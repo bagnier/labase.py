@@ -13,3 +13,7 @@ coverage.xml
 htmlcov/
 .DS_Store
 .dockerignore
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/

@@ -14,7 +14,7 @@ migrate:
 	supabase db push
 
 # --- App ---
-dev:
+dev: db-start
 	docker compose up --build
 
 up:
@@ -38,6 +38,10 @@ typecheck:
 
 test:
 	ENV_FILE=.env.test uv run pytest
+
+coverage:
+	ENV_FILE=.env.test uv run pytest --cov=app --cov-report=html
+	open htmlcov/index.html
 
 bdd:
 	ENV_FILE=.env.test uv run behave features/
