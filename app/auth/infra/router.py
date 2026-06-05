@@ -11,12 +11,20 @@ _COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     response.set_cookie(
-        "access_token", access_token,
-        httponly=True, secure=True, samesite="lax", max_age=_COOKIE_MAX_AGE,
+        "access_token",
+        access_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=_COOKIE_MAX_AGE,
     )
     response.set_cookie(
-        "refresh_token", refresh_token,
-        httponly=True, secure=True, samesite="lax", max_age=_COOKIE_MAX_AGE,
+        "refresh_token",
+        refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=_COOKIE_MAX_AGE,
     )
 
 

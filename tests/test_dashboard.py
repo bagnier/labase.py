@@ -9,7 +9,6 @@ async def test_dashboard_requires_auth(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_root_redirects(client: AsyncClient) -> None:
+async def test_root_is_public(client: AsyncClient) -> None:
     r = await client.get("/")
-    assert r.status_code == 307
-    assert r.headers["location"] == "/dashboard"
+    assert r.status_code == 200

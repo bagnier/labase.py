@@ -1,14 +1,13 @@
 from collections.abc import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.shared.config import settings
-from sqlalchemy.orm import sessionmaker
 
 engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = async_sessionmaker(engine, class_=SQLModelAsyncSession, expire_on_commit=False)
 
 
 async def create_db_tables() -> None:
@@ -16,6 +15,6 @@ async def create_db_tables() -> None:
         await conn.run_sync(SQLModel.metadata.create_all)
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:  # type: ignore[misc]  # ty: ignore[invalid-return-type]
-    async with AsyncSessionLocal() as session:  # type: ignore[attr-defined]
+async def get_session() -> AsyncGenerator[SQLModelAsyncSession, None]:  # type: ignore[misc]
+    async with AsyncSessionLocal() as session:
         yield session

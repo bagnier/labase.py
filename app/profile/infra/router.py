@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession
 from supabase_auth import User
 
 from app.auth.infra.dependencies import get_current_user
@@ -24,9 +24,7 @@ async def dashboard(
     request: Request,
     current_user: User = Depends(get_current_user),
 ) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "dashboard.html", {"user": current_user}
-    )
+    return templates.TemplateResponse(request, "dashboard.html", {"user": current_user})
 
 
 @router.get("/profile", response_class=HTMLResponse)

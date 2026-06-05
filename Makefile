@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test bdd
+.PHONY: dev up down logs db-start db-stop db-reset migrate test bdd bdd-api bdd-web bdd-all ci
 
 # --- Local Supabase ---
 db-start:
@@ -37,11 +37,20 @@ typecheck:
 	uv run ty check app/
 
 test:
-	ENV_FILE=.env.test uv run pytest
+	ENV_FILE=.env.test uv run pytest  # unit + integration + BDD api driver
+
+ci: lint typecheck test bdd-web
 
 coverage:
 	ENV_FILE=.env.test uv run pytest --cov=app --cov-report=html
 	open htmlcov/index.html
 
-bdd:
-	ENV_FILE=.env.test uv run behave features/
+bdd-api:
+	ENV_FILE=.env.test uv run pytest tests/bdd/ --driver=api
+
+bdd-web:
+	ENV_FILE=.env.test uv run pytest tests/bdd/ --driver=browser
+
+bdd-all: bdd-api bdd-web
+
+bdd: bdd-api

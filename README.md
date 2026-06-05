@@ -19,13 +19,13 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 
 ### Quality tools
 
-| Tool                        | Purpose                                              |
-| --------------------------- | ---------------------------------------------------- |
-| **ruff**                    | Linting + formatting                                 |
-| **ty**                      | Type checking (Astral, Rust)                         |
-| **pytest + pytest-asyncio** | Unit and integration tests                           |
-| **behave**                  | Functional BDD tests (Gherkin)                       |
-| **pytest-cov**              | Code coverage (generates `coverage.xml` for VS Code) |
+| Tool                        | Purpose                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| **ruff**                    | Linting + formatting                                                             |
+| **ty**                      | Type checking (Astral, Rust)                                                     |
+| **pytest + pytest-asyncio** | Unit and integration tests                                                       |
+| **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
+| **pytest-cov**              | Code coverage (generates `coverage.xml` for VS Code)                             |
 
 ## Architecture
 
@@ -52,7 +52,7 @@ HTTP request
 
 **Plain SQL migrations** — Supabase CLI migrations stay readable and versioned in raw SQL. The initial migration creates the `profiles` table linked to `auth.users` with RLS and an auto-create trigger on sign-up.
 
-**Functional BDD tests** — Gherkin scenarios (`features/`) drive the real HTTP API via `httpx.AsyncClient`. No network mocking: the app actually runs, validating routes, serialization, and HTTP responses end-to-end.
+**Dual-driver BDD tests** — Gherkin scenarios (`features/`) are written in functional business language and run against two drivers: an API driver (`httpx.AsyncClient`, fast, no browser) and a browser driver (Playwright Chromium). The same scenarios exercise both the HTTP layer and the real UI without duplicating test logic.
 
 ## Structure
 
@@ -77,8 +77,11 @@ labase.py/
 │   │       ├── repository.py  # Profile CRUD (SQLAlchemy)
 │   │       └── router.py    # Dashboard + index redirect
 │   └── templates/           # Jinja2 (base, auth, dashboard)
-├── features/                # BDD Gherkin + behave steps
-├── tests/                   # pytest fixtures
+├── features/                # BDD Gherkin scenarios (plain text, no code)
+├── tests/
+│   ├── bdd/                 # pytest-bdd steps, fixtures, drivers (api / browser)
+│   ├── test_auth.py         # auth integration tests
+│   └── test_dashboard.py    # dashboard integration tests
 ├── supabase/migrations/     # Versioned SQL (Supabase CLI)
 ├── Dockerfile               # Production image
 ├── Dockerfile.dev           # Dev image with hot-reload
@@ -166,5 +169,8 @@ make format       # ruff format
 make typecheck    # ty check
 make test         # pytest (generates coverage.xml)
 make coverage     # pytest + open HTML coverage report in browser
-make bdd          # behave (functional BDD tests)
+make bdd          # pytest-bdd via API driver (fast, no browser)
+make bdd-web      # pytest-bdd via Playwright browser driver (requires DB)
+make bdd-all      # both drivers in sequence
+make ci           # lint + typecheck + test + bdd-web
 ```

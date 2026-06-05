@@ -5,10 +5,10 @@ Feature: Dashboard
 
   Scenario: Dashboard requires authentication
     Given the app is running
-    When I GET "/dashboard" without auth
-    Then the response status is 401
+    When I visit the dashboard without logging in
+    Then I am not authorized
 
-  Scenario: Root redirects to dashboard
+  Scenario: Home page is publicly accessible
     Given the app is running
-    When I GET "/" without auth
-    Then the response status is 307
+    When I visit the home page without logging in
+    Then the page loads successfully
