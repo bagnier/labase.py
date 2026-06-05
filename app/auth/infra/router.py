@@ -1,13 +1,10 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from app.auth.domain.service import login, logout, register
+from app.shared.templates import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -25,7 +22,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "auth/login.html")
+    return templates.TemplateResponse(request, "login.html")
 
 
 @router.post("/login")
@@ -43,7 +40,7 @@ async def login_endpoint(
     except Exception:
         return templates.TemplateResponse(
             request,
-            "auth/login.html",
+            "login.html",
             {"error": "Email ou mot de passe invalide"},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
@@ -61,7 +58,7 @@ async def logout_endpoint() -> Response:
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "auth/register.html")
+    return templates.TemplateResponse(request, "register.html")
 
 
 @router.post("/register")
@@ -74,13 +71,13 @@ async def register_endpoint(
         register(email, password)
         return templates.TemplateResponse(
             request,
-            "auth/login.html",
+            "login.html",
             {"info": "Compte créé. Vérifiez votre email puis connectez-vous."},
         )
     except Exception as e:
         return templates.TemplateResponse(
             request,
-            "auth/register.html",
+            "register.html",
             {"error": str(e)},
             status_code=status.HTTP_400_BAD_REQUEST,
         )

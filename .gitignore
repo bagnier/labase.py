@@ -13,6 +13,7 @@ coverage.xml
 htmlcov/
 .DS_Store
 .dockerignore
+.playwright-mcp/
 
 # Supabase local state
 supabase/.branches/

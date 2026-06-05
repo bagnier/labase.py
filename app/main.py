@@ -4,15 +4,12 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from app.auth.infra.router import router as auth_router
 from app.profile.infra.router import router as profile_router
 from app.shared.database import create_db_tables
 
 BASE_DIR = Path(__file__).parent
-
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 @asynccontextmanager

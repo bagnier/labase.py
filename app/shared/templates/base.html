@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}labase{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            sidebar: '#0f1117',
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: 'Inter', ui-sans-serif, system-ui; }
+    .nav-link { @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors; }
+    .nav-link.active { @apply text-white bg-white/10; }
+  </style>
+</head>
+<body class="h-full bg-gray-50 text-gray-900 antialiased">
+  {% block body %}
+  <div class="flex h-full min-h-screen">
+
+    <!-- Sidebar -->
+    <aside class="w-56 bg-sidebar flex-none flex flex-col border-r border-white/5">
+      <!-- Logo -->
+      <div class="px-5 py-5 border-b border-white/5">
+        <a href="/dashboard" class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+            </svg>
+          </div>
+          <span class="text-white font-semibold text-sm tracking-tight">labase</span>
+        </a>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="flex-1 px-3 py-4 space-y-0.5">
+        <a href="/dashboard" class="nav-link {% block nav_dashboard %}{% endblock %}">
+          <svg class="w-4 h-4 flex-none" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+          </svg>
+          Vue d'ensemble
+        </a>
+        <a href="/profile" class="nav-link {% block nav_profile %}{% endblock %}">
+          <svg class="w-4 h-4 flex-none" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
+          </svg>
+          Profil
+        </a>
+      </nav>
+
+      <!-- User footer -->
+      {% block sidebar_footer %}{% endblock %}
+    </aside>
+
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Top bar -->
+      <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-none">
+        <div class="flex items-center gap-2 text-sm text-gray-500">
+          {% block breadcrumb %}{% endblock %}
+        </div>
+        <div class="flex items-center gap-3">
+          {% block header_actions %}{% endblock %}
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main class="flex-1 p-6 overflow-auto">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+  </div>
+  {% endblock %}
+</body>
+</html>
