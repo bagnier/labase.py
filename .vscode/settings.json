@@ -1,0 +1,33 @@
+{
+  // Python interpreter — uv managed venv
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+
+  // Pytest
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
+  "coverage-gutters.coverageFileNames": ["coverage.xml"],
+  "coverage-gutters.showLineCoverage": true,
+  "coverage-gutters.showRulerCoverage": true,
+
+  // Ruff — linting + formatting (remplace black, isort, flake8)
+  "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
+  "ruff.fixAll": true,
+  "ruff.organizeImports": true,
+
+  // Format + fix on save
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
+  },
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+
+  // ty est le type checker — on désactive le type checking de Pylance pour éviter les conflits
+  "ty.path": "${workspaceFolder}/.venv/bin/ty",
+  "python.analysis.typeCheckingMode": "off"
+}

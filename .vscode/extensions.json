@@ -1,0 +1,30 @@
+{
+  "recommendations": [
+    // Python
+    "ms-python.python",
+
+    // Ruff — linting + formatting (remplace black, isort, flake8)
+    "charliermarsh.ruff",
+
+    // ty — type checking (Astral)
+    "astral-sh.ty",
+
+    // Jinja2 templates
+    "samuelcolvin.jinjahtml",
+
+    // Tailwind CSS (autocomplétion dans les classes HTML)
+    "bradlc.vscode-tailwindcss",
+
+    // HTMX (autocomplétion des attributs hx-*)
+    "otovo-oss.htmx-tags",
+
+    // Docker
+    "ms-azuretools.vscode-docker",
+
+    // Coverage dans le gutter (lignes couvertes/non couvertes)
+    "ryanluker.vscode-coverage-gutters",
+
+    // .env
+    "mikestead.dotenv"
+  ]
+}
