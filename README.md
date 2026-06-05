@@ -1,59 +1,59 @@
 # labase.py
 
-Base SaaS en Python, full open-source, s'appuyant sur Supabase pour la base de données, l'authentification et le stockage de fichiers.
+Python SaaS base, fully open-source, built on Supabase for the database, authentication, and file storage.
 
 ## Stack
 
-| Couche | Choix | Raison |
-|--------|-------|--------|
-| **Web framework** | FastAPI | Async natif, Pydantic V2, OpenAPI auto-généré |
-| **Rendu HTML** | Jinja2 + HTMX | SSR sans build JS, dynamisme SPA-like via échanges de fragments |
-| **Styling** | Tailwind CSS | CDN Play en dev, CLI en prod |
-| **ORM** | SQLModel (sur SQLAlchemy 2.x) | Modèles Pydantic + SQLAlchemy, async, bien intégré avec Postgres |
-| **Auth + Storage** | supabase-py | SDK officiel Supabase, JWT en cookie HTTPOnly |
-| **Base de données** | Supabase (Postgres) | DB hébergée, RLS, triggers, Storage, Auth intégrés |
-| **Migrations** | Supabase CLI (SQL pur) | Migrations versionnées, intégration Studio, contrôle total |
-| **Serveur ASGI** | Uvicorn | Standard de facto pour FastAPI |
-| **Gestion des dépendances** | uv | Ultra-rapide, lockfile, gestion Python intégrée |
-| **Python** | 3.14 | Dernière version stable |
+| Layer                     | Choice                       | Reason                                                            |
+| ------------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| **Web framework**         | FastAPI                      | Native async, Pydantic V2, auto-generated OpenAPI                 |
+| **HTML rendering**        | Jinja2 + HTMX                | SSR without a JS build step, SPA-like dynamism via HTML fragments |
+| **Styling**               | Tailwind CSS                 | CDN Play in dev, CLI in prod                                      |
+| **ORM**                   | SQLModel (on SQLAlchemy 2.x) | Pydantic + SQLAlchemy models, async, Postgres-native              |
+| **Auth + Storage**        | supabase-py                  | Official Supabase SDK, JWT stored in HTTPOnly cookie              |
+| **Database**              | Supabase (Postgres)          | Hosted DB, RLS, triggers, Storage, Auth built-in                  |
+| **Migrations**            | Supabase CLI (plain SQL)     | Versioned migrations, Studio integration, full control            |
+| **ASGI server**           | Uvicorn                      | De facto standard for FastAPI                                     |
+| **Dependency management** | uv                           | Ultra-fast, lockfile, built-in Python version management          |
+| **Python**                | 3.14                         | Latest stable release                                             |
 
-### Outils qualité
+### Quality tools
 
-| Outil | Usage |
-|-------|-------|
-| **ruff** | Linting + formatting |
-| **ty** | Type checking (Astral, Rust) |
-| **pyright** | Type checking (Microsoft, en CI) |
-| **pytest + pytest-asyncio** | Tests unitaires et d'intégration |
-| **behave** | Tests BDD fonctionnels (Gherkin) |
+| Tool                        | Purpose                                              |****
+| --------------------------- | ---------------------------------------------------- |
+| **ruff**                    | Linting + formatting                                 |
+| **ty**                      | Type checking (Astral, Rust)                         |
+| **pytest + pytest-asyncio** | Unit and integration tests                           |
+| **behave**                  | Functional BDD tests (Gherkin)                       |
+| **pytest-cov**              | Code coverage (generates `coverage.xml` for VS Code) |
 
 ## Architecture
 
-Le projet démarre en **CRUD simple** et peut évoluer vers une architecture hexagonale domaine par domaine, sans réécriture.
+The project starts as **simple CRUD** and can evolve toward hexagonal architecture one domain at a time, without a full rewrite.
 
 ```
-Mode CRUD (défaut) :
+CRUD mode (default):
   router → repository (SQLAlchemy) → DB
 
-Mode hexagonal (opt-in par domaine) :
+Hexagonal mode (opt-in per domain):
   router → service (use case) → repository (adapter) → DB
                               ↘ supabase_client (adapter) → Storage / Auth
 ```
 
-- `app/routers/` — routes HTTP, logique de présentation uniquement
-- `app/repositories/` — accès données, interface simple sur SQLAlchemy
-- `app/services/` — use cases métier (vide au départ, à remplir quand la logique grossit)
-- `app/auth/` — authentification via Supabase Auth (JWT en cookie HTTPOnly)
+- `app/routers/` — HTTP routes, presentation logic only
+- `app/repositories/` — data access, thin interface over SQLAlchemy
+- `app/services/` — business use cases (empty by default, fill as logic grows)
+- `app/auth/` — authentication via Supabase Auth (JWT in HTTPOnly cookie)
 
-## Choix structurants
+## Key design decisions
 
-**Supabase comme couche infrastructure** — supabase-py est cantonné à l'auth et au storage. Les requêtes métier passent par SQLAlchemy directement sur Postgres, ce qui préserve la flexibilité (requêtes complexes, transactions, pgvector…).
+**Supabase as infrastructure layer** — supabase-py is limited to auth and storage. Business queries go through SQLAlchemy directly on Postgres, preserving flexibility (complex queries, transactions, pgvector…).
 
-**SSR avec HTMX plutôt qu'une SPA séparée** — un seul repo, un seul déploiement, pas de CORS, auth simplifiée côté serveur. Adapté à un SaaS dont l'interface est principalement du CRUD.
+**SSR with HTMX instead of a separate SPA** — single repo, single deployment, no CORS, server-side auth. Well-suited for a SaaS whose UI is mostly CRUD.
 
-**Migrations SQL pures** — les migrations Supabase CLI restent lisibles et versionnées en SQL brut. La migration initiale pose la table `profiles` liée à `auth.users` avec RLS et un trigger d'auto-création à l'inscription.
+**Plain SQL migrations** — Supabase CLI migrations stay readable and versioned in raw SQL. The initial migration creates the `profiles` table linked to `auth.users` with RLS and an auto-create trigger on sign-up.
 
-**Tests BDD fonctionnels** — les scénarios Gherkin (`features/`) pilotent l'API HTTP réelle via `httpx.AsyncClient`. Pas de mock réseau : l'app tourne vraiment, ce qui valide les routes, la sérialisation et les réponses HTTP de bout en bout.
+**Functional BDD tests** — Gherkin scenarios (`features/`) drive the real HTTP API via `httpx.AsyncClient`. No network mocking: the app actually runs, validating routes, serialization, and HTTP responses end-to-end.
 
 ## Structure
 
@@ -63,78 +63,100 @@ labase.py/
 │   ├── main.py              # FastAPI app + lifespan
 │   ├── config.py            # Settings (pydantic-settings, .env)
 │   ├── database.py          # SQLAlchemy async engine + session
-│   ├── supabase_client.py   # Clients supabase-py (anon + admin)
-│   ├── auth/                # Login, logout, register + middleware JWT
+│   ├── supabase_client.py   # supabase-py clients (anon + admin)
+│   ├── auth/                # Login, logout, register + JWT middleware
 │   ├── models/              # SQLModel table models
-│   ├── repositories/        # Accès données (adapter pattern)
-│   ├── services/            # Use cases métier (à alimenter)
+│   ├── repositories/        # Data access (adapter pattern)
+│   ├── services/            # Business use cases (to populate)
 │   └── templates/           # Jinja2 (base, auth, dashboard)
-├── features/                # BDD Gherkin + steps behave
-├── tests/                   # Fixtures pytest
-├── supabase/migrations/     # SQL versionnés (Supabase CLI)
-├── Dockerfile               # Image production
-├── Dockerfile.dev           # Image dev avec hot-reload
-├── docker-compose.yml       # App + connexion Supabase local
-└── Makefile                 # Commandes courantes
+├── features/                # BDD Gherkin + behave steps
+├── tests/                   # pytest fixtures
+├── supabase/migrations/     # Versioned SQL (Supabase CLI)
+├── Dockerfile               # Production image
+├── Dockerfile.dev           # Dev image with hot-reload
+├── docker-compose.yml       # App + local Supabase connection
+└── Makefile                 # Common commands
 ```
 
-## Démarrage local
+## Local setup
 
-### Prérequis
+### Prerequisites
 
 - [uv](https://docs.astral.sh/uv/)
 - [Docker](https://www.docker.com/)
 - [Supabase CLI](https://supabase.com/docs/guides/cli)
 
-### Installation
+### Install
 
 ```bash
-# Cloner et installer les dépendances
+# Clone and install dependencies
 uv sync --all-groups
 
-# Copier et remplir les variables d'environnement
+# Copy and fill in environment variables
 cp .env.example .env
 ```
 
-### Lancer Supabase en local
+### Start Supabase locally
 
 ```bash
 make db-start
-# Récupérer les clés affichées par `supabase status` et les mettre dans .env
 ```
 
-### Appliquer les migrations
+`supabase start` downloads and starts about ten Docker containers (Postgres, Auth, Storage, Studio…). The first run takes a few minutes.
 
-```bash
-make migrate
+Once started, `supabase status` prints the URLs and keys to copy into `.env`:
+
+```
+API URL:          http://localhost:54321
+DB URL:           postgresql://postgres:postgres@localhost:54322/postgres
+Studio URL:       http://localhost:54323
+anon key:         eyJ...
+service_role key: eyJ...
 ```
 
-### Lancer l'application
+| Interface           | URL                    | Purpose                                                     |
+| ------------------- | ---------------------- | ----------------------------------------------------------- |
+| **Supabase Studio** | http://localhost:54323 | Web UI: tables, Auth, Storage, SQL editor                   |
+| **Supabase API**    | http://localhost:54321 | PostgREST, Auth API, Storage API                            |
+| **Postgres direct** | localhost:54322        | psql or any SQL client (user: `postgres`, pass: `postgres`) |
+
+### Apply migrations
 
 ```bash
-make dev          # via Docker Compose (hot-reload)
-# ou directement :
+make migrate      # supabase db push — applies supabase/migrations/
+make db-reset     # wipe and replay all migrations from scratch
+```
+
+### Start the application
+
+```bash
+make dev          # Supabase (host) + app via Docker Compose with hot-reload
+# or without Docker:
 uv run uvicorn app.main:app --reload
 ```
 
-L'app est disponible sur [http://localhost:8000](http://localhost:8000).
+| Interface             | URL                        |
+| --------------------- | -------------------------- |
+| **App**               | http://localhost:8000      |
+| **OpenAPI / Swagger** | http://localhost:8000/docs |
 
-## Commandes
+## Commands
 
 ```bash
-make dev          # Docker Compose en mode dev (hot-reload)
-make up           # Docker Compose en arrière-plan
-make down         # Arrêter les conteneurs
-make logs         # Logs de l'app
+make dev          # Docker Compose in dev mode (hot-reload)
+make up           # Docker Compose in background
+make down         # Stop containers
+make logs         # App logs
 
-make db-start     # Démarrer Supabase local
-make db-stop      # Arrêter Supabase local
-make db-reset     # Réinitialiser la DB locale
-make migrate      # Appliquer les migrations (supabase db push)
+make db-start     # Start local Supabase
+make db-stop      # Stop local Supabase
+make db-reset     # Wipe and reset local DB
+make migrate      # Apply migrations (supabase db push)
 
 make lint         # ruff check
 make format       # ruff format
 make typecheck    # ty check
-make test         # pytest
-make bdd          # behave (tests BDD fonctionnels)
+make test         # pytest (generates coverage.xml)
+make coverage     # pytest + open HTML coverage report in browser
+make bdd          # behave (functional BDD tests)
 ```
