@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.models.user import Profile, ProfileCreate, ProfileUpdate
+from app.profile.domain.models import Profile, ProfileCreate, ProfileUpdate
 
 
-class UserRepository:
+class ProfileRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 

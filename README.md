@@ -19,7 +19,7 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 
 ### Quality tools
 
-| Tool                        | Purpose                                              |****
+| Tool                        | Purpose                                              |
 | --------------------------- | ---------------------------------------------------- |
 | **ruff**                    | Linting + formatting                                 |
 | **ty**                      | Type checking (Astral, Rust)                         |
@@ -29,21 +29,20 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 
 ## Architecture
 
-The project starts as **simple CRUD** and can evolve toward hexagonal architecture one domain at a time, without a full rewrite.
+The project is organized by **bounded context**, each split into `domain/` and `infra/` layers.
 
 ```
-CRUD mode (default):
-  router → repository (SQLAlchemy) → DB
-
-Hexagonal mode (opt-in per domain):
-  router → service (use case) → repository (adapter) → DB
-                              ↘ supabase_client (adapter) → Storage / Auth
+HTTP request
+  → infra/router.py       (FastAPI endpoint)
+  → domain/service.py     (business logic, no framework dependencies)
+  → infra/repository.py   (SQLAlchemy, Supabase SDK)
+  → DB / external service
 ```
 
-- `app/routers/` — HTTP routes, presentation logic only
-- `app/repositories/` — data access, thin interface over SQLAlchemy
-- `app/services/` — business use cases (empty by default, fill as logic grows)
-- `app/auth/` — authentication via Supabase Auth (JWT in HTTPOnly cookie)
+**Coupling rules:**
+- `domain/` never imports from `infra/`
+- Contexts don't import each other directly — shared infrastructure goes through `app/shared/`
+- Exception: `auth/infra/dependencies.py` (JWT guard) may be imported by other `infra/` routers
 
 ## Key design decisions
 
@@ -60,14 +59,23 @@ Hexagonal mode (opt-in per domain):
 ```
 labase.py/
 ├── app/
-│   ├── main.py              # FastAPI app + lifespan
-│   ├── config.py            # Settings (pydantic-settings, .env)
-│   ├── database.py          # SQLAlchemy async engine + session
-│   ├── supabase_client.py   # supabase-py clients (anon + admin)
-│   ├── auth/                # Login, logout, register + JWT middleware
-│   ├── models/              # SQLModel table models
-│   ├── repositories/        # Data access (adapter pattern)
-│   ├── services/            # Business use cases (to populate)
+│   ├── main.py              # FastAPI app + lifespan, router registration
+│   ├── shared/              # Cross-context infrastructure
+│   │   ├── config.py        # Settings (pydantic-settings, .env)
+│   │   ├── database.py      # SQLAlchemy async engine + session
+│   │   └── supabase_client.py  # supabase-py clients (anon + admin)
+│   ├── auth/                # Bounded context: authentication
+│   │   ├── domain/
+│   │   │   └── service.py   # login / logout / register logic
+│   │   └── infra/
+│   │       ├── router.py    # FastAPI endpoints + cookie handling
+│   │       └── dependencies.py  # JWT guard (get_current_user)
+│   ├── profile/             # Bounded context: user profile
+│   │   ├── domain/
+│   │   │   └── models.py    # SQLModel Profile entity
+│   │   └── infra/
+│   │       ├── repository.py  # Profile CRUD (SQLAlchemy)
+│   │       └── router.py    # Dashboard + index redirect
 │   └── templates/           # Jinja2 (base, auth, dashboard)
 ├── features/                # BDD Gherkin + behave steps
 ├── tests/                   # pytest fixtures

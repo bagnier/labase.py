@@ -1,6 +1,6 @@
 from supabase import Client, create_client
 
-from app.config import settings
+from app.shared.config import settings
 
 # Anon client — for user-facing auth operations (respects RLS)
 supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)

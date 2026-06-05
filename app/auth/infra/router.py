@@ -4,11 +4,10 @@ from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.supabase_client import supabase
+from app.auth.domain.service import login, logout, register
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-
+templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -30,17 +29,15 @@ async def login_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/login")
-async def login(
+async def login_endpoint(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
 ) -> Response:
     try:
-        auth = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        if auth.session is None:
-            raise ValueError("No session returned")
+        tokens = login(email, password)
         resp = Response(status_code=status.HTTP_200_OK)
-        _set_auth_cookies(resp, auth.session.access_token, auth.session.refresh_token)
+        _set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         resp.headers["HX-Redirect"] = "/dashboard"
         return resp
     except Exception:
@@ -53,11 +50,8 @@ async def login(
 
 
 @router.post("/logout")
-async def logout() -> Response:
-    try:
-        supabase.auth.sign_out()
-    except Exception:
-        pass
+async def logout_endpoint() -> Response:
+    logout()
     resp = Response(status_code=status.HTTP_200_OK)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
@@ -71,13 +65,13 @@ async def register_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/register")
-async def register(
+async def register_endpoint(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
 ) -> Response:
     try:
-        supabase.auth.sign_up({"email": email, "password": password})
+        register(email, password)
         return templates.TemplateResponse(
             request,
             "auth/login.html",

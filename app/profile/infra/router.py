@@ -5,10 +5,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from supabase_auth import User
 
-from app.auth.dependencies import get_current_user
+from app.auth.infra.dependencies import get_current_user
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 
 
 @router.get("/", response_class=HTMLResponse)

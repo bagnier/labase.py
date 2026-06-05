@@ -1,7 +1,7 @@
 from fastapi import Cookie, HTTPException, status
 from supabase_auth import User
 
-from app.supabase_client import supabase
+from app.shared.supabase_client import supabase
 
 
 async def get_current_user(access_token: str | None = Cookie(default=None)) -> User:
