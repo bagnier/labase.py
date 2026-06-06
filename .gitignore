@@ -1,18 +1,21 @@
-.env
-.venv/
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+
+# Env & deps
+.env
+.venv/
+
+# Tools
+.cov/
+.DS_Store
+.playwright-mcp/
 .pytest_cache/
 .ruff_cache/
 dist/
-*.egg-info/
-.coverage
-coverage.xml
 htmlcov/
-.DS_Store
-.dockerignore
-.playwright-mcp/
 
 # Supabase local state
 supabase/.branches/

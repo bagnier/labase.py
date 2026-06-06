@@ -1,0 +1,10 @@
+__pycache__/
+.env
+.git/
+.pytest_cache/
+.venv/
+.vscode/
+*.pyc
+features/
+Makefile
+tests/

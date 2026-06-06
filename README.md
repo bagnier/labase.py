@@ -26,7 +26,7 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 | **ty**                      | Type checking (Astral, Rust)                                                     |
 | **pytest + pytest-asyncio** | Unit and integration tests                                                       |
 | **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
-| **pytest-cov**              | Code coverage (generates `coverage.xml` for VS Code)                             |
+| **pytest-cov**              | Code coverage (generates `.cov/coverage.xml` for VS Code)                        |
 
 ## Architecture
 
@@ -172,7 +172,7 @@ make migrate      # Apply migrations (supabase db push)
 make lint         # ruff check
 make format       # ruff format
 make typecheck    # ty check
-make test         # pytest (generates coverage.xml)
+make test         # pytest (generates .cov/coverage.xml)
 make coverage     # pytest + open HTML coverage report in browser
 make bdd          # pytest-bdd via API driver (fast, no browser)
 make bdd-web      # pytest-bdd via Playwright browser driver (requires DB)

@@ -2,7 +2,7 @@
 name = "labase"
 version = "0.1.0"
 description = "SaaS base — FastAPI + Supabase + HTMX"
-requires-python = ">=3.14"
+requires-python = "~=3.14.0"
 dependencies = [
     "asyncpg==0.31.0",
     "fastapi==0.136.3",
@@ -24,6 +24,7 @@ dev = [
     "pytest-bdd==8.1.0",
     "pytest-cov==7.1.0",
     "pytest==9.0.3",
+    "python-dotenv==1.2.2",
     "ruff==0.15.16",
     "ty==0.0.44",
 ]
@@ -32,11 +33,12 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--cov=app --cov-report=term-missing --cov-report=xml"
+addopts = "--cov=app --cov-report=term-missing --cov-report=xml:.cov/coverage.xml"
 
 [tool.coverage.run]
 source = ["app"]
 omit = ["app/templates/*"]
+data_file = ".cov/.coverage"
 
 [tool.coverage.report]
 show_missing = true
