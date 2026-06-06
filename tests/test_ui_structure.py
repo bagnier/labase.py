@@ -1,10 +1,3 @@
-"""
-Playwright tests verifying the visual structure of each page.
-These act as a regression guard during template refactoring.
-"""
-
-from collections.abc import Generator
-
 import pytest
 
 from tests.bdd.drivers.browser import BrowserDriver
@@ -13,26 +6,22 @@ TEST_EMAIL = "ui-structure@labase.dev"
 TEST_PASSWORD = "Test1234!"
 
 
-@pytest.fixture(scope="module")
-def browser() -> Generator[BrowserDriver, None, None]:
-    d = BrowserDriver()
-    d.start()
-    d.ensure_registered(TEST_EMAIL, TEST_PASSWORD)
-    yield d
-    d.stop()
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_ui_user(browser_driver: BrowserDriver):
+    browser_driver.ensure_registered(TEST_EMAIL, TEST_PASSWORD)
 
 
 @pytest.fixture()
-def page_anon(browser: BrowserDriver):
-    browser.reset_session()
-    return browser
+def page_anon(browser_driver: BrowserDriver):
+    browser_driver.reset_session()
+    return browser_driver
 
 
 @pytest.fixture()
-def page_auth(browser: BrowserDriver):
-    browser.reset_session()
-    browser.sign_in(TEST_EMAIL, TEST_PASSWORD)
-    return browser
+def page_auth(browser_driver: BrowserDriver):
+    browser_driver.reset_session()
+    browser_driver.sign_in(TEST_EMAIL, TEST_PASSWORD)
+    return browser_driver
 
 
 # ---------------------------------------------------------------------------

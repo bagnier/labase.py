@@ -1,4 +1,9 @@
+from collections.abc import Generator
+
+import pytest
 from dotenv import load_dotenv
+
+from tests.bdd.drivers.browser import BrowserDriver
 
 pytest_plugins = ["tests.bdd.steps"]
 
@@ -12,3 +17,11 @@ def pytest_configure(config):
     get_settings.cache_clear()
     get_supabase.cache_clear()
     get_supabase_admin.cache_clear()
+
+
+@pytest.fixture(scope="session")
+def browser_driver() -> Generator[BrowserDriver, None, None]:
+    d = BrowserDriver()
+    d.start()
+    yield d
+    d.stop()
