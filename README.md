@@ -112,6 +112,17 @@ pre-commit install
 cp .env.example .env
 ```
 
+### `.env` vs `.env.test`
+
+| File        | Used by                                  | Hosts                        |
+| ----------- | ---------------------------------------- | ---------------------------- |
+| `.env`      | `docker compose` (app container)         | `host.docker.internal:543xx` |
+| `.env.test` | `make test` / `make bdd*` (runs on host) | `localhost:543xx`            |
+
+The app container reaches Supabase via `host.docker.internal` (mapped by `extra_hosts` in `docker-compose.yml`). Tests run directly on the host, so they use `localhost`.
+
+**`DEBUG=true`** must be set in both files while running over plain HTTP. Without it, session cookies are set with the `Secure` flag and the browser (or httpx) silently drops them on non-HTTPS connections, causing every authenticated request to return 401.
+
 ### Start Supabase locally
 
 ```bash

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     database_url: str
     secret_key: str = "change-me-in-production"
+    debug: bool = False
 
 
 @lru_cache

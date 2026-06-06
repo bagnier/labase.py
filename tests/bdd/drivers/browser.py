@@ -195,3 +195,10 @@ class BrowserDriver:
     def assert_registration_failed(self) -> None:
         assert self._last_response is not None
         assert self._last_response.status == 400, f"Expected 400, got {self._last_response.status}"
+
+    def assert_registration_failed_with_message(self, message: str) -> None:
+        self.assert_registration_failed()
+        self._p.wait_for_selector("[class*='red']", timeout=3000)
+        assert message in self._p.content(), (
+            f"'{message}' not found in page after registration failure"
+        )

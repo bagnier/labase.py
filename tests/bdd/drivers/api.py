@@ -40,7 +40,14 @@ class ApiDriver:
         return self._client
 
     def reset_session(self) -> None:
-        pass
+        if self._client and self._loop:
+            self._loop.run_until_complete(self._client.aclose())
+        transport = httpx.ASGITransport(app=app)
+        self._client = httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            follow_redirects=False,
+        )
 
     def sign_in(self, email: str, password: str) -> None:
         self._response = self._run(
@@ -141,3 +148,9 @@ class ApiDriver:
     def assert_registration_failed(self) -> None:
         assert self._response is not None
         assert self._response.status_code == 400, f"Expected 400, got {self._response.status_code}"
+
+    def assert_registration_failed_with_message(self, message: str) -> None:
+        self.assert_registration_failed()
+        assert message in self._response.text, (
+            f"'{message}' not found in:\n{self._response.text[:500]}"
+        )

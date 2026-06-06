@@ -1,20 +1,52 @@
 from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
+from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from app.auth.domain.service import login, logout, register
+from app.shared.config import get_settings
 from app.shared.templates import templates
 
 router = APIRouter()
+
+_WEAK_PASSWORD_REASONS: dict[str, str] = {
+    "too_short": "trop court",
+    "too_simple": "trop simple",
+    "no_uppercase": "doit contenir une majuscule",
+    "no_lowercase": "doit contenir une minuscule",
+    "no_digit": "doit contenir un chiffre",
+    "no_special": "doit contenir un caractère spécial",
+    "pwned": "ce mot de passe est compromis",
+}
+
+_AUTH_ERROR_MESSAGES: dict[str, str] = {
+    "email_exists": "Un compte existe déjà avec cet email.",
+    "user_already_exists": "Un compte existe déjà avec cet email.",
+    "email_address_not_authorized": "Cette adresse email n'est pas autorisée.",
+    "signup_disabled": "Les inscriptions sont désactivées.",
+    "invalid_email": "Adresse email invalide.",
+}
+
+
+def _format_weak_password_reasons(reasons: list[str]) -> str:
+    labels = [_WEAK_PASSWORD_REASONS.get(r, r) for r in reasons]
+    return ", ".join(labels) if labels else "critères non respectés"
+
+
+def _friendly_auth_error(e: AuthApiError) -> str:
+    code = str(e.code) if e.code else ""
+    return _AUTH_ERROR_MESSAGES.get(code, e.message)
+
 
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    secure = not get_settings().debug
     response.set_cookie(
         "access_token",
         access_token,
         httponly=True,
-        secure=True,
+        secure=secure,
         samesite="lax",
         max_age=_COOKIE_MAX_AGE,
     )
@@ -22,7 +54,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         "refresh_token",
         refresh_token,
         httponly=True,
-        secure=True,
+        secure=secure,
         samesite="lax",
         max_age=_COOKIE_MAX_AGE,
     )
@@ -82,10 +114,15 @@ async def register_endpoint(
             "login.html",
             {"info": "Compte créé. Vérifiez votre email puis connectez-vous."},
         )
-    except Exception as e:
-        return templates.TemplateResponse(
-            request,
-            "register.html",
-            {"error": str(e)},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
+    except AuthWeakPasswordError as e:
+        error = f"Mot de passe trop faible : {_format_weak_password_reasons(e.reasons)}"
+    except AuthApiError as e:
+        error = _friendly_auth_error(e)
+    except Exception:
+        error = "Une erreur inattendue s'est produite."
+    return templates.TemplateResponse(
+        request,
+        "register.html",
+        {"error": error},
+        status_code=status.HTTP_400_BAD_REQUEST,
+    )

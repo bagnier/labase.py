@@ -95,6 +95,11 @@ def step_registration_rejected(driver):
     driver.assert_registration_failed()
 
 
+@then(parsers.parse('their registration is rejected with message "{message}"'))
+def step_registration_rejected_with_message(driver, message):
+    driver.assert_registration_failed_with_message(message)
+
+
 @then("they are redirected to sign-in")
 def step_redirected_to_sign_in(driver):
     driver.assert_redirected_to_login()
