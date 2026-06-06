@@ -1,22 +1,39 @@
 Feature: Authentication
   As a user
-  I want to authenticate
-  So that I can access protected resources
+  I want to manage my account access
+  So that I can securely use the application
 
-  Scenario: Login page is accessible
-    Given the app is running
-    Then the login page is accessible
+  Background: running
+    Given the application is running
+    And a user is registered with email "test@labase.dev" and password "Test1234!"
 
-  Scenario: Login with invalid credentials fails
-    Given the app is running
-    When I log in with email "invalid@example.com" and password "wrongpassword"
-    Then my login attempt is rejected
+  Scenario: A visitor can initiate sign-in
+    Then the sign-in form is available
 
-  Scenario: Accessing dashboard without auth is forbidden
-    Given the app is running
-    When I visit the dashboard without logging in
-    Then I am not authorized
+  Scenario: A visitor can initiate registration
+    Then the registration form is available
 
-  Scenario: Register page is accessible
-    Given the app is running
-    Then the register page is accessible
+  Scenario: A registered user can sign in
+    When they sign in with email "test@labase.dev" and password "Test1234!"
+    Then they are on their dashboard
+
+  Scenario: Sign-in with wrong credentials is rejected
+    When they sign in with email "unknown@example.com" and password "wrongpassword"
+    Then their sign-in is rejected
+
+  Scenario: An unauthenticated user cannot access the dashboard
+    When they try to access the dashboard without signing in
+    Then access is denied
+
+  Scenario: A visitor can create an account with a new email
+    When they register with a "unknown@example.com" and password "Test1234!"
+    Then they are asked to verify their email
+
+  Scenario: Registration with an already taken email is rejected
+    When they register with email "test@labase.dev" and password "Test1234!"
+    Then their registration is rejected
+
+  Scenario: A signed-in user can sign out
+    Given a user is signed in as "test@labase.dev" with password "Test1234!"
+    When they sign out
+    Then they are redirected to sign-in

@@ -3,10 +3,11 @@ import socket
 import subprocess
 import sys
 import time
+from uuid import uuid4
 
 from playwright.sync_api import Page, Response, sync_playwright
 
-from tests.bdd.drivers.base import BaseDriver
+from app.shared.config import settings
 
 
 def _free_port() -> int:
@@ -15,7 +16,7 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-class BrowserDriver(BaseDriver):
+class BrowserDriver:
     def __init__(self) -> None:
         self._base_url: str = os.environ.get("APP_URL", "")
         self._server: subprocess.Popen | None = None
@@ -24,6 +25,7 @@ class BrowserDriver(BaseDriver):
         self._context = None
         self._page: Page | None = None
         self._last_response: Response | None = None
+        self._last_registered_email: str | None = None
 
     def start(self) -> None:
         if not self._base_url:
@@ -64,12 +66,20 @@ class BrowserDriver(BaseDriver):
             self._server.terminate()
             self._server.wait(timeout=10)
 
+    def reset_session(self) -> None:
+        if self._context:
+            self._context.close()
+        assert self._browser
+        self._context = self._browser.new_context()
+        self._page = self._context.new_page()
+        self._last_response = None
+
     @property
     def _p(self) -> Page:
         assert self._page
         return self._page
 
-    def login(self, email: str, password: str) -> None:
+    def sign_in(self, email: str, password: str) -> None:
         self._p.goto(f"{self._base_url}/auth/login")
         self._p.fill("input[name=email]", email)
         self._p.fill("input[name=password]", password)
@@ -78,6 +88,58 @@ class BrowserDriver(BaseDriver):
         ):
             self._p.click("button[type=submit]")
         self._p.wait_for_load_state("domcontentloaded")
+
+    def ensure_registered(self, email: str, password: str) -> None:
+        assert self._context
+        self._context.request.post(
+            f"{self._base_url}/auth/register",
+            form={"email": email, "password": password},
+        )
+
+    def register(self, email: str, password: str) -> None:
+        self._last_registered_email = email
+        self._p.goto(f"{self._base_url}/auth/register")
+        self._p.fill("input[name=email]", email)
+        self._p.fill("input[name=password]", password)
+        with self._p.expect_response(
+            lambda r: "/auth/register" in r.url and r.request.method == "POST"
+        ) as resp_info:
+            self._p.click("button[type=submit]")
+        self._last_response = resp_info.value
+        self._p.wait_for_load_state("domcontentloaded")
+
+    def register_fresh(self, password: str) -> None:
+        self.register(f"{uuid4()}@test.local", password)
+
+    def _delete_user_if_exists(self, email: str) -> None:
+        assert self._context
+        resp = self._context.request.get(
+            f"{settings.supabase_url}/auth/v1/admin/users",
+            params={"email": email},
+            headers={
+                "apikey": settings.supabase_service_role_key,
+                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            },
+        )
+        for user in resp.json().get("users", []):
+            self._context.request.delete(
+                f"{settings.supabase_url}/auth/v1/admin/users/{user['id']}",
+                headers={
+                    "apikey": settings.supabase_service_role_key,
+                    "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                },
+            )
+
+    def register_disposable(self, email: str, password: str) -> None:
+        self._delete_user_if_exists(email)
+        self.register(email, password)
+
+    def logout_action(self) -> None:
+        self._p.goto(f"{self._base_url}/auth/login", wait_until="networkidle")
+        self._p.evaluate(
+            "fetch('/auth/logout', {method:'POST'}).then(r => { if(r.headers.get('hx-redirect')) window.location = r.headers.get('hx-redirect'); })"
+        )
+        self._p.wait_for_url(f"{self._base_url}/auth/login", timeout=5000)
 
     def visit(self, path: str) -> None:
         self._last_response = self._p.goto(f"{self._base_url}{path}", wait_until="networkidle")
@@ -104,7 +166,32 @@ class BrowserDriver(BaseDriver):
 
     def assert_login_rejected(self) -> None:
         # HTMX 2.x drops 4xx responses without swapping — verify by checking
-        # we were not redirected to the dashboard (i.e., login was refused)
+        # we were not redirected to the dashboard (i.e., sign-in was refused)
         assert "/dashboard" not in self._p.url, (
-            f"Expected login to fail but ended up at {self._p.url}"
+            f"Expected sign-in to fail but ended up at {self._p.url}"
         )
+
+    def assert_redirected_to_dashboard(self) -> None:
+        self._p.wait_for_url(f"{self._base_url}/dashboard", timeout=5000)
+        assert "/dashboard" in self._p.url, f"Expected /dashboard, got {self._p.url}"
+
+    def assert_registration_successful(self) -> None:
+        assert "Vérifiez" in self._p.content(), "'Vérifiez' not found in registration response"
+        assert self._last_registered_email is not None
+        assert self._context is not None
+        resp = self._context.request.get(
+            f"{settings.supabase_url}/auth/v1/admin/users",
+            params={"email": self._last_registered_email},
+            headers={
+                "apikey": settings.supabase_service_role_key,
+                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            },
+        )
+        users = resp.json().get("users", [])
+        assert any(u["email"] == self._last_registered_email for u in users), (
+            f"User {self._last_registered_email!r} not found in Supabase after registration"
+        )
+
+    def assert_registration_failed(self) -> None:
+        assert self._last_response is not None
+        assert self._last_response.status == 400, f"Expected 400, got {self._last_response.status}"

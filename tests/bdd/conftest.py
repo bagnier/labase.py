@@ -3,7 +3,6 @@ from collections.abc import Generator
 import pytest
 
 from tests.bdd.drivers.api import ApiDriver
-from tests.bdd.drivers.base import BaseDriver
 from tests.bdd.drivers.browser import BrowserDriver
 
 
@@ -12,7 +11,7 @@ def pytest_addoption(parser):
 
 
 @pytest.fixture(scope="session")
-def driver(request) -> Generator[BaseDriver, None, None]:
+def driver(request) -> Generator[ApiDriver | BrowserDriver, None, None]:
     name = request.config.getoption("--driver")
     d = BrowserDriver() if name == "browser" else ApiDriver()
     d.start()

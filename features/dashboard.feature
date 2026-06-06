@@ -3,12 +3,12 @@ Feature: Dashboard
   I want to access the dashboard
   So that I can manage my resources
 
-  Scenario: Dashboard requires authentication
-    Given the app is running
-    When I visit the dashboard without logging in
-    Then I am not authorized
+  Scenario: An unauthenticated user cannot access the dashboard
+    Given the application is running
+    When they try to access the dashboard without signing in
+    Then access is denied
 
-  Scenario: Home page is publicly accessible
-    Given the app is running
-    When I visit the home page without logging in
-    Then the page loads successfully
+  Scenario: The home page is publicly accessible
+    Given the application is running
+    When they access the home page without signing in
+    Then it is publicly accessible
