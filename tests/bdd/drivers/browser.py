@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from playwright.sync_api import Page, Response, sync_playwright
 
-from app.shared.config import settings
+from app.shared.config import get_settings
 
 
 def _free_port() -> int:
@@ -114,19 +114,19 @@ class BrowserDriver:
     def _delete_user_if_exists(self, email: str) -> None:
         assert self._context
         resp = self._context.request.get(
-            f"{settings.supabase_url}/auth/v1/admin/users",
+            f"{get_settings().supabase_url}/auth/v1/admin/users",
             params={"email": email},
             headers={
-                "apikey": settings.supabase_service_role_key,
-                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                "apikey": get_settings().supabase_service_role_key,
+                "Authorization": f"Bearer {get_settings().supabase_service_role_key}",
             },
         )
         for user in resp.json().get("users", []):
             self._context.request.delete(
-                f"{settings.supabase_url}/auth/v1/admin/users/{user['id']}",
+                f"{get_settings().supabase_url}/auth/v1/admin/users/{user['id']}",
                 headers={
-                    "apikey": settings.supabase_service_role_key,
-                    "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                    "apikey": get_settings().supabase_service_role_key,
+                    "Authorization": f"Bearer {get_settings().supabase_service_role_key}",
                 },
             )
 
@@ -180,11 +180,11 @@ class BrowserDriver:
         assert self._last_registered_email is not None
         assert self._context is not None
         resp = self._context.request.get(
-            f"{settings.supabase_url}/auth/v1/admin/users",
+            f"{get_settings().supabase_url}/auth/v1/admin/users",
             params={"email": self._last_registered_email},
             headers={
-                "apikey": settings.supabase_service_role_key,
-                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                "apikey": get_settings().supabase_service_role_key,
+                "Authorization": f"Bearer {get_settings().supabase_service_role_key}",
             },
         )
         users = resp.json().get("users", [])

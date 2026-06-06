@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.shared.supabase_client import supabase
+from app.shared.supabase_client import get_supabase
 
 
 @dataclass
@@ -10,7 +10,7 @@ class AuthTokens:
 
 
 def login(email: str, password: str) -> AuthTokens:
-    auth = supabase.auth.sign_in_with_password({"email": email, "password": password})
+    auth = get_supabase().auth.sign_in_with_password({"email": email, "password": password})
     if auth.session is None:
         raise ValueError("No session returned")
     return AuthTokens(
@@ -21,10 +21,10 @@ def login(email: str, password: str) -> AuthTokens:
 
 def logout() -> None:
     try:
-        supabase.auth.sign_out()
+        get_supabase().auth.sign_out()
     except Exception:
         pass
 
 
 def register(email: str, password: str) -> None:
-    supabase.auth.sign_up({"email": email, "password": password})
+    get_supabase().auth.sign_up({"email": email, "password": password})

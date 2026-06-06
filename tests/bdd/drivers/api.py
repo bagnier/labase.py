@@ -4,7 +4,7 @@ from uuid import uuid4
 import httpx
 
 from app.main import app
-from app.shared.config import settings
+from app.shared.config import get_settings
 
 
 class ApiDriver:
@@ -61,19 +61,19 @@ class ApiDriver:
 
     def _admin_headers(self) -> dict:
         return {
-            "apikey": settings.supabase_service_role_key,
-            "Authorization": f"Bearer {settings.supabase_service_role_key}",
+            "apikey": get_settings().supabase_service_role_key,
+            "Authorization": f"Bearer {get_settings().supabase_service_role_key}",
         }
 
     def _delete_user_if_exists(self, email: str) -> None:
         resp = httpx.get(
-            f"{settings.supabase_url}/auth/v1/admin/users",
+            f"{get_settings().supabase_url}/auth/v1/admin/users",
             params={"email": email},
             headers=self._admin_headers(),
         )
         for user in resp.json().get("users", []):
             httpx.delete(
-                f"{settings.supabase_url}/auth/v1/admin/users/{user['id']}",
+                f"{get_settings().supabase_url}/auth/v1/admin/users/{user['id']}",
                 headers=self._admin_headers(),
             )
 
@@ -129,7 +129,7 @@ class ApiDriver:
         assert "Vérifiez" in self._response.text, "'Vérifiez' not found in registration response"
         assert self._last_registered_email is not None
         resp = httpx.get(
-            f"{settings.supabase_url}/auth/v1/admin/users",
+            f"{get_settings().supabase_url}/auth/v1/admin/users",
             params={"email": self._last_registered_email},
             headers=self._admin_headers(),
         )
