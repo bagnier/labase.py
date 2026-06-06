@@ -22,6 +22,7 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 | Tool                        | Purpose                                                                          |
 | --------------------------- | -------------------------------------------------------------------------------- |
 | **ruff**                    | Linting + formatting                                                             |
+| **pre-commit**              | Git hooks — runs `ruff format` on staged files before each commit                |
 | **ty**                      | Type checking (Astral, Rust)                                                     |
 | **pytest + pytest-asyncio** | Unit and integration tests                                                       |
 | **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
@@ -96,12 +97,16 @@ labase.py/
 - [uv](https://docs.astral.sh/uv/)
 - [Docker](https://www.docker.com/)
 - [Supabase CLI](https://supabase.com/docs/guides/cli)
+- [pre-commit](https://pre-commit.com/) (`uv tool install pre-commit`)
 
 ### Install
 
 ```bash
 # Clone and install dependencies
 uv sync --all-groups
+
+# Install git hooks (ruff format on commit)
+pre-commit install
 
 # Copy and fill in environment variables
 cp .env.example .env
