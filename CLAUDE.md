@@ -1,0 +1,3 @@
+- when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`)
+- when you think it's done, run `make quality; make test` before you claim it.
+- import at top, unless it's impossible

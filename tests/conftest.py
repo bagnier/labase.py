@@ -1,12 +1,14 @@
-from collections.abc import AsyncGenerator
+from dotenv import load_dotenv
 
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
+pytest_plugins = ["tests.bdd.steps"]
 
 
-@pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
+def pytest_configure(config):
+    load_dotenv(".env.test", override=True)
+
+    from app.shared.config import get_settings
+    from app.shared.supabase_client import get_supabase, get_supabase_admin
+
+    get_settings.cache_clear()
+    get_supabase.cache_clear()
+    get_supabase_admin.cache_clear()

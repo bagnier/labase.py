@@ -28,13 +28,15 @@ logs:
 
 # --- Tests ---
 lint:
-	uv run ruff check .
+	uv run ruff check --fix .
 
 format:
 	uv run ruff format .
 
 typecheck:
 	uv run ty check app/
+
+quality: lint format typecheck
 
 test:
 	ENV_FILE=.env.test uv run pytest  # unit + integration + BDD api driver
