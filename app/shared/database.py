@@ -10,7 +10,11 @@ from app.shared.config import get_settings
 
 @lru_cache
 def _engine():
-    return create_async_engine(get_settings().database_url, echo=False, pool_pre_ping=True)
+    settings = get_settings()
+    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    return create_async_engine(
+        settings.database_url, echo=False, pool_pre_ping=True, connect_args=connect_args
+    )
 
 
 @lru_cache

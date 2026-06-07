@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
     database_url: str
+    db_schema: str = "public"
     secret_key: str = "change-me-in-production"
     debug: bool = False
 

@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test bdd bdd-api bdd-web bdd-all ci install js-build
+.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all serve ci install js-build quality lint format typecheck
 
 # --- Front-end assets ---
 js-build:
@@ -31,7 +31,7 @@ down:
 logs:
 	docker compose logs -f app
 
-# --- Tests ---
+# --- Quality ---
 lint:
 	uv run ruff check --fix .
 
@@ -43,21 +43,17 @@ typecheck:
 
 quality: lint format typecheck
 
+# --- Tests ---
 test:
-	ENV_FILE=.env.test uv run pytest  # unit + integration + BDD api driver
+	ENV_FILE=.env.test uv run pytest --ignore=tests/test_ui_structure.py
 
-ci: js-build lint typecheck test bdd-web
+test-e2e:
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/bdd/ --driver=browser
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/test_ui_structure.py
 
-coverage:
-	ENV_FILE=.env.test uv run pytest --cov=app --cov-report=html
-	open htmlcov/index.html
+test-all: test test-e2e
 
-bdd-api:
-	ENV_FILE=.env.test uv run pytest tests/bdd/ --driver=api
+serve:
+	ENV_FILE=.env.test uv run uvicorn app.main:app --port 8002 --reload
 
-bdd-web:
-	ENV_FILE=.env.test uv run pytest tests/bdd/ --driver=browser
-
-bdd-all: bdd-api bdd-web
-
-bdd: bdd-api
+ci: js-build lint typecheck test-all
