@@ -22,8 +22,13 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   // Pytest
   "python.testing.pytestArgs": [
-    "tests"
+    "tests",
+    "--ignore=tests/e2e"
   ],
+  // Load .env.test for tests/runs. Without this, the Python extension injects
+  // .env (host.docker.internal) and pydantic-settings, which prioritizes
+  // environment variables over env_file, overrides the .env.test values.
+  "python.envFile": "${workspaceFolder}/.env.test",
   "python.testing.pytestEnabled": true,
   "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
   "python.testing.unittestEnabled": false,

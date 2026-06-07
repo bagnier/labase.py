@@ -1,6 +1,6 @@
 import pytest
 
-from tests.bdd.drivers.browser import BrowserDriver
+from tests.e2e.drivers.browser import BrowserDriver
 
 TEST_EMAIL = "ui-structure@labase.dev"
 TEST_PASSWORD = "Test1234!"

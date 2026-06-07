@@ -45,11 +45,11 @@ quality: lint format typecheck
 
 # --- Tests ---
 test:
-	ENV_FILE=.env.test uv run pytest --ignore=tests/test_ui_structure.py
+	ENV_FILE=.env.test uv run pytest --ignore=tests/e2e
 
 test-e2e:
-	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/bdd/ --driver=browser
-	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/test_ui_structure.py
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/e2e/test_features.py --driver=browser
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/e2e/test_ui_structure.py -p no:asyncio
 
 test-all: test test-e2e
 
