@@ -115,9 +115,9 @@ class TestDashboardPage:
         page_auth.visit("/dashboard")
         assert page_auth._p.locator("button:has-text('Déconnexion')").count() == 1
 
-    def test_shows_empty_state(self, page_auth: BrowserDriver):
+    def test_has_link_to_todos(self, page_auth: BrowserDriver):
         page_auth.visit("/dashboard")
-        assert "Aucune activité récente" in page_auth._p.content()
+        assert page_auth._p.query_selector("a[href='/todos']") is not None
 
 
 # ---------------------------------------------------------------------------

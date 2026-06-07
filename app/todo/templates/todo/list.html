@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Todos — labase{% endblock %}
+{% block nav_todos %}active{% endblock %}
+
+{% block breadcrumb %}<span class="text-gray-400">Todos</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-xl space-y-6">
+
+  <h1 class="text-lg font-semibold text-gray-900">Todos</h1>
+
+  <form hx-post="/todos" hx-target="#todo-list" hx-swap="outerHTML" class="flex gap-2">
+    <input type="text" name="title" placeholder="Add a new task…" required
+      class="flex-1 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+    <button type="submit"
+      class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600 transition-colors shadow-sm">
+      Add
+    </button>
+  </form>
+
+  <div id="todo-list" class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+    {% for todo in todos %}
+    <div class="flex items-center gap-3 px-4 py-3 group">
+      <input type="checkbox" data-todo-id="{{ todo.id }}" {% if todo.done %}checked{% endif %}
+        hx-patch="/todos/{{ todo.id }}" hx-vals='{"done": "true"}' hx-target="#todo-list" hx-swap="outerHTML"
+        class="w-4 h-4 rounded border-gray-300 text-indigo-500 cursor-pointer flex-none" />
+      <span class="flex-1 text-sm {% if todo.done %}text-gray-400 line-through{% else %}text-gray-900{% endif %}">
+        {{ todo.title }}
+      </span>
+      <button data-delete-id="{{ todo.id }}" hx-delete="/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="outerHTML"
+        class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    {% else %}
+    <p class="px-4 py-6 text-sm text-center text-gray-400">No tasks yet.</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

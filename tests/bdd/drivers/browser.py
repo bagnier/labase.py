@@ -202,3 +202,105 @@ class BrowserDriver:
         assert message in self._p.content(), (
             f"'{message}' not found in page after registration failure"
         )
+
+    # --- Auth (generic) ---
+
+    def sign_in_as_fresh_user(self) -> None:
+        email = f"{uuid4()}@test.local"
+        password = "Secret1!"
+        self.ensure_registered(email, password)
+        self.sign_in(email, password)
+
+    # --- Dashboard ---
+
+    def view_dashboard(self) -> None:
+        self._last_response = self._p.goto(f"{self._base_url}/dashboard", wait_until="networkidle")
+
+    def assert_link_to_todos(self) -> None:
+        assert self._p.query_selector("a[href='/todos']") is not None, (
+            "No link to /todos found on dashboard"
+        )
+
+    # --- Todo ---
+
+    def _todo_items_json(self) -> list[dict]:
+        assert self._context
+        resp = self._context.request.get(
+            f"{self._base_url}/todos",
+            headers={"accept": "application/json"},
+        )
+        return resp.json()
+
+    def have_todo_items(self, titles: list[str]) -> None:
+        assert self._context
+        for title in reversed(titles):
+            self._context.request.post(
+                f"{self._base_url}/todos",
+                form={"title": title},
+            )
+
+    def view_todo_list(self) -> None:
+        self._last_response = self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+
+    def add_todo(self, title: str) -> None:
+        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._p.fill("input[name=title]", title)
+        self._p.click("button[type=submit]")
+        self._p.wait_for_load_state("networkidle")
+
+    def mark_todo_done(self, title: str) -> None:
+        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        todo_id = next(t["id"] for t in self._todo_items_json() if t["title"] == title)
+        self._p.click(f"input[data-todo-id='{todo_id}']")
+        self._p.wait_for_load_state("networkidle")
+
+    def rename_todo(self, title: str, new_title: str) -> None:
+        assert self._context
+        todo_id = next(t["id"] for t in self._todo_items_json() if t["title"] == title)
+        self._context.request.patch(
+            f"{self._base_url}/todos/{todo_id}",
+            form={"title": new_title},
+        )
+
+    def delete_todo(self, title: str) -> None:
+        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        todo_id = next(t["id"] for t in self._todo_items_json() if t["title"] == title)
+        self._p.click(f"button[data-delete-id='{todo_id}']")
+        self._p.wait_for_load_state("networkidle")
+
+    def move_todo_above(self, title: str, above: str) -> None:
+        assert self._context
+        todos = self._todo_items_json()
+        ids = {t["title"]: t["id"] for t in todos}
+        self._context.request.post(
+            f"{self._base_url}/todos/reorder",
+            data={"id": ids[title], "above_id": ids[above]},
+        )
+
+    def move_todo_to_end(self, title: str) -> None:
+        assert self._context
+        todos = self._todo_items_json()
+        ids = {t["title"]: t["id"] for t in todos}
+        self._context.request.post(
+            f"{self._base_url}/todos/reorder",
+            data={"id": ids[title]},
+        )
+
+    def assert_todo_list_order(self, titles: list[str]) -> None:
+        actual = [t["title"] for t in self._todo_items_json()]
+        assert actual == titles, f"Expected order {titles}, got {actual}"
+
+    def assert_todo_visible(self, title: str) -> None:
+        titles = [t["title"] for t in self._todo_items_json()]
+        assert title in titles, f"'{title}' not found in todo list: {titles}"
+
+    def assert_todo_completed(self, title: str) -> None:
+        for t in self._todo_items_json():
+            if t["title"] == title:
+                assert t["done"], f"Todo '{title}' is not marked as done"
+                return
+        raise AssertionError(f"Todo '{title}' not found")
+
+    def assert_todo_absent(self, title: str) -> None:
+        titles = [t["title"] for t in self._todo_items_json()]
+        assert title not in titles, f"'{title}' should be absent but found in: {titles}"

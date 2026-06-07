@@ -1,11 +1,9 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
+from app.shared.utils import utcnow
 
 
 class Profile(SQLModel, table=True):
@@ -15,8 +13,8 @@ class Profile(SQLModel, table=True):
     auth_user_id: uuid.UUID = Field(unique=True, index=True)
     email: str = Field(index=True)
     display_name: str | None = None
-    created_at: datetime = Field(default_factory=_now)
-    updated_at: datetime = Field(default_factory=_now)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class ProfileCreate(SQLModel):
