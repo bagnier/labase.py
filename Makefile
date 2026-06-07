@@ -1,4 +1,9 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test bdd bdd-api bdd-web bdd-all ci
+.PHONY: dev up down logs db-start db-stop db-reset migrate test bdd bdd-api bdd-web bdd-all ci install js-build
+
+# --- Front-end assets ---
+js-build:
+	npm install
+	npm run build
 
 # --- Local Supabase ---
 db-start:
@@ -41,7 +46,7 @@ quality: lint format typecheck
 test:
 	ENV_FILE=.env.test uv run pytest  # unit + integration + BDD api driver
 
-ci: lint typecheck test bdd-web
+ci: js-build lint typecheck test bdd-web
 
 coverage:
 	ENV_FILE=.env.test uv run pytest --cov=app --cov-report=html

@@ -18,6 +18,14 @@ def _wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
 
 
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
+def _html_template(request: Request) -> str:
+    return "todo/_list_fragment.html" if _is_htmx(request) else "todo/list.html"
+
+
 @router.get("", response_class=HTMLResponse)
 async def todo_list(
     request: Request,
@@ -29,7 +37,7 @@ async def todo_list(
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
     return templates.TemplateResponse(
-        request, "todo/list.html", {"user": current_user, "todos": todos}
+        request, _html_template(request), {"user": current_user, "todos": todos}
     )
 
 
@@ -46,7 +54,7 @@ async def add_todo(
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
     return templates.TemplateResponse(
-        request, "todo/list.html", {"user": current_user, "todos": todos}
+        request, _html_template(request), {"user": current_user, "todos": todos}
     )
 
 
@@ -69,7 +77,7 @@ async def patch_todo(
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
     return templates.TemplateResponse(
-        request, "todo/list.html", {"user": current_user, "todos": todos}
+        request, _html_template(request), {"user": current_user, "todos": todos}
     )
 
 
@@ -88,7 +96,7 @@ async def delete_todo(
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
     return templates.TemplateResponse(
-        request, "todo/list.html", {"user": current_user, "todos": todos}
+        request, _html_template(request), {"user": current_user, "todos": todos}
     )
 
 
@@ -107,5 +115,5 @@ async def reorder_todos(
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
     return templates.TemplateResponse(
-        request, "todo/list.html", {"user": current_user, "todos": todos}
+        request, _html_template(request), {"user": current_user, "todos": todos}
     )
