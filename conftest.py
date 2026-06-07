@@ -3,7 +3,11 @@ import pytest
 from tests.e2e.drivers.api import ApiDriver
 from tests.e2e.drivers.browser import BrowserDriver
 
-pytest_plugins = ["tests.e2e.steps"]
+pytest_plugins = [
+    "app.auth.tests.steps",
+    "app.dashboard.tests.steps",
+    "app.todo.tests.steps",
+]
 
 
 def pytest_addoption(parser):

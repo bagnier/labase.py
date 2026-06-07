@@ -48,8 +48,8 @@ test:
 	ENV_FILE=.env.test uv run pytest --ignore=tests/e2e
 
 test-e2e:
-	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/e2e/test_features.py --driver=browser
-	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest tests/e2e/test_ui_structure.py -p no:asyncio
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest app/ -k test_scenarios --driver=browser
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest app/ -k test_ui -p no:asyncio
 
 test-all: test test-e2e
 
