@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from app.auth.domain.service import login, logout, register
-from app.shared.config import get_settings
+from app.auth.infra.cookies import set_auth_cookies
 from app.shared.templates import templates
 
 router = APIRouter()
@@ -37,29 +37,6 @@ def _friendly_auth_error(e: AuthApiError) -> str:
     return _AUTH_ERROR_MESSAGES.get(code, e.message)
 
 
-_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-
-
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    secure = not get_settings().debug
-    response.set_cookie(
-        "access_token",
-        access_token,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        max_age=_COOKIE_MAX_AGE,
-    )
-    response.set_cookie(
-        "refresh_token",
-        refresh_token,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        max_age=_COOKIE_MAX_AGE,
-    )
-
-
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "login.html")
@@ -74,7 +51,7 @@ async def login_endpoint(
     try:
         tokens = login(email, password)
         resp = Response(status_code=status.HTTP_200_OK)
-        _set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
+        set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         resp.headers["HX-Redirect"] = "/dashboard"
         return resp
     except Exception:

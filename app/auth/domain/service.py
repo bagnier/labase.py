@@ -32,5 +32,15 @@ def logout() -> None:
         pass
 
 
+def refresh_session(refresh_token: str) -> AuthTokens:
+    auth = get_supabase().auth.refresh_session(refresh_token)
+    if auth.session is None:
+        raise ValueError("Refresh failed")
+    return AuthTokens(
+        access_token=auth.session.access_token,
+        refresh_token=auth.session.refresh_token,
+    )
+
+
 def register(email: str, password: str) -> None:
     get_supabase().auth.sign_up({"email": email, "password": password})

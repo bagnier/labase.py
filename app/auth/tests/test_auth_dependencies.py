@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
+import jwt
 import pytest
 import pytest_asyncio
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.auth.domain.service import login
+from app.auth.domain.service import AuthTokens, login
 from app.auth.infra.security import get_current_user
 
 _app = FastAPI()
@@ -54,3 +57,53 @@ async def test_valid_token_returns_user(client, test_user):
     response = await client.get("/me")
     assert response.status_code == 200
     assert response.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_expired_token_with_valid_refresh_returns_200_and_sets_new_cookies(client, test_user):
+    email, password = test_user
+    real_tokens = login(email, password)
+    fake_new_tokens = AuthTokens(
+        access_token=real_tokens.access_token, refresh_token=real_tokens.refresh_token
+    )
+
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", real_tokens.refresh_token)
+
+    with (
+        patch(
+            "app.auth.infra.security._decode",
+            side_effect=[jwt.ExpiredSignatureError, {"sub": "user-id", "email": email}],
+        ),
+        patch("app.auth.infra.security.refresh_session", return_value=fake_new_tokens),
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "user-id"
+    assert "access_token" in response.cookies
+    assert "refresh_token" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_expired_token_without_refresh_returns_401(client):
+    client.cookies.set("access_token", "expired.token.value")
+
+    with patch("app.auth.infra.security._decode", side_effect=jwt.ExpiredSignatureError):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_expired_token_with_invalid_refresh_returns_401(client):
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", "invalid.refresh.token")
+
+    with (
+        patch("app.auth.infra.security._decode", side_effect=jwt.ExpiredSignatureError),
+        patch("app.auth.infra.security.refresh_session", side_effect=ValueError("Refresh failed")),
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
