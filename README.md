@@ -55,6 +55,8 @@ The `todo` bounded context is an intentional example. It demonstrates the full p
 
 ## Key design decisions
 
+**Real RLS security model (hybrid)** — two Postgres connection pools: a *user pool* (`DATABASE_URL`, role `authenticated`, RLS enforced) and a *service pool* (`DATABASE_URL_SERVICE`, role `postgres`, BYPASSRLS for migrations and admin jobs). Every authenticated HTTP request calls `bind_rls(session, user_id)` which issues `SET role authenticated` and injects the user's JWT claims via `set_config('request.jwt.claims', ...)`, enabling Postgres `auth.uid()` in all policies. The service connection is only used for registration (org creation) and org-resolution infrastructure — never for user data queries.
+
 **Supabase as infrastructure layer** — supabase-py is limited to auth and storage. Business queries go through SQLAlchemy directly on Postgres, preserving flexibility (complex queries, transactions, pgvector…).
 
 **SSR with HTMX instead of a separate SPA** — single repo, single deployment, no CORS, server-side auth. Well-suited for a SaaS whose UI is mostly CRUD.
@@ -73,7 +75,8 @@ labase.py/
 │   ├── main.py              # FastAPI app + lifespan, router registration
 │   ├── shared/              # Cross-context infrastructure
 │   │   ├── config.py        # Settings (pydantic-settings, .env)
-│   │   ├── database.py      # SQLAlchemy async engine + session
+│   │   ├── database.py      # Async engines (user + service) + sessions
+│   │   ├── rls.py           # bind_rls / reset_rls (injects JWT claims)
 │   │   ├── supabase_client.py  # supabase-py clients (anon + admin)
 │   │   ├── templates.py     # Jinja2 environment
 │   │   ├── utils.py         # Shared helpers
@@ -81,10 +84,17 @@ labase.py/
 │   ├── auth/                # Bounded context: authentication
 │   │   ├── domain/service.py
 │   │   ├── infra/router.py
-│   │   ├── infra/dependencies.py  # JWT guard (get_current_user)
+│   │   ├── infra/dependencies.py  # get_rls_session (JWT guard + RLS claims)
+│   │   ├── infra/security.py      # get_current_user (JWT decode)
 │   │   ├── templates/       # login.html, register.html
 │   │   ├── tests/           # Unit + BDD steps + API driver
 │   │   └── e2e/             # Playwright browser tests
+│   ├── organizations/       # Bounded context: multi-tenant orgs + memberships
+│   │   ├── domain/models.py
+│   │   ├── infra/repository.py
+│   │   ├── infra/router.py
+│   │   ├── infra/dependencies.py  # get_current_org (active org resolution)
+│   │   └── tests/
 │   ├── profile/             # Bounded context: user profile
 │   │   ├── domain/models.py
 │   │   ├── infra/repository.py

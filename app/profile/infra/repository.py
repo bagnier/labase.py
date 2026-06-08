@@ -28,7 +28,6 @@ class ProfileRepository:
         profile = Profile.model_validate(data)
         self.session.add(profile)
         await self.session.commit()
-        await self.session.refresh(profile)
         return profile
 
     async def update(self, profile: Profile, data: ProfileUpdate) -> Profile:
@@ -37,7 +36,6 @@ class ProfileRepository:
         profile.updated_at = datetime.now(timezone.utc)
         self.session.add(profile)
         await self.session.commit()
-        await self.session.refresh(profile)
         return profile
 
     async def delete(self, profile: Profile) -> None:

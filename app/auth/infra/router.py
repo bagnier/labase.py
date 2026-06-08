@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Form, Request, Response, status
+import uuid
+
+from fastapi import APIRouter, Depends, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from app.auth.domain.service import login, logout, register
 from app.auth.infra.cookies import set_auth_cookies
+from app.organizations.infra.repository import OrganizationRepository
+from app.shared.database import get_service_session
 from app.shared.templates import templates
 
 router = APIRouter()
@@ -83,9 +88,14 @@ async def register_endpoint(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    service_session: AsyncSession = Depends(get_service_session),
 ) -> Response:
     try:
-        register(email, password)
+        user_id_str = register(email, password)
+        org_repo = OrganizationRepository(service_session)
+        await org_repo.create_with_owner(
+            name=f"Organisation de {email}", auth_user_id=uuid.UUID(user_id_str)
+        )
         return templates.TemplateResponse(
             request,
             "login.html",

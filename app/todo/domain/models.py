@@ -13,6 +13,7 @@ class TodoItem(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID
+    org_id: uuid.UUID = Field(foreign_key="organizations.id")
     title: str
     done: bool = False
     position: int = 0

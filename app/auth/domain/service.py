@@ -42,5 +42,9 @@ def refresh_session(refresh_token: str) -> AuthTokens:
     )
 
 
-def register(email: str, password: str) -> None:
-    get_supabase().auth.sign_up({"email": email, "password": password})
+def register(email: str, password: str) -> str:
+    """Returns the new user's UUID (auth.users.id)."""
+    res = get_supabase().auth.sign_up({"email": email, "password": password})
+    if res.user is None:
+        raise ValueError("Registration failed: no user returned")
+    return res.user.id

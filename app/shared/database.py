@@ -2,14 +2,13 @@ from collections.abc import AsyncGenerator
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
 
 from app.shared.config import get_settings
 
 
 @lru_cache
-def _engine():
+def _user_engine():
     settings = get_settings()
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     return create_async_engine(
@@ -18,15 +17,30 @@ def _engine():
 
 
 @lru_cache
-def _session_factory():
-    return async_sessionmaker(_engine(), class_=SQLModelAsyncSession, expire_on_commit=False)
+def _service_engine():
+    settings = get_settings()
+    url = settings.database_url_service or settings.database_url
+    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    return create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)
 
 
-async def create_db_tables() -> None:
-    async with _engine().begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+@lru_cache
+def _user_session_factory():
+    return async_sessionmaker(_user_engine(), class_=SQLModelAsyncSession, expire_on_commit=False)
+
+
+@lru_cache
+def _service_session_factory():
+    return async_sessionmaker(
+        _service_engine(), class_=SQLModelAsyncSession, expire_on_commit=False
+    )
 
 
 async def get_session() -> AsyncGenerator[SQLModelAsyncSession, None]:  # type: ignore[misc]
-    async with _session_factory()() as session:
+    async with _user_session_factory()() as session:
+        yield session
+
+
+async def get_service_session() -> AsyncGenerator[SQLModelAsyncSession, None]:  # type: ignore[misc]
+    async with _service_session_factory()() as session:
         yield session

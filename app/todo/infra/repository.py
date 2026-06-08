@@ -11,27 +11,26 @@ class TodoRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def list_for_user(self, user_id: uuid.UUID) -> list[TodoItem]:
+    async def list_for_org(self, org_id: uuid.UUID) -> list[TodoItem]:
         result = await self.session.exec(
-            select(TodoItem).where(TodoItem.user_id == user_id).order_by(col(TodoItem.position))
+            select(TodoItem).where(TodoItem.org_id == org_id).order_by(col(TodoItem.position))
         )
         return list(result.all())
 
-    async def add(self, user_id: uuid.UUID, title: str) -> TodoItem:
+    async def add(self, user_id: uuid.UUID, org_id: uuid.UUID, title: str) -> TodoItem:
         await self.session.exec(  # type: ignore[call-overload]
             update(TodoItem)
-            .where(col(TodoItem.user_id) == user_id)
+            .where(col(TodoItem.org_id) == org_id)
             .values(position=col(TodoItem.position) + 1)
         )
-        todo = TodoItem(user_id=user_id, title=title, position=0)
+        todo = TodoItem(user_id=user_id, org_id=org_id, title=title, position=0)
         self.session.add(todo)
         await self.session.commit()
-        await self.session.refresh(todo)
         return todo
 
-    async def get(self, todo_id: uuid.UUID, user_id: uuid.UUID) -> TodoItem | None:
+    async def get(self, todo_id: uuid.UUID, org_id: uuid.UUID) -> TodoItem | None:
         result = await self.session.exec(
-            select(TodoItem).where(TodoItem.id == todo_id, TodoItem.user_id == user_id)
+            select(TodoItem).where(TodoItem.id == todo_id, TodoItem.org_id == org_id)
         )
         return result.first()
 
@@ -39,14 +38,12 @@ class TodoRepository:
         todo.done = not todo.done
         self.session.add(todo)
         await self.session.commit()
-        await self.session.refresh(todo)
         return todo
 
     async def set_title(self, todo: TodoItem, title: str) -> TodoItem:
         todo.title = title
         self.session.add(todo)
         await self.session.commit()
-        await self.session.refresh(todo)
         return todo
 
     async def delete(self, todo: TodoItem) -> None:
@@ -54,12 +51,10 @@ class TodoRepository:
         await self.session.commit()
 
     async def move_above(
-        self, user_id: uuid.UUID, todo_id: uuid.UUID, above_id: uuid.UUID | None
+        self, org_id: uuid.UUID, todo_id: uuid.UUID, above_id: uuid.UUID | None
     ) -> None:
         result = await self.session.exec(
-            select(TodoItem)
-            .where(col(TodoItem.user_id) == user_id)
-            .order_by(col(TodoItem.position))
+            select(TodoItem).where(col(TodoItem.org_id) == org_id).order_by(col(TodoItem.position))
         )
         items = list(result.all())
         item_map = {t.id: t for t in items}
@@ -76,7 +71,7 @@ class TodoRepository:
         new_positions = {item.id: pos for pos, item in enumerate(ordered)}
         await self.session.exec(  # type: ignore[call-overload]
             update(TodoItem)
-            .where(col(TodoItem.user_id) == user_id)
+            .where(col(TodoItem.org_id) == org_id)
             .values(
                 position=case(
                     *[(col(TodoItem.id) == id_, pos) for id_, pos in new_positions.items()],
