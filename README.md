@@ -8,7 +8,7 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 | ------------------------- | ---------------------------- | ----------------------------------------------------------------- |
 | **Web framework**         | FastAPI                      | Native async, Pydantic V2, auto-generated OpenAPI                 |
 | **HTML rendering**        | Jinja2 + HTMX                | SSR without a JS build step, SPA-like dynamism via HTML fragments |
-| **Styling**               | Tailwind CSS                 | CDN Play in dev, CLI in prod                                      |
+| **Styling**               | Tailwind CSS                 | Built via npm CLI (`make install`), served from `static/`         |
 | **ORM**                   | SQLModel (on SQLAlchemy 2.x) | Pydantic + SQLAlchemy models, async, Postgres-native              |
 | **Auth + Storage**        | supabase-py                  | Official Supabase SDK, JWT stored in HTTPOnly cookie              |
 | **Database**              | Supabase (Postgres)          | Hosted DB, RLS, triggers, Storage, Auth built-in                  |
@@ -45,6 +45,14 @@ HTTP request
 - Contexts don't import each other directly — shared infrastructure goes through `app/shared/`
 - Exception: `auth/infra/dependencies.py` (JWT guard) may be imported by other `infra/` routers
 
+**Templates are colocated** — each context owns its Jinja2 templates under `<context>/templates/`. Shared layout lives in `app/shared/templates/`.
+
+**Tests are colocated** — each context owns its unit/integration tests under `<context>/tests/` and its browser E2E tests under `<context>/e2e/`. Gherkin `.feature` files live in `features/` at the root; the corresponding pytest-bdd step implementations are in `<context>/tests/steps.py`.
+
+## Demo context: `todo/`
+
+The `todo` bounded context is an intentional example. It demonstrates the full pattern — model, repository, router, Jinja2 templates, BDD steps, E2E tests — on a trivial domain. When starting a new SaaS, delete it and use it as a reference for your first real context.
+
 ## Key design decisions
 
 **Supabase as infrastructure layer** — supabase-py is limited to auth and storage. Business queries go through SQLAlchemy directly on Postgres, preserving flexibility (complex queries, transactions, pgvector…).
@@ -55,6 +63,8 @@ HTTP request
 
 **Dual-driver BDD tests** — Gherkin scenarios (`features/`) are written in functional business language and run against two drivers: an API driver (`httpx.AsyncClient`, fast, no browser) and a browser driver (Playwright Chromium). The same scenarios exercise both the HTTP layer and the real UI without duplicating test logic.
 
+**Front-end assets via npm** — `npm run build` does three things: copies `htmx.min.js` from `node_modules`, copies Inter font woff2 files into `static/fonts/`, and compiles `static/input.css` → `static/tailwind.css` via the Tailwind CLI. All output lands in `static/` and is committed. Re-run `make install` after any template change that adds new Tailwind classes. No CDN in production.
+
 ## Structure
 
 ```
@@ -64,29 +74,41 @@ labase.py/
 │   ├── shared/              # Cross-context infrastructure
 │   │   ├── config.py        # Settings (pydantic-settings, .env)
 │   │   ├── database.py      # SQLAlchemy async engine + session
-│   │   └── supabase_client.py  # supabase-py clients (anon + admin)
+│   │   ├── supabase_client.py  # supabase-py clients (anon + admin)
+│   │   ├── templates.py     # Jinja2 environment
+│   │   ├── utils.py         # Shared helpers
+│   │   └── templates/       # base.html, macros, shared layouts
 │   ├── auth/                # Bounded context: authentication
-│   │   ├── domain/
-│   │   │   └── service.py   # login / logout / register logic
-│   │   └── infra/
-│   │       ├── router.py    # FastAPI endpoints + cookie handling
-│   │       └── dependencies.py  # JWT guard (get_current_user)
+│   │   ├── domain/service.py
+│   │   ├── infra/router.py
+│   │   ├── infra/dependencies.py  # JWT guard (get_current_user)
+│   │   ├── templates/       # login.html, register.html
+│   │   ├── tests/           # Unit + BDD steps + API driver
+│   │   └── e2e/             # Playwright browser tests
 │   ├── profile/             # Bounded context: user profile
-│   │   ├── domain/
-│   │   │   └── models.py    # SQLModel Profile entity
-│   │   └── infra/
-│   │       ├── repository.py  # Profile CRUD (SQLAlchemy)
-│   │       └── router.py    # Dashboard + index redirect
-│   └── templates/           # Jinja2 (base, auth, dashboard)
+│   │   ├── domain/models.py
+│   │   ├── infra/repository.py
+│   │   ├── infra/router.py
+│   │   ├── templates/
+│   │   ├── tests/
+│   │   └── e2e/
+│   ├── dashboard/           # View context (no domain layer)
+│   │   ├── tests/
+│   │   └── e2e/
+│   └── todo/                # Demo context — full pattern example
+│       ├── domain/models.py
+│       ├── infra/repository.py
+│       ├── infra/router.py
+│       ├── templates/
+│       └── tests/
 ├── features/                # BDD Gherkin scenarios (plain text, no code)
-├── tests/
-│   ├── bdd/                 # pytest-bdd steps, fixtures, drivers (api / browser)
-│   ├── test_auth.py         # auth integration tests
-│   └── test_dashboard.py    # dashboard integration tests
+├── tests/                   # Top-level conftest + config tests
+├── static/                  # Compiled CSS, HTMX, fonts
 ├── supabase/migrations/     # Versioned SQL (Supabase CLI)
 ├── Dockerfile               # Production image
 ├── Dockerfile.dev           # Dev image with hot-reload
 ├── docker-compose.yml       # App + local Supabase connection
+├── package.json             # Tailwind CLI
 └── Makefile                 # Common commands
 ```
 
@@ -97,27 +119,29 @@ labase.py/
 - [uv](https://docs.astral.sh/uv/)
 - [Docker](https://www.docker.com/)
 - [Supabase CLI](https://supabase.com/docs/guides/cli)
+- [Node.js](https://nodejs.org/) (Tailwind build)
 - [pre-commit](https://pre-commit.com/) (`uv tool install pre-commit`)
 
 ### Install
 
 ```bash
-# Clone and install dependencies
-uv sync --all-groups
-
-# Install git hooks (ruff format on commit)
-pre-commit install
-
-# Copy and fill in environment variables
-cp .env.example .env
+make install
 ```
+
+This runs `uv sync`, installs pre-commit hooks, copies `.env.example → .env` (if not present), and builds front-end assets.
+
+### Front-end assets
+
+`static/` is committed and served directly by Uvicorn. `make install` copies HTMX and Inter fonts from `node_modules` and compiles `static/input.css` → `static/tailwind.css` via Tailwind CLI.
+
+Re-run `make install` whenever you add a new Tailwind class (unused classes are purged) or upgrade a `package.json` dependency.
 
 ### `.env` vs `.env.test`
 
 | File        | Used by                                  | Hosts                        |
 | ----------- | ---------------------------------------- | ---------------------------- |
 | `.env`      | `docker compose` (app container)         | `host.docker.internal:543xx` |
-| `.env.test` | `make test` / `make bdd*` (runs on host) | `localhost:543xx`            |
+| `.env.test` | `make test` / `make test-e2e` (on host)  | `localhost:543xx`            |
 
 The app container reaches Supabase via `host.docker.internal` (mapped by `extra_hosts` in `docker-compose.yml`). Tests run directly on the host, so they use `localhost`.
 
@@ -159,7 +183,7 @@ make db-reset     # wipe and replay all migrations from scratch
 ```bash
 make dev          # Supabase (host) + app via Docker Compose with hot-reload
 # or without Docker:
-uv run uvicorn app.main:app --reload
+make serve        # uvicorn on port 8002 with .env.test
 ```
 
 | Interface             | URL                        |
@@ -174,19 +198,23 @@ make dev          # Docker Compose in dev mode (hot-reload)
 make up           # Docker Compose in background
 make down         # Stop containers
 make logs         # App logs
+make serve        # uvicorn on port 8002 (test env, no Docker)
 
 make db-start     # Start local Supabase
 make db-stop      # Stop local Supabase
 make db-reset     # Wipe and reset local DB
 make migrate      # Apply migrations (supabase db push)
 
-make lint         # ruff check
+make install      # uv sync + pre-commit + .env + npm install + npm run build
+
+make lint         # ruff check --fix
 make format       # ruff format
 make typecheck    # ty check
-make test         # pytest (generates .cov/coverage.xml)
-make coverage     # pytest + open HTML coverage report in browser
-make bdd          # pytest-bdd via API driver (fast, no browser)
-make bdd-web      # pytest-bdd via Playwright browser driver (requires DB)
-make bdd-all      # both drivers in sequence
-make ci           # lint + typecheck + test + bdd-web
+make quality      # lint + format + typecheck
+
+make test         # pytest unit/integration (generates coverage)
+make test-e2e     # pytest-bdd browser driver + Playwright E2E (requires running app)
+make test-all     # test + test-e2e + coverage XML
+
+make ci           # js-build + lint + typecheck + test + test-e2e + coverage XML
 ```

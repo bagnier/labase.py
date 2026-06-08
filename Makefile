@@ -1,7 +1,10 @@
 .PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all serve ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html
 
-# --- Front-end assets ---
-js-build:
+# --- Setup ---
+install:
+	uv sync --all-groups
+	pre-commit install
+	@test -f .env || cp .env.example .env
 	npm install
 	npm run build
 
