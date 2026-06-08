@@ -6,8 +6,9 @@
   "coverage-gutters.coverageFileNames": [
     ".cov/coverage.xml"
   ],
-  "coverage-gutters.showLineCoverage": true,
-  "coverage-gutters.showRulerCoverage": true,
+  "coverage-gutters.showGutterCoverage": true,
+  "coverage-gutters.showLineCoverage": false,
+  "coverage-gutters.showRulerCoverage": false,
   "editor.codeActionsOnSave": {
     "source.fixAll.ruff": "explicit",
     "source.organizeImports.ruff": "explicit"
@@ -23,7 +24,7 @@
   // Pytest
   "python.testing.pytestArgs": [
     "tests",
-    "--ignore=tests/e2e"
+    "app"
   ],
   // Load .env.test for tests/runs. Without this, the Python extension injects
   // .env (host.docker.internal) and pydantic-settings, which prioritizes

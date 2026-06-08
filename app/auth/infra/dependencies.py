@@ -16,15 +16,3 @@ async def get_current_user(access_token: str | None = Cookie(default=None)) -> U
         raise
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-
-async def get_optional_user(access_token: str | None = Cookie(default=None)) -> User | None:
-    if not access_token:
-        return None
-    try:
-        response = get_supabase().auth.get_user(access_token)
-        if response is None:
-            return None
-        return response.user
-    except Exception:
-        return None

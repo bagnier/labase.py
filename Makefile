@@ -45,11 +45,11 @@ quality: lint format typecheck
 
 # --- Tests ---
 test:
-	ENV_FILE=.env.test uv run pytest --ignore=tests/e2e
+	ENV_FILE=.env.test uv run pytest
 
 test-e2e:
 	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest app/ -k test_scenarios --driver=browser
-	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest app/ -k test_ui -p no:asyncio
+	ENV_FILE=.env.test APP_URL=http://127.0.0.1:8002 uv run pytest app/*/e2e -p no:asyncio --override-ini="norecursedirs="
 
 coverage-erase:
 	uv run coverage erase

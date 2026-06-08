@@ -31,8 +31,9 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
-testpaths = ["tests"]
+testpaths = ["tests", "app"]
 pythonpath = ["."]
+norecursedirs = ["e2e"]
 addopts = "--cov=app --cov-report=term-missing --cov-append"
 
 [tool.coverage.run]
