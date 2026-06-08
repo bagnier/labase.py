@@ -3,9 +3,9 @@ import uuid
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
-from supabase_auth import User
 
-from app.auth.infra.dependencies import get_current_user
+from app.auth.domain.service import AuthenticatedUser
+from app.auth.infra.security import get_current_user
 from app.shared.database import get_session
 from app.shared.templates import templates
 from app.todo.domain.models import TodoRead
@@ -29,7 +29,7 @@ def _html_template(request: Request) -> str:
 @router.get("", response_class=HTMLResponse)
 async def todo_list(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     repo = TodoRepository(session)
@@ -45,7 +45,7 @@ async def todo_list(
 async def add_todo(
     request: Request,
     title: str = Form(...),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     repo = TodoRepository(session)
@@ -64,7 +64,7 @@ async def patch_todo(
     todo_id: uuid.UUID,
     done: bool | None = Form(default=None),
     title: str | None = Form(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     repo = TodoRepository(session)
@@ -85,7 +85,7 @@ async def patch_todo(
 async def delete_todo(
     request: Request,
     todo_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     repo = TodoRepository(session)
@@ -103,7 +103,7 @@ async def delete_todo(
 @router.post("/reorder")
 async def reorder_todos(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     body = await request.json()

@@ -3,9 +3,9 @@ import uuid
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
-from supabase_auth import User
 
-from app.auth.infra.dependencies import get_current_user
+from app.auth.domain.service import AuthenticatedUser
+from app.auth.infra.security import get_current_user
 from app.profile.domain.models import ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
 from app.shared.database import get_session
@@ -22,7 +22,7 @@ async def index(request: Request) -> HTMLResponse:
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> HTMLResponse:
     return templates.TemplateResponse(request, "dashboard.html", {"user": current_user})
 
@@ -30,7 +30,7 @@ async def dashboard(
 @router.get("/profile", response_class=HTMLResponse)
 async def profile_page(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
     repo = ProfileRepository(session)
@@ -44,7 +44,7 @@ async def profile_page(
 async def profile_update(
     request: Request,
     display_name: str = Form(default=""),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
     repo = ProfileRepository(session)

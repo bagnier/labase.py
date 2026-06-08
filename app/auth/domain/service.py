@@ -4,6 +4,12 @@ from app.shared.supabase_client import get_supabase
 
 
 @dataclass
+class AuthenticatedUser:
+    id: str
+    email: str
+
+
+@dataclass
 class AuthTokens:
     access_token: str
     refresh_token: str

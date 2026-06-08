@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.domain.service import login
-from app.auth.infra.dependencies import get_current_user
+from app.auth.infra.security import get_current_user
 
 _app = FastAPI()
 
@@ -29,6 +29,19 @@ async def test_no_cookie_returns_401(client):
 @pytest.mark.asyncio
 async def test_invalid_token_returns_401(client):
     client.cookies.set("access_token", "garbage")
+    response = await client.get("/me")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_wrong_signature_returns_401(client):
+    # A well-formed JWT structure but signed with a different key
+    client.cookies.set(
+        "access_token",
+        "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9"
+        ".eyJzdWIiOiIxMjMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIn0"
+        ".AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    )
     response = await client.get("/me")
     assert response.status_code == 401
 
