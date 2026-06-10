@@ -18,20 +18,31 @@ Each BDD scenario must pass under **both** drivers.
 
 ## Project layout
 
+Tests are **colocated** with each bounded context. Gherkin `.feature` files live at the root;
+step definitions and per-context driver mixins live under `app/<module>/tests/`.
+
 ```
-features/          ← Gherkin .feature files
-tests/bdd/
-  steps.py         ← shared step definitions (driver-agnostic)
-  drivers/
-    browser.py     ← BrowserDriver (Playwright)
-    api.py         ← ApiDriver
-  conftest.py      ← fixtures, driver wiring
-  test_features.py ← pytest entry point
+features/                  ← Gherkin .feature files (+ <name>.analysis.md, <name>.mockup.html)
+conftest.py                ← driver fixture + pytest_plugins (registers each context's steps.py)
+tests/e2e/drivers/
+  protocols.py             ← ApiProtocol / BrowserProtocol (typing interfaces)
+  api.py                   ← ApiDriver (composes the *ApiMixin classes)
+  browser.py               ← BrowserDriver (composes the *BrowserMixin classes)
 app/
   <module>/
-    domain/        ← business logic
-    infra/         ← router, repository, dependencies
+    domain/                ← business logic (models.py, service.py)
+    infra/                 ← router, repository, dependencies
+    templates/<module>/    ← Jinja2 + HTMX templates
+    tests/
+      steps.py             ← @given/@when/@then for this context (driver-agnostic)
+      driver_mixin_api.py  ← <Module>ApiMixin (httpx)
+      driver_mixin_browser.py ← <Module>BrowserMixin (Playwright)
+      driver_mixin.py      ← exports both mixins
+      test_scenarios.py    ← scenarios("../../../features/<name>.feature")
 ```
+
+A new context's step module must be registered in the root `conftest.py` `pytest_plugins` list,
+and its mixins added to `ApiDriver` / `BrowserDriver` in `tests/e2e/drivers/`.
 
 ## Scenarios — Write the `.feature` file (iterative, before any code)
 
@@ -40,7 +51,7 @@ app/
   - Write or update the in `features/<name>.feature` file`.
   - Use english language.
   - Propose scenarios, discuss edge cases, revise wording.
-  - Reuse existing steps from `tests/bdd/steps.py` when possible.
+  - Reuse existing steps from any context's `app/<module>/tests/steps.py` when possible (e.g. auth/sign-in steps in `app/auth/tests/steps.py`).
   - Aim for scenarios that are readable by a non-technical user.
   - Steps must express **user intent**, not technical actions:
     - ✗ `When they click the submit button`
@@ -89,16 +100,19 @@ For **each scenario** in the `.feature` file, execute the following steps **in o
 
 ### Per-scenario cycle (repeat for every scenario)
 
-#### Step definitions (`tests/bdd/steps.py`)
+#### Step definitions (`app/<module>/tests/steps.py`)
 
 - Add missing `@given` / `@when` / `@then` decorators.
 - Steps must be driver-agnostic: they only call methods on `driver`.
 - Steps that need a new driver method → add a `NotImplementedError` stub first.
+- For a brand-new context, create `app/<module>/tests/steps.py` and register it in the root
+  `conftest.py` `pytest_plugins` list, plus `test_scenarios.py` pointing at the `.feature`.
 - Run `make test` → the scenario must fail with `NotImplementedError`, not a missing step error.
 
-#### Drivers (`tests/bdd/drivers/browser.py` and `api.py`)
+#### Drivers (`app/<module>/tests/driver_mixin_api.py` and `driver_mixin_browser.py`)
 
-- Implement the new methods on **both** drivers.
+- Implement the new methods on **both** mixins, then compose them into `ApiDriver` /
+  `BrowserDriver` (`tests/e2e/drivers/{api,browser}.py`) and extend the protocols in `protocols.py`.
 - If a brand-new driver is needed (e.g. email, queue), create it without asking.
 - Run `make test` → the scenario must fail with an application error (404, missing route…), not a driver error.
 
