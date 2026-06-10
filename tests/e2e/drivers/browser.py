@@ -8,6 +8,7 @@ from playwright.sync_api import Page, Response, sync_playwright
 
 from app.auth.tests.driver_mixin import AuthBrowserMixin
 from app.dashboard.tests.driver_mixin import DashboardBrowserMixin
+from app.files.tests.driver_mixin import OrgFileBrowserMixin
 from app.todo.tests.driver_mixin import TodoBrowserMixin
 from tests.e2e.drivers.shared_mixin import SharedBrowserMixin
 
@@ -18,7 +19,13 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-class BrowserDriver(AuthBrowserMixin, DashboardBrowserMixin, TodoBrowserMixin, SharedBrowserMixin):
+class BrowserDriver(
+    AuthBrowserMixin,
+    DashboardBrowserMixin,
+    TodoBrowserMixin,
+    OrgFileBrowserMixin,
+    SharedBrowserMixin,
+):
     def __init__(self) -> None:
         self._base_url: str = os.environ.get("APP_URL", "")
         self._server: subprocess.Popen | None = None

@@ -5,12 +5,13 @@ import httpx
 
 from app.auth.tests.driver_mixin import AuthApiMixin
 from app.dashboard.tests.driver_mixin import DashboardApiMixin
+from app.files.tests.driver_mixin import OrgFileApiMixin
 from app.main import app
 from app.todo.tests.driver_mixin import TodoApiMixin
 from tests.e2e.drivers.shared_mixin import SharedApiMixin
 
 
-class ApiDriver(AuthApiMixin, DashboardApiMixin, TodoApiMixin, SharedApiMixin):
+class ApiDriver(AuthApiMixin, DashboardApiMixin, TodoApiMixin, OrgFileApiMixin, SharedApiMixin):
     def __init__(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
