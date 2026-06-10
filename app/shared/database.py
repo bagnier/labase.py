@@ -1,8 +1,7 @@
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.shared.config import get_settings
 
@@ -26,21 +25,19 @@ def _service_engine():
 
 @lru_cache
 def _user_session_factory():
-    return async_sessionmaker(_user_engine(), class_=SQLModelAsyncSession, expire_on_commit=False)
+    return async_sessionmaker(_user_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
 @lru_cache
 def _service_session_factory():
-    return async_sessionmaker(
-        _service_engine(), class_=SQLModelAsyncSession, expire_on_commit=False
-    )
+    return async_sessionmaker(_service_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
-async def get_session() -> AsyncGenerator[SQLModelAsyncSession, None]:  # type: ignore[misc]
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with _user_session_factory()() as session:
         yield session
 
 
-async def get_service_session() -> AsyncGenerator[SQLModelAsyncSession, None]:  # type: ignore[misc]
+async def get_service_session() -> AsyncGenerator[AsyncSession, None]:
     async with _service_session_factory()() as session:
         yield session

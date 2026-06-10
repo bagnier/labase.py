@@ -1,27 +1,43 @@
 import uuid
 from datetime import datetime
 
-from sqlmodel import Field, SQLModel
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import DateTime, Index, String
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.shared.base import Base
 from app.shared.utils import utcnow
 
 
-class Profile(SQLModel, table=True):
-    __tablename__ = "profiles"  # type: ignore[assignment]
+class Profile(Base):
+    __tablename__ = "profiles"
+    __table_args__ = (
+        Index("ix_profiles_auth_user_id", "auth_user_id", unique=True),
+        Index("ix_profiles_email", "email"),
+    )
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    auth_user_id: uuid.UUID = Field(unique=True, index=True)
-    email: str = Field(index=True)
-    display_name: str | None = None
-    created_at: datetime = Field(default_factory=utcnow)
-    updated_at: datetime = Field(default_factory=utcnow)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    auth_user_id: Mapped[uuid.UUID]
+    email: Mapped[str] = mapped_column(String)
+    display_name: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class ProfileCreate(SQLModel):
+class ProfileCreate(BaseModel):
     auth_user_id: uuid.UUID
     email: str
     display_name: str | None = None
 
 
-class ProfileUpdate(SQLModel):
+class ProfileUpdate(BaseModel):
     display_name: str | None = None
+
+
+class ProfileRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    auth_user_id: uuid.UUID
+    email: str
+    display_name: str | None

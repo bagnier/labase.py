@@ -8,9 +8,8 @@ import uuid
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession as SQLModelAsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.auth.tests.admin_helpers import create_user, delete_user
 from app.profile.domain.models import Profile
@@ -26,7 +25,7 @@ async def test_rls_profile_isolation():
         echo=False,
         connect_args=connect_args,
     )
-    factory = async_sessionmaker(engine, class_=SQLModelAsyncSession, expire_on_commit=False)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     email1 = f"{uuid.uuid4()}@rls.local"
     email2 = f"{uuid.uuid4()}@rls.local"
@@ -41,8 +40,8 @@ async def test_rls_profile_isolation():
             await conn.execute(
                 text("SELECT set_config('request.jwt.claims', :c, false)").bindparams(c=claims)
             )
-            result = await session.exec(select(Profile))
-            profiles = list(result.all())
+            result = await session.execute(select(Profile))
+            profiles = list(result.scalars().all())
 
         assert len(profiles) == 1, f"RLS devrait limiter à 1 profil (user1), got {len(profiles)}"
         assert profiles[0].auth_user_id == uid1

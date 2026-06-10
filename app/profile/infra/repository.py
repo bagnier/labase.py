@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.profile.domain.models import Profile, ProfileCreate, ProfileUpdate
 
@@ -15,17 +15,17 @@ class ProfileRepository:
         return await self.session.get(Profile, profile_id)
 
     async def get_by_auth_user_id(self, auth_user_id: uuid.UUID) -> Profile | None:
-        result = await self.session.exec(
+        result = await self.session.execute(
             select(Profile).where(Profile.auth_user_id == auth_user_id)
         )
-        return result.first()
+        return result.scalars().first()
 
     async def get_by_email(self, email: str) -> Profile | None:
-        result = await self.session.exec(select(Profile).where(Profile.email == email))
-        return result.first()
+        result = await self.session.execute(select(Profile).where(Profile.email == email))
+        return result.scalars().first()
 
     async def create(self, data: ProfileCreate) -> Profile:
-        profile = Profile.model_validate(data)
+        profile = Profile(**data.model_dump())
         self.session.add(profile)
         await self.session.commit()
         return profile

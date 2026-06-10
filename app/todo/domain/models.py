@@ -2,32 +2,35 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime
-from sqlmodel import Field, SQLModel
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.shared.base import Base
 from app.shared.utils import utcnow
 
 
-class TodoItem(SQLModel, table=True):
-    __tablename__ = "todos"  # type: ignore[assignment]
+class TodoItem(Base):
+    __tablename__ = "todos"
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID
-    org_id: uuid.UUID = Field(foreign_key="organizations.id")
-    title: str
-    done: bool = False
-    position: int = 0
-    created_at: Optional[datetime] = Field(
-        default_factory=utcnow,
-        sa_column=Column(DateTime(timezone=True), nullable=False),
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID]
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    title: Mapped[str]
+    done: Mapped[bool] = mapped_column(default=False)
+    position: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 
-class TodoCreate(SQLModel):
+class TodoCreate(BaseModel):
     title: str
 
 
-class TodoRead(SQLModel):
+class TodoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     title: str
     done: bool

@@ -3,9 +3,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum
-from sqlmodel import Field, SQLModel
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.shared.base import Base
 from app.shared.utils import utcnow
 
 
@@ -15,49 +17,50 @@ class OrgRole(str, Enum):
     member = "member"
 
 
-class Organization(SQLModel, table=True):
-    __tablename__ = "organizations"  # type: ignore[assignment]
+class Organization(Base):
+    __tablename__ = "organizations"
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    name: str
-    created_at: datetime = Field(
-        default_factory=utcnow,
-        sa_column=Column(DateTime(timezone=True), nullable=False),
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 
-class Membership(SQLModel, table=True):
-    __tablename__ = "memberships"  # type: ignore[assignment]
+class Membership(Base):
+    __tablename__ = "memberships"
 
-    org_id: uuid.UUID = Field(foreign_key="organizations.id", primary_key=True)
-    auth_user_id: uuid.UUID = Field(primary_key=True)
-    role: OrgRole = Field(
-        default=OrgRole.member,
-        sa_column=Column(SAEnum(OrgRole, name="org_role", create_type=False), nullable=False),
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    auth_user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    role: Mapped[OrgRole] = mapped_column(
+        SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
-    created_at: datetime = Field(
-        default_factory=utcnow,
-        sa_column=Column(DateTime(timezone=True), nullable=False),
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 
-class OrganizationCreate(SQLModel):
+class OrganizationCreate(BaseModel):
     name: str
 
 
-class OrganizationRead(SQLModel):
+class OrganizationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     name: str
     created_at: datetime
 
 
-class MembershipRead(SQLModel):
+class MembershipRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     org_id: uuid.UUID
     auth_user_id: uuid.UUID
     role: OrgRole
 
 
-class OrganizationService(SQLModel):
+class OrganizationService(BaseModel):
     """Données agrégées utiles pour un membre : org + son rôle."""
 
     org: OrganizationRead

@@ -2,7 +2,7 @@ import json
 import uuid
 
 from sqlalchemy import text
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def bind_rls(session: AsyncSession, user_id: uuid.UUID) -> None:

@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Form, Response
 from fastapi.responses import HTMLResponse
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.session import get_rls_session
