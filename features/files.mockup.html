@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Files — mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .screen { border: 2px dashed #e5e7eb; border-radius: 1rem; padding: 2rem; margin-bottom: 3rem; }
+    .screen-label { font-size: 0.7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #9ca3af; margin-bottom: 1rem; }
+    .annotation { font-size: 0.7rem; color: #f59e0b; font-style: italic; margin-top: 0.25rem; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans p-10 max-w-4xl mx-auto">
+
+  <h1 class="text-2xl font-bold mb-2">Files — UI mockup</h1>
+  <p class="text-sm text-gray-500 mb-12">All states. Static — no backend. Interactive elements marked with ★.</p>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 1. Empty state -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">1 — File list · empty state</div>
+
+    <h2 class="text-lg font-semibold mb-4">Organisation files — Acme</h2>
+
+    <!-- Upload form -->
+    <form class="flex gap-2 items-center mb-6">
+      <input type="file" class="flex-1 text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 cursor-pointer" />
+      <button type="button" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600">
+        ★ Upload
+      </button>
+    </form>
+    <p class="text-xs text-gray-400 -mt-4 mb-6">Max file size: 50 MB</p>
+
+    <!-- Empty list -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <p class="px-4 py-10 text-sm text-center text-gray-400">No files yet. Upload the first one.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 2. Populated list (alice owns rapport.pdf; bob owns budget.xlsx) -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">2 — File list · populated · alice's view (owner of rapport.pdf)</div>
+
+    <h2 class="text-lg font-semibold mb-4">Organisation files — Acme</h2>
+
+    <form class="flex gap-2 items-center mb-6">
+      <input type="file" class="flex-1 text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-600" />
+      <button type="button" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">★ Upload</button>
+    </form>
+    <p class="text-xs text-gray-400 -mt-4 mb-6">Max file size: 50 MB</p>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+
+      <!-- Row: own file — full actions -->
+      <div class="flex items-center gap-3 px-4 py-3 group hover:bg-gray-50">
+        <svg class="w-5 h-5 text-gray-400 flex-none" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+        </svg>
+        <span class="flex-1 min-w-0">
+          <a href="#" class="text-sm text-gray-900 hover:text-indigo-600 hover:underline truncate block">rapport.pdf</a>
+          <span class="text-xs text-gray-400">234 KB &middot; uploaded by <strong>alice@example.com</strong> on 2026-06-10</span>
+        </span>
+        <!-- Actions: visible on hover (always visible here for mockup) -->
+        <div class="flex items-center gap-1">
+          <!-- Share -->
+          <button type="button" title="★ Generate share link"
+            class="p-1 rounded text-gray-400 hover:text-indigo-500 hover:bg-indigo-50" onclick="document.getElementById('share-modal').classList.remove('hidden')">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+            </svg>
+          </button>
+          <!-- Rename -->
+          <button type="button" title="★ Rename"
+            class="p-1 rounded text-gray-400 hover:text-indigo-500 hover:bg-indigo-50" onclick="document.getElementById('rename-modal').classList.remove('hidden')">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/>
+            </svg>
+          </button>
+          <!-- Delete -->
+          <button type="button" title="★ Delete"
+            class="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Row: other member's file — share only (no rename/delete for member) -->
+      <div class="flex items-center gap-3 px-4 py-3 group hover:bg-gray-50">
+        <svg class="w-5 h-5 text-gray-400 flex-none" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+        </svg>
+        <span class="flex-1 min-w-0">
+          <a href="#" class="text-sm text-gray-900 hover:text-indigo-600 hover:underline truncate block">budget.xlsx</a>
+          <span class="text-xs text-gray-400">9 KB &middot; uploaded by <strong>bob@example.com</strong> on 2026-06-10</span>
+        </span>
+        <!-- Only download (via filename link); rename/delete disabled for non-owner member -->
+        <div class="flex items-center gap-1 opacity-30 cursor-not-allowed" title="Only the uploader or an admin can rename or delete">
+          <span class="p-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg></span>
+          <span class="p-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg></span>
+        </div>
+      </div>
+
+    </div>
+    <p class="annotation">Rename + delete greyed out for files owned by others (member view). Admin sees them enabled.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 3. Rename modal -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">3 — Rename modal (opens over list)</div>
+
+    <div id="rename-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+      <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+        <h3 class="font-semibold mb-4">Rename file</h3>
+        <label class="block text-sm text-gray-600 mb-1">New name</label>
+        <input type="text" value="rapport.pdf"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-4" />
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('rename-modal').classList.add('hidden')"
+            class="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button type="button"
+            class="px-4 py-2 text-sm rounded-lg bg-indigo-500 text-white hover:bg-indigo-600">★ Rename</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trigger for standalone view -->
+    <button onclick="document.getElementById('rename-modal').classList.remove('hidden')"
+      class="px-4 py-2 text-sm rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200">
+      ★ Open rename modal
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 4. Share link modal -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">4 — Share link modal · link generated</div>
+
+    <div id="share-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+      <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+        <h3 class="font-semibold mb-1">Share link — rapport.pdf</h3>
+        <p class="text-xs text-gray-500 mb-4">Anyone with this link can download the file. Expires in 7 days.</p>
+
+        <!-- Generated link -->
+        <div class="flex gap-2 items-center">
+          <input type="text" readonly value="https://app.example.com/files/share/a3f9c1d2-…"
+            class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-mono focus:outline-none" />
+          <button type="button"
+            class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+            ★ Copy
+          </button>
+        </div>
+
+        <div class="flex justify-end mt-4">
+          <button type="button" onclick="document.getElementById('share-modal').classList.add('hidden')"
+            class="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <button onclick="document.getElementById('share-modal').classList.remove('hidden')"
+      class="px-4 py-2 text-sm rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200">
+      ★ Open share modal
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 5. Public share link page (no auth required) -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">5 — Public share page · GET /files/share/{token}</div>
+
+    <div class="min-h-40 flex flex-col items-center justify-center gap-4 py-10">
+      <svg class="w-12 h-12 text-indigo-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+      </svg>
+      <div class="text-center">
+        <p class="font-semibold text-gray-800">rapport.pdf</p>
+        <p class="text-xs text-gray-400 mt-1">234 KB &middot; Shared by alice@example.com</p>
+      </div>
+      <a href="#"
+        class="px-6 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600">
+        ★ Download
+      </a>
+    </div>
+    <p class="annotation">No login required. Page streams/proxies file bytes server-side. Token validated server-side before serving.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 6. Public share page — expired token -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">6 — Public share page · expired or invalid token</div>
+
+    <div class="min-h-40 flex flex-col items-center justify-center gap-4 py-10">
+      <svg class="w-12 h-12 text-red-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+      </svg>
+      <p class="font-semibold text-gray-700">This link has expired or is invalid.</p>
+      <p class="text-xs text-gray-400">Share links are valid for 7 days. Ask the file owner for a new one.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 7. Permission denied (403) -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">7 — Permission error · inline toast (delete or rename of another member's file)</div>
+
+    <!-- File list with toast -->
+    <div class="relative">
+      <!-- Toast -->
+      <div class="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <svg class="w-4 h-4 flex-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+        </svg>
+        You are not allowed to modify this file. Only the uploader or an org admin can do this.
+      </div>
+
+      <!-- List unchanged -->
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+        <div class="flex items-center gap-3 px-4 py-3">
+          <svg class="w-5 h-5 text-gray-400 flex-none" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+          </svg>
+          <span class="flex-1 min-w-0">
+            <a href="#" class="text-sm text-gray-900 hover:text-indigo-600 truncate block">budget.xlsx</a>
+            <span class="text-xs text-gray-400">9 KB &middot; uploaded by <strong>bob@example.com</strong> on 2026-06-10</span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <p class="annotation">File stays in the list. Toast dismisses after 4 s or on click.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 8. Upload rejected (413) -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">8 — Upload rejected · file exceeds 50 MB</div>
+
+    <form class="flex gap-2 items-center mb-2">
+      <input type="file" class="flex-1 text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-red-50 file:text-red-600" />
+      <button type="button" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">★ Upload</button>
+    </form>
+    <p class="text-xs text-red-600 mb-4">File exceeds the 50 MB limit and was not uploaded.</p>
+    <p class="annotation">Upload form stays; error shown inline below the form. List unchanged.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 9. Org isolation — carol sees empty list -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">9 — Org isolation · carol (Beta Corp) sees her own empty org</div>
+
+    <h2 class="text-lg font-semibold mb-4">Organisation files — Beta Corp</h2>
+    <form class="flex gap-2 items-center mb-6">
+      <input type="file" class="flex-1 text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-600" />
+      <button type="button" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white">★ Upload</button>
+    </form>
+    <p class="text-xs text-gray-400 -mt-4 mb-6">Max file size: 50 MB</p>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <p class="px-4 py-10 text-sm text-center text-gray-400">No files yet. Upload the first one.</p>
+    </div>
+    <p class="annotation">Acme's rapport.pdf is never visible here. RLS enforces org boundary.</p>
+  </div>
+
+</body>
+</html>

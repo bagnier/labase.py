@@ -45,3 +45,11 @@ class OrganizationRepository:
             .limit(1)
         )
         return result.scalars().first()
+
+    async def get_by_id(self, org_id: uuid.UUID) -> Organization | None:
+        result = await self.session.execute(select(Organization).where(Organization.id == org_id))
+        return result.scalars().first()
+
+    async def rename(self, org: Organization, name: str) -> None:
+        org.name = name
+        await self.session.commit()

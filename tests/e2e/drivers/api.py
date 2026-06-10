@@ -54,3 +54,4 @@ class ApiDriver(AuthApiMixin, DashboardApiMixin, TodoApiMixin, OrgFileApiMixin, 
             base_url="http://testserver",
             follow_redirects=False,
         )
+        self._reset_multi_user_state()

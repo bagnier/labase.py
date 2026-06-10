@@ -41,7 +41,10 @@ async def get_current_user(
         except Exception:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
         set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
-        payload = _decode(tokens.access_token)
+        access_token = tokens.access_token
+        payload = _decode(access_token)
     except jwt.PyJWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    return AuthenticatedUser(id=payload["sub"], email=payload.get("email", ""))
+    return AuthenticatedUser(
+        id=payload["sub"], email=payload.get("email", ""), access_token=access_token
+    )

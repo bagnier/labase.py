@@ -7,7 +7,19 @@ from app.shared.config import get_settings
 BUCKET = "org-files"
 
 
+def user_storage_client(access_token: str) -> AsyncStorageClient:
+    s = get_settings()
+    return AsyncStorageClient(
+        url=f"{s.supabase_url}/storage/v1",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "apikey": s.supabase_anon_key,
+        },
+    )
+
+
 def service_storage_client() -> AsyncStorageClient:
+    """Used only inside app boundary (e.g. public share proxy). Never expose to client."""
     s = get_settings()
     return AsyncStorageClient(
         url=f"{s.supabase_url}/storage/v1",

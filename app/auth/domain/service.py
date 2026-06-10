@@ -7,6 +7,7 @@ from app.shared.supabase_client import get_supabase
 class AuthenticatedUser:
     id: str
     email: str
+    access_token: str = ""
 
 
 @dataclass

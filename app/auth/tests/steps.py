@@ -1,31 +1,31 @@
 from pytest_bdd import given, parsers, then, when
 
 
-@given("the application is running", target_fixture="app")
+@given("the application is running")
 def step_app_running(driver):
     driver.reset_session()
 
 
-@given(
-    parsers.parse('a user is registered with email "{email}" and password "{password}"'),
-    target_fixture="app",
-)
+@given(parsers.parse('a user is signed in as "{email}" within org "{org_name}"'))
+def step_user_signed_in_within_org(driver, email, org_name):
+    driver.reset_session()
+    driver.sign_in_within_org(email, org_name)
+
+
+@given(parsers.parse('a user is registered with email "{email}" and password "{password}"'))
 def step_user_registered(driver, email, password):
     driver.reset_session()
     driver.ensure_registered(email, password)
 
 
-@given(
-    parsers.parse('a user is signed in as "{email}" with password "{password}"'),
-    target_fixture="app",
-)
+@given(parsers.parse('a user is signed in as "{email}" with password "{password}"'))
 def step_user_signed_in(driver, email, password):
     driver.reset_session()
     driver.ensure_registered(email, password)
     driver.sign_in(email, password)
 
 
-@given("a user is signed in", target_fixture="app")
+@given("a user is signed in")
 def step_signed_in_fresh(driver):
     driver.reset_session()
     driver.sign_in_as_fresh_user()

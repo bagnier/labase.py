@@ -20,9 +20,18 @@ class OrgFile(Base):
     storage_path: Mapped[str] = mapped_column(String)
     content_type: Mapped[str] = mapped_column(String, default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(default=0)
+    uploader_email: Mapped[str] = mapped_column(String, default="")
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+class OrgFileShareToken(Base):
+    __tablename__ = "org_file_share_tokens"
+
+    token: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("org_files.id"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class OrgFileRead(BaseModel):
@@ -32,4 +41,5 @@ class OrgFileRead(BaseModel):
     filename: str
     content_type: str
     size_bytes: int
+    uploader_email: str
     created_at: datetime

@@ -1,9 +1,12 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.files.domain.models import OrgFile
+from app.files.domain.models import OrgFile, OrgFileShareToken
+
+_SHARE_TOKEN_TTL_DAYS = 7
 
 
 class OrgFileRepository:
@@ -24,6 +27,7 @@ class OrgFileRepository:
         storage_path: str,
         content_type: str,
         size_bytes: int,
+        uploader_email: str = "",
     ) -> OrgFile:
         org_file = OrgFile(
             org_id=org_id,
@@ -32,6 +36,7 @@ class OrgFileRepository:
             storage_path=storage_path,
             content_type=content_type,
             size_bytes=size_bytes,
+            uploader_email=uploader_email,
         )
         self.session.add(org_file)
         await self.session.commit()
@@ -43,6 +48,29 @@ class OrgFileRepository:
         )
         return result.scalars().first()
 
+    async def get_by_id(self, file_id: uuid.UUID) -> OrgFile | None:
+        result = await self.session.execute(select(OrgFile).where(OrgFile.id == file_id))
+        return result.scalars().first()
+
+    async def rename(self, org_file: OrgFile, new_filename: str) -> None:
+        org_file.filename = new_filename
+        await self.session.commit()
+
     async def delete(self, org_file: OrgFile) -> None:
         await self.session.delete(org_file)
         await self.session.commit()
+
+    async def add_share_token(self, file_id: uuid.UUID) -> OrgFileShareToken:
+        token = OrgFileShareToken(
+            file_id=file_id,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=_SHARE_TOKEN_TTL_DAYS),
+        )
+        self.session.add(token)
+        await self.session.commit()
+        return token
+
+    async def get_share_token(self, token: uuid.UUID) -> OrgFileShareToken | None:
+        result = await self.session.execute(
+            select(OrgFileShareToken).where(OrgFileShareToken.token == token)
+        )
+        return result.scalars().first()
