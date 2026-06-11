@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
+from app.auth.infra.session import get_rls_session
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import OrgFileRepository
 from app.files.infra.storage import (
@@ -16,9 +17,9 @@ from app.files.infra.storage import (
     storage_path,
     user_storage_client,
 )
-from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import Membership, OrgRole
 from app.organizations.infra.context import get_current_membership, get_current_org
+from app.shared.audit import enqueue_audit_log
 from app.shared.clock import Clock, get_clock
 from app.shared.database import get_service_session
 from app.shared.templates import templates
@@ -70,6 +71,7 @@ async def file_list(
 @router.post("", response_class=HTMLResponse)
 async def upload_file(
     request: Request,
+    bg: BackgroundTasks,
     file: UploadFile,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
@@ -90,7 +92,7 @@ async def upload_file(
     await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
 
     repo = OrgFileRepository(session, clock)
-    await repo.add(
+    org_file = await repo.add(
         org_id=org_id,
         user_id=uuid.UUID(current_user.id),
         filename=file.filename or "upload",
@@ -98,6 +100,15 @@ async def upload_file(
         content_type=content_type,
         size_bytes=len(content),
         uploader_email=current_user.email,
+    )
+    enqueue_audit_log(
+        bg,
+        level="info",
+        event="file.uploaded",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        file_id=str(org_file.id),
+        filename=org_file.filename,
     )
 
     files = await repo.list_for_org(org_id)
@@ -129,6 +140,7 @@ async def download_file(
 @router.delete("/{file_id}", response_class=HTMLResponse)
 async def delete_file(
     request: Request,
+    bg: BackgroundTasks,
     file_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
@@ -148,6 +160,14 @@ async def delete_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).remove([org_file.storage_path])
     await repo.delete(org_file)
+    enqueue_audit_log(
+        bg,
+        level="info",
+        event="file.deleted",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        file_id=str(file_id),
+    )
 
     files = await repo.list_for_org(org_id)
     if _wants_json(request):

@@ -1,11 +1,14 @@
 from functools import lru_cache
 
 import jwt
+import structlog
 from fastapi import Cookie, HTTPException, Response, status
 
 from app.auth.domain.service import AuthenticatedUser, AuthTokens, refresh_session
 from app.auth.infra.cookies import set_auth_cookies
 from app.shared.config import get_settings
+
+log = structlog.get_logger("labase.auth.security")
 
 
 @lru_cache
@@ -39,6 +42,7 @@ async def get_current_user(
         try:
             tokens: AuthTokens = refresh_session(refresh_token)
         except Exception:
+            log.warning("auth.token_refresh_failed")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
         set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
         access_token = tokens.access_token

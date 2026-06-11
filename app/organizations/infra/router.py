@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -17,6 +17,7 @@ from app.organizations.domain.models import (
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
+from app.shared.audit import enqueue_audit_log
 from app.shared.database import get_service_session
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -123,6 +124,7 @@ async def update_member_role(
 @router.delete("/{org_id}/members/me", status_code=status.HTTP_204_NO_CONTENT)
 async def leave_organization(
     org_id: uuid.UUID,
+    bg: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
 ) -> None:
@@ -132,12 +134,16 @@ async def leave_organization(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    enqueue_audit_log(
+        bg, level="info", event="org.member_left", user_id=current_user.id, org_id=str(org_id)
+    )
 
 
 @router.delete("/{org_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_member(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
+    bg: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
 ) -> None:
@@ -151,6 +157,14 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    enqueue_audit_log(
+        bg,
+        level="info",
+        event="org.member_removed",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        target_user_id=str(user_id),
+    )
 
 
 class InvitationCreateBody(BaseModel):
@@ -163,6 +177,7 @@ class InvitationCreateBody(BaseModel):
 async def create_invitation(
     org_id: uuid.UUID,
     body: InvitationCreateBody,
+    bg: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
     service_session: AsyncSession = Depends(get_service_session),
@@ -192,6 +207,14 @@ async def create_invitation(
         email=body.email,
         role=OrgRole.member,
         invited_by=uuid.UUID(current_user.id),
+    )
+    enqueue_audit_log(
+        bg,
+        level="info",
+        event="org.invitation_sent",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        invitee_email=body.email,
     )
     return InvitationRead.model_validate(invitation)
 

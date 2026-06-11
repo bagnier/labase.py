@@ -22,8 +22,10 @@
 - [x] headers de sécurité (HSTS, CSP)
 - [x] healthcheck (liveness / readiness)
 - [x] rate-limiting
-- [ ] logging
-- [ ] observabilité
+- [x] logging
+- [x] observabilité
+- [ ] TLS and HTTP/2
+- [ ] OWASP Dependency Check
 - [ ] file de tâches asynchrones
 - [ ] index fulltext
 - [ ] cache
@@ -44,3 +46,4 @@
 - [x] gestion de fichiers (bucket + share tokens)
 - [ ] flashcards comme exemple HexArch
 - [ ] dashboard user (contexte testé mais router non câblé dans main.py)
+- [ ] admin dashboard

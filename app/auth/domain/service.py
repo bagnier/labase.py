@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 
+import structlog
+
 from app.shared.supabase_client import get_supabase
+
+log = structlog.get_logger("labase.auth.service")
 
 
 @dataclass
@@ -30,7 +34,7 @@ def logout() -> None:
     try:
         get_supabase().auth.sign_out()
     except Exception:
-        pass
+        log.warning("auth.signout_failed")
 
 
 def refresh_session(refresh_token: str) -> AuthTokens:

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +17,12 @@ from app.organizations.infra.router import router as organizations_router
 from app.profile.infra.router import router as profile_router
 from app.shared.config import get_settings
 from app.shared.limiter import limiter
+from app.shared.logging import setup_logging
+from app.shared.middleware_logging import LoggingMiddleware
 from app.todo.infra.router import router as todo_router
+
+setup_logging()
+log = structlog.get_logger("labase.app")
 
 BASE_DIR = Path(__file__).parent
 
@@ -31,6 +37,7 @@ async def rate_limit_handler(request: Request, exc: Exception) -> Response:
     return JSONResponse({"detail": "Too many requests"}, status_code=429)
 
 
+app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,
@@ -57,6 +64,16 @@ async def security_headers(request: Request, call_next):  # type: ignore[no-unty
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = _CSP
     return response
+
+
+@app.exception_handler(500)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> Response:
+    log.exception(
+        "request.unhandled_error",
+        method=request.method,
+        path=request.url.path,
+    )
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 
 @app.exception_handler(HTTPException)

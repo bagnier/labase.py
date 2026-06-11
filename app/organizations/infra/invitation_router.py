@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,8 +11,11 @@ from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
+from app.shared.audit import enqueue_audit_log
 from app.shared.database import get_service_session
 from app.shared.templates import templates
+
+log = structlog.get_logger("labase.organizations.invitations")
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
@@ -87,6 +91,7 @@ async def get_invitation(
 @router.post("/{token}/accept", status_code=status.HTTP_200_OK, response_model=None)
 async def accept_invitation(
     request: Request,
+    bg: BackgroundTasks,
     token: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
     rls_session: AsyncSession = Depends(get_rls_session),
@@ -133,11 +138,19 @@ async def accept_invitation(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
             ) from exc
+        log.exception("invitation.accept_error")
         raise
 
     repo = OrganizationRepository(rls_session)
     org = await repo.get_by_id(inv["org_id"])
     slug = org.slug if org else ""
+    enqueue_audit_log(
+        bg,
+        level="info",
+        event="org.member_joined",
+        user_id=current_user.id,
+        org_id=str(inv["org_id"]),
+    )
     redirect_url = f"/orgs/{slug}/dashboard"
     if _wants_json(request):
         return JSONResponse({"redirect": redirect_url})

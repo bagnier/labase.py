@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.infra.context import get_current_org
+from app.shared.audit import enqueue_audit_log
 from app.shared.templates import templates
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
@@ -51,13 +52,22 @@ async def todo_list(
 @router.post("", response_class=HTMLResponse)
 async def add_todo(
     request: Request,
+    bg: BackgroundTasks,
     title: str = Form(...),
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
-    await repo.add(uuid.UUID(current_user.id), org_id, title)
+    todo = await repo.add(uuid.UUID(current_user.id), org_id, title)
+    enqueue_audit_log(
+        bg,
+        level="info",
+        event="todo.created",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        todo_id=str(todo.id),
+    )
     todos = await repo.list_for_org(org_id)
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
@@ -93,6 +103,7 @@ async def patch_todo(
 @router.delete("/{todo_id}", response_class=HTMLResponse)
 async def delete_todo(
     request: Request,
+    bg: BackgroundTasks,
     todo_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
@@ -102,6 +113,14 @@ async def delete_todo(
     todo = await repo.get(todo_id, org_id)
     if todo:
         await repo.delete(todo)
+        enqueue_audit_log(
+            bg,
+            level="info",
+            event="todo.deleted",
+            user_id=current_user.id,
+            org_id=str(org_id),
+            todo_id=str(todo_id),
+        )
     todos = await repo.list_for_org(org_id)
     if _wants_json(request):
         return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])

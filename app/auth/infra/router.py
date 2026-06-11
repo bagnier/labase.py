@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Form, Request, Response, status
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
@@ -8,9 +9,12 @@ from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 from app.auth.domain.service import login, logout, register
 from app.auth.infra.cookies import set_auth_cookies
 from app.organizations.infra.repository import OrganizationRepository
+from app.shared.audit import enqueue_audit_log
 from app.shared.database import get_service_session
 from app.shared.limiter import rate_limit
 from app.shared.templates import templates
+
+log = structlog.get_logger("labase.auth")
 
 router = APIRouter()
 
@@ -52,9 +56,11 @@ async def login_page(request: Request) -> HTMLResponse:
 @rate_limit("10/minute")
 async def login_endpoint(
     request: Request,
+    bg: BackgroundTasks,
     email: str = Form(...),
     password: str = Form(...),
 ) -> Response:
+    ip = request.client.host if request.client else None
     try:
         tokens = login(email, password)
         resp = Response(status_code=status.HTTP_200_OK)
@@ -62,6 +68,7 @@ async def login_endpoint(
         resp.headers["HX-Redirect"] = "/dashboard"
         return resp
     except Exception:
+        enqueue_audit_log(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -89,10 +96,12 @@ async def register_page(request: Request) -> HTMLResponse:
 @rate_limit("5/minute")
 async def register_endpoint(
     request: Request,
+    bg: BackgroundTasks,
     email: str = Form(...),
     password: str = Form(...),
     service_session: AsyncSession = Depends(get_service_session),
 ) -> Response:
+    ip = request.client.host if request.client else None
     try:
         user_id_str = register(email, password)
         org_repo = OrganizationRepository(service_session)
@@ -108,7 +117,9 @@ async def register_endpoint(
         error = f"Mot de passe trop faible : {_format_weak_password_reasons(e.reasons)}"
     except AuthApiError as e:
         error = _friendly_auth_error(e)
+        log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
     except Exception:
+        log.exception("auth.register_error", ip=ip, email=email)
         error = "Une erreur inattendue s'est produite."
     return templates.TemplateResponse(
         request,
