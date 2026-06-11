@@ -1,7 +1,7 @@
 import re
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.organizations.domain.models import (
@@ -11,6 +11,16 @@ from app.organizations.domain.models import (
     OrgRole,
     Organization,
 )
+
+
+async def resolve_emails(session: AsyncSession, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    if not user_ids:
+        return {}
+    result = await session.execute(
+        text("SELECT id, email FROM auth.users WHERE id = ANY(:ids)"),
+        {"ids": [str(uid) for uid in user_ids]},
+    )
+    return {uuid.UUID(str(row.id)): row.email for row in result}
 
 
 def _slugify(name: str) -> str:
@@ -42,14 +52,6 @@ class OrganizationRepository:
         self.session.add(membership)
         await self.session.commit()
         return org
-
-    async def list_for_user(self, auth_user_id: uuid.UUID) -> list[Organization]:
-        result = await self.session.execute(
-            select(Organization)
-            .join(Membership, Membership.org_id == Organization.id)
-            .where(Membership.auth_user_id == auth_user_id)
-        )
-        return list(result.scalars().all())
 
     async def list_with_role_for_user(
         self, auth_user_id: uuid.UUID
@@ -96,12 +98,14 @@ class OrganizationRepository:
 
     async def count_owners(self, org_id: uuid.UUID) -> int:
         result = await self.session.execute(
-            select(Membership).where(
+            select(func.count())
+            .select_from(Membership)
+            .where(
                 Membership.org_id == org_id,
                 Membership.role == OrgRole.owner,
             )
         )
-        return len(result.scalars().all())
+        return result.scalar_one()
 
     async def update_member_role(
         self, org_id: uuid.UUID, user_id: uuid.UUID, role: OrgRole

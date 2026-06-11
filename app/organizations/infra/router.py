@@ -16,22 +16,10 @@ from app.organizations.domain.models import (
     OrganizationWithRoleRead,
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
-from app.organizations.infra.repository import OrganizationRepository
+from app.organizations.infra.repository import OrganizationRepository, resolve_emails
 from app.shared.database import get_service_session
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
-
-
-async def _resolve_emails(
-    service_session: AsyncSession, user_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, str]:
-    if not user_ids:
-        return {}
-    result = await service_session.execute(
-        text("SELECT id, email FROM auth.users WHERE id = ANY(:ids)"),
-        {"ids": [str(uid) for uid in user_ids]},
-    )
-    return {uuid.UUID(str(row.id)): row.email for row in result}
 
 
 @router.get("", response_model=list[OrganizationWithRoleRead])
@@ -69,9 +57,9 @@ async def rename_organization(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await repo.rename(org, body.name)
     return JSONResponse(
-        OrganizationWithRoleRead.model_validate({**org.__dict__, "role": "member"}).model_dump(
-            mode="json"
-        )
+        OrganizationWithRoleRead.model_validate(
+            {**org.__dict__, "role": membership.role}
+        ).model_dump(mode="json")
     )
 
 
@@ -87,7 +75,7 @@ async def list_members(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     members = await repo.list_members(org_id)
-    emails = await _resolve_emails(service_session, [m.auth_user_id for m in members])
+    emails = await resolve_emails(service_session, [m.auth_user_id for m in members])
     return [
         MemberRead(
             auth_user_id=m.auth_user_id,
@@ -123,7 +111,7 @@ async def update_member_role(
     membership = await repo.update_member_role(org_id, user_id, body.role)
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    emails = await _resolve_emails(service_session, [membership.auth_user_id])
+    emails = await resolve_emails(service_session, [membership.auth_user_id])
     return MemberRead(
         auth_user_id=membership.auth_user_id,
         email=emails.get(membership.auth_user_id, ""),
