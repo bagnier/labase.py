@@ -46,6 +46,11 @@ def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
     return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
 
 
+def _template_ctx(request: Request, current_user: object, files: list) -> dict:
+    org_slug = request.path_params.get("org_slug", "")
+    return {"user": current_user, "files": files, "org_slug": org_slug}
+
+
 @router.get("", response_class=HTMLResponse)
 async def file_list(
     request: Request,
@@ -58,7 +63,7 @@ async def file_list(
     if _wants_json(request):
         return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
     return templates.TemplateResponse(
-        request, _html_template(request), {"user": current_user, "files": files}
+        request, _html_template(request), _template_ctx(request, current_user, files)
     )
 
 
@@ -99,7 +104,7 @@ async def upload_file(
     if _wants_json(request):
         return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
     return templates.TemplateResponse(
-        request, _html_template(request), {"user": current_user, "files": files}
+        request, _html_template(request), _template_ctx(request, current_user, files)
     )
 
 
@@ -148,7 +153,7 @@ async def delete_file(
     if _wants_json(request):
         return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
     return templates.TemplateResponse(
-        request, _html_template(request), {"user": current_user, "files": files}
+        request, _html_template(request), _template_ctx(request, current_user, files)
     )
 
 
@@ -182,7 +187,7 @@ async def rename_file(
     if _wants_json(request):
         return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
     return templates.TemplateResponse(
-        request, _html_template(request), {"user": current_user, "files": files}
+        request, _html_template(request), _template_ctx(request, current_user, files)
     )
 
 

@@ -4,6 +4,10 @@ from tests.e2e.drivers.protocols import BrowserProtocol
 
 
 class TodoBrowserMixin(BrowserProtocol):
+    def _todos_url(self) -> str:
+        slug = getattr(self, "_active_org_slug", "")
+        return f"{self._base_url}/orgs/{slug}/todos"
+
     def _dom_todo_rows(self) -> list:
         return self._p.locator("#todo-list > div").all()
 
@@ -19,7 +23,7 @@ class TodoBrowserMixin(BrowserProtocol):
     def _api_todo_ids(self) -> dict[str, str]:
         assert self._context
         resp = self._context.request.get(
-            f"{self._base_url}/todos",
+            self._todos_url(),
             headers={"accept": "application/json"},
         )
         return {t["title"]: t["id"] for t in resp.json()}
@@ -28,15 +32,15 @@ class TodoBrowserMixin(BrowserProtocol):
         assert self._context
         for title in reversed(titles):
             self._context.request.post(
-                f"{self._base_url}/todos",
+                self._todos_url(),
                 form={"title": title},
             )
 
     def view_todo_list(self) -> None:
-        self._last_response = self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._last_response = self._p.goto(self._todos_url(), wait_until="networkidle")
 
     def _goto_todos(self) -> None:
-        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="networkidle")
 
     def _wait_htmx_response(self, url_fragment: str, method: str, action: Callable) -> None:
         with self._p.expect_response(
@@ -48,10 +52,11 @@ class TodoBrowserMixin(BrowserProtocol):
     def add_todo(self, title: str) -> None:
         self._goto_todos()
         self._p.fill("input[name=title]", title)
+        todos_path = f"/orgs/{getattr(self, '_active_org_slug', '')}/todos"
         self._wait_htmx_response(
-            "/todos",
+            todos_path,
             "POST",
-            lambda: self._p.locator("form[hx-post='/todos'] button[type=submit]").click(),
+            lambda: self._p.locator(f"form[hx-post='{todos_path}'] button[type=submit]").click(),
         )
 
     def mark_todo_done(self, title: str) -> None:
@@ -68,7 +73,7 @@ class TodoBrowserMixin(BrowserProtocol):
         todo_id = self._dom_todo_id_by_title(title)
         assert self._context
         self._context.request.patch(
-            f"{self._base_url}/todos/{todo_id}",
+            f"{self._todos_url()}/{todo_id}",
             form={"title": new_title},
         )
         self._goto_todos()
@@ -83,24 +88,24 @@ class TodoBrowserMixin(BrowserProtocol):
         )
 
     def move_todo_above(self, title: str, above: str) -> None:
-        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="networkidle")
         ids = {t: self._dom_todo_id_by_title(t) for t in (title, above)}
         assert self._context
         self._context.request.post(
-            f"{self._base_url}/todos/reorder",
+            f"{self._todos_url()}/reorder",
             data={"id": ids[title], "above_id": ids[above]},
         )
-        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="networkidle")
 
     def move_todo_to_end(self, title: str) -> None:
-        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="networkidle")
         todo_id = self._dom_todo_id_by_title(title)
         assert self._context
         self._context.request.post(
-            f"{self._base_url}/todos/reorder",
+            f"{self._todos_url()}/reorder",
             data={"id": todo_id},
         )
-        self._p.goto(f"{self._base_url}/todos", wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="networkidle")
 
     def assert_todo_list_order(self, titles: list[str]) -> None:
         actual = self._dom_todo_titles()

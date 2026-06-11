@@ -37,6 +37,11 @@ class BrowserDriver(
         self._page: Page | None = None
         self._last_response: Response | None = None
         self._last_registered_email: str | None = None
+        self._active_org_slug: str = ""
+        self._primary_email: str = ""
+        self._secondary_browser_contexts: dict = {}
+        self._acting_as_email: str = ""
+        self._primary_context_backup = None
 
     def start(self) -> None:
         if not self._base_url:
@@ -78,12 +83,20 @@ class BrowserDriver(
             self._server.wait(timeout=10)
 
     def reset_session(self) -> None:
+        for ctx in self._secondary_browser_contexts.values():
+            ctx.close()
+        self._secondary_browser_contexts = {}
         if self._context:
             self._context.close()
         assert self._browser
         self._context = self._browser.new_context()
         self._page = self._context.new_page()
         self._last_response = None
+        self._active_org_slug = ""
+        self._primary_email = ""
+        self._acting_as_email = ""
+        self._primary_context_backup = None
+        self._org_list_response = None  # type: ignore[attr-defined]
 
     @property
     def _p(self) -> Page:
