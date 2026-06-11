@@ -7,4 +7,6 @@ class DashboardApiMixin(ApiProtocol):
 
     def assert_link_to_todos(self) -> None:
         assert self._response is not None
-        assert "/todos" in self._response.text, "No link to /todos found on dashboard"
+        slug = getattr(self, "_active_org_slug", "")
+        expected = f"/orgs/{slug}/todos"
+        assert expected in self._response.text, f"No link to {expected!r} found on dashboard"

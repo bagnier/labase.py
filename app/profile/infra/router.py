@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
+from app.organizations.infra.repository import OrganizationRepository
 from app.profile.domain.models import ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
-from app.shared.database import get_session
+from app.shared.database import get_service_session, get_session
 from app.shared.templates import templates
 
 router = APIRouter()
@@ -23,8 +24,15 @@ async def index(request: Request) -> HTMLResponse:
 async def dashboard(
     request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
+    service_session: AsyncSession = Depends(get_service_session),
 ) -> HTMLResponse:
-    return templates.TemplateResponse(request, "dashboard.html", {"user": current_user})
+    repo = OrganizationRepository(service_session)
+    pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
+    orgs = [org for org, _ in pairs]
+    org_slug = orgs[0].slug if orgs else ""
+    return templates.TemplateResponse(
+        request, "dashboard.html", {"user": current_user, "org_slug": org_slug, "orgs": orgs}
+    )
 
 
 @router.get("/profile", response_class=HTMLResponse)

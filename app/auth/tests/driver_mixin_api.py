@@ -25,10 +25,16 @@ class AuthApiMixin(ApiProtocol):
                 headers=self._admin_headers(),
             )
 
+    def _store_active_slug(self) -> None:
+        resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))
+        if resp.status_code == 200 and resp.json():
+            self._active_org_slug = resp.json()[0]["slug"]
+
     def sign_in(self, email: str, password: str) -> None:
         self._response = self._run(
             self._c.post("/auth/login", data={"email": email, "password": password})
         )
+        self._store_active_slug()
 
     def ensure_registered(self, email: str, password: str) -> None:
         self._run(self._c.post("/auth/register", data={"email": email, "password": password}))
@@ -51,6 +57,7 @@ class AuthApiMixin(ApiProtocol):
         password = "Secret1!"
         self.ensure_registered(email, password)
         self.sign_in(email, password)
+        self._store_active_slug()
 
     def logout_action(self) -> None:
         self._response = self._run(self._c.post("/auth/logout"))

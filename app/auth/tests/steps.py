@@ -15,7 +15,8 @@ def step_user_signed_in_within_org(driver, email, org_name):
 @given(parsers.parse('a user is registered with email "{email}" and password "{password}"'))
 def step_user_registered(driver, email, password):
     driver.reset_session()
-    driver.ensure_registered(email, password)
+    driver.register_disposable(email, password)
+    driver._last_registered_email = email
 
 
 @given(parsers.parse('a user is signed in as "{email}" with password "{password}"'))

@@ -9,6 +9,7 @@ from playwright.sync_api import Page, Response, sync_playwright
 from app.auth.tests.driver_mixin import AuthBrowserMixin
 from app.dashboard.tests.driver_mixin import DashboardBrowserMixin
 from app.files.tests.driver_mixin import OrgFileBrowserMixin
+from app.organizations.tests.driver_mixin import OrgBrowserMixin
 from app.todo.tests.driver_mixin import TodoBrowserMixin
 from tests.e2e.drivers.shared_mixin import SharedBrowserMixin
 
@@ -24,6 +25,7 @@ class BrowserDriver(
     DashboardBrowserMixin,
     TodoBrowserMixin,
     OrgFileBrowserMixin,
+    OrgBrowserMixin,
     SharedBrowserMixin,
 ):
     def __init__(self) -> None:

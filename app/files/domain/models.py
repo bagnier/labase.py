@@ -7,7 +7,6 @@ from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.base import Base
-from app.shared.utils import utcnow
 
 
 class OrgFile(Base):
@@ -22,7 +21,7 @@ class OrgFile(Base):
     size_bytes: Mapped[int] = mapped_column(default=0)
     uploader_email: Mapped[str] = mapped_column(String, default="")
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True), nullable=False, default=None
     )
 
 

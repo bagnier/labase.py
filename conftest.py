@@ -8,6 +8,7 @@ pytest_plugins = [
     "app.dashboard.tests.steps",
     "app.todo.tests.steps",
     "app.files.tests.steps",
+    "app.organizations.tests.steps",
 ]
 
 

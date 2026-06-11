@@ -1,6 +1,11 @@
 from pytest_bdd import given, parsers, then, when
 
 
+@given(parsers.parse('the current date is "{date}"'))
+def step_set_current_date(driver, date):
+    driver.set_current_date(date)
+
+
 # ── existing (kept for backward compat) ──────────────────────────────────────
 
 
@@ -95,6 +100,11 @@ def step_create_user_in_org(driver, email, org_name):
 @given("they are an admin of the org")
 def step_promote_to_admin(driver):
     driver.promote_to_admin()
+
+
+@given("they are a member of the org")
+def step_demote_to_member(driver):
+    driver.demote_to_member()
 
 
 @given(parsers.parse('they have generated a share link for "{filename}"'))

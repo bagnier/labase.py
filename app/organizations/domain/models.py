@@ -22,6 +22,7 @@ class Organization(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str]
+    slug: Mapped[str] = mapped_column(default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -49,7 +50,12 @@ class OrganizationRead(BaseModel):
 
     id: uuid.UUID
     name: str
+    slug: str
     created_at: datetime
+
+
+class OrganizationWithRoleRead(OrganizationRead):
+    role: OrgRole
 
 
 class MembershipRead(BaseModel):

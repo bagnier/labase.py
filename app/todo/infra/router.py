@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
+from app.auth.infra.session import get_rls_session
 from app.organizations.infra.context import get_current_org
-from app.shared.database import get_session
 from app.shared.templates import templates
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
@@ -31,7 +31,7 @@ def _html_template(request: Request) -> str:
 async def todo_list(
     request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
@@ -48,7 +48,7 @@ async def add_todo(
     request: Request,
     title: str = Form(...),
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
@@ -68,7 +68,7 @@ async def patch_todo(
     done: bool | None = Form(default=None),
     title: str | None = Form(default=None),
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
@@ -90,7 +90,7 @@ async def delete_todo(
     request: Request,
     todo_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
@@ -109,7 +109,7 @@ async def delete_todo(
 async def reorder_todos(
     request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     body = await request.json()

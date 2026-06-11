@@ -20,7 +20,8 @@ Feature: Org file storage
   # List
 
   Scenario: File list shows all members' files with metadata
-    Given "bob@example.com" is a member of the org
+    Given the current date is "2026-06-10"
+    And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" of 9 KB to the org
     When they view the file list
     Then "budget.xlsx" appears in the file list with size "9 KB", uploaded by "bob@example.com" on "2026-06-10"
@@ -40,7 +41,8 @@ Feature: Org file storage
     Then "rapport.pdf" no longer appears in the file list
 
   Scenario: Member cannot delete another member's file
-    Given "bob@example.com" is a member of the org
+    Given they are a member of the org
+    And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
     When they delete "budget.xlsx"
     Then the action is denied
@@ -62,7 +64,8 @@ Feature: Org file storage
     And "rapport.pdf" no longer appears in the file list
 
   Scenario: Member cannot rename another member's file
-    Given "bob@example.com" is a member of the org
+    Given they are a member of the org
+    And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
     When they rename "budget.xlsx" to "budget-final.xlsx"
     Then the action is denied

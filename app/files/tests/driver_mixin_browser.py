@@ -112,6 +112,9 @@ class OrgFileBrowserMixin(BrowserProtocol):
     def promote_to_admin(self) -> None:
         raise NotImplementedError("promote_to_admin browser")
 
+    def demote_to_member(self) -> None:
+        raise NotImplementedError("demote_to_member browser")
+
     def generate_share_link(self, filename: str) -> None:
         raise NotImplementedError("generate_share_link browser")
 

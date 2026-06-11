@@ -16,12 +16,15 @@ from app.files.infra.storage import (
     storage_path,
     user_storage_client,
 )
+from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import Membership, OrgRole
 from app.organizations.infra.context import get_current_membership, get_current_org
-from app.shared.database import get_service_session, get_session
+from app.shared.clock import Clock, get_clock
+from app.shared.database import get_service_session
 from app.shared.templates import templates
 
 router = APIRouter(prefix="/files", tags=["files"])
+public_router = APIRouter(prefix="/files", tags=["files"])
 
 _MAX_SIZE_BYTES = 50 * 1024 * 1024
 _SIGNED_URL_TTL = 60
@@ -50,7 +53,7 @@ def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
 async def file_list(
     request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = OrgFileRepository(session)
@@ -67,8 +70,9 @@ async def upload_file(
     request: Request,
     file: UploadFile,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
+    clock: Clock = Depends(get_clock),
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
@@ -83,7 +87,7 @@ async def upload_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
 
-    repo = OrgFileRepository(session)
+    repo = OrgFileRepository(session, clock)
     await repo.add(
         org_id=org_id,
         user_id=uuid.UUID(current_user.id),
@@ -106,7 +110,7 @@ async def upload_file(
 async def download_file(
     file_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = OrgFileRepository(session)
@@ -125,7 +129,7 @@ async def delete_file(
     request: Request,
     file_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
     membership: Membership = Depends(get_current_membership),
 ):
@@ -161,7 +165,7 @@ async def rename_file(
     file_id: uuid.UUID,
     body: RenameBody,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
     membership: Membership = Depends(get_current_membership),
 ):
@@ -190,7 +194,7 @@ async def generate_share_link(
     request: Request,
     file_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = OrgFileRepository(session)
@@ -202,7 +206,7 @@ async def generate_share_link(
     return JSONResponse({"url": f"/files/share/{token.token}"})
 
 
-@router.get("/share/{token}")
+@public_router.get("/share/{token}")
 async def public_share_download(
     token: uuid.UUID,
     service_session: AsyncSession = Depends(get_service_session),

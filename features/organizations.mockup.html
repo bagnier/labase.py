@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Organisations — mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .screen { border: 2px dashed #e5e7eb; border-radius: 1rem; padding: 2rem; margin-bottom: 3rem; }
+    .screen-label { font-size: 0.7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #9ca3af; margin-bottom: 1rem; }
+    .annotation { font-size: 0.7rem; color: #f59e0b; font-style: italic; margin-top: 0.25rem; }
+    .badge-owner  { background:#ede9fe; color:#7c3aed; }
+    .badge-admin  { background:#dbeafe; color:#1d4ed8; }
+    .badge-member { background:#f3f4f6; color:#6b7280; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans p-10 max-w-4xl mx-auto">
+
+  <h1 class="text-2xl font-bold mb-2">Organisations — UI mockup</h1>
+  <p class="text-sm text-gray-500 mb-12">All states. Static — no backend. Interactive elements marked with ★.<br>
+  URLs use slugs: <code class="bg-gray-100 px-1 rounded">/orgs/{slug}/files</code> — no UUIDs, no active-org cookie.</p>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 1. Dashboard — single org (just registered)            -->
+  <!-- Auto-redirect, no card selection needed                -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">1 — Dashboard · single org · auto-redirect</div>
+    <p class="text-sm text-gray-500 mb-4">User has exactly one org → dashboard redirects immediately to <code class="bg-gray-100 px-1 rounded">/orgs/alice/files</code>. No selection screen shown.</p>
+    <div class="flex items-center gap-2 text-sm text-gray-400 italic">
+      <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      Redirecting to your workspace…
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 2. Dashboard — multiple orgs — workspace card grid     -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">2 — Dashboard · multiple orgs · workspace selection</div>
+
+    <h2 class="text-lg font-semibold mb-6">Your workspaces</h2>
+
+    <div class="grid grid-cols-2 gap-4">
+
+      <!-- Card: Acme (owner) -->
+      <a href="/orgs/acme/files" class="block bg-white border border-gray-200 rounded-xl shadow-sm p-5 hover:border-indigo-400 hover:shadow-md transition group">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-9 h-9 rounded-lg bg-indigo-500 flex items-center justify-center text-white text-sm font-bold flex-none">A</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold truncate group-hover:text-indigo-600">Acme</div>
+            <div class="text-xs text-gray-400">/orgs/acme</div>
+          </div>
+        </div>
+        <span class="text-xs font-medium px-2 py-0.5 rounded badge-owner">owner</span>
+      </a>
+
+      <!-- Card: Beta Corp (member) -->
+      <a href="/orgs/beta-corp/files" class="block bg-white border border-gray-200 rounded-xl shadow-sm p-5 hover:border-indigo-400 hover:shadow-md transition group">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center text-white text-sm font-bold flex-none">B</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold truncate group-hover:text-indigo-600">Beta Corp</div>
+            <div class="text-xs text-gray-400">/orgs/beta-corp</div>
+          </div>
+        </div>
+        <span class="text-xs font-medium px-2 py-0.5 rounded badge-member">member</span>
+      </a>
+
+    </div>
+    <p class="annotation mt-3">★ Each card is a plain &lt;a href&gt; — no JS, no cookie, no server state</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 3. Org-scoped page — nav shows current org context     -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">3 — Org-scoped page · /orgs/acme/files · nav bar</div>
+
+    <!-- Nav bar -->
+    <div class="flex items-center gap-4 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm mb-6">
+      <!-- Org breadcrumb -->
+      <a href="/dashboard" class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        Workspaces
+      </a>
+      <span class="text-gray-300">/</span>
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">A</div>
+        <span class="text-sm font-semibold">Acme</span>
+      </div>
+      <!-- Nav links -->
+      <div class="ml-auto flex items-center gap-4 text-sm">
+        <a href="/orgs/acme/files" class="font-medium text-indigo-600 border-b-2 border-indigo-500 pb-0.5">Files</a>
+        <a href="/orgs/acme/todos" class="text-gray-500 hover:text-gray-800">Todos</a>
+        <a href="/orgs/acme/settings" class="text-gray-500 hover:text-gray-800">★ Settings</a>
+      </div>
+    </div>
+
+    <p class="annotation">Org context always visible in URL and breadcrumb — no hidden state</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 4. Organisation settings — owner view                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">4 — /orgs/acme/settings · owner view</div>
+
+    <h2 class="text-lg font-semibold mb-6">Organisation settings</h2>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-4">
+      <h3 class="text-sm font-semibold mb-3">Name</h3>
+      <form class="flex gap-2">
+        <input type="text" value="Acme"
+          class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <button type="submit" class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600">
+          ★ Save
+        </button>
+      </form>
+      <p class="annotation">hx-patch="/orgs/acme" — slug in URL stays stable after rename</p>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <h3 class="text-sm font-semibold mb-1">Your role</h3>
+      <span class="text-sm font-medium px-2 py-0.5 rounded badge-owner">owner</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- 5. Organisation settings — member view (read-only)     -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="screen">
+    <div class="screen-label">5 — /orgs/acme/settings · member view</div>
+
+    <h2 class="text-lg font-semibold mb-6">Organisation settings</h2>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-4">
+      <h3 class="text-sm font-semibold mb-3">Name</h3>
+      <div class="flex gap-2">
+        <input type="text" value="Acme" disabled
+          class="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-400 cursor-not-allowed" />
+        <button disabled class="rounded-lg bg-gray-200 px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed">Save</button>
+      </div>
+      <p class="annotation">Rename hidden for members — 403 if attempted via API</p>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <h3 class="text-sm font-semibold mb-1">Your role</h3>
+      <span class="text-sm font-medium px-2 py-0.5 rounded badge-member">member</span>
+    </div>
+  </div>
+
+</body>
+</html>

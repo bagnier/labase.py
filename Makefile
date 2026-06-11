@@ -66,6 +66,7 @@ coverage-html:
 test-all: coverage-erase test test-e2e coverage-xml
 
 serve:
+	-lsof -ti :8002 | xargs kill -9 2>/dev/null; true
 	ENV_FILE=.env.test uv run uvicorn app.main:app --port 8002 --reload
 
 ci: js-build lint typecheck coverage-erase test test-e2e coverage-xml
