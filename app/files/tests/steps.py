@@ -97,9 +97,9 @@ def step_create_user_in_org(driver, email, org_name):
     driver.create_user_in_org(email, org_name)
 
 
-@given("they are an admin of the org")
-def step_promote_to_admin(driver):
-    driver.promote_to_admin()
+@given("they are an owner of the org")
+def step_promote_to_owner(driver):
+    driver.promote_to_owner()
 
 
 @given("they are a member of the org")

@@ -13,7 +13,6 @@ from app.shared.utils import utcnow
 
 class OrgRole(str, Enum):
     owner = "owner"
-    admin = "admin"
     member = "member"
 
 

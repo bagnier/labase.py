@@ -271,7 +271,7 @@ class OrgFileApiMixin(ApiProtocol):
                 )
             )
 
-    def promote_to_admin(self) -> None:
+    def promote_to_owner(self) -> None:
         self._ensure_multi_user()
         s = get_settings()
         org_id = self._get_primary_org_id()
@@ -279,7 +279,7 @@ class OrgFileApiMixin(ApiProtocol):
         pg_resp = httpx.patch(
             f"{s.supabase_url}/rest/v1/memberships",
             params={"org_id": f"eq.{org_id}", "auth_user_id": f"eq.{user_id}"},
-            json={"role": "admin"},
+            json={"role": "owner"},
             headers={
                 **self._admin_headers(),
                 "Content-Type": "application/json",

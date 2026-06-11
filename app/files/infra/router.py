@@ -43,10 +43,7 @@ def _html_template(request: Request) -> str:
 
 
 def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
-    return file_user_id == membership.auth_user_id or membership.role in (
-        OrgRole.owner,
-        OrgRole.admin,
-    )
+    return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
 
 
 @router.get("", response_class=HTMLResponse)

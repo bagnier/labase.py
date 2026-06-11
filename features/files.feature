@@ -48,10 +48,10 @@ Feature: Org file storage
     Then the action is denied
     And "budget.xlsx" still appears in the file list
 
-  Scenario: Admin can delete any file in the org
+  Scenario: Owner can delete any file in the org
     Given "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
-    And they are an admin of the org
+    And they are an owner of the org
     When they delete "budget.xlsx"
     Then "budget.xlsx" no longer appears in the file list
 

@@ -109,8 +109,8 @@ class OrgFileBrowserMixin(BrowserProtocol):
     def create_user_in_org(self, email: str, org_name: str) -> None:
         raise NotImplementedError("create_user_in_org browser")
 
-    def promote_to_admin(self) -> None:
-        raise NotImplementedError("promote_to_admin browser")
+    def promote_to_owner(self) -> None:
+        raise NotImplementedError("promote_to_owner browser")
 
     def demote_to_member(self) -> None:
         raise NotImplementedError("demote_to_member browser")
