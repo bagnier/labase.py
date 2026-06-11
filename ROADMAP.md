@@ -19,6 +19,14 @@
 - [ ] migrations database
 - [ ] collaboration par hooks entre les apps
 - [ ] CORS
+- [ ] rate-limiting
+- [ ] logging
+- [ ] observabilité
+- [ ] file de tâches asynchrones
+- [ ] index fulltext
+- [ ] cache
+- [ ] messaging
+- [ ] email
 
 
 ### fonctionnel
@@ -32,7 +40,3 @@
 - [x] gestion de fichiers
 - [ ] flashcards comme exemple HexArch
 - [ ] dashboard user
-- [ ] index fulltext
-- [ ] cache
-- [ ] messaging
-- [ ] email

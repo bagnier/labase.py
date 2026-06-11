@@ -30,9 +30,12 @@ class AuthBrowserMixin(BrowserProtocol):
         self._p.fill("input[name=password]", password)
         with self._p.expect_response(
             lambda r: "/auth/login" in r.url and r.request.method == "POST"
-        ):
+        ) as resp_info:
             self._p.click("button[type=submit]")
-        self._p.wait_for_load_state("domcontentloaded")
+        if resp_info.value.headers.get("hx-redirect"):
+            self._p.wait_for_url(f"{self._base_url}/dashboard", timeout=5000)
+        else:
+            self._p.wait_for_load_state("domcontentloaded")
 
     def ensure_registered(self, email: str, password: str) -> None:
         assert self._context
@@ -86,10 +89,8 @@ class AuthBrowserMixin(BrowserProtocol):
         self._p.wait_for_url(f"{self._base_url}/auth/login", timeout=5000)
 
     def assert_unauthorized(self) -> None:
-        assert self._last_response is not None
-        assert self._last_response.status == 401, (
-            f"Expected 401, got {self._last_response.status} at {self._p.url}"
-        )
+        # Browser is redirected to /auth/login (302); check final URL
+        assert "/auth/login" in self._p.url, f"Expected /auth/login, got {self._p.url}"
 
     def assert_redirected_to_login(self) -> None:
         assert "/auth/login" in self._p.url, f"Expected redirect to /auth/login, got {self._p.url}"

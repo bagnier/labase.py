@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.auth.infra.router import router as auth_router
@@ -15,6 +16,21 @@ from app.todo.infra.router import router as todo_router
 BASE_DIR = Path(__file__).parent
 
 app = FastAPI(title="labase")
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> Response:
+    if exc.status_code == 401:
+        if request.headers.get("HX-Request"):
+            r = Response(status_code=200)
+            r.headers["HX-Redirect"] = "/auth/login"
+            return r
+        if "text/html" in request.headers.get("Accept", ""):
+            return RedirectResponse(url="/auth/login", status_code=302)
+    return JSONResponse(
+        {"detail": exc.detail}, status_code=exc.status_code, headers=dict(exc.headers or {})
+    )
+
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR.parent / "static")), name="static")
 

@@ -50,3 +50,8 @@ class TestDashboardPage:
     def test_has_link_to_todos(self, page_auth: BrowserDriver):
         page_auth.visit("/dashboard")
         assert page_auth._p.query_selector("a[href='/todos']") is not None
+
+    def test_unauthenticated_access_redirects_to_login(self, browser_driver: BrowserDriver):
+        browser_driver.reset_session()
+        browser_driver.visit("/dashboard")
+        assert "/auth/login" in browser_driver._p.url

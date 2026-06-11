@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth.domain.service import AuthTokens, login
 from app.auth.infra.security import get_current_user
+from app.main import app as main_app
 
 _app = FastAPI()
 
@@ -92,6 +93,25 @@ async def test_expired_token_without_refresh_returns_401(client):
     with patch("app.auth.infra.security._decode", side_effect=jwt.ExpiredSignatureError):
         response = await client.get("/me")
 
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_dashboard_browser_redirect_to_login_when_unauthenticated():
+    async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
+        response = await c.get(
+            "/dashboard",
+            headers={"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"},
+            follow_redirects=False,
+        )
+    assert response.status_code == 302
+    assert response.headers["location"] == "/auth/login"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_api_client_still_gets_401_when_unauthenticated():
+    async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
+        response = await c.get("/dashboard", follow_redirects=False)
     assert response.status_code == 401
 
 

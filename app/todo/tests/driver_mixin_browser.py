@@ -81,6 +81,7 @@ class TodoBrowserMixin(BrowserProtocol):
     def delete_todo(self, title: str) -> None:
         self._goto_todos()
         todo_id = self._dom_todo_id_by_title(title)
+        self._p.once("dialog", lambda d: d.accept())
         self._wait_htmx_response(
             f"/todos/{todo_id}",
             "DELETE",
