@@ -15,5 +15,7 @@ RUN uv sync --frozen --no-dev
 # Copy source
 COPY app/ ./app/
 COPY static/ ./static/
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/entrypoint.sh"]

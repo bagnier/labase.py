@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all serve ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html
+.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all serve ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt
 
 # --- Setup ---
 install:
@@ -68,8 +68,16 @@ coverage-html:
 
 test-all: coverage-erase test test-e2e coverage-xml
 
+cert:
+	openssl req -x509 -newkey rsa:4096 -keyout dev.key -out dev.crt -days 365 -nodes -subj '/CN=localhost'
+
+letsencrypt:
+	certbot certonly --standalone -d $(DOMAIN) --agree-tos --non-interactive
+	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
+
 serve:
 	-lsof -ti :8002 | xargs kill -9 2>/dev/null; true
-	ENV_FILE=.env.test uv run uvicorn app.main:app --port 8002 --reload
+	ENV_FILE=.env.test uv run hypercorn app.main:app --bind 0.0.0.0:8002 --reload \
+		$(if $(SSL_CERTFILE),--certfile $(SSL_CERTFILE) --keyfile $(SSL_KEYFILE),)
 
 ci: js-build lint typecheck coverage-erase test test-e2e coverage-xml

@@ -24,7 +24,7 @@
 - [x] rate-limiting
 - [x] logging
 - [x] observabilité
-- [ ] TLS and HTTP/2
+- [x] TLS and HTTP/2
 - [ ] OWASP Dependency Check
 - [ ] file de tâches asynchrones
 - [ ] index fulltext

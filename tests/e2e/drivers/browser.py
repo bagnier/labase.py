@@ -48,7 +48,7 @@ class BrowserDriver(
             port = _free_port()
             self._base_url = f"http://127.0.0.1:{port}"
             self._server = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "app.main:app", "--port", str(port)],
+                [sys.executable, "-m", "hypercorn", "app.main:app", "--bind", f"127.0.0.1:{port}"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

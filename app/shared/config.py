@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     debug: bool = False
     cors_origins: list[str] = ["*"]
+    ssl_certfile: str | None = None
+    ssl_keyfile: str | None = None
 
 
 @lru_cache
