@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     db_schema: str = "public"
     secret_key: str = "change-me-in-production"
     debug: bool = False
+    cors_origins: list[str] = ["*"]
 
 
 @lru_cache

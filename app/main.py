@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
 
 from app.auth.infra.router import router as auth_router
 from app.files.infra.router import public_router as files_public_router
@@ -11,11 +12,41 @@ from app.organizations.infra.html_router import router as organizations_html_rou
 from app.organizations.infra.invitation_router import router as invitations_router
 from app.organizations.infra.router import router as organizations_router
 from app.profile.infra.router import router as profile_router
+from app.shared.config import get_settings
 from app.todo.infra.router import router as todo_router
 
 BASE_DIR = Path(__file__).parent
 
+_settings = get_settings()
+
 app = FastAPI(title="labase")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'"
+)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = _CSP
+    return response
 
 
 @app.exception_handler(HTTPException)

@@ -18,8 +18,8 @@
 - [x] SSR HTMX
 - [x] migrations database
 - [ ] collaboration par hooks entre les apps
-- [ ] CORS
-- [ ] headers de sécurité (HSTS, CSP)
+- [x] CORS
+- [x] headers de sécurité (HSTS, CSP)
 - [ ] healthcheck (liveness / readiness)
 - [ ] rate-limiting
 - [ ] logging
