@@ -1,0 +1,185 @@
+import uuid
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.domain.service import AuthenticatedUser
+from app.auth.infra.security import get_current_user
+from app.auth.infra.session import get_rls_session
+from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
+from app.organizations.domain.service import ensure_no_pending_invitation
+from app.organizations.infra.context import get_current_membership, get_current_org
+from app.organizations.infra.repository import OrganizationRepository
+from app.shared.database import get_service_session
+from app.shared.templates import templates
+
+router = APIRouter(tags=["organizations-html"])
+
+
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
+async def _resolve_emails(
+    service_session: AsyncSession, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    if not user_ids:
+        return {}
+    result = await service_session.execute(
+        text("SELECT id, email FROM auth.users WHERE id = ANY(:ids)"),
+        {"ids": [str(uid) for uid in user_ids]},
+    )
+    return {uuid.UUID(str(row.id)): row.email for row in result}
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def org_settings(
+    request: Request,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+    org_id: uuid.UUID = Depends(get_current_org),
+    membership=Depends(get_current_membership),
+):
+    repo = OrganizationRepository(session)
+    org = await repo.get_by_id(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org_slug = request.path_params.get("org_slug", org.slug)
+    return templates.TemplateResponse(
+        request,
+        "organizations/settings.html",
+        {
+            "user": current_user,
+            "org": org,
+            "org_slug": org_slug,
+            "role": membership.role.value,
+        },
+    )
+
+
+@router.patch("", response_class=HTMLResponse)
+async def rename_org_html(
+    request: Request,
+    name: str = Form(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+    org_id: uuid.UUID = Depends(get_current_org),
+    membership=Depends(get_current_membership),
+):
+    if membership.role != OrgRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    repo = OrganizationRepository(session)
+    org = await repo.get_by_id(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await repo.rename(org, name)
+    # Reload org to get new slug
+    org = await repo.get_by_id(org_id)
+    assert org is not None
+    return RedirectResponse(url=f"/orgs/{org.slug}/settings", status_code=303)
+
+
+# ── Members ───────────────────────────────────────────────────────────────────
+
+
+@router.get("/members", response_class=HTMLResponse)
+async def org_members(
+    request: Request,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+    service_session: AsyncSession = Depends(get_service_session),
+    org_id: uuid.UUID = Depends(get_current_org),
+    membership=Depends(get_current_membership),
+):
+    repo = OrganizationRepository(session)
+    org = await repo.get_by_id(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    raw_members = await repo.list_members(org_id)
+    emails = await _resolve_emails(service_session, [m.auth_user_id for m in raw_members])
+    members = [
+        MemberRead(
+            auth_user_id=m.auth_user_id,
+            email=emails.get(m.auth_user_id, ""),
+            role=m.role,
+            created_at=m.created_at,
+        )
+        for m in raw_members
+    ]
+    invitations: list[InvitationRead] = []
+    if membership.role == OrgRole.owner:
+        raw_invs = await repo.list_invitations(org_id)
+        invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
+
+    org_slug = request.path_params.get("org_slug", org.slug)
+    return templates.TemplateResponse(
+        request,
+        "organizations/members.html",
+        {
+            "user": current_user,
+            "org": org,
+            "org_slug": org_slug,
+            "caller_role": membership.role.value,
+            "members": members,
+            "invitations": invitations,
+            "current_user": current_user,
+        },
+    )
+
+
+# ── Invite (HTMX) ─────────────────────────────────────────────────────────────
+
+
+@router.post("/invitations", response_class=HTMLResponse)
+async def create_invitation_html(
+    request: Request,
+    email: str = Form(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+    service_session: AsyncSession = Depends(get_service_session),
+    org_id: uuid.UUID = Depends(get_current_org),
+    membership=Depends(get_current_membership),
+):
+    if membership.role != OrgRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    error: str | None = None
+    link: str = ""
+
+    try:
+        result = await service_session.execute(
+            text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
+            {"email": email},
+        )
+        existing_user = result.first()
+        if existing_user is not None:
+            existing_membership = await OrganizationRepository(session).get_membership(
+                org_id, existing_user.id
+            )
+            if existing_membership is not None:
+                error = "already a member"
+
+        if error is None:
+            repo = OrganizationRepository(session)
+            await ensure_no_pending_invitation(repo, org_id, email)
+            invitation = await repo.create_invitation(
+                org_id=org_id,
+                email=email,
+                role=OrgRole.member,
+                invited_by=uuid.UUID(current_user.id),
+            )
+            base_url = str(request.base_url).rstrip("/")
+            link = f"{base_url}/invitations/{invitation.token}"
+    except HTTPException as exc:
+        error = exc.detail
+
+    return templates.TemplateResponse(
+        request,
+        "organizations/_invite_result.html",
+        {"email": email, "link": link, "error": error},
+    )

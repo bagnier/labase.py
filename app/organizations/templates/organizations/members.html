@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Membres — {{ org.name }} — labase{% endblock %}
+
+{% block breadcrumb %}
+  <a href="/orgs/{{ org_slug }}/files" class="hover:text-gray-700">{{ org.name }}</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <span class="text-gray-700">Membres</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-8">
+
+  <!-- ── Members ──────────────────────────────────────────────── -->
+  <div>
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-900">{{ org.name }} — Membres</h1>
+        <p class="text-sm text-gray-500">{{ members | length }} membre{{ 's' if members | length != 1 }}</p>
+      </div>
+      {% if caller_role == "owner" %}
+        <button onclick="document.getElementById('invite-form').classList.toggle('hidden')"
+                class="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+          Inviter un membre
+        </button>
+      {% endif %}
+    </div>
+
+    <div id="member-list" class="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white">
+      {% for m in members %}
+      <div id="member-row-{{ m.auth_user_id }}"
+           class="flex items-center justify-between px-4 py-3"
+           data-member-email="{{ m.email }}"
+           data-member-role="{{ m.role.value }}">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full {{ 'bg-indigo-100' if m.role == 'owner' else 'bg-gray-100' }} flex items-center justify-center text-sm font-bold {{ 'text-indigo-700' if m.role == 'owner' else 'text-gray-500' }}">
+            {{ m.email[0] | upper }}
+          </div>
+          <div>
+            <p class="text-sm font-medium">
+              {{ m.email }}
+              {% if m.email == current_user.email %}<span class="text-xs text-gray-400">(vous)</span>{% endif %}
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          {% if m.role == "owner" %}
+            <span class="inline-block bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">owner</span>
+          {% else %}
+            <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full">member</span>
+          {% endif %}
+
+          {% if caller_role == "owner" and m.email != current_user.email %}
+            <!-- Owner actions on other members -->
+            <div class="relative group" tabindex="0">
+              <button class="text-xs border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                Gérer <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div class="hidden group-focus-within:block absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
+                {% if m.role == "member" %}
+                  <button class="block w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                          hx-patch="/organizations/{{ org.id }}/members/{{ m.auth_user_id }}"
+                          hx-vals='{"role": "owner"}'
+                          hx-target="#member-row-{{ m.auth_user_id }}"
+                          hx-swap="outerHTML">
+                    Promouvoir owner
+                  </button>
+                {% else %}
+                  <button class="block w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                          hx-patch="/organizations/{{ org.id }}/members/{{ m.auth_user_id }}"
+                          hx-vals='{"role": "member"}'
+                          hx-target="#member-row-{{ m.auth_user_id }}"
+                          hx-swap="outerHTML">
+                    Rétrograder membre
+                  </button>
+                {% endif %}
+                <hr class="border-gray-100">
+                <button class="block w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                        hx-delete="/organizations/{{ org.id }}/members/{{ m.auth_user_id }}"
+                        hx-target="#member-row-{{ m.auth_user_id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Retirer {{ m.email }} de l'organisation ?">
+                  Retirer de l'org
+                </button>
+              </div>
+            </div>
+
+          {% elif m.email == current_user.email %}
+            <!-- Leave button for current user -->
+            <button class="text-xs border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+                    hx-delete="/organizations/{{ org.id }}/members/me"
+                    hx-target="body"
+                    hx-push-url="/dashboard"
+                    hx-confirm="Quitter {{ org.name }} ?">
+              Quitter
+            </button>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── Invite form ──────────────────────────────────────────── -->
+  {% if caller_role == "owner" %}
+  <div id="invite-form" class="hidden bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+    <h2 class="text-sm font-semibold text-gray-700">Inviter un nouveau membre</h2>
+    <form hx-post="/orgs/{{ org_slug }}/invitations"
+          hx-target="#invite-result"
+          hx-swap="innerHTML"
+          class="flex gap-3 items-start">
+      <input type="email" name="email" placeholder="email@example.com" required
+             class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+      <button type="submit"
+              class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600 transition-colors shadow-sm flex-none">
+        Inviter
+      </button>
+    </form>
+    <div id="invite-result"></div>
+  </div>
+
+  <!-- ── Pending invitations ──────────────────────────────────── -->
+  {% if invitations %}
+  <div>
+    <h2 class="text-sm font-semibold text-gray-700 mb-3">Invitations en attente</h2>
+    <div class="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white">
+      {% for inv in invitations %}
+      <div id="inv-row-{{ inv.id }}"
+           class="flex items-center justify-between px-4 py-3"
+           data-invitation-email="{{ inv.email }}">
+        <div>
+          <p class="text-sm font-medium">{{ inv.email }}</p>
+          <p class="text-xs text-gray-400">Envoyée le {{ inv.created_at.strftime('%d/%m/%Y') }}</p>
+        </div>
+        <button class="text-xs text-red-600 hover:text-red-800 font-medium"
+                hx-delete="/organizations/{{ org.id }}/invitations/{{ inv.id }}"
+                hx-target="#inv-row-{{ inv.id }}"
+                hx-swap="outerHTML"
+                hx-confirm="Révoquer l'invitation pour {{ inv.email }} ?">
+          Révoquer
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+</div>
+{% endblock %}

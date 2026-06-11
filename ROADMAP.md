@@ -4,6 +4,7 @@
 - fondée sur Supabase
 - en Python moderne
 
+
 ## buts
 
 ### technique
@@ -15,7 +16,10 @@
 - [x] séparation en apps
 - [x] BDD dual driver, Json & Web
 - [x] SSR HTMX
+- [ ] migrations database
 - [ ] collaboration par hooks entre les apps
+- [ ] CORS
+
 
 ### fonctionnel
 

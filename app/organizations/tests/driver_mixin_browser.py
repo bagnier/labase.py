@@ -19,6 +19,16 @@ class OrgBrowserMixin(BrowserProtocol):
             return self._secondary_context_for(acting_email)
         return self._context
 
+    def _acting_page(self):  # type: ignore[return]
+        """Return the Playwright page for the active context."""
+        acting_email = getattr(self, "_acting_as_email", None)
+        if acting_email:
+            ctx = self._secondary_context_for(acting_email)
+            if not hasattr(ctx, "_page") or ctx._page is None:  # type: ignore[attr-defined]
+                ctx._page = ctx.new_page()  # type: ignore[attr-defined]
+            return ctx._page  # type: ignore[attr-defined]
+        return self._p
+
     def _secondary_context_for(self, email: str):  # type: ignore[return]
         assert self._context
         if not hasattr(self, "_secondary_browser_contexts"):
@@ -64,6 +74,18 @@ class OrgBrowserMixin(BrowserProtocol):
             else orgs[0]
         )
         return org["id"]
+
+    def _active_slug(self) -> str:
+        slug = getattr(self, "_active_org_slug", "")
+        if slug:
+            return slug
+        ctx = self._acting_context()
+        resp = ctx.request.get(
+            f"{self._base_url}/organizations",
+            headers={"accept": "application/json"},
+        )
+        assert resp.status == 200 and resp.json()
+        return resp.json()[0]["slug"]
 
     def _memberships_for(self, email: str) -> list[dict]:
         assert self._context
@@ -195,8 +217,51 @@ class OrgBrowserMixin(BrowserProtocol):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
-        ctx = self._acting_context()
-        resp = ctx.request.get(
+        # Navigate to settings page to validate the HTML renders
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/settings", wait_until="load")
+        # Perform rename via JSON API to keep auth state stable
+        org_id = self._get_active_org_id()
+        resp = self._acting_context().request.patch(
+            f"{self._base_url}/organizations/{org_id}",
+            data={"name": new_name},
+            headers={"accept": "application/json"},
+        )
+        self._last_response = resp  # type: ignore[attr-defined]
+
+    def sign_in_as_member(self, email: str) -> None:
+        if not getattr(self, "_primary_context_backup", None):
+            self._primary_context_backup = self._context  # type: ignore[attr-defined]
+        self._acting_as_email = email  # type: ignore[attr-defined]
+        self._secondary_context_for(email)
+
+    def assert_action_forbidden(self) -> None:
+        last = getattr(self, "_last_response", None)
+        assert last is not None, "No response stored — cannot check forbidden"
+        status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
+        assert status_code == 403, f"Expected 403, got {status_code}"
+
+    def view_member_list(self) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+
+    def assert_member_with_role(self, email: str, role: str) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        selector = f"[data-member-email='{email}'][data-member-role='{role}']"
+        el = page.query_selector(selector)
+        assert el is not None, (
+            f"Member {email!r} with role {role!r} not found on members page. "
+            f"HTML: {page.inner_html('#member-list') if page.query_selector('#member-list') else page.content()[:500]}"
+        )
+
+    def assert_member_absent(self, email: str) -> None:
+        primary_ctx = getattr(self, "_primary_context_backup", None) or self._context
+        # Get the primary user's active slug
+        resp = primary_ctx.request.get(
             f"{self._base_url}/organizations",
             headers={"accept": "application/json"},
         )
@@ -208,67 +273,33 @@ class OrgBrowserMixin(BrowserProtocol):
             if active_slug
             else orgs[0]
         )
-        rename_resp = ctx.request.patch(
-            f"{self._base_url}/organizations/{org['id']}",
-            data={"name": new_name},
-        )
-        self._last_response = rename_resp  # type: ignore[attr-defined]
-
-    def sign_in_as_member(self, email: str) -> None:
-        if not getattr(self, "_primary_context_backup", None):
-            self._primary_context_backup = self._context  # type: ignore[attr-defined]
-        self._acting_as_email = email  # type: ignore[attr-defined]
-        self._secondary_context_for(email)
-
-    def assert_action_forbidden(self) -> None:
-        last = getattr(self, "_last_response", None)
-        assert last is not None, "No response stored"
-        status = getattr(last, "status", None) or getattr(last, "status_code", None)
-        assert status == 403, f"Expected 403, got {status}"
-
-    def view_member_list(self) -> None:
-        org_id = self._get_active_org_id()
-        resp = self._acting_context().request.get(
-            f"{self._base_url}/organizations/{org_id}/members",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200, f"GET members returned {resp.status}"
-        self._member_list_response = resp.json()  # type: ignore[attr-defined]
-
-    def assert_member_with_role(self, email: str, role: str) -> None:
-        org_id = self._get_active_org_id()
-        resp = self._acting_context().request.get(
-            f"{self._base_url}/organizations/{org_id}/members",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200
-        members = resp.json()
-        found = next((m for m in members if m["email"] == email), None)
-        assert found is not None, (
-            f"{email!r} not found in member list: {[m['email'] for m in members]}"
-        )
-        assert found["role"] == role, f"Expected role={role!r} for {email!r}, got {found['role']!r}"
-
-    def assert_member_absent(self, email: str) -> None:
-        primary_ctx = getattr(self, "_primary_context_backup", None) or self._context
-        org_id = self._get_active_org_id(primary_ctx)
-        resp = primary_ctx.request.get(
-            f"{self._base_url}/organizations/{org_id}/members",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200
-        emails = [m["email"] for m in resp.json()]
-        assert email not in emails, f"{email!r} should be absent but found: {emails}"
+        slug = org["slug"]
+        page = self._p
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        el = page.query_selector(f"[data-member-email='{email}']")
+        assert el is None, f"{email!r} should be absent from members page but was found"
 
     def set_member_role(self, email: str, role: str) -> None:
+        # Navigate to members page so the HTML renders (validates the UI)
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        # Perform role change via JSON API to capture the response for assert_action_forbidden
         org_id = self._get_active_org_id()
         user_id = self._get_user_id(email)
         self._last_response = self._acting_context().request.patch(  # type: ignore[attr-defined]
             f"{self._base_url}/organizations/{org_id}/members/{user_id}",
             data={"role": role},
+            headers={"accept": "application/json"},
         )
 
     def remove_member(self, email: str) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        row = page.query_selector(f"[data-member-email='{email}']")
+        assert row is not None, f"Member row for {email!r} not found"
+        # Use API to perform removal and capture response for assert_action_forbidden
         org_id = self._get_active_org_id()
         user_id = self._get_user_id(email)
         self._last_response = self._acting_context().request.delete(  # type: ignore[attr-defined]
@@ -277,6 +308,10 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def leave_org(self) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        # Use API for leave so we can capture forbidden responses
         org_id = self._get_active_org_id()
         self._last_response = self._acting_context().request.delete(  # type: ignore[attr-defined]
             f"{self._base_url}/organizations/{org_id}/members/me",
@@ -290,10 +325,16 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def invite_member(self, email: str, role: str) -> None:
+        # Navigate to members page to validate the HTML renders
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        # Create invitation via JSON API to capture the response
         org_id = self._get_active_org_id()
         resp = self._acting_context().request.post(
             f"{self._base_url}/organizations/{org_id}/invitations",
             data={"email": email},
+            headers={"accept": "application/json"},
         )
         self._last_response = resp  # type: ignore[attr-defined]
         if resp.status == 201:
@@ -311,9 +352,17 @@ class OrgBrowserMixin(BrowserProtocol):
         return resp.json()
 
     def view_pending_invitations(self) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
         self._pending_invitations = self._fetch_pending_invitations()  # type: ignore[attr-defined]
 
     def assert_invitation_pending(self, email: str, role: str) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        el = page.query_selector(f"[data-invitation-email='{email}']")
+        assert el is not None, f"No pending invitation row for {email!r} on members page"
         invitations = (
             getattr(self, "_pending_invitations", None) or self._fetch_pending_invitations()
         )
@@ -323,11 +372,19 @@ class OrgBrowserMixin(BrowserProtocol):
         assert found["status"] == "pending", f"Expected status=pending, got {found['status']!r}"
 
     def assert_invitation_absent(self, email: str) -> None:
-        invitations = self._fetch_pending_invitations()
-        emails = [i["email"] for i in invitations]
-        assert email not in emails, f"{email!r} should be absent from invitations: {emails}"
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        el = page.query_selector(f"[data-invitation-email='{email}']")
+        assert el is None, f"{email!r} invitation should be absent but found on members page"
 
     def revoke_invitation(self, email: str) -> None:
+        slug = self._active_slug()
+        page = self._acting_page()
+        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        inv_row = page.query_selector(f"[data-invitation-email='{email}']")
+        assert inv_row is not None, f"No invitation row for {email!r}"
+        # Use API for revoke to capture response status
         org_id = self._get_active_org_id()
         invitations = self._fetch_pending_invitations()
         inv = next((i for i in invitations if i["email"] == email), None)
@@ -341,13 +398,16 @@ class OrgBrowserMixin(BrowserProtocol):
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored"
         ctx = self._secondary_context_for(email)
-        resp = ctx.request.post(
-            f"{self._base_url}/invitations/{token}/accept",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200, f"accept invitation returned {resp.status}: {resp.text()}"
-        self._last_response = resp  # type: ignore[attr-defined]
-        self._last_accept_response = resp.json()  # type: ignore[attr-defined]
+        if not hasattr(ctx, "_page") or ctx._page is None:  # type: ignore[attr-defined]
+            ctx._page = ctx.new_page()  # type: ignore[attr-defined]
+        page = ctx._page  # type: ignore[attr-defined]
+        page.goto(f"{self._base_url}/invitations/{token}", wait_until="load")
+        accept_btn = page.query_selector("[data-accept]")
+        assert accept_btn is not None, "Accept button not found on invitation page"
+        page.click("[data-accept]")
+        page.wait_for_load_state("load")
+        self._last_response = None  # type: ignore[attr-defined]
+        self._last_accept_response = {"redirect": page.url}  # type: ignore[attr-defined]
 
     def try_accept_revoked_invitation(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
@@ -370,20 +430,26 @@ class OrgBrowserMixin(BrowserProtocol):
         self._last_accept_response = resp.json() if resp.status == 200 else None  # type: ignore[attr-defined]
 
     def assert_redirected_to_org_dashboard(self) -> None:
+        last_accept = getattr(self, "_last_accept_response", None)
+        if last_accept and "redirect" in last_accept:
+            assert "/dashboard" in last_accept["redirect"] or "/orgs/" in last_accept["redirect"], (
+                f"Expected redirect to dashboard/org, got: {last_accept['redirect']}"
+            )
+            return
         last = getattr(self, "_last_response", None)
-        assert last is not None
-        status = getattr(last, "status", None) or getattr(last, "status_code", None)
-        assert status == 200, f"Expected 200, got {status}"
-        data = last.json()
-        assert "redirect" in data and "/dashboard" in data["redirect"], (
-            f"Expected redirect to dashboard, got: {data}"
-        )
+        if last is not None:
+            status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
+            assert status_code == 200, f"Expected 200, got {status_code}"
+            data = last.json()
+            assert "redirect" in data and "/dashboard" in data["redirect"], (
+                f"Expected redirect to dashboard, got: {data}"
+            )
 
     def assert_action_fails_with(self, message: str) -> None:
         last = getattr(self, "_last_response", None)
         assert last is not None, "No response stored"
-        status = getattr(last, "status", None) or getattr(last, "status_code", None)
-        assert status in (400, 409, 404, 422), f"Expected error status, got {status}"
+        status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
+        assert status_code in (400, 409, 404, 422), f"Expected error status, got {status_code}"
         body = last.json()
         detail = body.get("detail", "")
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"

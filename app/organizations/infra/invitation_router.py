@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,47 +11,87 @@ from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.database import get_service_session
+from app.shared.templates import templates
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 
-@router.get("/{token}", response_model=InvitationRead)
+def _wants_json(request: Request) -> bool:
+    return "application/json" in request.headers.get("accept", "")
+
+
+@router.get("/{token}", response_model=None)
 async def get_invitation(
+    request: Request,
     token: uuid.UUID,
     service_session: AsyncSession = Depends(get_service_session),
-) -> InvitationRead:
+):
     result = await service_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
         {"token": str(token)},
     )
     row = result.mappings().first()
+
+    if _wants_json(request):
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="invitation not found or already used",
+            )
+        inv = dict(row)
+        if inv["status"] == "revoked":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="invitation not found or already used",
+            )
+        return InvitationRead(
+            id=inv["id"],
+            org_id=inv["org_id"],
+            email=inv["email"],
+            role=inv["role"],
+            token=inv["token"],
+            status=InvitationStatus(inv["status"]),
+            created_at=inv["created_at"],
+        )
+
+    # HTML response
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
+        return templates.TemplateResponse(
+            request,
+            "invitations/accept.html",
+            {"state": "invalid", "token": str(token), "org_name": "", "email": ""},
+            status_code=404,
         )
     inv = dict(row)
-    if inv["status"] == "revoked":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
-        )
-    return InvitationRead(
-        id=inv["id"],
-        org_id=inv["org_id"],
-        email=inv["email"],
-        role=inv["role"],
-        token=inv["token"],
-        status=InvitationStatus(inv["status"]),
-        created_at=inv["created_at"],
+    repo = OrganizationRepository(service_session)
+    org = await repo.get_by_id(inv["org_id"])
+    org_name = org.name if org else ""
+    if inv["status"] == "accepted":
+        state = "already_accepted"
+    elif inv["status"] == "revoked":
+        state = "invalid"
+    else:
+        state = "valid"
+    return templates.TemplateResponse(
+        request,
+        "invitations/accept.html",
+        {
+            "state": state,
+            "token": str(token),
+            "org_name": org_name,
+            "email": inv.get("email", ""),
+        },
     )
 
 
-@router.post("/{token}/accept", status_code=status.HTTP_200_OK)
+@router.post("/{token}/accept", status_code=status.HTTP_200_OK, response_model=None)
 async def accept_invitation(
+    request: Request,
     token: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
     rls_session: AsyncSession = Depends(get_rls_session),
     service_session: AsyncSession = Depends(get_service_session),
-) -> JSONResponse:
+):
     # Resolve current invitation state (no membership required)
     inv_result = await service_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
@@ -70,7 +110,10 @@ async def accept_invitation(
         repo = OrganizationRepository(rls_session)
         org = await repo.get_by_id(inv["org_id"])
         slug = org.slug if org else ""
-        return JSONResponse({"redirect": f"/orgs/{slug}/dashboard"})
+        redirect_url = f"/orgs/{slug}/dashboard"
+        if _wants_json(request):
+            return JSONResponse({"redirect": redirect_url})
+        return RedirectResponse(url=redirect_url, status_code=303)
 
     if inv["status"] != "pending":
         raise HTTPException(
@@ -95,4 +138,7 @@ async def accept_invitation(
     repo = OrganizationRepository(rls_session)
     org = await repo.get_by_id(inv["org_id"])
     slug = org.slug if org else ""
-    return JSONResponse({"redirect": f"/orgs/{slug}/dashboard"})
+    redirect_url = f"/orgs/{slug}/dashboard"
+    if _wants_json(request):
+        return JSONResponse({"redirect": redirect_url})
+    return RedirectResponse(url=redirect_url, status_code=303)

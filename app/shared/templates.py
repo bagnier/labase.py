@@ -11,5 +11,6 @@ templates = Jinja2Templates(
         str(_BASE / "profile" / "templates"),
         str(_BASE / "todo" / "templates"),
         str(_BASE / "files" / "templates"),
+        str(_BASE / "organizations" / "templates"),
     ]
 )
