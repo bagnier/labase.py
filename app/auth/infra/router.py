@@ -9,6 +9,7 @@ from app.auth.domain.service import login, logout, register
 from app.auth.infra.cookies import set_auth_cookies
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.database import get_service_session
+from app.shared.limiter import rate_limit
 from app.shared.templates import templates
 
 router = APIRouter()
@@ -48,6 +49,7 @@ async def login_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/login")
+@rate_limit("10/minute")
 async def login_endpoint(
     request: Request,
     email: str = Form(...),
@@ -84,6 +86,7 @@ async def register_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/register")
+@rate_limit("5/minute")
 async def register_endpoint(
     request: Request,
     email: str = Form(...),

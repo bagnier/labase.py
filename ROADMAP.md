@@ -20,8 +20,8 @@
 - [ ] collaboration par hooks entre les apps
 - [x] CORS
 - [x] headers de sécurité (HSTS, CSP)
-- [ ] healthcheck (liveness / readiness)
-- [ ] rate-limiting
+- [x] healthcheck (liveness / readiness)
+- [x] rate-limiting
 - [ ] logging
 - [ ] observabilité
 - [ ] file de tâches asynchrones

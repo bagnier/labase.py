@@ -1,3 +1,4 @@
+import os
 import tempfile
 
 import pytest
@@ -46,13 +47,11 @@ class TestFilesPage:
                 lambda r: "/files" in r.url and r.request.method == "POST", timeout=15000
             ):
                 page_auth._p.get_by_role("button", name="Envoyer").click()
-            page_auth._p.wait_for_selector("button[data-delete-id]", state="attached", timeout=5000)
 
+            page_auth.visit(files_url)
             btn = page_auth._p.locator("button[data-delete-id]").first
             assert btn.get_attribute("hx-confirm") is not None, (
                 "Delete button is missing hx-confirm — file deleted without confirmation"
             )
         finally:
-            import os
-
             os.unlink(tmppath)

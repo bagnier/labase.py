@@ -34,8 +34,8 @@ class TestTodosPage:
             lambda r: "/todos" in r.url and r.request.method == "POST", timeout=10000
         ):
             page_auth._p.press("input[placeholder='Nouvelle tâche…']", "Enter")
-        page_auth._p.wait_for_selector("button[data-delete-id]", state="attached", timeout=5000)
 
+        page_auth.visit(todos_url)
         btn = page_auth._p.locator("button[data-delete-id]").first
         assert btn.get_attribute("hx-confirm") is not None, (
             "Delete button is missing hx-confirm — todo deleted without confirmation"

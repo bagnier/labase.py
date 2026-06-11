@@ -3,16 +3,19 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 
 from app.auth.infra.router import router as auth_router
 from app.files.infra.router import public_router as files_public_router
 from app.files.infra.router import router as files_router
+from app.health.router import router as health_router
 from app.organizations.infra.html_router import router as organizations_html_router
 from app.organizations.infra.invitation_router import router as invitations_router
 from app.organizations.infra.router import router as organizations_router
 from app.profile.infra.router import router as profile_router
 from app.shared.config import get_settings
+from app.shared.limiter import limiter
 from app.todo.infra.router import router as todo_router
 
 BASE_DIR = Path(__file__).parent
@@ -20,6 +23,13 @@ BASE_DIR = Path(__file__).parent
 _settings = get_settings()
 
 app = FastAPI(title="labase")
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: Exception) -> Response:
+    return JSONResponse({"detail": "Too many requests"}, status_code=429)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,6 +75,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR.parent / "static")), name="static")
 
+app.include_router(health_router)
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(organizations_router)
 app.include_router(invitations_router)
