@@ -9,7 +9,7 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 | **Web framework**         | FastAPI                      | Native async, Pydantic V2, auto-generated OpenAPI                 |
 | **HTML rendering**        | Jinja2 + HTMX                | SSR without a JS build step, SPA-like dynamism via HTML fragments |
 | **Styling**               | Tailwind CSS                 | Built via npm CLI (`make install`), served from `static/`         |
-| **ORM**                   | SQLModel (on SQLAlchemy 2.x) | Pydantic + SQLAlchemy models, async, Postgres-native              |
+| **ORM**                   | SQLAlchemy 2.x (async)       | Mapped ORM models for tables, Pydantic V2 for DTOs, Postgres-native |
 | **Auth + Storage**        | supabase-py                  | Official Supabase SDK, JWT stored in HTTPOnly cookie              |
 | **Database**              | Supabase (Postgres)          | Hosted DB, RLS, triggers, Storage, Auth built-in                  |
 | **Migrations**            | Supabase CLI (plain SQL)     | Versioned migrations, Studio integration, full control            |
@@ -43,7 +43,7 @@ HTTP request
 **Coupling rules:**
 - `domain/` never imports from `infra/`
 - Contexts don't import each other directly — shared infrastructure goes through `app/shared/`
-- Exception: `auth/infra/dependencies.py` (JWT guard) may be imported by other `infra/` routers
+- Exception: `auth/infra/security.py` (`get_current_user`) and `auth/infra/session.py` (`get_rls_session`) are the shared JWT guard / RLS-session dependencies, imported by other `infra/` routers
 
 **Templates are colocated** — each context owns its Jinja2 templates under `<context>/templates/`. Shared layout lives in `app/shared/templates/`.
 
@@ -72,28 +72,34 @@ The `todo` bounded context is an intentional example. It demonstrates the full p
 ```
 labase.py/
 ├── app/
-│   ├── main.py              # FastAPI app + lifespan, router registration
+│   ├── main.py              # FastAPI app, router registration, 401 handler
 │   ├── shared/              # Cross-context infrastructure
 │   │   ├── config.py        # Settings (pydantic-settings, .env)
 │   │   ├── database.py      # Async engines (user + service) + sessions
+│   │   ├── base.py          # SQLAlchemy DeclarativeBase
 │   │   ├── rls.py           # bind_rls / reset_rls (injects JWT claims)
 │   │   ├── supabase_client.py  # supabase-py clients (anon + admin)
 │   │   ├── templates.py     # Jinja2 environment
+│   │   ├── clock.py         # Clock protocol (System / Fixed for tests)
 │   │   ├── utils.py         # Shared helpers
 │   │   └── templates/       # base.html, macros, shared layouts
 │   ├── auth/                # Bounded context: authentication
 │   │   ├── domain/service.py
 │   │   ├── infra/router.py
-│   │   ├── infra/dependencies.py  # get_rls_session (JWT guard + RLS claims)
 │   │   ├── infra/security.py      # get_current_user (JWT decode)
+│   │   ├── infra/session.py       # get_rls_session (JWT guard + RLS claims)
+│   │   ├── infra/cookies.py       # set/clear auth cookies
 │   │   ├── templates/       # login.html, register.html
 │   │   ├── tests/           # Unit + BDD steps + API driver
 │   │   └── e2e/             # Playwright browser tests
-│   ├── organizations/       # Bounded context: multi-tenant orgs + memberships
+│   ├── organizations/       # Bounded context: multi-tenant orgs + memberships + invitations
 │   │   ├── domain/models.py
 │   │   ├── infra/repository.py
-│   │   ├── infra/router.py
-│   │   ├── infra/dependencies.py  # get_current_org (active org resolution)
+│   │   ├── infra/router.py          # JSON API
+│   │   ├── infra/html_router.py     # org settings + members (HTMX)
+│   │   ├── infra/invitation_router.py  # token-based accept flow
+│   │   ├── infra/context.py         # get_current_org / get_current_membership
+│   │   ├── templates/
 │   │   └── tests/
 │   ├── profile/             # Bounded context: user profile
 │   │   ├── domain/models.py
@@ -105,12 +111,21 @@ labase.py/
 │   ├── dashboard/           # View context (no domain layer)
 │   │   ├── tests/
 │   │   └── e2e/
+│   ├── files/               # Bounded context: org files (Supabase Storage + share tokens)
+│   │   ├── domain/models.py
+│   │   ├── infra/repository.py
+│   │   ├── infra/storage.py
+│   │   ├── infra/router.py
+│   │   ├── templates/
+│   │   ├── tests/
+│   │   └── e2e/
 │   └── todo/                # Demo context — full pattern example
 │       ├── domain/models.py
 │       ├── infra/repository.py
 │       ├── infra/router.py
 │       ├── templates/
-│       └── tests/
+│       ├── tests/
+│       └── e2e/
 ├── features/                # BDD Gherkin scenarios (plain text, no code)
 ├── tests/                   # Top-level conftest + config tests
 ├── static/                  # Compiled CSS, HTMX, fonts

@@ -30,7 +30,10 @@ class TestTodosPage:
         page_auth.visit(todos_url)
 
         page_auth._p.fill("input[placeholder='Nouvelle tâche…']", "Tâche test e2e")
-        page_auth._p.press("input[placeholder='Nouvelle tâche…']", "Enter")
+        with page_auth._p.expect_response(
+            lambda r: "/todos" in r.url and r.request.method == "POST", timeout=10000
+        ):
+            page_auth._p.press("input[placeholder='Nouvelle tâche…']", "Enter")
         page_auth._p.wait_for_selector("button[data-delete-id]", state="attached", timeout=5000)
 
         btn = page_auth._p.locator("button[data-delete-id]").first

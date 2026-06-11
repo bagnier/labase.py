@@ -6,6 +6,9 @@ install:
 	pre-commit install
 	@test -f .env || cp .env.example .env
 	npm install
+	$(MAKE) js-build
+
+js-build:
 	npm run build
 
 # --- Local Supabase ---

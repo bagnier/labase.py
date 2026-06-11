@@ -16,9 +16,11 @@
 - [x] séparation en apps
 - [x] BDD dual driver, Json & Web
 - [x] SSR HTMX
-- [ ] migrations database
+- [x] migrations database
 - [ ] collaboration par hooks entre les apps
 - [ ] CORS
+- [ ] headers de sécurité (HSTS, CSP)
+- [ ] healthcheck (liveness / readiness)
 - [ ] rate-limiting
 - [ ] logging
 - [ ] observabilité
@@ -27,6 +29,7 @@
 - [ ] cache
 - [ ] messaging
 - [ ] email
+- [ ] doc déploiement prod (secrets, env)
 
 
 ### fonctionnel
@@ -36,7 +39,8 @@
 - [x] creation d'organisation
 - [x] partage de l'ownership d'organisation
 - [x] ajout et revocation de membres
-- [x] todo list comme exemple CRUD 
-- [x] gestion de fichiers
+- [x] invitations par token (accept flow)
+- [x] todo list comme exemple CRUD
+- [x] gestion de fichiers (bucket + share tokens)
 - [ ] flashcards comme exemple HexArch
-- [ ] dashboard user
+- [ ] dashboard user (contexte testé mais router non câblé dans main.py)

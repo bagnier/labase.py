@@ -42,7 +42,10 @@ class TestFilesPage:
         try:
             page_auth.visit(files_url)
             page_auth._p.locator("input[type='file']").set_input_files(tmppath)
-            page_auth._p.get_by_role("button", name="Envoyer").click()
+            with page_auth._p.expect_response(
+                lambda r: "/files" in r.url and r.request.method == "POST", timeout=15000
+            ):
+                page_auth._p.get_by_role("button", name="Envoyer").click()
             page_auth._p.wait_for_selector("button[data-delete-id]", state="attached", timeout=5000)
 
             btn = page_auth._p.locator("button[data-delete-id]").first
