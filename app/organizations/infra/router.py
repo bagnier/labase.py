@@ -9,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
-from app.organizations.domain.models import MemberRead, OrgRole, OrganizationWithRoleRead
-from app.organizations.domain.service import ensure_not_last_owner
+from app.organizations.domain.models import (
+    InvitationRead,
+    MemberRead,
+    OrgRole,
+    OrganizationWithRoleRead,
+)
+from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.database import get_service_session
 
@@ -158,3 +163,79 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+class InvitationCreateBody(BaseModel):
+    email: str
+
+
+@router.post(
+    "/{org_id}/invitations", response_model=InvitationRead, status_code=status.HTTP_201_CREATED
+)
+async def create_invitation(
+    org_id: uuid.UUID,
+    body: InvitationCreateBody,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+    service_session: AsyncSession = Depends(get_service_session),
+) -> InvitationRead:
+    repo = OrganizationRepository(session)
+    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
+    if caller is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if caller.role != OrgRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    # Check if already a member
+    result = await service_session.execute(
+        text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
+        {"email": body.email},
+    )
+    existing_user = result.first()
+    if existing_user is not None:
+        existing_membership = await repo.get_membership(org_id, existing_user.id)
+        if existing_membership is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already a member")
+
+    await ensure_no_pending_invitation(repo, org_id, body.email)
+
+    invitation = await repo.create_invitation(
+        org_id=org_id,
+        email=body.email,
+        role=OrgRole.member,
+        invited_by=uuid.UUID(current_user.id),
+    )
+    return InvitationRead.model_validate(invitation)
+
+
+@router.get("/{org_id}/invitations", response_model=list[InvitationRead])
+async def list_invitations(
+    org_id: uuid.UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+) -> list[InvitationRead]:
+    repo = OrganizationRepository(session)
+    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
+    if caller is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    invitations = await repo.list_invitations(org_id)
+    return [InvitationRead.model_validate(inv) for inv in invitations]
+
+
+@router.delete("/{org_id}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_invitation(
+    org_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+) -> None:
+    repo = OrganizationRepository(session)
+    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
+    if caller is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if caller.role != OrgRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    invitation = await repo.get_invitation_by_id(org_id, invitation_id)
+    if invitation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    await repo.revoke_invitation(invitation)

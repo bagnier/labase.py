@@ -55,3 +55,33 @@ class OrgBrowserMixin(BrowserProtocol):
 
     def assert_workspace_card(self, org_name: str) -> None:
         raise NotImplementedError
+
+    def invite_member(self, email: str, role: str) -> None:
+        raise NotImplementedError
+
+    def view_pending_invitations(self) -> None:
+        raise NotImplementedError
+
+    def assert_invitation_pending(self, email: str, role: str) -> None:
+        raise NotImplementedError
+
+    def assert_invitation_absent(self, email: str) -> None:
+        raise NotImplementedError
+
+    def revoke_invitation(self, email: str) -> None:
+        raise NotImplementedError
+
+    def accept_invitation(self, email: str) -> None:
+        raise NotImplementedError
+
+    def try_accept_revoked_invitation(self, email: str) -> None:
+        raise NotImplementedError
+
+    def follow_invitation_link_again(self, email: str) -> None:
+        raise NotImplementedError
+
+    def assert_redirected_to_org_dashboard(self) -> None:
+        raise NotImplementedError
+
+    def assert_action_fails_with(self, message: str) -> None:
+        raise NotImplementedError

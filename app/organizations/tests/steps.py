@@ -94,3 +94,57 @@ def step_remove_member(driver, email):
 @when("they leave the organisation")
 def step_leave_org(driver):
     driver.leave_org()
+
+
+@when(parsers.parse('they invite "{email}" to the organisation with role "{role}"'))
+def step_invite_member(driver, email, role):
+    driver.invite_member(email, role)
+
+
+@when("they view the pending invitations list")
+def step_view_pending_invitations(driver):
+    driver.view_pending_invitations()
+
+
+@then(
+    parsers.parse(
+        'an invitation for "{email}" appears in the pending invitations list with role "{role}"'
+    )
+)
+def step_assert_invitation_pending(driver, email, role):
+    driver.assert_invitation_pending(email, role)
+
+
+@then(parsers.parse('"{email}" does not appear in the pending invitations list'))
+def step_assert_invitation_absent(driver, email):
+    driver.assert_invitation_absent(email)
+
+
+@when(parsers.parse('they revoke the invitation for "{email}"'))
+def step_revoke_invitation(driver, email):
+    driver.revoke_invitation(email)
+
+
+@when(parsers.parse('"{email}" accepts the invitation'))
+def step_accept_invitation(driver, email):
+    driver.accept_invitation(email)
+
+
+@when(parsers.parse('"{email}" tries to accept the revoked invitation'))
+def step_try_accept_revoked(driver, email):
+    driver.try_accept_revoked_invitation(email)
+
+
+@when(parsers.parse('"{email}" follows the invitation link again'))
+def step_follow_invitation_link_again(driver, email):
+    driver.follow_invitation_link_again(email)
+
+
+@then("they are redirected to the organisation dashboard")
+def step_assert_redirected_to_org_dashboard(driver):
+    driver.assert_redirected_to_org_dashboard()
+
+
+@then(parsers.parse('the action fails with error "{message}"'))
+def step_action_fails_with(driver, message):
+    driver.assert_action_fails_with(message)

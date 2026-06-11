@@ -4,7 +4,13 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.organizations.domain.models import Membership, OrgRole, Organization
+from app.organizations.domain.models import (
+    InvitationStatus,
+    Membership,
+    OrgInvitation,
+    OrgRole,
+    Organization,
+)
 
 
 def _slugify(name: str) -> str:
@@ -118,4 +124,49 @@ class OrganizationRepository:
 
     async def rename(self, org: Organization, name: str) -> None:
         org.name = name
+        await self.session.commit()
+
+    async def create_invitation(
+        self, org_id: uuid.UUID, email: str, role: OrgRole, invited_by: uuid.UUID
+    ) -> OrgInvitation:
+        invitation = OrgInvitation(org_id=org_id, email=email, role=role, invited_by=invited_by)
+        self.session.add(invitation)
+        await self.session.commit()
+        return invitation
+
+    async def list_invitations(
+        self, org_id: uuid.UUID, status: InvitationStatus = InvitationStatus.pending
+    ) -> list[OrgInvitation]:
+        result = await self.session.execute(
+            select(OrgInvitation)
+            .where(OrgInvitation.org_id == org_id, OrgInvitation.status == status)
+            .order_by(OrgInvitation.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def get_invitation_by_email(
+        self, org_id: uuid.UUID, email: str, status: InvitationStatus = InvitationStatus.pending
+    ) -> OrgInvitation | None:
+        result = await self.session.execute(
+            select(OrgInvitation).where(
+                OrgInvitation.org_id == org_id,
+                OrgInvitation.email == email,
+                OrgInvitation.status == status,
+            )
+        )
+        return result.scalars().first()
+
+    async def get_invitation_by_id(
+        self, org_id: uuid.UUID, invitation_id: uuid.UUID
+    ) -> OrgInvitation | None:
+        result = await self.session.execute(
+            select(OrgInvitation).where(
+                OrgInvitation.id == invitation_id,
+                OrgInvitation.org_id == org_id,
+            )
+        )
+        return result.scalars().first()
+
+    async def revoke_invitation(self, invitation: OrgInvitation) -> None:
+        invitation.status = InvitationStatus.revoked
         await self.session.commit()

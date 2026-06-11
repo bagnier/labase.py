@@ -271,3 +271,106 @@ class OrgApiMixin(ApiProtocol):
         assert f'data-workspace-card="{org_name}"' in resp.text, (
             f"Workspace card for {org_name!r} not found in dashboard"
         )
+
+    def _fetch_pending_invitations(self) -> list[dict]:
+        org_id = self._get_active_org_id()
+        resp = self._run(
+            self._c.get(
+                f"/organizations/{org_id}/invitations", headers={"accept": "application/json"}
+            )
+        )
+        assert resp.status_code == 200, f"GET invitations returned {resp.status_code}: {resp.text}"
+        return resp.json()
+
+    def invite_member(self, email: str, role: str) -> None:
+        org_id = self._get_active_org_id()
+        self._response = self._run(
+            self._c.post(
+                f"/organizations/{org_id}/invitations",
+                json={"email": email},
+                headers={"accept": "application/json"},
+            )
+        )
+        if self._response.status_code == 201:
+            inv = self._response.json()
+            self._last_invitation_token = inv.get("token")
+            self._last_invitation_email = email
+
+    def view_pending_invitations(self) -> None:
+        self._pending_invitations = self._fetch_pending_invitations()
+
+    def assert_invitation_pending(self, email: str, role: str) -> None:
+        invitations = (
+            getattr(self, "_pending_invitations", None) or self._fetch_pending_invitations()
+        )
+        found = next((i for i in invitations if i["email"] == email), None)
+        assert found is not None, f"No pending invitation for {email!r}: {invitations}"
+        assert found["role"] == role, f"Expected role={role!r}, got {found['role']!r}"
+        assert found["status"] == "pending", f"Expected status=pending, got {found['status']!r}"
+
+    def assert_invitation_absent(self, email: str) -> None:
+        invitations = self._fetch_pending_invitations()
+        emails = [i["email"] for i in invitations]
+        assert email not in emails, f"{email!r} should be absent from invitations: {emails}"
+
+    def revoke_invitation(self, email: str) -> None:
+        org_id = self._get_active_org_id()
+        invitations = self._fetch_pending_invitations()
+        inv = next((i for i in invitations if i["email"] == email), None)
+        assert inv is not None, f"No pending invitation for {email!r} to revoke"
+        self._response = self._run(
+            self._c.delete(
+                f"/organizations/{org_id}/invitations/{inv['id']}",
+                headers={"accept": "application/json"},
+            )
+        )
+
+    def accept_invitation(self, email: str) -> None:
+        token = getattr(self, "_last_invitation_token", None)
+        assert token, "No invitation token stored — call invite_member first"
+        client = self._client_for(email)
+        self._response = self._run(
+            client.post(f"/invitations/{token}/accept", headers={"accept": "application/json"})
+        )
+        assert self._response.status_code == 200, (
+            f"POST /invitations/{token}/accept returned {self._response.status_code}: {self._response.text}"
+        )
+        self._last_accept_response = self._response.json()
+
+    def try_accept_revoked_invitation(self, email: str) -> None:
+        token = getattr(self, "_last_invitation_token", None)
+        assert token, "No invitation token stored"
+        client = self._client_for(email)
+        self._response = self._run(
+            client.post(f"/invitations/{token}/accept", headers={"accept": "application/json"})
+        )
+
+    def follow_invitation_link_again(self, email: str) -> None:
+        token = getattr(self, "_last_invitation_token", None)
+        assert token, "No invitation token stored"
+        client = self._client_for(email)
+        self._response = self._run(
+            client.post(f"/invitations/{token}/accept", headers={"accept": "application/json"})
+        )
+        self._last_accept_response = (
+            self._response.json() if self._response.status_code == 200 else None
+        )
+
+    def assert_redirected_to_org_dashboard(self) -> None:
+        assert self._response is not None
+        assert self._response.status_code == 200, (
+            f"Expected 200 with redirect payload, got {self._response.status_code}: {self._response.text}"
+        )
+        data = self._response.json()
+        assert "redirect" in data and "/dashboard" in data["redirect"], (
+            f"Expected redirect to dashboard, got: {data}"
+        )
+
+    def assert_action_fails_with(self, message: str) -> None:
+        assert self._response is not None, "No response stored"
+        assert self._response.status_code in (400, 409, 404, 422), (
+            f"Expected error status, got {self._response.status_code}: {self._response.text}"
+        )
+        body = self._response.json()
+        detail = body.get("detail", "")
+        assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
