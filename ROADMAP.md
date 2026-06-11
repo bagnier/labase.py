@@ -25,7 +25,7 @@
 - [x] logging
 - [x] observabilité
 - [x] TLS and HTTP/2
-- [ ] OWASP Dependency Check
+- [x] OWASP Dependency Check
 - [ ] file de tâches asynchrones
 - [ ] index fulltext
 - [ ] cache

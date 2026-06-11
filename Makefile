@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all serve ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt
+.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all serve ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit
 
 # --- Setup ---
 install:
@@ -47,6 +47,9 @@ format:
 typecheck:
 	uv run ty check app/
 
+audit:
+	uv run pip-audit
+
 quality: lint format typecheck
 
 # --- Tests ---
@@ -80,4 +83,4 @@ serve:
 	ENV_FILE=.env.test uv run hypercorn app.main:app --bind 0.0.0.0:8002 --reload \
 		$(if $(SSL_CERTFILE),--certfile $(SSL_CERTFILE) --keyfile $(SSL_KEYFILE),)
 
-ci: js-build lint typecheck coverage-erase test test-e2e coverage-xml
+ci: js-build lint typecheck audit coverage-erase test test-e2e coverage-xml
