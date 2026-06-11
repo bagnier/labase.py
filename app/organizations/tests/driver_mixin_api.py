@@ -165,9 +165,9 @@ class OrgApiMixin(ApiProtocol):
         self._response = resp
 
     def sign_in_as_member(self, email: str) -> None:
+        if not getattr(self, "_primary_client_backup", None):
+            self._primary_client_backup = self._client  # type: ignore[attr-defined]
         client = self._client_for(email)
-        # Point active client to this user by reassigning _c
-        # We store the member's client to simulate "current user" is now email
         self._client = client  # type: ignore[assignment]
 
     def assert_action_forbidden(self) -> None:
@@ -175,6 +175,95 @@ class OrgApiMixin(ApiProtocol):
         assert self._response.status_code == 403, (
             f"Expected 403, got {self._response.status_code}: {self._response.text}"
         )
+
+    def _get_active_org_id(self, client=None) -> str:
+        import httpx as _httpx
+
+        c: _httpx.AsyncClient = client or self._c
+        resp = self._run(c.get("/organizations", headers={"accept": "application/json"}))
+        assert resp.status_code == 200 and resp.json(), "Cannot resolve active org id"
+        orgs = resp.json()
+        active_slug = getattr(self, "_active_org_slug", "")
+        org = (
+            next((o for o in orgs if o.get("slug") == active_slug), orgs[0])
+            if active_slug
+            else orgs[0]
+        )
+        return org["id"]
+
+    def _user_id_for(self, email: str) -> str:
+        return self._user_id_for_email(email)
+
+    def view_member_list(self) -> None:
+        org_id = self._get_active_org_id()
+        self._response = self._run(
+            self._c.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
+        )
+        assert self._response.status_code == 200, (
+            f"GET /organizations/{org_id}/members returned {self._response.status_code}: {self._response.text}"
+        )
+        self._member_list_response = self._response.json()
+
+    def assert_member_with_role(self, email: str, role: str) -> None:
+        org_id = self._get_active_org_id()
+        resp = self._run(
+            self._c.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
+        )
+        assert resp.status_code == 200, f"GET members returned {resp.status_code}: {resp.text}"
+        members = resp.json()
+        found = next((m for m in members if m["email"] == email), None)
+        assert found is not None, (
+            f"{email!r} not found in member list: {[m['email'] for m in members]}"
+        )
+        assert found["role"] == role, f"Expected role={role!r} for {email!r}, got {found['role']!r}"
+
+    def assert_member_absent(self, email: str) -> None:
+        # Use primary client (owner) if current client may have lost org access (e.g. after leave)
+        client = getattr(self, "_primary_client_backup", None) or self._c
+        org_id = self._get_active_org_id(client)
+        resp = self._run(
+            client.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
+        )
+        assert resp.status_code == 200, (
+            f"GET /organizations/{org_id}/members returned {resp.status_code}: {resp.text}"
+        )
+        emails = [m["email"] for m in resp.json()]
+        assert email not in emails, f"{email!r} should be absent but found in member list: {emails}"
+
+    def set_member_role(self, email: str, role: str) -> None:
+        org_id = self._get_active_org_id()
+        user_id = self._user_id_for(email)
+        self._response = self._run(
+            self._c.patch(
+                f"/organizations/{org_id}/members/{user_id}",
+                json={"role": role},
+                headers={"accept": "application/json"},
+            )
+        )
+
+    def remove_member(self, email: str) -> None:
+        org_id = self._get_active_org_id()
+        user_id = self._user_id_for(email)
+        self._response = self._run(
+            self._c.delete(
+                f"/organizations/{org_id}/members/{user_id}",
+                headers={"accept": "application/json"},
+            )
+        )
+
+    def leave_org(self) -> None:
+        org_id = self._get_active_org_id()
+        self._response = self._run(
+            self._c.delete(
+                f"/organizations/{org_id}/members/me",
+                headers={"accept": "application/json"},
+            )
+        )
+        if self._response.status_code not in (204, 403):
+            raise AssertionError(
+                f"leave_org DELETE /organizations/{org_id}/members/me returned "
+                f"{self._response.status_code}: {self._response.text}"
+            )
 
     def assert_workspace_card(self, org_name: str) -> None:
         resp = self._run(self._c.get("/dashboard"))

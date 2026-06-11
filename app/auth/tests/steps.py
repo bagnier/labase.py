@@ -12,6 +12,12 @@ def step_user_signed_in_within_org(driver, email, org_name):
     driver.sign_in_within_org(email, org_name)
 
 
+@given(parsers.parse('a user is signed in as "{email}" as owner of "{org_name}"'))
+def step_user_signed_in_as_owner_of(driver, email, org_name):
+    driver.reset_session()
+    driver.sign_in_within_org(email, org_name)
+
+
 @given(parsers.parse('a user is registered with email "{email}" and password "{password}"'))
 def step_user_registered(driver, email, password):
     driver.reset_session()

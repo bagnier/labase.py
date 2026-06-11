@@ -65,6 +65,15 @@ class MembershipRead(BaseModel):
     role: OrgRole
 
 
+class MemberRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    auth_user_id: uuid.UUID
+    email: str
+    role: OrgRole
+    created_at: datetime
+
+
 class OrganizationService(BaseModel):
     """Données agrégées utiles pour un membre : org + son rôle."""
 

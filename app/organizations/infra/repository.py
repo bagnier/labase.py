@@ -1,7 +1,7 @@
 import re
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.organizations.domain.models import Membership, OrgRole, Organization
@@ -81,6 +81,40 @@ class OrganizationRepository:
     async def get_by_slug(self, slug: str) -> Organization | None:
         result = await self.session.execute(select(Organization).where(Organization.slug == slug))
         return result.scalars().first()
+
+    async def list_members(self, org_id: uuid.UUID) -> list[Membership]:
+        result = await self.session.execute(
+            select(Membership).where(Membership.org_id == org_id).order_by(Membership.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def count_owners(self, org_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            select(Membership).where(
+                Membership.org_id == org_id,
+                Membership.role == OrgRole.owner,
+            )
+        )
+        return len(result.scalars().all())
+
+    async def update_member_role(
+        self, org_id: uuid.UUID, user_id: uuid.UUID, role: OrgRole
+    ) -> Membership | None:
+        membership = await self.get_membership(org_id, user_id)
+        if membership is None:
+            return None
+        membership.role = role
+        await self.session.commit()
+        return membership
+
+    async def remove_member(self, org_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        result = await self.session.execute(
+            delete(Membership)
+            .where(Membership.org_id == org_id, Membership.auth_user_id == user_id)
+            .returning(Membership.auth_user_id)
+        )
+        await self.session.commit()
+        return result.scalar() is not None
 
     async def rename(self, org: Organization, name: str) -> None:
         org.name = name

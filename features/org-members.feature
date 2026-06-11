@@ -9,7 +9,7 @@ Feature: Organisation member management
   # List members
 
   Scenario: Owner sees all members of the organisation
-    Given "bob@example.com" is a member of "Acme"
+    Given "bob@example.com" is a member of the org
     When they view the member list
     Then "alice@example.com" appears in the member list with role "owner"
     And "bob@example.com" appears in the member list with role "member"
@@ -17,12 +17,12 @@ Feature: Organisation member management
   # Change role
 
   Scenario: Owner can promote a member to owner
-    Given "bob@example.com" is a member of "Acme"
+    Given "bob@example.com" is a member of the org
     When they set the role of "bob@example.com" to "owner"
     Then "bob@example.com" appears in the member list with role "owner"
 
   Scenario: Member cannot change roles
-    Given "bob@example.com" is a member of "Acme"
+    Given "bob@example.com" is a member of the org
     And they are signed in as "bob@example.com" in the same org
     When they set the role of "alice@example.com" to "member"
     Then the action is forbidden
@@ -30,13 +30,13 @@ Feature: Organisation member management
   # Remove member
 
   Scenario: Owner can remove a member
-    Given "bob@example.com" is a member of "Acme"
+    Given "bob@example.com" is a member of the org
     When they remove "bob@example.com" from the org
     Then "bob@example.com" does not appear in the member list
 
   Scenario: Member cannot remove another member
-    Given "bob@example.com" is a member of "Acme"
-    And "carol@example.com" is a member of "Acme"
+    Given "bob@example.com" is a member of the org
+    And "carol@example.com" is a member of the org
     And they are signed in as "bob@example.com" in the same org
     When they remove "carol@example.com" from the org
     Then the action is forbidden
@@ -54,7 +54,7 @@ Feature: Organisation member management
   # Leave
 
   Scenario: Member can leave an organisation
-    Given "bob@example.com" is a member of "Acme"
+    Given "bob@example.com" is a member of the org
     And they are signed in as "bob@example.com" in the same org
     When they leave the organisation
     Then "bob@example.com" does not appear in the member list

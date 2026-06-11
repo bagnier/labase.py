@@ -64,3 +64,33 @@ def step_action_forbidden(driver):
 @then(parsers.parse('"{org_name}" appears as a workspace card'))
 def step_assert_workspace_card(driver, org_name):
     driver.assert_workspace_card(org_name)
+
+
+@when("they view the member list")
+def step_view_member_list(driver):
+    driver.view_member_list()
+
+
+@then(parsers.parse('"{email}" appears in the member list with role "{role}"'))
+def step_assert_member_with_role(driver, email, role):
+    driver.assert_member_with_role(email, role)
+
+
+@then(parsers.parse('"{email}" does not appear in the member list'))
+def step_assert_member_absent(driver, email):
+    driver.assert_member_absent(email)
+
+
+@when(parsers.parse('they set the role of "{email}" to "{role}"'))
+def step_set_member_role(driver, email, role):
+    driver.set_member_role(email, role)
+
+
+@when(parsers.parse('they remove "{email}" from the org'))
+def step_remove_member(driver, email):
+    driver.remove_member(email)
+
+
+@when("they leave the organisation")
+def step_leave_org(driver):
+    driver.leave_org()

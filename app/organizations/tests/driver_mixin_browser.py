@@ -35,5 +35,23 @@ class OrgBrowserMixin(BrowserProtocol):
     def assert_action_forbidden(self) -> None:
         raise NotImplementedError
 
+    def view_member_list(self) -> None:
+        raise NotImplementedError
+
+    def assert_member_with_role(self, email: str, role: str) -> None:
+        raise NotImplementedError
+
+    def assert_member_absent(self, email: str) -> None:
+        raise NotImplementedError
+
+    def set_member_role(self, email: str, role: str) -> None:
+        raise NotImplementedError
+
+    def remove_member(self, email: str) -> None:
+        raise NotImplementedError
+
+    def leave_org(self) -> None:
+        raise NotImplementedError
+
     def assert_workspace_card(self, org_name: str) -> None:
         raise NotImplementedError

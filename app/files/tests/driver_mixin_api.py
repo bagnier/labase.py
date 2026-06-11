@@ -39,6 +39,7 @@ class OrgFileApiMixin(ApiProtocol):
         self._primary_email = ""
         self._active_org_slug = ""
         self._org_list_response = None  # reset cached org list from OrgApiMixin
+        self._primary_client_backup = None  # type: ignore[assignment]
         self._restore_clock()
 
     def _admin_headers(self) -> dict:
