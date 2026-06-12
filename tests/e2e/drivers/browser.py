@@ -10,6 +10,7 @@ from app.auth.tests.driver_mixin import AuthBrowserMixin
 from app.dashboard.tests.driver_mixin import DashboardBrowserMixin
 from app.files.tests.driver_mixin import OrgFileBrowserMixin
 from app.organizations.tests.driver_mixin import OrgBrowserMixin
+from app.profile.tests.driver_mixin import ProfileBrowserMixin
 from app.todo.tests.driver_mixin import TodoBrowserMixin
 from tests.e2e.drivers.shared_mixin import SharedBrowserMixin
 
@@ -23,6 +24,7 @@ def _free_port() -> int:
 class BrowserDriver(
     AuthBrowserMixin,
     DashboardBrowserMixin,
+    ProfileBrowserMixin,
     TodoBrowserMixin,
     OrgFileBrowserMixin,
     OrgBrowserMixin,

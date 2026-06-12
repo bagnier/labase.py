@@ -33,7 +33,7 @@ def _admin_session_factory():
     return async_sessionmaker(_admin_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_user_session() -> AsyncGenerator[AsyncSession, None]:
     async with _user_session_factory()() as session:
         yield session
 

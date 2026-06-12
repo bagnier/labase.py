@@ -6,6 +6,7 @@ from tests.e2e.drivers.browser import BrowserDriver
 pytest_plugins = [
     "app.auth.tests.steps",
     "app.dashboard.tests.steps",
+    "app.profile.tests.steps",
     "app.todo.tests.steps",
     "app.files.tests.steps",
     "app.organizations.tests.steps",
@@ -20,14 +21,6 @@ def pytest_addoption(parser):
 def driver(request) -> ApiDriver | BrowserDriver:
     name = request.config.getoption("--driver")
     d = BrowserDriver() if name == "browser" else ApiDriver()
-    d.start()
-    request.addfinalizer(d.stop)
-    return d
-
-
-@pytest.fixture(scope="session")
-def browser_driver(request) -> BrowserDriver:
-    d = BrowserDriver()
     d.start()
     request.addfinalizer(d.stop)
     return d

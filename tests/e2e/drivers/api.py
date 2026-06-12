@@ -8,12 +8,19 @@ from app.dashboard.tests.driver_mixin import DashboardApiMixin
 from app.files.tests.driver_mixin import OrgFileApiMixin
 from app.main import app
 from app.organizations.tests.driver_mixin import OrgApiMixin
+from app.profile.tests.driver_mixin import ProfileApiMixin
 from app.todo.tests.driver_mixin import TodoApiMixin
 from tests.e2e.drivers.shared_mixin import SharedApiMixin
 
 
 class ApiDriver(
-    AuthApiMixin, DashboardApiMixin, TodoApiMixin, OrgFileApiMixin, OrgApiMixin, SharedApiMixin
+    AuthApiMixin,
+    DashboardApiMixin,
+    ProfileApiMixin,
+    TodoApiMixin,
+    OrgFileApiMixin,
+    OrgApiMixin,
+    SharedApiMixin,
 ):
     def __init__(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None

@@ -1,7 +1,12 @@
+import uuid
+
 import httpx
 
+from app.auth.tests.admin_helpers import create_user as _admin_create_user
 from app.main import app
+from app.organizations.infra.repository import OrganizationRepository
 from app.shared.config import get_settings
+from app.shared.persistence.database import _admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
 _PASSWORD = "Secret1!"
@@ -145,22 +150,20 @@ class OrgFileApiMixin(ApiProtocol):
         self._last_registered_email = email
         self._cleanup_example_users()
         self._known_test_emails = set()
-        self._run(self._c.post("/auth/register", data={"email": email, "password": _PASSWORD}))
-        self._run(self._c.post("/auth/login", data={"email": email, "password": _PASSWORD}))
-        resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))
-        if resp.status_code == 200 and resp.json():
-            org = resp.json()[0]
-            org_id = org["id"]
-            self._run(
-                self._c.patch(
-                    f"/organizations/{org_id}",
-                    json={"name": org_name},
-                    headers={"accept": "application/json"},
+        # Use admin API to create user: avoids GoTrue timing race where the new
+        # auth.users row isn't visible via direct Postgres FK check when using sign_up.
+        user_id_str = _admin_create_user(email, _PASSWORD)
+
+        async def _create_org() -> str:
+            async with _admin_session_factory()() as session:
+                repo = OrganizationRepository(session)
+                org = await repo.create_with_owner(
+                    name=org_name, auth_user_id=uuid.UUID(user_id_str)
                 )
-            )
-            # Fetch slug after rename (slug is stable, not renamed)
-            resp2 = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))
-            self._active_org_slug = resp2.json()[0]["slug"]
+                return org.slug
+
+        self._active_org_slug = self._run(_create_org())
+        self._run(self._c.post("/auth/login", data={"email": email, "password": _PASSWORD}))
 
     # ── file operations ───────────────────────────────────────────────────────
 
