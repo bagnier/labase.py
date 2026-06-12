@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, ForeignKey, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.clock import now
+from app.shared import clock
 from app.shared.persistence.base import Base
 
 
@@ -23,7 +23,7 @@ class Organization(Base):
     name: Mapped[str]
     slug: Mapped[str] = mapped_column(default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now
+        DateTime(timezone=True), nullable=False, default=clock.now
     )
 
 
@@ -36,7 +36,7 @@ class Membership(Base):
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now
+        DateTime(timezone=True), nullable=False, default=clock.now
     )
 
 
@@ -63,7 +63,7 @@ class OrgInvitation(Base):
         default=InvitationStatus.pending,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now
+        DateTime(timezone=True), nullable=False, default=clock.now
     )
 
 

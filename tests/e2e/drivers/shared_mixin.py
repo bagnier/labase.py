@@ -1,18 +1,18 @@
 import datetime
 
-import app.shared.clock as _clock
+from app.shared import clock
 from tests.e2e.drivers.protocols import ApiProtocol, BrowserProtocol
 
 
 class SharedApiMixin(ApiProtocol):
     def set_current_date(self, date: str) -> None:
         fixed = datetime.datetime.fromisoformat(date).replace(tzinfo=datetime.UTC)
-        self._original_now = _clock.now
-        _clock.now = lambda: fixed  # type: ignore[method-assign]
+        self._original_now = clock.now
+        clock.now = lambda: fixed  # type: ignore[method-assign]
 
     def _restore_clock(self) -> None:
         if hasattr(self, "_original_now"):
-            _clock.now = self._original_now
+            clock.now = self._original_now
             del self._original_now
 
     def visit(self, path: str) -> None:
@@ -35,7 +35,7 @@ class SharedApiMixin(ApiProtocol):
 class SharedBrowserMixin(BrowserProtocol):
     def set_current_date(self, date: str) -> None:
         fixed = datetime.datetime.fromisoformat(date).replace(tzinfo=datetime.UTC)
-        _clock.now = lambda: fixed  # type: ignore[method-assign]
+        clock.now = lambda: fixed  # type: ignore[method-assign]
 
     def visit(self, path: str) -> None:
         self._last_response = self._p.goto(f"{self._base_url}{path}", wait_until="load")

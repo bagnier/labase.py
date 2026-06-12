@@ -80,7 +80,7 @@ labase.py/
 │   │   ├── rls.py           # bind_rls / reset_rls (injects JWT claims)
 │   │   ├── supabase_client.py  # supabase-py clients (anon + admin)
 │   │   ├── templates.py     # Jinja2 environment
-│   │   ├── clock.py         # Clock protocol (System / Fixed for tests)
+│   │   ├── clock.py         # now() — patched via module ref in tests
 │   │   ├── utils.py         # Shared helpers
 │   │   └── templates/       # base.html, macros, shared layouts
 │   ├── auth/                # Bounded context: authentication
