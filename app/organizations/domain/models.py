@@ -111,11 +111,3 @@ class MemberRead(BaseModel):
     email: str
     role: OrgRole
     created_at: datetime
-
-
-class OrganizationService(BaseModel):
-    """Données agrégées utiles pour un membre : org + son rôle."""
-
-    org: OrganizationRead
-    role: OrgRole
-    is_active: bool | None = None

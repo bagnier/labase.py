@@ -78,9 +78,9 @@
 
 #### 3. Outillage (gains immédiats)
 
-- Ruff est quasi désactivé — select = ["DTZ"] dans pyproject.toml remplace les règles par défaut : même pyflakes (F) ne tourne pas. Un essai avec E,F,I,UP,B,SIM remonte 139 erreurs, dont 6 imports inutilisés et 16 imports non triés. Passer à extend-select avec I, UP, B au minimum, et ajouter ruff check au pre-commit (qui ne fait que format actuellement).
+- [x] Ruff est quasi désactivé — select = ["DTZ"] dans pyproject.toml remplace les règles par défaut : même pyflakes (F) ne tourne pas. Un essai avec E,F,I,UP,B,SIM remonte 139 erreurs, dont 6 imports inutilisés et 16 imports non triés. Passer à extend-select avec I, UP, B au minimum, et ajouter ruff check au pre-commit (qui ne fait que format actuellement).
 
-- Dead code dans la config — secret_key, ssl_certfile/ssl_keyfile (config.py) ne sont lus nulle part (l'entrypoint Docker lit les env vars directement), et le modèle OrganizationService (models.py:113-118) n'a aucun usage.
+- [x] Dead code dans la config — secret_key, ssl_certfile/ssl_keyfile (config.py) ne sont lus nulle part (l'entrypoint Docker lit les env vars directement), et le modèle OrganizationService (models.py:113-118) n'a aucun usage.
 
 - Le gel d'horloge des tests est cassé pour la moitié des modules — les tests patchent _clock.now (late binding), mais todo, organizations et profile font from app.shared.clock import now (early binding) : le patch ne les atteint jamais. Seul files/repository.py utilise le bon style. À standardiser — et le README décrit un « Clock protocol (System/Fixed) » qui n'existe pas.
 

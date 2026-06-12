@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=os.getenv("ENV_FILE", ".env"))
+    model_config = SettingsConfigDict(env_file=os.getenv("ENV_FILE", ".env"), extra="ignore")
 
     supabase_url: str
     supabase_anon_key: str
@@ -13,11 +13,8 @@ class Settings(BaseSettings):
     database_url: str
     database_url_service: str = ""
     db_schema: str = "public"
-    secret_key: str = "change-me-in-production"
     debug: bool = False
     cors_origins: list[str] = ["*"]
-    ssl_certfile: str | None = None
-    ssl_keyfile: str | None = None
 
 
 @lru_cache
