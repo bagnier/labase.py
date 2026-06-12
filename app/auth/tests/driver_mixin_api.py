@@ -67,8 +67,8 @@ class AuthApiMixin(ApiProtocol):
 
     def assert_redirected_to_dashboard(self) -> None:
         assert self._response is not None
-        assert self._response.headers.get("hx-redirect") == "/dashboard", (
-            f"Expected HX-Redirect to /dashboard, got {self._response.headers.get('hx-redirect')}"
+        assert self._response.headers.get("hx-redirect") == "/profile", (
+            f"Expected HX-Redirect to /profile, got {self._response.headers.get('hx-redirect')}"
         )
 
     def assert_registration_successful(self) -> None:

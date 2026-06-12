@@ -50,18 +50,7 @@
 - [x] gestion de fichiers (bucket + share tokens)
 - [ ] flashcards comme exemple HexArch
 - [ ] dashboard user (contexte testé mais router non câblé dans main.py)
-- [ ] admin dashboard
-
-
-### défauts à corriger
-
-#### 4. Architecture, mineur
-- [ ] /dashboard et / vivent dans le contexte profile (router.py:21-37) alors qu'un contexte dashboard existe avec ses tests mais sans router — la roadmap le note déjà ; c'est un déménagement, pas du code neuf.
-
-- [x] get_current_org consomme une session admin (BYPASSRLS) à chaque requête (context.py) — soit une 2ᵉ connexion DB par requête pour un simple check d'accès, résolvable via la session RLS (les policies memberships permettent de voir ses propres memberships).
-
-- [x] Détection d'erreur par matching de string — invitation_router.py:142 teste "invitation not found" in str(exc) : fragile, un SQLSTATE custom (RAISE ... USING ERRCODE) est aussi simple et stable.
-
+- [ ] admin console
 
 
 ### intégration possibles à Supabase

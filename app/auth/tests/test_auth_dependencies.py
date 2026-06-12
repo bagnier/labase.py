@@ -97,10 +97,10 @@ async def test_expired_token_without_refresh_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_dashboard_browser_redirect_to_login_when_unauthenticated():
+async def test_profile_browser_redirect_to_login_when_unauthenticated():
     async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
         response = await c.get(
-            "/dashboard",
+            "/profile",
             headers={"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"},
             follow_redirects=False,
         )
@@ -109,9 +109,9 @@ async def test_dashboard_browser_redirect_to_login_when_unauthenticated():
 
 
 @pytest.mark.asyncio
-async def test_dashboard_api_client_still_gets_401_when_unauthenticated():
+async def test_profile_api_client_still_gets_401_when_unauthenticated():
     async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
-        response = await c.get("/dashboard", follow_redirects=False)
+        response = await c.get("/profile", follow_redirects=False)
     assert response.status_code == 401
 
 

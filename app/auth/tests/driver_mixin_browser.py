@@ -17,7 +17,7 @@ class AuthBrowserMixin(BrowserProtocol):
         ) as resp_info:
             self._p.click("button[type=submit]")
         if resp_info.value.headers.get("hx-redirect"):
-            self._p.wait_for_url(f"{self._base_url}/dashboard", timeout=5000)
+            self._p.wait_for_url(f"{self._base_url}/profile", timeout=5000)
         else:
             self._p.wait_for_load_state("domcontentloaded")
 
@@ -83,13 +83,13 @@ class AuthBrowserMixin(BrowserProtocol):
     def assert_login_rejected(self) -> None:
         # HTMX 2.x drops 4xx responses without swapping — verify by checking
         # we were not redirected to the dashboard (i.e., sign-in was refused)
-        assert "/dashboard" not in self._p.url, (
+        assert "/profile" not in self._p.url, (
             f"Expected sign-in to fail but ended up at {self._p.url}"
         )
 
     def assert_redirected_to_dashboard(self) -> None:
-        self._p.wait_for_url(f"{self._base_url}/dashboard", timeout=5000)
-        assert "/dashboard" in self._p.url, f"Expected /dashboard, got {self._p.url}"
+        self._p.wait_for_url(f"{self._base_url}/profile", timeout=5000)
+        assert "/profile" in self._p.url, f"Expected /profile, got {self._p.url}"
 
     def assert_registration_successful(self) -> None:
         assert "Vérifiez" in self._p.content(), "'Vérifiez' not found in registration response"

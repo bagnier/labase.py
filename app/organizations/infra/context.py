@@ -29,7 +29,7 @@ async def get_current_org(
             status_code=status.HTTP_403_FORBIDDEN, detail="Organisation not found or access denied"
         )
 
-    # Fallback for routes not under /orgs/{org_slug}: use first org
+    # Fallback for routes not under /{org_slug}: use first org
     org = await repo.get_first_for_user(user_uuid)
     if org is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization found")

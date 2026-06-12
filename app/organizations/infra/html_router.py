@@ -20,6 +20,29 @@ from app.shared.http.templates import templates
 router = APIRouter(tags=["organizations-html"])
 
 
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def org_dashboard(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
+) -> HTMLResponse:
+    repo = OrganizationRepository(session)
+    org = await repo.get_by_id(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org_slug = request.path_params.get("org_slug", org.slug)
+    return templates.TemplateResponse(
+        request,
+        "organizations/dashboard.html",
+        {"user": current_user, "org": org, "org_slug": org_slug},
+    )
+
+
 # ── Settings ─────────────────────────────────────────────────────────────────
 
 
@@ -67,7 +90,7 @@ async def rename_org_html(
     # Reload org to get new slug
     org = await repo.get_by_id(org_id)
     assert org is not None
-    return RedirectResponse(url=f"/orgs/{org.slug}/settings", status_code=303)
+    return RedirectResponse(url=f"/{org.slug}/settings", status_code=303)
 
 
 # ── Members ───────────────────────────────────────────────────────────────────

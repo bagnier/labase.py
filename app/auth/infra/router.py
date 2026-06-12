@@ -63,7 +63,7 @@ async def login_endpoint(
         tokens = await login(email, password)
         resp = Response(status_code=status.HTTP_200_OK)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
-        resp.headers["HX-Redirect"] = "/dashboard"
+        resp.headers["HX-Redirect"] = "/profile"
         return resp
     except Exception:
         record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)

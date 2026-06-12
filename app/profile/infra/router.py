@@ -12,36 +12,23 @@ from app.shared.http.templates import templates
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "home.html")
-
-
-@router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(
-    request: Request,
-    current_user: CurrentUser,
-    admin_session: AdminSession,
-) -> HTMLResponse:
-    repo = OrganizationRepository(admin_session)
-    pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
-    orgs = [org for org, _ in pairs]
-    org_slug = orgs[0].slug if orgs else ""
-    return templates.TemplateResponse(
-        request, "dashboard.html", {"user": current_user, "org_slug": org_slug, "orgs": orgs}
-    )
-
-
 @router.get("/profile", response_class=HTMLResponse)
 async def profile_page(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    admin_session: AdminSession,
 ) -> HTMLResponse:
     repo = ProfileRepository(session)
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
+    org_repo = OrganizationRepository(admin_session)
+    pairs = await org_repo.list_with_role_for_user(uuid.UUID(current_user.id))
+    orgs = [org for org, _ in pairs]
+    org_slug = orgs[0].slug if orgs else ""
     return templates.TemplateResponse(
-        request, "profile.html", {"user": current_user, "profile": profile}
+        request,
+        "profile.html",
+        {"user": current_user, "profile": profile, "orgs": orgs, "org_slug": org_slug},
     )
 
 
@@ -50,11 +37,16 @@ async def profile_update(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    admin_session: AdminSession,
     display_name: str = Form(default=""),
 ) -> HTMLResponse:
     repo = ProfileRepository(session)
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
-    ctx: dict = {"user": current_user, "profile": profile}
+    org_repo = OrganizationRepository(admin_session)
+    pairs = await org_repo.list_with_role_for_user(uuid.UUID(current_user.id))
+    orgs = [org for org, _ in pairs]
+    org_slug = orgs[0].slug if orgs else ""
+    ctx: dict = {"user": current_user, "profile": profile, "orgs": orgs, "org_slug": org_slug}
     if profile is None:
         ctx["error"] = "Profil introuvable."
         return templates.TemplateResponse(request, "profile.html", ctx)

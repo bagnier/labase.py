@@ -112,7 +112,7 @@ async def accept_invitation(
         repo = OrganizationRepository(rls_session)
         org = await repo.get_by_id(inv["org_id"])
         slug = org.slug if org else ""
-        redirect_url = f"/orgs/{slug}/dashboard"
+        redirect_url = f"/{slug}/dashboard"
         if _wants_json(request):
             return JSONResponse({"redirect": redirect_url})
         return RedirectResponse(url=redirect_url, status_code=303)
@@ -146,7 +146,7 @@ async def accept_invitation(
         user_id=current_user.id,
         org_id=str(inv["org_id"]),
     )
-    redirect_url = f"/orgs/{slug}/dashboard"
+    redirect_url = f"/{slug}/dashboard"
     if _wants_json(request):
         return JSONResponse({"redirect": redirect_url})
     return RedirectResponse(url=redirect_url, status_code=303)

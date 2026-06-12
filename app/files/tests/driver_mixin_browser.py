@@ -10,7 +10,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
 
     def _files_url(self, slug: str | None = None) -> str:
         s = slug or getattr(self, "_active_org_slug", "")
-        return f"{self._base_url}/orgs/{s}/files"
+        return f"{self._base_url}/{s}/files"
 
     def _goto_files(self) -> None:
         self._p.goto(self._files_url(), wait_until="load")
@@ -187,7 +187,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
         )
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
         ctx.request.post(
-            f"{self._base_url}/orgs/{slug}/files",
+            f"{self._base_url}/{slug}/files",
             multipart={
                 "file": {
                     "name": filename,
@@ -240,7 +240,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
             email, getattr(self, "_active_org_slug", "")
         )
         resp = ctx.request.get(
-            f"{self._base_url}/orgs/{slug}/files",
+            f"{self._base_url}/{slug}/files",
             headers={"accept": "application/json"},
         )
         self._last_response = resp

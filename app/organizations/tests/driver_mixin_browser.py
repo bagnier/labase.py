@@ -179,7 +179,7 @@ class OrgBrowserMixin(BrowserProtocol):
         # Navigate to settings page to validate the HTML renders
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/settings", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/settings", wait_until="load")
         # Perform rename via JSON API to keep auth state stable
         org_id = self._get_active_org_id()
         resp = self._acting_context().request.patch(
@@ -204,12 +204,12 @@ class OrgBrowserMixin(BrowserProtocol):
     def view_member_list(self) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
 
     def assert_member_with_role(self, email: str, role: str) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         selector = f"[data-member-email='{email}'][data-member-role='{role}']"
         el = page.query_selector(selector)
         member_list = page.query_selector("#member-list")
@@ -235,7 +235,7 @@ class OrgBrowserMixin(BrowserProtocol):
         )
         slug = org["slug"]
         page = self._p
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         el = page.query_selector(f"[data-member-email='{email}']")
         assert el is None, f"{email!r} should be absent from members page but was found"
 
@@ -243,7 +243,7 @@ class OrgBrowserMixin(BrowserProtocol):
         # Navigate to members page so the HTML renders (validates the UI)
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         # Perform role change via JSON API to capture the response for assert_action_forbidden
         org_id = self._get_active_org_id()
         user_id = self._get_user_id(email)
@@ -256,7 +256,7 @@ class OrgBrowserMixin(BrowserProtocol):
     def remove_member(self, email: str) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         row = page.query_selector(f"[data-member-email='{email}']")
         assert row is not None, f"Member row for {email!r} not found"
         # Use API to perform removal and capture response for assert_action_forbidden
@@ -270,7 +270,7 @@ class OrgBrowserMixin(BrowserProtocol):
     def leave_org(self) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         # Use API for leave so we can capture forbidden responses
         org_id = self._get_active_org_id()
         self._last_response = self._acting_context().request.delete(  # type: ignore[attr-defined]
@@ -279,7 +279,7 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def assert_workspace_card(self, org_name: str) -> None:
-        self._p.goto(f"{self._base_url}/dashboard", wait_until="load")
+        self._p.goto(f"{self._base_url}/profile", wait_until="load")
         assert self._p.query_selector(f'[data-workspace-card="{org_name}"]') is not None, (
             f"Workspace card for {org_name!r} not found on dashboard"
         )
@@ -288,7 +288,7 @@ class OrgBrowserMixin(BrowserProtocol):
         # Navigate to members page to validate the HTML renders
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         # Create invitation via JSON API to capture the response
         org_id = self._get_active_org_id()
         resp = self._acting_context().request.post(
@@ -314,13 +314,13 @@ class OrgBrowserMixin(BrowserProtocol):
     def view_pending_invitations(self) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         self._pending_invitations = self._fetch_pending_invitations()  # type: ignore[attr-defined]
 
     def assert_invitation_pending(self, email: str, role: str) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         el = page.query_selector(f"[data-invitation-email='{email}']")
         assert el is not None, f"No pending invitation row for {email!r} on members page"
         invitations = (
@@ -334,14 +334,14 @@ class OrgBrowserMixin(BrowserProtocol):
     def assert_invitation_absent(self, email: str) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         el = page.query_selector(f"[data-invitation-email='{email}']")
         assert el is None, f"{email!r} invitation should be absent but found on members page"
 
     def revoke_invitation(self, email: str) -> None:
         slug = self._active_slug()
         page = self._acting_page()
-        page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
+        page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         inv_row = page.query_selector(f"[data-invitation-email='{email}']")
         assert inv_row is not None, f"No invitation row for {email!r}"
         # Use API for revoke to capture response status
@@ -392,7 +392,7 @@ class OrgBrowserMixin(BrowserProtocol):
     def assert_redirected_to_org_dashboard(self) -> None:
         last_accept = getattr(self, "_last_accept_response", None)
         if last_accept and "redirect" in last_accept:
-            assert "/dashboard" in last_accept["redirect"] or "/orgs/" in last_accept["redirect"], (
+            assert "/dashboard" in last_accept["redirect"], (
                 f"Expected redirect to dashboard/org, got: {last_accept['redirect']}"
             )
             return
@@ -402,7 +402,7 @@ class OrgBrowserMixin(BrowserProtocol):
             assert status_code == 200, f"Expected 200, got {status_code}"
             data = last.json()
             assert "redirect" in data and "/dashboard" in data["redirect"], (
-                f"Expected redirect to dashboard, got: {data}"
+                f"Expected redirect to /<slug>/dashboard, got: {data}"
             )
 
     def assert_action_fails_with(self, message: str) -> None:

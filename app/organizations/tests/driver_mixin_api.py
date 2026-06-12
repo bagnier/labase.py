@@ -216,10 +216,10 @@ class OrgApiMixin(ApiProtocol):
             )
 
     def assert_workspace_card(self, org_name: str) -> None:
-        resp = self._run(self._c.get("/dashboard"))
-        assert resp.status_code == 200, f"GET /dashboard returned {resp.status_code}"
+        resp = self._run(self._c.get("/profile"))
+        assert resp.status_code == 200, f"GET /profile returned {resp.status_code}"
         assert f'data-workspace-card="{org_name}"' in resp.text, (
-            f"Workspace card for {org_name!r} not found in dashboard"
+            f"Workspace card for {org_name!r} not found in profile"
         )
 
     def _fetch_pending_invitations(self) -> list[dict]:

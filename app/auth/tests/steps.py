@@ -60,7 +60,7 @@ def step_register_disposable(driver, email, password):
 
 @when("they try to access the dashboard without signing in")
 def step_access_dashboard_unauthenticated(driver):
-    driver.visit("/dashboard")
+    driver.visit("/profile")
 
 
 @when("they access the home page without signing in")

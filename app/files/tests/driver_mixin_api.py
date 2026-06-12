@@ -44,11 +44,11 @@ class OrgFileApiMixin(ApiProtocol):
 
     def _org_url(self, path: str, slug: str | None = None) -> str:
         s = slug or getattr(self, "_active_org_slug", "")
-        return f"/orgs/{s}{path}"
+        return f"/{s}{path}"
 
     def _org_url_for(self, email: str, path: str) -> str:
         slug = self._secondary_slugs.get(email, getattr(self, "_active_org_slug", ""))
-        return f"/orgs/{slug}{path}"
+        return f"/{slug}{path}"
 
     def _fetch_slug_for(self, client: httpx.AsyncClient) -> str:
         resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
@@ -56,7 +56,7 @@ class OrgFileApiMixin(ApiProtocol):
         return resp.json()[0]["slug"]
 
     def _list_files_with(self, client: httpx.AsyncClient, slug: str) -> list[dict]:
-        resp = self._run(client.get(f"/orgs/{slug}/files", headers={"accept": "application/json"}))
+        resp = self._run(client.get(f"/{slug}/files", headers={"accept": "application/json"}))
         assert resp.status_code == 200, f"list_files got {resp.status_code}: {resp.text}"
         return resp.json()
 
@@ -195,7 +195,7 @@ class OrgFileApiMixin(ApiProtocol):
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
         self._run(
             client.post(
-                f"/orgs/{slug}/files",
+                f"/{slug}/files",
                 files={"file": (filename, content, "application/octet-stream")},
             )
         )
@@ -243,7 +243,7 @@ class OrgFileApiMixin(ApiProtocol):
         client = self._client_for(email)
         slug = self._secondary_slugs.get(email, self._active_org_slug)
         self._response = self._run(
-            client.get(f"/orgs/{slug}/files", headers={"accept": "application/json"})
+            client.get(f"/{slug}/files", headers={"accept": "application/json"})
         )
         assert self._response.status_code == 200, (
             f"view_file_list_as got {self._response.status_code}"

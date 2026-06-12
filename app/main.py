@@ -6,6 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 
 from app.auth.infra.router import router as auth_router
+from app.console.infra.router import router as console_router
 from app.files.infra.router import public_router as files_public_router
 from app.files.infra.router import router as files_router
 from app.health.router import router as health_router
@@ -13,6 +14,7 @@ from app.organizations.infra.html_router import router as organizations_html_rou
 from app.organizations.infra.invitation_router import router as invitations_router
 from app.organizations.infra.router import router as organizations_router
 from app.profile.infra.router import router as profile_router
+from app.public.infra.router import router as public_router
 from app.shared.config import get_settings
 from app.shared.http.exceptions import handle_http_error, handle_rate_limit, handle_unhandled_error
 from app.shared.http.limiter import limiter
@@ -39,16 +41,25 @@ app.add_middleware(CORSMiddleware, **cors_config(_settings.cors_origins))
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR.parent / "static")), name="static")
 
+# Public — no auth required
+app.include_router(public_router)
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(organizations_router)
 app.include_router(invitations_router)
-app.include_router(profile_router, tags=["profile"])
 
 # Public share endpoint — mounted before org-scoped routes to avoid slug conflicts
 app.include_router(files_public_router)
 
-# Org-scoped routes: /orgs/{org_slug}/...
-app.include_router(organizations_html_router, prefix="/orgs/{org_slug}")
-app.include_router(files_router, prefix="/orgs/{org_slug}")
-app.include_router(todo_router, prefix="/orgs/{org_slug}")
+# Profile — user-specific
+app.include_router(profile_router, tags=["profile"])
+
+# Console — SaaS admin
+app.include_router(console_router, prefix="/console")
+
+# JSON API — org management
+app.include_router(organizations_router)
+
+# Org-scoped routes: /{org_slug}/...
+app.include_router(organizations_html_router, prefix="/{org_slug}")
+app.include_router(files_router, prefix="/{org_slug}")
+app.include_router(todo_router, prefix="/{org_slug}")

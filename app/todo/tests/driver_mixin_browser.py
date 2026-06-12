@@ -6,7 +6,7 @@ from tests.e2e.drivers.protocols import BrowserProtocol
 class TodoBrowserMixin(BrowserProtocol):
     def _todos_url(self) -> str:
         slug = getattr(self, "_active_org_slug", "")
-        return f"{self._base_url}/orgs/{slug}/todos"
+        return f"{self._base_url}/{slug}/todos"
 
     def _dom_todo_rows(self) -> list:
         return self._p.locator("#todo-list > div").all()
@@ -52,11 +52,11 @@ class TodoBrowserMixin(BrowserProtocol):
     def add_todo(self, title: str) -> None:
         self._goto_todos()
         self._p.fill("input[name=title]", title)
-        todos_path = f"/orgs/{getattr(self, '_active_org_slug', '')}/todos"
+        form_path = f"/{getattr(self, '_active_org_slug', '')}/todos"
         self._wait_htmx_response(
-            todos_path,
+            form_path,
             "POST",
-            lambda: self._p.locator(f"form[hx-post='{todos_path}'] button[type=submit]").click(),
+            lambda: self._p.locator(f"form[hx-post='{form_path}'] button[type=submit]").click(),
         )
 
     def mark_todo_done(self, title: str) -> None:

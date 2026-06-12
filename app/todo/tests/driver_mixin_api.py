@@ -4,7 +4,7 @@ from tests.e2e.drivers.protocols import ApiProtocol
 class TodoApiMixin(ApiProtocol):
     def _todos_url(self, path: str = "") -> str:
         slug = getattr(self, "_active_org_slug", "")
-        return f"/orgs/{slug}/todos{path}"
+        return f"/{slug}/todos{path}"
 
     def _todo_id_by_title(self, title: str) -> str:
         resp = self._run(self._c.get(self._todos_url(), headers={"accept": "application/json"}))
