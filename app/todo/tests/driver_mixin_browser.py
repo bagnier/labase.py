@@ -37,10 +37,10 @@ class TodoBrowserMixin(BrowserProtocol):
             )
 
     def view_todo_list(self) -> None:
-        self._last_response = self._p.goto(self._todos_url(), wait_until="networkidle")
+        self._last_response = self._p.goto(self._todos_url(), wait_until="load")
 
     def _goto_todos(self) -> None:
-        self._p.goto(self._todos_url(), wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="load")
 
     def _wait_htmx_response(self, url_fragment: str, method: str, action: Callable) -> None:
         with self._p.expect_response(
@@ -89,24 +89,24 @@ class TodoBrowserMixin(BrowserProtocol):
         )
 
     def move_todo_above(self, title: str, above: str) -> None:
-        self._p.goto(self._todos_url(), wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="load")
         ids = {t: self._dom_todo_id_by_title(t) for t in (title, above)}
         assert self._context
         self._context.request.post(
             f"{self._todos_url()}/reorder",
             data={"id": ids[title], "above_id": ids[above]},
         )
-        self._p.goto(self._todos_url(), wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="load")
 
     def move_todo_to_end(self, title: str) -> None:
-        self._p.goto(self._todos_url(), wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="load")
         todo_id = self._dom_todo_id_by_title(title)
         assert self._context
         self._context.request.post(
             f"{self._todos_url()}/reorder",
             data={"id": todo_id},
         )
-        self._p.goto(self._todos_url(), wait_until="networkidle")
+        self._p.goto(self._todos_url(), wait_until="load")
 
     def assert_todo_list_order(self, titles: list[str]) -> None:
         actual = self._dom_todo_titles()

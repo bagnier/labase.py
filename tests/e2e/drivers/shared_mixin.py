@@ -38,10 +38,10 @@ class SharedBrowserMixin(BrowserProtocol):
         _clock.now = lambda: fixed  # type: ignore[method-assign]
 
     def visit(self, path: str) -> None:
-        self._last_response = self._p.goto(f"{self._base_url}{path}", wait_until="networkidle")
+        self._last_response = self._p.goto(f"{self._base_url}{path}", wait_until="load")
 
     def assert_page_accessible(self, path: str, contains: str) -> None:
-        self._p.goto(f"{self._base_url}{path}", wait_until="networkidle")
+        self._p.goto(f"{self._base_url}{path}", wait_until="load")
         assert contains in self._p.content(), f"'{contains}' not found on {path}"
 
     def assert_text(self, text: str) -> None:

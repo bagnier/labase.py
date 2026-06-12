@@ -12,7 +12,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
         return f"{self._base_url}/orgs/{s}/files"
 
     def _goto_files(self) -> None:
-        self._p.goto(self._files_url(), wait_until="networkidle")
+        self._p.goto(self._files_url(), wait_until="load")
 
     def _dom_file_rows(self) -> list:
         return self._p.locator("#file-list > div[data-file-id]").all()

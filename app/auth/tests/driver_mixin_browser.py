@@ -82,7 +82,7 @@ class AuthBrowserMixin(BrowserProtocol):
         self._store_active_org_slug()
 
     def logout_action(self) -> None:
-        self._p.goto(f"{self._base_url}/auth/login", wait_until="networkidle")
+        self._p.goto(f"{self._base_url}/auth/login", wait_until="load")
         self._p.evaluate(
             "fetch('/auth/logout', {method:'POST'}).then(r => { if(r.headers.get('hx-redirect')) window.location = r.headers.get('hx-redirect'); })"
         )
