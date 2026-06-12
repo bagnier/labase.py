@@ -1,18 +1,16 @@
-import uuid
-
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
-from app.auth.domain.service import login, logout, register
+from app.auth.domain.service import login, logout
 from app.auth.infra.cookies import set_auth_cookies
-from app.organizations.infra.repository import OrganizationRepository
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 from app.shared.persistence.database import get_admin_session
+from app.shared.registration import register_user
 
 log = structlog.get_logger("labase.auth")
 
@@ -104,11 +102,7 @@ async def register_endpoint(
 ) -> Response:
     ip = request.client.host if request.client else None
     try:
-        user_id_str = await register(email, password)
-        org_repo = OrganizationRepository(admin_session)
-        await org_repo.create_with_owner(
-            name=f"Organisation de {email}", auth_user_id=uuid.UUID(user_id_str)
-        )
+        await register_user(email, password, admin_session)
         return templates.TemplateResponse(
             request,
             "login.html",
