@@ -55,18 +55,6 @@
 
 ### défauts à corriger
 
-#### 1. Correction / sécurité (prioritaire)
-
-- [x] Client supabase-py singleton avec état de session partagé — supabase.py met en cache un seul Client pour tout le process. Or sign_in_with_password y stocke la session : sous trafic concurrent, le client retient la session du dernier connecté, et logout() (service.py:33-38) fait sign_out() sur cet état partagé — au mieux un no-op, au pire la révocation du token d'un autre utilisateur. En plus, ces appels sont synchrones et bloquent l'event loop dans des handlers async (y compris le refresh dans security.py:38-48). Fix : client async stateless (ou par appel), sans rien changer fonctionnellement.
-
-- [x] Inscription non atomique + violation de votre propre règle de couplage — router.py:100-121 : register() crée le user Supabase puis l'org via une session admin ; si la création d'org échoue, user orphelin. Et auth importe OrganizationRepository, ce que le README interdit. Vous avez déjà le pattern qui résout les deux : le trigger Postgres qui auto-crée profiles. Le même trigger peut créer org + membership — moins de code Python, atomicité gratuite, et un premier pas concret vers l'item « collaboration par hooks » de la roadmap.
-
-- [x] Le domain d'organizations dépend de l'infra et de FastAPI — service.py importe infra/repository et lève des HTTPException, en contradiction directe avec les deux règles affichées du README. Pour une base censée montrer le pattern, c'est le mauvais exemple à copier. (Accepter un protocole et lever des exceptions domaine suffit.)
-
-- [x] Un seul flag debug pilote trois comportements de sécurité — cookies sans Secure (cookies.py), rate-limiting désactivé (limiter.py), niveau de log. Quelqu'un qui active DEBUG=true en prod pour diagnostiquer perd silencieusement le rate-limiting et les cookies sécurisés.
-
-- [x] /health/ready renvoie str(e) (router.py:21) — fuite de détails internes (DSN, host) sur un endpoint non authentifié.
-
 #### 2. Réduction du boilerplate (le cœur de votre objectif)
 
 - [x] Alias Annotated pour les dépendances — chaque endpoint répète 4 paramètres Depends(...) (~30 endpoints). Des alias partagés (CurrentUser, RlsSession, CurrentOrg, AdminSession) dans shared/ suppriment 3-4 lignes par endpoint, idiome FastAPI standard.
@@ -77,7 +65,7 @@
 
 - [x] commit() dans chaque méthode de repository — c'est ce qui rend l'item « transactions » de la roadmap impossible aujourd'hui : on ne peut pas composer deux opérations atomiquement. Déplacer le commit à la frontière de requête (dans get_user_session/get_rls_session) supprime une ligne par méthode de repo et donne les transactions gratuitement — votre harness de test (SAVEPOINT sur connexion partagée) le supporte déjà tel quel.
 
-- [ ] Registre de templates manuel — templates.py liste chaque dossier ; un glob sur app/*/templates supprime cette étape d'enregistrement pour chaque nouveau contexte.
+- [x] Registre de templates manuel — templates.py liste chaque dossier ; un glob sur app/*/templates supprime cette étape d'enregistrement pour chaque nouveau contexte.
 
 #### 4. Architecture, mineur
 - [ ] /dashboard et / vivent dans le contexte profile (router.py:21-37) alors qu'un contexte dashboard existe avec ses tests mais sans router — la roadmap le note déjà ; c'est un déménagement, pas du code neuf.

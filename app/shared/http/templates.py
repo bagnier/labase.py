@@ -5,12 +5,5 @@ from fastapi.templating import Jinja2Templates
 _BASE = Path(__file__).parent.parent.parent
 
 templates = Jinja2Templates(
-    directory=[
-        str(_BASE / "shared" / "templates"),
-        str(_BASE / "auth" / "templates"),
-        str(_BASE / "profile" / "templates"),
-        str(_BASE / "todo" / "templates"),
-        str(_BASE / "files" / "templates"),
-        str(_BASE / "organizations" / "templates"),
-    ]
+    directory=[str(p) for p in sorted(_BASE.glob("*/templates")) if p.is_dir()]
 )
