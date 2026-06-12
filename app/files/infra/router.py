@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from app.files.domain.models import OrgFileRead
@@ -21,7 +21,7 @@ from app.shared.dependencies import (
     CurrentUser,
     RlsSession,
 )
-from app.shared.http.templates import templates
+from app.shared.http import render_list
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -31,25 +31,20 @@ _MAX_SIZE_BYTES = 50 * 1024 * 1024
 _SIGNED_URL_TTL = 60
 
 
-def _wants_json(request: Request) -> bool:
-    return "application/json" in request.headers.get("accept", "")
-
-
-def _is_htmx(request: Request) -> bool:
-    return request.headers.get("HX-Request") == "true"
-
-
-def _html_template(request: Request) -> str:
-    return "files/_list_fragment.html" if _is_htmx(request) else "files/list.html"
-
-
 def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
     return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
 
 
-def _template_ctx(request: Request, current_user: object, files: list) -> dict:
-    org_slug = request.path_params.get("org_slug", "")
-    return {"user": current_user, "files": files, "org_slug": org_slug}
+def _render(request: Request, current_user: object, files: list) -> Response:
+    return render_list(
+        request,
+        fragment="files/_list_fragment.html",
+        full="files/list.html",
+        items_key="files",
+        schema=OrgFileRead,
+        items=files,
+        user=current_user,
+    )
 
 
 @router.get("", response_class=HTMLResponse)
@@ -61,11 +56,7 @@ async def file_list(
 ):
     repo = OrgFileRepository(session)
     files = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, files)
-    )
+    return _render(request, current_user, files)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -79,7 +70,7 @@ async def upload_file(
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
-        if _wants_json(request):
+        if "application/json" in request.headers.get("accept", ""):
             return JSONResponse({"detail": "File too large"}, status_code=413)
         return HTMLResponse("File too large", status_code=413)
 
@@ -111,11 +102,7 @@ async def upload_file(
     )
 
     files = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, files)
-    )
+    return _render(request, current_user, files)
 
 
 @router.get("/{file_id}/download")
@@ -152,7 +139,7 @@ async def delete_file(
         return HTMLResponse("Not found", status_code=404)
 
     if not _can_modify(org_file.user_id, membership):
-        if _wants_json(request):
+        if "application/json" in request.headers.get("accept", ""):
             return JSONResponse({"detail": "Forbidden"}, status_code=403)
         return HTMLResponse("Forbidden", status_code=403)
 
@@ -169,11 +156,7 @@ async def delete_file(
     )
 
     files = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, files)
-    )
+    return _render(request, current_user, files)
 
 
 class RenameBody(BaseModel):
@@ -196,18 +179,14 @@ async def rename_file(
         return HTMLResponse("Not found", status_code=404)
 
     if not _can_modify(org_file.user_id, membership):
-        if _wants_json(request):
+        if "application/json" in request.headers.get("accept", ""):
             return JSONResponse({"detail": "Forbidden"}, status_code=403)
         return HTMLResponse("Forbidden", status_code=403)
 
     await repo.rename(org_file, body.filename)
 
     files = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([OrgFileRead.model_validate(f).model_dump(mode="json") for f in files])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, files)
-    )
+    return _render(request, current_user, files)
 
 
 @router.post("/{file_id}/share")

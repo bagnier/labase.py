@@ -70,7 +70,7 @@
 
 - [x] Alias Annotated pour les dépendances — chaque endpoint répète 4 paramètres Depends(...) (~30 endpoints). Des alias partagés (CurrentUser, RlsSession, CurrentOrg, AdminSession) dans shared/ suppriment 3-4 lignes par endpoint, idiome FastAPI standard.
 
-- [ ] Négociation de contenu dupliquée 3 fois — _wants_json / _is_htmx / _html_template / _template_ctx + le re-render de liste sont copiés à l'identique dans todo/router.py, files/router.py et partiellement invitations. Un seul helper render_list(request, template, items, schema) dans shared/http réduit chaque endpoint à sa logique métier.
+- [x] Négociation de contenu dupliquée 3 fois — _wants_json / _is_htmx / _html_template / _template_ctx + le re-render de liste sont copiés à l'identique dans todo/router.py, files/router.py et partiellement invitations. Un seul helper render_list(request, template, items, schema) dans shared/http réduit chaque endpoint à sa logique métier.
 
 - [ ] Les checks d'autorisation copiés-collés — le bloc « get_membership → 404 → role != owner → 403 » apparaît 6 fois dans organizations/router.py. Une dépendance require_owner (sur le modèle de get_current_membership) les remplace toutes.
 

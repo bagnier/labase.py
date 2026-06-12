@@ -1,10 +1,10 @@
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.shared.dependencies import CurrentOrg, CurrentUser, RlsSession
-from app.shared.http.templates import templates
+from app.shared.http import render_list
 from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
@@ -12,21 +12,16 @@ from app.todo.infra.repository import TodoRepository
 router = APIRouter(prefix="/todos", tags=["todo"])
 
 
-def _wants_json(request: Request) -> bool:
-    return "application/json" in request.headers.get("accept", "")
-
-
-def _is_htmx(request: Request) -> bool:
-    return request.headers.get("HX-Request") == "true"
-
-
-def _html_template(request: Request) -> str:
-    return "todo/_list_fragment.html" if _is_htmx(request) else "todo/list.html"
-
-
-def _template_ctx(request: Request, current_user: object, todos: list) -> dict:
-    org_slug = request.path_params.get("org_slug", "")
-    return {"user": current_user, "todos": todos, "org_slug": org_slug}
+def _render(request: Request, current_user: object, todos: list) -> Response:
+    return render_list(
+        request,
+        fragment="todo/_list_fragment.html",
+        full="todo/list.html",
+        items_key="todos",
+        schema=TodoRead,
+        items=todos,
+        user=current_user,
+    )
 
 
 @router.get("", response_class=HTMLResponse)
@@ -38,11 +33,7 @@ async def todo_list(
 ):
     repo = TodoRepository(session)
     todos = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, todos)
-    )
+    return _render(request, current_user, todos)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -65,11 +56,7 @@ async def add_todo(
         todo_id=str(todo.id),
     )
     todos = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, todos)
-    )
+    return _render(request, current_user, todos)
 
 
 @router.patch("/{todo_id}", response_class=HTMLResponse)
@@ -89,11 +76,7 @@ async def patch_todo(
     if todo and title is not None:
         await repo.set_title(todo, title)
     todos = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, todos)
-    )
+    return _render(request, current_user, todos)
 
 
 @router.delete("/{todo_id}", response_class=HTMLResponse)
@@ -118,11 +101,7 @@ async def delete_todo(
             todo_id=str(todo_id),
         )
     todos = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, todos)
-    )
+    return _render(request, current_user, todos)
 
 
 @router.post("/reorder")
@@ -138,8 +117,4 @@ async def reorder_todos(
     repo = TodoRepository(session)
     await repo.move_above(org_id, todo_id, above_id)
     todos = await repo.list_for_org(org_id)
-    if _wants_json(request):
-        return JSONResponse([TodoRead.model_validate(t).model_dump(mode="json") for t in todos])
-    return templates.TemplateResponse(
-        request, _html_template(request), _template_ctx(request, current_user, todos)
-    )
+    return _render(request, current_user, todos)
