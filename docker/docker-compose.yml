@@ -1,15 +1,15 @@
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile.dev
+      context: ..
+      dockerfile: docker/Dockerfile.dev
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app          # hot-reload
-      - ./static:/app/static
+      - ../app:/app/app          # hot-reload
+      - ../static:/app/static
     env_file:
-      - .env
+      - ../.env
     # Supabase local runs on the host via `supabase start`.
     # extra_hosts lets the container reach host ports via host.docker.internal.
     extra_hosts:
@@ -17,7 +17,7 @@ services:
     develop:
       watch:
         - action: sync
-          path: ./app
+          path: ../app
           target: /app/app
         - action: rebuild
-          path: pyproject.toml
+          path: ../pyproject.toml

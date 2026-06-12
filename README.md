@@ -130,9 +130,11 @@ labase.py/
 ├── tests/                   # Top-level conftest + config tests
 ├── static/                  # Compiled CSS, HTMX, fonts
 ├── supabase/migrations/     # Versioned SQL (Supabase CLI)
-├── Dockerfile               # Production image
-├── Dockerfile.dev           # Dev image with hot-reload
-├── docker-compose.yml       # App + local Supabase connection
+├── docker/                  # Docker assets
+│   ├── Dockerfile           # Production image
+│   ├── Dockerfile.dev       # Dev image with hot-reload
+│   ├── docker-compose.yml   # App + local Supabase connection
+│   └── entrypoint.sh
 ├── package.json             # Tailwind CLI
 └── Makefile                 # Common commands
 ```
@@ -168,7 +170,7 @@ Re-run `make install` whenever you add a new Tailwind class (unused classes are 
 | `.env`      | `docker compose` (app container)         | `host.docker.internal:543xx` |
 | `.env.test` | `make test` / `make test-e2e` (on host)  | `localhost:543xx`            |
 
-The app container reaches Supabase via `host.docker.internal` (mapped by `extra_hosts` in `docker-compose.yml`). Tests run directly on the host, so they use `localhost`.
+The app container reaches Supabase via `host.docker.internal` (mapped by `extra_hosts` in `docker/docker-compose.yml`). Tests run directly on the host, so they use `localhost`.
 
 **`DEBUG=true`** must be set in both files while running over plain HTTP. Without it, session cookies are set with the `Secure` flag and the browser (or httpx) silently drops them on non-HTTPS connections, causing every authenticated request to return 401.
 

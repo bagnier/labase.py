@@ -26,16 +26,16 @@ migrate:
 
 # --- App ---
 dev: db-start
-	docker compose up --build
+	docker compose -f docker/docker-compose.yml up --build
 
 up:
-	docker compose up -d
+	docker compose -f docker/docker-compose.yml up -d
 
 down:
-	docker compose down
+	docker compose -f docker/docker-compose.yml down
 
 logs:
-	docker compose logs -f app
+	docker compose -f docker/docker-compose.yml logs -f app
 
 # --- Quality ---
 lint:
