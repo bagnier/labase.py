@@ -64,7 +64,7 @@
 
 - [x] Un seul flag debug pilote trois comportements de sécurité — cookies sans Secure (cookies.py), rate-limiting désactivé (limiter.py), niveau de log. Quelqu'un qui active DEBUG=true en prod pour diagnostiquer perd silencieusement le rate-limiting et les cookies sécurisés.
 
-- [ ] /health/ready renvoie str(e) (router.py:21) — fuite de détails internes (DSN, host) sur un endpoint non authentifié.
+- [x] /health/ready renvoie str(e) (router.py:21) — fuite de détails internes (DSN, host) sur un endpoint non authentifié.
 
 #### 2. Réduction du boilerplate (le cœur de votre objectif)
 

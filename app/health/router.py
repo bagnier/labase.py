@@ -18,5 +18,5 @@ async def readiness() -> JSONResponse:
         async with _admin_engine().connect() as conn:
             await conn.execute(text("SELECT 1"))
         return JSONResponse({"status": "ok"})
-    except Exception as e:
-        return JSONResponse({"status": "degraded", "detail": str(e)}, status_code=503)
+    except Exception:
+        return JSONResponse({"status": "degraded"}, status_code=503)
