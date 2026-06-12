@@ -90,6 +90,14 @@ class OrganizationRepository:
         result = await self.session.execute(select(Organization).where(Organization.slug == slug))
         return result.scalars().first()
 
+    async def get_by_slug_for_user(self, slug: str, auth_user_id: uuid.UUID) -> Organization | None:
+        result = await self.session.execute(
+            select(Organization)
+            .join(Membership, Membership.org_id == Organization.id)
+            .where(Organization.slug == slug, Membership.auth_user_id == auth_user_id)
+        )
+        return result.scalars().first()
+
     async def list_members(self, org_id: uuid.UUID) -> list[Membership]:
         result = await self.session.execute(
             select(Membership).where(Membership.org_id == org_id).order_by(Membership.created_at)
