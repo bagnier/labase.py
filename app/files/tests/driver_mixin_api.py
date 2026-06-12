@@ -132,17 +132,23 @@ class OrgFileApiMixin(ApiProtocol):
 
     def _cleanup_example_users(self) -> None:
         s = get_settings()
-        resp = httpx.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            headers=self._admin_headers(),
-        )
-        for user in resp.json().get("users", []):
-            ue = user.get("email", "")
-            if ue.endswith("@example.com") or ue.endswith("@test.local"):
-                httpx.delete(
-                    f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
-                    headers=self._admin_headers(),
-                )
+        page = 1
+        while True:
+            resp = httpx.get(
+                f"{s.supabase_url}/auth/v1/admin/users?per_page=1000&page={page}",
+                headers=self._admin_headers(),
+            )
+            users = resp.json().get("users", [])
+            for user in users:
+                ue = user.get("email", "")
+                if ue.endswith("@example.com"):
+                    httpx.delete(
+                        f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
+                        headers=self._admin_headers(),
+                    )
+            if len(users) < 1000:
+                break
+            page += 1
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
         self._ensure_multi_user()

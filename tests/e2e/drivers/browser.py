@@ -61,7 +61,7 @@ class BrowserDriver(
         self._context = self._browser.new_context()
         self._page = self._context.new_page()
 
-    def _wait_for_server(self, timeout: float = 10.0) -> None:
+    def _wait_for_server(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
@@ -82,7 +82,11 @@ class BrowserDriver(
             self._pw.stop()
         if self._server:
             self._server.terminate()
-            self._server.wait(timeout=10)
+            try:
+                self._server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self._server.kill()
+                self._server.wait()
 
     def reset_session(self) -> None:
         for ctx in self._secondary_browser_contexts.values():

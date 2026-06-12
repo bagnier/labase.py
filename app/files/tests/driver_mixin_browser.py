@@ -81,17 +81,23 @@ class OrgFileBrowserMixin(BrowserProtocol):
     def _cleanup_example_users(self) -> None:
         assert self._context
         s = get_settings()
-        resp = self._context.request.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            headers=self._admin_headers(),
-        )
-        for user in resp.json().get("users", []):
-            ue = user.get("email", "")
-            if ue.endswith("@example.com") or ue.endswith("@test.local"):
-                self._context.request.delete(
-                    f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
-                    headers=self._admin_headers(),
-                )
+        page = 1
+        while True:
+            resp = self._context.request.get(
+                f"{s.supabase_url}/auth/v1/admin/users?per_page=1000&page={page}",
+                headers=self._admin_headers(),
+            )
+            users = resp.json().get("users", [])
+            for user in users:
+                ue = user.get("email", "")
+                if ue.endswith("@example.com"):
+                    self._context.request.delete(
+                        f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
+                        headers=self._admin_headers(),
+                    )
+            if len(users) < 1000:
+                break
+            page += 1
 
     # ── basic file ops ────────────────────────────────────────────────────────
 
@@ -174,14 +180,11 @@ class OrgFileBrowserMixin(BrowserProtocol):
     def sign_in_within_org(self, email: str, org_name: str) -> None:
         assert self._context
         self._cleanup_example_users()
-        # Register via API
         self._context.request.post(
             f"{self._base_url}/auth/register",
             form={"email": email, "password": _PASSWORD},
         )
-        # Sign in via browser UI
         self.sign_in(email, _PASSWORD)  # type: ignore[attr-defined]
-        # Fetch org and rename it
         resp = self._context.request.get(
             f"{self._base_url}/organizations",
             headers={"accept": "application/json"},
