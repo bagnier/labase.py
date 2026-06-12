@@ -149,7 +149,8 @@ class OrgApiMixin(ApiProtocol):
             self._c.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
         )
         assert self._response.status_code == 200, (
-            f"GET /organizations/{org_id}/members returned {self._response.status_code}: {self._response.text}"
+            f"GET /organizations/{org_id}/members returned"
+            f" {self._response.status_code}: {self._response.text}"
         )
         self._member_list_response = self._response.json()
 
@@ -282,7 +283,8 @@ class OrgApiMixin(ApiProtocol):
             client.post(f"/invitations/{token}/accept", headers={"accept": "application/json"})
         )
         assert self._response.status_code == 200, (
-            f"POST /invitations/{token}/accept returned {self._response.status_code}: {self._response.text}"
+            f"POST /invitations/{token}/accept returned"
+            f" {self._response.status_code}: {self._response.text}"
         )
         self._last_accept_response = self._response.json()
 
@@ -308,7 +310,8 @@ class OrgApiMixin(ApiProtocol):
     def assert_redirected_to_org_dashboard(self) -> None:
         assert self._response is not None
         assert self._response.status_code == 200, (
-            f"Expected 200 with redirect payload, got {self._response.status_code}: {self._response.text}"
+            f"Expected 200 with redirect payload,"
+            f" got {self._response.status_code}: {self._response.text}"
         )
         data = self._response.json()
         assert "redirect" in data and "/dashboard" in data["redirect"], (

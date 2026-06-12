@@ -69,7 +69,7 @@ class ApiDriver(
             self._test_auth_emails.append(email)
 
     def track_org_id(self, org_id: str) -> None:
-        """Enregistre un org_id à supprimer explicitement en teardown (org commitée hors test TX)."""
+        """Enregistre un org_id à supprimer en teardown (org commitée hors test TX)."""
         if org_id not in self._test_org_ids:
             self._test_org_ids.append(org_id)
 
@@ -85,13 +85,12 @@ class ApiDriver(
             return
 
         async def _delete():
-            async with _admin_session_factory()() as session:
-                async with session.begin():
-                    await session.execute(
-                        delete(Organization).where(
-                            Organization.id.in_([uuid.UUID(oid) for oid in self._test_org_ids])
-                        )
+            async with _admin_session_factory()() as session, session.begin():
+                await session.execute(
+                    delete(Organization).where(
+                        Organization.id.in_([uuid.UUID(oid) for oid in self._test_org_ids])
                     )
+                )
 
         self._run(_delete())
         self._test_org_ids.clear()

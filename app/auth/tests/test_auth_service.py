@@ -43,7 +43,7 @@ def test_logout_authenticated_session_does_not_raise(test_user):
 
 def test_register_existing_email_raises(test_user):
     email, password = test_user
-    with pytest.raises(Exception):
+    with pytest.raises(AuthApiError):
         register(email, password)
 
 
@@ -61,5 +61,5 @@ def test_logout_invalidates_token(test_user):
     email, password = test_user
     tokens = login(email, password)
     logout()
-    with pytest.raises(Exception):
+    with pytest.raises(AuthApiError):
         get_supabase().auth.get_user(tokens.access_token)

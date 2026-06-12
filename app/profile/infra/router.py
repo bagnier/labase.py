@@ -4,14 +4,14 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.infra.session import get_rls_session
-from app.auth.infra.security import get_current_user
 from app.auth.domain.service import AuthenticatedUser
+from app.auth.infra.security import get_current_user
+from app.auth.infra.session import get_rls_session
 from app.organizations.infra.repository import OrganizationRepository
 from app.profile.domain.models import ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
-from app.shared.persistence.database import get_admin_session
 from app.shared.http.templates import templates
+from app.shared.persistence.database import get_admin_session
 
 router = APIRouter()
 

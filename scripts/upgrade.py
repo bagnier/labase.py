@@ -10,14 +10,15 @@ TOML = "pyproject.toml"
 
 
 def parse_lock(path: str) -> dict[str, str]:
-    return {
-        m[1]: m[2] for m in re.finditer(r'name = "(.+?)"\nversion = "(.+?)"', open(path).read())
-    }
+    with open(path) as f:
+        return {m[1]: m[2] for m in re.finditer(r'name = "(.+?)"\nversion = "(.+?)"', f.read())}
 
 
 def relax_pins() -> None:
-    content = open(TOML).read()
-    open(TOML, "w").write(re.sub(r'==([\d.]+)"', '"', content))
+    with open(TOML) as f:
+        content = f.read()
+    with open(TOML, "w") as f:
+        f.write(re.sub(r'==([\d.]+)"', '"', content))
 
 
 def repin_and_report() -> None:
@@ -29,13 +30,15 @@ def repin_and_report() -> None:
     else:
         print("  Nothing to upgrade.")
 
-    content = open(TOML_BAK).read()
+    with open(TOML_BAK) as f:
+        content = f.read()
     updated = re.sub(
         r'"([A-Za-z0-9_.-]+)==([\d.]+)"',
         lambda m: f'"{m.group(1)}=={new.get(m.group(1).lower(), m.group(2))}"',
         content,
     )
-    open(TOML, "w").write(updated)
+    with open(TOML, "w") as f:
+        f.write(updated)
 
 
 if __name__ == "__main__":

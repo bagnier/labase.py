@@ -12,8 +12,8 @@ from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import (
     InvitationRead,
     MemberRead,
-    OrgRole,
     OrganizationWithRoleRead,
+    OrgRole,
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails

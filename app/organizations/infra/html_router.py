@@ -12,8 +12,8 @@ from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
 from app.organizations.infra.context import get_current_membership, get_current_org
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
-from app.shared.persistence.database import get_admin_session
 from app.shared.http.templates import templates
+from app.shared.persistence.database import get_admin_session
 
 router = APIRouter(tags=["organizations-html"])
 

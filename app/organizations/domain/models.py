@@ -1,14 +1,14 @@
 import uuid
 from datetime import datetime
 from enum import StrEnum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Text
+from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.persistence.base import Base
 from app.shared.clock import now
+from app.shared.persistence.base import Base
 
 
 class OrgRole(StrEnum):

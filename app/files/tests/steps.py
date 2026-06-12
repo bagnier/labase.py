@@ -154,7 +154,8 @@ def step_assert_file_does_not_appear(driver, filename):
 
 @then(
     parsers.parse(
-        '"{filename}" appears in the file list with size "{size}", uploaded by "{email}" on "{date}"'
+        '"{filename}" appears in the file list with size "{size}",'
+        ' uploaded by "{email}" on "{date}"'
     )
 )
 def step_assert_file_metadata(driver, filename, size, email, date):

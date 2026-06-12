@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -19,9 +19,9 @@ from app.files.infra.storage import (
 )
 from app.organizations.domain.models import Membership, OrgRole
 from app.organizations.infra.context import get_current_membership, get_current_org
+from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 from app.shared.persistence.database import get_admin_session
-from app.shared.http.templates import templates
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])

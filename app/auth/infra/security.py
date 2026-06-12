@@ -38,17 +38,23 @@ async def get_current_user(
         payload = _decode(access_token)
     except jwt.ExpiredSignatureError:
         if not refresh_token:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+            ) from None
         try:
             tokens: AuthTokens = refresh_session(refresh_token)
-        except Exception:
+        except Exception as exc:
             log.warning("auth.token_refresh_failed")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+            ) from exc
         set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
         access_token = tokens.access_token
         payload = _decode(access_token)
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
     return AuthenticatedUser(
         id=payload["sub"], email=payload.get("email", ""), access_token=access_token
     )

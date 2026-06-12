@@ -68,7 +68,8 @@ class AuthBrowserMixin(BrowserProtocol):
     def logout_action(self) -> None:
         self._p.goto(f"{self._base_url}/auth/login", wait_until="load")
         self._p.evaluate(
-            "fetch('/auth/logout', {method:'POST'}).then(r => { if(r.headers.get('hx-redirect')) window.location = r.headers.get('hx-redirect'); })"
+            "fetch('/auth/logout',{method:'POST'})"
+            ".then(r=>{if(r.headers.get('hx-redirect'))window.location=r.headers.get('hx-redirect');})"
         )
         self._p.wait_for_url(f"{self._base_url}/auth/login", timeout=5000)
 

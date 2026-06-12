@@ -1,8 +1,9 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import OperationalError
-from unittest.mock import AsyncMock, patch
 
 from app.main import app
 

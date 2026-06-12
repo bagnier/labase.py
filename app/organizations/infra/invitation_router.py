@@ -11,9 +11,9 @@ from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
+from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 from app.shared.persistence.database import get_admin_session
-from app.shared.http.templates import templates
 
 log = structlog.get_logger("labase.organizations.invitations")
 

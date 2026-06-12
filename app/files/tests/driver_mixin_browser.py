@@ -303,6 +303,6 @@ class OrgFileBrowserMixin(BrowserProtocol):
                 assert email in meta, f"Expected {email!r} in metadata, got: {meta!r}"
                 if size.endswith(" KB"):
                     assert size in meta, f"Expected {size!r} in metadata, got: {meta!r}"
-                # Date check skipped in browser mode: set_current_date cannot override live server clock
+                # Date check skipped: set_current_date can't override live server clock
                 return
         raise AssertionError(f"File '{filename}' not found in DOM")

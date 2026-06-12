@@ -8,8 +8,8 @@ from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.infra.context import get_current_org
-from app.shared.observability.audit import record_audit_event
 from app.shared.http.templates import templates
+from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
 

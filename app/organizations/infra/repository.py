@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.organizations.domain.models import (
     InvitationStatus,
     Membership,
+    Organization,
     OrgInvitation,
     OrgRole,
-    Organization,
 )
 
 

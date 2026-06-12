@@ -5,8 +5,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.persistence.base import Base
 from app.shared.clock import now
+from app.shared.persistence.base import Base
 
 
 class Profile(Base):

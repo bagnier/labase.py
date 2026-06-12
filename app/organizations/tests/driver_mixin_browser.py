@@ -212,9 +212,10 @@ class OrgBrowserMixin(BrowserProtocol):
         page.goto(f"{self._base_url}/orgs/{slug}/members", wait_until="load")
         selector = f"[data-member-email='{email}'][data-member-role='{role}']"
         el = page.query_selector(selector)
+        member_list = page.query_selector("#member-list")
+        member_html = page.inner_html("#member-list") if member_list else page.content()[:500]
         assert el is not None, (
-            f"Member {email!r} with role {role!r} not found on members page. "
-            f"HTML: {page.inner_html('#member-list') if page.query_selector('#member-list') else page.content()[:500]}"
+            f"Member {email!r} with role {role!r} not found on members page. HTML: {member_html}"
         )
 
     def assert_member_absent(self, email: str) -> None:

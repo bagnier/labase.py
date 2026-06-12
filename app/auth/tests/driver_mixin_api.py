@@ -57,7 +57,8 @@ class AuthApiMixin(ApiProtocol):
         is_hx = "/auth/login" in hx_redirect
         is_http = self._response.status_code in (301, 302, 307, 308)
         assert is_hx or is_http, (
-            f"Expected redirect to /auth/login, got status={self._response.status_code} hx-redirect={hx_redirect!r}"
+            f"Expected redirect to /auth/login, got status={self._response.status_code}"
+            f" hx-redirect={hx_redirect!r}"
         )
 
     def assert_login_rejected(self) -> None:

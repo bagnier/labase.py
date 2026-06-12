@@ -1,4 +1,5 @@
 import atexit
+import contextlib
 import os
 import signal
 import socket
@@ -46,10 +47,8 @@ def _reap_stale_servers() -> None:
             continue
         # On vérifie la ligne de commande avant de tuer : le pid a pu être réutilisé.
         if "hypercorn app.main:app" in _cmdline(pid):
-            try:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(pid, signal.SIGKILL)
-            except ProcessLookupError, PermissionError:
-                pass
         pidfile.unlink(missing_ok=True)
 
 
@@ -128,10 +127,8 @@ class BrowserDriver(
     def _stop_server(self) -> None:
         if not self._server:
             return
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(self._server.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
         try:
             self._server.wait(timeout=10)
         except subprocess.TimeoutExpired:

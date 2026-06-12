@@ -1,13 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.persistence.base import Base
 from app.shared.clock import now
+from app.shared.persistence.base import Base
 
 
 class TodoItem(Base):

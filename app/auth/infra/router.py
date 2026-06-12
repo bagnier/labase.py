@@ -9,10 +9,10 @@ from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 from app.auth.domain.service import login, logout, register
 from app.auth.infra.cookies import set_auth_cookies
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.observability.audit import record_audit_event
-from app.shared.persistence.database import get_admin_session
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
+from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import get_admin_session
 
 log = structlog.get_logger("labase.auth")
 
