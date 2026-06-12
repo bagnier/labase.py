@@ -16,7 +16,7 @@ log = structlog.get_logger("labase.auth.session")
 async def get_rls_session(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_user_session),
-) -> AsyncGenerator[AsyncSession, None]:
+) -> AsyncGenerator[AsyncSession]:
     """Session utilisateur avec rôle + claims RLS injectés pour toute la durée de la requête."""
     await set_rls_context(session, uuid.UUID(current_user.id))
     try:

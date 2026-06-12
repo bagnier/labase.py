@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -11,7 +11,7 @@ from app.shared.persistence.base import Base
 from app.shared.clock import now
 
 
-class OrgRole(str, Enum):
+class OrgRole(StrEnum):
     owner = "owner"
     member = "member"
 
@@ -40,7 +40,7 @@ class Membership(Base):
     )
 
 
-class InvitationStatus(str, Enum):
+class InvitationStatus(StrEnum):
     pending = "pending"
     accepted = "accepted"
     revoked = "revoked"
@@ -118,4 +118,4 @@ class OrganizationService(BaseModel):
 
     org: OrganizationRead
     role: OrgRole
-    is_active: Optional[bool] = None
+    is_active: bool | None = None

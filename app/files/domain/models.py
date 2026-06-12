@@ -20,7 +20,7 @@ class OrgFile(Base):
     content_type: Mapped[str] = mapped_column(String, default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(default=0)
     uploader_email: Mapped[str] = mapped_column(String, default="")
-    created_at: Mapped[Optional[datetime]] = mapped_column(
+    created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, default=None
     )
 

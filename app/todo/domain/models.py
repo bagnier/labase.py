@@ -19,7 +19,7 @@ class TodoItem(Base):
     title: Mapped[str]
     done: Mapped[bool] = mapped_column(default=False)
     position: Mapped[int] = mapped_column(default=0)
-    created_at: Mapped[Optional[datetime]] = mapped_column(
+    created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now
     )
 

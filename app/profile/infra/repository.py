@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +33,7 @@ class ProfileRepository:
     async def update(self, profile: Profile, data: ProfileUpdate) -> Profile:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(profile, field, value)
-        profile.updated_at = datetime.now(timezone.utc)
+        profile.updated_at = datetime.now(UTC)
         self.session.add(profile)
         await self.session.commit()
         return profile

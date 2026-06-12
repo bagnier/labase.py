@@ -6,7 +6,7 @@ from tests.e2e.drivers.protocols import ApiProtocol, BrowserProtocol
 
 class SharedApiMixin(ApiProtocol):
     def set_current_date(self, date: str) -> None:
-        fixed = datetime.datetime.fromisoformat(date).replace(tzinfo=datetime.timezone.utc)
+        fixed = datetime.datetime.fromisoformat(date).replace(tzinfo=datetime.UTC)
         self._original_now = _clock.now
         _clock.now = lambda: fixed  # type: ignore[method-assign]
 
@@ -34,7 +34,7 @@ class SharedApiMixin(ApiProtocol):
 
 class SharedBrowserMixin(BrowserProtocol):
     def set_current_date(self, date: str) -> None:
-        fixed = datetime.datetime.fromisoformat(date).replace(tzinfo=datetime.timezone.utc)
+        fixed = datetime.datetime.fromisoformat(date).replace(tzinfo=datetime.UTC)
         _clock.now = lambda: fixed  # type: ignore[method-assign]
 
     def visit(self, path: str) -> None:

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -235,7 +235,7 @@ async def public_share_download(
     share_token = await repo.get_share_token(token)
     if share_token is None:
         return HTMLResponse("Link not found", status_code=404)
-    if share_token.expires_at < datetime.now(timezone.utc):
+    if share_token.expires_at < datetime.now(UTC):
         return HTMLResponse("Link expired", status_code=410)
 
     org_file = await repo.get_by_id(share_token.file_id)

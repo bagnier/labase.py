@@ -36,7 +36,7 @@ async def end_test_transaction(conn: AsyncConnection) -> None:
     await conn.close()
 
 
-async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
+async def override_get_session() -> AsyncGenerator[AsyncSession]:
     """Override get_user_session et get_admin_session : session sur la connexion de test.
 
     Les repos appellent session.commit() eux-mêmes ; sur une connexion déjà en transaction,
@@ -73,7 +73,7 @@ async def fetch_orgs_for_email(email: str) -> list[dict]:
 async def override_get_rls_session(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_user_session),
-) -> AsyncGenerator[AsyncSession, None]:
+) -> AsyncGenerator[AsyncSession]:
     """Override de get_rls_session : pose request.jwt.claims pour que auth.uid()
     soit disponible dans les fonctions SECURITY DEFINER, sans SET role authenticated —
     le user postgres a BYPASSRLS. Les tests RLS restent dans test_rls.py.
