@@ -1,6 +1,8 @@
 from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import lru_cache
 
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.shared.config import get_settings
@@ -35,21 +37,39 @@ _user_session_factory = _make_session_factory(_user_engine)
 _admin_session_factory = _make_session_factory(_admin_engine)
 
 
-async def _session(factory) -> AsyncGenerator[AsyncSession]:
-    # Frontière de transaction : commit après yield (succès uniquement — une exception
-    # court-circuite le commit et l'async with rollback implicitement).
-    # En contexte de test, une AsyncConnection partagée est injectée via l'override ;
-    # session.commit() émet alors SAVEPOINT/RELEASE au lieu d'un vrai COMMIT.
-    async with factory()() as session:
-        yield session
+@asynccontextmanager
+async def _commit_on_success(session: AsyncSession):
+    """Commit on clean exit, rollback on exception."""
+    try:
+        yield
         await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
 
-async def get_user_session() -> AsyncGenerator[AsyncSession]:
-    async for session in _session(_user_session_factory):
+async def _session(factory, request: Request | None = None) -> AsyncGenerator[AsyncSession]:
+    # Frontière de transaction : idéalement commit avant l'envoi de la réponse.
+    # FastAPI expose fastapi_function_astack, dont le teardown s'exécute AVANT
+    # l'envoi de la réponse (contrairement à fastapi_inner_astack, après).
+    # Sans request (ex. tests directs), fallback : commit après yield.
+    async with factory()() as session:
+        func_stack: AsyncExitStack | None = (
+            request.scope.get("fastapi_function_astack") if request is not None else None
+        )
+        if func_stack is not None:
+            await func_stack.enter_async_context(_commit_on_success(session))
+            yield session
+        else:
+            yield session
+            await session.commit()
+
+
+async def get_user_session(request: Request) -> AsyncGenerator[AsyncSession]:
+    async for session in _session(_user_session_factory, request):
         yield session
 
 
-async def get_admin_session() -> AsyncGenerator[AsyncSession]:
-    async for session in _session(_admin_session_factory):
+async def get_admin_session(request: Request) -> AsyncGenerator[AsyncSession]:
+    async for session in _session(_admin_session_factory, request):
         yield session

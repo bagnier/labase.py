@@ -1,5 +1,6 @@
 """Test transaction helpers — connexion partagée + rollback automatique."""
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 
@@ -85,6 +86,54 @@ async def override_get_rls_session(
         text("SELECT set_config('request.jwt.claims', :claims, true)").bindparams(claims=claims)
     )
     yield session
+
+
+def truncate_app_tables() -> None:
+    """Vide toutes les tables applicatives — utilisé en teardown des tests browser.
+
+    Crée un engine NullPool frais (comme purge_leftover_test_data) et l'exécute
+    dans un thread dédié pour éviter les conflits avec l'event loop de pytest-asyncio.
+    """
+    import threading
+
+    errors: list[Exception] = []
+
+    async def _truncate() -> None:
+        settings = get_settings()
+        url = settings.database_url_service or settings.database_url
+        connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+        engine = create_async_engine(url, poolclass=NullPool, connect_args=connect_args)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "TRUNCATE TABLE public.audit_logs, public.org_file_share_tokens, "
+                        "public.org_files, public.todos, public.org_invitations, "
+                        "public.memberships, public.organizations, public.profiles CASCADE"
+                    )
+                )
+                await conn.execute(
+                    text("DELETE FROM auth.users WHERE split_part(email, '@', 2) = ANY(:domains)"),
+                    {"domains": _TEST_EMAIL_DOMAINS},
+                )
+        finally:
+            await engine.dispose()
+
+    def _target() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_truncate())
+        except Exception as e:
+            errors.append(e)
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join()
+    if errors:
+        raise errors[0]
 
 
 async def purge_leftover_test_data() -> None:

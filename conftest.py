@@ -37,6 +37,7 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     """
     if not isinstance(driver, ApiDriver):
         yield
+        db.truncate_app_tables()
         return
 
     conn = driver._run(db.begin_test_transaction(_admin_engine()))
