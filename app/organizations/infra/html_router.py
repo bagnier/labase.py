@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
+from app.organizations.domain.exceptions import PendingInvitationExists
 from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
 from app.organizations.infra.context import get_current_membership, get_current_org
@@ -135,22 +136,25 @@ async def create_invitation_html(
     error: str | None = None
     link: str = ""
 
-    try:
-        result = await admin_session.execute(
-            text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
-            {"email": email},
+    result = await admin_session.execute(
+        text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
+        {"email": email},
+    )
+    existing_user = result.first()
+    if existing_user is not None:
+        existing_membership = await OrganizationRepository(session).get_membership(
+            org_id, existing_user.id
         )
-        existing_user = result.first()
-        if existing_user is not None:
-            existing_membership = await OrganizationRepository(session).get_membership(
-                org_id, existing_user.id
-            )
-            if existing_membership is not None:
-                error = "already a member"
+        if existing_membership is not None:
+            error = "already a member"
 
-        if error is None:
-            repo = OrganizationRepository(session)
+    if error is None:
+        repo = OrganizationRepository(session)
+        try:
             await ensure_no_pending_invitation(repo, org_id, email)
+        except PendingInvitationExists as exc:
+            error = str(exc)
+        else:
             invitation = await repo.create_invitation(
                 org_id=org_id,
                 email=email,
@@ -159,8 +163,6 @@ async def create_invitation_html(
             )
             base_url = str(request.base_url).rstrip("/")
             link = f"{base_url}/invitations/{invitation.token}"
-    except HTTPException as exc:
-        error = exc.detail
 
     return templates.TemplateResponse(
         request,

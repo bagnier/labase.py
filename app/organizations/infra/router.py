@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
+from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
 from app.organizations.domain.models import (
     InvitationRead,
     MemberRead,
@@ -108,7 +109,10 @@ async def update_member_role(
     if caller.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if body.role != OrgRole.owner:
-        await ensure_not_last_owner(repo, org_id, user_id)
+        try:
+            await ensure_not_last_owner(repo, org_id, user_id)
+        except LastOwnerViolation as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     membership = await repo.update_member_role(org_id, user_id, body.role)
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -130,7 +134,10 @@ async def leave_organization(
 ) -> None:
     user_id = uuid.UUID(current_user.id)
     repo = OrganizationRepository(session)
-    await ensure_not_last_owner(repo, org_id, user_id)
+    try:
+        await ensure_not_last_owner(repo, org_id, user_id)
+    except LastOwnerViolation as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -153,7 +160,10 @@ async def remove_member(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     if caller.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    await ensure_not_last_owner(repo, org_id, user_id)
+    try:
+        await ensure_not_last_owner(repo, org_id, user_id)
+    except LastOwnerViolation as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -200,7 +210,10 @@ async def create_invitation(
         if existing_membership is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already a member")
 
-    await ensure_no_pending_invitation(repo, org_id, body.email)
+    try:
+        await ensure_no_pending_invitation(repo, org_id, body.email)
+    except PendingInvitationExists as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     invitation = await repo.create_invitation(
         org_id=org_id,

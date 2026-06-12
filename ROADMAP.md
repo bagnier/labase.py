@@ -60,7 +60,7 @@
 
 - [x] Inscription non atomique + violation de votre propre règle de couplage — router.py:100-121 : register() crée le user Supabase puis l'org via une session admin ; si la création d'org échoue, user orphelin. Et auth importe OrganizationRepository, ce que le README interdit. Vous avez déjà le pattern qui résout les deux : le trigger Postgres qui auto-crée profiles. Le même trigger peut créer org + membership — moins de code Python, atomicité gratuite, et un premier pas concret vers l'item « collaboration par hooks » de la roadmap.
 
-- [ ] Le domain d'organizations dépend de l'infra et de FastAPI — service.py importe infra/repository et lève des HTTPException, en contradiction directe avec les deux règles affichées du README. Pour une base censée montrer le pattern, c'est le mauvais exemple à copier. (Accepter un protocole et lever des exceptions domaine suffit.)
+- [x] Le domain d'organizations dépend de l'infra et de FastAPI — service.py importe infra/repository et lève des HTTPException, en contradiction directe avec les deux règles affichées du README. Pour une base censée montrer le pattern, c'est le mauvais exemple à copier. (Accepter un protocole et lever des exceptions domaine suffit.)
 
 - [ ] Un seul flag debug pilote trois comportements de sécurité — cookies sans Secure (cookies.py), rate-limiting désactivé (limiter.py), niveau de log. Quelqu'un qui active DEBUG=true en prod pour diagnostiquer perd silencieusement le rate-limiting et les cookies sécurisés.
 
