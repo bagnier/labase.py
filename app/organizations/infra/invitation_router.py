@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
@@ -127,9 +128,8 @@ async def accept_invitation(
             text("SELECT public.accept_org_invitation(:token)"),
             {"token": str(token)},
         )
-    except Exception as exc:
-        msg = str(exc)
-        if "invitation not found or already used" in msg:
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) == "P0404":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
             ) from exc
