@@ -27,7 +27,7 @@ class ProfileRepository:
     async def create(self, data: ProfileCreate) -> Profile:
         profile = Profile(**data.model_dump())
         self.session.add(profile)
-        await self.session.commit()
+        await self.session.flush()
         return profile
 
     async def update(self, profile: Profile, data: ProfileUpdate) -> Profile:
@@ -35,9 +35,8 @@ class ProfileRepository:
             setattr(profile, field, value)
         profile.updated_at = datetime.now(UTC)
         self.session.add(profile)
-        await self.session.commit()
+
         return profile
 
     async def delete(self, profile: Profile) -> None:
         await self.session.delete(profile)
-        await self.session.commit()

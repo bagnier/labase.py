@@ -39,16 +39,17 @@ async def end_test_transaction(conn: AsyncConnection) -> None:
 async def override_get_session() -> AsyncGenerator[AsyncSession]:
     """Override get_user_session et get_admin_session : session sur la connexion de test.
 
-    Les repos appellent session.commit() eux-mêmes ; sur une connexion déjà en transaction,
-    SQLAlchemy émet SAVEPOINT/RELEASE SAVEPOINT au lieu de COMMIT réel.
-    Le conn.rollback() en fin de test annule tout.
+    Sur une connexion déjà en transaction, SQLAlchemy émet SAVEPOINT/RELEASE
+    au lieu de COMMIT réel. Le conn.rollback() en fin de test annule tout.
     """
     if _test_connection is not None:
         async with AsyncSession(bind=_test_connection, expire_on_commit=False) as session:
             yield session
+            await session.commit()
     else:
         async with _user_session_factory()() as session:
             yield session
+            await session.commit()
 
 
 async def fetch_orgs_for_email(email: str) -> list[dict]:

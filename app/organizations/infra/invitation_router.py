@@ -127,7 +127,6 @@ async def accept_invitation(
             text("SELECT public.accept_org_invitation(:token)"),
             {"token": str(token)},
         )
-        await rls_session.commit()
     except Exception as exc:
         msg = str(exc)
         if "invitation not found or already used" in msg:

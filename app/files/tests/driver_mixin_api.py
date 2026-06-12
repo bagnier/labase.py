@@ -113,6 +113,7 @@ class OrgFileApiMixin(ApiProtocol):
                 org = await repo.create_with_owner(
                     name=org_name, auth_user_id=uuid.UUID(user_id_str)
                 )
+                await session.commit()
                 return str(org.id), org.slug
 
         org_id, self._active_org_slug = self._run(_create_org())

@@ -50,7 +50,7 @@ class OrganizationRepository:
         await self.session.flush()
         membership = Membership(org_id=org.id, auth_user_id=auth_user_id, role=OrgRole.owner)
         self.session.add(membership)
-        await self.session.commit()
+
         return org
 
     async def list_with_role_for_user(
@@ -114,7 +114,7 @@ class OrganizationRepository:
         if membership is None:
             return None
         membership.role = role
-        await self.session.commit()
+
         return membership
 
     async def remove_member(self, org_id: uuid.UUID, user_id: uuid.UUID) -> bool:
@@ -123,19 +123,18 @@ class OrganizationRepository:
             .where(Membership.org_id == org_id, Membership.auth_user_id == user_id)
             .returning(Membership.auth_user_id)
         )
-        await self.session.commit()
+
         return result.scalar() is not None
 
     async def rename(self, org: Organization, name: str) -> None:
         org.name = name
-        await self.session.commit()
 
     async def create_invitation(
         self, org_id: uuid.UUID, email: str, role: OrgRole, invited_by: uuid.UUID
     ) -> OrgInvitation:
         invitation = OrgInvitation(org_id=org_id, email=email, role=role, invited_by=invited_by)
         self.session.add(invitation)
-        await self.session.commit()
+        await self.session.flush()
         return invitation
 
     async def list_invitations(
@@ -173,4 +172,3 @@ class OrganizationRepository:
 
     async def revoke_invitation(self, invitation: OrgInvitation) -> None:
         invitation.status = InvitationStatus.revoked
-        await self.session.commit()

@@ -28,6 +28,7 @@
 - [x] OWASP Dependency Check
 - [ ] transactions
 - [x] upgrade
+- [ ] english all around
 - [ ] file de tâches asynchrones
 - [ ] index fulltext
 - [ ] cache
@@ -74,7 +75,7 @@
 
 - [x] Les checks d'autorisation copiés-collés — le bloc « get_membership → 404 → role != owner → 403 » apparaît 6 fois dans organizations/router.py. Une dépendance require_owner (sur le modèle de get_current_membership) les remplace toutes.
 
-- [ ] commit() dans chaque méthode de repository — c'est ce qui rend l'item « transactions » de la roadmap impossible aujourd'hui : on ne peut pas composer deux opérations atomiquement. Déplacer le commit à la frontière de requête (dans get_user_session/get_rls_session) supprime une ligne par méthode de repo et donne les transactions gratuitement — votre harness de test (SAVEPOINT sur connexion partagée) le supporte déjà tel quel.
+- [x] commit() dans chaque méthode de repository — c'est ce qui rend l'item « transactions » de la roadmap impossible aujourd'hui : on ne peut pas composer deux opérations atomiquement. Déplacer le commit à la frontière de requête (dans get_user_session/get_rls_session) supprime une ligne par méthode de repo et donne les transactions gratuitement — votre harness de test (SAVEPOINT sur connexion partagée) le supporte déjà tel quel.
 
 - [ ] Registre de templates manuel — templates.py liste chaque dossier ; un glob sur app/*/templates supprime cette étape d'enregistrement pour chaque nouveau contexte.
 

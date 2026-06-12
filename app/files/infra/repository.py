@@ -41,7 +41,7 @@ class OrgFileRepository:
             created_at=clock.now(),
         )
         self.session.add(org_file)
-        await self.session.commit()
+        await self.session.flush()
         return org_file
 
     async def get(self, file_id: uuid.UUID, org_id: uuid.UUID) -> OrgFile | None:
@@ -56,11 +56,9 @@ class OrgFileRepository:
 
     async def rename(self, org_file: OrgFile, new_filename: str) -> None:
         org_file.filename = new_filename
-        await self.session.commit()
 
     async def delete(self, org_file: OrgFile) -> None:
         await self.session.delete(org_file)
-        await self.session.commit()
 
     async def add_share_token(self, file_id: uuid.UUID) -> OrgFileShareToken:
         token = OrgFileShareToken(
@@ -68,7 +66,7 @@ class OrgFileRepository:
             expires_at=clock.now() + timedelta(days=_SHARE_TOKEN_TTL_DAYS),
         )
         self.session.add(token)
-        await self.session.commit()
+        await self.session.flush()
         return token
 
     async def get_share_token(self, token: uuid.UUID) -> OrgFileShareToken | None:

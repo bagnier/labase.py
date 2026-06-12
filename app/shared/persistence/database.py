@@ -23,25 +23,33 @@ def _admin_engine():
     return create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)
 
 
-@lru_cache
-def _user_session_factory():
-    return async_sessionmaker(_user_engine(), class_=AsyncSession, expire_on_commit=False)
+def _make_session_factory(engine_fn):
+    @lru_cache
+    def factory():
+        return async_sessionmaker(engine_fn(), class_=AsyncSession, expire_on_commit=False)
+
+    return factory
 
 
-@lru_cache
-def _admin_session_factory():
-    return async_sessionmaker(_admin_engine(), class_=AsyncSession, expire_on_commit=False)
+_user_session_factory = _make_session_factory(_user_engine)
+_admin_session_factory = _make_session_factory(_admin_engine)
+
+
+async def _session(factory) -> AsyncGenerator[AsyncSession]:
+    # Frontière de transaction : commit après yield (succès uniquement — une exception
+    # court-circuite le commit et l'async with rollback implicitement).
+    # En contexte de test, une AsyncConnection partagée est injectée via l'override ;
+    # session.commit() émet alors SAVEPOINT/RELEASE au lieu d'un vrai COMMIT.
+    async with factory()() as session:
+        yield session
+        await session.commit()
 
 
 async def get_user_session() -> AsyncGenerator[AsyncSession]:
-    # Transaction boundary : la session est ouverte ici et fermée (rollback implicite si exception)
-    # à la sortie du bloc. Les repos appellent session.commit() eux-mêmes.
-    # En contexte de test, une AsyncConnection partagée est injectée via override_get_session ;
-    # session.commit() émet alors SAVEPOINT/RELEASE au lieu d'un vrai COMMIT.
-    async with _user_session_factory()() as session:
+    async for session in _session(_user_session_factory):
         yield session
 
 
 async def get_admin_session() -> AsyncGenerator[AsyncSession]:
-    async with _admin_session_factory()() as session:
+    async for session in _session(_admin_session_factory):
         yield session

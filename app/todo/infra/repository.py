@@ -22,7 +22,7 @@ class TodoRepository:
         )
         todo = TodoItem(user_id=user_id, org_id=org_id, title=title, position=0)
         self.session.add(todo)
-        await self.session.commit()
+        await self.session.flush()
         return todo
 
     async def get(self, todo_id: uuid.UUID, org_id: uuid.UUID) -> TodoItem | None:
@@ -34,18 +34,17 @@ class TodoRepository:
     async def toggle_done(self, todo: TodoItem) -> TodoItem:
         todo.done = not todo.done
         self.session.add(todo)
-        await self.session.commit()
+
         return todo
 
     async def set_title(self, todo: TodoItem, title: str) -> TodoItem:
         todo.title = title
         self.session.add(todo)
-        await self.session.commit()
+
         return todo
 
     async def delete(self, todo: TodoItem) -> None:
         await self.session.delete(todo)
-        await self.session.commit()
 
     async def move_above(
         self, org_id: uuid.UUID, todo_id: uuid.UUID, above_id: uuid.UUID | None
@@ -76,4 +75,3 @@ class TodoRepository:
                 )
             )
         )
-        await self.session.commit()
