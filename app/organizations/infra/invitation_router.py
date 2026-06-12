@@ -1,19 +1,15 @@
 import uuid
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
+from app.shared.dependencies import AdminSession, CurrentUser, RlsSession
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
-from app.shared.persistence.database import get_admin_session
 
 log = structlog.get_logger("labase.organizations.invitations")
 
@@ -28,7 +24,7 @@ def _wants_json(request: Request) -> bool:
 async def get_invitation(
     request: Request,
     token: uuid.UUID,
-    admin_session: AsyncSession = Depends(get_admin_session),
+    admin_session: AdminSession,
 ):
     result = await admin_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
@@ -93,9 +89,9 @@ async def accept_invitation(
     request: Request,
     bg: BackgroundTasks,
     token: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    rls_session: AsyncSession = Depends(get_rls_session),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    current_user: CurrentUser,
+    rls_session: RlsSession,
+    admin_session: AdminSession,
 ):
     # Resolve current invitation state (no membership required)
     inv_result = await admin_session.execute(

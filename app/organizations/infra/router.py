@@ -1,14 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
 from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
 from app.organizations.domain.models import (
     InvitationRead,
@@ -18,16 +14,16 @@ from app.organizations.domain.models import (
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
+from app.shared.dependencies import AdminSession, CurrentUser, RlsSession
 from app.shared.observability.audit import record_audit_event
-from app.shared.persistence.database import get_admin_session
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
 @router.get("", response_model=list[OrganizationWithRoleRead])
 async def list_organizations(
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> list[OrganizationWithRoleRead]:
     repo = OrganizationRepository(session)
     pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
@@ -45,8 +41,8 @@ class RenameOrgBody(BaseModel):
 async def rename_organization(
     org_id: uuid.UUID,
     body: RenameOrgBody,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> JSONResponse:
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -68,9 +64,9 @@ async def rename_organization(
 @router.get("/{org_id}/members", response_model=list[MemberRead])
 async def list_members(
     org_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    current_user: CurrentUser,
+    session: RlsSession,
+    admin_session: AdminSession,
 ) -> list[MemberRead]:
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -98,9 +94,9 @@ async def update_member_role(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     body: UpdateRoleBody,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    current_user: CurrentUser,
+    session: RlsSession,
+    admin_session: AdminSession,
 ) -> MemberRead:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -129,8 +125,8 @@ async def update_member_role(
 async def leave_organization(
     org_id: uuid.UUID,
     bg: BackgroundTasks,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> None:
     user_id = uuid.UUID(current_user.id)
     repo = OrganizationRepository(session)
@@ -151,8 +147,8 @@ async def remove_member(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     bg: BackgroundTasks,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> None:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -188,9 +184,9 @@ async def create_invitation(
     org_id: uuid.UUID,
     body: InvitationCreateBody,
     bg: BackgroundTasks,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    current_user: CurrentUser,
+    session: RlsSession,
+    admin_session: AdminSession,
 ) -> InvitationRead:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -235,8 +231,8 @@ async def create_invitation(
 @router.get("/{org_id}/invitations", response_model=list[InvitationRead])
 async def list_invitations(
     org_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> list[InvitationRead]:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -250,8 +246,8 @@ async def list_invitations(
 async def revoke_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> None:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))

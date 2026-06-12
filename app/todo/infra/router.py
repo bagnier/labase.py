@@ -1,13 +1,9 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
-from app.organizations.infra.context import get_current_org
+from app.shared.dependencies import CurrentOrg, CurrentUser, RlsSession
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
@@ -36,9 +32,9 @@ def _template_ctx(request: Request, current_user: object, todos: list) -> dict:
 @router.get("", response_class=HTMLResponse)
 async def todo_list(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     repo = TodoRepository(session)
     todos = await repo.list_for_org(org_id)
@@ -53,10 +49,10 @@ async def todo_list(
 async def add_todo(
     request: Request,
     bg: BackgroundTasks,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
     title: str = Form(...),
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
     todo = await repo.add(uuid.UUID(current_user.id), org_id, title)
@@ -80,11 +76,11 @@ async def add_todo(
 async def patch_todo(
     request: Request,
     todo_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
     done: bool | None = Form(default=None),
     title: str | None = Form(default=None),
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
 ):
     repo = TodoRepository(session)
     todo = await repo.get(todo_id, org_id)
@@ -105,9 +101,9 @@ async def delete_todo(
     request: Request,
     bg: BackgroundTasks,
     todo_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     repo = TodoRepository(session)
     todo = await repo.get(todo_id, org_id)
@@ -132,9 +128,9 @@ async def delete_todo(
 @router.post("/reorder")
 async def reorder_todos(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     body = await request.json()
     todo_id = uuid.UUID(body["id"])

@@ -1,14 +1,10 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import OrgFileRepository
 from app.files.infra.storage import (
@@ -18,10 +14,15 @@ from app.files.infra.storage import (
     user_storage_client,
 )
 from app.organizations.domain.models import Membership, OrgRole
-from app.organizations.infra.context import get_current_membership, get_current_org
+from app.shared.dependencies import (
+    AdminSession,
+    CurrentMembership,
+    CurrentOrg,
+    CurrentUser,
+    RlsSession,
+)
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
-from app.shared.persistence.database import get_admin_session
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])
@@ -54,9 +55,9 @@ def _template_ctx(request: Request, current_user: object, files: list) -> dict:
 @router.get("", response_class=HTMLResponse)
 async def file_list(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     repo = OrgFileRepository(session)
     files = await repo.list_for_org(org_id)
@@ -72,9 +73,9 @@ async def upload_file(
     request: Request,
     bg: BackgroundTasks,
     file: UploadFile,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
@@ -120,9 +121,9 @@ async def upload_file(
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     repo = OrgFileRepository(session)
     org_file = await repo.get(file_id, org_id)
@@ -140,10 +141,10 @@ async def delete_file(
     request: Request,
     bg: BackgroundTasks,
     file_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
-    membership: Membership = Depends(get_current_membership),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
 ):
     repo = OrgFileRepository(session)
     org_file = await repo.get(file_id, org_id)
@@ -184,10 +185,10 @@ async def rename_file(
     request: Request,
     file_id: uuid.UUID,
     body: RenameBody,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
-    membership: Membership = Depends(get_current_membership),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
 ):
     repo = OrgFileRepository(session)
     org_file = await repo.get(file_id, org_id)
@@ -213,9 +214,9 @@ async def rename_file(
 async def generate_share_link(
     request: Request,
     file_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
 ):
     repo = OrgFileRepository(session)
     org_file = await repo.get(file_id, org_id)
@@ -229,7 +230,7 @@ async def generate_share_link(
 @public_router.get("/share/{token}")
 async def public_share_download(
     token: uuid.UUID,
-    admin_session: AsyncSession = Depends(get_admin_session),
+    admin_session: AdminSession,
 ):
     repo = OrgFileRepository(admin_session)
     share_token = await repo.get_share_token(token)

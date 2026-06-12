@@ -1,17 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
 from app.organizations.infra.repository import OrganizationRepository
 from app.profile.domain.models import ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
+from app.shared.dependencies import AdminSession, CurrentUser, RlsSession
 from app.shared.http.templates import templates
-from app.shared.persistence.database import get_admin_session
 
 router = APIRouter()
 
@@ -24,8 +20,8 @@ async def index(request: Request) -> HTMLResponse:
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    current_user: CurrentUser,
+    admin_session: AdminSession,
 ) -> HTMLResponse:
     repo = OrganizationRepository(admin_session)
     pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
@@ -39,8 +35,8 @@ async def dashboard(
 @router.get("/profile", response_class=HTMLResponse)
 async def profile_page(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> HTMLResponse:
     repo = ProfileRepository(session)
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
@@ -52,9 +48,9 @@ async def profile_page(
 @router.post("/profile", response_class=HTMLResponse)
 async def profile_update(
     request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
     display_name: str = Form(default=""),
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
 ) -> HTMLResponse:
     repo = ProfileRepository(session)
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))

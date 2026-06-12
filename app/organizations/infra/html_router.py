@@ -1,20 +1,21 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
 from app.organizations.domain.exceptions import PendingInvitationExists
 from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
-from app.organizations.infra.context import get_current_membership, get_current_org
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
+from app.shared.dependencies import (
+    AdminSession,
+    CurrentMembership,
+    CurrentOrg,
+    CurrentUser,
+    RlsSession,
+)
 from app.shared.http.templates import templates
-from app.shared.persistence.database import get_admin_session
 
 router = APIRouter(tags=["organizations-html"])
 
@@ -25,10 +26,10 @@ router = APIRouter(tags=["organizations-html"])
 @router.get("/settings", response_class=HTMLResponse)
 async def org_settings(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
-    membership=Depends(get_current_membership),
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
 ):
     repo = OrganizationRepository(session)
     org = await repo.get_by_id(org_id)
@@ -50,11 +51,11 @@ async def org_settings(
 @router.patch("", response_class=HTMLResponse)
 async def rename_org_html(
     request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
     name: str = Form(...),
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    org_id: uuid.UUID = Depends(get_current_org),
-    membership=Depends(get_current_membership),
 ):
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
@@ -75,11 +76,11 @@ async def rename_org_html(
 @router.get("/members", response_class=HTMLResponse)
 async def org_members(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    admin_session: AsyncSession = Depends(get_admin_session),
-    org_id: uuid.UUID = Depends(get_current_org),
-    membership=Depends(get_current_membership),
+    current_user: CurrentUser,
+    session: RlsSession,
+    admin_session: AdminSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
 ):
     repo = OrganizationRepository(session)
     org = await repo.get_by_id(org_id)
@@ -123,12 +124,12 @@ async def org_members(
 @router.post("/invitations", response_class=HTMLResponse)
 async def create_invitation_html(
     request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    admin_session: AdminSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
     email: str = Form(...),
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
-    admin_session: AsyncSession = Depends(get_admin_session),
-    org_id: uuid.UUID = Depends(get_current_org),
-    membership=Depends(get_current_membership),
 ):
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
