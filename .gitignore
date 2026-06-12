@@ -28,3 +28,4 @@ node_modules/
 static/htmx.min.js
 static/tailwind.css
 static/fonts/
+docs/schema/

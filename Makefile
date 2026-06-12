@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade
+.PHONY: dev up down logs db-start db-stop db-reset migrate schema test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade
 
 # --- Setup ---
 install:
@@ -23,6 +23,10 @@ db-reset:
 
 migrate:
 	supabase db push
+
+schema:
+	tbls doc --rm-dist
+	uv run python scripts/tbls_postprocess.py
 
 # --- App ---
 dev: db-start

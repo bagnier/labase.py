@@ -1,0 +1,14 @@
+dsn: postgres://postgres:postgres@localhost:54322/postgres?sslmode=disable
+
+docPath: docs/schema
+
+include:
+  - public.*
+  - test.*
+  - auth.users
+
+sort: true
+
+er:
+  format: mermaid
+  comment: true

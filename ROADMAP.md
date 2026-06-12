@@ -26,8 +26,9 @@
 - [x] observabilité
 - [x] TLS and HTTP/2
 - [x] OWASP Dependency Check
-- [ ] transactions
+- [x] transactions
 - [x] upgrade
+- [x] DB schema
 - [ ] english all around
 - [ ] file de tâches asynchrones
 - [ ] index fulltext
@@ -49,7 +50,9 @@
 - [x] todo list comme exemple CRUD
 - [x] gestion de fichiers (bucket + share tokens)
 - [ ] flashcards comme exemple HexArch
-- [ ] dashboard user (contexte testé mais router non câblé dans main.py)
+- [ ] public page
+- [ ] user profile
+- [ ] org dashboard
 - [ ] admin console
 
 
