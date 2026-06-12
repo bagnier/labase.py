@@ -1,7 +1,10 @@
-import httpx
+import uuid
 
-from app.main import app
-from app.shared.config import get_settings
+import tests.db as db
+from app.auth.tests.admin_helpers import create_user as _admin_create
+from app.organizations.domain.models import Membership, OrgRole
+from app.organizations.infra.repository import OrganizationRepository
+from app.shared.persistence.database import _admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
 _PASSWORD = "Secret1!"
@@ -17,54 +20,23 @@ class OrgApiMixin(ApiProtocol):
         )
         return resp.json()
 
-    def _admin_memberships_for(self, email: str) -> list[dict]:
-        """Fetch memberships for email using service role (no user auth needed)."""
-        s = get_settings()
-        admin_headers = {
-            "apikey": s.supabase_service_role_key,
-            "Authorization": f"Bearer {s.supabase_service_role_key}",
-            "Accept": "application/json",
-        }
-        users_resp = httpx.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=admin_headers,
+    def _orgs_for_current_user(self) -> list[dict]:
+        """Fetch orgs for the current user, using test TX directly if not authenticated."""
+        email = getattr(self, "_last_registered_email", None) or getattr(
+            self, "_primary_email", None
         )
-        all_users = users_resp.json().get("users", [])
-        matched = [u for u in all_users if u.get("email") == email]
-        assert matched, f"User {email!r} not found in Supabase"
-        user_id = matched[0]["id"]
-
-        memberships_resp = httpx.get(
-            f"{s.supabase_url}/rest/v1/memberships",
-            params={"auth_user_id": f"eq.{user_id}"},
-            headers=admin_headers,
-        )
-        assert memberships_resp.status_code == 200, (
-            f"memberships query failed: {memberships_resp.text}"
-        )
-        return memberships_resp.json()
+        if email and db.in_test_transaction():
+            return self._run(db.fetch_orgs_for_email(email))
+        return self._fetch_org_list()
 
     def assert_org_count(self, count: int) -> None:
-        email = getattr(self, "_last_registered_email", None) or getattr(
-            self, "_primary_email", None
-        )
-        assert email, "No registered email stored — cannot assert org count"
-        memberships = self._admin_memberships_for(email)
-        assert len(memberships) == count, (
-            f"Expected {count} org(s), got {len(memberships)}: {memberships}"
-        )
+        orgs = self._orgs_for_current_user()
+        assert len(orgs) == count, f"Expected {count} org(s), got {len(orgs)}: {orgs}"
 
     def assert_is_owner(self) -> None:
-        email = getattr(self, "_last_registered_email", None) or getattr(
-            self, "_primary_email", None
-        )
-        assert email, "No registered email stored — cannot assert is_owner"
-        memberships = self._admin_memberships_for(email)
-        assert memberships, "No memberships found"
-        assert memberships[0]["role"] == "owner", (
-            f"Expected role=owner, got {memberships[0].get('role')!r}"
-        )
+        orgs = self._orgs_for_current_user()
+        assert orgs, "No organisations found"
+        assert orgs[0]["role"] == "owner", f"Expected role=owner, got {orgs[0].get('role')!r}"
 
     def view_org_list_as(self, email: str) -> None:
         client = self._client_for(email)
@@ -84,47 +56,24 @@ class OrgApiMixin(ApiProtocol):
             assert name not in names, f"Other user's org {name!r} appears in list: {names}"
 
     def join_org_as_member(self, org_name: str, email: str) -> None:
-        s = get_settings()
-        admin_headers = {
-            "apikey": s.supabase_service_role_key,
-            "Authorization": f"Bearer {s.supabase_service_role_key}",
-        }
-        # Create a throwaway owner for this org (so email can join as member, not owner)
+        # Create throwaway owner directly (bypasses test transaction — committed to real DB)
         slug = org_name.lower().replace(" ", "-")
         owner_email = f"owner-{slug}@example.com"
-        transport = httpx.ASGITransport(app=app)
-        owner_client = httpx.AsyncClient(
-            transport=transport, base_url="http://testserver", follow_redirects=False
-        )
-        self._run(
-            owner_client.post("/auth/register", data={"email": owner_email, "password": _PASSWORD})
-        )
-        self._run(
-            owner_client.post("/auth/login", data={"email": owner_email, "password": _PASSWORD})
-        )
-        resp = self._run(owner_client.get("/organizations", headers={"accept": "application/json"}))
-        assert resp.status_code == 200 and resp.json()
-        new_org_id = resp.json()[0]["id"]
-        self._run(
-            owner_client.patch(
-                f"/organizations/{new_org_id}",
-                json={"name": org_name},
-                headers={"accept": "application/json"},
-            )
-        )
+        owner_uid = uuid.UUID(_admin_create(owner_email, _PASSWORD))
+        self.track_auth_email(owner_email)
 
-        # Add email as member of this new org
-        member_auth_id = self._user_id_for_email(email)
-        pg_resp = httpx.post(
-            f"{s.supabase_url}/rest/v1/memberships",
-            json={"org_id": new_org_id, "auth_user_id": member_auth_id, "role": "member"},
-            headers={
-                **admin_headers,
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
-        )
-        assert pg_resp.status_code in (200, 201), f"membership insert failed: {pg_resp.text}"
+        member_uid = uuid.UUID(self._user_id_for_email(email))
+
+        async def _setup() -> str:
+            async with _admin_session_factory()() as session:
+                repo = OrganizationRepository(session)
+                org = await repo.create_with_owner(name=org_name, auth_user_id=owner_uid)
+                session.add(Membership(org_id=org.id, auth_user_id=member_uid, role=OrgRole.member))
+                await session.commit()
+                return str(org.id)
+
+        org_id = self._run(_setup())
+        self.track_org_id(org_id)
 
     def view_org_list(self) -> None:
         resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))

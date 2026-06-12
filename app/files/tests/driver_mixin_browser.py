@@ -1,4 +1,5 @@
-from app.shared.config import get_settings
+from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
+from app.organizations.tests.admin_helpers import add_membership, set_membership_role
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -32,13 +33,6 @@ class OrgFileBrowserMixin(BrowserProtocol):
             raise AssertionError(f"File '{filename}' not found in DOM")
         return fid
 
-    def _admin_headers(self) -> dict:
-        s = get_settings()
-        return {
-            "apikey": s.supabase_service_role_key,
-            "Authorization": f"Bearer {s.supabase_service_role_key}",
-        }
-
     def _secondary_context_for(self, email: str):  # type: ignore[return]
         assert self._context
         if not hasattr(self, "_secondary_browser_contexts"):
@@ -57,17 +51,9 @@ class OrgFileBrowserMixin(BrowserProtocol):
         return self._secondary_browser_contexts[email]
 
     def _get_user_id(self, email: str) -> str:
-        assert self._context
-        s = get_settings()
-        resp = self._context.request.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=self._admin_headers(),
-        )
-        users = resp.json().get("users", [])
-        matched = [u for u in users if u.get("email") == email]
-        assert matched, f"User {email!r} not found in Supabase"
-        return matched[0]["id"]
+        users = find_users(email)
+        assert users, f"User {email!r} not found in Supabase"
+        return users[0].id
 
     def _get_primary_org_id(self) -> str:
         assert self._context
@@ -77,27 +63,6 @@ class OrgFileBrowserMixin(BrowserProtocol):
         )
         assert resp.status == 200 and resp.json(), "Cannot find primary org"
         return resp.json()[0]["id"]
-
-    def _cleanup_example_users(self) -> None:
-        assert self._context
-        s = get_settings()
-        page = 1
-        while True:
-            resp = self._context.request.get(
-                f"{s.supabase_url}/auth/v1/admin/users?per_page=1000&page={page}",
-                headers=self._admin_headers(),
-            )
-            users = resp.json().get("users", [])
-            for user in users:
-                ue = user.get("email", "")
-                if ue.endswith("@example.com"):
-                    self._context.request.delete(
-                        f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
-                        headers=self._admin_headers(),
-                    )
-            if len(users) < 1000:
-                break
-            page += 1
 
     # ── basic file ops ────────────────────────────────────────────────────────
 
@@ -179,7 +144,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
         assert self._context
-        self._cleanup_example_users()
+        delete_user_if_exists(email)
         self._context.request.post(
             f"{self._base_url}/auth/register",
             form={"email": email, "password": _PASSWORD},
@@ -210,18 +175,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
     def add_member_to_org(self, email: str) -> None:
         assert self._context
         self._secondary_context_for(email)
-        user_id = self._get_user_id(email)
-        org_id = self._get_primary_org_id()
-        s = get_settings()
-        resp = self._context.request.post(
-            f"{s.supabase_url}/rest/v1/memberships",
-            data={"org_id": org_id, "auth_user_id": user_id, "role": "member"},
-            headers={
-                **self._admin_headers(),
-                "Prefer": "return=minimal",
-            },
-        )
-        assert resp.status in (200, 201), f"membership insert failed: {resp.text()}"
+        add_membership(self._get_primary_org_id(), self._get_user_id(email))
         if not hasattr(self, "_secondary_slugs"):
             self._secondary_slugs: dict = {}
         self._secondary_slugs[email] = getattr(self, "_active_org_slug", "")
@@ -262,38 +216,12 @@ class OrgFileBrowserMixin(BrowserProtocol):
             )
 
     def promote_to_owner(self) -> None:
-        assert self._context
-        s = get_settings()
-        org_id = self._get_primary_org_id()
         primary_email = getattr(self, "_primary_email", "")
-        user_id = self._get_user_id(primary_email)
-        resp = self._context.request.patch(
-            f"{s.supabase_url}/rest/v1/memberships",
-            params={"org_id": f"eq.{org_id}", "auth_user_id": f"eq.{user_id}"},
-            data={"role": "owner"},
-            headers={
-                **self._admin_headers(),
-                "Prefer": "return=minimal",
-            },
-        )
-        assert resp.status in (200, 204), f"promote failed: {resp.text()}"
+        set_membership_role(self._get_primary_org_id(), self._get_user_id(primary_email), "owner")
 
     def demote_to_member(self) -> None:
-        assert self._context
-        s = get_settings()
-        org_id = self._get_primary_org_id()
         primary_email = getattr(self, "_primary_email", "")
-        user_id = self._get_user_id(primary_email)
-        resp = self._context.request.patch(
-            f"{s.supabase_url}/rest/v1/memberships",
-            params={"org_id": f"eq.{org_id}", "auth_user_id": f"eq.{user_id}"},
-            data={"role": "member"},
-            headers={
-                **self._admin_headers(),
-                "Prefer": "return=minimal",
-            },
-        )
-        assert resp.status in (200, 204), f"demote failed: {resp.text()}"
+        set_membership_role(self._get_primary_org_id(), self._get_user_id(primary_email), "member")
 
     def generate_share_link(self, filename: str) -> None:
         assert self._context

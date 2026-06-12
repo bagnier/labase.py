@@ -3,9 +3,10 @@ import uuid
 import httpx
 
 from app.auth.tests.admin_helpers import create_user as _admin_create_user
+from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from app.main import app
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.config import get_settings
+from app.organizations.tests.admin_helpers import add_membership, set_membership_role
 from app.shared.persistence.database import _admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
@@ -32,12 +33,6 @@ class OrgFileApiMixin(ApiProtocol):
             self._active_org_slug = ""
 
     def _reset_multi_user_state(self) -> None:
-        if not hasattr(self, "_known_test_emails"):
-            self._known_test_emails: set[str] = set()
-        if hasattr(self, "_primary_email") and self._primary_email:
-            self._known_test_emails.add(self._primary_email)
-        if hasattr(self, "_secondary_clients"):
-            self._known_test_emails.update(self._secondary_clients.keys())
         self._secondary_clients = {}
         self._secondary_slugs = {}
         self._share_link_url = None
@@ -46,13 +41,6 @@ class OrgFileApiMixin(ApiProtocol):
         self._org_list_response = None  # reset cached org list from OrgApiMixin
         self._primary_client_backup = None  # type: ignore[assignment]
         self._restore_clock()
-
-    def _admin_headers(self) -> dict:
-        s = get_settings()
-        return {
-            "apikey": s.supabase_service_role_key,
-            "Authorization": f"Bearer {s.supabase_service_role_key}",
-        }
 
     def _org_url(self, path: str, slug: str | None = None) -> str:
         s = slug or getattr(self, "_active_org_slug", "")
@@ -93,6 +81,7 @@ class OrgFileApiMixin(ApiProtocol):
         )
         self._run(client.post("/auth/register", data={"email": email, "password": _PASSWORD}))
         self._run(client.post("/auth/login", data={"email": email, "password": _PASSWORD}))
+        self.track_auth_email(email)
         return client
 
     def _client_for(self, email: str) -> httpx.AsyncClient:
@@ -102,73 +91,32 @@ class OrgFileApiMixin(ApiProtocol):
         return self._secondary_clients[email]
 
     def _user_id_for_email(self, email: str) -> str:
-        s = get_settings()
-        resp = httpx.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=self._admin_headers(),
-        )
-        all_users = resp.json().get("users", [])
-        matched = [u for u in all_users if u.get("email") == email]
-        assert matched, (
-            f"User {email!r} not found in Supabase (got {[u.get('email') for u in all_users]})"
-        )
-        return matched[0]["id"]
+        users = find_users(email)
+        assert users, f"User {email!r} not found in Supabase"
+        return users[0].id
 
     # ── sign-in with org naming ───────────────────────────────────────────────
-
-    def _delete_supabase_user(self, email: str) -> None:
-        s = get_settings()
-        resp = httpx.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=self._admin_headers(),
-        )
-        for user in resp.json().get("users", []):
-            httpx.delete(
-                f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
-                headers=self._admin_headers(),
-            )
-
-    def _cleanup_example_users(self) -> None:
-        s = get_settings()
-        page = 1
-        while True:
-            resp = httpx.get(
-                f"{s.supabase_url}/auth/v1/admin/users?per_page=1000&page={page}",
-                headers=self._admin_headers(),
-            )
-            users = resp.json().get("users", [])
-            for user in users:
-                ue = user.get("email", "")
-                if ue.endswith("@example.com"):
-                    httpx.delete(
-                        f"{s.supabase_url}/auth/v1/admin/users/{user['id']}",
-                        headers=self._admin_headers(),
-                    )
-            if len(users) < 1000:
-                break
-            page += 1
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
         self._ensure_multi_user()
         self._primary_email = email
         self._last_registered_email = email
-        self._cleanup_example_users()
-        self._known_test_emails = set()
+        delete_user_if_exists(email)
         # Use admin API to create user: avoids GoTrue timing race where the new
         # auth.users row isn't visible via direct Postgres FK check when using sign_up.
         user_id_str = _admin_create_user(email, _PASSWORD)
+        self.track_auth_email(email)
 
-        async def _create_org() -> str:
+        async def _create_org() -> tuple[str, str]:
             async with _admin_session_factory()() as session:
                 repo = OrganizationRepository(session)
                 org = await repo.create_with_owner(
                     name=org_name, auth_user_id=uuid.UUID(user_id_str)
                 )
-                return org.slug
+                return str(org.id), org.slug
 
-        self._active_org_slug = self._run(_create_org())
+        org_id, self._active_org_slug = self._run(_create_org())
+        self.track_org_id(org_id)
         self._run(self._c.post("/auth/login", data={"email": email, "password": _PASSWORD}))
 
     # ── file operations ───────────────────────────────────────────────────────
@@ -236,21 +184,7 @@ class OrgFileApiMixin(ApiProtocol):
     def add_member_to_org(self, email: str) -> None:
         self._ensure_multi_user()
         self._client_for(email)
-        user_id = self._user_id_for_email(email)
-        org_id = self._get_primary_org_id()
-
-        s = get_settings()
-        pg_resp = httpx.post(
-            f"{s.supabase_url}/rest/v1/memberships",
-            json={"org_id": org_id, "auth_user_id": user_id, "role": "member"},
-            headers={
-                **self._admin_headers(),
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
-        )
-        assert pg_resp.status_code in (200, 201), f"membership insert failed: {pg_resp.text}"
-
+        add_membership(self._get_primary_org_id(), self._user_id_for_email(email))
         # Secondary client points at primary org slug
         self._secondary_slugs[email] = self._active_org_slug
 
@@ -283,37 +217,15 @@ class OrgFileApiMixin(ApiProtocol):
 
     def promote_to_owner(self) -> None:
         self._ensure_multi_user()
-        s = get_settings()
-        org_id = self._get_primary_org_id()
-        user_id = self._user_id_for_email(self._primary_email)
-        pg_resp = httpx.patch(
-            f"{s.supabase_url}/rest/v1/memberships",
-            params={"org_id": f"eq.{org_id}", "auth_user_id": f"eq.{user_id}"},
-            json={"role": "owner"},
-            headers={
-                **self._admin_headers(),
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
+        set_membership_role(
+            self._get_primary_org_id(), self._user_id_for_email(self._primary_email), "owner"
         )
-        assert pg_resp.status_code in (200, 204), f"promote failed: {pg_resp.text}"
 
     def demote_to_member(self) -> None:
         self._ensure_multi_user()
-        s = get_settings()
-        org_id = self._get_primary_org_id()
-        user_id = self._user_id_for_email(self._primary_email)
-        pg_resp = httpx.patch(
-            f"{s.supabase_url}/rest/v1/memberships",
-            params={"org_id": f"eq.{org_id}", "auth_user_id": f"eq.{user_id}"},
-            json={"role": "member"},
-            headers={
-                **self._admin_headers(),
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
+        set_membership_role(
+            self._get_primary_org_id(), self._user_id_for_email(self._primary_email), "member"
         )
-        assert pg_resp.status_code in (200, 204), f"demote failed: {pg_resp.text}"
 
     def generate_share_link(self, filename: str) -> None:
         self._ensure_multi_user()

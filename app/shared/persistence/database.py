@@ -34,6 +34,10 @@ def _admin_session_factory():
 
 
 async def get_user_session() -> AsyncGenerator[AsyncSession, None]:
+    # Transaction boundary : la session est ouverte ici et fermée (rollback implicite si exception)
+    # à la sortie du bloc. Les repos appellent session.commit() eux-mêmes.
+    # En contexte de test, une AsyncConnection partagée est injectée via override_get_session ;
+    # session.commit() émet alors SAVEPOINT/RELEASE au lieu d'un vrai COMMIT.
     async with _user_session_factory()() as session:
         yield session
 

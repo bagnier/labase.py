@@ -1,14 +1,18 @@
 import asyncio
 import threading
+import uuid
 
 import httpx
+from sqlalchemy import delete
 
 from app.auth.tests.driver_mixin import AuthApiMixin
 from app.dashboard.tests.driver_mixin import DashboardApiMixin
 from app.files.tests.driver_mixin import OrgFileApiMixin
 from app.main import app
+from app.organizations.domain.models import Organization
 from app.organizations.tests.driver_mixin import OrgApiMixin
 from app.profile.tests.driver_mixin import ProfileApiMixin
+from app.shared.persistence.database import _admin_session_factory
 from app.todo.tests.driver_mixin import TodoApiMixin
 from tests.e2e.drivers.shared_mixin import SharedApiMixin
 
@@ -28,6 +32,8 @@ class ApiDriver(
         self._client: httpx.AsyncClient | None = None
         self._response: httpx.Response | None = None
         self._last_registered_email: str | None = None
+        self._test_auth_emails: list[str] = []
+        self._test_org_ids: list[str] = []
 
     def start(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -56,6 +62,39 @@ class ApiDriver(
     def _c(self) -> httpx.AsyncClient:
         assert self._client
         return self._client
+
+    def track_auth_email(self, email: str) -> None:
+        """Enregistre un email d'auth user créé pendant le test en cours."""
+        if email not in self._test_auth_emails:
+            self._test_auth_emails.append(email)
+
+    def track_org_id(self, org_id: str) -> None:
+        """Enregistre un org_id à supprimer explicitement en teardown (org commitée hors test TX)."""
+        if org_id not in self._test_org_ids:
+            self._test_org_ids.append(org_id)
+
+    def cleanup_test_auth_users(self) -> None:
+        """Supprime tous les auth users Supabase créés pendant le test en cours."""
+        for email in self._test_auth_emails:
+            self._delete_user_if_exists(email)
+        self._test_auth_emails.clear()
+
+    def cleanup_test_orgs(self) -> None:
+        """Supprime les orgs commitées hors test transaction (créées via admin session directe)."""
+        if not self._test_org_ids:
+            return
+
+        async def _delete():
+            async with _admin_session_factory()() as session:
+                async with session.begin():
+                    await session.execute(
+                        delete(Organization).where(
+                            Organization.id.in_([uuid.UUID(oid) for oid in self._test_org_ids])
+                        )
+                    )
+
+        self._run(_delete())
+        self._test_org_ids.clear()
 
     def reset_session(self) -> None:
         transport = httpx.ASGITransport(app=app)

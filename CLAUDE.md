@@ -1,4 +1,4 @@
 - read @README.md.
 - import at top, refactor to make it possible.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).
-- when you think it's done, run `make quality; make test` before you claim it.
+- when you think it's done, run `make ci` before you claim it.

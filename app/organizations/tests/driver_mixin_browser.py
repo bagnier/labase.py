@@ -1,17 +1,11 @@
-from app.shared.config import get_settings
+from app.auth.tests.admin_helpers import find_users
+from app.organizations.tests.admin_helpers import add_membership, memberships_for_user
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
 
 
 class OrgBrowserMixin(BrowserProtocol):
-    def _admin_headers(self) -> dict:
-        s = get_settings()
-        return {
-            "apikey": s.supabase_service_role_key,
-            "Authorization": f"Bearer {s.supabase_service_role_key}",
-        }
-
     def _acting_context(self):  # type: ignore[return]
         """Return the active context: secondary if sign_in_as_member was called, else primary."""
         acting_email = getattr(self, "_acting_as_email", None)
@@ -47,17 +41,9 @@ class OrgBrowserMixin(BrowserProtocol):
         return self._secondary_browser_contexts[email]
 
     def _get_user_id(self, email: str) -> str:
-        assert self._context
-        s = get_settings()
-        resp = self._context.request.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=self._admin_headers(),
-        )
-        users = resp.json().get("users", [])
-        matched = [u for u in users if u.get("email") == email]
-        assert matched, f"User {email!r} not found in Supabase"
-        return matched[0]["id"]
+        users = find_users(email)
+        assert users, f"User {email!r} not found in Supabase"
+        return users[0].id
 
     def _get_active_org_id(self, ctx=None) -> str:
         c = ctx or self._acting_context()
@@ -88,24 +74,7 @@ class OrgBrowserMixin(BrowserProtocol):
         return resp.json()[0]["slug"]
 
     def _memberships_for(self, email: str) -> list[dict]:
-        assert self._context
-        s = get_settings()
-        resp = self._context.request.get(
-            f"{s.supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=self._admin_headers(),
-        )
-        users = resp.json().get("users", [])
-        matched = [u for u in users if u.get("email") == email]
-        assert matched, f"User {email!r} not found"
-        user_id = matched[0]["id"]
-        m_resp = self._context.request.get(
-            f"{s.supabase_url}/rest/v1/memberships",
-            params={"auth_user_id": f"eq.{user_id}"},
-            headers=self._admin_headers(),
-        )
-        assert m_resp.status == 200
-        return m_resp.json()
+        return memberships_for_user(self._get_user_id(email))
 
     # ── basic org assertions ──────────────────────────────────────────────────
 
@@ -154,7 +123,6 @@ class OrgBrowserMixin(BrowserProtocol):
 
     def join_org_as_member(self, org_name: str, email: str) -> None:
         assert self._context
-        s = get_settings()
         slug = org_name.lower().replace(" ", "-")
         owner_email = f"owner-{slug}@example.com"
         owner_ctx = self._context.browser.new_context()
@@ -178,16 +146,7 @@ class OrgBrowserMixin(BrowserProtocol):
         )
         # Ensure the member user exists
         self._secondary_context_for(email)
-        member_user_id = self._get_user_id(email)
-        pg_resp = self._context.request.post(
-            f"{s.supabase_url}/rest/v1/memberships",
-            data={"org_id": new_org_id, "auth_user_id": member_user_id, "role": "member"},
-            headers={
-                **self._admin_headers(),
-                "Prefer": "return=minimal",
-            },
-        )
-        assert pg_resp.status in (200, 201), f"membership insert failed: {pg_resp.text()}"
+        add_membership(new_org_id, self._get_user_id(email))
 
     def view_org_list(self) -> None:
         resp = self._acting_context().request.get(

@@ -1,28 +1,12 @@
 from uuid import uuid4
 
-from app.shared.config import get_settings
+from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 
 class AuthBrowserMixin(BrowserProtocol):
-    def _admin_headers(self) -> dict:
-        return {
-            "apikey": get_settings().supabase_service_role_key,
-            "Authorization": f"Bearer {get_settings().supabase_service_role_key}",
-        }
-
     def _delete_user_if_exists(self, email: str) -> None:
-        assert self._context
-        resp = self._context.request.get(
-            f"{get_settings().supabase_url}/auth/v1/admin/users",
-            params={"email": email},
-            headers=self._admin_headers(),
-        )
-        for user in resp.json().get("users", []):
-            self._context.request.delete(
-                f"{get_settings().supabase_url}/auth/v1/admin/users/{user['id']}",
-                headers=self._admin_headers(),
-            )
+        delete_user_if_exists(email)
 
     def sign_in(self, email: str, password: str) -> None:
         self._p.goto(f"{self._base_url}/auth/login")
@@ -109,14 +93,7 @@ class AuthBrowserMixin(BrowserProtocol):
     def assert_registration_successful(self) -> None:
         assert "Vérifiez" in self._p.content(), "'Vérifiez' not found in registration response"
         assert self._last_registered_email is not None
-        assert self._context is not None
-        resp = self._context.request.get(
-            f"{get_settings().supabase_url}/auth/v1/admin/users",
-            params={"email": self._last_registered_email},
-            headers=self._admin_headers(),
-        )
-        users = resp.json().get("users", [])
-        assert any(u["email"] == self._last_registered_email for u in users), (
+        assert find_users(self._last_registered_email), (
             f"User {self._last_registered_email!r} not found in Supabase after registration"
         )
 
