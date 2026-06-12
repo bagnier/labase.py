@@ -53,7 +53,7 @@ async def test_wrong_signature_returns_401(client):
 @pytest.mark.asyncio
 async def test_valid_token_returns_user(client, test_user):
     email, password = test_user
-    tokens = login(email, password)
+    tokens = await login(email, password)
     client.cookies.set("access_token", tokens.access_token)
     response = await client.get("/me")
     assert response.status_code == 200
@@ -63,7 +63,7 @@ async def test_valid_token_returns_user(client, test_user):
 @pytest.mark.asyncio
 async def test_expired_token_with_valid_refresh_returns_200_and_sets_new_cookies(client, test_user):
     email, password = test_user
-    real_tokens = login(email, password)
+    real_tokens = await login(email, password)
     fake_new_tokens = AuthTokens(
         access_token=real_tokens.access_token, refresh_token=real_tokens.refresh_token
     )

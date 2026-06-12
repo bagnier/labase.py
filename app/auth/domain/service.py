@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
+import httpx
 import structlog
 
-from app.shared.persistence.supabase import get_supabase
+from app.shared.config import get_settings
+from app.shared.persistence.supabase import make_auth_client
 
 log = structlog.get_logger("labase.auth.service")
 
@@ -20,8 +22,9 @@ class AuthTokens:
     refresh_token: str
 
 
-def login(email: str, password: str) -> AuthTokens:
-    auth = get_supabase().auth.sign_in_with_password({"email": email, "password": password})
+async def login(email: str, password: str) -> AuthTokens:
+    client = await make_auth_client()
+    auth = await client.auth.sign_in_with_password({"email": email, "password": password})
     if auth.session is None:
         raise ValueError("No session returned")
     return AuthTokens(
@@ -30,15 +33,24 @@ def login(email: str, password: str) -> AuthTokens:
     )
 
 
-def logout() -> None:
+async def logout(access_token: str) -> None:
+    s = get_settings()
     try:
-        get_supabase().auth.sign_out()
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{s.supabase_url}/auth/v1/logout",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "apikey": s.supabase_anon_key,
+                },
+            )
     except Exception:
         log.warning("auth.signout_failed")
 
 
-def refresh_session(refresh_token: str) -> AuthTokens:
-    auth = get_supabase().auth.refresh_session(refresh_token)
+async def refresh_session(refresh_token: str) -> AuthTokens:
+    client = await make_auth_client()
+    auth = await client.auth.refresh_session(refresh_token)
     if auth.session is None:
         raise ValueError("Refresh failed")
     return AuthTokens(
@@ -47,9 +59,10 @@ def refresh_session(refresh_token: str) -> AuthTokens:
     )
 
 
-def register(email: str, password: str) -> str:
+async def register(email: str, password: str) -> str:
     """Returns the new user's UUID (auth.users.id)."""
-    res = get_supabase().auth.sign_up({"email": email, "password": password})
+    client = await make_auth_client()
+    res = await client.auth.sign_up({"email": email, "password": password})
     if res.user is None:
         raise ValueError("Registration failed: no user returned")
     return res.user.id

@@ -1,7 +1,7 @@
 import uuid
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, Request, Response, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
@@ -62,7 +62,7 @@ async def login_endpoint(
 ) -> Response:
     ip = request.client.host if request.client else None
     try:
-        tokens = login(email, password)
+        tokens = await login(email, password)
         resp = Response(status_code=status.HTTP_200_OK)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         resp.headers["HX-Redirect"] = "/dashboard"
@@ -78,8 +78,9 @@ async def login_endpoint(
 
 
 @router.post("/logout")
-async def logout_endpoint() -> Response:
-    logout()
+async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Response:
+    if access_token:
+        await logout(access_token)
     resp = Response(status_code=status.HTTP_200_OK)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
@@ -103,7 +104,7 @@ async def register_endpoint(
 ) -> Response:
     ip = request.client.host if request.client else None
     try:
-        user_id_str = register(email, password)
+        user_id_str = await register(email, password)
         org_repo = OrganizationRepository(admin_session)
         await org_repo.create_with_owner(
             name=f"Organisation de {email}", auth_user_id=uuid.UUID(user_id_str)
