@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit
+.PHONY: dev up down logs db-start db-stop db-reset migrate test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade
 
 # --- Setup ---
 install:
@@ -49,6 +49,13 @@ typecheck:
 
 audit:
 	uv run pip-audit
+
+upgrade:
+	cp uv.lock /tmp/uv.lock.bak
+	cp pyproject.toml /tmp/pyproject.toml.bak
+	python3 scripts/upgrade.py relax
+	uv lock --upgrade
+	python3 scripts/upgrade.py repin
 
 quality: lint format typecheck
 

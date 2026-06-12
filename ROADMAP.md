@@ -27,7 +27,7 @@
 - [x] TLS and HTTP/2
 - [x] OWASP Dependency Check
 - [ ] transactions
-- [ ] upgrade
+- [x] upgrade
 - [ ] file de tâches asynchrones
 - [ ] index fulltext
 - [ ] cache
