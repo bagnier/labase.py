@@ -72,7 +72,7 @@
 
 - [x] Négociation de contenu dupliquée 3 fois — _wants_json / _is_htmx / _html_template / _template_ctx + le re-render de liste sont copiés à l'identique dans todo/router.py, files/router.py et partiellement invitations. Un seul helper render_list(request, template, items, schema) dans shared/http réduit chaque endpoint à sa logique métier.
 
-- [ ] Les checks d'autorisation copiés-collés — le bloc « get_membership → 404 → role != owner → 403 » apparaît 6 fois dans organizations/router.py. Une dépendance require_owner (sur le modèle de get_current_membership) les remplace toutes.
+- [x] Les checks d'autorisation copiés-collés — le bloc « get_membership → 404 → role != owner → 403 » apparaît 6 fois dans organizations/router.py. Une dépendance require_owner (sur le modèle de get_current_membership) les remplace toutes.
 
 - [ ] commit() dans chaque méthode de repository — c'est ce qui rend l'item « transactions » de la roadmap impossible aujourd'hui : on ne peut pas composer deux opérations atomiquement. Déplacer le commit à la frontière de requête (dans get_user_session/get_rls_session) supprime une ligne par méthode de repo et donne les transactions gratuitement — votre harness de test (SAVEPOINT sur connexion partagée) le supporte déjà tel quel.
 

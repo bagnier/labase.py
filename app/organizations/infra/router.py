@@ -14,7 +14,7 @@ from app.organizations.domain.models import (
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
-from app.shared.dependencies import AdminSession, CurrentUser, RlsSession
+from app.shared.dependencies import AdminSession, CurrentUser, OwnerMembership, RlsSession
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -41,23 +41,18 @@ class RenameOrgBody(BaseModel):
 async def rename_organization(
     org_id: uuid.UUID,
     body: RenameOrgBody,
-    current_user: CurrentUser,
+    owner: OwnerMembership,
     session: RlsSession,
 ) -> JSONResponse:
     repo = OrganizationRepository(session)
-    membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
-    if membership is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     org = await repo.get_by_id(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await repo.rename(org, body.name)
     return JSONResponse(
-        OrganizationWithRoleRead.model_validate(
-            {**org.__dict__, "role": membership.role}
-        ).model_dump(mode="json")
+        OrganizationWithRoleRead.model_validate({**org.__dict__, "role": owner.role}).model_dump(
+            mode="json"
+        )
     )
 
 
@@ -94,16 +89,11 @@ async def update_member_role(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     body: UpdateRoleBody,
-    current_user: CurrentUser,
+    _: OwnerMembership,
     session: RlsSession,
     admin_session: AdminSession,
 ) -> MemberRead:
     repo = OrganizationRepository(session)
-    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
-    if caller is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if caller.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if body.role != OrgRole.owner:
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
@@ -148,14 +138,10 @@ async def remove_member(
     user_id: uuid.UUID,
     bg: BackgroundTasks,
     current_user: CurrentUser,
+    _: OwnerMembership,
     session: RlsSession,
 ) -> None:
     repo = OrganizationRepository(session)
-    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
-    if caller is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if caller.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
@@ -185,16 +171,11 @@ async def create_invitation(
     body: InvitationCreateBody,
     bg: BackgroundTasks,
     current_user: CurrentUser,
+    _: OwnerMembership,
     session: RlsSession,
     admin_session: AdminSession,
 ) -> InvitationRead:
     repo = OrganizationRepository(session)
-    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
-    if caller is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if caller.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-
     # Check if already a member
     result = await admin_session.execute(
         text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
@@ -246,15 +227,10 @@ async def list_invitations(
 async def revoke_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
-    current_user: CurrentUser,
+    _: OwnerMembership,
     session: RlsSession,
 ) -> None:
     repo = OrganizationRepository(session)
-    caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
-    if caller is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if caller.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     invitation = await repo.get_invitation_by_id(org_id, invitation_id)
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")

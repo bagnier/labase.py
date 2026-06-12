@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
-from app.organizations.domain.models import Membership
+from app.auth.infra.session import get_rls_session
+from app.organizations.domain.models import Membership, OrgRole
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.persistence.database import get_admin_session
 
@@ -47,4 +48,24 @@ async def get_current_membership(
     membership = await repo.get_membership(org_id, user_uuid)
     if membership is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member")
+    return membership
+
+
+async def get_membership_by_org_id(
+    org_id: uuid.UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_rls_session),
+) -> Membership:
+    repo = OrganizationRepository(session)
+    membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
+    if membership is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return membership
+
+
+async def require_owner(
+    membership: Membership = Depends(get_membership_by_org_id),
+) -> Membership:
+    if membership.role != OrgRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership
