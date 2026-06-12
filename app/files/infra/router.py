@@ -19,10 +19,9 @@ from app.files.infra.storage import (
 )
 from app.organizations.domain.models import Membership, OrgRole
 from app.organizations.infra.context import get_current_membership, get_current_org
-from app.shared.audit import enqueue_audit_log
-from app.shared.clock import Clock, get_clock
-from app.shared.database import get_service_session
-from app.shared.templates import templates
+from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import get_admin_session
+from app.shared.http.templates import templates
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])
@@ -76,7 +75,6 @@ async def upload_file(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
     org_id: uuid.UUID = Depends(get_current_org),
-    clock: Clock = Depends(get_clock),
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
@@ -91,7 +89,7 @@ async def upload_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
 
-    repo = OrgFileRepository(session, clock)
+    repo = OrgFileRepository(session)
     org_file = await repo.add(
         org_id=org_id,
         user_id=uuid.UUID(current_user.id),
@@ -101,7 +99,7 @@ async def upload_file(
         size_bytes=len(content),
         uploader_email=current_user.email,
     )
-    enqueue_audit_log(
+    record_audit_event(
         bg,
         level="info",
         event="file.uploaded",
@@ -160,7 +158,7 @@ async def delete_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).remove([org_file.storage_path])
     await repo.delete(org_file)
-    enqueue_audit_log(
+    record_audit_event(
         bg,
         level="info",
         event="file.deleted",
@@ -231,9 +229,9 @@ async def generate_share_link(
 @public_router.get("/share/{token}")
 async def public_share_download(
     token: uuid.UUID,
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ):
-    repo = OrgFileRepository(service_session)
+    repo = OrgFileRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
         return HTMLResponse("Link not found", status_code=404)

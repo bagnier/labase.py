@@ -11,7 +11,7 @@ log = structlog.get_logger("labase.http")
 _SKIP_PATHS = {"/health/live", "/health/ready"}
 
 
-class LoggingMiddleware(BaseHTTPMiddleware):
+class RequestLogger(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
         if request.url.path in _SKIP_PATHS:
             return await call_next(request)

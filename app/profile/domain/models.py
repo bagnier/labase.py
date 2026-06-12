@@ -5,8 +5,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.base import Base
-from app.shared.utils import utcnow
+from app.shared.persistence.base import Base
+from app.shared.clock import now
 
 
 class Profile(Base):
@@ -20,8 +20,8 @@ class Profile(Base):
     auth_user_id: Mapped[uuid.UUID]
     email: Mapped[str] = mapped_column(String)
     display_name: Mapped[str | None]
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class ProfileCreate(BaseModel):

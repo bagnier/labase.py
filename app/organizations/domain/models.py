@@ -7,8 +7,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.base import Base
-from app.shared.utils import utcnow
+from app.shared.persistence.base import Base
+from app.shared.clock import now
 
 
 class OrgRole(str, Enum):
@@ -23,7 +23,7 @@ class Organization(Base):
     name: Mapped[str]
     slug: Mapped[str] = mapped_column(default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True), nullable=False, default=now
     )
 
 
@@ -36,7 +36,7 @@ class Membership(Base):
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True), nullable=False, default=now
     )
 
 
@@ -63,7 +63,7 @@ class OrgInvitation(Base):
         default=InvitationStatus.pending,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True), nullable=False, default=now
     )
 
 

@@ -7,7 +7,7 @@ from supabase_auth.errors import AuthApiError
 from app.auth.domain.service import login, logout, register
 from app.auth.tests.admin_helpers import admin_headers, delete_user
 from app.shared.config import get_settings
-from app.shared.supabase_client import get_supabase
+from app.shared.persistence.supabase import get_supabase
 
 
 def test_login_valid_credentials_returns_access_and_refresh_tokens(test_user):

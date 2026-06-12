@@ -8,8 +8,8 @@ from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.infra.context import get_current_org
-from app.shared.audit import enqueue_audit_log
-from app.shared.templates import templates
+from app.shared.observability.audit import record_audit_event
+from app.shared.http.templates import templates
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
 
@@ -60,7 +60,7 @@ async def add_todo(
 ):
     repo = TodoRepository(session)
     todo = await repo.add(uuid.UUID(current_user.id), org_id, title)
-    enqueue_audit_log(
+    record_audit_event(
         bg,
         level="info",
         event="todo.created",
@@ -113,7 +113,7 @@ async def delete_todo(
     todo = await repo.get(todo_id, org_id)
     if todo:
         await repo.delete(todo)
-        enqueue_audit_log(
+        record_audit_event(
             bg,
             level="info",
             event="todo.deleted",

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 from slowapi.errors import RateLimitExceeded
 
-from app.shared.limiter import limiter, rate_limit
+from app.shared.http.limiter import limiter, rate_limit
 
 
 @pytest_asyncio.fixture()

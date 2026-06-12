@@ -16,7 +16,7 @@ def _user_engine():
 
 
 @lru_cache
-def _service_engine():
+def _admin_engine():
     settings = get_settings()
     url = settings.database_url_service or settings.database_url
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
@@ -29,8 +29,8 @@ def _user_session_factory():
 
 
 @lru_cache
-def _service_session_factory():
-    return async_sessionmaker(_service_engine(), class_=AsyncSession, expire_on_commit=False)
+def _admin_session_factory():
+    return async_sessionmaker(_admin_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -38,6 +38,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def get_service_session() -> AsyncGenerator[AsyncSession, None]:
-    async with _service_session_factory()() as session:
+async def get_admin_session() -> AsyncGenerator[AsyncSession, None]:
+    async with _admin_session_factory()() as session:
         yield session

@@ -9,10 +9,10 @@ from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 from app.auth.domain.service import login, logout, register
 from app.auth.infra.cookies import set_auth_cookies
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.audit import enqueue_audit_log
-from app.shared.database import get_service_session
-from app.shared.limiter import rate_limit
-from app.shared.templates import templates
+from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import get_admin_session
+from app.shared.http.limiter import rate_limit
+from app.shared.http.templates import templates
 
 log = structlog.get_logger("labase.auth")
 
@@ -68,7 +68,7 @@ async def login_endpoint(
         resp.headers["HX-Redirect"] = "/dashboard"
         return resp
     except Exception:
-        enqueue_audit_log(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
+        record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -99,12 +99,12 @@ async def register_endpoint(
     bg: BackgroundTasks,
     email: str = Form(...),
     password: str = Form(...),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> Response:
     ip = request.client.host if request.client else None
     try:
         user_id_str = register(email, password)
-        org_repo = OrganizationRepository(service_session)
+        org_repo = OrganizationRepository(admin_session)
         await org_repo.create_with_owner(
             name=f"Organisation de {email}", auth_user_id=uuid.UUID(user_id_str)
         )

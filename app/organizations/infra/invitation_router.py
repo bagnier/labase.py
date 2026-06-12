@@ -11,9 +11,9 @@ from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.audit import enqueue_audit_log
-from app.shared.database import get_service_session
-from app.shared.templates import templates
+from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import get_admin_session
+from app.shared.http.templates import templates
 
 log = structlog.get_logger("labase.organizations.invitations")
 
@@ -28,9 +28,9 @@ def _wants_json(request: Request) -> bool:
 async def get_invitation(
     request: Request,
     token: uuid.UUID,
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ):
-    result = await service_session.execute(
+    result = await admin_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
         {"token": str(token)},
     )
@@ -67,7 +67,7 @@ async def get_invitation(
             status_code=404,
         )
     inv = dict(row)
-    repo = OrganizationRepository(service_session)
+    repo = OrganizationRepository(admin_session)
     org = await repo.get_by_id(inv["org_id"])
     org_name = org.name if org else ""
     if inv["status"] == "accepted":
@@ -95,10 +95,10 @@ async def accept_invitation(
     token: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
     rls_session: AsyncSession = Depends(get_rls_session),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ):
     # Resolve current invitation state (no membership required)
-    inv_result = await service_session.execute(
+    inv_result = await admin_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
         {"token": str(token)},
     )
@@ -144,7 +144,7 @@ async def accept_invitation(
     repo = OrganizationRepository(rls_session)
     org = await repo.get_by_id(inv["org_id"])
     slug = org.slug if org else ""
-    enqueue_audit_log(
+    record_audit_event(
         bg,
         level="info",
         event="org.member_joined",

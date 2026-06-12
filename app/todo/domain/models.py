@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.base import Base
-from app.shared.utils import utcnow
+from app.shared.persistence.base import Base
+from app.shared.clock import now
 
 
 class TodoItem(Base):
@@ -20,7 +20,7 @@ class TodoItem(Base):
     done: Mapped[bool] = mapped_column(default=False)
     position: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow
+        DateTime(timezone=True), nullable=False, default=now
     )
 
 

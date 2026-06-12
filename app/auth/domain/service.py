@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import structlog
 
-from app.shared.supabase_client import get_supabase
+from app.shared.persistence.supabase import get_supabase
 
 log = structlog.get_logger("labase.auth.service")
 

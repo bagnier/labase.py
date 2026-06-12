@@ -9,8 +9,8 @@ from app.auth.infra.security import get_current_user
 from app.organizations.infra.repository import OrganizationRepository
 from app.profile.domain.models import ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
-from app.shared.database import get_service_session, get_session
-from app.shared.templates import templates
+from app.shared.persistence.database import get_admin_session, get_session
+from app.shared.http.templates import templates
 
 router = APIRouter()
 
@@ -24,9 +24,9 @@ async def index(request: Request) -> HTMLResponse:
 async def dashboard(
     request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> HTMLResponse:
-    repo = OrganizationRepository(service_session)
+    repo = OrganizationRepository(admin_session)
     pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
     orgs = [org for org, _ in pairs]
     org_slug = orgs[0].slug if orgs else ""

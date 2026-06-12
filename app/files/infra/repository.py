@@ -4,16 +4,16 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.shared.clock as _clock
+
 from app.files.domain.models import OrgFile, OrgFileShareToken
-from app.shared.clock import Clock, SystemClock
 
 _SHARE_TOKEN_TTL_DAYS = 7
 
 
 class OrgFileRepository:
-    def __init__(self, session: AsyncSession, clock: Clock | None = None) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
-        self._clock: Clock = clock or SystemClock()
 
     async def list_for_org(self, org_id: uuid.UUID) -> list[OrgFile]:
         result = await self.session.execute(
@@ -39,7 +39,7 @@ class OrgFileRepository:
             content_type=content_type,
             size_bytes=size_bytes,
             uploader_email=uploader_email,
-            created_at=self._clock.now(),
+            created_at=_clock.now(),
         )
         self.session.add(org_file)
         await self.session.commit()
@@ -66,7 +66,7 @@ class OrgFileRepository:
     async def add_share_token(self, file_id: uuid.UUID) -> OrgFileShareToken:
         token = OrgFileShareToken(
             file_id=file_id,
-            expires_at=self._clock.now() + timedelta(days=_SHARE_TOKEN_TTL_DAYS),
+            expires_at=_clock.now() + timedelta(days=_SHARE_TOKEN_TTL_DAYS),
         )
         self.session.add(token)
         await self.session.commit()

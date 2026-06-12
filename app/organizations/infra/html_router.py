@@ -12,8 +12,8 @@ from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
 from app.organizations.infra.context import get_current_membership, get_current_org
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
-from app.shared.database import get_service_session
-from app.shared.templates import templates
+from app.shared.persistence.database import get_admin_session
+from app.shared.http.templates import templates
 
 router = APIRouter(tags=["organizations-html"])
 
@@ -76,7 +76,7 @@ async def org_members(
     request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
     org_id: uuid.UUID = Depends(get_current_org),
     membership=Depends(get_current_membership),
 ):
@@ -85,7 +85,7 @@ async def org_members(
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     raw_members = await repo.list_members(org_id)
-    emails = await resolve_emails(service_session, [m.auth_user_id for m in raw_members])
+    emails = await resolve_emails(admin_session, [m.auth_user_id for m in raw_members])
     members = [
         MemberRead(
             auth_user_id=m.auth_user_id,
@@ -125,7 +125,7 @@ async def create_invitation_html(
     email: str = Form(...),
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
     org_id: uuid.UUID = Depends(get_current_org),
     membership=Depends(get_current_membership),
 ):
@@ -136,7 +136,7 @@ async def create_invitation_html(
     link: str = ""
 
     try:
-        result = await service_session.execute(
+        result = await admin_session.execute(
             text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
             {"email": email},
         )

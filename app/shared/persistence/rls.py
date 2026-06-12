@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def bind_rls(session: AsyncSession, user_id: uuid.UUID) -> None:
+async def set_rls_context(session: AsyncSession, user_id: uuid.UUID) -> None:
     """Set session-level role + JWT claims so Postgres RLS policies see auth.uid()."""
     claims = json.dumps({"sub": str(user_id), "role": "authenticated"})
     conn = await session.connection()
@@ -15,7 +15,7 @@ async def bind_rls(session: AsyncSession, user_id: uuid.UUID) -> None:
     )
 
 
-async def reset_rls(session: AsyncSession) -> None:
+async def clear_rls_context(session: AsyncSession) -> None:
     """Reset role and claims before the connection is returned to the pool."""
     conn = await session.connection()
     await conn.execute(text("RESET role"))

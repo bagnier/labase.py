@@ -15,9 +15,11 @@ async def _insert_audit_log(
     ip: str | None,
     payload: dict[str, Any],
 ) -> None:
-    from app.shared.database import _service_session_factory  # local import avoids circular
+    from app.shared.persistence.database import (
+        _admin_session_factory,
+    )  # local import avoids circular
 
-    async with _service_session_factory()() as session:
+    async with _admin_session_factory()() as session:
         await session.execute(
             text(
                 "INSERT INTO public.audit_logs (level, event, user_id, ip, payload) "
@@ -34,7 +36,7 @@ async def _insert_audit_log(
         await session.commit()
 
 
-def enqueue_audit_log(
+def record_audit_event(
     bg: BackgroundTasks,
     *,
     level: str,

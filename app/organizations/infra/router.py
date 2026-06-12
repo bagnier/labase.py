@@ -17,8 +17,8 @@ from app.organizations.domain.models import (
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository, resolve_emails
-from app.shared.audit import enqueue_audit_log
-from app.shared.database import get_service_session
+from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import get_admin_session
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -69,14 +69,14 @@ async def list_members(
     org_id: uuid.UUID,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> list[MemberRead]:
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     members = await repo.list_members(org_id)
-    emails = await resolve_emails(service_session, [m.auth_user_id for m in members])
+    emails = await resolve_emails(admin_session, [m.auth_user_id for m in members])
     return [
         MemberRead(
             auth_user_id=m.auth_user_id,
@@ -99,7 +99,7 @@ async def update_member_role(
     body: UpdateRoleBody,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> MemberRead:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -112,7 +112,7 @@ async def update_member_role(
     membership = await repo.update_member_role(org_id, user_id, body.role)
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    emails = await resolve_emails(service_session, [membership.auth_user_id])
+    emails = await resolve_emails(admin_session, [membership.auth_user_id])
     return MemberRead(
         auth_user_id=membership.auth_user_id,
         email=emails.get(membership.auth_user_id, ""),
@@ -134,7 +134,7 @@ async def leave_organization(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    enqueue_audit_log(
+    record_audit_event(
         bg, level="info", event="org.member_left", user_id=current_user.id, org_id=str(org_id)
     )
 
@@ -157,7 +157,7 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    enqueue_audit_log(
+    record_audit_event(
         bg,
         level="info",
         event="org.member_removed",
@@ -180,7 +180,7 @@ async def create_invitation(
     bg: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
-    service_session: AsyncSession = Depends(get_service_session),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> InvitationRead:
     repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
@@ -190,7 +190,7 @@ async def create_invitation(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     # Check if already a member
-    result = await service_session.execute(
+    result = await admin_session.execute(
         text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
         {"email": body.email},
     )
@@ -208,7 +208,7 @@ async def create_invitation(
         role=OrgRole.member,
         invited_by=uuid.UUID(current_user.id),
     )
-    enqueue_audit_log(
+    record_audit_event(
         bg,
         level="info",
         event="org.invitation_sent",
