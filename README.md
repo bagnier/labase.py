@@ -13,7 +13,7 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 | **Auth + Storage**        | supabase-py                  | Official Supabase SDK, JWT stored in HTTPOnly cookie              |
 | **Database**              | Supabase (Postgres)          | Hosted DB, RLS, triggers, Storage, Auth built-in                  |
 | **Migrations**            | Supabase CLI (plain SQL)     | Versioned migrations, Studio integration, full control            |
-| **ASGI server**           | Uvicorn                      | De facto standard for FastAPI                                     |
+| **ASGI server**           | Hypercorn                    | ASGI server with HTTP/2 support                                   |
 | **Dependency management** | uv                           | Ultra-fast, lockfile, built-in Python version management          |
 | **Python**                | 3.14                         | Latest stable release                                             |
 
@@ -43,7 +43,7 @@ HTTP request
 **Coupling rules:**
 - `domain/` never imports from `infra/`
 - Contexts don't import each other directly — shared infrastructure goes through `app/shared/`
-- Exception: `auth/infra/security.py` (`get_current_user`) and `auth/infra/session.py` (`get_rls_session`) are the shared JWT guard / RLS-session dependencies, imported by other `infra/` routers
+- Exception: `shared/http/security.py` (`get_current_user`) and `auth/infra/session.py` (`get_rls_session`) are the shared JWT guard / RLS-session dependencies, imported by other `infra/` routers
 
 **Templates are colocated** — each context owns its Jinja2 templates under `<context>/templates/`. Shared layout lives in `app/shared/templates/`.
 
@@ -55,7 +55,7 @@ The `todo` bounded context is an intentional example. It demonstrates the full p
 
 ## Key design decisions
 
-**Real RLS security model (hybrid)** — two Postgres connection pools: a *user pool* (`DATABASE_URL`, role `authenticated`, RLS enforced) and a *service pool* (`DATABASE_URL_SERVICE`, role `postgres`, BYPASSRLS for migrations and admin jobs). Every authenticated HTTP request calls `bind_rls(session, user_id)` which issues `SET role authenticated` and injects the user's JWT claims via `set_config('request.jwt.claims', ...)`, enabling Postgres `auth.uid()` in all policies. The service connection is only used for registration (org creation) and org-resolution infrastructure — never for user data queries.
+**Real RLS security model (hybrid)** — two Postgres connection pools: a *user pool* (`DATABASE_URL`, role `authenticated`, RLS enforced) and a *service pool* (`DATABASE_URL_SERVICE`, role `postgres`, BYPASSRLS for migrations and admin jobs). Every authenticated HTTP request calls `set_rls_context(session, user_id)` which issues `SET role authenticated` and injects the user's JWT claims via `set_config('request.jwt.claims', ...)`, enabling Postgres `auth.uid()` in all policies. The service connection is only used for registration (org creation) and org-resolution infrastructure — never for user data queries.
 
 **Supabase as infrastructure layer** — supabase-py is limited to auth and storage. Business queries go through SQLAlchemy directly on Postgres, preserving flexibility (complex queries, transactions, pgvector…).
 
@@ -65,7 +65,7 @@ The `todo` bounded context is an intentional example. It demonstrates the full p
 
 **Dual-driver BDD tests** — Gherkin scenarios (`features/`) are written in functional business language and run against two drivers: an API driver (`httpx.AsyncClient`, fast, no browser) and a browser driver (Playwright Chromium). The same scenarios exercise both the HTTP layer and the real UI without duplicating test logic.
 
-**Front-end assets via npm** — `npm run build` does three things: copies `htmx.min.js` from `node_modules`, copies Inter font woff2 files into `static/fonts/`, and compiles `static/input.css` → `static/tailwind.css` via the Tailwind CLI. All output lands in `static/` and is committed. Re-run `make install` after any template change that adds new Tailwind classes. No CDN in production.
+**Front-end assets via npm** — `npm run build` does three things: copies `htmx.min.js` from `node_modules`, copies Inter font woff2 files into `static/fonts/`, and compiles `static/input.css` → `static/tailwind.css` via the Tailwind CLI. All output lands in `static/` and is **gitignored** — run `make install` to generate them. Re-run `make install` after any template change that adds new Tailwind classes. No CDN in production.
 
 ## Structure
 
@@ -75,13 +75,21 @@ labase.py/
 │   ├── main.py              # FastAPI app, router registration, 401 handler
 │   ├── shared/              # Cross-context infrastructure
 │   │   ├── config.py        # Settings (pydantic-settings, .env)
-│   │   ├── database.py      # Async engines (user + service) + sessions
-│   │   ├── base.py          # SQLAlchemy DeclarativeBase
-│   │   ├── rls.py           # bind_rls / reset_rls (injects JWT claims)
-│   │   ├── supabase_client.py  # supabase-py clients (anon + admin)
-│   │   ├── templates.py     # Jinja2 environment
 │   │   ├── clock.py         # now() — patched via module ref in tests
-│   │   ├── utils.py         # Shared helpers
+│   │   ├── persistence/     # DB layer
+│   │   │   ├── base.py      # SQLAlchemy DeclarativeBase
+│   │   │   ├── database.py  # Async engines (user + service) + sessions
+│   │   │   ├── rls.py       # set_rls_context (injects JWT claims)
+│   │   │   └── supabase.py  # supabase-py clients (anon + admin)
+│   │   ├── http/            # HTTP layer
+│   │   │   ├── security.py  # get_current_user (JWT decode)
+│   │   │   ├── templates.py # Jinja2 environment
+│   │   │   ├── exceptions.py
+│   │   │   └── limiter.py
+│   │   ├── observability/   # Logging, audit, request tracking
+│   │   │   ├── audit.py
+│   │   │   ├── logging.py
+│   │   │   └── request.py
 │   │   └── templates/       # base.html, macros, shared layouts
 │   ├── auth/                # Bounded context: authentication
 │   │   ├── domain/service.py
@@ -159,7 +167,7 @@ This runs `uv sync`, installs pre-commit hooks, copies `.env.example → .env` (
 
 ### Front-end assets
 
-`static/` is committed and served directly by Uvicorn. `make install` copies HTMX and Inter fonts from `node_modules` and compiles `static/input.css` → `static/tailwind.css` via Tailwind CLI.
+`static/` is gitignored and must be built before running the app. `make install` copies HTMX and Inter fonts from `node_modules` and compiles `static/input.css` → `static/tailwind.css` via Tailwind CLI.
 
 Re-run `make install` whenever you add a new Tailwind class (unused classes are purged) or upgrade a `package.json` dependency.
 
@@ -209,8 +217,6 @@ make db-reset     # wipe and replay all migrations from scratch
 
 ```bash
 make dev          # Supabase (host) + app via Docker Compose with hot-reload
-# or without Docker:
-make serve        # uvicorn on port 8002 with .env.test
 ```
 
 | Interface             | URL                        |
@@ -225,7 +231,6 @@ make dev          # Docker Compose in dev mode (hot-reload)
 make up           # Docker Compose in background
 make down         # Stop containers
 make logs         # App logs
-make serve        # uvicorn on port 8002 (test env, no Docker)
 
 make db-start     # Start local Supabase
 make db-stop      # Stop local Supabase

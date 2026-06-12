@@ -84,7 +84,7 @@
 
 - [x] Le gel d'horloge des tests est cassé pour la moitié des modules — les tests patchent _clock.now (late binding), mais todo, organizations et profile font from app.shared.clock import now (early binding) : le patch ne les atteint jamais. Seul files/repository.py utilise le bon style. À standardiser — et le README décrit un « Clock protocol (System/Fixed) » qui n'existe pas.
 
-- README en dérive sur 4 points — il annonce Uvicorn (c'est Hypercorn partout), une structure shared/ obsolète (base.py, rls.py, utils.py… déplacés dans persistence/http/observability), bind_rls (devenu set_rls_context), et « static/ is committed » (les artefacts sont gitignorés). Pour une base dont le README est le contrat, c'est coûteux.
+- [x] README en dérive sur 4 points — il annonce Uvicorn (c'est Hypercorn partout), une structure shared/ obsolète (base.py, rls.py, utils.py… déplacés dans persistence/http/observability), bind_rls (devenu set_rls_context), et « static/ is committed » (les artefacts sont gitignorés). Pour une base dont le README est le contrat, c'est coûteux.
 
 - make ci existe mais aucun workflow GitHub Actions — pour une base réutilisable, le pipeline CI est exactement le genre de boilerplate qu'elle doit fournir.
 
