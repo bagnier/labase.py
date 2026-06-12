@@ -62,7 +62,7 @@
 
 - [x] Le domain d'organizations dépend de l'infra et de FastAPI — service.py importe infra/repository et lève des HTTPException, en contradiction directe avec les deux règles affichées du README. Pour une base censée montrer le pattern, c'est le mauvais exemple à copier. (Accepter un protocole et lever des exceptions domaine suffit.)
 
-- [ ] Un seul flag debug pilote trois comportements de sécurité — cookies sans Secure (cookies.py), rate-limiting désactivé (limiter.py), niveau de log. Quelqu'un qui active DEBUG=true en prod pour diagnostiquer perd silencieusement le rate-limiting et les cookies sécurisés.
+- [x] Un seul flag debug pilote trois comportements de sécurité — cookies sans Secure (cookies.py), rate-limiting désactivé (limiter.py), niveau de log. Quelqu'un qui active DEBUG=true en prod pour diagnostiquer perd silencieusement le rate-limiting et les cookies sécurisés.
 
 - [ ] /health/ready renvoie str(e) (router.py:21) — fuite de détails internes (DSN, host) sur un endpoint non authentifié.
 

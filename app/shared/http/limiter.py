@@ -10,6 +10,6 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 def rate_limit(limit_string: str) -> Callable[[Any], Any]:
-    if get_settings().debug:
+    if not get_settings().rate_limit_enabled:
         return lambda f: f
     return limiter.limit(limit_string)  # type: ignore[return-value]

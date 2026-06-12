@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     database_url: str
     database_url_service: str = ""
     db_schema: str = "public"
-    debug: bool = False
+    log_debug: bool = False
+    cookies_secure: bool = True
+    rate_limit_enabled: bool = True
     cors_origins: list[str] = ["*"]
 
 

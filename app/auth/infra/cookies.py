@@ -6,7 +6,7 @@ _COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    secure = not get_settings().debug
+    secure = get_settings().cookies_secure
     response.set_cookie(
         "access_token",
         access_token,

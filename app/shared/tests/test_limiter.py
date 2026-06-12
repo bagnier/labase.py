@@ -42,7 +42,12 @@ async def test_rate_limit_blocks_excess_requests(rate_limited_client):
     assert r.json() == {"detail": "Too many requests"}
 
 
-def test_rate_limit_is_noop_in_debug_mode():
+def test_rate_limit_is_noop_when_disabled(monkeypatch):
+    from app.shared.config import get_settings
+
+    original = get_settings()
+    monkeypatch.setattr(original, "rate_limit_enabled", False)
+
     def dummy():
         pass
 

@@ -8,7 +8,7 @@ from app.shared.config import get_settings
 
 def setup_logging() -> None:
     settings = get_settings()
-    level = logging.DEBUG if settings.debug else logging.INFO
+    level = logging.DEBUG if settings.log_debug else logging.INFO
 
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
@@ -16,7 +16,7 @@ def setup_logging() -> None:
         structlog.processors.TimeStamper(fmt="iso"),
     ]
 
-    if settings.debug:
+    if settings.log_debug:
         renderer: structlog.types.Processor = structlog.dev.ConsoleRenderer()
     else:
         renderer = structlog.processors.JSONRenderer()
