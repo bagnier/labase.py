@@ -55,6 +55,17 @@
 - [ ] org dashboard
 - [ ] admin console
 
+### auth avancée
+
+- [ ] Mot de passe oublié (/auth/forgot-password + /auth/reset-password)
+- [ ] Changement de mot de passe (connecté) — POST /profile/password
+- [ ] Changement d'email — POST /profile/email + trigger SQL sync profiles.email
+- [ ] Suppression de compte — DELETE /profile + cascade + logout
+- [ ] Vérification email non confirmé — bloquer le login proprement si email_confirmed_at est null
+- [ ] Avatar — upload dans Supabase Storage, le pattern org_files est réutilisable directement
+- [ ] 2FA TOTP — Supabase Auth le gère nativement, juste câbler le flow UI
+- [ ] OAuth social login (Google, GitHub) — page de callback + merge avec compte email existant via auth.identities
+- [ ] Passkeys / WebAuthn — auth.webauthn_credentials est déjà dans le schema Supabase
 
 ### intégration possibles à Supabase
 
