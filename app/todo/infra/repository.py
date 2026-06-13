@@ -31,8 +31,8 @@ class TodoRepository:
         )
         return result.scalars().first()
 
-    async def toggle_done(self, todo: TodoItem) -> TodoItem:
-        todo.done = not todo.done
+    async def set_done(self, todo: TodoItem, done: bool) -> TodoItem:
+        todo.done = done
         self.session.add(todo)
 
         return todo
@@ -46,24 +46,24 @@ class TodoRepository:
     async def delete(self, todo: TodoItem) -> None:
         await self.session.delete(todo)
 
-    async def move_above(
-        self, org_id: uuid.UUID, todo_id: uuid.UUID, above_id: uuid.UUID | None
-    ) -> None:
-        result = await self.session.execute(
-            select(TodoItem).where(TodoItem.org_id == org_id).order_by(TodoItem.position)
-        )
-        items = list(result.scalars().all())
-        item_map = {t.id: t for t in items}
-        if todo_id not in item_map:
-            return
+    @staticmethod
+    def _reorder(
+        items: list[TodoItem], todo_id: uuid.UUID, above_id: uuid.UUID | None
+    ) -> list[TodoItem] | None:
+        todo = next((t for t in items if t.id == todo_id), None)
+        if todo is None:
+            return None
         ordered = [t for t in items if t.id != todo_id]
         if above_id is None:
-            ordered.append(item_map[todo_id])
+            ordered.append(todo)
         else:
-            if above_id not in item_map:
-                return
-            above_idx = next(i for i, t in enumerate(ordered) if t.id == above_id)
-            ordered.insert(above_idx, item_map[todo_id])
+            above_idx = next((i for i, t in enumerate(ordered) if t.id == above_id), None)
+            if above_idx is None:
+                return None
+            ordered.insert(above_idx, todo)
+        return ordered
+
+    async def _apply_positions(self, org_id: uuid.UUID, ordered: list[TodoItem]) -> None:
         new_positions = {item.id: pos for pos, item in enumerate(ordered)}
         await self.session.execute(
             update(TodoItem)
@@ -75,3 +75,15 @@ class TodoRepository:
                 )
             )
         )
+
+    async def move_above(
+        self, org_id: uuid.UUID, todo_id: uuid.UUID, above_id: uuid.UUID | None
+    ) -> None:
+        result = await self.session.execute(
+            select(TodoItem).where(TodoItem.org_id == org_id).order_by(TodoItem.position)
+        )
+        items = list(result.scalars().all())
+        ordered = self._reorder(items, todo_id, above_id)
+        if ordered is None:
+            return
+        await self._apply_positions(org_id, ordered)

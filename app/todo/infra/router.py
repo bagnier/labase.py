@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.shared.dependencies import CurrentOrg, CurrentUser, RlsSession
@@ -71,9 +71,11 @@ async def patch_todo(
 ):
     repo = TodoRepository(session)
     todo = await repo.get(todo_id, org_id)
-    if todo and done is not None and todo.done != done:
-        await repo.toggle_done(todo)
-    if todo and title is not None:
+    if todo is None:
+        raise HTTPException(404)
+    if done is not None:
+        await repo.set_done(todo, done)
+    if title is not None:
         await repo.set_title(todo, title)
     todos = await repo.list_for_org(org_id)
     return _render(request, current_user, todos)
