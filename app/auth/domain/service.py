@@ -4,7 +4,7 @@ import httpx
 import structlog
 
 from app.shared.config import get_settings
-from app.shared.persistence.supabase import make_auth_client
+from app.shared.persistence.supabase import get_user_supabase
 
 log = structlog.get_logger("labase.auth.service")
 
@@ -23,8 +23,8 @@ class AuthTokens:
 
 
 async def login(email: str, password: str) -> AuthTokens:
-    client = await make_auth_client()
-    auth = await client.auth.sign_in_with_password({"email": email, "password": password})
+    supabase = await get_user_supabase()
+    auth = await supabase.auth.sign_in_with_password({"email": email, "password": password})
     if auth.session is None:
         raise ValueError("No session returned")
     return AuthTokens(
@@ -49,8 +49,8 @@ async def logout(access_token: str) -> None:
 
 
 async def refresh_session(refresh_token: str) -> AuthTokens:
-    client = await make_auth_client()
-    auth = await client.auth.refresh_session(refresh_token)
+    supabase = await get_user_supabase()
+    auth = await supabase.auth.refresh_session(refresh_token)
     if auth.session is None:
         raise ValueError("Refresh failed")
     return AuthTokens(
@@ -61,8 +61,8 @@ async def refresh_session(refresh_token: str) -> AuthTokens:
 
 async def register(email: str, password: str) -> str:
     """Returns the new user's UUID (auth.users.id)."""
-    client = await make_auth_client()
-    res = await client.auth.sign_up({"email": email, "password": password})
+    supabase = await get_user_supabase()
+    res = await supabase.auth.sign_up({"email": email, "password": password})
     if res.user is None:
         raise ValueError("Registration failed: no user returned")
     return res.user.id

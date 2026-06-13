@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import register
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.persistence.supabase import get_supabase_admin
+from app.shared.persistence.supabase import get_admin_supabase
 
 log = structlog.get_logger("labase.registration")
 
@@ -22,6 +22,6 @@ async def register_user(email: str, password: str, session: AsyncSession) -> Non
         )
     except Exception:
         log.warning("registration.org_creation_failed_compensating", user_id=user_id_str)
-        admin = get_supabase_admin()
-        await asyncio.to_thread(admin.auth.admin.delete_user, user_id_str)
+        supabase = get_admin_supabase()
+        await asyncio.to_thread(supabase.auth.admin.delete_user, user_id_str)
         raise

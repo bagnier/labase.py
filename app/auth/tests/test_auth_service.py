@@ -5,7 +5,7 @@ from supabase_auth.errors import AuthApiError
 
 from app.auth.domain.service import login, logout, register
 from app.auth.tests.admin_helpers import delete_user, find_users
-from app.shared.persistence.supabase import get_supabase_admin
+from app.shared.persistence.supabase import get_admin_supabase
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,7 @@ async def test_register_existing_email_raises(test_user):
 async def test_login_returns_token_valid_for_get_user(test_user):
     email, password = test_user
     tokens = await login(email, password)
-    response = get_supabase_admin().auth.get_user(tokens.access_token)
+    response = get_admin_supabase().auth.get_user(tokens.access_token)
     assert response is not None
     user = response.user
     assert user is not None
@@ -70,4 +70,4 @@ async def test_logout_invalidates_token(test_user):
     tokens = await login(email, password)
     await logout(tokens.access_token)
     with pytest.raises(AuthApiError):
-        get_supabase_admin().auth.get_user(tokens.access_token)
+        get_admin_supabase().auth.get_user(tokens.access_token)

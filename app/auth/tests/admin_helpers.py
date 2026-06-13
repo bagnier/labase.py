@@ -2,7 +2,7 @@
 
 from supabase_auth.types import User
 
-from app.shared.persistence.supabase import get_supabase_admin
+from app.shared.persistence.supabase import get_admin_supabase
 
 
 def find_users(email: str) -> list[User]:
@@ -13,11 +13,11 @@ def find_users(email: str) -> list[User]:
     renvoyés vide auth.users — y compris des lignes FK-lockées par la
     transaction de test ouverte (DELETE bloqué, 504 Kong après 10s).
     """
-    admin = get_supabase_admin().auth.admin
+    supabase = get_admin_supabase().auth.admin
     found: list[User] = []
     page = 1
     while True:
-        users = admin.list_users(page=page, per_page=1000)
+        users = supabase.list_users(page=page, per_page=1000)
         found.extend(u for u in users if u.email == email)
         if len(users) < 1000:
             return found
@@ -30,7 +30,7 @@ def delete_user_if_exists(email: str) -> None:
 
 
 def create_user(email: str, password: str) -> str:
-    resp = get_supabase_admin().auth.admin.create_user(
+    resp = get_admin_supabase().auth.admin.create_user(
         {"email": email, "password": password, "email_confirm": True}
     )
     assert resp.user, f"create_user({email!r}) returned no user"
@@ -38,4 +38,4 @@ def create_user(email: str, password: str) -> str:
 
 
 def delete_user(uid: str) -> None:
-    get_supabase_admin().auth.admin.delete_user(uid)
+    get_admin_supabase().auth.admin.delete_user(uid)
