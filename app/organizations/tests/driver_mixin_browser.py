@@ -413,3 +413,16 @@ class OrgBrowserMixin(BrowserProtocol):
         body = last.json()
         detail = body.get("detail", "")
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
+
+    def view_org_dashboard(self) -> None:
+        slug = getattr(self, "_active_org_slug", "")
+        self._last_response = self._p.goto(f"{self._base_url}/{slug}/dashboard", wait_until="load")
+
+    def assert_org_dashboard_visible(self) -> None:
+        assert self._last_response is not None
+        assert self._last_response.status == 200, (
+            f"Expected 200 for org dashboard, got {self._last_response.status}"
+        )
+
+    def visit_org_dashboard_unauthenticated(self) -> None:
+        self._last_response = self._p.goto(f"{self._base_url}/any-org/dashboard", wait_until="load")

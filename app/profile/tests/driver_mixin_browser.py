@@ -31,3 +31,19 @@ class ProfileBrowserMixin(BrowserProtocol):
         self._p.goto(self._profile_url(), wait_until="load")
         disabled = self._p.locator("input[disabled]")
         assert disabled.count() >= 1, "Expected at least one disabled input on profile page"
+
+    def visit_profile_unauthenticated(self) -> None:
+        self._last_response = self._p.goto(self._profile_url(), wait_until="load")
+
+    def assert_link_to_org_dashboard(self) -> None:
+        assert self._p.query_selector("a[href*='/dashboard']") is not None, (
+            "No link to org dashboard found on profile"
+        )
+
+    def view_dashboard(self) -> None:
+        self._last_response = self._p.goto(self._profile_url(), wait_until="load")
+
+    def assert_link_to_todos(self) -> None:
+        assert self._p.query_selector("a[href*='/todos']") is not None, (
+            "No link to /todos found on dashboard"
+        )

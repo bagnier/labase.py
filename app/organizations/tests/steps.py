@@ -148,3 +148,18 @@ def step_assert_redirected_to_org_dashboard(driver):
 @then(parsers.parse('the action fails with error "{message}"'))
 def step_action_fails_with(driver, message):
     driver.assert_action_fails_with(message)
+
+
+@when("they try to access an org dashboard without signing in")
+def step_access_org_dashboard_unauthenticated(driver):
+    driver.visit_org_dashboard_unauthenticated()
+
+
+@when("they view their org dashboard")
+def step_view_org_dashboard(driver):
+    driver.view_org_dashboard()
+
+
+@then("the org dashboard is visible")
+def step_org_dashboard_visible(driver):
+    driver.assert_org_dashboard_visible()

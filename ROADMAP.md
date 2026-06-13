@@ -57,6 +57,7 @@
 
 ### auth avancée
 
+- [ ] @handle
 - [ ] Mot de passe oublié (/auth/forgot-password + /auth/reset-password)
 - [ ] Changement de mot de passe (connecté) — POST /profile/password
 - [ ] Changement d'email — POST /profile/email + trigger SQL sync profiles.email

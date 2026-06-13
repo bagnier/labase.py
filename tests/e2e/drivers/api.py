@@ -6,7 +6,7 @@ import httpx
 from sqlalchemy import delete
 
 from app.auth.tests.driver_mixin import AuthApiMixin
-from app.dashboard.tests.driver_mixin import DashboardApiMixin
+from app.console.tests.driver_mixin import ConsoleApiMixin
 from app.files.tests.driver_mixin import OrgFileApiMixin
 from app.main import app
 from app.organizations.domain.models import Organization
@@ -19,7 +19,7 @@ from tests.e2e.drivers.shared_mixin import SharedApiMixin
 
 class ApiDriver(
     AuthApiMixin,
-    DashboardApiMixin,
+    ConsoleApiMixin,
     ProfileApiMixin,
     TodoApiMixin,
     OrgFileApiMixin,

@@ -1,6 +1,26 @@
 from pytest_bdd import given, parsers, then, when
 
 
+@when("they try to access the profile without signing in")
+def step_access_profile_unauthenticated(driver):
+    driver.visit_profile_unauthenticated()
+
+
+@then("there is a link to their org dashboard")
+def step_link_to_org_dashboard(driver):
+    driver.assert_link_to_org_dashboard()
+
+
+@when("they view the dashboard")
+def step_view_dashboard(driver):
+    driver.view_dashboard()
+
+
+@then("there is a link to their todo list")
+def step_link_to_todos(driver):
+    driver.assert_link_to_todos()
+
+
 @given(parsers.parse('their display name is "{name}"'))
 def step_have_display_name(driver, name):
     driver.update_display_name(name)

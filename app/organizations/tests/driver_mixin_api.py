@@ -326,3 +326,16 @@ class OrgApiMixin(ApiProtocol):
         body = self._response.json()
         detail = body.get("detail", "")
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
+
+    def view_org_dashboard(self) -> None:
+        slug = getattr(self, "_active_org_slug", "")
+        self._response = self._run(self._c.get(f"/{slug}/dashboard"))
+
+    def assert_org_dashboard_visible(self) -> None:
+        assert self._response is not None
+        assert self._response.status_code == 200, (
+            f"Expected 200 for org dashboard, got {self._response.status_code}"
+        )
+
+    def visit_org_dashboard_unauthenticated(self) -> None:
+        self._response = self._run(self._c.get("/any-org/dashboard"))

@@ -23,3 +23,21 @@ class ProfileApiMixin(ApiProtocol):
         resp = self._run(self._c.get("/profile"))
         html = resp.text
         assert "disabled" in html, "Expected a disabled input field on the profile page"
+
+    def visit_profile_unauthenticated(self) -> None:
+        self._response = self._run(self._c.get("/profile"))
+
+    def assert_link_to_org_dashboard(self) -> None:
+        assert self._response is not None
+        slug = getattr(self, "_active_org_slug", "")
+        expected = f"/{slug}/dashboard"
+        assert expected in self._response.text, f"No link to {expected!r} found on profile"
+
+    def view_dashboard(self) -> None:
+        self._response = self._run(self._c.get("/profile"))
+
+    def assert_link_to_todos(self) -> None:
+        assert self._response is not None
+        slug = getattr(self, "_active_org_slug", "")
+        expected = f"/{slug}/todos"
+        assert expected in self._response.text, f"No link to {expected!r} found on dashboard"

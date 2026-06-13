@@ -39,7 +39,7 @@ def _render(request: Request, current_user: object, files: list) -> Response:
     return render_list(
         request,
         fragment="files/_list_fragment.html",
-        full="files/list.html",
+        full="files/files.html",
         items_key="files",
         schema=OrgFileRead,
         items=files,

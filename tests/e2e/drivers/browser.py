@@ -12,7 +12,7 @@ from pathlib import Path
 from playwright.sync_api import Page, Response, sync_playwright
 
 from app.auth.tests.driver_mixin import AuthBrowserMixin
-from app.dashboard.tests.driver_mixin import DashboardBrowserMixin
+from app.console.tests.driver_mixin import ConsoleBrowserMixin
 from app.files.tests.driver_mixin import OrgFileBrowserMixin
 from app.organizations.tests.driver_mixin import OrgBrowserMixin
 from app.profile.tests.driver_mixin import ProfileBrowserMixin
@@ -54,7 +54,7 @@ def _reap_stale_servers() -> None:
 
 class BrowserDriver(
     AuthBrowserMixin,
-    DashboardBrowserMixin,
+    ConsoleBrowserMixin,
     ProfileBrowserMixin,
     TodoBrowserMixin,
     OrgFileBrowserMixin,

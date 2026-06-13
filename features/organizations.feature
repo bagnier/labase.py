@@ -40,6 +40,18 @@ Feature: Organisation management
     When they rename the active organisation to "Hacked Name"
     Then the action is forbidden
 
+  # Access control
+
+  Scenario: The org dashboard requires authentication
+    Given the application is running
+    When they try to access an org dashboard without signing in
+    Then access is denied
+
+  Scenario: An authenticated member can view their org dashboard
+    Given a user is signed in
+    When they view their org dashboard
+    Then the org dashboard is visible
+
   # Navigate — dashboard as hub
 
   Scenario: Navigate to an organisation from the dashboard

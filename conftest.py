@@ -14,7 +14,7 @@ from tests.e2e.drivers.browser import BrowserDriver
 
 pytest_plugins = [
     "app.auth.tests.steps",
-    "app.dashboard.tests.steps",
+    "app.console.tests.steps",
     "app.profile.tests.steps",
     "app.todo.tests.steps",
     "app.files.tests.steps",
