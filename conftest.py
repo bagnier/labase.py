@@ -1,4 +1,7 @@
 import asyncio
+import os
+
+os.environ.setdefault("ENV_FILE", ".env.test")
 
 import pytest
 import pytest_asyncio

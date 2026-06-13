@@ -16,31 +16,22 @@ class TodoRepository:
         )
         return list(result.scalars().all())
 
-    async def add(self, user_id: uuid.UUID, org_id: uuid.UUID, title: str) -> TodoItem:
-        await self.session.execute(
-            update(TodoItem).where(TodoItem.org_id == org_id).values(position=TodoItem.position + 1)
-        )
-        todo = TodoItem(user_id=user_id, org_id=org_id, title=title, position=0)
-        self.session.add(todo)
-        await self.session.flush()
-        return todo
-
     async def get(self, todo_id: uuid.UUID, org_id: uuid.UUID) -> TodoItem | None:
         result = await self.session.execute(
             select(TodoItem).where(TodoItem.id == todo_id, TodoItem.org_id == org_id)
         )
         return result.scalars().first()
 
-    async def set_done(self, todo: TodoItem, done: bool) -> TodoItem:
-        todo.done = done
+    async def add(self, user_id: uuid.UUID, org_id: uuid.UUID, title: str) -> TodoItem:
+        await self.session.execute(
+            update(TodoItem).where(TodoItem.org_id == org_id).values(position=TodoItem.position + 1)
+        )
+        todo = TodoItem(user_id=user_id, org_id=org_id, title=title, position=0)
+        return await self.save(todo)
+
+    async def save(self, todo: TodoItem) -> TodoItem:
         self.session.add(todo)
-
-        return todo
-
-    async def set_title(self, todo: TodoItem, title: str) -> TodoItem:
-        todo.title = title
-        self.session.add(todo)
-
+        await self.session.flush()
         return todo
 
     async def delete(self, todo: TodoItem) -> None:

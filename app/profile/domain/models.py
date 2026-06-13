@@ -20,8 +20,11 @@ class Profile(Base):
     auth_user_id: Mapped[uuid.UUID]
     email: Mapped[str] = mapped_column(String)
     display_name: Mapped[str | None]
+    version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class ProfileCreate(BaseModel):

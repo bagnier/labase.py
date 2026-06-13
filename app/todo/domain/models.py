@@ -18,9 +18,10 @@ class TodoItem(Base):
     title: Mapped[str]
     done: Mapped[bool] = mapped_column(default=False)
     position: Mapped[int] = mapped_column(default=0)
-    created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=clock.now
-    )
+    version: Mapped[int] = mapped_column(default=1)
+
+    __mapper_args__ = {"version_id_col": version}
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
 
 
 class TodoCreate(BaseModel):

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.shared import clock
 from app.shared.persistence.base import Base
 
 
@@ -19,9 +20,11 @@ class OrgFile(Base):
     content_type: Mapped[str] = mapped_column(String, default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(default=0)
     uploader_email: Mapped[str] = mapped_column(String, default="")
-    created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=None
-    )
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class OrgFileShareToken(Base):

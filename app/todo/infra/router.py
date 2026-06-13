@@ -74,9 +74,10 @@ async def patch_todo(
     if todo is None:
         raise HTTPException(404)
     if done is not None:
-        await repo.set_done(todo, done)
+        todo.done = done
     if title is not None:
-        await repo.set_title(todo, title)
+        todo.title = title
+    await repo.save(todo)
     todos = await repo.list_for_org(org_id)
     return _render(request, current_user, todos)
 

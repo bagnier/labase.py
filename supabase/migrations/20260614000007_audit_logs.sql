@@ -8,10 +8,9 @@ create table public.audit_logs (
   payload    jsonb
 );
 
--- Seul le rôle service (postgres / service_role) peut écrire ; les users ne lisent pas leurs propres logs.
+-- append-only via service_role — no GRANT to authenticated intentional
 alter table public.audit_logs enable row level security;
 
--- Index pour les requêtes courantes depuis le dashboard
 create index audit_logs_created_at_idx on public.audit_logs (created_at desc);
 create index audit_logs_event_idx      on public.audit_logs (event);
 create index audit_logs_user_id_idx    on public.audit_logs (user_id) where user_id is not null;

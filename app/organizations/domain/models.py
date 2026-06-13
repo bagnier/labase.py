@@ -22,9 +22,11 @@ class Organization(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str]
     slug: Mapped[str] = mapped_column(default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=clock.now
-    )
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class Membership(Base):
@@ -35,9 +37,11 @@ class Membership(Base):
     role: Mapped[OrgRole] = mapped_column(
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=clock.now
-    )
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class InvitationStatus(StrEnum):
@@ -56,15 +60,17 @@ class OrgInvitation(Base):
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
     token: Mapped[uuid.UUID] = mapped_column(default=uuid.uuid4, unique=True)
-    invited_by: Mapped[uuid.UUID]
+    invited_by: Mapped[uuid.UUID | None]
     status: Mapped[InvitationStatus] = mapped_column(
         SAEnum(InvitationStatus, name="invitation_status", create_type=False),
         nullable=False,
         default=InvitationStatus.pending,
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=clock.now
-    )
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class InvitationRead(BaseModel):
