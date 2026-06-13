@@ -2,14 +2,13 @@ import uuid
 
 from fastapi import APIRouter, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import text
 
+from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
 from app.organizations.domain.exceptions import PendingInvitationExists
 from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
-from app.organizations.infra.repository import OrganizationRepository, resolve_emails
+from app.organizations.infra.repository import OrganizationRepository
 from app.shared.dependencies import (
-    AdminSession,
     CurrentMembership,
     CurrentOrg,
     CurrentUser,
@@ -101,7 +100,6 @@ async def org_members(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
-    admin_session: AdminSession,
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ):
@@ -110,7 +108,7 @@ async def org_members(
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     raw_members = await repo.list_members(org_id)
-    emails = await resolve_emails(admin_session, [m.auth_user_id for m in raw_members])
+    emails = await resolve_user_emails([m.auth_user_id for m in raw_members])
     members = [
         MemberRead(
             auth_user_id=m.auth_user_id,
@@ -149,7 +147,6 @@ async def create_invitation_html(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
-    admin_session: AdminSession,
     org_id: CurrentOrg,
     membership: CurrentMembership,
     email: str = Form(...),
@@ -160,14 +157,10 @@ async def create_invitation_html(
     error: str | None = None
     link: str = ""
 
-    result = await admin_session.execute(
-        text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
-        {"email": email},
-    )
-    existing_user = result.first()
-    if existing_user is not None:
+    existing_user_id = await find_user_id_by_email(email)
+    if existing_user_id is not None:
         existing_membership = await OrganizationRepository(session).get_membership(
-            org_id, existing_user.id
+            org_id, existing_user_id
         )
         if existing_membership is not None:
             error = "already a member"

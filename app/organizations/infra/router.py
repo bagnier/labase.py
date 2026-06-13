@@ -3,8 +3,8 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import text
 
+from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
 from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
 from app.organizations.domain.models import (
     InvitationRead,
@@ -13,8 +13,8 @@ from app.organizations.domain.models import (
     OrgRole,
 )
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
-from app.organizations.infra.repository import OrganizationRepository, resolve_emails
-from app.shared.dependencies import AdminSession, CurrentUser, OwnerMembership, RlsSession
+from app.organizations.infra.repository import OrganizationRepository
+from app.shared.dependencies import CurrentUser, OwnerMembership, RlsSession
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -61,14 +61,13 @@ async def list_members(
     org_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
-    admin_session: AdminSession,
 ) -> list[MemberRead]:
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     members = await repo.list_members(org_id)
-    emails = await resolve_emails(admin_session, [m.auth_user_id for m in members])
+    emails = await resolve_user_emails([m.auth_user_id for m in members])
     return [
         MemberRead(
             auth_user_id=m.auth_user_id,
@@ -91,7 +90,6 @@ async def update_member_role(
     body: UpdateRoleBody,
     _: OwnerMembership,
     session: RlsSession,
-    admin_session: AdminSession,
 ) -> MemberRead:
     repo = OrganizationRepository(session)
     if body.role != OrgRole.owner:
@@ -102,7 +100,7 @@ async def update_member_role(
     membership = await repo.update_member_role(org_id, user_id, body.role)
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    emails = await resolve_emails(admin_session, [membership.auth_user_id])
+    emails = await resolve_user_emails([membership.auth_user_id])
     return MemberRead(
         auth_user_id=membership.auth_user_id,
         email=emails.get(membership.auth_user_id, ""),
@@ -173,17 +171,11 @@ async def create_invitation(
     current_user: CurrentUser,
     _: OwnerMembership,
     session: RlsSession,
-    admin_session: AdminSession,
 ) -> InvitationRead:
     repo = OrganizationRepository(session)
-    # Check if already a member
-    result = await admin_session.execute(
-        text("SELECT id FROM auth.users WHERE lower(email) = lower(:email)"),
-        {"email": body.email},
-    )
-    existing_user = result.first()
-    if existing_user is not None:
-        existing_membership = await repo.get_membership(org_id, existing_user.id)
+    existing_user_id = await find_user_id_by_email(body.email)
+    if existing_user_id is not None:
+        existing_membership = await repo.get_membership(org_id, existing_user_id)
         if existing_membership is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already a member")
 

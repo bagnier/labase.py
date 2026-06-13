@@ -1,7 +1,7 @@
 import re
 import uuid
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.organizations.domain.models import (
@@ -11,16 +11,6 @@ from app.organizations.domain.models import (
     OrgInvitation,
     OrgRole,
 )
-
-
-async def resolve_emails(session: AsyncSession, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
-    if not user_ids:
-        return {}
-    result = await session.execute(
-        text("SELECT id, email FROM auth.users WHERE id = ANY(:ids)"),
-        {"ids": [str(uid) for uid in user_ids]},
-    )
-    return {uuid.UUID(str(row.id)): row.email for row in result}
 
 
 def _slugify(name: str) -> str:
