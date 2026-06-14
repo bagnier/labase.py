@@ -19,21 +19,24 @@ async def _insert_audit_log(
         _admin_session_factory,
     )  # local import avoids circular
 
-    async with _admin_session_factory()() as session:
-        await session.execute(
-            text(
-                "INSERT INTO public.audit_logs (level, event, user_id, ip, payload) "
-                "VALUES (:level, :event, CAST(:user_id AS uuid), :ip, CAST(:payload AS jsonb))"
-            ),
-            {
-                "level": level,
-                "event": event,
-                "user_id": user_id,
-                "ip": ip,
-                "payload": json.dumps(payload) if payload else None,
-            },
-        )
-        await session.commit()
+    try:
+        async with _admin_session_factory()() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO public.audit_logs (level, event, user_id, ip, payload) "
+                    "VALUES (:level, :event, CAST(:user_id AS uuid), :ip, CAST(:payload AS jsonb))"
+                ),
+                {
+                    "level": level,
+                    "event": event,
+                    "user_id": user_id,
+                    "ip": ip,
+                    "payload": json.dumps(payload) if payload else None,
+                },
+            )
+            await session.commit()
+    except Exception:
+        log.warning("audit.write_failed", event=event, user_id=user_id)
 
 
 def record_audit_event(
