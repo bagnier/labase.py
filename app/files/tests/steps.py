@@ -142,6 +142,16 @@ def step_action_rejected(driver):
     driver.assert_action_rejected()
 
 
+@when(parsers.parse('they upload a file with filename "{filename}"'))
+def step_upload_raw_filename(driver, filename):
+    driver.upload_file_with_raw_filename(filename)
+
+
+@then(parsers.parse("the upload is rejected with status {status:d}"))
+def step_upload_rejected_with_status(driver, status):
+    driver.assert_upload_rejected(status)
+
+
 @then(parsers.parse('"{filename}" still appears in the file list'))
 def step_assert_file_still_visible(driver, filename):
     driver.assert_file_visible(filename)

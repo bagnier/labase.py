@@ -133,6 +133,20 @@ class OrgFileApiMixin(ApiProtocol):
     def have_uploaded_file(self, filename: str) -> None:
         self.upload_file(filename)
 
+    def upload_file_with_raw_filename(self, filename: str) -> None:
+        self._response = self._run(
+            self._c.post(
+                self._org_url("/files"),
+                files={"file": (filename, b"content", "application/octet-stream")},
+            )
+        )
+
+    def assert_upload_rejected(self, status: int) -> None:
+        assert self._response is not None
+        assert self._response.status_code == status, (
+            f"Expected {status}, got {self._response.status_code}: {self._response.text}"
+        )
+
     def upload_oversized_file(self, size_mb: int) -> None:
         content = b"\x00" * (size_mb * 1024 * 1024)
         self._response = self._run(

@@ -17,6 +17,14 @@ Feature: Org file storage
     When they upload a file of 51 MB to the org
     Then the action is rejected
 
+  Scenario: Upload is rejected for a filename with path traversal
+    When they upload a file with filename "../../../etc/passwd"
+    Then the upload is rejected with status 400
+
+  Scenario: Upload with XSS characters in filename is sanitized and succeeds
+    When they upload a file with filename "<img onerror=alert(1)>.txt"
+    Then "_img onerror=alert(1)_.txt" appears in the file list
+
   # List
 
   Scenario: File list shows all members' files with metadata

@@ -295,6 +295,25 @@ class OrgFileBrowserMixin(BrowserProtocol):
             f"Expected 413 or 422, got {self._last_response.status}"
         )
 
+    def upload_file_with_raw_filename(self, filename: str) -> None:
+        assert self._context
+        self._last_response = self._context.request.post(
+            self._files_url(),
+            multipart={
+                "file": {
+                    "name": filename,
+                    "mimeType": "application/octet-stream",
+                    "buffer": b"content",
+                }
+            },
+        )
+
+    def assert_upload_rejected(self, status: int) -> None:
+        assert self._last_response is not None
+        assert self._last_response.status == status, (
+            f"Expected {status}, got {self._last_response.status}: {self._last_response.text()}"
+        )
+
     def assert_file_metadata(self, filename: str, size: str, email: str, date: str) -> None:
         self._goto_files()
         for row in self._dom_file_rows():

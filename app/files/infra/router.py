@@ -1,9 +1,11 @@
+import re
 import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
+from storage3.exceptions import StorageApiError
 
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
@@ -26,6 +28,19 @@ from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])
+
+_UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _sanitize_filename(name: str) -> str:
+    name = name.strip()
+    if not name or ".." in name.split("/")[0] or "/" in name or "\\" in name:
+        raise ValueError("Invalid filename")
+    cleaned = _UNSAFE_FILENAME.sub("_", name)
+    if not cleaned or cleaned.lstrip(".") == "":
+        raise ValueError("Invalid filename")
+    return cleaned
+
 
 _MAX_SIZE_BYTES = 50 * 1024 * 1024
 _SIGNED_URL_TTL = 60
@@ -74,17 +89,29 @@ async def upload_file(
             return JSONResponse({"detail": "File too large"}, status_code=413)
         return HTMLResponse("File too large", status_code=413)
 
+    try:
+        safe_name = _sanitize_filename(file.filename or "upload")
+    except ValueError:
+        if "application/json" in request.headers.get("accept", ""):
+            return JSONResponse({"detail": "Invalid filename"}, status_code=400)
+        return HTMLResponse("Invalid filename", status_code=400)
+
     file_id = uuid.uuid4()
-    path = storage_path(org_id, file_id, file.filename or "upload")
+    path = storage_path(org_id, file_id, safe_name)
     content_type = file.content_type or "application/octet-stream"
 
     storage = user_storage_client(current_user.access_token)
-    await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
+    try:
+        await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
+    except StorageApiError as exc:
+        if "application/json" in request.headers.get("accept", ""):
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        return HTMLResponse(f"Upload rejected: {exc}", status_code=400)
 
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.add(
         user_id=uuid.UUID(current_user.id),
-        filename=file.filename or "upload",
+        filename=safe_name,
         storage_path=path,
         content_type=content_type,
         size_bytes=len(content),
