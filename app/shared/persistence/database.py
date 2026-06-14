@@ -34,7 +34,7 @@ def _make_session_factory(engine_fn):
 
 
 _user_session_factory = _make_session_factory(_user_engine)
-_admin_session_factory = _make_session_factory(_admin_engine)
+admin_session_factory = _make_session_factory(_admin_engine)
 
 
 @asynccontextmanager
@@ -71,5 +71,5 @@ async def get_user_session(request: Request) -> AsyncGenerator[AsyncSession]:
 
 
 async def get_admin_session(request: Request) -> AsyncGenerator[AsyncSession]:
-    async for session in _session(_admin_session_factory, request):
+    async for session in _session(admin_session_factory, request):
         yield session

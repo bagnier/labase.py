@@ -13,7 +13,7 @@
 
   <div>
     <h1 class="text-lg font-semibold text-gray-900">Overview</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Welcome, {{ user.email }}</p>
+    <p class="text-sm text-gray-500 mt-0.5">Welcome, {{ display_name or user.email }}</p>
   </div>
 
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">

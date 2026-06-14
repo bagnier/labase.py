@@ -7,7 +7,7 @@ from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from app.main import app
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.tests.admin_helpers import add_membership, set_membership_role
-from app.shared.persistence.database import _admin_session_factory
+from app.shared.persistence.database import admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
 _PASSWORD = "Secret1!"
@@ -108,7 +108,7 @@ class OrgFileApiMixin(ApiProtocol):
         self.track_auth_email(email)
 
         async def _create_org() -> tuple[str, str]:
-            async with _admin_session_factory()() as session:
+            async with admin_session_factory()() as session:
                 repo = OrganizationRepository(session)
                 org = await repo.create_with_owner(
                     name=org_name, auth_user_id=uuid.UUID(user_id_str)

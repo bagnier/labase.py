@@ -4,7 +4,7 @@ import tests.db as db
 from app.auth.tests.admin_helpers import create_user as _admin_create
 from app.organizations.domain.models import Membership, OrgRole
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.persistence.database import _admin_session_factory
+from app.shared.persistence.database import admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
 _PASSWORD = "Secret1!"
@@ -65,7 +65,7 @@ class OrgApiMixin(ApiProtocol):
         member_uid = uuid.UUID(self._user_id_for_email(email))
 
         async def _setup() -> str:
-            async with _admin_session_factory()() as session:
+            async with admin_session_factory()() as session:
                 repo = OrganizationRepository(session)
                 org = await repo.create_with_owner(name=org_name, auth_user_id=owner_uid)
                 session.add(Membership(org_id=org.id, auth_user_id=member_uid, role=OrgRole.member))

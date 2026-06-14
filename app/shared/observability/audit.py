@@ -16,11 +16,11 @@ async def _insert_audit_log(
     payload: dict[str, Any],
 ) -> None:
     from app.shared.persistence.database import (
-        _admin_session_factory,
+        admin_session_factory,
     )  # local import avoids circular
 
     try:
-        async with _admin_session_factory()() as session:
+        async with admin_session_factory()() as session:
             await session.execute(
                 text(
                     "INSERT INTO public.audit_logs (level, event, user_id, ip, payload) "

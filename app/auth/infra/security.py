@@ -17,7 +17,7 @@ def _jwks_client() -> jwt.PyJWKClient:
     return jwt.PyJWKClient(jwks_uri)
 
 
-def _decode(token: str) -> dict:
+def decode_jwt(token: str) -> dict:
     signing_key = _jwks_client().get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
@@ -35,7 +35,7 @@ async def get_current_user(
     if not access_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = _decode(access_token)
+        payload = decode_jwt(access_token)
     except jwt.ExpiredSignatureError:
         if not refresh_token:
             raise HTTPException(
@@ -50,7 +50,7 @@ async def get_current_user(
             ) from exc
         set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
         access_token = tokens.access_token
-        payload = _decode(access_token)
+        payload = decode_jwt(access_token)
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"

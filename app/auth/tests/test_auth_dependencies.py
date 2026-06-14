@@ -73,7 +73,7 @@ async def test_expired_token_with_valid_refresh_returns_200_and_sets_new_cookies
 
     with (
         patch(
-            "app.auth.infra.security._decode",
+            "app.auth.infra.security.decode_jwt",
             side_effect=[jwt.ExpiredSignatureError, {"sub": "user-id", "email": email}],
         ),
         patch("app.auth.infra.security.refresh_session", return_value=fake_new_tokens),
@@ -90,7 +90,7 @@ async def test_expired_token_with_valid_refresh_returns_200_and_sets_new_cookies
 async def test_expired_token_without_refresh_returns_401(client):
     client.cookies.set("access_token", "expired.token.value")
 
-    with patch("app.auth.infra.security._decode", side_effect=jwt.ExpiredSignatureError):
+    with patch("app.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError):
         response = await client.get("/me")
 
     assert response.status_code == 401
@@ -119,7 +119,7 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
     client.cookies.set("refresh_token", "invalid.refresh.token")
 
     with (
-        patch("app.auth.infra.security._decode", side_effect=jwt.ExpiredSignatureError),
+        patch("app.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
         patch("app.auth.infra.security.refresh_session", side_effect=ValueError("Refresh failed")),
     ):
         response = await client.get("/me")

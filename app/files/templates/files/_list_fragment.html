@@ -10,7 +10,7 @@
         {{ f.filename }}
       </a>
       <span class="file-meta text-xs text-gray-400">
-        {{ f.content_type }} &middot; {{ (f.size_bytes / 1024) | round | int }} KB &middot; {{ f.created_at.strftime('%Y-%m-%d') }} &middot; {{ f.uploader_email }}
+        {{ (f.size_bytes / 1024) | round | int }} KB &middot; {{ f.created_at.strftime('%Y-%m-%d') }} &middot; {{ f.uploader_email }}
       </span>
     </span>
     <button data-delete-id="{{ f.id }}"

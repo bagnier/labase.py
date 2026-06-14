@@ -13,7 +13,7 @@ from app.main import app
 from app.organizations.domain.models import Organization
 from app.organizations.tests.driver_mixin import OrgApiMixin
 from app.profile.tests.driver_mixin import ProfileApiMixin
-from app.shared.persistence.database import _admin_session_factory
+from app.shared.persistence.database import admin_session_factory
 from app.todo.tests.driver_mixin import TodoApiMixin
 from tests.e2e.drivers.shared_mixin import SharedApiMixin
 
@@ -87,7 +87,7 @@ class ApiDriver(
             return
 
         async def _delete():
-            async with _admin_session_factory()() as session, session.begin():
+            async with admin_session_factory()() as session, session.begin():
                 await session.execute(
                     delete(Organization).where(
                         Organization.id.in_([uuid.UUID(oid) for oid in self._test_org_ids])
