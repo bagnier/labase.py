@@ -32,6 +32,7 @@ _AUTH_ERROR_MESSAGES: dict[str, str] = {
     "email_address_not_authorized": "This email address is not authorized.",
     "signup_disabled": "Sign-ups are disabled.",
     "invalid_email": "Invalid email address.",
+    "email_not_confirmed": "Please verify your email before signing in.",
 }
 
 
@@ -65,12 +66,14 @@ async def login_endpoint(
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         resp.headers["HX-Redirect"] = "/profile"
         return resp
-    except AuthApiError:
+    except AuthApiError as e:
         record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
+        code = str(e.code) if e.code else ""
+        error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Invalid email or password"},
+            {"error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
     except Exception:

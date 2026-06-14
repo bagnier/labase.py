@@ -5,10 +5,10 @@ import pytest
 import pytest_asyncio
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
+from supabase_auth.errors import AuthApiError
 
 from app.auth.domain.service import AuthenticatedUser, AuthTokens, login
 from app.auth.infra.security import get_current_user
-from app.main import app as main_app
 
 _app = FastAPI()
 
@@ -96,22 +96,20 @@ async def test_expired_token_without_refresh_returns_401(client):
     assert response.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_profile_browser_redirect_to_login_when_unauthenticated():
-    async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
-        response = await c.get(
+def test_profile_browser_redirect_to_login_when_unauthenticated(driver):
+    response = driver._run(
+        driver._c.get(
             "/profile",
             headers={"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"},
             follow_redirects=False,
         )
+    )
     assert response.status_code == 302
     assert response.headers["location"] == "/auth/login"
 
 
-@pytest.mark.asyncio
-async def test_profile_api_client_still_gets_401_when_unauthenticated():
-    async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
-        response = await c.get("/profile", follow_redirects=False)
+def test_profile_api_client_still_gets_401_when_unauthenticated(driver):
+    response = driver._run(driver._c.get("/profile", follow_redirects=False))
     assert response.status_code == 401
 
 
@@ -129,26 +127,40 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
     assert response.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_login_unexpected_exception_returns_503():
-    async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
-        with patch("app.auth.infra.router.login", side_effect=RuntimeError("unexpected")):
-            response = await c.post(
-                "/auth/login",
-                data={"email": "x@test.local", "password": "pw"},
-            )
+def test_login_unexpected_exception_returns_503(driver):
+    with patch("app.auth.infra.router.login", side_effect=RuntimeError("unexpected")):
+        response = driver._run(
+            driver._c.post("/auth/login", data={"email": "x@test.local", "password": "pw"})
+        )
     assert response.status_code == 503
     assert "system error" in response.text.lower()
 
 
-@pytest.mark.asyncio
-async def test_register_unexpected_exception_returns_400():
-    async with AsyncClient(transport=ASGITransport(app=main_app), base_url="http://test") as c:
-        with patch("app.auth.infra.router.register_user", side_effect=RuntimeError("unexpected")):
-            response = await c.post(
-                "/auth/register",
-                data={"email": "x@test.local", "password": "pw"},
-            )
+def test_login_email_not_confirmed_returns_401_with_message(driver):
+    err = AuthApiError("Email not confirmed", 400, "email_not_confirmed")
+    with patch("app.auth.infra.router.login", side_effect=err):
+        response = driver._run(
+            driver._c.post("/auth/login", data={"email": "x@test.local", "password": "pw"})
+        )
+    assert response.status_code == 401
+    assert "verify your email" in response.text.lower()
+
+
+def test_login_wrong_password_returns_401_with_generic_message(driver):
+    err = AuthApiError("Invalid login credentials", 400, "invalid_credentials")
+    with patch("app.auth.infra.router.login", side_effect=err):
+        response = driver._run(
+            driver._c.post("/auth/login", data={"email": "x@test.local", "password": "pw"})
+        )
+    assert response.status_code == 401
+    assert "invalid email or password" in response.text.lower()
+
+
+def test_register_unexpected_exception_returns_400(driver):
+    with patch("app.auth.infra.router.register_user", side_effect=RuntimeError("unexpected")):
+        response = driver._run(
+            driver._c.post("/auth/register", data={"email": "x@test.local", "password": "pw"})
+        )
     assert response.status_code == 400
     assert "unexpected error" in response.text.lower()
 

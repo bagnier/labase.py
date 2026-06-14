@@ -1,12 +1,8 @@
 """Tests for invitation_router.py branches not covered by BDD scenarios."""
 
 import uuid
-from datetime import UTC
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
@@ -42,41 +38,34 @@ def _mock_user(user_id: str = "00000000-0000-0000-0000-000000000001"):
     return _override
 
 
-@pytest_asyncio.fixture()
-async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
-
-
 # ── GET /invitations/{token} ──────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_get_invitation_unknown_token_html_returns_invalid_state(client):
+def test_get_invitation_unknown_token_html_returns_invalid_state(driver):
     token = uuid.uuid4()
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=None)
     try:
-        resp = await client.get(f"/invitations/{token}", headers={"accept": "text/html"})
+        resp = driver._run(driver._c.get(f"/invitations/{token}", headers={"accept": "text/html"}))
         assert resp.status_code == 404
         assert "invalid" in resp.text.lower()
     finally:
         app.dependency_overrides.pop(get_admin_session, None)
 
 
-@pytest.mark.asyncio
-async def test_get_invitation_unknown_token_json_returns_404(client):
+def test_get_invitation_unknown_token_json_returns_404(driver):
     token = uuid.uuid4()
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=None)
     try:
-        resp = await client.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        resp = driver._run(
+            driver._c.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        )
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
     finally:
         app.dependency_overrides.pop(get_admin_session, None)
 
 
-@pytest.mark.asyncio
-async def test_get_invitation_revoked_json_returns_404(client):
+def test_get_invitation_revoked_json_returns_404(driver):
     token = uuid.uuid4()
     fake_row = {
         "id": uuid.uuid4(),
@@ -89,19 +78,18 @@ async def test_get_invitation_revoked_json_returns_404(client):
     }
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     try:
-        resp = await client.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        resp = driver._run(
+            driver._c.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        )
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
     finally:
         app.dependency_overrides.pop(get_admin_session, None)
 
 
-@pytest.mark.asyncio
-async def test_get_invitation_valid_json_returns_invitation(client):
+def test_get_invitation_valid_json_returns_invitation(driver):
     token = uuid.uuid4()
     org_id = uuid.uuid4()
-    from datetime import datetime
-
     fake_row = {
         "id": uuid.uuid4(),
         "org_id": org_id,
@@ -113,7 +101,9 @@ async def test_get_invitation_valid_json_returns_invitation(client):
     }
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     try:
-        resp = await client.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        resp = driver._run(
+            driver._c.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "pending"
@@ -122,8 +112,7 @@ async def test_get_invitation_valid_json_returns_invitation(client):
         app.dependency_overrides.pop(get_admin_session, None)
 
 
-@pytest.mark.asyncio
-async def test_get_invitation_already_accepted_html_shows_state(client):
+def test_get_invitation_already_accepted_html_shows_state(driver):
     token = uuid.uuid4()
     org_id = uuid.uuid4()
     fake_row = {
@@ -146,15 +135,15 @@ async def test_get_invitation_already_accepted_html_shows_state(client):
     async def _override():
         yield mock_session
 
-    from unittest.mock import patch
-
     with patch(
         "app.organizations.infra.invitation_router.OrganizationRepository.get",
         AsyncMock(return_value=mock_org),
     ):
         app.dependency_overrides[get_admin_session] = _override
         try:
-            resp = await client.get(f"/invitations/{token}", headers={"accept": "text/html"})
+            resp = driver._run(
+                driver._c.get(f"/invitations/{token}", headers={"accept": "text/html"})
+            )
             assert resp.status_code == 200
             assert "already_accepted" in resp.text or "accepted" in resp.text.lower()
         finally:
@@ -164,8 +153,7 @@ async def test_get_invitation_already_accepted_html_shows_state(client):
 # ── POST /invitations/{token}/accept ─────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_accept_already_accepted_invitation_is_idempotent(client):
+def test_accept_already_accepted_invitation_is_idempotent(driver):
     token = uuid.uuid4()
     org_id = uuid.uuid4()
     fake_row = {
@@ -180,8 +168,6 @@ async def test_accept_already_accepted_invitation_is_idempotent(client):
     mock_org = MagicMock()
     mock_org.slug = "test-org"
 
-    from unittest.mock import patch
-
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     app.dependency_overrides[get_user_session] = _mock_rls_session()
     app.dependency_overrides[get_current_user] = _mock_user()
@@ -190,9 +176,11 @@ async def test_accept_already_accepted_invitation_is_idempotent(client):
             "app.organizations.infra.invitation_router.OrganizationRepository.get",
             AsyncMock(return_value=mock_org),
         ):
-            resp = await client.post(
-                f"/invitations/{token}/accept",
-                headers={"accept": "application/json"},
+            resp = driver._run(
+                driver._c.post(
+                    f"/invitations/{token}/accept",
+                    headers={"accept": "application/json"},
+                )
             )
         assert resp.status_code == 200
         data = resp.json()
@@ -204,8 +192,7 @@ async def test_accept_already_accepted_invitation_is_idempotent(client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
-@pytest.mark.asyncio
-async def test_accept_non_pending_invitation_returns_404(client):
+def test_accept_non_pending_invitation_returns_404(driver):
     token = uuid.uuid4()
     fake_row = {
         "id": uuid.uuid4(),
@@ -220,9 +207,11 @@ async def test_accept_non_pending_invitation_returns_404(client):
     app.dependency_overrides[get_user_session] = _mock_rls_session()
     app.dependency_overrides[get_current_user] = _mock_user()
     try:
-        resp = await client.post(
-            f"/invitations/{token}/accept",
-            headers={"accept": "application/json"},
+        resp = driver._run(
+            driver._c.post(
+                f"/invitations/{token}/accept",
+                headers={"accept": "application/json"},
+            )
         )
         assert resp.status_code == 404
     finally:
