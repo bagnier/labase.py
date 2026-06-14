@@ -15,11 +15,12 @@ from app.files.infra.storage import (
     storage_path,
     user_storage_client,
 )
-from app.organizations.domain.models import Membership, OrgRole
+from app.organizations.domain.models import Membership, Organization, OrgRole
 from app.shared.dependencies import (
     AdminSession,
     CurrentMembership,
     CurrentOrg,
+    CurrentOrgModel,
     CurrentUser,
     RlsSession,
 )
@@ -50,7 +51,7 @@ def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
     return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
 
 
-def _render(request: Request, current_user: object, files: list) -> Response:
+def _render(request: Request, current_user: object, files: list, org: Organization) -> Response:
     return render_list(
         request,
         fragment="files/_list_fragment.html",
@@ -59,6 +60,7 @@ def _render(request: Request, current_user: object, files: list) -> Response:
         schema=OrgFileRead,
         items=files,
         user=current_user,
+        org=org,
     )
 
 
@@ -68,10 +70,11 @@ async def file_list(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
 ):
     repo = OrgFileRepository(session, org_id)
     files = await repo.all()
-    return _render(request, current_user, files)
+    return _render(request, current_user, files, org)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -82,6 +85,7 @@ async def upload_file(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
@@ -128,7 +132,7 @@ async def upload_file(
     )
 
     files = await repo.all()
-    return _render(request, current_user, files)
+    return _render(request, current_user, files, org)
 
 
 @router.get("/{file_id}/download")
@@ -157,6 +161,7 @@ async def delete_file(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
     membership: CurrentMembership,
 ):
     repo = OrgFileRepository(session, org_id)
@@ -182,7 +187,7 @@ async def delete_file(
     )
 
     files = await repo.all()
-    return _render(request, current_user, files)
+    return _render(request, current_user, files, org)
 
 
 class RenameBody(BaseModel):
@@ -197,6 +202,7 @@ async def rename_file(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
     membership: CurrentMembership,
 ):
     repo = OrgFileRepository(session, org_id)
@@ -212,7 +218,7 @@ async def rename_file(
     await repo.rename(org_file, body.filename)
 
     files = await repo.all()
-    return _render(request, current_user, files)
+    return _render(request, current_user, files, org)
 
 
 @router.post("/{file_id}/share")

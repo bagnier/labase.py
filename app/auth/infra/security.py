@@ -58,3 +58,16 @@ async def get_current_user(
     return AuthenticatedUser(
         id=payload["sub"], email=payload.get("email", ""), access_token=access_token
     )
+
+
+async def try_get_current_user(
+    response: Response,
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
+) -> AuthenticatedUser | None:
+    if not access_token:
+        return None
+    try:
+        return await get_current_user(response, access_token, refresh_token)
+    except HTTPException:
+        return None

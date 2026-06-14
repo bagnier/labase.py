@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
-from app.organizations.domain.models import Membership, OrgRole
+from app.organizations.domain.models import Membership, Organization, OrgRole
 from app.organizations.infra.repository import OrganizationRepository
 
 
@@ -34,6 +34,16 @@ async def get_current_org(
     if org is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization found")
     return org.id
+
+
+async def get_current_org_model(
+    session: AsyncSession = Depends(get_rls_session),
+    org_id: uuid.UUID = Depends(get_current_org),
+) -> Organization:
+    org = await OrganizationRepository(session).get(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organisation not found")
+    return org
 
 
 async def get_current_membership(

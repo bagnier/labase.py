@@ -15,7 +15,7 @@ from app.learning.infra.router import router as learning_router
 from app.organizations.infra.html_router import router as organizations_html_router
 from app.organizations.infra.invitation_router import router as invitations_router
 from app.organizations.infra.router import router as organizations_router
-from app.profile.infra.context_processor import load_display_name
+from app.profile.infra.context_processor import load_display_name, load_nav_orgs
 from app.profile.infra.router import router as profile_router
 from app.public.infra.router import router as public_router
 from app.shared.config import get_settings
@@ -31,7 +31,7 @@ setup_logging()
 BASE_DIR = Path(__file__).parent
 _settings = get_settings()
 
-app = FastAPI(title="labase", dependencies=[Depends(load_display_name)])
+app = FastAPI(title="labase", dependencies=[Depends(load_display_name), Depends(load_nav_orgs)])
 app.state.limiter = limiter
 
 app.exception_handler(RateLimitExceeded)(handle_rate_limit)

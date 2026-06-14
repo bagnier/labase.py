@@ -26,10 +26,11 @@ async def profile_page(
     pairs = await org_repo.list_with_role_for_user(uuid.UUID(current_user.id))
     orgs = [org for org, _ in pairs]
     org_slug = orgs[0].slug if orgs else ""
+    org = orgs[0] if orgs else None
     return templates.TemplateResponse(
         request,
         "profile.html",
-        {"user": current_user, "profile": profile, "orgs": orgs, "org_slug": org_slug},
+        {"user": current_user, "profile": profile, "orgs": orgs, "org_slug": org_slug, "org": org},
     )
 
 
@@ -47,11 +48,18 @@ async def profile_update(
     pairs = await org_repo.list_with_role_for_user(uuid.UUID(current_user.id))
     orgs = [org for org, _ in pairs]
     org_slug = orgs[0].slug if orgs else ""
+    org = orgs[0] if orgs else None
     if profile is None:
         profile = await repo.create(
             ProfileCreate(auth_user_id=uuid.UUID(current_user.id), email=current_user.email)
         )
-    ctx: dict = {"user": current_user, "profile": profile, "orgs": orgs, "org_slug": org_slug}
+    ctx: dict = {
+        "user": current_user,
+        "profile": profile,
+        "orgs": orgs,
+        "org_slug": org_slug,
+        "org": org,
+    }
     if display_name.strip() == "":
         ctx["error"] = "Display name cannot be empty."
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=422)

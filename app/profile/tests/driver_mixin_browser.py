@@ -47,3 +47,11 @@ class ProfileBrowserMixin(BrowserProtocol):
         assert self._p.query_selector("a[href*='/todos']") is not None, (
             "No link to /todos found on dashboard"
         )
+
+    def assert_profile_link_in_footer(self) -> None:
+        link = self._p.query_selector("aside a[href='/profile']")
+        assert link is not None, "No /profile link found in sidebar footer"
+
+    def assert_no_profile_nav_link(self) -> None:
+        link = self._p.query_selector("nav a[href='/profile']")
+        assert link is None, "Unexpected /profile link found inside <nav>"

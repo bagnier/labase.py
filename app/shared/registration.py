@@ -17,7 +17,7 @@ async def register_user(email: str, password: str, session: AsyncSession) -> Non
     try:
         repo = OrganizationRepository(session)
         await repo.create_with_owner(
-            name=f"Organisation de {email}",
+            name=email,
             auth_user_id=uuid.UUID(user_id_str),
         )
     except Exception:

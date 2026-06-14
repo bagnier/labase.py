@@ -14,6 +14,13 @@ Feature: Profile management
     Given a user is signed in
     When they view their profile
     Then there is a link to their org dashboard
+    And there is a link to their todo list
+
+  Scenario: The profile is accessible via the user footer
+    Given a user is signed in
+    When they view their profile
+    Then there is a link to the profile in the user footer
+    And there is no profile link in the navigation
 
   # Profile edition
 

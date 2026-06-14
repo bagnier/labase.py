@@ -18,7 +18,7 @@ from app.learning.domain.service import (
 )
 from app.learning.infra.repository import CatalogRow, LearningRepository
 from app.shared import clock
-from app.shared.dependencies import CurrentOrg, CurrentUser, RlsSession
+from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
@@ -51,7 +51,9 @@ def _due_rows(rows: list[CatalogRow], today) -> list[CatalogRow]:
     return [by_external[c.external_id] for c in ordered]
 
 
-def _render_session(request: Request, current_user: object, rows: list[CatalogRow]) -> Response:
+def _render_session(
+    request: Request, current_user: object, rows: list[CatalogRow], org: object
+) -> Response:
     cards = [
         ReviewCardRead(
             external_id=r.card.external_id,
@@ -69,7 +71,7 @@ def _render_session(request: Request, current_user: object, rows: list[CatalogRo
     template = "learning/_session_fragment.html" if is_htmx else "learning/session.html"
     org_slug = request.path_params.get("org_slug", "")
     return templates.TemplateResponse(
-        request, template, {"user": current_user, "cards": cards, "org_slug": org_slug}
+        request, template, {"user": current_user, "cards": cards, "org_slug": org_slug, "org": org}
     )
 
 
@@ -79,6 +81,7 @@ async def subscribe(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
     deck: str = Form(...),
 ):
     repo = LearningRepository(session, org_id, uuid.UUID(current_user.id))
@@ -87,7 +90,7 @@ async def subscribe(
         raise HTTPException(404, "Deck not found")
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return _render_session(request, current_user, rows)
+    return _render_session(request, current_user, rows, org)
 
 
 @router.get("/today", response_class=HTMLResponse)
@@ -96,10 +99,11 @@ async def today(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
 ):
     repo = LearningRepository(session, org_id, uuid.UUID(current_user.id))
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return _render_session(request, current_user, rows)
+    return _render_session(request, current_user, rows, org)
 
 
 @router.get("/cards/{external_id}", response_class=HTMLResponse)
@@ -146,6 +150,7 @@ async def mark_card(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
     outcome: Outcome = Form(...),
 ):
     repo = LearningRepository(session, org_id, uuid.UUID(current_user.id))
@@ -166,7 +171,7 @@ async def mark_card(
         outcome=outcome.value,
     )
     rows = _due_rows(await repo.catalog(), today_date)
-    return _render_session(request, current_user, rows)
+    return _render_session(request, current_user, rows, org)
 
 
 @router.get("/resources", response_class=HTMLResponse)
@@ -175,6 +180,7 @@ async def resources(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
+    org: CurrentOrgModel,
 ):
     repo = LearningRepository(session, org_id, uuid.UUID(current_user.id))
     rows = await repo.catalog()
@@ -198,5 +204,5 @@ async def resources(
     return templates.TemplateResponse(
         request,
         "learning/resources.html",
-        {"user": current_user, "resources": items, "org_slug": org_slug},
+        {"user": current_user, "resources": items, "org_slug": org_slug, "org": org},
     )

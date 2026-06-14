@@ -21,6 +21,16 @@ def step_link_to_todos(driver):
     driver.assert_link_to_todos()
 
 
+@then("there is a link to the profile in the user footer")
+def step_profile_link_in_footer(driver):
+    driver.assert_profile_link_in_footer()
+
+
+@then("there is no profile link in the navigation")
+def step_no_profile_nav_link(driver):
+    driver.assert_no_profile_nav_link()
+
+
 @given(parsers.parse('their display name is "{name}"'))
 def step_have_display_name(driver, name):
     driver.update_display_name(name)
