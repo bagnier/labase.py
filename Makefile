@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade
+.PHONY: dev up down logs db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act
 
 # --- Setup ---
 install:
@@ -9,6 +9,7 @@ install:
 	$(MAKE) js-build
 
 js-build:
+	mkdir -p static/fonts
 	npm run build
 
 # --- Local Supabase ---
@@ -71,10 +72,10 @@ quality: lint format typecheck
 
 # --- Tests ---
 test:
-	ENV_FILE=.env.test uv run pytest
+	env -i ENV_FILE=.env.test HOME=$(HOME) PATH=$(PATH) uv run pytest
 
 test-e2e:
-	ENV_FILE=.env.test uv run pytest app/ -k test_scenarios --driver=browser --no-cov
+	env -i ENV_FILE=.env.test HOME=$(HOME) PATH=$(PATH) uv run pytest app/ -k test_scenarios --driver=browser --no-cov
 
 coverage-erase:
 	uv run coverage erase
@@ -95,3 +96,6 @@ letsencrypt:
 	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
 
 ci: js-build lint typecheck audit coverage-erase test test-e2e coverage-xml
+
+act:
+	act push -j ci -P ubuntu-latest=catthehacker/ubuntu:act-24.04 --container-architecture linux/amd64 --network host

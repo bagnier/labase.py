@@ -1,7 +1,7 @@
 from pytest_bdd import scenarios
 
 scenarios(
-    "../../../features/apprentissage espacé.feature",
-    "../../../features/session de révision.feature",
+    "../../../features/apprentissage-espace.feature",
+    "../../../features/session-de-revision.feature",
     "../../../features/ressources.feature",
 )

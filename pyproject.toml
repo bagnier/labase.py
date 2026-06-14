@@ -38,7 +38,7 @@ asyncio_mode = "strict"
 testpaths = ["tests", "app"]
 pythonpath = ["."]
 norecursedirs = ["e2e"]
-addopts = "--cov=app --cov-report=term-missing --cov-append"
+addopts = "--cov=app --cov-report=term-missing --cov-append --junitxml=.cov/junit.xml"
 # Third-party deprecations we cannot fix at the source (no app code passes these args):
 # - supabase-py forwards deprecated timeout/verify to SyncPostgrestClient
 # - slowapi calls the deprecated asyncio.iscoroutinefunction

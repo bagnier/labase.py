@@ -37,8 +37,9 @@
 - [ ] messaging
 - [ ] email
 - [ ] prod deployment doc (secrets, env)
-- [ ] GitHub Actions
+- [x] GitHub Actions
 - [ ] refactor / simplify migration
+- [ ] reactive web
 
 ### functional
 
@@ -50,7 +51,7 @@
 - [x] token-based invitations (accept flow)
 - [x] todo list as CRUD example
 - [x] file management (bucket + share tokens)
-- [ ] flashcards as HexArch example
+- [x] flashcards as HexArch example
 - [ ] public page
 - [ ] user profile
 - [ ] org dashboard
