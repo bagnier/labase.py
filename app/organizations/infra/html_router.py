@@ -77,7 +77,7 @@ async def rename_org_html(
     session: RlsSession,
     org_id: CurrentOrg,
     membership: CurrentMembership,
-    name: str = Form(...),
+    name: str = Form(..., min_length=1, max_length=255),
 ):
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")

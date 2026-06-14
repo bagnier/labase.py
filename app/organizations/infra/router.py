@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
 from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
@@ -34,7 +34,7 @@ async def list_organizations(
 
 
 class RenameOrgBody(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=255)
 
 
 @router.patch("/{org_id}")
