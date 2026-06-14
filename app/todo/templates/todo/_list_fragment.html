@@ -7,7 +7,7 @@
     <span class="flex-1 text-sm {% if todo.done %}text-gray-400 line-through{% else %}text-gray-900{% endif %}">
       {{ todo.title }}
     </span>
-    <button data-delete-id="{{ todo.id }}" hx-delete="/{{ org_slug }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="outerHTML" hx-confirm="Supprimer cette tâche ?"
+    <button data-delete-id="{{ todo.id }}" hx-delete="/{{ org_slug }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="outerHTML" hx-confirm="Delete this task?"
       class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -15,6 +15,6 @@
     </button>
   </div>
   {% else %}
-  <p class="px-4 py-6 text-sm text-center text-gray-400">Aucune tâche pour le moment.</p>
+  <p class="px-4 py-6 text-sm text-center text-gray-400">No tasks yet.</p>
   {% endfor %}
 </div>

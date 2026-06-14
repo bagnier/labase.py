@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -22,33 +22,33 @@
     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
 
       {% if state == "valid" %}
-        <h2 class="text-lg font-semibold text-gray-900 mb-1">Vous avez été invité(e)</h2>
+        <h2 class="text-lg font-semibold text-gray-900 mb-1">You have been invited</h2>
         <p class="text-sm text-gray-500 mb-6">
-          Rejoignez <strong>{{ org_name }}</strong> en tant que membre.
-          {% if email %}<br>Invitation pour : <span class="font-medium">{{ email }}</span>{% endif %}
+          Join <strong>{{ org_name }}</strong> as a member.
+          {% if email %}<br>Invitation for: <span class="font-medium">{{ email }}</span>{% endif %}
         </p>
         <form method="POST" action="/invitations/{{ token }}/accept">
           <button type="submit" data-accept
                   class="w-full rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors shadow-sm">
-            Accepter l'invitation
+            Accept invitation
           </button>
         </form>
 
       {% elif state == "already_accepted" %}
         <div role="alert" data-error class="text-center space-y-3">
-          <p class="text-sm font-semibold text-gray-800">Invitation déjà acceptée</p>
-          <p class="text-sm text-gray-500">Vous êtes déjà membre de <strong>{{ org_name }}</strong>.</p>
+          <p class="text-sm font-semibold text-gray-800">Invitation already accepted</p>
+          <p class="text-sm text-gray-500">You are already a member of <strong>{{ org_name }}</strong>.</p>
           <a href="/profile" class="inline-block mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-            Aller au tableau de bord →
+            Go to dashboard →
           </a>
         </div>
 
       {% else %}
         <div role="alert" data-error class="text-center space-y-3">
-          <p class="text-sm font-semibold text-gray-800">Lien invalide ou expiré</p>
-          <p class="text-sm text-gray-500">Cette invitation n'est plus valide. Demandez un nouveau lien à l'administrateur de l'organisation.</p>
+          <p class="text-sm font-semibold text-gray-800">Invalid or expired link</p>
+          <p class="text-sm text-gray-500">This invitation is no longer valid. Ask the organisation admin for a new link.</p>
           <a href="/profile" class="inline-block mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-            Retour à l'accueil →
+            Back to home →
           </a>
         </div>
       {% endif %}

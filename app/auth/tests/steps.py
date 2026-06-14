@@ -75,12 +75,12 @@ def step_sign_out(driver):
 
 @then("the sign-in form is available")
 def step_sign_in_form_available(driver):
-    driver.assert_page_accessible("/auth/login", "Connexion")
+    driver.assert_page_accessible("/auth/login", "Sign in")
 
 
 @then("the registration form is available")
 def step_registration_form_available(driver):
-    driver.assert_page_accessible("/auth/register", "Créer un compte")
+    driver.assert_page_accessible("/auth/register", "Create an account")
 
 
 @then("they are on their dashboard")

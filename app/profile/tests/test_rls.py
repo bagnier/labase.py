@@ -1,5 +1,5 @@
-"""Preuve que le RLS protège les profils : même sans filtre applicatif,
-un utilisateur ne voit que son propre profil via le rôle authenticated.
+"""Proof that RLS protects profiles: even without an application filter,
+a user only sees their own profile via the authenticated role.
 """
 
 import uuid
@@ -24,7 +24,7 @@ async def test_rls_profile_isolation(db_session: AsyncSession):
         result = await db_session.execute(select(Profile))
         profiles = list(result.scalars().all())
 
-        assert len(profiles) == 1, f"RLS devrait limiter à 1 profil (user1), got {len(profiles)}"
+        assert len(profiles) == 1, f"RLS should limit to 1 profile (user1), got {len(profiles)}"
         assert profiles[0].auth_user_id == uuid.UUID(uid1_str)
     finally:
         delete_user(uid1_str)

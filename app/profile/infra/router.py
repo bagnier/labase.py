@@ -48,12 +48,12 @@ async def profile_update(
     org_slug = orgs[0].slug if orgs else ""
     ctx: dict = {"user": current_user, "profile": profile, "orgs": orgs, "org_slug": org_slug}
     if profile is None:
-        ctx["error"] = "Profil introuvable."
+        ctx["error"] = "Profile not found."
         return templates.TemplateResponse(request, "profile.html", ctx)
     if display_name.strip() == "":
-        ctx["error"] = "Le nom d'affichage ne peut pas être vide."
+        ctx["error"] = "Display name cannot be empty."
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=422)
     updated = await repo.update(profile, ProfileUpdate(display_name=display_name or None))
     ctx["profile"] = updated
-    ctx["success"] = "Profil mis à jour."
+    ctx["success"] = "Profile updated."
     return templates.TemplateResponse(request, "profile.html", ctx)

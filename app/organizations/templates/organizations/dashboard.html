@@ -5,15 +5,15 @@
 {% block nav_dashboard %}active{% endblock %}
 
 {% block breadcrumb %}
-<span class="text-gray-400">Vue d'ensemble</span>
+<span class="text-gray-400">Overview</span>
 {% endblock %}
 
 {% block content %}
 <div class="space-y-6">
 
   <div>
-    <h1 class="text-lg font-semibold text-gray-900">Vue d'ensemble</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Bienvenue, {{ user.email }}</p>
+    <h1 class="text-lg font-semibold text-gray-900">Overview</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Welcome, {{ user.email }}</p>
   </div>
 
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -30,11 +30,11 @@
         </svg>
       </div>
       <div>
-        <h3 class="text-sm font-semibold text-gray-700">Ma liste de tâches</h3>
-        <p class="text-sm text-gray-400">Gérez vos tâches et suivez votre progression.</p>
+        <h3 class="text-sm font-semibold text-gray-700">My to-do list</h3>
+        <p class="text-sm text-gray-400">Manage your tasks and track your progress.</p>
       </div>
     </div>
-    <a href="/{{ org_slug }}/todos" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Voir mes tâches →</a>
+    <a href="/{{ org_slug }}/todos" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">View my tasks →</a>
   </div>
 
 </div>

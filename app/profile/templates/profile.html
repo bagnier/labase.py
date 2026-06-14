@@ -2,19 +2,19 @@
 {% from "macros/alert.html" import alert %}
 {% from "macros/input_field.html" import input_field %}
 
-{% block title %}Profil — labase{% endblock %}
+{% block title %}Profile — labase{% endblock %}
 {% block nav_profile %}active{% endblock %}
 
 {% block breadcrumb %}
-<span class="text-gray-400">Profil</span>
+<span class="text-gray-400">Profile</span>
 {% endblock %}
 
 {% block content %}
 <div class="space-y-6 max-w-2xl">
 
   <div>
-    <h1 class="text-lg font-semibold text-gray-900">Profil</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Gérez vos informations personnelles.</p>
+    <h1 class="text-lg font-semibold text-gray-900">Profile</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Manage your personal information.</p>
   </div>
 
   <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
@@ -24,7 +24,7 @@
       </div>
       <div>
         <p class="font-semibold text-gray-900">{{ user.email }}</p>
-        <p class="text-sm text-gray-500 mt-0.5">Membre depuis {{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '—' }}</p>
+        <p class="text-sm text-gray-500 mt-0.5">Member since {{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</p>
       </div>
     </div>
 
@@ -32,16 +32,16 @@
     {{ alert('error', error) }}
 
     <form hx-post="/profile" hx-target="body" class="space-y-4">
-      {{ input_field("display_name", "display_name", label="Nom d'affichage",
-                     placeholder="Votre nom ou pseudo",
+      {{ input_field("display_name", "display_name", label="Display name",
+                     placeholder="Your name or handle",
                      value=(profile.display_name if (profile and profile.display_name) else '')) }}
       {{ input_field("email", "email", label="Email",
                      value=user.email, disabled=true,
-                     hint="L'email ne peut pas être modifié ici.") }}
+                     hint="Email cannot be changed here.") }}
       <div class="pt-1">
         <button type="submit"
                 class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors shadow-sm shadow-indigo-500/20">
-          Enregistrer les modifications
+          Save changes
         </button>
       </div>
     </form>
@@ -49,12 +49,12 @@
 
   {% if orgs %}
   <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Mes espaces de travail</h2>
+    <h2 class="text-sm font-semibold text-gray-700 mb-3">My workspaces</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {% for org in orgs %}
       <div data-workspace-card="{{ org.name }}" class="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-gray-800">{{ org.name }}</h3>
-        <a href="/{{ org.slug }}/dashboard" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Ouvrir →</a>
+        <a href="/{{ org.slug }}/dashboard" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Open →</a>
       </div>
       {% endfor %}
     </div>
@@ -62,11 +62,11 @@
   {% endif %}
 
   <div class="bg-white border border-red-100 rounded-xl p-6 shadow-sm">
-    <h2 class="text-sm font-semibold text-gray-900 mb-1">Zone de danger</h2>
-    <p class="text-sm text-gray-500 mb-4">Ces actions sont irréversibles. Procédez avec prudence.</p>
+    <h2 class="text-sm font-semibold text-gray-900 mb-1">Danger zone</h2>
+    <p class="text-sm text-gray-500 mb-4">These actions are irreversible. Proceed with caution.</p>
     <button type="button" disabled
             class="border border-red-200 text-red-500 text-sm font-medium px-4 py-2 rounded-lg opacity-50 cursor-not-allowed">
-      Supprimer mon compte
+      Delete my account
     </button>
   </div>
 

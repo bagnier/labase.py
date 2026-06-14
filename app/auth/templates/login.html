@@ -2,13 +2,13 @@
 {% from "macros/alert.html" import alert %}
 {% from "macros/input_field.html" import input_field %}
 
-{% block title %}Connexion — labase{% endblock %}
+{% block title %}Sign in — labase{% endblock %}
 
 {% block content %}
 <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
   <div class="mb-6">
-    <h1 class="text-xl font-bold text-gray-900">Connexion</h1>
-    <p class="text-sm text-gray-500 mt-1">Ravi de vous revoir.</p>
+    <h1 class="text-xl font-bold text-gray-900">Sign in</h1>
+    <p class="text-sm text-gray-500 mt-1">Welcome back.</p>
   </div>
 
   {{ alert('error', error) }}
@@ -16,17 +16,17 @@
 
   <form hx-post="/auth/login" hx-target="body" class="space-y-4">
     {{ input_field("email", "email", type="email", label="Email",
-                   placeholder="vous@exemple.com") }}
-    {{ input_field("password", "password", type="password", label="Mot de passe") }}
+                   placeholder="you@example.com") }}
+    {{ input_field("password", "password", type="password", label="Password") }}
     <button type="submit"
             class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm shadow-indigo-500/20 mt-1">
-      Se connecter
+      Sign in
     </button>
   </form>
 </div>
 
 <p class="mt-5 text-center text-sm text-gray-500">
-  Pas encore de compte ?
-  <a href="/auth/register" class="text-indigo-600 hover:text-indigo-700 font-medium">Créer un compte</a>
+  No account yet?
+  <a href="/auth/register" class="text-indigo-600 hover:text-indigo-700 font-medium">Create an account</a>
 </p>
 {% endblock %}

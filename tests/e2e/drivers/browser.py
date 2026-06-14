@@ -26,8 +26,8 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-# Un pidfile par serveur lancé : si un run meurt sans exécuter stop() (SIGKILL, crash),
-# le run suivant retrouve et tue les serveurs orphelins via _reap_stale_servers().
+# One pidfile per started server: if a run dies without calling stop() (SIGKILL, crash),
+# the next run finds and kills orphaned servers via _reap_stale_servers().
 _PID_DIR = Path(tempfile.gettempdir()) / "labase-e2e-servers"
 
 
@@ -45,7 +45,7 @@ def _reap_stale_servers() -> None:
         except ValueError:
             pidfile.unlink(missing_ok=True)
             continue
-        # On vérifie la ligne de commande avant de tuer : le pid a pu être réutilisé.
+        # Verify the command line before killing: the pid may have been reused.
         if "hypercorn app.main:app" in _cmdline(pid):
             with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(pid, signal.SIGKILL)
@@ -82,9 +82,9 @@ class BrowserDriver(
             _reap_stale_servers()
             port = _free_port()
             self._base_url = f"http://127.0.0.1:{port}"
-            # start_new_session : le serveur et ses workers multiprocessing forment leur
-            # propre groupe de processus — stop() peut tuer le groupe entier via killpg
-            # (terminate() seul laissait survivre le worker qui tient le pool postgres).
+            # start_new_session: the server and its multiprocessing workers form their
+            # own process group — stop() can kill the entire group via killpg
+            # (terminate() alone left the worker holding the postgres pool alive).
             self._server = subprocess.Popen(
                 [sys.executable, "-m", "hypercorn", "app.main:app", "--bind", f"127.0.0.1:{port}"],
                 stdout=subprocess.DEVNULL,

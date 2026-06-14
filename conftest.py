@@ -31,12 +31,12 @@ def pytest_addoption(parser):
 
 @pytest.fixture(autouse=True)
 def db_rollback(driver: ApiDriver | BrowserDriver):
-    """Chaque test/scénario s'exécute dans une transaction rollbackée à la fin.
+    """Each test/scenario runs inside a transaction that is rolled back at the end.
 
-    Toutes les sessions (user, admin, rls) partagent la même connexion postgres sur
-    laquelle SQLAlchemy émet des SAVEPOINTs. conn.rollback() en teardown annule tout.
-    set_rls_context est bypassé (la connexion postgres a BYPASSRLS) — les tests RLS
-    restent dans test_rls.py avec la fixture db_session.
+    All sessions (user, admin, rls) share the same postgres connection on which
+    SQLAlchemy emits SAVEPOINTs. conn.rollback() in teardown discards everything.
+    set_rls_context is bypassed (the postgres connection has BYPASSRLS) — RLS tests
+    stay in test_rls.py with the db_session fixture.
     """
     if not isinstance(driver, ApiDriver):
         yield
@@ -60,7 +60,7 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
 
 @pytest_asyncio.fixture()
 async def db_session():
-    """Session transactionnelle rollbackée pour tests d'intégration directs (sans HTTP)."""
+    """Rolled-back transactional session for direct integration tests (no HTTP)."""
     settings = get_settings()
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     engine = create_async_engine(settings.database_url, connect_args=connect_args)

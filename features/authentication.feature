@@ -31,11 +31,11 @@ Feature: Authentication
 
   Scenario: Registration with an already taken email is rejected
     When they register with email "test@labase.dev" and password "Test1234!"
-    Then their registration is rejected with message "Un compte existe déjà"
+    Then their registration is rejected with message "An account already exists"
 
   Scenario: Registration with a weak password is rejected
     When they register with a "unknown@example.com" and password "toto"
-    Then their registration is rejected with message "Mot de passe trop faible"
+    Then their registration is rejected with message "Password too weak"
 
   Scenario: A signed-in user can sign out
     Given a user is signed in as "test@labase.dev" with password "Test1234!"

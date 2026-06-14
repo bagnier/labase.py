@@ -4,15 +4,15 @@
 </div>
 {% else %}
 <div class="rounded-lg bg-green-50 border border-green-200 px-4 py-3 space-y-2">
-  <p class="text-sm font-medium text-green-800">Invitation créée.</p>
-  <p class="text-xs text-green-700">Partagez ce lien avec <strong>{{ email }}</strong> :</p>
+  <p class="text-sm font-medium text-green-800">Invitation created.</p>
+  <p class="text-xs text-green-700">Share this link with <strong>{{ email }}</strong>:</p>
   <div class="flex items-center gap-2">
     <code class="flex-1 text-xs bg-white border border-green-200 rounded px-2 py-1.5 text-gray-700 break-all"
           data-invitation-link="{{ link }}">{{ link }}</code>
     <button type="button"
             onclick="navigator.clipboard.writeText('{{ link }}')"
             class="text-xs text-green-700 hover:text-green-900 border border-green-300 rounded px-2 py-1.5 flex-none">
-      Copier
+      Copy
     </button>
   </div>
 </div>

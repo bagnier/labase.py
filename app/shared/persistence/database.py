@@ -49,10 +49,10 @@ async def _commit_on_success(session: AsyncSession):
 
 
 async def _session(factory, request: Request | None = None) -> AsyncGenerator[AsyncSession]:
-    # Frontière de transaction : idéalement commit avant l'envoi de la réponse.
-    # FastAPI expose fastapi_function_astack, dont le teardown s'exécute AVANT
-    # l'envoi de la réponse (contrairement à fastapi_inner_astack, après).
-    # Sans request (ex. tests directs), fallback : commit après yield.
+    # Transaction boundary: ideally commit before the response is sent.
+    # FastAPI exposes fastapi_function_astack, whose teardown runs BEFORE
+    # the response is sent (unlike fastapi_inner_astack, which runs after).
+    # Without a request (e.g. direct tests), fallback: commit after yield.
     async with factory()() as session:
         func_stack: AsyncExitStack | None = (
             request.scope.get("fastapi_function_astack") if request is not None else None

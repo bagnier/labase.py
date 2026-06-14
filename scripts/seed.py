@@ -24,23 +24,23 @@ from app.todo.domain.models import TodoItem
 _DEFAULT_EMAIL = "dev@labase.dev"
 _DEFAULT_PASSWORD = "Devpass123!"
 _DEFAULT_ORG = "Dev Org"
-_TODOS = ["Lire la doc", "Écrire un test", "Shipper"]
+_TODOS = ["Read the docs", "Write a test", "Ship it"]
 
 
 async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None:
     settings = get_settings()
 
     if reset:
-        print(f"Suppression de {email}…")
+        print(f"Deleting {email}…")
         delete_user_if_exists(email)
 
     existing = find_users(email)
     if existing:
-        print(f"User {email} existe déjà (id={existing[0].id}), seed ignoré.")
-        print("Relancez avec --reset pour recréer depuis zéro.")
+        print(f"User {email} already exists (id={existing[0].id}), seed skipped.")
+        print("Re-run with --reset to recreate from scratch.")
         return
 
-    print(f"Création user {email}…")
+    print(f"Creating user {email}…")
     uid_str = create_user(email, password)
     auth_user_id = uuid.UUID(uid_str)
     print(f"  → auth_user_id={auth_user_id}")
@@ -60,7 +60,7 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
         await session.flush()
 
     await engine.dispose()
-    print(f"\nSeed terminé. Connectez-vous avec {email} / {password}")
+    print(f"\nSeed complete. Sign in with {email} / {password}")
 
 
 def main() -> None:
@@ -69,7 +69,7 @@ def main() -> None:
     parser.add_argument("--password", default=_DEFAULT_PASSWORD)
     parser.add_argument("--org", default=_DEFAULT_ORG)
     parser.add_argument(
-        "--reset", action="store_true", help="Supprime le user existant avant de recréer"
+        "--reset", action="store_true", help="Delete the existing user before recreating"
     )
     args = parser.parse_args()
 

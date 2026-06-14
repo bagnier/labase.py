@@ -1,75 +1,75 @@
-## cadre général
+## general framework
 
-- une base pour toute application pro / Saas
-- fondée sur Supabase
-- en Python moderne
+- a foundation for any professional / SaaS application
+- built on Supabase
+- in modern Python
 
 
-## buts
+## goals
 
-### technique
+### technical
 
 - [x] uv
 - [x] python 3.14
 - [x] fastAPI
 - [x] pytest
-- [x] séparation en apps
+- [x] app separation
 - [x] BDD dual driver, Json & Web
 - [x] SSR HTMX
-- [x] migrations database
-- [ ] collaboration par hooks entre les apps
+- [x] database migrations
+- [ ] collaboration via hooks between apps
 - [x] CORS
-- [x] headers de sécurité (HSTS, CSP)
+- [x] security headers (HSTS, CSP)
 - [x] healthcheck (liveness / readiness)
 - [x] rate-limiting
 - [x] logging
-- [x] observabilité
+- [x] observability
 - [x] TLS and HTTP/2
 - [x] OWASP Dependency Check
 - [x] transactions
 - [x] upgrade
 - [x] DB schema
-- [x] generic repository à la SpringJPA
-- [ ] english all around
-- [ ] file de tâches asynchrones
-- [ ] index fulltext
+- [x] generic repository (SpringJPA style)
+- [x] english all around
+- [ ] async task queue
+- [ ] fulltext index
 - [ ] cache
 - [ ] messaging
 - [ ] email
-- [ ] doc déploiement prod (secrets, env)
+- [ ] prod deployment doc (secrets, env)
 - [ ] GitHub Actions
 - [ ] refactor / simplify migration
 
-### fonctionnel
+### functional
 
-- [x] authentification
-- [x] création de compte
-- [x] creation d'organisation
-- [x] partage de l'ownership d'organisation
-- [x] ajout et revocation de membres
-- [x] invitations par token (accept flow)
-- [x] todo list comme exemple CRUD
-- [x] gestion de fichiers (bucket + share tokens)
-- [ ] flashcards comme exemple HexArch
+- [x] authentication
+- [x] account creation
+- [x] organisation creation
+- [x] organisation ownership sharing
+- [x] member add and revoke
+- [x] token-based invitations (accept flow)
+- [x] todo list as CRUD example
+- [x] file management (bucket + share tokens)
+- [ ] flashcards as HexArch example
 - [ ] public page
 - [ ] user profile
 - [ ] org dashboard
 - [ ] admin console
 
-### auth avancée
+### advanced auth
 
 - [ ] @handle
-- [ ] Mot de passe oublié (/auth/forgot-password + /auth/reset-password)
-- [ ] Changement de mot de passe (connecté) — POST /profile/password
-- [ ] Changement d'email — POST /profile/email + trigger SQL sync profiles.email
-- [ ] Suppression de compte — DELETE /profile + cascade + logout
-- [ ] Vérification email non confirmé — bloquer le login proprement si email_confirmed_at est null
-- [ ] Avatar — upload dans Supabase Storage, le pattern org_files est réutilisable directement
-- [ ] 2FA TOTP — Supabase Auth le gère nativement, juste câbler le flow UI
-- [ ] OAuth social login (Google, GitHub) — page de callback + merge avec compte email existant via auth.identities
-- [ ] Passkeys / WebAuthn — auth.webauthn_credentials est déjà dans le schema Supabase
+- [ ] Forgot password (/auth/forgot-password + /auth/reset-password)
+- [ ] Password change (authenticated) — POST /profile/password
+- [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email
+- [ ] Account deletion — DELETE /profile + cascade + logout
+- [ ] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
+- [ ] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
+- [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
+- [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
+- [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
 
-### intégration possibles à Supabase
+### possible Supabase integrations
 
 - [ ] AI Integrations - Enhance applications with OpenAI and Hugging Face integrations.
 - [ ] Auth Hooks - Customize authentication flows with serverless functions.
@@ -97,7 +97,7 @@
 - [ ] Image transformations - Optimize and resize images on-the-fly directly from your Supabase storage buckets.
 - [ ] JWT Signing Keys - Asymmetric key management for enhanced JWT security.
 - [ ] Log Drains - Export logs to Datadog, Grafana, Sentry, S3, and more — now available on Pro.
-- [ ] Logs & Analytics - Gain insights into your application’s performance and usage.
+- [ ] Logs & Analytics - Gain insights into your application's performance and usage.
 - [ ] Multi-Factor Authentication (MFA) - Add an extra layer of security to your application with MFA.
 - [ ] Network restrictions - Restrict IP ranges that can connect to your database.
 - [ ] OAuth2.1 Server - Turn your project into an OAuth 2.1 identity provider.

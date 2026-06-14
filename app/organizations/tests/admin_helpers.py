@@ -1,7 +1,7 @@
-"""Helpers admin memberships pour les tests, via le client supabase service-role.
+"""Admin membership helpers for tests, via the supabase service-role client.
 
-Ces écritures passent par PostgREST : elles sont commitées hors de la transaction
-de test — les orgs concernées doivent être trackées via track_org_id().
+These writes go through PostgREST: they are committed outside the test transaction —
+the affected orgs must be tracked via track_org_id().
 """
 
 from typing import cast

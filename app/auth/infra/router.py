@@ -17,27 +17,27 @@ log = structlog.get_logger("labase.auth")
 router = APIRouter()
 
 _WEAK_PASSWORD_REASONS: dict[str, str] = {
-    "too_short": "trop court",
-    "too_simple": "trop simple",
-    "no_uppercase": "doit contenir une majuscule",
-    "no_lowercase": "doit contenir une minuscule",
-    "no_digit": "doit contenir un chiffre",
-    "no_special": "doit contenir un caractère spécial",
-    "pwned": "ce mot de passe est compromis",
+    "too_short": "too short",
+    "too_simple": "too simple",
+    "no_uppercase": "must contain an uppercase letter",
+    "no_lowercase": "must contain a lowercase letter",
+    "no_digit": "must contain a digit",
+    "no_special": "must contain a special character",
+    "pwned": "this password has been compromised",
 }
 
 _AUTH_ERROR_MESSAGES: dict[str, str] = {
-    "email_exists": "Un compte existe déjà avec cet email.",
-    "user_already_exists": "Un compte existe déjà avec cet email.",
-    "email_address_not_authorized": "Cette adresse email n'est pas autorisée.",
-    "signup_disabled": "Les inscriptions sont désactivées.",
-    "invalid_email": "Adresse email invalide.",
+    "email_exists": "An account already exists with this email.",
+    "user_already_exists": "An account already exists with this email.",
+    "email_address_not_authorized": "This email address is not authorized.",
+    "signup_disabled": "Sign-ups are disabled.",
+    "invalid_email": "Invalid email address.",
 }
 
 
 def _format_weak_password_reasons(reasons: list[str]) -> str:
     labels = [_WEAK_PASSWORD_REASONS.get(r, r) for r in reasons]
-    return ", ".join(labels) if labels else "critères non respectés"
+    return ", ".join(labels) if labels else "requirements not met"
 
 
 def _friendly_auth_error(e: AuthApiError) -> str:
@@ -70,7 +70,7 @@ async def login_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Email ou mot de passe invalide"},
+            {"error": "Invalid email or password"},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -106,16 +106,16 @@ async def register_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"info": "Compte créé. Vérifiez votre email puis connectez-vous."},
+            {"info": "Account created. Please verify your email then sign in."},
         )
     except AuthWeakPasswordError as e:
-        error = f"Mot de passe trop faible : {_format_weak_password_reasons(e.reasons)}"
+        error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
-        error = "Une erreur inattendue s'est produite."
+        error = "An unexpected error occurred."
     return templates.TemplateResponse(
         request,
         "register.html",

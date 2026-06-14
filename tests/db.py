@@ -1,4 +1,4 @@
-"""Test transaction helpers — connexion partagée + rollback automatique."""
+"""Test transaction helpers — shared connection + automatic rollback."""
 
 import asyncio
 import json
@@ -14,11 +14,11 @@ from app.auth.infra.security import get_current_user
 from app.shared.config import get_settings
 from app.shared.persistence.database import _user_session_factory, get_user_session
 
-# Global simple (tests séquentiels) : visible depuis tous les threads, notamment
-# celui de l'event loop du driver qui exécute les overrides FastAPI.
+# Simple global (sequential tests): visible from all threads, including
+# the driver event loop thread that runs FastAPI dependency overrides.
 _test_connection: AsyncConnection | None = None
 
-# Domaines réservés aux fixtures de test — périmètre de purge_leftover_test_data().
+# Email domains reserved for test fixtures — scope of purge_leftover_test_data().
 _TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local", "labase.dev"]
 
 
@@ -38,10 +38,10 @@ async def end_test_transaction(conn: AsyncConnection) -> None:
 
 
 async def override_get_session() -> AsyncGenerator[AsyncSession]:
-    """Override get_user_session et get_admin_session : session sur la connexion de test.
+    """Override for get_user_session and get_admin_session: session on the test connection.
 
-    Sur une connexion déjà en transaction, SQLAlchemy émet SAVEPOINT/RELEASE
-    au lieu de COMMIT réel. Le conn.rollback() en fin de test annule tout.
+    On a connection already in a transaction, SQLAlchemy emits SAVEPOINT/RELEASE
+    instead of a real COMMIT. conn.rollback() at test end discards everything.
     """
     if _test_connection is not None:
         async with AsyncSession(bind=_test_connection, expire_on_commit=False) as session:
@@ -56,7 +56,7 @@ async def override_get_session() -> AsyncGenerator[AsyncSession]:
 async def fetch_orgs_for_email(email: str) -> list[dict]:
     """Query organisations+role for email via the test transaction connection.
 
-    Utilisé quand le user n'est pas authentifié (ex: juste après register()).
+    Used when the user is not authenticated (e.g. right after register()).
     """
     assert _test_connection is not None, "No active test transaction"
     result = await _test_connection.execute(
@@ -76,9 +76,9 @@ async def override_get_rls_session(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_user_session),
 ) -> AsyncGenerator[AsyncSession]:
-    """Override de get_rls_session : pose request.jwt.claims pour que auth.uid()
-    soit disponible dans les fonctions SECURITY DEFINER, sans SET role authenticated —
-    le user postgres a BYPASSRLS. Les tests RLS restent dans test_rls.py.
+    """Override for get_rls_session: sets request.jwt.claims so auth.uid() is
+    available in SECURITY DEFINER functions, without SET role authenticated —
+    the postgres user has BYPASSRLS. RLS tests stay in test_rls.py.
     """
     conn = await session.connection()
     claims = json.dumps({"sub": current_user.id, "role": "authenticated"})
@@ -89,10 +89,10 @@ async def override_get_rls_session(
 
 
 def truncate_app_tables() -> None:
-    """Vide toutes les tables applicatives — utilisé en teardown des tests browser.
+    """Truncates all application tables — used in browser test teardown.
 
-    Crée un engine NullPool frais (comme purge_leftover_test_data) et l'exécute
-    dans un thread dédié pour éviter les conflits avec l'event loop de pytest-asyncio.
+    Creates a fresh NullPool engine (like purge_leftover_test_data) and runs it
+    in a dedicated thread to avoid conflicts with the pytest-asyncio event loop.
     """
     import threading
 
@@ -137,11 +137,11 @@ def truncate_app_tables() -> None:
 
 
 async def purge_leftover_test_data() -> None:
-    """Supprime les données de test qui survivent aux teardowns.
+    """Deletes test data that survives teardowns.
 
-    Le driver browser ne nettoie rien, et un run crashé laisse des résidus :
-    users des domaines de test (cascade memberships/profiles/todos/files),
-    puis orgs sans plus aucune membership.
+    The browser driver does no cleanup, and a crashed run leaves residues:
+    users from test domains (cascading memberships/profiles/todos/files),
+    then orgs with no remaining membership.
     """
     settings = get_settings()
     url = settings.database_url_service or settings.database_url

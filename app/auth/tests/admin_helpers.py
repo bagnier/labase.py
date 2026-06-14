@@ -1,4 +1,4 @@
-"""Helpers admin GoTrue pour les tests, via le client supabase service-role."""
+"""Admin GoTrue helpers for tests, via the supabase service-role client."""
 
 from supabase_auth.types import User
 
@@ -6,12 +6,12 @@ from app.shared.persistence.supabase import get_admin_supabase
 
 
 def find_users(email: str) -> list[User]:
-    """Liste les users GoTrue ayant exactement cet email.
+    """Lists GoTrue users with exactly this email.
 
-    L'API admin ne filtre pas par email et renvoie tous les users : le filtrage
-    doit se faire côté client. Sans lui, un appelant qui supprime les users
-    renvoyés vide auth.users — y compris des lignes FK-lockées par la
-    transaction de test ouverte (DELETE bloqué, 504 Kong après 10s).
+    The admin API does not filter by email and returns all users: filtering
+    must be done client-side. Without it, a caller deleting the returned users
+    would empty auth.users — including rows FK-locked by the open test
+    transaction (DELETE blocked, 504 from Kong after 10s).
     """
     supabase = get_admin_supabase().auth.admin
     found: list[User] = []

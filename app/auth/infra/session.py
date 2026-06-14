@@ -17,7 +17,7 @@ async def get_rls_session(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_user_session),
 ) -> AsyncGenerator[AsyncSession]:
-    """Session utilisateur avec rôle + claims RLS injectés pour toute la durée de la requête."""
+    """User session with role + RLS claims injected for the entire request lifetime."""
     await set_rls_context(session, uuid.UUID(current_user.id))
     try:
         yield session

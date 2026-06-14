@@ -64,23 +64,23 @@ class ApiDriver(
         return self._client
 
     def track_auth_email(self, email: str) -> None:
-        """Enregistre un email d'auth user créé pendant le test en cours."""
+        """Registers an auth user email created during the current test."""
         if email not in self._test_auth_emails:
             self._test_auth_emails.append(email)
 
     def track_org_id(self, org_id: str) -> None:
-        """Enregistre un org_id à supprimer en teardown (org commitée hors test TX)."""
+        """Registers an org_id for deletion in teardown (org committed outside the test TX)."""
         if org_id not in self._test_org_ids:
             self._test_org_ids.append(org_id)
 
     def cleanup_test_auth_users(self) -> None:
-        """Supprime tous les auth users Supabase créés pendant le test en cours."""
+        """Deletes all Supabase auth users created during the current test."""
         for email in self._test_auth_emails:
             self._delete_user_if_exists(email)
         self._test_auth_emails.clear()
 
     def cleanup_test_orgs(self) -> None:
-        """Supprime les orgs commitées hors test transaction (créées via admin session directe)."""
+        """Deletes orgs committed outside the test TX (created via direct admin session)."""
         if not self._test_org_ids:
             return
 
