@@ -65,13 +65,21 @@ async def login_endpoint(
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         resp.headers["HX-Redirect"] = "/profile"
         return resp
-    except Exception:
+    except AuthApiError:
         record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
         return templates.TemplateResponse(
             request,
             "login.html",
             {"error": "Invalid email or password"},
             status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    except Exception:
+        log.exception("auth.login_error", ip=ip, email=email)
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "A system error occurred. Please try again later."},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
 
