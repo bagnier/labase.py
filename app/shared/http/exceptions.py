@@ -5,8 +5,16 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 log = structlog.get_logger("labase.app")
 
 
-async def handle_rate_limit(_request: Request, _exc: Exception) -> Response:
-    return JSONResponse({"detail": "Too many requests"}, status_code=429)
+async def handle_rate_limit(_request: Request, exc: Exception) -> Response:
+    headers = {}
+    limit = getattr(exc, "limit", None)
+    if limit is not None:
+        item = getattr(limit, "limit", None)
+        if item is not None:
+            granularity = getattr(item.GRANULARITY, "seconds", None)
+            if granularity is not None:
+                headers["Retry-After"] = str(int(granularity * (item.multiples or 1)))
+    return JSONResponse({"detail": "Too many requests"}, status_code=429, headers=headers)
 
 
 async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
