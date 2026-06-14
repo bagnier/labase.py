@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -10,6 +11,7 @@ from app.console.infra.router import router as console_router
 from app.files.infra.router import public_router as files_public_router
 from app.files.infra.router import router as files_router
 from app.health.router import router as health_router
+from app.learning.infra.router import router as learning_router
 from app.organizations.infra.html_router import router as organizations_html_router
 from app.organizations.infra.invitation_router import router as invitations_router
 from app.organizations.infra.router import router as organizations_router
@@ -63,3 +65,10 @@ app.include_router(organizations_router)
 app.include_router(organizations_html_router, prefix="/{org_slug}")
 app.include_router(files_router, prefix="/{org_slug}")
 app.include_router(todo_router, prefix="/{org_slug}")
+app.include_router(learning_router, prefix="/{org_slug}")
+
+# Test-only: clock control endpoint for the browser BDD driver (never in prod).
+if os.environ.get("ENABLE_TEST_CLOCK") == "1":
+    from app.shared.http.test_clock import router as test_clock_router
+
+    app.include_router(test_clock_router)

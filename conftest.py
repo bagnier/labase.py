@@ -2,6 +2,9 @@ import asyncio
 import os
 
 os.environ.setdefault("ENV_FILE", ".env.test")
+# Mount the test-only clock endpoint so the browser driver can pin "today" in the
+# app subprocess. Set before app import; inherited by the subprocess via os.environ.
+os.environ.setdefault("ENABLE_TEST_CLOCK", "1")
 
 import pytest
 import pytest_asyncio
@@ -20,6 +23,7 @@ pytest_plugins = [
     "app.console.tests.steps",
     "app.profile.tests.steps",
     "app.todo.tests.steps",
+    "app.learning.tests.steps",
     "app.files.tests.steps",
     "app.organizations.tests.steps",
 ]
@@ -40,6 +44,7 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     """
     if not isinstance(driver, ApiDriver):
         yield
+        driver._restore_clock()
         db.truncate_app_tables()
         return
 
@@ -53,6 +58,7 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     app.dependency_overrides.pop(get_admin_session, None)
     app.dependency_overrides.pop(get_rls_session, None)
     db._test_connection = None
+    driver._restore_clock()
     driver._run(db.end_test_transaction(conn))
     driver.cleanup_test_orgs()
     driver.cleanup_test_auth_users()

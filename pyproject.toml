@@ -39,6 +39,14 @@ testpaths = ["tests", "app"]
 pythonpath = ["."]
 norecursedirs = ["e2e"]
 addopts = "--cov=app --cov-report=term-missing --cov-append"
+# Third-party deprecations we cannot fix at the source (no app code passes these args):
+# - supabase-py forwards deprecated timeout/verify to SyncPostgrestClient
+# - slowapi calls the deprecated asyncio.iscoroutinefunction
+filterwarnings = [
+    "ignore:The 'timeout' parameter is deprecated:DeprecationWarning:supabase",
+    "ignore:The 'verify' parameter is deprecated:DeprecationWarning:supabase",
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:slowapi",
+]
 
 [tool.coverage.run]
 source = ["app"]

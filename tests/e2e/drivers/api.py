@@ -8,6 +8,7 @@ from sqlalchemy import delete
 from app.auth.tests.driver_mixin import AuthApiMixin
 from app.console.tests.driver_mixin import ConsoleApiMixin
 from app.files.tests.driver_mixin import OrgFileApiMixin
+from app.learning.tests.driver_mixin import LearningApiMixin
 from app.main import app
 from app.organizations.domain.models import Organization
 from app.organizations.tests.driver_mixin import OrgApiMixin
@@ -22,6 +23,7 @@ class ApiDriver(
     ConsoleApiMixin,
     ProfileApiMixin,
     TodoApiMixin,
+    LearningApiMixin,
     OrgFileApiMixin,
     OrgApiMixin,
     SharedApiMixin,

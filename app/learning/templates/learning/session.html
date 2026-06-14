@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Learning — labase{% endblock %}
+{% block nav_learning %}active{% endblock %}
+
+{% block breadcrumb %}<span class="text-gray-400">Learning</span>{% endblock %}
+
+{% block content %}
+<style>
+  .scene { perspective: 1200px; }
+  .flip { transform-style: preserve-3d; transition: transform .45s cubic-bezier(.2,.7,.2,1); }
+  .paper { background: radial-gradient(120% 120% at 0 0, #fff 0%, #fbfbfd 60%, #f3f4f8 100%);
+           box-shadow: 0 18px 40px -18px rgba(15,23,42,.35), 0 2px 8px -2px rgba(15,23,42,.12); }
+  .lcard.flying { transition: transform .35s ease, opacity .35s ease; opacity: 0; }
+  .lcard.revealed .flip { transform: rotateY(4deg); }
+</style>
+
+<div class="max-w-xl space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-lg font-semibold text-gray-900">Review session</h1>
+    <a href="/{{ org_slug }}/learning/resources"
+       class="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700">Resources to review</a>
+  </div>
+
+  {% include "learning/_session_fragment.html" %}
+</div>
+
+<script>
+  // Progressive enhancement: reveal un-hides the answer; drag the card to mark it.
+  document.body.addEventListener("htmx:afterSwap", (e) => {
+    if (e.detail.target && e.detail.target.matches("[data-answer]")) {
+      e.detail.target.classList.remove("hidden");
+      e.detail.target.closest(".lcard")?.classList.add("revealed");
+    }
+  });
+
+  let active = null, startX = 0, dx = 0;
+  const THRESHOLD = 110;
+  document.body.addEventListener("pointerdown", (e) => {
+    const card = e.target.closest(".lcard.revealed");
+    if (!card || e.target.closest("button")) return;
+    active = card; startX = e.clientX; dx = 0;
+  });
+  document.body.addEventListener("pointermove", (e) => {
+    if (!active) return;
+    dx = e.clientX - startX;
+    active.querySelector(".flip").style.transform = `translateX(${dx}px) rotate(${dx/25}deg)`;
+  });
+  document.body.addEventListener("pointerup", () => {
+    if (!active) return;
+    const card = active; active = null;
+    const kind = dx > THRESHOLD ? "learned" : dx < -THRESHOLD ? "again" : null;
+    const flip = card.querySelector(".flip");
+    if (!kind) { flip.style.transform = ""; return; }
+    card.classList.add("flying");
+    card.querySelector(`[data-mark="${kind}"]`)?.click();
+  });
+</script>
+{% endblock %}

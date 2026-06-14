@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Resources — labase{% endblock %}
+{% block nav_learning %}active{% endblock %}
+
+{% block breadcrumb %}<span class="text-gray-400">Learning · Resources</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-xl space-y-4">
+  <h1 class="text-lg font-semibold text-gray-900">Resources to review</h1>
+
+  <div id="learning-resources" class="space-y-1">
+    {% for item in resources %}
+    <div class="flex gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm"
+         data-resource-deck="{{ item.deck }}">
+      <span class="font-medium text-gray-700">{{ item.deck }}</span>
+      <a href="{{ item.resource }}" data-resource class="break-all text-indigo-600">{{ item.resource }}</a>
+    </div>
+    {% else %}
+    <p data-empty class="rounded-xl border border-gray-200 bg-white px-5 py-9 text-center text-gray-500">
+      No resources to review — nicely done.
+    </p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

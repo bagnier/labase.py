@@ -1,0 +1,36 @@
+<div id="learning-session" data-due-count="{{ cards|length }}" class="scene mx-auto max-w-sm space-y-4">
+  {% for card in cards %}
+  <div class="lcard relative select-none" data-card-id="{{ card.external_id }}" data-card-level="{{ card.level }}"
+       data-deck="{{ card.deck }}">
+    <div class="flip rounded-2xl">
+      <div class="paper rounded-2xl p-6">
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-gray-500" data-deck-name>{{ card.deck }}</span>
+          <span class="rounded-full border border-indigo-500 px-2 py-0.5 text-xs text-indigo-600">level {{ card.level }}</span>
+        </div>
+        <p class="mt-3 text-lg font-semibold text-gray-900" data-question>{{ card.question }}</p>
+        <div class="answer mt-3 hidden border-t border-dashed border-gray-200 pt-3 font-mono text-gray-900"
+             id="answer-{{ card.external_id }}" data-answer></div>
+        <div class="mt-4 flex gap-2">
+          <button type="button" data-reveal
+            hx-get="/{{ org_slug }}/learning/cards/{{ card.external_id }}"
+            hx-target="#answer-{{ card.external_id }}" hx-swap="innerHTML"
+            class="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">Reveal answer</button>
+          <button type="button" data-mark="again"
+            hx-post="/{{ org_slug }}/learning/cards/{{ card.external_id }}/mark" hx-vals='{"outcome": "again"}'
+            hx-target="#learning-session" hx-swap="outerHTML"
+            class="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white">To review</button>
+          <button type="button" data-mark="learned"
+            hx-post="/{{ org_slug }}/learning/cards/{{ card.external_id }}/mark" hx-vals='{"outcome": "learned"}'
+            hx-target="#learning-session" hx-swap="outerHTML"
+            class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Learned</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <p data-empty class="rounded-xl border border-gray-200 bg-white px-5 py-9 text-center text-gray-500">
+    🎉 Session complete — no more cards for today.
+  </p>
+  {% endfor %}
+</div>
