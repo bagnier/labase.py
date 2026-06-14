@@ -69,6 +69,6 @@ app.include_router(learning_router, prefix="/{org_slug}")
 
 # Test-only: clock control endpoint for the browser BDD driver (never in prod).
 if os.environ.get("ENABLE_TEST_CLOCK") == "1":
-    from app.shared.http.test_clock import router as test_clock_router
+    from tests.clock_router import router as test_clock_router
 
     app.include_router(test_clock_router)

@@ -1,11 +1,13 @@
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from supabase_auth.errors import AuthApiError
 
-from app.auth.domain.service import login, logout, register
+from app.auth.domain.service import login, logout, refresh_session, register
 from app.auth.tests.admin_helpers import delete_user, find_users
 from app.shared.persistence.supabase import get_admin_supabase
+from app.shared.registration import register_user
 
 
 @pytest.mark.asyncio
@@ -71,3 +73,60 @@ async def test_logout_invalidates_token(test_user):
     await logout(tokens.access_token)
     with pytest.raises(AuthApiError):
         get_admin_supabase().auth.get_user(tokens.access_token)
+
+
+@pytest.mark.asyncio
+async def test_login_session_none_raises_value_error():
+    fake_auth = MagicMock()
+    fake_auth.session = None
+    fake_supabase = MagicMock()
+    fake_supabase.auth.sign_in_with_password = AsyncMock(return_value=fake_auth)
+    with (
+        patch("app.auth.domain.service.get_user_supabase", AsyncMock(return_value=fake_supabase)),
+        pytest.raises(ValueError, match="No session returned"),
+    ):
+        await login("a@test.local", "pw")
+
+
+@pytest.mark.asyncio
+async def test_logout_network_error_does_not_raise():
+    with patch("app.auth.domain.service.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = OSError("network down")
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await logout("some-token")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_refresh_session_none_raises_value_error():
+    fake_auth = MagicMock()
+    fake_auth.session = None
+    fake_supabase = MagicMock()
+    fake_supabase.auth.refresh_session = AsyncMock(return_value=fake_auth)
+    with (
+        patch("app.auth.domain.service.get_user_supabase", AsyncMock(return_value=fake_supabase)),
+        pytest.raises(ValueError, match="Refresh failed"),
+    ):
+        await refresh_session("old-refresh-token")
+
+
+@pytest.mark.asyncio
+async def test_register_user_compensates_when_org_creation_fails():
+    fake_user_id = str(uuid4())
+    fake_admin = MagicMock()
+    fake_admin.auth.admin.delete_user = MagicMock()
+    fake_session = MagicMock()
+
+    with (
+        patch("app.shared.registration.register", AsyncMock(return_value=fake_user_id)),
+        patch(
+            "app.shared.registration.OrganizationRepository.create_with_owner",
+            AsyncMock(side_effect=RuntimeError("db down")),
+        ),
+        patch("app.shared.registration.get_admin_supabase", return_value=fake_admin),
+        pytest.raises(RuntimeError),
+    ):
+        await register_user("x@test.local", "pw", fake_session)
+
+    fake_admin.auth.admin.delete_user.assert_called_once_with(fake_user_id)
