@@ -55,7 +55,7 @@ class AuthApiMixin(ApiProtocol):
         assert self._response is not None
         hx_redirect = self._response.headers.get("hx-redirect", "")
         is_hx = "/auth/login" in hx_redirect
-        is_http = self._response.status_code in (301, 302, 307, 308)
+        is_http = self._response.status_code in (301, 302, 303, 307, 308)
         assert is_hx or is_http, (
             f"Expected redirect to /auth/login, got status={self._response.status_code}"
             f" hx-redirect={hx_redirect!r}"
@@ -67,14 +67,22 @@ class AuthApiMixin(ApiProtocol):
 
     def assert_redirected_to_dashboard(self) -> None:
         assert self._response is not None
-        assert self._response.headers.get("hx-redirect") == "/profile", (
-            f"Expected HX-Redirect to /profile, got {self._response.headers.get('hx-redirect')}"
+        is_303 = self._response.status_code == 303 and "/profile" in self._response.headers.get(
+            "location", ""
+        )
+        is_hx = self._response.headers.get("hx-redirect") == "/profile"
+        assert is_303 or is_hx, (
+            f"Expected 303 redirect to /profile or HX-Redirect, "
+            f"got status={self._response.status_code} "
+            f"location={self._response.headers.get('location')!r}"
         )
 
     def assert_registration_successful(self) -> None:
         assert self._response is not None
-        assert self._response.status_code == 200, f"Expected 200, got {self._response.status_code}"
-        assert "verify" in self._response.text, "'verify' not found in registration response"
+        assert self._response.status_code == 303, f"Expected 303, got {self._response.status_code}"
+        assert "/auth/login" in self._response.headers.get("location", ""), (
+            f"Expected redirect to /auth/login, got {self._response.headers.get('location')!r}"
+        )
         assert self._last_registered_email is not None
         assert find_users(self._last_registered_email), (
             f"User {self._last_registered_email!r} not found in Supabase after registration"

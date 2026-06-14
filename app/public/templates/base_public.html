@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}labase{% endblock %}</title>
   <link rel="stylesheet" href="/static/tailwind.css" />
-  <script src="/static/htmx.min.js"></script>
+  <script src="/static/htmx.min.js" defer></script>
   <script>
     document.addEventListener('htmx:beforeSwap', function(e) {
       if (e.detail.xhr.status >= 400) {

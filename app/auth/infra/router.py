@@ -1,6 +1,6 @@
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, Request, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
@@ -46,9 +46,16 @@ def _friendly_auth_error(e: AuthApiError) -> str:
     return _AUTH_ERROR_MESSAGES.get(code, e.message)
 
 
+_INFO_MESSAGES: dict[str, str] = {
+    "registered": "Account created. Please verify your email then sign in.",
+}
+
+
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "login.html")
+async def login_page(request: Request, info: str | None = None) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "login.html", {"info": _INFO_MESSAGES.get(info or "")}
+    )
 
 
 @router.post("/login")
@@ -62,9 +69,8 @@ async def login_endpoint(
     ip = request.client.host if request.client else None
     try:
         tokens = await login(email, password)
-        resp = Response(status_code=status.HTTP_200_OK)
+        resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
-        resp.headers["HX-Redirect"] = "/profile"
         return resp
     except AuthApiError as e:
         record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
@@ -90,10 +96,9 @@ async def login_endpoint(
 async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Response:
     if access_token:
         await logout(access_token)
-    resp = Response(status_code=status.HTTP_200_OK)
+    resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
-    resp.headers["HX-Redirect"] = "/auth/login"
     return resp
 
 
@@ -114,10 +119,8 @@ async def register_endpoint(
     ip = request.client.host if request.client else None
     try:
         await register_user(email, password, admin_session)
-        return templates.TemplateResponse(
-            request,
-            "login.html",
-            {"info": "Account created. Please verify your email then sign in."},
+        return RedirectResponse(
+            "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
         )
     except AuthWeakPasswordError as e:
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"

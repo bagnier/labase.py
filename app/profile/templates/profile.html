@@ -31,7 +31,7 @@
     {{ alert('success', success) }}
     {{ alert('error', error) }}
 
-    <form hx-post="/profile" hx-target="body" class="space-y-4">
+    <form method="post" action="/profile" hx-post="/profile" hx-target="body" class="space-y-4">
       {{ input_field("display_name", "display_name", label="Display name",
                      placeholder="Your name or handle",
                      value=(profile.display_name if (profile and profile.display_name) else '')) }}

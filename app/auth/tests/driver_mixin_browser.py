@@ -16,7 +16,7 @@ class AuthBrowserMixin(BrowserProtocol):
             lambda r: "/auth/login" in r.url and r.request.method == "POST"
         ) as resp_info:
             self._p.click("button[type=submit]")
-        if resp_info.value.headers.get("hx-redirect"):
+        if resp_info.value.status == 303 or resp_info.value.headers.get("hx-redirect"):
             self._p.wait_for_url(f"{self._base_url}/profile", timeout=5000)
         else:
             self._p.wait_for_load_state("domcontentloaded")
@@ -66,12 +66,8 @@ class AuthBrowserMixin(BrowserProtocol):
         self._store_active_org_slug()
 
     def logout_action(self) -> None:
+        self._p.evaluate("fetch('/auth/logout',{method:'POST'})")
         self._p.goto(f"{self._base_url}/auth/login", wait_until="load")
-        self._p.evaluate(
-            "fetch('/auth/logout',{method:'POST'})"
-            ".then(r=>{if(r.headers.get('hx-redirect'))window.location=r.headers.get('hx-redirect');})"
-        )
-        self._p.wait_for_url(f"{self._base_url}/auth/login", timeout=5000)
 
     def assert_unauthorized(self) -> None:
         # Browser is redirected to /auth/login (302); check final URL

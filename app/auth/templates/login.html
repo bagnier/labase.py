@@ -14,7 +14,7 @@
   {{ alert('error', error) }}
   {{ alert('info', info) }}
 
-  <form hx-post="/auth/login" hx-target="body" class="space-y-4">
+  <form method="post" action="/auth/login" class="space-y-4">
     {{ input_field("email", "email", type="email", label="Email",
                    placeholder="you@example.com") }}
     {{ input_field("password", "password", type="password", label="Password") }}
