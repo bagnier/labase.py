@@ -29,6 +29,7 @@
 - [x] transactions
 - [x] upgrade
 - [x] DB schema
+- [x] generic repository à la SpringJPA
 - [ ] english all around
 - [ ] file de tâches asynchrones
 - [ ] index fulltext

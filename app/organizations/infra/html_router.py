@@ -31,7 +31,7 @@ async def org_dashboard(
     membership: CurrentMembership,
 ) -> HTMLResponse:
     repo = OrganizationRepository(session)
-    org = await repo.get_by_id(org_id)
+    org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     org_slug = request.path_params.get("org_slug", org.slug)
@@ -54,7 +54,7 @@ async def org_settings(
     membership: CurrentMembership,
 ):
     repo = OrganizationRepository(session)
-    org = await repo.get_by_id(org_id)
+    org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     org_slug = request.path_params.get("org_slug", org.slug)
@@ -82,12 +82,12 @@ async def rename_org_html(
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     repo = OrganizationRepository(session)
-    org = await repo.get_by_id(org_id)
+    org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await repo.rename(org, name)
     # Reload org to get new slug
-    org = await repo.get_by_id(org_id)
+    org = await repo.get(org_id)
     assert org is not None
     return RedirectResponse(url=f"/{org.slug}/settings", status_code=303)
 
@@ -104,7 +104,7 @@ async def org_members(
     membership: CurrentMembership,
 ):
     repo = OrganizationRepository(session)
-    org = await repo.get_by_id(org_id)
+    org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     raw_members = await repo.list_members(org_id)

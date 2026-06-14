@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from pydantic import BaseModel
 
 from app.files.domain.models import OrgFileRead
-from app.files.infra.repository import OrgFileRepository
+from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.storage import (
     BUCKET,
     service_storage_client,
@@ -54,8 +54,8 @@ async def file_list(
     session: RlsSession,
     org_id: CurrentOrg,
 ):
-    repo = OrgFileRepository(session)
-    files = await repo.list_for_org(org_id)
+    repo = OrgFileRepository(session, org_id)
+    files = await repo.all()
     return _render(request, current_user, files)
 
 
@@ -81,9 +81,8 @@ async def upload_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
 
-    repo = OrgFileRepository(session)
+    repo = OrgFileRepository(session, org_id)
     org_file = await repo.add(
-        org_id=org_id,
         user_id=uuid.UUID(current_user.id),
         filename=file.filename or "upload",
         storage_path=path,
@@ -101,7 +100,7 @@ async def upload_file(
         filename=org_file.filename,
     )
 
-    files = await repo.list_for_org(org_id)
+    files = await repo.all()
     return _render(request, current_user, files)
 
 
@@ -112,8 +111,8 @@ async def download_file(
     session: RlsSession,
     org_id: CurrentOrg,
 ):
-    repo = OrgFileRepository(session)
-    org_file = await repo.get(file_id, org_id)
+    repo = OrgFileRepository(session, org_id)
+    org_file = await repo.get(file_id)
     if org_file is None:
         return HTMLResponse("Not found", status_code=404)
 
@@ -133,8 +132,8 @@ async def delete_file(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ):
-    repo = OrgFileRepository(session)
-    org_file = await repo.get(file_id, org_id)
+    repo = OrgFileRepository(session, org_id)
+    org_file = await repo.get(file_id)
     if org_file is None:
         return HTMLResponse("Not found", status_code=404)
 
@@ -155,7 +154,7 @@ async def delete_file(
         file_id=str(file_id),
     )
 
-    files = await repo.list_for_org(org_id)
+    files = await repo.all()
     return _render(request, current_user, files)
 
 
@@ -173,8 +172,8 @@ async def rename_file(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ):
-    repo = OrgFileRepository(session)
-    org_file = await repo.get(file_id, org_id)
+    repo = OrgFileRepository(session, org_id)
+    org_file = await repo.get(file_id)
     if org_file is None:
         return HTMLResponse("Not found", status_code=404)
 
@@ -185,7 +184,7 @@ async def rename_file(
 
     await repo.rename(org_file, body.filename)
 
-    files = await repo.list_for_org(org_id)
+    files = await repo.all()
     return _render(request, current_user, files)
 
 
@@ -197,8 +196,8 @@ async def generate_share_link(
     session: RlsSession,
     org_id: CurrentOrg,
 ):
-    repo = OrgFileRepository(session)
-    org_file = await repo.get(file_id, org_id)
+    repo = OrgFileRepository(session, org_id)
+    org_file = await repo.get(file_id)
     if org_file is None:
         return JSONResponse({"detail": "Not found"}, status_code=404)
 
@@ -211,14 +210,14 @@ async def public_share_download(
     token: uuid.UUID,
     admin_session: AdminSession,
 ):
-    repo = OrgFileRepository(admin_session)
+    repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
         return HTMLResponse("Link not found", status_code=404)
     if share_token.expires_at < datetime.now(UTC):
         return HTMLResponse("Link expired", status_code=410)
 
-    org_file = await repo.get_by_id(share_token.file_id)
+    org_file = await repo.get(share_token.file_id)
     if org_file is None:
         return HTMLResponse("File not found", status_code=404)
 

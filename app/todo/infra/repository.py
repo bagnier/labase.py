@@ -1,41 +1,29 @@
 import uuid
 
 from sqlalchemy import case, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.shared.persistence.repository import OrgScopedRepository
 from app.todo.domain.models import TodoItem
 
 
-class TodoRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+class TodoRepository(OrgScopedRepository[TodoItem]):
+    model = TodoItem
 
-    async def list_for_org(self, org_id: uuid.UUID) -> list[TodoItem]:
-        result = await self.session.execute(
-            select(TodoItem).where(TodoItem.org_id == org_id).order_by(TodoItem.position)
+    async def all(self) -> list[TodoItem]:
+        return list(
+            await self.session.scalars(
+                select(TodoItem).where(TodoItem.org_id == self.org_id).order_by(TodoItem.position)
+            )
         )
-        return list(result.scalars().all())
 
-    async def get(self, todo_id: uuid.UUID, org_id: uuid.UUID) -> TodoItem | None:
-        result = await self.session.execute(
-            select(TodoItem).where(TodoItem.id == todo_id, TodoItem.org_id == org_id)
-        )
-        return result.scalars().first()
-
-    async def add(self, user_id: uuid.UUID, org_id: uuid.UUID, title: str) -> TodoItem:
+    async def add(self, user_id: uuid.UUID, title: str) -> TodoItem:
         await self.session.execute(
-            update(TodoItem).where(TodoItem.org_id == org_id).values(position=TodoItem.position + 1)
+            update(TodoItem)
+            .where(TodoItem.org_id == self.org_id)
+            .values(position=TodoItem.position + 1)
         )
-        todo = TodoItem(user_id=user_id, org_id=org_id, title=title, position=0)
+        todo = TodoItem(user_id=user_id, org_id=self.org_id, title=title, position=0)
         return await self.save(todo)
-
-    async def save(self, todo: TodoItem) -> TodoItem:
-        self.session.add(todo)
-        await self.session.flush()
-        return todo
-
-    async def delete(self, todo: TodoItem) -> None:
-        await self.session.delete(todo)
 
     @staticmethod
     def _reorder(
@@ -54,11 +42,11 @@ class TodoRepository:
             ordered.insert(above_idx, todo)
         return ordered
 
-    async def _apply_positions(self, org_id: uuid.UUID, ordered: list[TodoItem]) -> None:
+    async def _apply_positions(self, ordered: list[TodoItem]) -> None:
         new_positions = {item.id: pos for pos, item in enumerate(ordered)}
         await self.session.execute(
             update(TodoItem)
-            .where(TodoItem.org_id == org_id)
+            .where(TodoItem.org_id == self.org_id)
             .values(
                 position=case(
                     *[(TodoItem.id == id_, pos) for id_, pos in new_positions.items()],
@@ -67,14 +55,9 @@ class TodoRepository:
             )
         )
 
-    async def move_above(
-        self, org_id: uuid.UUID, todo_id: uuid.UUID, above_id: uuid.UUID | None
-    ) -> None:
-        result = await self.session.execute(
-            select(TodoItem).where(TodoItem.org_id == org_id).order_by(TodoItem.position)
-        )
-        items = list(result.scalars().all())
+    async def move_above(self, todo_id: uuid.UUID, above_id: uuid.UUID | None) -> None:
+        items = await self.all()
         ordered = self._reorder(items, todo_id, above_id)
         if ordered is None:
             return
-        await self._apply_positions(org_id, ordered)
+        await self._apply_positions(ordered)

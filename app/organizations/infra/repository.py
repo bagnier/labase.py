@@ -2,7 +2,6 @@ import re
 import uuid
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.organizations.domain.models import (
     InvitationStatus,
@@ -11,15 +10,15 @@ from app.organizations.domain.models import (
     OrgInvitation,
     OrgRole,
 )
+from app.shared.persistence.repository import BaseRepository
 
 
 def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-class OrganizationRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+class OrganizationRepository(BaseRepository[Organization]):
+    model = Organization
 
     async def _unique_slug(self, base: str) -> str:
         slug = base
@@ -70,10 +69,6 @@ class OrganizationRepository:
             .order_by(Organization.created_at)
             .limit(1)
         )
-        return result.scalars().first()
-
-    async def get_by_id(self, org_id: uuid.UUID) -> Organization | None:
-        result = await self.session.execute(select(Organization).where(Organization.id == org_id))
         return result.scalars().first()
 
     async def get_by_slug(self, slug: str) -> Organization | None:

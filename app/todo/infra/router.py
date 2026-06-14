@@ -31,8 +31,8 @@ async def todo_list(
     session: RlsSession,
     org_id: CurrentOrg,
 ):
-    repo = TodoRepository(session)
-    todos = await repo.list_for_org(org_id)
+    repo = TodoRepository(session, org_id)
+    todos = await repo.all()
     return _render(request, current_user, todos)
 
 
@@ -45,8 +45,8 @@ async def add_todo(
     org_id: CurrentOrg,
     title: str = Form(...),
 ):
-    repo = TodoRepository(session)
-    todo = await repo.add(uuid.UUID(current_user.id), org_id, title)
+    repo = TodoRepository(session, org_id)
+    todo = await repo.add(uuid.UUID(current_user.id), title)
     record_audit_event(
         bg,
         level="info",
@@ -55,7 +55,7 @@ async def add_todo(
         org_id=str(org_id),
         todo_id=str(todo.id),
     )
-    todos = await repo.list_for_org(org_id)
+    todos = await repo.all()
     return _render(request, current_user, todos)
 
 
@@ -69,8 +69,8 @@ async def patch_todo(
     done: bool | None = Form(default=None),
     title: str | None = Form(default=None),
 ):
-    repo = TodoRepository(session)
-    todo = await repo.get(todo_id, org_id)
+    repo = TodoRepository(session, org_id)
+    todo = await repo.get(todo_id)
     if todo is None:
         raise HTTPException(404)
     if done is not None:
@@ -78,7 +78,7 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
-    todos = await repo.list_for_org(org_id)
+    todos = await repo.all()
     return _render(request, current_user, todos)
 
 
@@ -91,8 +91,8 @@ async def delete_todo(
     session: RlsSession,
     org_id: CurrentOrg,
 ):
-    repo = TodoRepository(session)
-    todo = await repo.get(todo_id, org_id)
+    repo = TodoRepository(session, org_id)
+    todo = await repo.get(todo_id)
     if todo:
         await repo.delete(todo)
         record_audit_event(
@@ -103,7 +103,7 @@ async def delete_todo(
             org_id=str(org_id),
             todo_id=str(todo_id),
         )
-    todos = await repo.list_for_org(org_id)
+    todos = await repo.all()
     return _render(request, current_user, todos)
 
 
@@ -117,7 +117,7 @@ async def reorder_todos(
     body = await request.json()
     todo_id = uuid.UUID(body["id"])
     above_id = uuid.UUID(body["above_id"]) if body.get("above_id") else None
-    repo = TodoRepository(session)
-    await repo.move_above(org_id, todo_id, above_id)
-    todos = await repo.list_for_org(org_id)
+    repo = TodoRepository(session, org_id)
+    await repo.move_above(todo_id, above_id)
+    todos = await repo.all()
     return _render(request, current_user, todos)

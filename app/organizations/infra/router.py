@@ -45,7 +45,7 @@ async def rename_organization(
     session: RlsSession,
 ) -> JSONResponse:
     repo = OrganizationRepository(session)
-    org = await repo.get_by_id(org_id)
+    org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await repo.rename(org, body.name)
