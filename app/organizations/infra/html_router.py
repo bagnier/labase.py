@@ -12,6 +12,7 @@ from app.shared.dependencies import (
     CurrentMembership,
     CurrentOrg,
     CurrentUser,
+    OwnerMembership,
     RlsSession,
 )
 from app.shared.http.templates import templates
@@ -51,7 +52,7 @@ async def org_settings(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
-    membership: CurrentMembership,
+    membership: OwnerMembership,
 ):
     repo = OrganizationRepository(session)
     org = await repo.get(org_id)
