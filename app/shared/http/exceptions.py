@@ -25,7 +25,9 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
         method=request.method,
         path=request.url.path,
     )
-    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+    if wants_json(request):
+        return JSONResponse({"detail": "Internal server error"}, status_code=500)
+    return HTMLResponse("Internal server error", status_code=500)
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:

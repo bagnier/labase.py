@@ -67,8 +67,16 @@ async def test_handle_rate_limit_no_limit_attr():
 
 
 @pytest.mark.asyncio
-async def test_handle_unhandled_error():
+async def test_handle_unhandled_error_html():
     req = _mock_request()
+    resp = await handle_unhandled_error(req, RuntimeError("boom"))
+    assert resp.status_code == 500
+    assert b"Internal server error" in bytes(resp.body)
+
+
+@pytest.mark.asyncio
+async def test_handle_unhandled_error_json():
+    req = _mock_request(headers={"Accept": "application/json"})
     resp = await handle_unhandled_error(req, RuntimeError("boom"))
     assert resp.status_code == 500
     body = json.loads(bytes(resp.body))
