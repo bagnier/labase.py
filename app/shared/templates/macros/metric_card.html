@@ -1,4 +1,4 @@
-{% macro metric_card(label, color, svg_path) %}
+{% macro metric_card(label, color, icon) %}
 {% set bg = {
   'indigo':  'bg-indigo-50',
   'emerald': 'bg-emerald-50',
@@ -13,9 +13,7 @@
   <div class="flex items-center justify-between mb-3">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ label }}</p>
     <div class="w-7 h-7 rounded-lg {{ bg[color] }} flex items-center justify-center">
-      <svg class="w-4 h-4 {{ text[color] }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="{{ svg_path }}"/>
-      </svg>
+      <i class="ph ph-{{ icon }} ph-sm {{ text[color] }}" aria-hidden="true"></i>
     </div>
   </div>
   <p class="text-2xl font-bold text-gray-900">—</p>

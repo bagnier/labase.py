@@ -29,10 +29,10 @@
 - [x] refactor / simplify features
 - [x] refactor / simplify API uniforme CRUD comme BaseRepository
 - [x] simplify json + form
-- [ ] logs
-- [ ] remplacer les SVG par une fonte
+- [x] remplacer les SVG par une fonte
 - [ ] trop de class tailwind, sementique web
 - [ ] reactive web
+- [ ] logs
 
 
 - [ ] async task queue

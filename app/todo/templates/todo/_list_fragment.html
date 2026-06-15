@@ -1,9 +1,7 @@
 <div id="todo-list" class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
   {% for todo in todos %}
   <div class="todo-item flex items-center gap-3 px-4 py-3 group" data-id="{{ todo.id }}">
-    <svg class="drag-handle w-4 h-4 text-gray-300 flex-none opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 6.75h16.5m-16.5 6.75h16.5"/>
-    </svg>
+    <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 flex-none opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" aria-hidden="true"></i>
     <input type="checkbox" data-todo-id="{{ todo.id }}" {% if todo.done %}checked{% endif %}
       hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-vals='{"done": "true"}' hx-target="#todo-list" hx-swap="outerHTML"
       class="w-4 h-4 rounded border-gray-300 text-indigo-500 cursor-pointer flex-none" />
@@ -12,9 +10,7 @@
     </span>
     <button data-delete-id="{{ todo.id }}" hx-delete="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="outerHTML" hx-confirm="Delete this task?"
       class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-      </svg>
+      <i class="ph ph-x ph-sm" aria-hidden="true"></i>
     </button>
   </div>
   {% else %}
