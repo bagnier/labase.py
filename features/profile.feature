@@ -34,7 +34,7 @@ Feature: Profile management
     And their handle is "alice"
     When they update their handle to ""
     Then the update is rejected
-    And their handle is still "alice"
+    And their handle is "alice"
 
   Scenario: A signed-in user cannot change their email
     Given a user is signed in

@@ -6,32 +6,14 @@ def step_set_current_date(driver, date):
     driver.set_current_date(date)
 
 
-# ── existing (kept for backward compat) ──────────────────────────────────────
-
-
 @given(parsers.parse('they have uploaded "{filename}" to the org'))
 def step_have_uploaded_file(driver, filename):
     driver.have_uploaded_file(filename)
 
 
-@when(parsers.parse('they upload a file "{filename}" to the org'))
-def step_upload_file_old(driver, filename):
-    driver.upload_file(filename)
-
-
 @when("they view the file list")
 def step_view_file_list(driver):
     driver.view_file_list()
-
-
-@when(parsers.parse('they download the file "{filename}"'))
-def step_download_file_old(driver, filename):
-    driver.download_file(filename)
-
-
-@when(parsers.parse('they delete the file "{filename}"'))
-def step_delete_file_old(driver, filename):
-    driver.delete_file(filename)
 
 
 @then(parsers.parse('"{filename}" appears in the file list'))
@@ -75,11 +57,6 @@ def step_file_size_limit():
 @when("they upload a file of 51 MB to the org")
 def step_upload_oversized(driver):
     driver.upload_oversized_file(51)
-
-
-@given(parsers.parse('"{email}" is a member of the org'))
-def step_add_member(driver, email):
-    driver.add_member_to_org(email)
 
 
 @given(parsers.parse('"{email}" has uploaded "{filename}" to the org'))
@@ -150,16 +127,6 @@ def step_upload_raw_filename(driver, filename):
 @then(parsers.parse("the upload is rejected with status {status:d}"))
 def step_upload_rejected_with_status(driver, status):
     driver.assert_upload_rejected(status)
-
-
-@then(parsers.parse('"{filename}" still appears in the file list'))
-def step_assert_file_still_visible(driver, filename):
-    driver.assert_file_visible(filename)
-
-
-@then(parsers.parse('"{filename}" does not appear in the file list'))
-def step_assert_file_does_not_appear(driver, filename):
-    driver.assert_file_absent(filename)
 
 
 @then(

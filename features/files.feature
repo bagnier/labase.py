@@ -54,7 +54,7 @@ Feature: Org file storage
     And "bob@example.com" has uploaded "budget.xlsx" to the org
     When they delete "budget.xlsx"
     Then the action is denied
-    And "budget.xlsx" still appears in the file list
+    And "budget.xlsx" appears in the file list
 
   Scenario: Owner can delete any file in the org
     Given "bob@example.com" is a member of the org
@@ -84,7 +84,7 @@ Feature: Org file storage
     Given "carol@example.com" is a member of "Beta Corp"
     And they have uploaded "rapport.pdf" to the org
     When "carol@example.com" views the file list
-    Then "rapport.pdf" does not appear in the file list
+    Then "rapport.pdf" no longer appears in the file list
 
   # Sharing — link accessible to anyone who has it
 

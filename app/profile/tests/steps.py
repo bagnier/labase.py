@@ -56,11 +56,6 @@ def step_assert_handle(driver, name):
     driver.assert_handle(name)
 
 
-@then(parsers.parse('their handle is still "{name}"'))
-def step_assert_handle_still(driver, name):
-    driver.assert_handle(name)
-
-
 @then("the update is rejected")
 def step_assert_update_rejected(driver):
     driver.assert_last_update_rejected()

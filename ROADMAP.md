@@ -26,7 +26,7 @@
 - [x] GitHub Actions
 - [x] refactor / simplify migration
 - [x] english all around
-- [ ] refactor / simplify features
+- [x] refactor / simplify features
 - [ ] refactor / simplify API uniforme CRUD comme BaseRepository
 - [ ] remplacer les SVG par une fonte
 - [ ] trop de class tailwind, sementique web
