@@ -7,16 +7,25 @@ single DB query. Routes call it explicitly via :func:`page_context` /
 """
 
 import uuid
+from dataclasses import dataclass
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import AuthenticatedUser
-from app.organizations.domain.models import Membership, Organization
+from app.organizations.domain.models import Membership, Organization, OrgRole
 from app.profile.domain.models import Profile
 
 log = structlog.get_logger("labase.profile.shell")
+
+
+@dataclass
+class NavOrg:
+    id: uuid.UUID
+    name: str
+    slug: str
+    is_owner: bool
 
 
 async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -> dict:
@@ -35,7 +44,7 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
     try:
         rows = (
             await session.execute(
-                select(Organization, display_name)
+                select(Organization, Membership.role, display_name)
                 .join(Membership, Membership.org_id == Organization.id)
                 .where(Membership.auth_user_id == user_id)
                 .order_by(Organization.created_at)
@@ -45,8 +54,16 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
         log.warning("profile.shell_load_failed")
         return {"display_name": None, "nav_orgs": []}
     return {
-        "display_name": rows[0][1] if rows else None,
-        "nav_orgs": [row[0] for row in rows],
+        "display_name": rows[0][2] if rows else None,
+        "nav_orgs": [
+            NavOrg(
+                id=row[0].id,
+                name=row[0].name,
+                slug=row[0].slug,
+                is_owner=row[1] == OrgRole.owner,
+            )
+            for row in rows
+        ],
     }
 
 

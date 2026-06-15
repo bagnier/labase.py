@@ -62,7 +62,7 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 - **SSR + HTMX, no SPA.** Single repo, single deployment, no CORS, server-side auth — suited to a mostly-CRUD UI.
 - **Plain SQL migrations.** Supabase CLI migrations stay readable and versioned; the first creates `profiles` linked to `auth.users` with RLS and an auto-create trigger on sign-up.
 - **Dual-driver BDD.** The same Gherkin scenarios run against an API driver (`httpx.AsyncClient`, fast) and a browser driver (Playwright), exercising both the HTTP layer and the real UI without duplicate test logic. Tests share one BYPASSRLS connection, so the `get_rls_session` override sets JWT claims *without* `SET role authenticated` — issuing it would drop BYPASSRLS and break unrelated queries on the shared connection.
-- **npm-built assets.** `npm run build` copies `htmx.min.js` and Inter fonts and compiles `static/input.css` → `static/tailwind.css`. Output lands in the gitignored `static/`; run `make install` to (re)generate after adding Tailwind classes. No CDN in production.
+- **npm-built assets, no remote dependencies at runtime.** All JS libraries and fonts are installed via `npm` and copied to `static/js/` at build time (`npm run build`). No CDN URLs in templates — add a library with `npm install`, copy it in `package.json`'s `build:js` step, and reference it as `/static/js/<file>`. Output lands in the gitignored `static/js/`; run `make install` to (re)generate.
 
 ## Structure
 

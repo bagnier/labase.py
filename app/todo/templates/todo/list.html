@@ -22,3 +22,24 @@
 
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sortable.min.js"></script>
+<script>
+(function () {
+  const list = document.getElementById('todo-list');
+  if (!list) return;
+  Sortable.create(list, {
+    animation: 150,
+    handle: '.drag-handle',
+    onEnd: ({ item, related }) => {
+      fetch('/{{ org_slug }}/todos/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.dataset.id, above_id: related?.dataset.id ?? null }),
+      });
+    },
+  });
+})();
+</script>
+{% endblock %}
