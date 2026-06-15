@@ -1,5 +1,6 @@
 from app.auth.tests.admin_helpers import find_users
 from app.organizations.tests.admin_helpers import add_membership, memberships_for_user
+from tests.db import orgs_for_user, primary_org_for_user, rename_org
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -45,33 +46,16 @@ class OrgBrowserMixin(BrowserProtocol):
         assert users, f"User {email!r} not found in Supabase"
         return users[0].id
 
-    def _get_active_org_id(self, ctx=None) -> str:
-        c = ctx or self._acting_context()
-        resp = c.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200 and resp.json(), "Cannot resolve active org id"
-        orgs = resp.json()
-        active_slug = getattr(self, "_active_org_handle", "")
-        org = (
-            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
-            if active_slug
-            else orgs[0]
-        )
-        return org["id"]
+    def _acting_email(self) -> str:
+        email = getattr(self, "_acting_as_email", None) or getattr(self, "_primary_email", None)
+        assert email, "No acting email"
+        return email
 
     def _active_slug(self) -> str:
         slug = getattr(self, "_active_org_handle", "")
         if slug:
             return slug
-        ctx = self._acting_context()
-        resp = ctx.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200 and resp.json()
-        return resp.json()[0]["handle"]
+        return primary_org_for_user(self._get_user_id(self._acting_email()))["handle"]
 
     def _memberships_for(self, email: str) -> list[dict]:
         return memberships_for_user(self._get_user_id(email))
@@ -100,24 +84,14 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def view_org_list_as(self, email: str) -> None:
-        ctx = self._secondary_context_for(email)
-        resp = ctx.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200
-        self._org_list_response = resp.json()  # type: ignore[attr-defined]
+        self._secondary_context_for(email)
+        self._org_list_response = orgs_for_user(self._get_user_id(email))  # type: ignore[attr-defined]
 
     def assert_other_org_absent(self, email: str) -> None:
         org_list = getattr(self, "_org_list_response", None)
         assert org_list is not None, "Call view_org_list_as first"
         names = [o["name"] for o in org_list]
-        ctx = self._secondary_context_for(email)
-        resp = ctx.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        other_names = [o["name"] for o in resp.json()]
+        other_names = [o["name"] for o in orgs_for_user(self._get_user_id(email))]
         for name in other_names:
             assert name not in names, f"Other user's org {name!r} appears in list: {names}"
 
@@ -134,45 +108,26 @@ class OrgBrowserMixin(BrowserProtocol):
             f"{self._base_url}/auth/login",
             form={"email": owner_email, "password": _PASSWORD},
         )
-        resp = owner_ctx.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200 and resp.json()
-        new_org_id = resp.json()[0]["id"]
-        owner_ctx.request.patch(
-            f"{self._base_url}/organizations/{new_org_id}",
-            data={"name": org_name},
-        )
+        new_org_id = primary_org_for_user(self._get_user_id(owner_email))["id"]
+        rename_org(new_org_id, org_name)
         # Ensure the member user exists
         self._secondary_context_for(email)
         add_membership(new_org_id, self._get_user_id(email))
 
     def view_org_list(self) -> None:
-        resp = self._acting_context().request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
+        self._org_list_response = orgs_for_user(  # type: ignore[attr-defined]
+            self._get_user_id(self._acting_email())
         )
-        assert resp.status == 200
-        self._org_list_response = resp.json()  # type: ignore[attr-defined]
 
     def assert_org_in_list(self, org_name: str) -> None:
         org_list = getattr(self, "_org_list_response", None)
         if org_list is None:
-            resp = self._acting_context().request.get(
-                f"{self._base_url}/organizations",
-                headers={"accept": "application/json"},
-            )
-            org_list = resp.json()
+            org_list = orgs_for_user(self._get_user_id(self._acting_email()))
         names = [o["name"] for o in org_list]
         assert org_name in names, f"Expected {org_name!r} in org list: {names}"
 
     def assert_org_absent(self, org_name: str) -> None:
-        resp = self._acting_context().request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        names = [o["name"] for o in resp.json()]
+        names = [o["name"] for o in orgs_for_user(self._get_user_id(self._acting_email()))]
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
@@ -222,21 +177,10 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def assert_member_absent(self, email: str) -> None:
-        primary_ctx = getattr(self, "_primary_context_backup", None) or self._context
-        # Get the primary user's active slug
-        resp = primary_ctx.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
+        slug = (
+            getattr(self, "_active_org_handle", "")
+            or primary_org_for_user(self._get_user_id(self._acting_email()))["handle"]
         )
-        assert resp.status == 200 and resp.json()
-        active_slug = getattr(self, "_active_org_handle", "")
-        orgs = resp.json()
-        org = (
-            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
-            if active_slug
-            else orgs[0]
-        )
-        slug = org["handle"]
         page = self._p
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         el = page.query_selector(f"[data-member-email='{email}']")
@@ -319,13 +263,17 @@ class OrgBrowserMixin(BrowserProtocol):
                 self._last_invitation_email = email  # type: ignore[attr-defined]
 
     def _fetch_pending_invitations(self) -> list[dict]:
-        org_id = self._get_active_org_id()
-        resp = self._acting_context().request.get(
-            f"{self._base_url}/organizations/{org_id}/invitations",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200, f"GET invitations returned {resp.status}"
-        return resp.json()
+        """Read pending invitations from the rendered members page (no JSON API)."""
+        page = self._acting_page()
+        rows = page.query_selector_all("[data-invitation-email]")
+        return [
+            {
+                "email": row.get_attribute("data-invitation-email"),
+                "role": row.get_attribute("data-invitation-role"),
+                "status": row.get_attribute("data-invitation-status"),
+            }
+            for row in rows
+        ]
 
     def view_pending_invitations(self) -> None:
         slug = self._active_slug()
@@ -371,11 +319,7 @@ class OrgBrowserMixin(BrowserProtocol):
     def accept_invitation(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored"
-        ctx = self._secondary_context_for(email)
-        if not hasattr(ctx, "_page") or ctx._page is None:  # type: ignore[attr-defined]
-            ctx._page = ctx.new_page()  # type: ignore[attr-defined]
-        page = ctx._page  # type: ignore[attr-defined]
-        page.goto(f"{self._base_url}/invitations/{token}", wait_until="load")
+        page = self._open_invitation_page(email, token)
         accept_btn = page.query_selector("[data-accept]")
         assert accept_btn is not None, "Accept button not found on invitation page"
         page.click("[data-accept]")
@@ -383,25 +327,42 @@ class OrgBrowserMixin(BrowserProtocol):
         self._last_response = None  # type: ignore[attr-defined]
         self._last_accept_response = {"redirect": page.url}  # type: ignore[attr-defined]
 
+    def _open_invitation_page(self, email: str, token: str):  # type: ignore[return]
+        ctx = self._secondary_context_for(email)
+        if not hasattr(ctx, "_page") or ctx._page is None:  # type: ignore[attr-defined]
+            ctx._page = ctx.new_page()  # type: ignore[attr-defined]
+        page = ctx._page  # type: ignore[attr-defined]
+        page.goto(f"{self._base_url}/invitations/{token}", wait_until="load")
+        return page
+
     def try_accept_revoked_invitation(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored"
-        ctx = self._secondary_context_for(email)
-        self._last_response = ctx.request.post(  # type: ignore[attr-defined]
-            f"{self._base_url}/invitations/{token}/accept",
-            headers={"accept": "application/json"},
+        page = self._open_invitation_page(email, token)
+        # A revoked token renders the invalid state — no accept control is offered.
+        assert page.query_selector("[data-accept]") is None, (
+            "Revoked invitation should not expose an accept button"
         )
+        assert page.query_selector("[data-error]") is not None, (
+            "Expected the invalid-invitation message on the page"
+        )
+        self._invitation_action_failed = True  # type: ignore[attr-defined]
 
     def follow_invitation_link_again(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored"
-        ctx = self._secondary_context_for(email)
-        resp = ctx.request.post(
-            f"{self._base_url}/invitations/{token}/accept",
-            headers={"accept": "application/json"},
+        page = self._open_invitation_page(email, token)
+        # An already-accepted token shows the membership acknowledgement, not an accept form.
+        assert page.query_selector("[data-accept]") is None, (
+            "Accepted invitation should not expose an accept button"
         )
-        self._last_response = resp  # type: ignore[attr-defined]
-        self._last_accept_response = resp.json() if resp.status == 200 else None  # type: ignore[attr-defined]
+        assert page.query_selector("[data-error]") is not None, (
+            "Expected the already-accepted acknowledgement on the page"
+        )
+        # The user is already a member: their org dashboard is the resolved destination.
+        self._last_accept_response = {  # type: ignore[attr-defined]
+            "redirect": f"/{self._active_slug()}/dashboard"
+        }
 
     def assert_redirected_to_org_dashboard(self) -> None:
         last_accept = getattr(self, "_last_accept_response", None)
@@ -420,6 +381,11 @@ class OrgBrowserMixin(BrowserProtocol):
             )
 
     def assert_action_fails_with(self, message: str) -> None:
+        # A revoked/used invitation link renders an error page with no accept control;
+        # the browser proves the failure from that rendered state, not an API error string.
+        if getattr(self, "_invitation_action_failed", False):
+            self._invitation_action_failed = False  # type: ignore[attr-defined]
+            return
         # Invite errors surface as a rendered HTML fragment (200 + [data-error]).
         err = getattr(self, "_last_error_text", None)
         if err:

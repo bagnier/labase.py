@@ -1,7 +1,8 @@
 import uuid
+from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -18,11 +19,24 @@ log = structlog.get_logger("labase.organizations.invitations")
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 
+async def _get_admin_org_repo(admin_session: AdminSession) -> OrganizationRepository:
+    return OrganizationRepository(admin_session)
+
+
+async def _get_rls_org_repo(rls_session: RlsSession) -> OrganizationRepository:
+    return OrganizationRepository(rls_session)
+
+
+AdminOrgRepo = Annotated[OrganizationRepository, Depends(_get_admin_org_repo)]
+RlsOrgRepo = Annotated[OrganizationRepository, Depends(_get_rls_org_repo)]
+
+
 @router.get("/{token}", response_model=None)
 async def get_invitation(
     request: Request,
     token: uuid.UUID,
     admin_session: AdminSession,
+    repo: AdminOrgRepo,
 ):
     result = await admin_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
@@ -61,7 +75,6 @@ async def get_invitation(
             status_code=404,
         )
     inv = dict(row)
-    repo = OrganizationRepository(admin_session)
     org = await repo.get(inv["org_id"])
     org_name = org.name if org else ""
     if inv["status"] == "accepted":
@@ -90,6 +103,7 @@ async def accept_invitation(
     current_user: CurrentUser,
     rls_session: RlsSession,
     admin_session: AdminSession,
+    repo: RlsOrgRepo,
 ):
     # Resolve current invitation state (no membership required)
     inv_result = await admin_session.execute(
@@ -106,7 +120,6 @@ async def accept_invitation(
 
     if inv["status"] == "accepted":
         # Idempotent: already accepted — resolve org slug and redirect
-        repo = OrganizationRepository(rls_session)
         org = await repo.get(inv["org_id"])
         slug = org.handle if org else ""
         redirect_url = f"/{slug}/dashboard"

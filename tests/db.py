@@ -77,6 +77,35 @@ def primary_org_for_user(user_id: str) -> dict:
     return _run_blocking(_query)
 
 
+def orgs_for_user(user_id: str) -> list[dict]:
+    """All orgs (id/name/handle/role) the user belongs to, read through SQLAlchemy.
+
+    Browser-driver stand-in for ``GET /organizations``: the driver resolves multi-org
+    state from the DB, never from the JSON API.
+    """
+
+    async def _query() -> list[dict]:
+        engine = _service_engine()
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as session:
+                rows = (
+                    await session.execute(
+                        select(Organization, Membership.role)
+                        .join(Membership, Membership.org_id == Organization.id)
+                        .where(Membership.auth_user_id == uuid.UUID(user_id))
+                        .order_by(Membership.created_at)
+                    )
+                ).all()
+                return [
+                    {"id": str(org.id), "name": org.name, "handle": org.handle, "role": role.value}
+                    for org, role in rows
+                ]
+        finally:
+            await engine.dispose()
+
+    return _run_blocking(_query)
+
+
 def rename_org(org_id: str, name: str) -> None:
     """Renames an org through SQLAlchemy (browser-side test setup)."""
 

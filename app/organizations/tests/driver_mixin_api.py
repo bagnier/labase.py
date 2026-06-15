@@ -95,19 +95,10 @@ class OrgApiMixin(ApiProtocol):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
-        orgs = self._fetch_org_list()
-        assert orgs, "No organisations to rename"
-        active_slug = getattr(self, "_active_org_handle", "")
-        org = (
-            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
-            if active_slug
-            else orgs[0]
-        )
-        org_id = org["id"]
         resp = self._run(
             self._c.patch(
-                f"/organizations/{org_id}",
-                json={"name": new_name},
+                f"/{self._handle()}",
+                data={"name": new_name},
                 headers={"accept": "application/json"},
             )
         )
@@ -125,39 +116,27 @@ class OrgApiMixin(ApiProtocol):
             f"Expected 403, got {self._response.status_code}: {self._response.text}"
         )
 
-    def _get_active_org_id(self, client=None) -> str:
-        import httpx as _httpx
-
-        c: _httpx.AsyncClient = client or self._c
-        resp = self._run(c.get("/organizations", headers={"accept": "application/json"}))
-        assert resp.status_code == 200 and resp.json(), "Cannot resolve active org id"
-        orgs = resp.json()
-        active_slug = getattr(self, "_active_org_handle", "")
-        org = (
-            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
-            if active_slug
-            else orgs[0]
-        )
-        return org["id"]
+    def _handle(self) -> str:
+        slug = getattr(self, "_active_org_handle", "")
+        assert slug, "No active org handle"
+        return slug
 
     def _user_id_for(self, email: str) -> str:
         return self._user_id_for_email(email)
 
     def view_member_list(self) -> None:
-        org_id = self._get_active_org_id()
         self._response = self._run(
-            self._c.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
+            self._c.get(f"/{self._handle()}/members", headers={"accept": "application/json"})
         )
         assert self._response.status_code == 200, (
-            f"GET /organizations/{org_id}/members returned"
+            f"GET /{self._handle()}/members returned"
             f" {self._response.status_code}: {self._response.text}"
         )
         self._member_list_response = self._response.json()
 
     def assert_member_with_role(self, email: str, role: str) -> None:
-        org_id = self._get_active_org_id()
         resp = self._run(
-            self._c.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
+            self._c.get(f"/{self._handle()}/members", headers={"accept": "application/json"})
         )
         assert resp.status_code == 200, f"GET members returned {resp.status_code}: {resp.text}"
         members = resp.json()
@@ -170,74 +149,65 @@ class OrgApiMixin(ApiProtocol):
     def assert_member_absent(self, email: str) -> None:
         # Use primary client (owner) if current client may have lost org access (e.g. after leave)
         client = getattr(self, "_primary_client_backup", None) or self._c
-        org_id = self._get_active_org_id(client)
         resp = self._run(
-            client.get(f"/organizations/{org_id}/members", headers={"accept": "application/json"})
+            client.get(f"/{self._handle()}/members", headers={"accept": "application/json"})
         )
         assert resp.status_code == 200, (
-            f"GET /organizations/{org_id}/members returned {resp.status_code}: {resp.text}"
+            f"GET /{self._handle()}/members returned {resp.status_code}: {resp.text}"
         )
         emails = [m["email"] for m in resp.json()]
         assert email not in emails, f"{email!r} should be absent but found in member list: {emails}"
 
     def set_member_role(self, email: str, role: str) -> None:
-        org_id = self._get_active_org_id()
         user_id = self._user_id_for(email)
         self._response = self._run(
             self._c.patch(
-                f"/organizations/{org_id}/members/{user_id}",
-                json={"role": role},
+                f"/{self._handle()}/members/{user_id}",
+                data={"role": role},
                 headers={"accept": "application/json"},
             )
         )
 
     def remove_member(self, email: str) -> None:
-        org_id = self._get_active_org_id()
         user_id = self._user_id_for(email)
         self._response = self._run(
             self._c.delete(
-                f"/organizations/{org_id}/members/{user_id}",
+                f"/{self._handle()}/members/{user_id}",
                 headers={"accept": "application/json"},
             )
         )
 
     def leave_org(self) -> None:
-        org_id = self._get_active_org_id()
         self._response = self._run(
             self._c.delete(
-                f"/organizations/{org_id}/members/me",
+                f"/{self._handle()}/members/me",
                 headers={"accept": "application/json"},
             )
         )
         if self._response.status_code not in (204, 403):
             raise AssertionError(
-                f"leave_org DELETE /organizations/{org_id}/members/me returned "
+                f"leave_org DELETE /{self._handle()}/members/me returned "
                 f"{self._response.status_code}: {self._response.text}"
             )
 
     def assert_workspace_card(self, org_name: str) -> None:
-        resp = self._run(self._c.get("/profile"))
-        assert resp.status_code == 200, f"GET /profile returned {resp.status_code}"
-        assert f'data-organisation-card="{org_name}"' in resp.text, (
-            f"Organisation card for {org_name!r} not found in profile"
+        names = [o["name"] for o in self._fetch_org_list()]
+        assert org_name in names, (
+            f"Organisation {org_name!r} not found in the user's org list: {names}"
         )
 
     def _fetch_pending_invitations(self) -> list[dict]:
-        org_id = self._get_active_org_id()
         resp = self._run(
-            self._c.get(
-                f"/organizations/{org_id}/invitations", headers={"accept": "application/json"}
-            )
+            self._c.get(f"/{self._handle()}/invitations", headers={"accept": "application/json"})
         )
         assert resp.status_code == 200, f"GET invitations returned {resp.status_code}: {resp.text}"
         return resp.json()
 
     def invite_member(self, email: str, role: str) -> None:
-        org_id = self._get_active_org_id()
         self._response = self._run(
             self._c.post(
-                f"/organizations/{org_id}/invitations",
-                json={"email": email},
+                f"/{self._handle()}/invitations",
+                data={"email": email},
                 headers={"accept": "application/json"},
             )
         )
@@ -264,13 +234,12 @@ class OrgApiMixin(ApiProtocol):
         assert email not in emails, f"{email!r} should be absent from invitations: {emails}"
 
     def revoke_invitation(self, email: str) -> None:
-        org_id = self._get_active_org_id()
         invitations = self._fetch_pending_invitations()
         inv = next((i for i in invitations if i["email"] == email), None)
         assert inv is not None, f"No pending invitation for {email!r} to revoke"
         self._response = self._run(
             self._c.delete(
-                f"/organizations/{org_id}/invitations/{inv['id']}",
+                f"/{self._handle()}/invitations/{inv['id']}",
                 headers={"accept": "application/json"},
             )
         )

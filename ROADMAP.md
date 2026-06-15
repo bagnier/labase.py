@@ -27,8 +27,8 @@
 - [x] refactor / simplify migration
 - [x] english all around
 - [x] refactor / simplify features
-- [ ] refactor / simplify API uniforme CRUD comme BaseRepository
-- [ ] simplify json + form
+- [x] refactor / simplify API uniforme CRUD comme BaseRepository
+- [x] simplify json + form
 - [ ] logs
 - [ ] remplacer les SVG par une fonte
 - [ ] trop de class tailwind, sementique web
