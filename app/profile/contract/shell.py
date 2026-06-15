@@ -36,7 +36,7 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
     user's orgs, and ``profiles: own read`` exposes the display name.
     """
     if user is None:
-        return {"display_name": None, "nav_orgs": []}
+        return {"display_name": None, "orgs": []}
     user_id = uuid.UUID(user.id)
     display_name = (
         select(Profile.display_name).where(Profile.auth_user_id == user_id).scalar_subquery()
@@ -52,10 +52,10 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
         ).all()
     except Exception:
         log.warning("profile.shell_load_failed")
-        return {"display_name": None, "nav_orgs": []}
+        return {"display_name": None, "orgs": []}
     return {
         "display_name": rows[0][2] if rows else None,
-        "nav_orgs": [
+        "orgs": [
             NavOrg(
                 id=row[0].id,
                 name=row[0].name,

@@ -3,9 +3,9 @@ import uuid
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from app.profile.contract.shell import shell_context
 from app.profile.domain.models import ProfileCreate, ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
-from app.profile.infra.shell import shell_context
 from app.shared.dependencies import CurrentUser, RlsSession
 from app.shared.http.templates import templates
 
@@ -16,11 +16,10 @@ async def _profile_context(session: RlsSession, current_user: CurrentUser) -> di
     repo = ProfileRepository(session)
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
     shell = await shell_context(session, current_user)
-    orgs = shell["nav_orgs"]
+    orgs = shell["orgs"]
     return {
         "user": current_user,
         "profile": profile,
-        "orgs": orgs,
         "org_slug": orgs[0].slug if orgs else "",
         "org": orgs[0] if orgs else None,
         **shell,

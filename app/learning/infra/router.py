@@ -19,7 +19,7 @@ from app.learning.domain.service import (
     select_due_cards,
 )
 from app.learning.infra.repository import CatalogRow, LearningRepository
-from app.profile.infra.shell import shell_context
+from app.profile.contract.shell import shell_context
 from app.shared import clock
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
 from app.shared.http.templates import templates

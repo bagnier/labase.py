@@ -17,7 +17,7 @@ from app.files.infra.storage import (
     user_storage_client,
 )
 from app.organizations.domain.models import Membership, Organization, OrgRole
-from app.profile.infra.shell import shell_context
+from app.profile.contract.shell import shell_context
 from app.shared.dependencies import (
     AdminSession,
     CurrentMembership,

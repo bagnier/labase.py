@@ -40,19 +40,20 @@ HTTP request → infra/router.py → domain/service.py → infra/repository.py �
 
 - `domain/` never imports from `infra/`.
 - Contexts never import each other directly — cross-cutting code lives in `app/shared/`.
-- The only shared dependencies that cross context boundaries are the two auth ones: `get_current_user` (`auth/infra/security.py`) and `get_rls_session` (`auth/infra/session.py`).
+- A context's **inter-app surface** lives in its `contract/` folder (e.g. `profile/contract/shell.py`, `organizations/contract/hooks.py`, `todo/contract/seed.py`). That is the only part another context (or the composition root) may consume; `domain/` and `infra/` stay private. `contract/` ≠ `app/shared/`: the former is a context's owned public API, the latter is cross-cutting code with no owner.
+- The request-scoped primitives that cross context boundaries are gathered in one façade, `app/shared/dependencies.py`: the auth ones (`get_current_user`, `get_rls_session`) plus the `organizations` tenancy resolvers (`CurrentOrg`, `CurrentMembership`, `CurrentOrgModel`, owner gates). This façade is the sanctioned coupling to `auth` and `organizations`, and is the only part of `app/shared/` that imports a context. Cross-context *orchestration* (which knows its participants by nature) lives at the composition root next to `main.py`, not in `shared/`: `app/registration.py` (the sign-up saga creating the Supabase auth user + personal org) and `app/seeding.py` (wiring the `org.created` subscribers).
 - Org-scoped contexts (`todo`, `files`, `learning`) touch `organizations` only for org resolution (`CurrentOrg`, `CurrentMembership`, `Organization`) — never its logic.
 
 ### Core principles
 
-1. **Explicit page composition.** A page is fragments, each owned by a context. The cross-cutting shell (sidebar nav + display name) is a provider — `profile/infra/shell.py::shell_context` — pulled in explicitly via `page_context(...)`. No middleware or Jinja context processor injects data silently; full pages load the shell, HTMX fragments don't.
-2. **Multi-org users.** Each account gets a personal org at sign-up and can join others; the sidebar lists all of them (`nav_orgs`) and org-scoped data lives under `/{org_slug}/...`.
+1. **Explicit page composition.** A page is fragments, each owned by a context. The cross-cutting shell (sidebar nav + display name) is a provider — `profile/contract/shell.py::shell_context` — pulled in explicitly via `page_context(...)`. No middleware or Jinja context processor injects data silently; full pages load the shell, HTMX fragments don't.
+2. **Multi-org users.** Each account gets a personal org at sign-up and can join others; the sidebar lists all of them (`orgs`) and org-scoped data lives under `/{org_slug}/...`.
 3. **Membership reads, ownership writes.** A member sees all of an org's data; owner-only actions are gated by a *single* app check (`CurrentOwnerMembership` / `OwnerMembership`) that exists only to return a clean `403`. Isolation is RLS's job, never re-implemented in Python.
 4. **One query per context, per page.** The shell resolves display name + orgs in one query; org-scoped repositories are already org-filtered. Providers compose without N+1.
 
 ### Colocation
 
-Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/` context is a deliberately trivial, full-pattern reference — delete it when starting real work.
+Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD and full-pattern reference, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
 
 ## Key design decisions
 
@@ -62,28 +63,33 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 - **SSR + HTMX, no SPA.** Single repo, single deployment, no CORS, server-side auth — suited to a mostly-CRUD UI.
 - **Plain SQL migrations.** Supabase CLI migrations stay readable and versioned; the first creates `profiles` linked to `auth.users` with RLS and an auto-create trigger on sign-up.
 - **Dual-driver BDD.** The same Gherkin scenarios run against an API driver (`httpx.AsyncClient`, fast) and a browser driver (Playwright), exercising both the HTTP layer and the real UI without duplicate test logic. Tests share one BYPASSRLS connection, so the `get_rls_session` override sets JWT claims *without* `SET role authenticated` — issuing it would drop BYPASSRLS and break unrelated queries on the shared connection.
+- **Cross-app collaboration via hooks.** A context emits a domain event from its `contract/`; others subscribe without importing one another. Today: `organizations/contract/hooks.py` emits `org.created` inside the org-creating transaction, and each app drops welcome data via a pure `seed` hook in its `contract/seed.py`. The composition root (`app/seeding.py`) auto-discovers those `contract/seed.py` modules and wires them to the emitter — so the emitter stays ignorant of its subscribers and adding an app needs no central edit. Seeding is skipped under the `test` schema so BDD scenarios start from an empty org.
 - **npm-built assets, no remote dependencies at runtime.** All JS libraries and fonts are installed via `npm` and copied to `static/js/` at build time (`npm run build`). No CDN URLs in templates — add a library with `npm install`, copy it in `package.json`'s `build:js` step, and reference it as `/static/js/<file>`. Output lands in the gitignored `static/js/`; run `make install` to (re)generate.
 
 ## Structure
 
 Every bounded context follows the same layout — `domain/` (models, service), `infra/`
-(router, repository), `templates/`, and `tests/`:
+(router, repository), `templates/`, `tests/`, and an optional `contract/` (its public
+inter-app surface). Three top-level modules form the composition root — the only place
+allowed to know several contexts at once: `main.py`, `registration.py`, `seeding.py`:
 
 ```
 labase.py/
 ├── app/
 │   ├── main.py            # FastAPI app, router registration, 401 handler
+│   ├── registration.py    # Composition root: sign-up saga (auth user + personal org)
+│   ├── seeding.py         # Composition root: wires org.created subscribers
 │   ├── shared/            # Cross-context infra: persistence (engines, rls), http
 │   │                      #   (security, templates, limiter), observability, templates/
 │   ├── auth/              # Authentication — get_current_user, get_rls_session, cookies
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations
 │   ├── profile/           # User profile + page shell (shell_context / page_context)
-│   ├── files/             # Org files (Supabase Storage + share tokens)
-│   ├── learning/          # Spaced-repetition learning
+│   ├── files/             # Demo context — Supabase Storage + share tokens
+│   ├── learning/          # Demo context — spaced repetition (HexArch example)
 │   ├── console/           # SaaS admin console
 │   ├── public/            # Public landing pages
 │   ├── health/            # Liveness / readiness probes
-│   └── todo/              # Demo context — full pattern example
+│   └── todo/              # Demo context — trivial CRUD, full-pattern reference
 ├── features/              # BDD Gherkin scenarios (plain text, no code)
 ├── tests/                 # Top-level conftest + config tests
 ├── static/                # Compiled CSS, HTMX, fonts (gitignored)

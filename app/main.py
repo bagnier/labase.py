@@ -17,6 +17,7 @@ from app.organizations.infra.invitation_router import router as invitations_rout
 from app.organizations.infra.router import router as organizations_router
 from app.profile.infra.router import router as profile_router
 from app.public.infra.router import router as public_router
+from app.seeding import register_seeders
 from app.shared.config import get_settings
 from app.shared.http.exceptions import handle_http_error, handle_rate_limit, handle_unhandled_error
 from app.shared.http.limiter import limiter
@@ -32,6 +33,11 @@ _settings = get_settings()
 
 app = FastAPI(title="labase")
 app.state.limiter = limiter
+
+# Wire each app's org.created subscriber. Skipped under the test schema so BDD
+# scenarios start from an empty org (seeding is exercised against real Supabase).
+if _settings.db_schema != "test":
+    register_seeders()
 
 app.exception_handler(RateLimitExceeded)(handle_rate_limit)
 app.exception_handler(500)(handle_unhandled_error)

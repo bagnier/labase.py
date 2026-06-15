@@ -8,7 +8,7 @@ from app.organizations.domain.exceptions import PendingInvitationExists
 from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
 from app.organizations.infra.repository import OrganizationRepository
-from app.profile.infra.shell import page_context
+from app.profile.contract.shell import page_context
 from app.shared.dependencies import (
     CurrentMembership,
     CurrentOrg,

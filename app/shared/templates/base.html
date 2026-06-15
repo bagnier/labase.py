@@ -27,12 +27,12 @@
 
       <!-- Navigation -->
       <nav class="flex-1 px-3 py-4 overflow-y-auto">
-        {% if not nav_orgs %}
+        {% if not orgs %}
         <div class="px-2 py-2">
           <p class="text-xs text-gray-500">No organisation.</p>
         </div>
         {% endif %}
-        {% for nav_org in nav_orgs %}
+        {% for nav_org in orgs %}
         {% set is_current = nav_org.slug == org_slug %}
         {% set path = request.url.path %}
         <div class="{% if not loop.first %}mt-4{% endif %}">

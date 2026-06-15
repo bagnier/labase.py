@@ -3,6 +3,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 
+from app.organizations.contract.hooks import emit_org_created
 from app.organizations.domain.models import (
     InvitationStatus,
     Membership,
@@ -39,6 +40,8 @@ class OrganizationRepository(BaseRepository[Organization]):
         await self.session.flush()
         membership = Membership(org_id=org.id, auth_user_id=auth_user_id, role=OrgRole.owner)
         self.session.add(membership)
+        await self.session.flush()  # make the membership visible to RLS for seeding
+        await emit_org_created(self.session, org.id, auth_user_id)
 
         return org
 

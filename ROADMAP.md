@@ -1,10 +1,3 @@
-## general framework
-
-- a foundation for any professional / SaaS application
-- built on Supabase
-- in modern Python
-
-
 ## goals
 
 ### technical
@@ -17,7 +10,7 @@
 - [x] BDD dual driver, Json & Web
 - [x] SSR HTMX
 - [x] database migrations
-- [ ] collaboration via hooks between apps
+- [x] collaboration via hooks between apps
 - [x] CORS
 - [x] security headers (HSTS, CSP)
 - [x] healthcheck (liveness / readiness)
@@ -38,7 +31,7 @@
 - [ ] email
 - [ ] prod deployment doc (secrets, env)
 - [x] GitHub Actions
-- [ ] refactor / simplify migration
+- [x] refactor / simplify migration
 - [ ] reactive web
 
 ### functional
@@ -60,6 +53,7 @@
 ### advanced auth
 
 - [ ] @handle
+- [ ] photo de profil
 - [ ] Forgot password (/auth/forgot-password + /auth/reset-password)
 - [ ] Password change (authenticated) — POST /profile/password
 - [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email

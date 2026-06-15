@@ -6,8 +6,8 @@ from supabase_auth.errors import AuthApiError
 
 from app.auth.domain.service import login, logout, refresh_session, register
 from app.auth.tests.admin_helpers import delete_user, find_users
+from app.registration import register_user
 from app.shared.persistence.supabase import get_admin_supabase
-from app.shared.registration import register_user
 
 
 @pytest.mark.asyncio
@@ -119,12 +119,12 @@ async def test_register_user_compensates_when_org_creation_fails():
     fake_session = MagicMock()
 
     with (
-        patch("app.shared.registration.register", AsyncMock(return_value=fake_user_id)),
+        patch("app.registration.register", AsyncMock(return_value=fake_user_id)),
         patch(
-            "app.shared.registration.OrganizationRepository.create_with_owner",
+            "app.registration.OrganizationRepository.create_with_owner",
             AsyncMock(side_effect=RuntimeError("db down")),
         ),
-        patch("app.shared.registration.get_admin_supabase", return_value=fake_admin),
+        patch("app.registration.get_admin_supabase", return_value=fake_admin),
         pytest.raises(RuntimeError),
     ):
         await register_user("x@test.local", "pw", fake_session)
