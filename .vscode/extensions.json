@@ -19,12 +19,18 @@
     "otovo-oss.htmx-tags",
 
     // Docker
-    "ms-azuretools.vscode-docker",
+    "ms-azuretools.vscode-containers",
 
     // Coverage dans le gutter (lignes couvertes/non couvertes)
     "ryanluker.vscode-coverage-gutters",
 
     // .env
-    "mikestead.dotenv"
+    "mikestead.dotenv",
+
+    // Gherkin / pytest-bdd
+    "alexkrechik.cucumberautocomplete",
+
+    // TOML (pyproject.toml, uv.lock)
+    "tamasfe.even-better-toml"
   ]
 }

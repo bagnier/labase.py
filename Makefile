@@ -3,7 +3,7 @@
 # --- Setup ---
 install:
 	uv sync --all-groups
-	pre-commit install
+	pre-commit install --config scripts/.pre-commit-config.yaml
 	@test -f .env || cp .env.example .env
 	npm install
 	$(MAKE) js-build
@@ -29,11 +29,11 @@ migrate:
 	supabase db push
 
 schema:
-	tbls doc --rm-dist
+	tbls doc --rm-dist --config scripts/.tbls.yml
 	uv run python scripts/tbls_postprocess.py
 
 schema-supabase:
-	tbls doc --rm-dist --config .tbls.supabase.yml
+	tbls doc --rm-dist --config scripts/.tbls.supabase.yml
 
 # --- App ---
 dev: db-start
