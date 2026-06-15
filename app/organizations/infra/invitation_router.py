@@ -132,6 +132,27 @@ async def accept_invitation(
             status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
         )
 
+    # Check that the logged-in user's email matches the invitation
+    if current_user.email.lower() != inv["email"].lower():
+        org = await repo.get(inv["org_id"])
+        org_name = org.name if org else ""
+        if wants_json(request):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="this invitation was sent to a different email address",
+            )
+        return templates.TemplateResponse(
+            request,
+            "invitations/accept.html",
+            {
+                "state": "wrong_email",
+                "token": str(token),
+                "org_name": org_name,
+                "email": inv["email"],
+            },
+            status_code=403,
+        )
+
     # Call SECURITY DEFINER function via RLS session so auth.uid() is set from the JWT
     try:
         await rls_session.execute(
@@ -140,9 +161,17 @@ async def accept_invitation(
         )
     except DBAPIError as exc:
         if getattr(exc.orig, "sqlstate", None) == "P0404":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
-            ) from exc
+            if wants_json(request):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="invitation not found or already used",
+                ) from exc
+            return templates.TemplateResponse(
+                request,
+                "invitations/accept.html",
+                {"state": "invalid", "token": str(token), "org_name": "", "email": ""},
+                status_code=404,
+            )
         log.exception("invitation.accept_error")
         raise
 

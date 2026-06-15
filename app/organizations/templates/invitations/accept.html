@@ -40,6 +40,18 @@
           </a>
         </div>
 
+      {% elif state == "wrong_email" %}
+        <div role="alert" data-error class="text-center space-y-3">
+          <p class="text-sm font-semibold text-gray-800">Wrong account</p>
+          <p class="text-sm text-gray-500">
+            This invitation was sent to <strong>{{ email }}</strong>.<br>
+            Please sign in with that address and try again.
+          </p>
+          <a href="/profile" class="inline-block mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+            Back to home →
+          </a>
+        </div>
+
       {% else %}
         <div role="alert" data-error class="text-center space-y-3">
           <p class="text-sm font-semibold text-gray-800">Invalid or expired link</p>
