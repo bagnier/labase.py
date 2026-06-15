@@ -92,3 +92,23 @@ class SharedBrowserMixin(BrowserProtocol):
     def assert_page_loaded(self) -> None:
         assert self._last_response is not None
         assert self._last_response.status == 200, f"Expected 200, got {self._last_response.status}"
+
+    # ── HTMX interaction helpers (real button clicks) ──────────────────────────
+
+    def _arm_dialogs(self, page) -> None:
+        """Auto-accept hx-confirm dialogs, once per page."""
+        armed = getattr(self, "_dialogs_armed", None)
+        if armed is None:
+            armed = self._dialogs_armed = set()  # type: ignore[attr-defined]
+        if id(page) not in armed:
+            page.on("dialog", lambda d: d.accept())
+            armed.add(id(page))
+
+    def _click_and_capture(self, page, selector: str, method: str, path_token: str):
+        """Click a control and return the HTMX response it triggers."""
+        self._arm_dialogs(page)
+        with page.expect_response(
+            lambda r: path_token in r.url and r.request.method == method
+        ) as info:
+            page.click(selector)
+        return info.value

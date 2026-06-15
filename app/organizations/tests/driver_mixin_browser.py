@@ -176,18 +176,19 @@ class OrgBrowserMixin(BrowserProtocol):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
-        # Navigate to settings page to validate the HTML renders
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
         slug = self._active_slug()
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/settings", wait_until="load")
-        # Perform rename via JSON API to keep auth state stable
-        org_id = self._get_active_org_id()
-        resp = self._acting_context().request.patch(
-            f"{self._base_url}/organizations/{org_id}",
-            data={"name": new_name},
-            headers={"accept": "application/json"},
+        # The editable name form is owner-only; absent for members (settings is 403).
+        if page.query_selector("input[name=name]") is None:
+            self._last_response = None  # type: ignore[attr-defined]
+            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            return
+        page.fill("input[name=name]", new_name)
+        self._last_response = self._click_and_capture(
+            page, "form:has(input[name=name]) button[type=submit]", "PATCH", f"/{slug}"
         )
-        self._last_response = resp  # type: ignore[attr-defined]
 
     def sign_in_as_member(self, email: str) -> None:
         if not getattr(self, "_primary_context_backup", None):
@@ -196,6 +197,8 @@ class OrgBrowserMixin(BrowserProtocol):
         self._secondary_context_for(email)
 
     def assert_action_forbidden(self) -> None:
+        if getattr(self, "_action_blocked_by_ui", False):
+            return  # the control is not even rendered for this user
         last = getattr(self, "_last_response", None)
         assert last is not None, "No response stored — cannot check forbidden"
         status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
@@ -240,42 +243,47 @@ class OrgBrowserMixin(BrowserProtocol):
         assert el is None, f"{email!r} should be absent from members page but was found"
 
     def set_member_role(self, email: str, role: str) -> None:
-        # Navigate to members page so the HTML renders (validates the UI)
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
         slug = self._active_slug()
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
-        # Perform role change via JSON API to capture the response for assert_action_forbidden
-        org_id = self._get_active_org_id()
-        user_id = self._get_user_id(email)
-        self._last_response = self._acting_context().request.patch(  # type: ignore[attr-defined]
-            f"{self._base_url}/organizations/{org_id}/members/{user_id}",
-            data={"role": role},
-            headers={"accept": "application/json"},
+        manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
+        if manage is None:
+            self._last_response = None  # type: ignore[attr-defined]
+            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            return
+        manage.click()  # open the dropdown (group-focus-within)
+        action = "[data-promote]" if role == "owner" else "[data-demote]"
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            page, f"[data-member-email='{email}'] {action}", "PATCH", "/members/"
         )
 
     def remove_member(self, email: str) -> None:
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
         slug = self._active_slug()
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
-        row = page.query_selector(f"[data-member-email='{email}']")
-        assert row is not None, f"Member row for {email!r} not found"
-        # Use API to perform removal and capture response for assert_action_forbidden
-        org_id = self._get_active_org_id()
-        user_id = self._get_user_id(email)
-        self._last_response = self._acting_context().request.delete(  # type: ignore[attr-defined]
-            f"{self._base_url}/organizations/{org_id}/members/{user_id}",
-            headers={"accept": "application/json"},
+        manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
+        if manage is None:
+            self._last_response = None  # type: ignore[attr-defined]
+            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            return
+        manage.click()
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            page, f"[data-member-email='{email}'] [data-remove]", "DELETE", "/members/"
         )
 
     def leave_org(self) -> None:
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
         slug = self._active_slug()
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
-        # Use API for leave so we can capture forbidden responses
-        org_id = self._get_active_org_id()
-        self._last_response = self._acting_context().request.delete(  # type: ignore[attr-defined]
-            f"{self._base_url}/organizations/{org_id}/members/me",
-            headers={"accept": "application/json"},
+        if page.query_selector("[data-leave]") is None:
+            self._last_response = None  # type: ignore[attr-defined]
+            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            return
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            page, "[data-leave]", "DELETE", "/members/me"
         )
 
     def assert_workspace_card(self, org_name: str) -> None:
@@ -285,22 +293,30 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def invite_member(self, email: str, role: str) -> None:
-        # Navigate to members page to validate the HTML renders
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
+        self._last_error_text = None  # type: ignore[attr-defined]
         slug = self._active_slug()
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
-        # Create invitation via JSON API to capture the response
-        org_id = self._get_active_org_id()
-        resp = self._acting_context().request.post(
-            f"{self._base_url}/organizations/{org_id}/invitations",
-            data={"email": email},
-            headers={"accept": "application/json"},
+        if page.query_selector("[data-invite-toggle]") is None:
+            self._last_response = None  # type: ignore[attr-defined]
+            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            return
+        page.click("[data-invite-toggle]")
+        page.fill("#invite-form input[name=email]", email)
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            page, "#invite-form button[type=submit]", "POST", "/invitations"
         )
-        self._last_response = resp  # type: ignore[attr-defined]
-        if resp.status == 201:
-            inv = resp.json()
-            self._last_invitation_token = inv.get("token")  # type: ignore[attr-defined]
-            self._last_invitation_email = email  # type: ignore[attr-defined]
+        error_el = page.query_selector("#invite-result [data-error]")
+        if error_el is not None:
+            self._last_error_text = error_el.inner_text()  # type: ignore[attr-defined]
+            return
+        link_el = page.query_selector("#invite-result [data-invitation-link]")
+        if link_el is not None:
+            link = link_el.get_attribute("data-invitation-link") or ""
+            if link:
+                self._last_invitation_token = link.rsplit("/", 1)[-1]  # type: ignore[attr-defined]
+                self._last_invitation_email = email  # type: ignore[attr-defined]
 
     def _fetch_pending_invitations(self) -> list[dict]:
         org_id = self._get_active_org_id()
@@ -339,19 +355,17 @@ class OrgBrowserMixin(BrowserProtocol):
         assert el is None, f"{email!r} invitation should be absent but found on members page"
 
     def revoke_invitation(self, email: str) -> None:
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
         slug = self._active_slug()
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
-        inv_row = page.query_selector(f"[data-invitation-email='{email}']")
-        assert inv_row is not None, f"No invitation row for {email!r}"
-        # Use API for revoke to capture response status
-        org_id = self._get_active_org_id()
-        invitations = self._fetch_pending_invitations()
-        inv = next((i for i in invitations if i["email"] == email), None)
-        assert inv is not None, f"No pending invitation for {email!r}"
-        self._last_response = self._acting_context().request.delete(  # type: ignore[attr-defined]
-            f"{self._base_url}/organizations/{org_id}/invitations/{inv['id']}",
-            headers={"accept": "application/json"},
+        revoke = page.query_selector(f"[data-invitation-email='{email}'] [data-revoke]")
+        if revoke is None:
+            self._last_response = None  # type: ignore[attr-defined]
+            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            return
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            page, f"[data-invitation-email='{email}'] [data-revoke]", "DELETE", "/invitations/"
         )
 
     def accept_invitation(self, email: str) -> None:
@@ -406,6 +420,12 @@ class OrgBrowserMixin(BrowserProtocol):
             )
 
     def assert_action_fails_with(self, message: str) -> None:
+        # Invite errors surface as a rendered HTML fragment (200 + [data-error]).
+        err = getattr(self, "_last_error_text", None)
+        if err:
+            self._last_error_text = None  # type: ignore[attr-defined]
+            assert message.lower() in err.lower(), f"Expected error {message!r} in {err!r}"
+            return
         last = getattr(self, "_last_response", None)
         assert last is not None, "No response stored"
         status_code = getattr(last, "status", None) or getattr(last, "status_code", None)

@@ -23,16 +23,21 @@
 - [x] upgrade
 - [x] DB schema
 - [x] generic repository (SpringJPA style)
-- [x] english all around
+- [x] GitHub Actions
+- [x] refactor / simplify migration
+- [ ] english all around
+- [ ] refactor / simplify features
+- [ ] refactor / simplify API uniforme CRUD comme BaseRepository
+- [ ] trop de class tailwind, sementique web
+- [ ] reactive web
+
+
 - [ ] async task queue
 - [ ] fulltext index
 - [ ] cache
 - [ ] messaging
 - [ ] email
 - [ ] prod deployment doc (secrets, env)
-- [x] GitHub Actions
-- [x] refactor / simplify migration
-- [ ] reactive web
 
 ### functional
 

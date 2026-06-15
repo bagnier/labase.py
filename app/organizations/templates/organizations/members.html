@@ -25,7 +25,7 @@
         <p class="text-sm text-gray-500">{{ members | length }} member{{ 's' if members | length != 1 }}</p>
       </div>
       {% if caller_role == "owner" %}
-        <button onclick="document.getElementById('invite-form').classList.toggle('hidden')"
+        <button data-invite-toggle onclick="document.getElementById('invite-form').classList.toggle('hidden')"
                 class="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
           Invite a member
         </button>
@@ -70,7 +70,7 @@
           <p class="text-sm font-medium">{{ inv.email }}</p>
           <p class="text-xs text-gray-400">Sent on {{ inv.created_at.strftime('%Y-%m-%d') }}</p>
         </div>
-        <button class="text-xs text-red-600 hover:text-red-800 font-medium"
+        <button data-revoke class="text-xs text-red-600 hover:text-red-800 font-medium"
                 hx-delete="/{{ org_handle }}/invitations/{{ inv.id }}"
                 hx-target="#inv-row-{{ inv.id }}"
                 hx-swap="outerHTML"

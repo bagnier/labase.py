@@ -38,6 +38,8 @@ class BrowserProtocol(Protocol):
     _last_response: Any
     _last_registered_email: str | None
     _context: Any
+    _action_blocked_by_ui: bool
+    _last_error_text: str | None
 
     @property
     def _p(self) -> Any: ...
@@ -45,6 +47,10 @@ class BrowserProtocol(Protocol):
     def ensure_clock(self, default_iso: str) -> None: ...
 
     def _restore_clock(self) -> None: ...
+
+    def _arm_dialogs(self, page: Any) -> None: ...
+
+    def _click_and_capture(self, page: Any, selector: str, method: str, path_token: str) -> Any: ...
 
     def sign_in(self, email: str, password: str) -> None: ...
 

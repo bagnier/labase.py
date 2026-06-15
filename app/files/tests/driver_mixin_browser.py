@@ -107,37 +107,30 @@ class OrgFileBrowserMixin(BrowserProtocol):
             f"{self._files_url()}/{file_id}/download",
         )
 
-    def _api_file_id(self, filename: str) -> str | None:
-        assert self._context
-        resp = self._context.request.get(self._files_url(), headers={"accept": "application/json"})
-        if resp.status != 200:
-            return None
-        for f in resp.json():
-            if f["filename"] == filename:
-                return f["id"]
-        return None
-
     def delete_file(self, filename: str) -> None:
-        file_id = self._api_file_id(filename)
+        self._goto_files()
+        file_id = self._dom_find_file_id(filename)
         if file_id is None:
             self.delete_todo(filename)
             return
-        assert self._context
-        self._last_response = self._context.request.delete(
-            f"{self._files_url()}/{file_id}",
-            headers={"accept": "application/json"},
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            self._p, f"[data-file-id='{file_id}'] [data-delete-id]", "DELETE", f"/files/{file_id}"
         )
 
     def rename_file(self, old_filename: str, new_filename: str) -> None:
-        file_id = self._api_file_id(old_filename)
+        self._goto_files()
+        file_id = self._dom_find_file_id(old_filename)
         if file_id is None:
             self.rename_todo(old_filename, new_filename)
             return
-        assert self._context
-        self._last_response = self._context.request.patch(
-            f"{self._files_url()}/{file_id}",
-            data={"filename": new_filename},
-            headers={"accept": "application/json"},
+        row = f"[data-file-id='{file_id}']"
+        self._p.click(f"{row} [data-rename-id]")  # reveal the form
+        self._p.fill(f"{row} [data-rename-form] input[name=filename]", new_filename)
+        self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
+            self._p,
+            f"{row} [data-rename-form] button[type=submit]",
+            "PATCH",
+            f"/files/{file_id}",
         )
 
     # ── sign-in with org naming ───────────────────────────────────────────────
@@ -224,15 +217,17 @@ class OrgFileBrowserMixin(BrowserProtocol):
         set_membership_role(self._get_primary_org_id(), self._get_user_id(primary_email), "member")
 
     def generate_share_link(self, filename: str) -> None:
-        assert self._context
         self._goto_files()
         file_id = self._dom_file_id_by_name(filename)
-        resp = self._context.request.post(
-            f"{self._files_url()}/{file_id}/share",
-            headers={"accept": "application/json"},
+        self._click_and_capture(  # type: ignore[attr-defined]
+            self._p,
+            f"[data-file-id='{file_id}'] [data-share-id]",
+            "POST",
+            f"/files/{file_id}/share",
         )
-        assert resp.status == 200, f"share link generation failed: {resp.text()}"
-        self._share_link_url = resp.json()["url"]  # type: ignore[attr-defined]
+        url_input = self._p.locator(f"#share-result-{file_id} [data-share-url]")
+        url_input.wait_for(state="visible")
+        self._share_link_url = url_input.input_value()  # type: ignore[attr-defined]
 
     def view_file_list_as(self, email: str) -> None:
         ctx = self._secondary_context_for(email)
