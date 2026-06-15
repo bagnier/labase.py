@@ -42,7 +42,8 @@
       <form hx-post="/{{ org_handle }}/invitations"
             hx-target="#invite-result"
             hx-swap="innerHTML"
-            class="flex gap-3 items-start">
+            class="flex gap-3 items-start"
+            hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
         <input type="email" name="email" placeholder="email@example.com" required
                class="input flex-1" />
         <button type="submit" class="btn-primary flex-none">Invite</button>

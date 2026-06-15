@@ -9,7 +9,8 @@
 
   <h1 class="page-title">Todos</h1>
 
-  <form hx-post="/{{ org_handle }}/todos" hx-target="#todo-list" hx-swap="outerHTML" class="flex gap-2">
+  <form hx-post="/{{ org_handle }}/todos" hx-target="#todo-list" hx-swap="outerHTML" class="flex gap-2"
+        hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
     <input type="text" name="title" placeholder="New task…" required class="input flex-1" />
     <button type="submit" class="btn-primary flex-none">Add</button>
   </form>
