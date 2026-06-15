@@ -20,14 +20,6 @@ class TodoBrowserMixin(BrowserProtocol):
                 return row.locator("input[data-todo-id]").get_attribute("data-todo-id") or ""
         raise AssertionError(f"Todo '{title}' not found in DOM")
 
-    def _api_todo_ids(self) -> dict[str, str]:
-        assert self._context
-        resp = self._context.request.get(
-            self._todos_url(),
-            headers={"accept": "application/json"},
-        )
-        return {t["title"]: t["id"] for t in resp.json()}
-
     def have_todo_items(self, titles: list[str]) -> None:
         assert self._context
         for title in reversed(titles):
@@ -92,9 +84,9 @@ class TodoBrowserMixin(BrowserProtocol):
         self._p.goto(self._todos_url(), wait_until="load")
         ids = {t: self._dom_todo_id_by_title(t) for t in (title, above)}
         assert self._context
-        self._context.request.post(
-            f"{self._todos_url()}/reorder",
-            data={"id": ids[title], "above_id": ids[above]},
+        self._context.request.put(
+            f"{self._todos_url()}/{ids[title]}/position",
+            data={"above_id": ids[above]},
         )
         self._p.goto(self._todos_url(), wait_until="load")
 
@@ -102,9 +94,9 @@ class TodoBrowserMixin(BrowserProtocol):
         self._p.goto(self._todos_url(), wait_until="load")
         todo_id = self._dom_todo_id_by_title(title)
         assert self._context
-        self._context.request.post(
-            f"{self._todos_url()}/reorder",
-            data={"id": todo_id},
+        self._context.request.put(
+            f"{self._todos_url()}/{todo_id}/position",
+            data={"above_id": None},
         )
         self._p.goto(self._todos_url(), wait_until="load")
 

@@ -33,10 +33,10 @@
     animation: 150,
     handle: '.drag-handle',
     onEnd: ({ item, related }) => {
-      fetch('/{{ org_handle }}/todos/reorder', {
-        method: 'POST',
+      fetch(`/{{ org_handle }}/todos/${item.dataset.id}/position`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: item.dataset.id, above_id: related?.dataset.id ?? null }),
+        body: JSON.stringify({ above_id: related?.dataset.id ?? null }),
       });
     },
   });

@@ -125,16 +125,16 @@ async def delete_todo(
     return await _render(request, session, current_user, repo, org)
 
 
-@router.post("/reorder")
-async def reorder_todos(
+@router.put("/{todo_id}/position", response_class=HTMLResponse)
+async def move_todo(
     request: Request,
+    todo_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
     repo: TodoRepo,
     org: CurrentOrgModel,
 ):
     body = await request.json()
-    todo_id = uuid.UUID(body["id"])
     above_id = uuid.UUID(body["above_id"]) if body.get("above_id") else None
     await repo.move_above(todo_id, above_id)
     return await _render(request, session, current_user, repo, org)

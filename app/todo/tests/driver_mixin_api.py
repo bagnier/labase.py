@@ -45,9 +45,7 @@ class TodoApiMixin(ApiProtocol):
         todos = resp.json()
         ids = {t["title"]: t["id"] for t in todos}
         self._response = self._run(
-            self._c.post(
-                self._todos_url("/reorder"), json={"id": ids[title], "above_id": ids[above]}
-            )
+            self._c.put(self._todos_url(f"/{ids[title]}/position"), json={"above_id": ids[above]})
         )
 
     def move_todo_to_end(self, title: str) -> None:
@@ -55,7 +53,7 @@ class TodoApiMixin(ApiProtocol):
         todos = resp.json()
         ids = {t["title"]: t["id"] for t in todos}
         self._response = self._run(
-            self._c.post(self._todos_url("/reorder"), json={"id": ids[title], "above_id": None})
+            self._c.put(self._todos_url(f"/{ids[title]}/position"), json={"above_id": None})
         )
 
     def assert_todo_list_order(self, titles: list[str]) -> None:
