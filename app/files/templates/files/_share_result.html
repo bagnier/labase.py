@@ -1,0 +1,11 @@
+<div class="flex items-center gap-2 mt-1" data-share-result>
+  <input type="text" readonly value="{{ url }}"
+         class="flex-1 min-w-0 rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600 bg-gray-50"
+         data-share-url
+         onclick="this.select()" />
+  <button type="button"
+          class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-none"
+          onclick="navigator.clipboard.writeText('{{ url }}')">
+    Copier
+  </button>
+</div>

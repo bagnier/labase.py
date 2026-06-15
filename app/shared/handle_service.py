@@ -1,18 +1,24 @@
 """Cross-table uniqueness check for handles (users + orgs share a global namespace)."""
 
 import uuid
+from typing import Any, Protocol
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.organizations.domain.models import Organization
 from app.profile.domain.models import Profile
 from app.shared.names import is_reserved
 
 
+class HandleQuerySession(Protocol):
+    """Minimal async session surface needed for handle lookups."""
+
+    async def scalar(self, query: Any, /) -> Any: ...
+
+
 async def handle_is_available(
     handle: str,
-    session: AsyncSession,
+    session: HandleQuerySession,
     *,
     exclude_profile_id: uuid.UUID | None = None,
     exclude_org_id: uuid.UUID | None = None,
@@ -35,7 +41,7 @@ async def handle_is_available(
 
 async def unique_handle(
     base: str,
-    session: AsyncSession,
+    session: HandleQuerySession,
     *,
     exclude_profile_id: uuid.UUID | None = None,
     exclude_org_id: uuid.UUID | None = None,

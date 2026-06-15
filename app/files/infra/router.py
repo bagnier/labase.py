@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
-from pydantic import BaseModel
 from storage3.exceptions import StorageApiError
 
 from app.auth.domain.service import AuthenticatedUser
@@ -27,6 +26,7 @@ from app.shared.dependencies import (
     RlsSession,
 )
 from app.shared.http import render_list, wants_full_page
+from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -200,21 +200,21 @@ async def delete_file(
     return await _render(request, session, current_user, files, org)
 
 
-class RenameBody(BaseModel):
-    filename: str
-
-
 @router.patch("/{file_id}", response_class=HTMLResponse)
 async def rename_file(
     request: Request,
     file_id: uuid.UUID,
-    body: RenameBody,
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
     org: CurrentOrgModel,
     membership: CurrentMembership,
 ):
+    if "application/json" in request.headers.get("content-type", ""):
+        filename = str((await request.json()).get("filename", ""))
+    else:
+        filename = str((await request.form()).get("filename", ""))
+
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
@@ -225,7 +225,7 @@ async def rename_file(
             return JSONResponse({"detail": "Forbidden"}, status_code=403)
         return HTMLResponse("Forbidden", status_code=403)
 
-    await repo.rename(org_file, body.filename)
+    await repo.rename(org_file, filename)
 
     files = await repo.all()
     return await _render(request, session, current_user, files, org)
@@ -245,7 +245,14 @@ async def generate_share_link(
         return JSONResponse({"detail": "Not found"}, status_code=404)
 
     token = await repo.add_share_token(file_id)
-    return JSONResponse({"url": f"/files/share/{token.token}"})
+    url = f"/files/share/{token.token}"
+    if "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"url": url})
+    return templates.TemplateResponse(
+        request,
+        "files/_share_result.html",
+        {"url": url, "filename": org_file.filename},
+    )
 
 
 @public_router.get("/share/{token}")

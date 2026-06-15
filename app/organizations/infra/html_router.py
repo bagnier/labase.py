@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Form, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
@@ -18,6 +18,7 @@ from app.shared.dependencies import (
 )
 from app.shared.http.templates import templates
 from app.shared.names import is_reserved, is_valid_handle
+from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(tags=["organizations-html"])
 
@@ -283,3 +284,122 @@ async def create_invitation_html(
         "organizations/_invite_result.html",
         {"email": email, "link": link, "error": error},
     )
+
+
+# ── Member management (HTMX) ────────────────────────────────────────────────────
+
+
+@router.patch("/members/{user_id}", response_class=HTMLResponse)
+async def update_member_role_html(
+    request: Request,
+    user_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentOwnerMembership,
+    bg: BackgroundTasks,
+    role: str = Form(...),
+) -> Response:
+    repo = OrganizationRepository(session)
+    org = await repo.get(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org_handle = request.path_params.get("org_handle", org.handle)
+    try:
+        new_role = OrgRole(role)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY) from exc
+
+    if new_role != OrgRole.owner:
+        try:
+            await ensure_not_last_owner(repo, org_id, user_id)
+        except LastOwnerViolation:
+            return HTMLResponse(
+                "You cannot demote the last owner.", status_code=status.HTTP_403_FORBIDDEN
+            )
+
+    updated = await repo.update_member_role(org_id, user_id, new_role)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    record_audit_event(
+        bg,
+        level="info",
+        event="org.member_role_changed",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        target_user_id=str(user_id),
+        role=new_role.value,
+    )
+    emails = await resolve_user_emails([updated.auth_user_id])
+    member = MemberRead(
+        auth_user_id=updated.auth_user_id,
+        email=emails.get(updated.auth_user_id, ""),
+        role=updated.role,
+        created_at=updated.created_at,
+    )
+    return templates.TemplateResponse(
+        request,
+        "organizations/_member_row.html",
+        {
+            "m": member,
+            "caller_role": membership.role.value,
+            "current_user": current_user,
+            "org": org,
+            "org_handle": org_handle,
+        },
+    )
+
+
+@router.delete("/members/{user_id}", response_class=HTMLResponse)
+async def remove_member_html(
+    user_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentOwnerMembership,
+    bg: BackgroundTasks,
+) -> Response:
+    repo = OrganizationRepository(session)
+    try:
+        await ensure_not_last_owner(repo, org_id, user_id)
+    except LastOwnerViolation:
+        return HTMLResponse(
+            "You cannot remove the last owner.", status_code=status.HTTP_403_FORBIDDEN
+        )
+    removed = await repo.remove_member(org_id, user_id)
+    if not removed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    record_audit_event(
+        bg,
+        level="info",
+        event="org.member_removed",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        target_user_id=str(user_id),
+    )
+    return HTMLResponse("", status_code=status.HTTP_200_OK)
+
+
+@router.delete("/invitations/{invitation_id}", response_class=HTMLResponse)
+async def revoke_invitation_html(
+    invitation_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentOwnerMembership,
+    bg: BackgroundTasks,
+) -> Response:
+    repo = OrganizationRepository(session)
+    invitation = await repo.get_invitation_by_id(org_id, invitation_id)
+    if invitation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    await repo.revoke_invitation(invitation)
+    record_audit_event(
+        bg,
+        level="info",
+        event="org.invitation_revoked",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        invitation_id=str(invitation_id),
+    )
+    return HTMLResponse("", status_code=status.HTTP_200_OK)
