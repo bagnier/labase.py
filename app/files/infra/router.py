@@ -234,7 +234,7 @@ async def generate_share_link(
         raise HTTPException(404, "Not found")
 
     token = await repo.add_share_token(file_id)
-    url = f"/files/share/{token.token}"
+    url = str(request.base_url) + f"files/share/{token.token}"
     if wants_json(request):
         return JSONResponse({"url": url})
     return templates.TemplateResponse(
