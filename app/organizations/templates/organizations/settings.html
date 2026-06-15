@@ -3,7 +3,7 @@
 {% block title %}Settings — {{ org.name }} — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_slug }}/files" class="hover:text-gray-700">{{ org.name }}</a>
+  <a href="/{{ org_handle }}/files" class="hover:text-gray-700">{{ org.name }}</a>
   <span class="mx-1 text-gray-300">/</span>
   <span class="text-gray-700">Settings</span>
 {% endblock %}
@@ -32,7 +32,7 @@
   <section class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
     <h2 class="text-sm font-semibold text-gray-700">Organisation name</h2>
     {% if role == "owner" %}
-      <form hx-patch="/{{ org_slug }}"
+      <form hx-patch="/{{ org_handle }}"
             hx-target="body"
             hx-push-url="true"
             class="flex gap-3 items-center">
@@ -51,7 +51,7 @@
   </section>
 
   <div class="flex gap-4 text-sm">
-    <a href="/{{ org_slug }}/members"
+    <a href="/{{ org_handle }}/members"
        class="text-indigo-600 hover:text-indigo-800 font-medium">Manage members →</a>
   </div>
 

@@ -53,16 +53,16 @@ class OrgBrowserMixin(BrowserProtocol):
         )
         assert resp.status == 200 and resp.json(), "Cannot resolve active org id"
         orgs = resp.json()
-        active_slug = getattr(self, "_active_org_slug", "")
+        active_slug = getattr(self, "_active_org_handle", "")
         org = (
-            next((o for o in orgs if o.get("slug") == active_slug), orgs[0])
+            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
             if active_slug
             else orgs[0]
         )
         return org["id"]
 
     def _active_slug(self) -> str:
-        slug = getattr(self, "_active_org_slug", "")
+        slug = getattr(self, "_active_org_handle", "")
         if slug:
             return slug
         ctx = self._acting_context()
@@ -71,7 +71,7 @@ class OrgBrowserMixin(BrowserProtocol):
             headers={"accept": "application/json"},
         )
         assert resp.status == 200 and resp.json()
-        return resp.json()[0]["slug"]
+        return resp.json()[0]["handle"]
 
     def _memberships_for(self, email: str) -> list[dict]:
         return memberships_for_user(self._get_user_id(email))
@@ -226,14 +226,14 @@ class OrgBrowserMixin(BrowserProtocol):
             headers={"accept": "application/json"},
         )
         assert resp.status == 200 and resp.json()
-        active_slug = getattr(self, "_active_org_slug", "")
+        active_slug = getattr(self, "_active_org_handle", "")
         orgs = resp.json()
         org = (
-            next((o for o in orgs if o.get("slug") == active_slug), orgs[0])
+            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
             if active_slug
             else orgs[0]
         )
-        slug = org["slug"]
+        slug = org["handle"]
         page = self._p
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         el = page.query_selector(f"[data-member-email='{email}']")
@@ -415,7 +415,7 @@ class OrgBrowserMixin(BrowserProtocol):
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
 
     def view_org_dashboard(self) -> None:
-        slug = getattr(self, "_active_org_slug", "")
+        slug = getattr(self, "_active_org_handle", "")
         self._last_response = self._p.goto(f"{self._base_url}/{slug}/dashboard", wait_until="load")
 
     def assert_org_dashboard_visible(self) -> None:

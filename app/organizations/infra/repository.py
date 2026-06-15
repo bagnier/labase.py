@@ -1,4 +1,3 @@
-import re
 import uuid
 
 from sqlalchemy import delete, func, select
@@ -11,31 +10,25 @@ from app.organizations.domain.models import (
     OrgInvitation,
     OrgRole,
 )
+from app.shared.handle_service import handle_is_available, unique_handle
+from app.shared.names import slugify
 from app.shared.persistence.repository import BaseRepository
-
-
-def _slugify(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
 class OrganizationRepository(BaseRepository[Organization]):
     model = Organization
 
-    async def _unique_slug(self, base: str) -> str:
-        slug = base
-        n = 2
-        while True:
-            result = await self.session.execute(
-                select(Organization).where(Organization.slug == slug)
-            )
-            if result.scalars().first() is None:
-                return slug
-            slug = f"{base}-{n}"
-            n += 1
-
-    async def create_with_owner(self, name: str, auth_user_id: uuid.UUID) -> Organization:
-        slug = await self._unique_slug(_slugify(name))
-        org = Organization(name=name, slug=slug)
+    async def create_with_owner(
+        self,
+        name: str,
+        auth_user_id: uuid.UUID,
+        suggested_handle: str | None = None,
+    ) -> Organization:
+        base = suggested_handle if suggested_handle else slugify(name)
+        if not base:
+            base = "org"
+        handle = await unique_handle(base, self.session)
+        org = Organization(name=name, handle=handle)
         self.session.add(org)
         await self.session.flush()
         membership = Membership(org_id=org.id, auth_user_id=auth_user_id, role=OrgRole.owner)
@@ -74,17 +67,20 @@ class OrganizationRepository(BaseRepository[Organization]):
         )
         return result.scalars().first()
 
-    async def get_by_slug(self, slug: str) -> Organization | None:
-        result = await self.session.execute(select(Organization).where(Organization.slug == slug))
-        return result.scalars().first()
+    async def get_by_handle(self, handle: str) -> Organization | None:
+        return await self.session.scalar(select(Organization).where(Organization.handle == handle))
 
-    async def get_by_slug_for_user(self, slug: str, auth_user_id: uuid.UUID) -> Organization | None:
-        result = await self.session.execute(
+    async def get_by_handle_for_user(
+        self, handle: str, auth_user_id: uuid.UUID
+    ) -> Organization | None:
+        return await self.session.scalar(
             select(Organization)
             .join(Membership, Membership.org_id == Organization.id)
-            .where(Organization.slug == slug, Membership.auth_user_id == auth_user_id)
+            .where(Organization.handle == handle, Membership.auth_user_id == auth_user_id)
         )
-        return result.scalars().first()
+
+    async def is_handle_available(self, handle: str, org_id: uuid.UUID) -> bool:
+        return await handle_is_available(handle, self.session, exclude_org_id=org_id)
 
     async def list_members(self, org_id: uuid.UUID) -> list[Membership]:
         result = await self.session.execute(
@@ -124,6 +120,9 @@ class OrganizationRepository(BaseRepository[Organization]):
 
     async def rename(self, org: Organization, name: str) -> None:
         org.name = name
+
+    async def update_handle(self, org: Organization, handle: str) -> None:
+        org.handle = handle
 
     async def create_invitation(
         self, org_id: uuid.UUID, email: str, role: OrgRole, invited_by: uuid.UUID

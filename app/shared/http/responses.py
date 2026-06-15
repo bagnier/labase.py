@@ -33,8 +33,8 @@ def render_list(
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
     is_htmx = request.headers.get("HX-Request") == "true"
     template = fragment if is_htmx else full
-    org_slug = request.path_params.get("org_slug", "")
-    ctx = {"user": user, items_key: items, "org_slug": org_slug, "org": org}
+    org_handle = request.path_params.get("org_handle", "")
+    ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
     if not is_htmx and shell:
         ctx |= shell
     return templates.TemplateResponse(request, template, ctx)

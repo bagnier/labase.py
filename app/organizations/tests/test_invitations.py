@@ -166,7 +166,7 @@ def test_accept_already_accepted_invitation_is_idempotent(driver):
         "created_at": None,
     }
     mock_org = MagicMock()
-    mock_org.slug = "test-org"
+    mock_org.handle = "test-org"
 
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     app.dependency_overrides[get_user_session] = _mock_rls_session()

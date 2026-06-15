@@ -17,6 +17,7 @@ from app.shared.dependencies import (
     RlsSession,
 )
 from app.shared.http.templates import templates
+from app.shared.names import is_reserved, is_valid_handle
 
 router = APIRouter(tags=["organizations-html"])
 
@@ -36,8 +37,8 @@ async def org_dashboard(
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    org_slug = request.path_params.get("org_slug", org.slug)
-    ctx = await page_context(session, current_user, org=org, org_slug=org_slug)
+    org_handle = request.path_params.get("org_handle", org.handle)
+    ctx = await page_context(session, current_user, org=org, org_handle=org_handle)
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 
@@ -56,9 +57,9 @@ async def org_settings(
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    org_slug = request.path_params.get("org_slug", org.slug)
+    org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await page_context(
-        session, current_user, org=org, org_slug=org_slug, role=membership.role.value
+        session, current_user, org=org, org_handle=org_handle, role=membership.role.value
     )
     return templates.TemplateResponse(request, "organizations/settings.html", ctx)
 
@@ -77,10 +78,50 @@ async def rename_org_html(
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await repo.rename(org, name)
-    # Reload org to get new slug
+    return RedirectResponse(url=f"/{org.handle}/settings", status_code=303)
+
+
+@router.patch("/handle", response_class=HTMLResponse)
+async def update_org_handle_html(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentOwnerMembership,
+    handle: str = Form(...),
+):
+    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
-    assert org is not None
-    return RedirectResponse(url=f"/{org.slug}/settings", status_code=303)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    handle = handle.strip().lower()
+    org_handle = request.path_params.get("org_handle", org.handle)
+    if not is_valid_handle(handle):
+        ctx = await page_context(
+            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
+        )
+        ctx["handle_error"] = "Handle must be lowercase alphanumeric with hyphens, max 39 chars."
+        return templates.TemplateResponse(
+            request, "organizations/settings.html", ctx, status_code=422
+        )
+    if is_reserved(handle):
+        ctx = await page_context(
+            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
+        )
+        ctx["handle_error"] = f"'{handle}' is a reserved name."
+        return templates.TemplateResponse(
+            request, "organizations/settings.html", ctx, status_code=422
+        )
+    if not await repo.is_handle_available(handle, org_id):
+        ctx = await page_context(
+            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
+        )
+        ctx["handle_error"] = f"'{handle}' is already taken."
+        return templates.TemplateResponse(
+            request, "organizations/settings.html", ctx, status_code=409
+        )
+    await repo.update_handle(org, handle)
+    return RedirectResponse(url=f"/{handle}/settings", status_code=303)
 
 
 # ── Members ───────────────────────────────────────────────────────────────────
@@ -114,13 +155,13 @@ async def org_members(
         raw_invs = await repo.list_invitations(org_id)
         invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
 
-    org_slug = request.path_params.get("org_slug", org.slug)
+    org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await page_context(
         session,
         current_user,
         current_user=current_user,
         org=org,
-        org_slug=org_slug,
+        org_handle=org_handle,
         caller_role=membership.role.value,
         members=members,
         invitations=invitations,

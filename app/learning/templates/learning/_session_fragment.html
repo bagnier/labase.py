@@ -13,15 +13,15 @@
              id="answer-{{ card.external_id }}" data-answer></div>
         <div class="mt-4 flex gap-2">
           <button type="button" data-reveal
-            hx-get="/{{ org_slug }}/learning/cards/{{ card.external_id }}"
+            hx-get="/{{ org_handle }}/learning/cards/{{ card.external_id }}"
             hx-target="#answer-{{ card.external_id }}" hx-swap="innerHTML"
             class="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">Reveal answer</button>
           <button type="button" data-mark="again"
-            hx-post="/{{ org_slug }}/learning/cards/{{ card.external_id }}/mark" hx-vals='{"outcome": "again"}'
+            hx-post="/{{ org_handle }}/learning/cards/{{ card.external_id }}/mark" hx-vals='{"outcome": "again"}'
             hx-target="#learning-session" hx-swap="outerHTML"
             class="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white">To review</button>
           <button type="button" data-mark="learned"
-            hx-post="/{{ org_slug }}/learning/cards/{{ card.external_id }}/mark" hx-vals='{"outcome": "learned"}'
+            hx-post="/{{ org_handle }}/learning/cards/{{ card.external_id }}/mark" hx-vals='{"outcome": "learned"}'
             hx-target="#learning-session" hx-swap="outerHTML"
             class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Learned</button>
         </div>

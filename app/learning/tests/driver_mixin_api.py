@@ -14,7 +14,7 @@ class LearningApiMixin(ApiProtocol):
     def _ensure_learn(self) -> None:
         if not hasattr(self, "_learn_clients"):
             self._learn_clients: dict = {}
-            self._learn_slug: dict = {}
+            self._learn_handle: dict = {}
             self._learn_org: dict = {}
             self._learn_uid: dict = {}
             self._deck_defs: list = []
@@ -28,7 +28,7 @@ class LearningApiMixin(ApiProtocol):
 
     def _reset_learning(self) -> None:
         self._learn_clients = {}
-        self._learn_slug = {}
+        self._learn_handle = {}
         self._learn_org = {}
         self._learn_uid = {}
         self._deck_defs = []
@@ -53,14 +53,14 @@ class LearningApiMixin(ApiProtocol):
             assert resp.status_code == 200 and resp.json(), f"no org for {email}: {resp.text}"
             org = resp.json()[0]
             self._learn_clients[key] = client
-            self._learn_slug[key] = org["slug"]
+            self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])
             self._learn_uid[key] = uuid.UUID(self._user_id_for_email(email))
         return key
 
     def _api(self, key: str, method: str, path: str, **kw):
         client = self._learn_clients[key]
-        url = f"/{self._learn_slug[key]}/learning{path}"
+        url = f"/{self._learn_handle[key]}/learning{path}"
         resp = self._run(getattr(client, method)(url, **kw))
         return resp
 

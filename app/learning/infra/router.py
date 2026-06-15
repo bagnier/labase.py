@@ -76,8 +76,8 @@ async def _render_session(
         )
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "learning/_session_fragment.html" if is_htmx else "learning/session.html"
-    org_slug = request.path_params.get("org_slug", "")
-    ctx = {"user": current_user, "cards": cards, "org_slug": org_slug, "org": org}
+    org_handle = request.path_params.get("org_handle", "")
+    ctx = {"user": current_user, "cards": cards, "org_handle": org_handle, "org": org}
     if not is_htmx:
         ctx |= await shell_context(session, current_user)
     return templates.TemplateResponse(request, template, ctx)
@@ -142,11 +142,11 @@ async def card_detail(
                 else None,
             }
         )
-    org_slug = request.path_params.get("org_slug", "")
+    org_handle = request.path_params.get("org_handle", "")
     return templates.TemplateResponse(
         request,
         "learning/_answer_fragment.html",
-        {"user": current_user, "card": card, "org_slug": org_slug},
+        {"user": current_user, "card": card, "org_handle": org_handle},
     )
 
 
@@ -208,7 +208,7 @@ async def resources(
     items = [ResourceRead(deck=deck, resource=res) for deck, res in pairs]
     if _wants_json(request):
         return JSONResponse([i.model_dump(mode="json") for i in items])
-    org_slug = request.path_params.get("org_slug", "")
-    ctx = {"user": current_user, "resources": items, "org_slug": org_slug, "org": org}
+    org_handle = request.path_params.get("org_handle", "")
+    ctx = {"user": current_user, "resources": items, "org_handle": org_handle, "org": org}
     ctx |= await shell_context(session, current_user)
     return templates.TemplateResponse(request, "learning/resources.html", ctx)

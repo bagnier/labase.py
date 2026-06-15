@@ -67,11 +67,11 @@ app.include_router(console_router, prefix="/console")
 # JSON API — org management
 app.include_router(organizations_router)
 
-# Org-scoped routes: /{org_slug}/...
-app.include_router(organizations_html_router, prefix="/{org_slug}")
-app.include_router(files_router, prefix="/{org_slug}")
-app.include_router(todo_router, prefix="/{org_slug}")
-app.include_router(learning_router, prefix="/{org_slug}")
+# Org-scoped routes: /{org_handle}/...
+app.include_router(organizations_html_router, prefix="/{org_handle}")
+app.include_router(files_router, prefix="/{org_handle}")
+app.include_router(todo_router, prefix="/{org_handle}")
+app.include_router(learning_router, prefix="/{org_handle}")
 
 # Test-only: clock control endpoint for the browser BDD driver (never in prod).
 if os.environ.get("ENABLE_TEST_CLOCK") == "1":

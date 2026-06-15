@@ -111,7 +111,7 @@ async def accept_invitation(
         # Idempotent: already accepted — resolve org slug and redirect
         repo = OrganizationRepository(rls_session)
         org = await repo.get(inv["org_id"])
-        slug = org.slug if org else ""
+        slug = org.handle if org else ""
         redirect_url = f"/{slug}/dashboard"
         if _wants_json(request):
             return JSONResponse({"redirect": redirect_url})
@@ -138,7 +138,7 @@ async def accept_invitation(
 
     repo = OrganizationRepository(rls_session)
     org = await repo.get(inv["org_id"])
-    slug = org.slug if org else ""
+    slug = org.handle if org else ""
     record_audit_event(
         bg,
         level="info",

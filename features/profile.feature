@@ -22,19 +22,19 @@ Feature: Profile management
     Then there is a link to the profile in the user footer
     And there is no profile link in the navigation
 
-  # Profile edition
+  # Handle edition
 
-  Scenario: A signed-in user can update their display name
+  Scenario: A signed-in user can update their handle
     Given a user is signed in
-    When they update their display name to "Alice Wonderland"
-    Then their display name is "Alice Wonderland"
+    When they update their handle to "alice"
+    Then their handle is "alice"
 
-  Scenario: A signed-in user cannot set an empty display name
+  Scenario: A signed-in user cannot set an empty handle
     Given a user is signed in
-    And their display name is "Alice Wonderland"
-    When they update their display name to ""
+    And their handle is "alice"
+    When they update their handle to ""
     Then the update is rejected
-    And their display name is still "Alice Wonderland"
+    And their handle is still "alice"
 
   Scenario: A signed-in user cannot change their email
     Given a user is signed in

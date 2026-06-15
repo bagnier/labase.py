@@ -15,21 +15,21 @@ async def get_current_org(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_rls_session),
 ) -> uuid.UUID:
-    """Resolve org from {org_slug} path parameter."""
+    """Resolve org from {org_handle} path parameter."""
     user_uuid = uuid.UUID(current_user.id)
     repo = OrganizationRepository(session)
 
-    slug = request.path_params.get("org_slug")
+    slug = request.path_params.get("org_handle")
     if slug:
         # Single join: org by slug that the current user is a member of
-        org = await repo.get_by_slug_for_user(slug, user_uuid)
+        org = await repo.get_by_handle_for_user(slug, user_uuid)
         if org is not None:
             return org.id
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Organisation not found or access denied"
         )
 
-    # Fallback for routes not under /{org_slug}: use first org
+    # Fallback for routes not under /{org_handle}: use first org
     org = await repo.get_first_for_user(user_uuid)
     if org is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization found")
@@ -83,7 +83,7 @@ async def require_owner(
 async def require_current_owner(
     membership: Membership = Depends(get_current_membership),
 ) -> Membership:
-    """Owner gate for ``/{org_slug}/...`` routes (resolves the org from the slug)."""
+    """Owner gate for ``/{org_handle}/...`` routes (resolves the org from the slug)."""
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership

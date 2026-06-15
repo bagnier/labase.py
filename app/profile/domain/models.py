@@ -19,7 +19,7 @@ class Profile(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     auth_user_id: Mapped[uuid.UUID]
     email: Mapped[str] = mapped_column(String)
-    display_name: Mapped[str | None]
+    handle: Mapped[str | None]
     version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
@@ -30,11 +30,11 @@ class Profile(Base):
 class ProfileCreate(BaseModel):
     auth_user_id: uuid.UUID
     email: str
-    display_name: str | None = None
+    handle: str | None = None
 
 
 class ProfileUpdate(BaseModel):
-    display_name: str | None = None
+    handle: str | None = None
 
 
 class ProfileRead(BaseModel):
@@ -43,4 +43,4 @@ class ProfileRead(BaseModel):
     id: uuid.UUID
     auth_user_id: uuid.UUID
     email: str
-    display_name: str | None
+    handle: str | None

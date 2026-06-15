@@ -5,19 +5,21 @@ class ProfileApiMixin(ApiProtocol):
     def view_profile(self) -> None:
         self._response = self._run(self._c.get("/profile"))
 
-    def update_display_name(self, name: str) -> None:
-        self._response = self._run(self._c.post("/profile", data={"display_name": name}))
+    def update_handle(self, name: str) -> None:
+        self._response = self._run(self._c.post("/profile", data={"handle": name}))
 
-    def assert_display_name(self, name: str | None) -> None:
+    def assert_handle(self, name: str | None) -> None:
         resp = self._run(self._c.get("/profile"))
         assert resp.status_code == 200, f"GET /profile returned {resp.status_code}"
         html = resp.text
         if name:
-            assert name in html, f"Expected display name '{name}' in profile page HTML"
+            assert name in html, f"Expected handle '{name}' in profile page HTML"
 
     def assert_last_update_rejected(self) -> None:
         assert self._response is not None
-        assert self._response.status_code == 422, f"Expected 422, got {self._response.status_code}"
+        assert self._response.status_code in (422, 409), (
+            f"Expected 422/409, got {self._response.status_code}"
+        )
 
     def assert_email_read_only(self) -> None:
         resp = self._run(self._c.get("/profile"))
@@ -29,8 +31,8 @@ class ProfileApiMixin(ApiProtocol):
 
     def assert_link_to_org_dashboard(self) -> None:
         assert self._response is not None
-        slug = getattr(self, "_active_org_slug", "")
-        expected = f"/{slug}/dashboard"
+        org_handle = getattr(self, "_active_org_handle", "")
+        expected = f"/{org_handle}/dashboard"
         assert expected in self._response.text, f"No link to {expected!r} found on profile"
 
     def view_dashboard(self) -> None:
@@ -38,8 +40,8 @@ class ProfileApiMixin(ApiProtocol):
 
     def assert_link_to_todos(self) -> None:
         assert self._response is not None
-        slug = getattr(self, "_active_org_slug", "")
-        expected = f"/{slug}/todos"
+        org_handle = getattr(self, "_active_org_handle", "")
+        expected = f"/{org_handle}/todos"
         assert expected in self._response.text, f"No link to {expected!r} found on dashboard"
 
     def assert_profile_link_in_footer(self) -> None:

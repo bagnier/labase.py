@@ -73,7 +73,7 @@ class BrowserDriver(
         self._page: Page | None = None
         self._last_response: Response | None = None
         self._last_registered_email: str | None = None
-        self._active_org_slug: str = ""
+        self._active_org_handle: str = ""
         self._primary_email: str = ""
         self._secondary_browser_contexts: dict = {}
         self._acting_as_email: str = ""
@@ -151,7 +151,7 @@ class BrowserDriver(
         self._context = self._browser.new_context()
         self._page = self._context.new_page()
         self._last_response = None
-        self._active_org_slug = ""
+        self._active_org_handle = ""
         self._primary_email = ""
         self._acting_as_email = ""
         self._primary_context_backup = None

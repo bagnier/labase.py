@@ -3,7 +3,7 @@
 {% block title %}Members — {{ org.name }} — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_slug }}/files" class="hover:text-gray-700">{{ org.name }}</a>
+  <a href="/{{ org_handle }}/files" class="hover:text-gray-700">{{ org.name }}</a>
   <span class="mx-1 text-gray-300">/</span>
   <span class="text-gray-700">Members</span>
 {% endblock %}
@@ -105,7 +105,7 @@
   {% if caller_role == "owner" %}
   <div id="invite-form" class="hidden bg-white border border-gray-200 rounded-xl p-6 space-y-4">
     <h2 class="text-sm font-semibold text-gray-700">Invite a new member</h2>
-    <form hx-post="/{{ org_slug }}/invitations"
+    <form hx-post="/{{ org_handle }}/invitations"
           hx-target="#invite-result"
           hx-swap="innerHTML"
           class="flex gap-3 items-start">

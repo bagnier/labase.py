@@ -97,9 +97,9 @@ class OrgApiMixin(ApiProtocol):
     def rename_org(self, new_name: str) -> None:
         orgs = self._fetch_org_list()
         assert orgs, "No organisations to rename"
-        active_slug = getattr(self, "_active_org_slug", "")
+        active_slug = getattr(self, "_active_org_handle", "")
         org = (
-            next((o for o in orgs if o.get("slug") == active_slug), orgs[0])
+            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
             if active_slug
             else orgs[0]
         )
@@ -132,9 +132,9 @@ class OrgApiMixin(ApiProtocol):
         resp = self._run(c.get("/organizations", headers={"accept": "application/json"}))
         assert resp.status_code == 200 and resp.json(), "Cannot resolve active org id"
         orgs = resp.json()
-        active_slug = getattr(self, "_active_org_slug", "")
+        active_slug = getattr(self, "_active_org_handle", "")
         org = (
-            next((o for o in orgs if o.get("slug") == active_slug), orgs[0])
+            next((o for o in orgs if o.get("handle") == active_slug), orgs[0])
             if active_slug
             else orgs[0]
         )
@@ -328,7 +328,7 @@ class OrgApiMixin(ApiProtocol):
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
 
     def view_org_dashboard(self) -> None:
-        slug = getattr(self, "_active_org_slug", "")
+        slug = getattr(self, "_active_org_handle", "")
         self._response = self._run(self._c.get(f"/{slug}/dashboard"))
 
     def assert_org_dashboard_visible(self) -> None:

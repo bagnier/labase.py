@@ -16,44 +16,44 @@ _PASSWORD = "Secret1!"
 class OrgFileApiMixin(ApiProtocol):
     _primary_email: str
     _secondary_clients: dict[str, httpx.AsyncClient]
-    _secondary_slugs: dict[str, str]
+    _secondary_handles: dict[str, str]
     _share_link_url: str | None
-    _active_org_slug: str
+    _active_org_handle: str
 
     def _ensure_multi_user(self) -> None:
         if not hasattr(self, "_secondary_clients"):
             self._secondary_clients = {}
-        if not hasattr(self, "_secondary_slugs"):
-            self._secondary_slugs = {}
+        if not hasattr(self, "_secondary_handles"):
+            self._secondary_handles = {}
         if not hasattr(self, "_share_link_url"):
             self._share_link_url = None
         if not hasattr(self, "_primary_email"):
             self._primary_email = ""
-        if not hasattr(self, "_active_org_slug"):
-            self._active_org_slug = ""
+        if not hasattr(self, "_active_org_handle"):
+            self._active_org_handle = ""
 
     def _reset_multi_user_state(self) -> None:
         self._secondary_clients = {}
-        self._secondary_slugs = {}
+        self._secondary_handles = {}
         self._share_link_url = None
         self._primary_email = ""
-        self._active_org_slug = ""
+        self._active_org_handle = ""
         self._org_list_response = None  # reset cached org list from OrgApiMixin
         self._primary_client_backup = None  # type: ignore[assignment]
         self._restore_clock()
 
     def _org_url(self, path: str, slug: str | None = None) -> str:
-        s = slug or getattr(self, "_active_org_slug", "")
+        s = slug or getattr(self, "_active_org_handle", "")
         return f"/{s}{path}"
 
     def _org_url_for(self, email: str, path: str) -> str:
-        slug = self._secondary_slugs.get(email, getattr(self, "_active_org_slug", ""))
+        slug = self._secondary_handles.get(email, getattr(self, "_active_org_handle", ""))
         return f"/{slug}{path}"
 
     def _fetch_slug_for(self, client: httpx.AsyncClient) -> str:
         resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
         assert resp.status_code == 200 and resp.json(), "Cannot fetch org slug"
-        return resp.json()[0]["slug"]
+        return resp.json()[0]["handle"]
 
     def _list_files_with(self, client: httpx.AsyncClient, slug: str) -> list[dict]:
         resp = self._run(client.get(f"/{slug}/files", headers={"accept": "application/json"}))
@@ -61,7 +61,7 @@ class OrgFileApiMixin(ApiProtocol):
         return resp.json()
 
     def _list_files(self) -> list[dict]:
-        return self._list_files_with(self._c, getattr(self, "_active_org_slug", ""))
+        return self._list_files_with(self._c, getattr(self, "_active_org_handle", ""))
 
     def _file_id_by_name(self, filename: str) -> str:
         for f in self._list_files():
@@ -114,9 +114,9 @@ class OrgFileApiMixin(ApiProtocol):
                     name=org_name, auth_user_id=uuid.UUID(user_id_str)
                 )
                 await session.commit()
-                return str(org.id), org.slug
+                return str(org.id), org.handle
 
-        org_id, self._active_org_slug = self._run(_create_org())
+        org_id, self._active_org_handle = self._run(_create_org())
         self.track_org_id(org_id)
         self._run(self._c.post("/auth/login", data={"email": email, "password": _PASSWORD}))
 
@@ -201,11 +201,11 @@ class OrgFileApiMixin(ApiProtocol):
         self._client_for(email)
         add_membership(self._get_primary_org_id(), self._user_id_for_email(email))
         # Secondary client points at primary org slug
-        self._secondary_slugs[email] = self._active_org_slug
+        self._secondary_handles[email] = self._active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
         client = self._client_for(email)
-        slug = self._secondary_slugs.get(email, self._active_org_slug)
+        slug = self._secondary_handles.get(email, self._active_org_handle)
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
         self._run(
             client.post(
@@ -220,8 +220,8 @@ class OrgFileApiMixin(ApiProtocol):
         resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
         if resp.status_code == 200 and resp.json():
             org_id = resp.json()[0]["id"]
-            slug = resp.json()[0]["slug"]
-            self._secondary_slugs[email] = slug
+            slug = resp.json()[0]["handle"]
+            self._secondary_handles[email] = slug
             self._run(
                 client.patch(
                     f"/organizations/{org_id}",
@@ -255,7 +255,7 @@ class OrgFileApiMixin(ApiProtocol):
 
     def view_file_list_as(self, email: str) -> None:
         client = self._client_for(email)
-        slug = self._secondary_slugs.get(email, self._active_org_slug)
+        slug = self._secondary_handles.get(email, self._active_org_handle)
         self._response = self._run(
             client.get(f"/{slug}/files", headers={"accept": "application/json"})
         )

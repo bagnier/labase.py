@@ -9,7 +9,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
     _share_link_url: str | None
 
     def _files_url(self, slug: str | None = None) -> str:
-        s = slug or getattr(self, "_active_org_slug", "")
+        s = slug or getattr(self, "_active_org_handle", "")
         return f"{self._base_url}/{s}/files"
 
     def _goto_files(self) -> None:
@@ -166,7 +166,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
                     f"{self._base_url}/organizations",
                     headers={"accept": "application/json"},
                 )
-                self._active_org_slug = resp2.json()[0]["slug"]  # type: ignore[attr-defined]
+                self._active_org_handle = resp2.json()[0]["handle"]  # type: ignore[attr-defined]
         self._primary_email = email  # type: ignore[attr-defined]
         self._last_registered_email = email
 
@@ -176,14 +176,14 @@ class OrgFileBrowserMixin(BrowserProtocol):
         assert self._context
         self._secondary_context_for(email)
         add_membership(self._get_primary_org_id(), self._get_user_id(email))
-        if not hasattr(self, "_secondary_slugs"):
-            self._secondary_slugs: dict = {}
-        self._secondary_slugs[email] = getattr(self, "_active_org_slug", "")
+        if not hasattr(self, "_secondary_handles"):
+            self._secondary_handles: dict = {}
+        self._secondary_handles[email] = getattr(self, "_active_org_handle", "")
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
         ctx = self._secondary_context_for(email)
-        slug = getattr(self, "_secondary_slugs", {}).get(
-            email, getattr(self, "_active_org_slug", "")
+        slug = getattr(self, "_secondary_handles", {}).get(
+            email, getattr(self, "_active_org_handle", "")
         )
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
         ctx.request.post(
@@ -205,10 +205,10 @@ class OrgFileBrowserMixin(BrowserProtocol):
         )
         if resp.status == 200 and resp.json():
             org_id = resp.json()[0]["id"]
-            slug = resp.json()[0]["slug"]
-            if not hasattr(self, "_secondary_slugs"):
-                self._secondary_slugs = {}
-            self._secondary_slugs[email] = slug
+            slug = resp.json()[0]["handle"]
+            if not hasattr(self, "_secondary_handles"):
+                self._secondary_handles = {}
+            self._secondary_handles[email] = slug
             ctx.request.patch(
                 f"{self._base_url}/organizations/{org_id}",
                 data={"name": org_name},
@@ -236,8 +236,8 @@ class OrgFileBrowserMixin(BrowserProtocol):
 
     def view_file_list_as(self, email: str) -> None:
         ctx = self._secondary_context_for(email)
-        slug = getattr(self, "_secondary_slugs", {}).get(
-            email, getattr(self, "_active_org_slug", "")
+        slug = getattr(self, "_secondary_handles", {}).get(
+            email, getattr(self, "_active_org_handle", "")
         )
         resp = ctx.request.get(
             f"{self._base_url}/{slug}/files",

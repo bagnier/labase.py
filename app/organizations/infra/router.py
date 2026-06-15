@@ -15,6 +15,7 @@ from app.organizations.domain.models import (
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.dependencies import CurrentUser, OwnerMembership, RlsSession
+from app.shared.names import is_reserved, is_valid_handle
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -32,7 +33,7 @@ async def create_organization(
     if "application/json" in request.headers.get("accept", ""):
         result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
         return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
-    return RedirectResponse(url=f"/{org.slug}/dashboard", status_code=303)
+    return RedirectResponse(url=f"/{org.handle}/dashboard", status_code=303)
 
 
 @router.get("", response_model=list[OrganizationWithRoleRead])
@@ -50,6 +51,44 @@ async def list_organizations(
 
 class RenameOrgBody(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+
+
+class UpdateHandleBody(BaseModel):
+    handle: str = Field(min_length=1, max_length=39)
+
+
+@router.patch("/{org_id}/handle")
+async def update_org_handle(
+    org_id: uuid.UUID,
+    body: UpdateHandleBody,
+    owner: OwnerMembership,
+    session: RlsSession,
+) -> JSONResponse:
+    handle = body.handle.strip().lower()
+    if not is_valid_handle(handle):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Handle must be lowercase alphanumeric with hyphens, max 39 chars.",
+        )
+    if is_reserved(handle):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"'{handle}' is a reserved name.",
+        )
+    repo = OrganizationRepository(session)
+    if not await repo.is_handle_available(handle, org_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"'{handle}' is already taken."
+        )
+    org = await repo.get(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    await repo.update_handle(org, handle)
+    return JSONResponse(
+        OrganizationWithRoleRead.model_validate({**org.__dict__, "role": owner.role}).model_dump(
+            mode="json"
+        )
+    )
 
 
 @router.patch("/{org_id}")

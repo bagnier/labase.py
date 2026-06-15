@@ -11,7 +11,7 @@ class AuthApiMixin(ApiProtocol):
     def _store_active_slug(self) -> None:
         resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))
         if resp.status_code == 200 and resp.json():
-            self._active_org_slug = resp.json()[0]["slug"]
+            self._active_org_handle = resp.json()[0]["handle"]
 
     def sign_in(self, email: str, password: str) -> None:
         self._response = self._run(

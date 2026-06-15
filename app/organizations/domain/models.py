@@ -21,7 +21,7 @@ class Organization(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str]
-    slug: Mapped[str] = mapped_column(default="")
+    handle: Mapped[str] = mapped_column(default="")
     version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
@@ -94,7 +94,7 @@ class OrganizationRead(BaseModel):
 
     id: uuid.UUID
     name: str
-    slug: str
+    handle: str
     created_at: datetime
 
 

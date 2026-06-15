@@ -3,7 +3,7 @@ from tests.e2e.drivers.protocols import ApiProtocol
 
 class TodoApiMixin(ApiProtocol):
     def _todos_url(self, path: str = "") -> str:
-        slug = getattr(self, "_active_org_slug", "")
+        slug = getattr(self, "_active_org_handle", "")
         return f"/{slug}/todos{path}"
 
     def _todo_id_by_title(self, title: str) -> str:

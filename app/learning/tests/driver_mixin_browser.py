@@ -21,7 +21,7 @@ class LearningBrowserMixin(BrowserProtocol):
         if not hasattr(self, "_learn_ctx"):
             self._learn_ctx: dict = {}
             self._learn_page: dict = {}
-            self._learn_slug: dict = {}
+            self._learn_handle: dict = {}
             self._learn_org: dict = {}
             self._learn_uid: dict = {}
             self._deck_defs: list = []
@@ -40,7 +40,7 @@ class LearningBrowserMixin(BrowserProtocol):
                 ctx.close()
         self._learn_ctx = {}
         self._learn_page = {}
-        self._learn_slug = {}
+        self._learn_handle = {}
         self._learn_org = {}
         self._learn_uid = {}
         self._deck_defs = []
@@ -102,7 +102,7 @@ class LearningBrowserMixin(BrowserProtocol):
             org = resp.json()[0]
             self._learn_ctx[key] = ctx
             self._learn_page[key] = ctx.new_page()
-            self._learn_slug[key] = org["slug"]
+            self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])
             self._learn_uid[key] = uuid.UUID(find_users(email)[0].id)
         return key
@@ -111,7 +111,7 @@ class LearningBrowserMixin(BrowserProtocol):
         return self._learn_page[key]
 
     def _url(self, key: str, path: str) -> str:
-        return f"{self._base_url}/{self._learn_slug[key]}/learning{path}"
+        return f"{self._base_url}/{self._learn_handle[key]}/learning{path}"
 
     def _goto_today(self, key: str):
         page = self._page_for(key)

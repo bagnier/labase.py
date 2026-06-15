@@ -61,7 +61,7 @@ async def fetch_orgs_for_email(email: str) -> list[dict]:
     assert _test_connection is not None, "No active test transaction"
     result = await _test_connection.execute(
         text("""
-            SELECT o.name, o.slug, o.id::text AS id, m.role
+            SELECT o.name, o.handle, o.id::text AS id, m.role
             FROM organizations o
             JOIN memberships m ON m.org_id = o.id
             JOIN profiles p ON p.auth_user_id = m.auth_user_id

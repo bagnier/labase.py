@@ -31,9 +31,9 @@ def step_no_profile_nav_link(driver):
     driver.assert_no_profile_nav_link()
 
 
-@given(parsers.parse('their display name is "{name}"'))
-def step_have_display_name(driver, name):
-    driver.update_display_name(name)
+@given(parsers.parse('their handle is "{name}"'))
+def step_have_handle(driver, name):
+    driver.update_handle(name)
 
 
 @when("they view their profile")
@@ -41,24 +41,24 @@ def step_view_profile(driver):
     driver.view_profile()
 
 
-@when(parsers.parse('they update their display name to "{name}"'))
-def step_update_display_name(driver, name):
-    driver.update_display_name(name)
+@when(parsers.parse('they update their handle to "{name}"'))
+def step_update_handle(driver, name):
+    driver.update_handle(name)
 
 
-@when('they update their display name to ""')
-def step_clear_display_name(driver):
-    driver.update_display_name("")
+@when('they update their handle to ""')
+def step_clear_handle(driver):
+    driver.update_handle("")
 
 
-@then(parsers.parse('their display name is "{name}"'))
-def step_assert_display_name(driver, name):
-    driver.assert_display_name(name)
+@then(parsers.parse('their handle is "{name}"'))
+def step_assert_handle(driver, name):
+    driver.assert_handle(name)
 
 
-@then(parsers.parse('their display name is still "{name}"'))
-def step_assert_display_name_still(driver, name):
-    driver.assert_display_name(name)
+@then(parsers.parse('their handle is still "{name}"'))
+def step_assert_handle_still(driver, name):
+    driver.assert_handle(name)
 
 
 @then("the update is rejected")

@@ -47,7 +47,7 @@ class AuthBrowserMixin(BrowserProtocol):
         self._delete_user_if_exists(email)
         self.register(email, password)
 
-    def _store_active_org_slug(self) -> None:
+    def _store_active_org_handle(self) -> None:
         assert self._context
         resp = self._context.request.get(
             f"{self._base_url}/organizations",
@@ -56,14 +56,14 @@ class AuthBrowserMixin(BrowserProtocol):
         if resp.status == 200:
             orgs = resp.json()
             if orgs:
-                self._active_org_slug = orgs[0]["slug"]  # type: ignore[attr-defined]
+                self._active_org_handle = orgs[0]["handle"]  # type: ignore[attr-defined]
 
     def sign_in_as_fresh_user(self) -> None:
         email = f"{uuid4()}@test.local"
         password = "Secret1!"
         self.ensure_registered(email, password)
         self.sign_in(email, password)
-        self._store_active_org_slug()
+        self._store_active_org_handle()
 
     def logout_action(self) -> None:
         self._p.evaluate("fetch('/auth/logout',{method:'POST'})")
