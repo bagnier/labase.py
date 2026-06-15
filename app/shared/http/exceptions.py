@@ -34,6 +34,9 @@ async def handle_http_error(request: Request, exc: HTTPException) -> Response:
             r = Response(status_code=200)
             r.headers["HX-Redirect"] = "/auth/login"
             return r
+        # Exception to "HTML by default": only an explicit text/html client (a browser) is
+        # redirected to /auth/login. Ambiguous clients (*/* or no Accept) get a 401 — this is
+        # the behavior encoded by the auth tests and is preserved deliberately.
         if wants_html(request):
             return RedirectResponse(url="/auth/login", status_code=302)
     if wants_json(request):

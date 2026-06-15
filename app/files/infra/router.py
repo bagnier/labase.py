@@ -1,8 +1,9 @@
 import re
 import uuid
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
 
@@ -31,6 +32,13 @@ from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])
+
+
+async def _get_file_repo(session: RlsSession, org_id: CurrentOrg) -> OrgFileRepository:
+    return OrgFileRepository(session, org_id)
+
+
+FileRepo = Annotated[OrgFileRepository, Depends(_get_file_repo)]
 
 _UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -79,10 +87,9 @@ async def file_list(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
     org: CurrentOrgModel,
+    repo: FileRepo,
 ):
-    repo = OrgFileRepository(session, org_id)
     files = await repo.all()
     return await _render(request, session, current_user, files, org)
 
@@ -96,6 +103,7 @@ async def upload_file(
     session: RlsSession,
     org_id: CurrentOrg,
     org: CurrentOrgModel,
+    repo: FileRepo,
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
@@ -116,7 +124,6 @@ async def upload_file(
     except StorageApiError as exc:
         raise HTTPException(400, str(exc)) from exc
 
-    repo = OrgFileRepository(session, org_id)
     org_file = await repo.add(
         user_id=uuid.UUID(current_user.id),
         filename=safe_name,
@@ -143,10 +150,8 @@ async def upload_file(
 async def download_file(
     file_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
-    org_id: CurrentOrg,
+    repo: FileRepo,
 ):
-    repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
         raise HTTPException(404, "Not found")
@@ -167,8 +172,8 @@ async def delete_file(
     org_id: CurrentOrg,
     org: CurrentOrgModel,
     membership: CurrentMembership,
+    repo: FileRepo,
 ):
-    repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
         raise HTTPException(404, "Not found")
@@ -198,13 +203,12 @@ async def rename_file(
     file_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
     org: CurrentOrgModel,
     membership: CurrentMembership,
+    repo: FileRepo,
 ):
     filename = await parse_field(request, "filename")
 
-    repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
         raise HTTPException(404, "Not found")
@@ -223,10 +227,8 @@ async def generate_share_link(
     request: Request,
     file_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
-    org_id: CurrentOrg,
+    repo: FileRepo,
 ):
-    repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
         raise HTTPException(404, "Not found")

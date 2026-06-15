@@ -22,8 +22,9 @@ async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
 ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 
 
-async def _profile_context(session: RlsSession, current_user: CurrentUser) -> dict:
-    repo = ProfileRepository(session)
+async def _profile_context(
+    session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
+) -> dict:
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
     if profile is not None and profile.handle is None:
         profile = await repo.auto_handle(profile, current_user.email)
@@ -43,50 +44,59 @@ async def profile_page(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: ProfileRepo,
 ) -> HTMLResponse | JSONResponse:
     if wants_json(request):
-        repo = ProfileRepository(session)
         profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
         if profile is not None and profile.handle is None:
             profile = await repo.auto_handle(profile, current_user.email)
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(session, current_user)
+    ctx = await _profile_context(session, current_user, repo)
     return templates.TemplateResponse(request, "profile.html", ctx)
 
 
-@router.post("/profile", response_class=HTMLResponse)
+def _validate_handle(handle: str) -> tuple[int, str] | None:
+    if not handle:
+        return 422, "Handle cannot be empty."
+    if not is_valid_handle(handle):
+        return 422, "Handle must be lowercase alphanumeric with hyphens, max 39 chars."
+    if is_reserved(handle):
+        return 422, f"'{handle}' is a reserved name."
+    return None
+
+
+@router.post("/profile", response_model=None)
 async def profile_update(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: ProfileRepo,
     handle: str = Form(default=""),
-) -> HTMLResponse:
-    repo = ProfileRepository(session)
+) -> HTMLResponse | JSONResponse:
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
     if profile is None:
         profile = await repo.create(
             ProfileCreate(auth_user_id=uuid.UUID(current_user.id), email=current_user.email)
         )
     handle = handle.strip().lower()
-    if not handle:
-        ctx = await _profile_context(session, current_user)
-        ctx["error"] = "Handle cannot be empty."
-        return templates.TemplateResponse(request, "profile.html", ctx, status_code=422)
-    if not is_valid_handle(handle):
-        ctx = await _profile_context(session, current_user)
-        ctx["error"] = "Handle must be lowercase alphanumeric with hyphens, max 39 chars."
-        return templates.TemplateResponse(request, "profile.html", ctx, status_code=422)
-    if is_reserved(handle):
-        ctx = await _profile_context(session, current_user)
-        ctx["error"] = f"'{handle}' is a reserved name."
-        return templates.TemplateResponse(request, "profile.html", ctx, status_code=422)
-    if not await repo.is_handle_available(handle, profile.id):
-        ctx = await _profile_context(session, current_user)
-        ctx["error"] = f"'{handle}' is already taken."
-        return templates.TemplateResponse(request, "profile.html", ctx, status_code=409)
+
+    error = _validate_handle(handle)
+    if error is None and not await repo.is_handle_available(handle, profile.id):
+        error = (409, f"'{handle}' is already taken.")
+
+    if error is not None:
+        status_code, message = error
+        if wants_json(request):
+            return JSONResponse({"detail": message}, status_code=status_code)
+        ctx = await _profile_context(session, current_user, repo)
+        ctx["error"] = message
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
+
     await repo.update(profile, ProfileUpdate(handle=handle))
-    ctx = await _profile_context(session, current_user)
+    if wants_json(request):
+        return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
+    ctx = await _profile_context(session, current_user, repo)
     ctx["success"] = "Profile updated."
     return templates.TemplateResponse(request, "profile.html", ctx)

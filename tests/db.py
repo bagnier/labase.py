@@ -2,17 +2,97 @@
 
 import asyncio
 import json
-from collections.abc import AsyncGenerator
+import threading
+import uuid
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from fastapi import Depends
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
+from app.organizations.domain.models import Membership, Organization
 from app.shared.config import get_settings
 from app.shared.persistence.database import _user_session_factory, get_user_session
+
+
+def _service_engine():
+    """Fresh NullPool engine on the service (BYPASSRLS) connection — for browser-side
+    test helpers that commit to the real DB outside any test transaction."""
+    settings = get_settings()
+    url = settings.database_url_service or settings.database_url
+    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    return create_async_engine(url, poolclass=NullPool, connect_args=connect_args)
+
+
+def _run_blocking[T](coro_factory: Callable[[], Awaitable[T]]) -> T:
+    """Runs an async DB helper on a dedicated thread/loop, avoiding conflicts with the
+    pytest-asyncio event loop. Mirrors truncate_app_tables()."""
+    result: list[T] = []
+    errors: list[Exception] = []
+
+    def _target() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result.append(loop.run_until_complete(coro_factory()))
+        except Exception as e:  # noqa: BLE001 — re-raised on the calling thread below
+            errors.append(e)
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join()
+    if errors:
+        raise errors[0]
+    return result[0]
+
+
+def primary_org_for_user(user_id: str) -> dict:
+    """First org (id/name/handle) the user belongs to, read through SQLAlchemy.
+
+    Lets the browser driver resolve org identifiers for test setup without calling the
+    JSON API — it drives the app through the DOM, not through REST.
+    """
+
+    async def _query() -> dict:
+        engine = _service_engine()
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as session:
+                org = await session.scalar(
+                    select(Organization)
+                    .join(Membership, Membership.org_id == Organization.id)
+                    .where(Membership.auth_user_id == uuid.UUID(user_id))
+                    .order_by(Membership.created_at)
+                    .limit(1)
+                )
+                assert org is not None, f"User {user_id!r} has no organization"
+                return {"id": str(org.id), "name": org.name, "handle": org.handle}
+        finally:
+            await engine.dispose()
+
+    return _run_blocking(_query)
+
+
+def rename_org(org_id: str, name: str) -> None:
+    """Renames an org through SQLAlchemy (browser-side test setup)."""
+
+    async def _update() -> None:
+        engine = _service_engine()
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as session:
+                org = await session.get(Organization, uuid.UUID(org_id))
+                assert org is not None, f"Org {org_id!r} not found"
+                org.name = name
+                await session.commit()
+        finally:
+            await engine.dispose()
+
+    _run_blocking(_update)
+
 
 # Simple global (sequential tests): visible from all threads, including
 # the driver event loop thread that runs FastAPI dependency overrides.

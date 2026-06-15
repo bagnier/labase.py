@@ -92,7 +92,7 @@ async def _render_session(
     return templates.TemplateResponse(request, template, ctx)
 
 
-@router.post("/subscribe", response_class=HTMLResponse)
+@router.post("/subscriptions", response_model=None)
 async def subscribe(
     request: Request,
     current_user: CurrentUser,
@@ -109,7 +109,7 @@ async def subscribe(
     return await _render_session(request, session, current_user, rows, org)
 
 
-@router.get("/today", response_class=HTMLResponse)
+@router.get("/sessions", response_model=None)
 async def today(
     request: Request,
     current_user: CurrentUser,
@@ -155,7 +155,7 @@ async def card_detail(
     )
 
 
-@router.post("/cards/{external_id}/mark", response_class=HTMLResponse)
+@router.post("/cards/{external_id}/reviews", response_model=None)
 async def mark_card(
     request: Request,
     bg: BackgroundTasks,

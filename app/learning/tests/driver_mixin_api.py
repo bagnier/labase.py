@@ -83,7 +83,7 @@ class LearningApiMixin(ApiProtocol):
         key = self._user(name)
         org_id = self._learn_org[key]
         self._run(self._seed(lambda s: self._materialize(org_id, s)))
-        resp = self._api(key, "post", "/subscribe", data={"deck": deck})
+        resp = self._api(key, "post", "/subscriptions", data={"deck": deck})
         assert resp.status_code == 200, f"subscribe -> {resp.status_code}: {resp.text}"
 
     # ── preset progress ─────────────────────────────────────────────────────────
@@ -132,12 +132,12 @@ class LearningApiMixin(ApiProtocol):
 
     def mark(self, name: str, ext: str, outcome: str) -> None:
         key = self._user(name)
-        resp = self._api(key, "post", f"/cards/{ext}/mark", data={"outcome": outcome})
+        resp = self._api(key, "post", f"/cards/{ext}/reviews", data={"outcome": outcome})
         assert resp.status_code == 200, f"mark -> {resp.status_code}: {resp.text}"
 
     def mark_all_learned(self, name: str) -> None:
         key = self._user(name)
-        for card in self._json(key, "/today")["cards"]:
+        for card in self._json(key, "/sessions")["cards"]:
             self.mark(name, card["external_id"], "learned")
 
     def reveal_answer(self, name: str, ext: str, answer: str) -> None:
@@ -151,12 +151,12 @@ class LearningApiMixin(ApiProtocol):
     # ── assertions ──────────────────────────────────────────────────────────────
     def assert_due_count(self, name: str, n: int) -> None:
         key = self._user(name)
-        count = self._json(key, "/today")["count"]
+        count = self._json(key, "/sessions")["count"]
         assert count == n, f"expected {n} due cards, got {count}"
 
     def assert_first_card(self, name: str, ext: str, question: str) -> None:
         key = self._user(name)
-        cards = self._json(key, "/today")["cards"]
+        cards = self._json(key, "/sessions")["cards"]
         assert cards, "no due cards"
         assert cards[0]["external_id"] == ext, f"first card {cards[0]['external_id']} != {ext}"
         assert cards[0]["question"] == question, (
@@ -165,7 +165,7 @@ class LearningApiMixin(ApiProtocol):
 
     def assert_order(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
-        cards = self._json(key, "/today")["cards"]
+        cards = self._json(key, "/sessions")["cards"]
         actual = [(c["external_id"], c["level"]) for c in cards]
         expected = [(r["ID"], int(r["Niveau"])) for r in rows]
         assert actual == expected, f"order {actual} != {expected}"

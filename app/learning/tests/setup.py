@@ -87,6 +87,30 @@ async def set_state(
     await session.flush()
 
 
+async def get_state(
+    session: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID, external_id: str
+) -> dict:
+    """Reads a card's review state (level + dates) through SQLAlchemy.
+
+    The browser driver validates spaced-repetition state from here rather than the JSON
+    API: these dates are not surfaced in the rendered HTML, so the DB is the only non-REST
+    source of truth.
+    """
+    card_id = await card_id_by_external(session, org_id, external_id)
+    state = await session.scalar(
+        select(CardState).where(CardState.user_id == user_id, CardState.card_id == card_id)
+    )
+    return {
+        "level": state.level if state else 0,
+        "last_reviewed_on": state.last_reviewed_on.isoformat()
+        if state and state.last_reviewed_on
+        else None,
+        "next_review_on": state.next_review_on.isoformat()
+        if state and state.next_review_on
+        else None,
+    }
+
+
 async def deck_card_ids(session: AsyncSession, deck_id: uuid.UUID) -> list[uuid.UUID]:
     rows = await session.scalars(select(Card.id).where(Card.deck_id == deck_id))
     return list(rows)

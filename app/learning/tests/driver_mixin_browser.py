@@ -10,6 +10,7 @@ from sqlalchemy.pool import NullPool
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from app.learning.tests import setup
 from app.shared.config import get_settings
+from tests.db import primary_org_for_user
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -95,16 +96,13 @@ class LearningBrowserMixin(BrowserProtocol):
             ctx.request.post(
                 f"{self._base_url}/auth/login", form={"email": email, "password": _PASSWORD}
             )
-            resp = ctx.request.get(
-                f"{self._base_url}/organizations", headers={"accept": "application/json"}
-            )
-            assert resp.status == 200 and resp.json(), f"no org for {email}"
-            org = resp.json()[0]
+            uid = find_users(email)[0].id
+            org = primary_org_for_user(uid)
             self._learn_ctx[key] = ctx
             self._learn_page[key] = ctx.new_page()
             self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])
-            self._learn_uid[key] = uuid.UUID(find_users(email)[0].id)
+            self._learn_uid[key] = uuid.UUID(uid)
         return key
 
     def _page_for(self, key: str):
@@ -115,15 +113,12 @@ class LearningBrowserMixin(BrowserProtocol):
 
     def _goto_today(self, key: str):
         page = self._page_for(key)
-        page.goto(self._url(key, "/today"), wait_until="load")
+        page.goto(self._url(key, "/sessions"), wait_until="load")
         return page
 
-    def _detail_json(self, key: str, ext: str) -> dict:
-        resp = self._learn_ctx[key].request.get(
-            self._url(key, f"/cards/{ext}"), headers={"accept": "application/json"}
-        )
-        assert resp.status == 200, f"card detail {ext} -> {resp.status}"
-        return resp.json()
+    def _card_state(self, key: str, ext: str) -> dict:
+        org_id, uid = self._learn_org[key], self._learn_uid[key]
+        return self._seed(lambda s: setup.get_state(s, org_id, uid, ext))
 
     async def _materialize(self, org_id: uuid.UUID, session: AsyncSession) -> None:
         for pos, (name, resource, cards) in enumerate(self._deck_defs):
@@ -139,7 +134,9 @@ class LearningBrowserMixin(BrowserProtocol):
         key = self._user(name)
         org_id = self._learn_org[key]
         self._seed(lambda s: self._materialize(org_id, s))
-        resp = self._learn_ctx[key].request.post(self._url(key, "/subscribe"), form={"deck": deck})
+        resp = self._learn_ctx[key].request.post(
+            self._url(key, "/subscriptions"), form={"deck": deck}
+        )
         assert resp.status == 200, f"subscribe -> {resp.status}"
 
     # ── preset progress ─────────────────────────────────────────────────────────
@@ -191,7 +188,7 @@ class LearningBrowserMixin(BrowserProtocol):
         page = self._goto_today(key)
         card = page.locator(f".lcard[data-card-id='{ext}']")
         with page.expect_response(
-            lambda r: f"/cards/{ext}/mark" in r.url and r.request.method == "POST"
+            lambda r: f"/cards/{ext}/reviews" in r.url and r.request.method == "POST"
         ):
             card.locator(f"[data-mark='{outcome}']").click()
 
@@ -267,14 +264,14 @@ class LearningBrowserMixin(BrowserProtocol):
         return self._learn_current
 
     def assert_level(self, ext: str, level: int) -> None:
-        detail = self._detail_json(self._current(), ext)
-        assert detail["level"] == level, f"level {detail['level']} != {level}"
+        state = self._card_state(self._current(), ext)
+        assert state["level"] == level, f"level {state['level']} != {level}"
 
     def assert_last_review_today(self, ext: str) -> None:
-        detail = self._detail_json(self._current(), ext)
-        assert detail["last_reviewed_on"] == self._today().isoformat()
+        state = self._card_state(self._current(), ext)
+        assert state["last_reviewed_on"] == self._today().isoformat()
 
     def assert_next_review_in(self, ext: str, days: int) -> None:
-        detail = self._detail_json(self._current(), ext)
+        state = self._card_state(self._current(), ext)
         expected = (self._today() + timedelta(days=days)).isoformat()
-        assert detail["next_review_on"] == expected, f"{detail['next_review_on']} != {expected}"
+        assert state["next_review_on"] == expected, f"{state['next_review_on']} != {expected}"

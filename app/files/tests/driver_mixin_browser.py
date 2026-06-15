@@ -1,5 +1,6 @@
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from app.organizations.tests.admin_helpers import add_membership, set_membership_role
+from tests.db import primary_org_for_user, rename_org
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -56,13 +57,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
         return users[0].id
 
     def _get_primary_org_id(self) -> str:
-        assert self._context
-        resp = self._context.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        assert resp.status == 200 and resp.json(), "Cannot find primary org"
-        return resp.json()[0]["id"]
+        return primary_org_for_user(self._get_user_id(self._primary_email))["id"]
 
     # ── basic file ops ────────────────────────────────────────────────────────
 
@@ -143,23 +138,9 @@ class OrgFileBrowserMixin(BrowserProtocol):
             form={"email": email, "password": _PASSWORD},
         )
         self.sign_in(email, _PASSWORD)  # type: ignore[attr-defined]
-        resp = self._context.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        if resp.status == 200:
-            orgs = resp.json()
-            if orgs:
-                org_id = orgs[0]["id"]
-                self._context.request.patch(
-                    f"{self._base_url}/organizations/{org_id}",
-                    data={"name": org_name},
-                )
-                resp2 = self._context.request.get(
-                    f"{self._base_url}/organizations",
-                    headers={"accept": "application/json"},
-                )
-                self._active_org_handle = resp2.json()[0]["handle"]  # type: ignore[attr-defined]
+        org = primary_org_for_user(self._get_user_id(email))
+        rename_org(org["id"], org_name)
+        self._active_org_handle = org["handle"]  # type: ignore[attr-defined]
         self._primary_email = email  # type: ignore[attr-defined]
         self._last_registered_email = email
 
@@ -191,22 +172,12 @@ class OrgFileBrowserMixin(BrowserProtocol):
         )
 
     def create_user_in_org(self, email: str, org_name: str) -> None:
-        ctx = self._secondary_context_for(email)
-        resp = ctx.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        if resp.status == 200 and resp.json():
-            org_id = resp.json()[0]["id"]
-            slug = resp.json()[0]["handle"]
-            if not hasattr(self, "_secondary_handles"):
-                self._secondary_handles = {}
-            self._secondary_handles[email] = slug
-            ctx.request.patch(
-                f"{self._base_url}/organizations/{org_id}",
-                data={"name": org_name},
-                headers={"content-type": "application/json"},
-            )
+        self._secondary_context_for(email)
+        org = primary_org_for_user(self._get_user_id(email))
+        if not hasattr(self, "_secondary_handles"):
+            self._secondary_handles = {}
+        self._secondary_handles[email] = org["handle"]
+        rename_org(org["id"], org_name)
 
     def promote_to_owner(self) -> None:
         primary_email = getattr(self, "_primary_email", "")
@@ -234,12 +205,15 @@ class OrgFileBrowserMixin(BrowserProtocol):
         slug = getattr(self, "_secondary_handles", {}).get(
             email, getattr(self, "_active_org_handle", "")
         )
-        resp = ctx.request.get(
-            f"{self._base_url}/{slug}/files",
-            headers={"accept": "application/json"},
-        )
-        self._last_response = resp
-        self._last_file_list = resp.json() if resp.status == 200 else []  # type: ignore[attr-defined]
+        page = ctx.new_page()
+        try:
+            self._last_response = page.goto(f"{self._base_url}/{slug}/files", wait_until="load")
+            rows = page.locator("#file-list > div[data-file-id]").all()
+            self._last_file_names = [  # type: ignore[attr-defined]
+                row.locator("a").inner_text().strip() for row in rows
+            ]
+        finally:
+            page.close()
 
     def access_share_link_as(self, email: str) -> None:
         ctx = self._secondary_context_for(email)
@@ -257,10 +231,12 @@ class OrgFileBrowserMixin(BrowserProtocol):
     # ── assertions ────────────────────────────────────────────────────────────
 
     def _current_file_names(self) -> list[str]:
-        last_list = getattr(self, "_last_file_list", None)
-        if last_list is not None:
-            self._last_file_list = None  # type: ignore[attr-defined]
-            return [f["filename"] for f in last_list]
+        # Names captured from another user's rendered page (view_file_list_as), read from the
+        # DOM — never via the JSON API.
+        last_names = getattr(self, "_last_file_names", None)
+        if last_names is not None:
+            self._last_file_names = None  # type: ignore[attr-defined]
+            return last_names
         self._goto_files()
         return self._dom_file_names()
 
