@@ -50,6 +50,18 @@ class LearningRepository:
             )
             await self.session.flush()
 
+    async def available_decks(self) -> list[Deck]:
+        """Decks in this org that the user is not yet subscribed to, ordered by position."""
+        subscribed = select(DeckSubscription.deck_id).where(
+            DeckSubscription.user_id == self.user_id
+        )
+        rows = await self.session.execute(
+            select(Deck)
+            .where(Deck.org_id == self.org_id, Deck.id.not_in(subscribed))
+            .order_by(Deck.position)
+        )
+        return list(rows.scalars().all())
+
     async def catalog(self) -> list[CatalogRow]:
         """All cards of the user's subscribed decks with this user's state, in deck/card order."""
         rows = await self.session.execute(

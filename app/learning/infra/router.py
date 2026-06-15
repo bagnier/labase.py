@@ -69,6 +69,7 @@ async def _render_session(
     current_user: AuthenticatedUser,
     rows: list[CatalogRow],
     org: object,
+    repo: LearningRepository,
 ) -> Response:
     cards = [
         ReviewCardRead(
@@ -86,7 +87,14 @@ async def _render_session(
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "learning/_session_fragment.html" if is_htmx else "learning/session.html"
     org_handle = request.path_params.get("org_handle", "")
-    ctx = {"user": current_user, "cards": cards, "org_handle": org_handle, "org": org}
+    available = await repo.available_decks()
+    ctx = {
+        "user": current_user,
+        "cards": cards,
+        "available_decks": available,
+        "org_handle": org_handle,
+        "org": org,
+    }
     if not is_htmx:
         ctx |= await shell_context(session, current_user)
     return templates.TemplateResponse(request, template, ctx)
@@ -106,7 +114,7 @@ async def subscribe(
         raise HTTPException(404, "Deck not found")
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return await _render_session(request, session, current_user, rows, org)
+    return await _render_session(request, session, current_user, rows, org, repo)
 
 
 @router.get("/sessions", response_model=None)
@@ -118,7 +126,7 @@ async def today(
     org: CurrentOrgModel,
 ):
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return await _render_session(request, session, current_user, rows, org)
+    return await _render_session(request, session, current_user, rows, org, repo)
 
 
 @router.get("/cards/{external_id}", response_class=HTMLResponse)
@@ -184,7 +192,7 @@ async def mark_card(
         outcome=outcome.value,
     )
     rows = _due_rows(await repo.catalog(), today_date)
-    return await _render_session(request, session, current_user, rows, org)
+    return await _render_session(request, session, current_user, rows, org, repo)
 
 
 @router.get("/resources", response_class=HTMLResponse)
