@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from app.auth.infra.router import router as auth_router
@@ -42,6 +43,7 @@ if _settings.db_schema != "test":
 app.exception_handler(RateLimitExceeded)(handle_rate_limit)
 app.exception_handler(500)(handle_unhandled_error)
 app.exception_handler(HTTPException)(handle_http_error)
+app.exception_handler(StarletteHTTPException)(handle_http_error)
 
 app.middleware("http")(security_headers)
 app.add_middleware(RequestLogger)

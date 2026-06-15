@@ -1,10 +1,27 @@
 import structlog
 from fastapi import HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from app.shared.http import wants_html, wants_json
+from app.shared.http.templates import templates
 
 log = structlog.get_logger("labase.app")
+
+_ERROR_TEMPLATES: dict[int, str] = {
+    403: "errors/403.html",
+    404: "errors/404.html",
+    500: "errors/500.html",
+}
+
+
+def _html_error(request: Request, status_code: int, detail: str) -> Response:
+    template = _ERROR_TEMPLATES.get(status_code, "errors/error.html")
+    return templates.TemplateResponse(
+        request,
+        template,
+        {"status_code": status_code, "detail": detail},
+        status_code=status_code,
+    )
 
 
 async def handle_rate_limit(_request: Request, exc: Exception) -> Response:
@@ -27,7 +44,7 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
     )
     if wants_json(request):
         return JSONResponse({"detail": "Internal server error"}, status_code=500)
-    return HTMLResponse("Internal server error", status_code=500)
+    return _html_error(request, 500, "An unexpected error occurred.")
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:
@@ -40,9 +57,12 @@ async def handle_http_error(request: Request, exc: HTTPException) -> Response:
         # redirected to /auth/login. Ambiguous clients (*/* or no Accept) get a 401 — this is
         # the behavior encoded by the auth tests and is preserved deliberately.
         if wants_html(request):
-            return RedirectResponse(url="/auth/login", status_code=302)
+            next_url = str(request.url.path)
+            if request.url.query:
+                next_url += f"?{request.url.query}"
+            return RedirectResponse(url=f"/auth/login?next={next_url}", status_code=302)
     if wants_json(request):
         return JSONResponse(
             {"detail": exc.detail}, status_code=exc.status_code, headers=dict(exc.headers or {})
         )
-    return HTMLResponse(str(exc.detail), status_code=exc.status_code)
+    return _html_error(request, exc.status_code, str(exc.detail))

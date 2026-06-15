@@ -71,7 +71,7 @@ async def test_handle_unhandled_error_html():
     req = _mock_request()
     resp = await handle_unhandled_error(req, RuntimeError("boom"))
     assert resp.status_code == 500
-    assert b"Internal server error" in bytes(resp.body)
+    assert b"Something went wrong" in bytes(resp.body)
 
 
 @pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_handle_http_error_401_html_accept():
     resp = await handle_http_error(req, exc)
     assert isinstance(resp, RedirectResponse)
     assert resp.status_code == 302
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=/test"
 
 
 @pytest.mark.asyncio

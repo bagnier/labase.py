@@ -18,6 +18,7 @@ router = APIRouter()
 
 _WEAK_PASSWORD_REASONS: dict[str, str] = {
     "too_short": "too short",
+    "length": "too short",
     "too_simple": "too simple",
     "no_uppercase": "must contain an uppercase letter",
     "no_lowercase": "must contain a lowercase letter",
@@ -37,7 +38,9 @@ _AUTH_ERROR_MESSAGES: dict[str, str] = {
 
 
 def _format_weak_password_reasons(reasons: list[str]) -> str:
-    labels = [_WEAK_PASSWORD_REASONS.get(r, r) for r in reasons]
+    # Supabase may send reasons as JSON-encoded strings (e.g. '"length"'); strip quotes.
+    cleaned = [r.strip('"') for r in reasons]
+    labels = [_WEAK_PASSWORD_REASONS.get(r, r) for r in cleaned]
     return ", ".join(labels) if labels else "requirements not met"
 
 
@@ -51,10 +54,19 @@ _INFO_MESSAGES: dict[str, str] = {
 }
 
 
+def _safe_next(next_url: str | None) -> str:
+    """Return next_url if it is a safe internal path, else /profile."""
+    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return "/profile"
+
+
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, info: str | None = None) -> HTMLResponse:
+async def login_page(
+    request: Request, info: str | None = None, next: str | None = None
+) -> HTMLResponse:
     return templates.TemplateResponse(
-        request, "login.html", {"info": _INFO_MESSAGES.get(info or "")}
+        request, "login.html", {"info": _INFO_MESSAGES.get(info or ""), "next": next}
     )
 
 
@@ -65,18 +77,19 @@ async def login_endpoint(
     bg: BackgroundTasks,
     email: str = Form(""),
     password: str = Form(""),
+    next: str = Form(""),
 ) -> Response:
     ip = request.client.host if request.client else None
     if not email or not password:
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Email and password are required."},
+            {"error": "Email and password are required.", "next": next},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
         tokens = await login(email, password)
-        resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
+        resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
@@ -86,7 +99,7 @@ async def login_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": error},
+            {"error": error, "next": next},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
     except Exception:
@@ -94,7 +107,7 @@ async def login_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "A system error occurred. Please try again later."},
+            {"error": "A system error occurred. Please try again later.", "next": next},
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 

@@ -1,0 +1,5 @@
+{% extends "errors/error.html" %}
+{% block title %}500 Server error — labase{% endblock %}
+{% set status_code = 500 %}
+{% set title = "Something went wrong" %}
+{% set detail = detail or "An unexpected error occurred. Please try again later." %}

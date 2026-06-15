@@ -105,7 +105,7 @@ def test_profile_browser_redirect_to_login_when_unauthenticated(driver):
         )
     )
     assert response.status_code == 302
-    assert response.headers["location"] == "/auth/login"
+    assert response.headers["location"] == "/auth/login?next=/profile"
 
 
 def test_profile_api_client_still_gets_401_when_unauthenticated(driver):

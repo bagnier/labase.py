@@ -1,0 +1,5 @@
+{% extends "errors/error.html" %}
+{% block title %}403 Access denied — labase{% endblock %}
+{% set status_code = 403 %}
+{% set title = "Access denied" %}
+{% set detail = detail or "You don't have permission to access this resource." %}

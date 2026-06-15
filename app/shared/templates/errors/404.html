@@ -1,0 +1,5 @@
+{% extends "errors/error.html" %}
+{% block title %}404 Not found — labase{% endblock %}
+{% set status_code = 404 %}
+{% set title = "Page not found" %}
+{% set detail = detail or "The page you're looking for doesn't exist or has been moved." %}
