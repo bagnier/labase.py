@@ -1,14 +1,7 @@
 {% macro alert(variant, message) %}
 {% if message %}
-{% set styles = {
-  'error':   'bg-red-50 text-red-700 border-red-100',
-  'info':    'bg-blue-50 text-blue-700 border-blue-100',
-  'success': 'bg-emerald-50 text-emerald-700 border-emerald-100',
-} %}
-{% set icons = {'error': '⚠️', 'info': 'ℹ️', 'success': '✅'} %}
-<div class="flex items-start gap-2.5 {{ styles[variant] }} border rounded-lg px-4 py-3 mb-5 text-sm">
-  <span class="flex-none">{{ icons[variant] }}</span>
-  {{ message }}
-</div>
+{% set cls  = {'error': 'alert-error',   'info': 'alert-info',   'success': 'alert-success'} %}
+{% set tcls = {'error': 'text-red-700',  'info': 'text-blue-700','success': 'text-emerald-700'} %}
+<div class="{{ cls[variant] }} {{ tcls[variant] }} mb-5" role="alert">{{ message }}</div>
 {% endif %}
 {% endmacro %}

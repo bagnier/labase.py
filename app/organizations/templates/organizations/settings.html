@@ -12,7 +12,7 @@
 <div class="max-w-lg space-y-8">
 
   <div>
-    <h1 class="text-lg font-semibold text-gray-900" data-org-name="{{ org.name }}">{{ org.name }}</h1>
+    <h1 class="page-title" data-org-name="{{ org.name }}">{{ org.name }}</h1>
     <p class="text-sm text-gray-500 mt-0.5">
       Your role:
       {% if role == "owner" %}
@@ -23,8 +23,8 @@
     </p>
   </div>
 
-  <section class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-    <h2 class="text-sm font-semibold text-gray-700">Organisation name</h2>
+  <section class="card space-y-4">
+    <h2 class="section-title">Organisation name</h2>
     {% if role == "owner" %}
       <form hx-patch="/{{ org_handle }}"
             hx-target="body"
@@ -32,11 +32,8 @@
             class="space-y-2">
         <div class="flex gap-3 items-center">
           <input type="text" name="name" value="{{ org.name }}" required
-                 class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 {% if name_error %}border-red-400{% endif %}" />
-          <button type="submit"
-                  class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600 transition-colors shadow-sm flex-none">
-            Save
-          </button>
+                 class="input flex-1 {% if name_error %}border-red-400{% endif %}" />
+          <button type="submit" class="btn-primary flex-none">Save</button>
         </div>
         {% if name_error %}
           <p class="text-xs text-red-600">{{ name_error }}</p>
@@ -44,15 +41,15 @@
       </form>
     {% else %}
       <input type="text" value="{{ org.name }}" disabled
-             class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-not-allowed" />
-      <p class="text-xs text-gray-400">Only an owner can rename the organisation.</p>
+             class="input opacity-60 cursor-not-allowed" />
+      <p class="meta-text">Only an owner can rename the organisation.</p>
     {% endif %}
   </section>
 
-  <section class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+  <section class="card space-y-4">
     <div>
-      <h2 class="text-sm font-semibold text-gray-700">Handle</h2>
-      <p class="text-xs text-gray-400 mt-0.5">Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.</p>
+      <h2 class="section-title">Handle</h2>
+      <p class="meta-text mt-0.5">Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.</p>
     </div>
     {% if role == "owner" %}
       <form hx-patch="/{{ org_handle }}/handle"
@@ -61,11 +58,8 @@
             class="space-y-2">
         <div class="flex gap-3 items-center">
           <input type="text" name="handle" value="{{ org.handle }}" required
-                 class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 {% if handle_error %}border-red-400{% endif %}" />
-          <button type="submit"
-                  class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600 transition-colors shadow-sm flex-none">
-            Save
-          </button>
+                 class="input flex-1 font-mono {% if handle_error %}border-red-400{% endif %}" />
+          <button type="submit" class="btn-primary flex-none">Save</button>
         </div>
         {% if handle_error %}
           <p class="text-xs text-red-600">{{ handle_error }}</p>
@@ -73,8 +67,8 @@
       </form>
     {% else %}
       <input type="text" value="{{ org.handle }}" disabled
-             class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-500 cursor-not-allowed" />
-      <p class="text-xs text-gray-400">Only an owner can change the handle.</p>
+             class="input font-mono opacity-60 cursor-not-allowed" />
+      <p class="meta-text">Only an owner can change the handle.</p>
     {% endif %}
   </section>
 

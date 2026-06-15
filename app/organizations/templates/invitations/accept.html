@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Invitation — labase</title>
   <link rel="stylesheet" href="/static/tailwind.css" />
-  <script src="/static/htmx.min.js"></script>
+  <script src="/static/js/htmx.min.js"></script>
 </head>
 <body class="h-full bg-gray-50 text-gray-900 antialiased flex items-center justify-center p-6">
 
@@ -17,17 +17,16 @@
       <h1 class="text-xl font-bold text-gray-900">labase</h1>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+    <div class="card rounded-2xl p-8">
 
       {% if state == "valid" %}
-        <h2 class="text-lg font-semibold text-gray-900 mb-1">You have been invited</h2>
+        <h2 class="page-title mb-1">You have been invited</h2>
         <p class="text-sm text-gray-500 mb-6">
           Join <strong>{{ org_name }}</strong> as a member.
           {% if email %}<br>Invitation for: <span class="font-medium">{{ email }}</span>{% endif %}
         </p>
         <form method="POST" action="/invitations/{{ token }}/accept">
-          <button type="submit" data-accept
-                  class="w-full rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors shadow-sm">
+          <button type="submit" data-accept class="btn-primary w-full justify-center">
             Accept invitation
           </button>
         </form>

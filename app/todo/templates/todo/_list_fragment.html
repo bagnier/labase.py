@@ -1,4 +1,4 @@
-<div id="todo-list" class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+<div id="todo-list" class="list-panel shadow-sm">
   {% for todo in todos %}
   <div class="todo-item flex items-center gap-3 px-4 py-3 group" data-id="{{ todo.id }}">
     <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 flex-none opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" aria-hidden="true"></i>
@@ -17,4 +17,3 @@
   <p class="px-4 py-6 text-sm text-center text-gray-400">No tasks yet.</p>
   {% endfor %}
 </div>
-

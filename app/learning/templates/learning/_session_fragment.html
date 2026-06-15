@@ -15,15 +15,15 @@
           <button type="button" data-reveal
             hx-get="/{{ org_handle }}/learning/cards/{{ card.external_id }}"
             hx-target="#answer-{{ card.external_id }}" hx-swap="innerHTML"
-            class="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">Reveal answer</button>
+            class="btn bg-indigo-500 text-white hover:bg-indigo-600">Reveal answer</button>
           <button type="button" data-mark="again"
             hx-post="/{{ org_handle }}/learning/cards/{{ card.external_id }}/reviews" hx-vals='{"outcome": "again"}'
             hx-target="#learning-session" hx-swap="outerHTML"
-            class="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white">To review</button>
+            class="btn bg-amber-500 text-white hover:bg-amber-600">To review</button>
           <button type="button" data-mark="learned"
             hx-post="/{{ org_handle }}/learning/cards/{{ card.external_id }}/reviews" hx-vals='{"outcome": "learned"}'
             hx-target="#learning-session" hx-swap="outerHTML"
-            class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Learned</button>
+            class="btn bg-emerald-500 text-white hover:bg-emerald-600">Learned</button>
         </div>
       </div>
     </div>

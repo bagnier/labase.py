@@ -12,11 +12,11 @@
 <div class="space-y-6 max-w-2xl">
 
   <div>
-    <h1 class="text-lg font-semibold text-gray-900">Profile</h1>
+    <h1 class="page-title">Profile</h1>
     <p class="text-sm text-gray-500 mt-0.5">Manage your personal information.</p>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+  <div class="card">
     <div class="flex items-center gap-5 mb-6">
       <div class="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center flex-none">
         <span class="text-2xl font-bold text-indigo-500">{{ (handle or user.email)[0] | upper }}</span>
@@ -35,9 +35,7 @@
         <input id="handle" name="handle" type="text"
                placeholder="your-handle"
                value="{{ profile.handle if (profile and profile.handle) else '' }}"
-               class="w-full border rounded-lg px-3.5 py-2.5 text-sm transition-colors font-mono
-                      {% if error %}border-red-400 bg-red-50 focus:ring-red-400{% else %}border-gray-200 bg-gray-50 focus:ring-indigo-500{% endif %}
-                      focus:outline-none focus:ring-2 focus:border-transparent focus:bg-white placeholder-gray-400" />
+               class="input font-mono {% if error %}border-red-400{% endif %}" />
         {% if error %}
           <p class="text-xs text-red-600 mt-1">{{ error }}</p>
         {% endif %}
@@ -46,18 +44,15 @@
                      value=user.email, disabled=true,
                      hint="Email cannot be changed here.") }}
       <div class="pt-1">
-        <button type="submit"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors shadow-sm shadow-indigo-500/20">
-          Save changes
-        </button>
+        <button type="submit" class="btn-primary">Save changes</button>
       </div>
     </form>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">My organisations</h2>
+  <div class="card space-y-4">
+    <h2 class="section-title">My organisations</h2>
     {% if orgs %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {% for org in orgs %}
       <div data-organisation-card="{{ org.name }}" class="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-gray-800">{{ org.name }}</h3>
@@ -69,30 +64,26 @@
     <form method="post" action="/organizations" class="flex gap-2">
       <input type="text" name="name" placeholder="Name of the new organisation"
              required minlength="1" maxlength="255"
-             class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-      <button type="submit"
-              class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-        Create
-      </button>
+             class="input flex-1" />
+      <button type="submit" class="btn-primary flex-none">Create</button>
     </form>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Session</h2>
+  <div class="card">
+    <h2 class="section-title mb-3">Session</h2>
     <form method="post" action="/auth/logout">
-      <button type="submit"
-              class="flex items-center gap-1.5 text-sm text-gray-700 hover:text-gray-900 border border-gray-200 hover:bg-gray-50 rounded-lg px-4 py-2 transition-colors">
+      <button type="submit" class="btn-secondary">
         <i class="ph ph-sign-out ph-4" aria-hidden="true"></i>
         Sign out
       </button>
     </form>
   </div>
 
-  <div class="bg-white border border-red-100 rounded-xl p-6 shadow-sm">
-    <h2 class="text-sm font-semibold text-gray-900 mb-1">Danger zone</h2>
+  <div class="card border-red-100">
+    <h2 class="section-title mb-1">Danger zone</h2>
     <p class="text-sm text-gray-500 mb-4">These actions are irreversible. Proceed with caution.</p>
     <button type="button" disabled
-            class="border border-red-200 text-red-500 text-sm font-medium px-4 py-2 rounded-lg opacity-50 cursor-not-allowed">
+            class="btn-danger border border-red-200 opacity-50 cursor-not-allowed">
       Delete my account
     </button>
   </div>

@@ -1,15 +1,7 @@
 {% macro metric_card(label, color, icon) %}
-{% set bg = {
-  'indigo':  'bg-indigo-50',
-  'emerald': 'bg-emerald-50',
-  'amber':   'bg-amber-50',
-} %}
-{% set text = {
-  'indigo':  'text-indigo-500',
-  'emerald': 'text-emerald-500',
-  'amber':   'text-amber-500',
-} %}
-<div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+{% set bg   = {'indigo': 'bg-indigo-50',  'emerald': 'bg-emerald-50', 'amber': 'bg-amber-50'} %}
+{% set text = {'indigo': 'text-indigo-500','emerald': 'text-emerald-500','amber': 'text-amber-500'} %}
+<div class="card">
   <div class="flex items-center justify-between mb-3">
     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ label }}</p>
     <div class="w-7 h-7 rounded-lg {{ bg[color] }} flex items-center justify-center">
@@ -17,6 +9,6 @@
     </div>
   </div>
   <p class="text-2xl font-bold text-gray-900">—</p>
-  <p class="text-xs text-gray-400 mt-1">No data yet</p>
+  <p class="meta-text mt-1">No data yet</p>
 </div>
 {% endmacro %}

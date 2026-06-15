@@ -1,6 +1,6 @@
-<div id="file-list" class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
+<div id="file-list" class="list-panel shadow-sm">
   {% for f in files %}
-  <div class="flex flex-col px-4 py-3 group" data-file-id="{{ f.id }}">
+  <div class="flex flex-col px-4 py-3 group" data-file-id="{{ f.id }}" x-data="{ renaming: false }">
     <div class="flex items-center gap-3">
       <i class="ph ph-file-text ph-md text-gray-400 flex-none" aria-hidden="true"></i>
       <span class="flex-1 min-w-0">
@@ -8,22 +8,22 @@
            class="text-sm text-gray-900 hover:text-indigo-600 hover:underline truncate block">
           {{ f.filename }}
         </a>
-        <span class="file-meta text-xs text-gray-400">
+        <span class="file-meta meta-text">
           {{ (f.size_bytes / 1024) | round | int }} KB &middot; {{ f.created_at.strftime('%Y-%m-%d') }} &middot; {{ f.uploader_email }}
         </span>
         <!-- Rename form (toggled) -->
-        <form class="hidden mt-1 flex gap-2 items-center" data-rename-form
+        <form x-show="renaming" class="mt-1 flex gap-2 items-center" data-rename-form
               hx-patch="/{{ org_handle }}/files/{{ f.id }}"
               hx-target="#file-list"
               hx-swap="outerHTML">
           <input type="text" name="filename" value="{{ f.filename }}" required
-                 class="flex-1 min-w-0 rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+                 class="input flex-1 min-w-0 py-1 px-2 text-xs" />
           <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-none">Save</button>
         </form>
       </span>
       <div class="flex items-center gap-2 flex-none">
         <button type="button" data-rename-id="{{ f.id }}"
-                onclick="this.closest('[data-file-id]').querySelector('[data-rename-form]').classList.toggle('hidden')"
+                @click="renaming = !renaming"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500"
                 title="Rename">
           <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
@@ -40,7 +40,7 @@
                 hx-delete="/{{ org_handle }}/files/{{ f.id }}"
                 hx-target="#file-list"
                 hx-swap="outerHTML"
-                hx-confirm="Delete “{{ f.filename }}”?"
+                hx-confirm="Delete "{{ f.filename }}"?"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
                 title="Delete">
           <i class="ph ph-x ph-sm" aria-hidden="true"></i>

@@ -30,11 +30,11 @@
 - [x] refactor / simplify API uniforme CRUD comme BaseRepository
 - [x] simplify json + form
 - [x] remplacer les SVG par une fonte
-- [ ] trop de class tailwind, sementique web
-- [ ] reactive web
+- [x] trop de class tailwind, sementique web
+- [x] reactive web
+
+
 - [ ] logs
-
-
 - [ ] async task queue
 - [ ] fulltext index
 - [ ] cache

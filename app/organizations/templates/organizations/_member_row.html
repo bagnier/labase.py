@@ -9,7 +9,7 @@
     <div>
       <p class="text-sm font-medium">
         {{ m.email }}
-        {% if m.email == current_user.email %}<span class="text-xs text-gray-400">(you)</span>{% endif %}
+        {% if m.email == current_user.email %}<span class="meta-text">(you)</span>{% endif %}
       </p>
     </div>
   </div>
@@ -23,7 +23,7 @@
     {% if caller_role == "owner" and m.email != current_user.email %}
       <!-- Owner actions on other members -->
       <div class="relative group" tabindex="0">
-        <button data-manage class="text-xs border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
+        <button data-manage class="btn-secondary btn-sm">
           Manage <i class="ph ph-caret-down ph-4" aria-hidden="true"></i>
         </button>
         <div class="hidden group-focus-within:block absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
@@ -57,7 +57,7 @@
 
     {% elif m.email == current_user.email %}
       <!-- Leave button for current user -->
-      <button data-leave class="text-xs border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+      <button data-leave class="btn-secondary btn-sm"
               hx-delete="/{{ org_handle }}/members/me"
               hx-target="body"
               hx-confirm="Leave {{ org.name }}?">
