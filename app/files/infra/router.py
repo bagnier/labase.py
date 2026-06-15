@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from pydantic import BaseModel
 from storage3.exceptions import StorageApiError
 
+from app.auth.domain.service import AuthenticatedUser
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.storage import (
@@ -16,6 +17,7 @@ from app.files.infra.storage import (
     user_storage_client,
 )
 from app.organizations.domain.models import Membership, Organization, OrgRole
+from app.profile.infra.shell import shell_context
 from app.shared.dependencies import (
     AdminSession,
     CurrentMembership,
@@ -24,7 +26,7 @@ from app.shared.dependencies import (
     CurrentUser,
     RlsSession,
 )
-from app.shared.http import render_list
+from app.shared.http import render_list, wants_full_page
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -51,7 +53,14 @@ def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
     return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
 
 
-def _render(request: Request, current_user: object, files: list, org: Organization) -> Response:
+async def _render(
+    request: Request,
+    session: RlsSession,
+    current_user: AuthenticatedUser,
+    files: list,
+    org: Organization,
+) -> Response:
+    shell = await shell_context(session, current_user) if wants_full_page(request) else None
     return render_list(
         request,
         fragment="files/_list_fragment.html",
@@ -61,6 +70,7 @@ def _render(request: Request, current_user: object, files: list, org: Organizati
         items=files,
         user=current_user,
         org=org,
+        shell=shell,
     )
 
 
@@ -74,7 +84,7 @@ async def file_list(
 ):
     repo = OrgFileRepository(session, org_id)
     files = await repo.all()
-    return _render(request, current_user, files, org)
+    return await _render(request, session, current_user, files, org)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -132,7 +142,7 @@ async def upload_file(
     )
 
     files = await repo.all()
-    return _render(request, current_user, files, org)
+    return await _render(request, session, current_user, files, org)
 
 
 @router.get("/{file_id}/download")
@@ -187,7 +197,7 @@ async def delete_file(
     )
 
     files = await repo.all()
-    return _render(request, current_user, files, org)
+    return await _render(request, session, current_user, files, org)
 
 
 class RenameBody(BaseModel):
@@ -218,7 +228,7 @@ async def rename_file(
     await repo.rename(org_file, body.filename)
 
     files = await repo.all()
-    return _render(request, current_user, files, org)
+    return await _render(request, session, current_user, files, org)
 
 
 @router.post("/{file_id}/share")

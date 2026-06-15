@@ -12,6 +12,7 @@ from app.organizations.infra.context import (
     get_current_membership,
     get_current_org,
     get_current_org_model,
+    require_current_owner,
     require_owner,
 )
 from app.shared.persistence.database import get_admin_session
@@ -23,3 +24,4 @@ CurrentOrg = Annotated[uuid.UUID, Depends(get_current_org)]
 CurrentOrgModel = Annotated[Organization, Depends(get_current_org_model)]
 CurrentMembership = Annotated[Membership, Depends(get_current_membership)]
 OwnerMembership = Annotated[Membership, Depends(require_owner)]
+CurrentOwnerMembership = Annotated[Membership, Depends(require_current_owner)]

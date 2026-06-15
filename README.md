@@ -4,147 +4,93 @@ Python SaaS base, fully open-source, built on Supabase for the database, authent
 
 ## Stack
 
-| Layer                     | Choice                       | Reason                                                            |
-| ------------------------- | ---------------------------- | ----------------------------------------------------------------- |
-| **Web framework**         | FastAPI                      | Native async, Pydantic V2, auto-generated OpenAPI                 |
-| **HTML rendering**        | Jinja2 + HTMX                | SSR without a JS build step, SPA-like dynamism via HTML fragments |
-| **Styling**               | Tailwind CSS                 | Built via npm CLI (`make install`), served from `static/`         |
-| **ORM**                   | SQLAlchemy 2.x (async)       | Mapped ORM models for tables, Pydantic V2 for DTOs, Postgres-native |
-| **Auth + Storage**        | supabase-py                  | Official Supabase SDK, JWT stored in HTTPOnly cookie              |
-| **Database**              | Supabase (Postgres)          | Hosted DB, RLS, triggers, Storage, Auth built-in                  |
-| **Migrations**            | Supabase CLI (plain SQL)     | Versioned migrations, Studio integration, full control            |
-| **ASGI server**           | Hypercorn                    | ASGI server with HTTP/2 support                                   |
-| **Dependency management** | uv                           | Ultra-fast, lockfile, built-in Python version management          |
-| **Python**                | 3.14                         | Latest stable release                                             |
+| Layer                     | Choice                   | Reason                                                              |
+| ------------------------- | ------------------------ | ------------------------------------------------------------------- |
+| **Web framework**         | FastAPI                  | Native async, Pydantic V2, auto-generated OpenAPI                   |
+| **HTML rendering**        | Jinja2 + HTMX            | SSR without a JS build step, SPA-like dynamism via HTML fragments   |
+| **Styling**               | Tailwind CSS             | Built via npm CLI (`make install`), served from `static/`           |
+| **ORM**                   | SQLAlchemy 2.x (async)   | Mapped ORM models for tables, Pydantic V2 for DTOs, Postgres-native |
+| **Auth + Storage**        | supabase-py              | Official Supabase SDK, JWT stored in HTTPOnly cookie                |
+| **Database**              | Supabase (Postgres)      | Hosted DB, RLS, triggers, Storage, Auth built-in                    |
+| **Migrations**            | Supabase CLI (plain SQL) | Versioned migrations, Studio integration, full control              |
+| **ASGI server**           | Hypercorn                | ASGI server with HTTP/2 support                                     |
+| **Dependency management** | uv                       | Ultra-fast, lockfile, built-in Python version management            |
+| **Python**                | 3.14                     | Latest stable release                                               |
 
 ### Quality tools
 
-| Tool                        | Purpose                                                                          |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| **ruff**                    | Linting + formatting                                                             |
-| **pre-commit**              | Git hooks — runs `ruff format` on staged files before each commit                |
-| **ty**                      | Type checking (Astral, Rust)                                                     |
-| **pytest + pytest-asyncio** | Unit and integration tests                                                       |
-| **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
-| **pytest-cov**              | Code coverage (generates `.cov/coverage.xml` for VS Code)                        |
+| Tool                        | Purpose                                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| **ruff**                    | Linting + formatting                                                                      |
+| **pre-commit**              | Git hooks — runs `ruff --fix` (lint) and `ruff format` on staged files before each commit |
+| **ty**                      | Type checking (Astral, Rust)                                                              |
+| **pytest + pytest-asyncio** | Unit and integration tests                                                                |
+| **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser          |
+| **pytest-cov**              | Code coverage (generates `.cov/coverage.xml` for VS Code)                                 |
 
 ## Architecture
 
-The project is organized by **bounded context**, each split into `domain/` and `infra/` layers.
+Organized by **bounded context**, each split into `domain/` (business logic, framework-free) and `infra/` (router, repository, framework I/O):
 
 ```
-HTTP request
-  → infra/router.py       (FastAPI endpoint)
-  → domain/service.py     (business logic, no framework dependencies)
-  → infra/repository.py   (SQLAlchemy, Supabase SDK)
-  → DB / external service
+HTTP request → infra/router.py → domain/service.py → infra/repository.py → DB / external service
 ```
 
-**Coupling rules:**
-- `domain/` never imports from `infra/`
-- Contexts don't import each other directly — shared infrastructure goes through `app/shared/`
-- Exception: `shared/http/security.py` (`get_current_user`) and `auth/infra/session.py` (`get_rls_session`) are the shared JWT guard / RLS-session dependencies, imported by other `infra/` routers
+### Coupling rules
 
-**Templates are colocated** — each context owns its Jinja2 templates under `<context>/templates/`. Shared layout lives in `app/shared/templates/`.
+- `domain/` never imports from `infra/`.
+- Contexts never import each other directly — cross-cutting code lives in `app/shared/`.
+- The only shared dependencies that cross context boundaries are the two auth ones: `get_current_user` (`auth/infra/security.py`) and `get_rls_session` (`auth/infra/session.py`).
+- Org-scoped contexts (`todo`, `files`, `learning`) touch `organizations` only for org resolution (`CurrentOrg`, `CurrentMembership`, `Organization`) — never its logic.
 
-**Tests are colocated** — each context owns its unit/integration tests under `<context>/tests/` and its browser E2E tests under `<context>/e2e/`. Gherkin `.feature` files live in `features/` at the root; the corresponding pytest-bdd step implementations are in `<context>/tests/steps.py`.
+### Core principles
 
-## Demo context: `todo/`
+1. **Explicit page composition.** A page is fragments, each owned by a context. The cross-cutting shell (sidebar nav + display name) is a provider — `profile/infra/shell.py::shell_context` — pulled in explicitly via `page_context(...)`. No middleware or Jinja context processor injects data silently; full pages load the shell, HTMX fragments don't.
+2. **Multi-org users.** Each account gets a personal org at sign-up and can join others; the sidebar lists all of them (`nav_orgs`) and org-scoped data lives under `/{org_slug}/...`.
+3. **Membership reads, ownership writes.** A member sees all of an org's data; owner-only actions are gated by a *single* app check (`CurrentOwnerMembership` / `OwnerMembership`) that exists only to return a clean `403`. Isolation is RLS's job, never re-implemented in Python.
+4. **One query per context, per page.** The shell resolves display name + orgs in one query; org-scoped repositories are already org-filtered. Providers compose without N+1.
 
-The `todo` bounded context is an intentional example. It demonstrates the full pattern — model, repository, router, Jinja2 templates, BDD steps, E2E tests — on a trivial domain. When starting a new SaaS, delete it and use it as a reference for your first real context.
+### Colocation
+
+Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/` context is a deliberately trivial, full-pattern reference — delete it when starting real work.
 
 ## Key design decisions
 
-**Real RLS security model (hybrid)** — two Postgres connection pools: a *user pool* (`DATABASE_URL`, role `authenticated`, RLS enforced) and a *service pool* (`DATABASE_URL_SERVICE`, role `postgres`, BYPASSRLS for migrations and admin jobs). Every authenticated HTTP request calls `set_rls_context(session, user_id)` which issues `SET role authenticated` and injects the user's JWT claims via `set_config('request.jwt.claims', ...)`, enabling Postgres `auth.uid()` in all policies. The service connection is only used for registration (org creation) and org-resolution infrastructure — never for user data queries.
-
-**Supabase as infrastructure layer** — supabase-py is limited to auth and storage. Business queries go through SQLAlchemy directly on Postgres, preserving flexibility (complex queries, transactions, pgvector…).
-
-**SSR with HTMX instead of a separate SPA** — single repo, single deployment, no CORS, server-side auth. Well-suited for a SaaS whose UI is mostly CRUD.
-
-**Plain SQL migrations** — Supabase CLI migrations stay readable and versioned in raw SQL. The initial migration creates the `profiles` table linked to `auth.users` with RLS and an auto-create trigger on sign-up.
-
-**Dual-driver BDD tests** — Gherkin scenarios (`features/`) are written in functional business language and run against two drivers: an API driver (`httpx.AsyncClient`, fast, no browser) and a browser driver (Playwright Chromium). The same scenarios exercise both the HTTP layer and the real UI without duplicating test logic.
-
-**Front-end assets via npm** — `npm run build` does three things: copies `htmx.min.js` from `node_modules`, copies Inter font woff2 files into `static/fonts/`, and compiles `static/input.css` → `static/tailwind.css` via the Tailwind CLI. All output lands in `static/` and is **gitignored** — run `make install` to generate them. Re-run `make install` after any template change that adds new Tailwind classes. No CDN in production.
+- **RLS is the single source of truth for isolation.** Two pools: *user* (`DATABASE_URL`, role `authenticated`, RLS enforced) and *service* (`DATABASE_URL_SERVICE`, role `postgres`, BYPASSRLS — migrations/admin/registration only). `get_rls_session` sets the RLS context (`SET role authenticated` + JWT claims) **once** per request; FastAPI's dependency cache means the shell, route, and sub-dependencies share that one session. Row access is decided only by policies in `supabase/migrations/`; the app's only authorization is the owner gate (for a friendly `403`).
+  - Three session dependencies — pick deliberately: `get_rls_session` (**default** for authenticated routes — wraps the user session and sets the RLS context), `get_user_session` (user pool but raw — you must call `set_rls_context` yourself), `get_admin_session` (BYPASSRLS — admin jobs and registration only, never user data).
+- **Supabase as infrastructure only.** supabase-py handles auth and storage; business queries go through SQLAlchemy on Postgres directly (complex queries, transactions, pgvector…).
+- **SSR + HTMX, no SPA.** Single repo, single deployment, no CORS, server-side auth — suited to a mostly-CRUD UI.
+- **Plain SQL migrations.** Supabase CLI migrations stay readable and versioned; the first creates `profiles` linked to `auth.users` with RLS and an auto-create trigger on sign-up.
+- **Dual-driver BDD.** The same Gherkin scenarios run against an API driver (`httpx.AsyncClient`, fast) and a browser driver (Playwright), exercising both the HTTP layer and the real UI without duplicate test logic. Tests share one BYPASSRLS connection, so the `get_rls_session` override sets JWT claims *without* `SET role authenticated` — issuing it would drop BYPASSRLS and break unrelated queries on the shared connection.
+- **npm-built assets.** `npm run build` copies `htmx.min.js` and Inter fonts and compiles `static/input.css` → `static/tailwind.css`. Output lands in the gitignored `static/`; run `make install` to (re)generate after adding Tailwind classes. No CDN in production.
 
 ## Structure
+
+Every bounded context follows the same layout — `domain/` (models, service), `infra/`
+(router, repository), `templates/`, and `tests/`:
 
 ```
 labase.py/
 ├── app/
-│   ├── main.py              # FastAPI app, router registration, 401 handler
-│   ├── shared/              # Cross-context infrastructure
-│   │   ├── config.py        # Settings (pydantic-settings, .env)
-│   │   ├── clock.py         # now() — patched via module ref in tests
-│   │   ├── persistence/     # DB layer
-│   │   │   ├── base.py      # SQLAlchemy DeclarativeBase
-│   │   │   ├── database.py  # Async engines (user + service) + sessions
-│   │   │   ├── rls.py       # set_rls_context (injects JWT claims)
-│   │   │   └── supabase.py  # supabase-py clients (anon + admin)
-│   │   ├── http/            # HTTP layer
-│   │   │   ├── security.py  # get_current_user (JWT decode)
-│   │   │   ├── templates.py # Jinja2 environment
-│   │   │   ├── exceptions.py
-│   │   │   └── limiter.py
-│   │   ├── observability/   # Logging, audit, request tracking
-│   │   │   ├── audit.py
-│   │   │   ├── logging.py
-│   │   │   └── request.py
-│   │   └── templates/       # base.html, macros, shared layouts
-│   ├── auth/                # Bounded context: authentication
-│   │   ├── domain/service.py
-│   │   ├── infra/router.py
-│   │   ├── infra/security.py      # get_current_user (JWT decode)
-│   │   ├── infra/session.py       # get_rls_session (JWT guard + RLS claims)
-│   │   ├── infra/cookies.py       # set/clear auth cookies
-│   │   ├── templates/       # login.html, register.html
-│   │   ├── tests/           # Unit + BDD steps + API driver
-│   │   └── e2e/             # Playwright browser tests
-│   ├── organizations/       # Bounded context: multi-tenant orgs + memberships + invitations
-│   │   ├── domain/models.py
-│   │   ├── infra/repository.py
-│   │   ├── infra/router.py          # JSON API
-│   │   ├── infra/html_router.py     # org settings + members (HTMX)
-│   │   ├── infra/invitation_router.py  # token-based accept flow
-│   │   ├── infra/context.py         # get_current_org / get_current_membership
-│   │   ├── templates/
-│   │   └── tests/
-│   ├── profile/             # Bounded context: user profile
-│   │   ├── domain/models.py
-│   │   ├── infra/repository.py
-│   │   ├── infra/router.py
-│   │   ├── templates/
-│   │   ├── tests/
-│   │   └── e2e/
-│   ├── dashboard/           # View context (no domain layer)
-│   │   ├── tests/
-│   │   └── e2e/
-│   ├── files/               # Bounded context: org files (Supabase Storage + share tokens)
-│   │   ├── domain/models.py
-│   │   ├── infra/repository.py
-│   │   ├── infra/storage.py
-│   │   ├── infra/router.py
-│   │   ├── templates/
-│   │   ├── tests/
-│   │   └── e2e/
-│   └── todo/                # Demo context — full pattern example
-│       ├── domain/models.py
-│       ├── infra/repository.py
-│       ├── infra/router.py
-│       ├── templates/
-│       ├── tests/
-│       └── e2e/
-├── features/                # BDD Gherkin scenarios (plain text, no code)
-├── tests/                   # Top-level conftest + config tests
-├── static/                  # Compiled CSS, HTMX, fonts
-├── supabase/migrations/     # Versioned SQL (Supabase CLI)
-├── docker/                  # Docker assets
-│   ├── Dockerfile           # Production image
-│   ├── Dockerfile.dev       # Dev image with hot-reload
-│   ├── docker-compose.yml   # App + local Supabase connection
-│   └── entrypoint.sh
-├── package.json             # Tailwind CLI
-└── Makefile                 # Common commands
+│   ├── main.py            # FastAPI app, router registration, 401 handler
+│   ├── shared/            # Cross-context infra: persistence (engines, rls), http
+│   │                      #   (security, templates, limiter), observability, templates/
+│   ├── auth/              # Authentication — get_current_user, get_rls_session, cookies
+│   ├── organizations/     # Multi-tenant orgs, memberships, invitations
+│   ├── profile/           # User profile + page shell (shell_context / page_context)
+│   ├── files/             # Org files (Supabase Storage + share tokens)
+│   ├── learning/          # Spaced-repetition learning
+│   ├── console/           # SaaS admin console
+│   ├── public/            # Public landing pages
+│   ├── health/            # Liveness / readiness probes
+│   └── todo/              # Demo context — full pattern example
+├── features/              # BDD Gherkin scenarios (plain text, no code)
+├── tests/                 # Top-level conftest + config tests
+├── static/                # Compiled CSS, HTMX, fonts (gitignored)
+├── supabase/migrations/   # Versioned SQL (Supabase CLI)
+├── docker/                # Dockerfile(s), docker-compose.yml, entrypoint.sh
+├── package.json           # Tailwind CLI
+└── Makefile               # Common commands
 ```
 
 ## Local setup
@@ -173,10 +119,10 @@ Re-run `make install` whenever you add a new Tailwind class (unused classes are 
 
 ### `.env` vs `.env.test`
 
-| File        | Used by                                  | Hosts                        |
-| ----------- | ---------------------------------------- | ---------------------------- |
-| `.env`      | `docker compose` (app container)         | `host.docker.internal:543xx` |
-| `.env.test` | `make test` / `make test-e2e` (on host)  | `localhost:543xx`            |
+| File        | Used by                                 | Hosts                        |
+| ----------- | --------------------------------------- | ---------------------------- |
+| `.env`      | `docker compose` (app container)        | `host.docker.internal:543xx` |
+| `.env.test` | `make test` / `make test-e2e` (on host) | `localhost:543xx`            |
 
 The app container reaches Supabase via `host.docker.internal` (mapped by `extra_hosts` in `docker/docker-compose.yml`). Tests run directly on the host, so they use `localhost`.
 

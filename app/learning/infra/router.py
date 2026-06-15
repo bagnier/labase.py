@@ -2,7 +2,9 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.domain.service import AuthenticatedUser
 from app.learning.domain.models import (
     CardResource,
     DueCard,
@@ -17,6 +19,7 @@ from app.learning.domain.service import (
     select_due_cards,
 )
 from app.learning.infra.repository import CatalogRow, LearningRepository
+from app.profile.infra.shell import shell_context
 from app.shared import clock
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
 from app.shared.http.templates import templates
@@ -51,8 +54,12 @@ def _due_rows(rows: list[CatalogRow], today) -> list[CatalogRow]:
     return [by_external[c.external_id] for c in ordered]
 
 
-def _render_session(
-    request: Request, current_user: object, rows: list[CatalogRow], org: object
+async def _render_session(
+    request: Request,
+    session: AsyncSession,
+    current_user: AuthenticatedUser,
+    rows: list[CatalogRow],
+    org: object,
 ) -> Response:
     cards = [
         ReviewCardRead(
@@ -70,9 +77,10 @@ def _render_session(
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "learning/_session_fragment.html" if is_htmx else "learning/session.html"
     org_slug = request.path_params.get("org_slug", "")
-    return templates.TemplateResponse(
-        request, template, {"user": current_user, "cards": cards, "org_slug": org_slug, "org": org}
-    )
+    ctx = {"user": current_user, "cards": cards, "org_slug": org_slug, "org": org}
+    if not is_htmx:
+        ctx |= await shell_context(session, current_user)
+    return templates.TemplateResponse(request, template, ctx)
 
 
 @router.post("/subscribe", response_class=HTMLResponse)
@@ -90,7 +98,7 @@ async def subscribe(
         raise HTTPException(404, "Deck not found")
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return _render_session(request, current_user, rows, org)
+    return await _render_session(request, session, current_user, rows, org)
 
 
 @router.get("/today", response_class=HTMLResponse)
@@ -103,7 +111,7 @@ async def today(
 ):
     repo = LearningRepository(session, org_id, uuid.UUID(current_user.id))
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return _render_session(request, current_user, rows, org)
+    return await _render_session(request, session, current_user, rows, org)
 
 
 @router.get("/cards/{external_id}", response_class=HTMLResponse)
@@ -171,7 +179,7 @@ async def mark_card(
         outcome=outcome.value,
     )
     rows = _due_rows(await repo.catalog(), today_date)
-    return _render_session(request, current_user, rows, org)
+    return await _render_session(request, session, current_user, rows, org)
 
 
 @router.get("/resources", response_class=HTMLResponse)
@@ -201,8 +209,6 @@ async def resources(
     if _wants_json(request):
         return JSONResponse([i.model_dump(mode="json") for i in items])
     org_slug = request.path_params.get("org_slug", "")
-    return templates.TemplateResponse(
-        request,
-        "learning/resources.html",
-        {"user": current_user, "resources": items, "org_slug": org_slug, "org": org},
-    )
+    ctx = {"user": current_user, "resources": items, "org_slug": org_slug, "org": org}
+    ctx |= await shell_context(session, current_user)
+    return templates.TemplateResponse(request, "learning/resources.html", ctx)

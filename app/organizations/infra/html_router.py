@@ -8,11 +8,12 @@ from app.organizations.domain.exceptions import PendingInvitationExists
 from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
 from app.organizations.domain.service import ensure_no_pending_invitation
 from app.organizations.infra.repository import OrganizationRepository
+from app.profile.infra.shell import page_context
 from app.shared.dependencies import (
     CurrentMembership,
     CurrentOrg,
+    CurrentOwnerMembership,
     CurrentUser,
-    OwnerMembership,
     RlsSession,
 )
 from app.shared.http.templates import templates
@@ -36,11 +37,8 @@ async def org_dashboard(
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     org_slug = request.path_params.get("org_slug", org.slug)
-    return templates.TemplateResponse(
-        request,
-        "organizations/dashboard.html",
-        {"user": current_user, "org": org, "org_slug": org_slug},
-    )
+    ctx = await page_context(session, current_user, org=org, org_slug=org_slug)
+    return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 
 # ── Settings ─────────────────────────────────────────────────────────────────
@@ -52,23 +50,17 @@ async def org_settings(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
-    membership: OwnerMembership,
+    membership: CurrentOwnerMembership,
 ):
     repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     org_slug = request.path_params.get("org_slug", org.slug)
-    return templates.TemplateResponse(
-        request,
-        "organizations/settings.html",
-        {
-            "user": current_user,
-            "org": org,
-            "org_slug": org_slug,
-            "role": membership.role.value,
-        },
+    ctx = await page_context(
+        session, current_user, org=org, org_slug=org_slug, role=membership.role.value
     )
+    return templates.TemplateResponse(request, "organizations/settings.html", ctx)
 
 
 @router.patch("", response_class=HTMLResponse)
@@ -77,11 +69,9 @@ async def rename_org_html(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
-    membership: CurrentMembership,
+    membership: CurrentOwnerMembership,
     name: str = Form(..., min_length=1, max_length=255),
 ):
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
@@ -125,19 +115,17 @@ async def org_members(
         invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
 
     org_slug = request.path_params.get("org_slug", org.slug)
-    return templates.TemplateResponse(
-        request,
-        "organizations/members.html",
-        {
-            "user": current_user,
-            "current_user": current_user,
-            "org": org,
-            "org_slug": org_slug,
-            "caller_role": membership.role.value,
-            "members": members,
-            "invitations": invitations,
-        },
+    ctx = await page_context(
+        session,
+        current_user,
+        current_user=current_user,
+        org=org,
+        org_slug=org_slug,
+        caller_role=membership.role.value,
+        members=members,
+        invitations=invitations,
     )
+    return templates.TemplateResponse(request, "organizations/members.html", ctx)
 
 
 # ── Invite (HTMX) ─────────────────────────────────────────────────────────────
@@ -149,12 +137,9 @@ async def create_invitation_html(
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
-    membership: CurrentMembership,
+    membership: CurrentOwnerMembership,
     email: str = Form(...),
 ):
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-
     error: str | None = None
     link: str = ""
 

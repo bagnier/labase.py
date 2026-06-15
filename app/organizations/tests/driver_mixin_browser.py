@@ -280,7 +280,7 @@ class OrgBrowserMixin(BrowserProtocol):
 
     def assert_workspace_card(self, org_name: str) -> None:
         self._p.goto(f"{self._base_url}/profile", wait_until="load")
-        assert self._p.query_selector(f'[data-workspace-card="{org_name}"]') is not None, (
+        assert self._p.query_selector(f'[data-organisation-card="{org_name}"]') is not None, (
             f"Workspace card for {org_name!r} not found on dashboard"
         )
 

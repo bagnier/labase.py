@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, status
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
@@ -18,6 +18,21 @@ from app.shared.dependencies import CurrentUser, OwnerMembership, RlsSession
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
+
+
+@router.post("", response_model=None)
+async def create_organization(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    name: str = Form(..., min_length=1, max_length=255),
+) -> JSONResponse | RedirectResponse:
+    repo = OrganizationRepository(session)
+    org = await repo.create_with_owner(name.strip(), uuid.UUID(current_user.id))
+    if "application/json" in request.headers.get("accept", ""):
+        result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
+        return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
+    return RedirectResponse(url=f"/{org.slug}/dashboard", status_code=303)
 
 
 @router.get("", response_model=list[OrganizationWithRoleRead])

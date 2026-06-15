@@ -74,6 +74,16 @@ async def get_membership_by_org_id(
 async def require_owner(
     membership: Membership = Depends(get_membership_by_org_id),
 ) -> Membership:
+    """Owner gate for routes with an ``{org_id}`` path parameter (JSON API)."""
+    if membership.role != OrgRole.owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return membership
+
+
+async def require_current_owner(
+    membership: Membership = Depends(get_current_membership),
+) -> Membership:
+    """Owner gate for ``/{org_slug}/...`` routes (resolves the org from the slug)."""
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership

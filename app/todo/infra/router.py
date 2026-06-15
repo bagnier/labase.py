@@ -3,9 +3,11 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.auth.domain.service import AuthenticatedUser
 from app.organizations.domain.models import Organization
+from app.profile.infra.shell import shell_context
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
-from app.shared.http import render_list
+from app.shared.http import render_list, wants_full_page
 from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
@@ -13,7 +15,14 @@ from app.todo.infra.repository import TodoRepository
 router = APIRouter(prefix="/todos", tags=["todo"])
 
 
-def _render(request: Request, current_user: object, todos: list, org: Organization) -> Response:
+async def _render(
+    request: Request,
+    session: RlsSession,
+    current_user: AuthenticatedUser,
+    todos: list,
+    org: Organization,
+) -> Response:
+    shell = await shell_context(session, current_user) if wants_full_page(request) else None
     return render_list(
         request,
         fragment="todo/_list_fragment.html",
@@ -23,6 +32,7 @@ def _render(request: Request, current_user: object, todos: list, org: Organizati
         items=todos,
         user=current_user,
         org=org,
+        shell=shell,
     )
 
 
@@ -36,7 +46,7 @@ async def todo_list(
 ):
     repo = TodoRepository(session, org_id)
     todos = await repo.all()
-    return _render(request, current_user, todos, org)
+    return await _render(request, session, current_user, todos, org)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -60,7 +70,7 @@ async def add_todo(
         todo_id=str(todo.id),
     )
     todos = await repo.all()
-    return _render(request, current_user, todos, org)
+    return await _render(request, session, current_user, todos, org)
 
 
 @router.patch("/{todo_id}", response_class=HTMLResponse)
@@ -84,7 +94,7 @@ async def patch_todo(
         todo.title = title
     await repo.save(todo)
     todos = await repo.all()
-    return _render(request, current_user, todos, org)
+    return await _render(request, session, current_user, todos, org)
 
 
 @router.delete("/{todo_id}", response_class=HTMLResponse)
@@ -110,7 +120,7 @@ async def delete_todo(
             todo_id=str(todo_id),
         )
     todos = await repo.all()
-    return _render(request, current_user, todos, org)
+    return await _render(request, session, current_user, todos, org)
 
 
 @router.post("/reorder")
@@ -127,4 +137,4 @@ async def reorder_todos(
     repo = TodoRepository(session, org_id)
     await repo.move_above(todo_id, above_id)
     todos = await repo.all()
-    return _render(request, current_user, todos, org)
+    return await _render(request, session, current_user, todos, org)

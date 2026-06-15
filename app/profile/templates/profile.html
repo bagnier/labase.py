@@ -46,19 +46,28 @@
     </form>
   </div>
 
-  {% if orgs %}
   <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">My workspaces</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <h2 class="text-sm font-semibold text-gray-700 mb-3">My organisations</h2>
+    {% if orgs %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
       {% for org in orgs %}
-      <div data-workspace-card="{{ org.name }}" class="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+      <div data-organisation-card="{{ org.name }}" class="border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <h3 class="text-sm font-semibold text-gray-800">{{ org.name }}</h3>
         <a href="/{{ org.slug }}/dashboard" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Open →</a>
       </div>
       {% endfor %}
     </div>
+    {% endif %}
+    <form method="post" action="/organizations" class="flex gap-2">
+      <input type="text" name="name" placeholder="Nom de la nouvelle organisation"
+             required minlength="1" maxlength="255"
+             class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      <button type="submit"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+        Créer
+      </button>
+    </form>
   </div>
-  {% endif %}
 
   <div class="bg-white border border-red-100 rounded-xl p-6 shadow-sm">
     <h2 class="text-sm font-semibold text-gray-900 mb-1">Danger zone</h2>
