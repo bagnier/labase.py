@@ -23,7 +23,7 @@
       </div>
       <div>
         <p class="font-semibold text-gray-900">{{ handle or user.email }}</p>
-        <p class="text-sm text-gray-500 mt-0.5">Member since {{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</p>
+        <p class="text-sm text-gray-500 mt-0.5">Member since {{ profile.created_at.strftime('%Y-%m-%d') if (profile and profile.created_at) else '—' }}</p>
       </div>
     </div>
 
@@ -86,6 +86,7 @@
             class="btn-danger border border-red-200 opacity-50 cursor-not-allowed">
       Delete my account
     </button>
+    <p class="text-xs text-gray-400 mt-2">Account deletion is not available yet. Contact support if you need your account removed.</p>
   </div>
 
 </div>
