@@ -15,9 +15,9 @@
 
   <form method="post" action="/auth/register" class="space-y-4">
     {{ input_field("email", "email", type="email", label="Email",
-                   placeholder="you@example.com") }}
+                   placeholder="you@example.com", required=true) }}
     {{ input_field("password", "password", type="password", label="Password",
-                   placeholder="8 characters minimum") }}
+                   placeholder="8 characters minimum", required=true) }}
     <button type="submit" class="btn-primary w-full justify-center mt-1">Create my account</button>
   </form>
 </div>

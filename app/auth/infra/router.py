@@ -63,10 +63,17 @@ async def login_page(request: Request, info: str | None = None) -> HTMLResponse:
 async def login_endpoint(
     request: Request,
     bg: BackgroundTasks,
-    email: str = Form(...),
-    password: str = Form(...),
+    email: str = Form(""),
+    password: str = Form(""),
 ) -> Response:
     ip = request.client.host if request.client else None
+    if not email or not password:
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "Email and password are required."},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     try:
         tokens = await login(email, password)
         resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -112,11 +119,18 @@ async def register_page(request: Request) -> HTMLResponse:
 async def register_endpoint(
     request: Request,
     bg: BackgroundTasks,
-    email: str = Form(...),
-    password: str = Form(...),
+    email: str = Form(""),
+    password: str = Form(""),
     admin_session: AsyncSession = Depends(get_admin_session),
 ) -> Response:
     ip = request.client.host if request.client else None
+    if not email or not password:
+        return templates.TemplateResponse(
+            request,
+            "register.html",
+            {"error": "Email and password are required."},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     try:
         await register_user(email, password, admin_session)
         return RedirectResponse(
