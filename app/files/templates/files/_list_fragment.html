@@ -20,14 +20,14 @@
               hx-swap="outerHTML">
           <input type="text" name="filename" value="{{ f.filename }}" required
                  class="flex-1 min-w-0 rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-          <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-none">Enregistrer</button>
+          <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-none">Save</button>
         </form>
       </span>
       <div class="flex items-center gap-2 flex-none">
         <button type="button" data-rename-id="{{ f.id }}"
                 onclick="this.closest('[data-file-id]').querySelector('[data-rename-form]').classList.toggle('hidden')"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500"
-                title="Renommer">
+                title="Rename">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
           </svg>
@@ -37,7 +37,7 @@
                 hx-target="#share-result-{{ f.id }}"
                 hx-swap="innerHTML"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500"
-                title="Partager">
+                title="Share">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"/>
           </svg>
@@ -46,9 +46,9 @@
                 hx-delete="/{{ org_handle }}/files/{{ f.id }}"
                 hx-target="#file-list"
                 hx-swap="outerHTML"
-                hx-confirm="Supprimer « {{ f.filename }} » ?"
+                hx-confirm="Delete “{{ f.filename }}”?"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
-                title="Supprimer">
+                title="Delete">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -58,6 +58,6 @@
     <div id="share-result-{{ f.id }}"></div>
   </div>
   {% else %}
-  <p class="px-4 py-6 text-sm text-center text-gray-400">Aucun fichier pour le moment.</p>
+  <p class="px-4 py-6 text-sm text-center text-gray-400">No files yet.</p>
   {% endfor %}
 </div>

@@ -25,9 +25,10 @@
 - [x] generic repository (SpringJPA style)
 - [x] GitHub Actions
 - [x] refactor / simplify migration
-- [ ] english all around
+- [x] english all around
 - [ ] refactor / simplify features
 - [ ] refactor / simplify API uniforme CRUD comme BaseRepository
+- [ ] remplacer les SVG par une fonte
 - [ ] trop de class tailwind, sementique web
 - [ ] reactive web
 
