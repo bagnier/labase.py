@@ -96,8 +96,19 @@ async def test_handle_http_error_401_html_accept():
 
 @pytest.mark.asyncio
 async def test_handle_http_error_403_json():
-    req = _mock_request()
+    req = _mock_request(headers={"accept": "application/json"})
     exc = HTTPException(status_code=403, detail="Forbidden")
     resp = await handle_http_error(req, exc)
     assert isinstance(resp, JSONResponse)
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_handle_http_error_403_html():
+    from fastapi.responses import HTMLResponse
+
+    req = _mock_request()
+    exc = HTTPException(status_code=403, detail="Forbidden")
+    resp = await handle_http_error(req, exc)
+    assert isinstance(resp, HTMLResponse)
     assert resp.status_code == 403

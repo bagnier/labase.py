@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.auth.domain.service import AuthenticatedUser
@@ -12,6 +13,13 @@ from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
 
+
+async def _get_todo_repo(session: RlsSession, org_id: CurrentOrg) -> TodoRepository:
+    return TodoRepository(session, org_id)
+
+
+TodoRepo = Annotated[TodoRepository, Depends(_get_todo_repo)]
+
 router = APIRouter(prefix="/todos", tags=["todo"])
 
 
@@ -19,7 +27,7 @@ async def _render(
     request: Request,
     session: RlsSession,
     current_user: AuthenticatedUser,
-    todos: list,
+    repo: TodoRepo,
     org: Organization,
 ) -> Response:
     shell = await shell_context(session, current_user) if wants_full_page(request) else None
@@ -29,7 +37,7 @@ async def _render(
         full="todo/list.html",
         items_key="todos",
         schema=TodoRead,
-        items=todos,
+        items=await repo.all(),
         user=current_user,
         org=org,
         shell=shell,
@@ -41,12 +49,10 @@ async def todo_list(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
+    repo: TodoRepo,
     org: CurrentOrgModel,
 ):
-    repo = TodoRepository(session, org_id)
-    todos = await repo.all()
-    return await _render(request, session, current_user, todos, org)
+    return await _render(request, session, current_user, repo, org)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -55,11 +61,11 @@ async def add_todo(
     bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
+    repo: TodoRepo,
     org: CurrentOrgModel,
+    org_id: CurrentOrg,
     title: str = Form(...),
 ):
-    repo = TodoRepository(session, org_id)
     todo = await repo.add(uuid.UUID(current_user.id), title)
     record_audit_event(
         bg,
@@ -69,8 +75,7 @@ async def add_todo(
         org_id=str(org_id),
         todo_id=str(todo.id),
     )
-    todos = await repo.all()
-    return await _render(request, session, current_user, todos, org)
+    return await _render(request, session, current_user, repo, org)
 
 
 @router.patch("/{todo_id}", response_class=HTMLResponse)
@@ -79,12 +84,11 @@ async def patch_todo(
     todo_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
+    repo: TodoRepo,
     org: CurrentOrgModel,
     done: bool | None = Form(default=None),
     title: str | None = Form(default=None),
 ):
-    repo = TodoRepository(session, org_id)
     todo = await repo.get(todo_id)
     if todo is None:
         raise HTTPException(404)
@@ -93,8 +97,7 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
-    todos = await repo.all()
-    return await _render(request, session, current_user, todos, org)
+    return await _render(request, session, current_user, repo, org)
 
 
 @router.delete("/{todo_id}", response_class=HTMLResponse)
@@ -104,10 +107,10 @@ async def delete_todo(
     todo_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
+    repo: TodoRepo,
     org: CurrentOrgModel,
+    org_id: CurrentOrg,
 ):
-    repo = TodoRepository(session, org_id)
     todo = await repo.get(todo_id)
     if todo:
         await repo.delete(todo)
@@ -119,8 +122,7 @@ async def delete_todo(
             org_id=str(org_id),
             todo_id=str(todo_id),
         )
-    todos = await repo.all()
-    return await _render(request, session, current_user, todos, org)
+    return await _render(request, session, current_user, repo, org)
 
 
 @router.post("/reorder")
@@ -128,13 +130,11 @@ async def reorder_todos(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
-    org_id: CurrentOrg,
+    repo: TodoRepo,
     org: CurrentOrgModel,
 ):
     body = await request.json()
     todo_id = uuid.UUID(body["id"])
     above_id = uuid.UUID(body["above_id"]) if body.get("above_id") else None
-    repo = TodoRepository(session, org_id)
     await repo.move_above(todo_id, above_id)
-    todos = await repo.all()
-    return await _render(request, session, current_user, todos, org)
+    return await _render(request, session, current_user, repo, org)

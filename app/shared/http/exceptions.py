@@ -1,6 +1,8 @@
 import structlog
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+
+from app.shared.http import wants_html, wants_json
 
 log = structlog.get_logger("labase.app")
 
@@ -32,8 +34,10 @@ async def handle_http_error(request: Request, exc: HTTPException) -> Response:
             r = Response(status_code=200)
             r.headers["HX-Redirect"] = "/auth/login"
             return r
-        if "text/html" in request.headers.get("Accept", ""):
+        if wants_html(request):
             return RedirectResponse(url="/auth/login", status_code=302)
-    return JSONResponse(
-        {"detail": exc.detail}, status_code=exc.status_code, headers=dict(exc.headers or {})
-    )
+    if wants_json(request):
+        return JSONResponse(
+            {"detail": exc.detail}, status_code=exc.status_code, headers=dict(exc.headers or {})
+        )
+    return HTMLResponse(str(exc.detail), status_code=exc.status_code)

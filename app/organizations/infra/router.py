@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -15,22 +16,29 @@ from app.organizations.domain.models import (
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.dependencies import CurrentUser, OwnerMembership, RlsSession
+from app.shared.http import wants_json
 from app.shared.names import is_reserved, is_valid_handle
 from app.shared.observability.audit import record_audit_event
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
+async def _get_org_repo(session: RlsSession) -> OrganizationRepository:
+    return OrganizationRepository(session)
+
+
+OrgRepo = Annotated[OrganizationRepository, Depends(_get_org_repo)]
+
+
 @router.post("", response_model=None)
 async def create_organization(
     request: Request,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
     name: str = Form(..., min_length=1, max_length=255),
 ) -> JSONResponse | RedirectResponse:
-    repo = OrganizationRepository(session)
     org = await repo.create_with_owner(name.strip(), uuid.UUID(current_user.id))
-    if "application/json" in request.headers.get("accept", ""):
+    if wants_json(request):
         result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
         return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
     return RedirectResponse(url=f"/{org.handle}/dashboard", status_code=303)
@@ -39,9 +47,8 @@ async def create_organization(
 @router.get("", response_model=list[OrganizationWithRoleRead])
 async def list_organizations(
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> list[OrganizationWithRoleRead]:
-    repo = OrganizationRepository(session)
     pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
     return [
         OrganizationWithRoleRead.model_validate({**org.__dict__, "role": role})
@@ -62,7 +69,7 @@ async def update_org_handle(
     org_id: uuid.UUID,
     body: UpdateHandleBody,
     owner: OwnerMembership,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> JSONResponse:
     handle = body.handle.strip().lower()
     if not is_valid_handle(handle):
@@ -75,7 +82,6 @@ async def update_org_handle(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"'{handle}' is a reserved name.",
         )
-    repo = OrganizationRepository(session)
     if not await repo.is_handle_available(handle, org_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=f"'{handle}' is already taken."
@@ -96,9 +102,8 @@ async def rename_organization(
     org_id: uuid.UUID,
     body: RenameOrgBody,
     owner: OwnerMembership,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> JSONResponse:
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -114,9 +119,8 @@ async def rename_organization(
 async def list_members(
     org_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> list[MemberRead]:
-    repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -143,9 +147,8 @@ async def update_member_role(
     user_id: uuid.UUID,
     body: UpdateRoleBody,
     _: OwnerMembership,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> MemberRead:
-    repo = OrganizationRepository(session)
     if body.role != OrgRole.owner:
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
@@ -168,10 +171,9 @@ async def leave_organization(
     org_id: uuid.UUID,
     bg: BackgroundTasks,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> None:
     user_id = uuid.UUID(current_user.id)
-    repo = OrganizationRepository(session)
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
@@ -191,9 +193,8 @@ async def remove_member(
     bg: BackgroundTasks,
     current_user: CurrentUser,
     _: OwnerMembership,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> None:
-    repo = OrganizationRepository(session)
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
@@ -224,9 +225,8 @@ async def create_invitation(
     bg: BackgroundTasks,
     current_user: CurrentUser,
     _: OwnerMembership,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> InvitationRead:
-    repo = OrganizationRepository(session)
     existing_user_id = await find_user_id_by_email(body.email)
     if existing_user_id is not None:
         existing_membership = await repo.get_membership(org_id, existing_user_id)
@@ -259,9 +259,8 @@ async def create_invitation(
 async def list_invitations(
     org_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> list[InvitationRead]:
-    repo = OrganizationRepository(session)
     caller = await repo.get_membership(org_id, uuid.UUID(current_user.id))
     if caller is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -274,9 +273,8 @@ async def revoke_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     _: OwnerMembership,
-    session: RlsSession,
+    repo: OrgRepo,
 ) -> None:
-    repo = OrganizationRepository(session)
     invitation = await repo.get_invitation_by_id(org_id, invitation_id)
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")

@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
 
@@ -25,7 +25,7 @@ from app.shared.dependencies import (
     CurrentUser,
     RlsSession,
 )
-from app.shared.http import render_list, wants_full_page
+from app.shared.http import parse_field, render_list, wants_full_page, wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
@@ -99,16 +99,12 @@ async def upload_file(
 ):
     content = await file.read()
     if len(content) > _MAX_SIZE_BYTES:
-        if "application/json" in request.headers.get("accept", ""):
-            return JSONResponse({"detail": "File too large"}, status_code=413)
-        return HTMLResponse("File too large", status_code=413)
+        raise HTTPException(413, "File too large")
 
     try:
         safe_name = _sanitize_filename(file.filename or "upload")
     except ValueError:
-        if "application/json" in request.headers.get("accept", ""):
-            return JSONResponse({"detail": "Invalid filename"}, status_code=400)
-        return HTMLResponse("Invalid filename", status_code=400)
+        raise HTTPException(400, "Invalid filename") from None
 
     file_id = uuid.uuid4()
     path = storage_path(org_id, file_id, safe_name)
@@ -118,9 +114,7 @@ async def upload_file(
     try:
         await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
     except StorageApiError as exc:
-        if "application/json" in request.headers.get("accept", ""):
-            return JSONResponse({"detail": str(exc)}, status_code=400)
-        return HTMLResponse(f"Upload rejected: {exc}", status_code=400)
+        raise HTTPException(400, str(exc)) from exc
 
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.add(
@@ -155,7 +149,7 @@ async def download_file(
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
-        return HTMLResponse("Not found", status_code=404)
+        raise HTTPException(404, "Not found")
 
     storage = user_storage_client(current_user.access_token)
     result = await storage.from_(BUCKET).create_signed_url(org_file.storage_path, _SIGNED_URL_TTL)
@@ -177,12 +171,10 @@ async def delete_file(
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
-        return HTMLResponse("Not found", status_code=404)
+        raise HTTPException(404, "Not found")
 
     if not _can_modify(org_file.user_id, membership):
-        if "application/json" in request.headers.get("accept", ""):
-            return JSONResponse({"detail": "Forbidden"}, status_code=403)
-        return HTMLResponse("Forbidden", status_code=403)
+        raise HTTPException(403, "Forbidden")
 
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).remove([org_file.storage_path])
@@ -210,20 +202,15 @@ async def rename_file(
     org: CurrentOrgModel,
     membership: CurrentMembership,
 ):
-    if "application/json" in request.headers.get("content-type", ""):
-        filename = str((await request.json()).get("filename", ""))
-    else:
-        filename = str((await request.form()).get("filename", ""))
+    filename = await parse_field(request, "filename")
 
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
-        return HTMLResponse("Not found", status_code=404)
+        raise HTTPException(404, "Not found")
 
     if not _can_modify(org_file.user_id, membership):
-        if "application/json" in request.headers.get("accept", ""):
-            return JSONResponse({"detail": "Forbidden"}, status_code=403)
-        return HTMLResponse("Forbidden", status_code=403)
+        raise HTTPException(403, "Forbidden")
 
     await repo.rename(org_file, filename)
 
@@ -242,11 +229,11 @@ async def generate_share_link(
     repo = OrgFileRepository(session, org_id)
     org_file = await repo.get(file_id)
     if org_file is None:
-        return JSONResponse({"detail": "Not found"}, status_code=404)
+        raise HTTPException(404, "Not found")
 
     token = await repo.add_share_token(file_id)
     url = f"/files/share/{token.token}"
-    if "application/json" in request.headers.get("accept", ""):
+    if wants_json(request):
         return JSONResponse({"url": url})
     return templates.TemplateResponse(
         request,
@@ -263,13 +250,13 @@ async def public_share_download(
     repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
-        return HTMLResponse("Link not found", status_code=404)
+        raise HTTPException(404, "Link not found")
     if share_token.expires_at < datetime.now(UTC):
-        return HTMLResponse("Link expired", status_code=410)
+        raise HTTPException(410, "Link expired")
 
     org_file = await repo.get(share_token.file_id)
     if org_file is None:
-        return HTMLResponse("File not found", status_code=404)
+        raise HTTPException(404, "File not found")
 
     storage = service_storage_client()
     result = await storage.from_(BUCKET).create_signed_url(org_file.storage_path, _SIGNED_URL_TTL)

@@ -50,6 +50,7 @@ HTTP request → infra/router.py → domain/service.py → infra/repository.py �
 2. **Multi-org users.** Each account gets a personal org at sign-up and can join others; the sidebar lists all of them (`orgs`) and org-scoped data lives under `/{org_slug}/...`.
 3. **Membership reads, ownership writes.** A member sees all of an org's data; owner-only actions are gated by a *single* app check (`CurrentOwnerMembership` / `OwnerMembership`) that exists only to return a clean `403`. Isolation is RLS's job, never re-implemented in Python.
 4. **One query per context, per page.** The shell resolves display name + orgs in one query; org-scoped repositories are already org-filtered. Providers compose without N+1.
+5. **Both JSON & HTML/fragment.** Each router implements both JSON & HTML/fragment, in order to work with HTMX and to expose a great Rest API.
 
 ### Colocation
 
@@ -62,7 +63,7 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 - **Supabase as infrastructure only.** supabase-py handles auth and storage; business queries go through SQLAlchemy on Postgres directly (complex queries, transactions, pgvector…).
 - **SSR + HTMX, no SPA.** Single repo, single deployment, no CORS, server-side auth — suited to a mostly-CRUD UI.
 - **Plain SQL migrations.** Supabase CLI migrations stay readable and versioned; the first creates `profiles` linked to `auth.users` with RLS and an auto-create trigger on sign-up.
-- **Dual-driver BDD.** The same Gherkin scenarios run against an API driver (`httpx.AsyncClient`, fast) and a browser driver (Playwright), exercising both the HTTP layer and the real UI without duplicate test logic. Tests share one BYPASSRLS connection, so the `get_rls_session` override sets JWT claims *without* `SET role authenticated` — issuing it would drop BYPASSRLS and break unrelated queries on the shared connection.
+- **Dual-driver BDD.** The same Gherkin scenarios run against an API driver (`httpx.AsyncClient`, JSON, fast) and a browser driver (HTML, Playwright), exercising both the Rest layer and the real UI without duplicate test logic. Tests share one BYPASSRLS connection, so the `get_rls_session` override sets JWT claims *without* `SET role authenticated` — issuing it would drop BYPASSRLS and break unrelated queries on the shared connection.
 - **Cross-app collaboration via hooks.** A context emits a domain event from its `contract/`; others subscribe without importing one another. Today: `organizations/contract/hooks.py` emits `org.created` inside the org-creating transaction, and each app drops welcome data via a pure `seed` hook in its `contract/seed.py`. The composition root (`app/seeding.py`) auto-discovers those `contract/seed.py` modules and wires them to the emitter — so the emitter stays ignorant of its subscribers and adding an app needs no central edit. Seeding is skipped under the `test` schema so BDD scenarios start from an empty org.
 - **npm-built assets, no remote dependencies at runtime.** All JS libraries and fonts are installed via `npm` and copied to `static/js/` at build time (`npm run build`). No CDN URLs in templates — add a library with `npm install`, copy it in `package.json`'s `build:js` step, and reference it as `/static/js/<file>`. Output lands in the gitignored `static/js/`; run `make install` to (re)generate.
 

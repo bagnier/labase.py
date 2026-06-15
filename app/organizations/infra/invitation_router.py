@@ -9,16 +9,13 @@ from sqlalchemy.exc import DBAPIError
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.dependencies import AdminSession, CurrentUser, RlsSession
+from app.shared.http import wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
 log = structlog.get_logger("labase.organizations.invitations")
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
-
-
-def _wants_json(request: Request) -> bool:
-    return "application/json" in request.headers.get("accept", "")
 
 
 @router.get("/{token}", response_model=None)
@@ -33,7 +30,7 @@ async def get_invitation(
     )
     row = result.mappings().first()
 
-    if _wants_json(request):
+    if wants_json(request):
         if row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -113,7 +110,7 @@ async def accept_invitation(
         org = await repo.get(inv["org_id"])
         slug = org.handle if org else ""
         redirect_url = f"/{slug}/dashboard"
-        if _wants_json(request):
+        if wants_json(request):
             return JSONResponse({"redirect": redirect_url})
         return RedirectResponse(url=redirect_url, status_code=303)
 
@@ -147,6 +144,6 @@ async def accept_invitation(
         org_id=str(inv["org_id"]),
     )
     redirect_url = f"/{slug}/dashboard"
-    if _wants_json(request):
+    if wants_json(request):
         return JSONResponse({"redirect": redirect_url})
     return RedirectResponse(url=redirect_url, status_code=303)

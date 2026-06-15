@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
@@ -23,6 +24,13 @@ from app.shared.observability.audit import record_audit_event
 router = APIRouter(tags=["organizations-html"])
 
 
+async def _get_org_repo(session: RlsSession) -> OrganizationRepository:
+    return OrganizationRepository(session)
+
+
+OrgRepo = Annotated[OrganizationRepository, Depends(_get_org_repo)]
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 
@@ -31,10 +39,10 @@ async def org_dashboard(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> HTMLResponse:
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -51,10 +59,10 @@ async def org_settings(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
 ):
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -70,11 +78,11 @@ async def rename_org_html(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     name: str = Form(default=""),
 ):
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -106,11 +114,11 @@ async def update_org_handle_html(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     handle: str = Form(...),
 ):
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -152,10 +160,10 @@ async def org_members(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ):
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -197,11 +205,11 @@ async def leave_org_html(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> Response:
     user_id = uuid.UUID(current_user.id)
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -247,7 +255,7 @@ async def leave_org_html(
 async def create_invitation_html(
     request: Request,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     email: str = Form(...),
@@ -257,14 +265,11 @@ async def create_invitation_html(
 
     existing_user_id = await find_user_id_by_email(email)
     if existing_user_id is not None:
-        existing_membership = await OrganizationRepository(session).get_membership(
-            org_id, existing_user_id
-        )
+        existing_membership = await repo.get_membership(org_id, existing_user_id)
         if existing_membership is not None:
             error = "already a member"
 
     if error is None:
-        repo = OrganizationRepository(session)
         try:
             await ensure_no_pending_invitation(repo, org_id, email)
         except PendingInvitationExists as exc:
@@ -294,13 +299,12 @@ async def update_member_role_html(
     request: Request,
     user_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     bg: BackgroundTasks,
     role: str = Form(...),
 ) -> Response:
-    repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -354,12 +358,11 @@ async def update_member_role_html(
 async def remove_member_html(
     user_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     bg: BackgroundTasks,
 ) -> Response:
-    repo = OrganizationRepository(session)
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation:
@@ -384,12 +387,11 @@ async def remove_member_html(
 async def revoke_invitation_html(
     invitation_id: uuid.UUID,
     current_user: CurrentUser,
-    session: RlsSession,
+    repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     bg: BackgroundTasks,
 ) -> Response:
-    repo = OrganizationRepository(session)
     invitation = await repo.get_invitation_by_id(org_id, invitation_id)
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")

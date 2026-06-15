@@ -4,17 +4,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
+from app.shared.http.content_type import wants_json
 from app.shared.http.templates import templates
-
-
-def wants_full_page(request: Request) -> bool:
-    """True when the response is a standalone HTML page (not JSON, not an HTMX swap).
-
-    Only full pages extend base.html and therefore need the shell context.
-    """
-    if "application/json" in request.headers.get("accept", ""):
-        return False
-    return request.headers.get("HX-Request") != "true"
 
 
 def render_list(
@@ -29,7 +20,7 @@ def render_list(
     org: Any = None,
     shell: dict | None = None,
 ) -> Response:
-    if "application/json" in request.headers.get("accept", ""):
+    if wants_json(request):
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
     is_htmx = request.headers.get("HX-Request") == "true"
     template = fragment if is_htmx else full
