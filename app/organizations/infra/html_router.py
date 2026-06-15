@@ -1,12 +1,12 @@
 import uuid
 
 from fastapi import APIRouter, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
-from app.organizations.domain.exceptions import PendingInvitationExists
+from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
 from app.organizations.domain.models import InvitationRead, MemberRead, OrgRole
-from app.organizations.domain.service import ensure_no_pending_invitation
+from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository
 from app.profile.contract.shell import page_context
 from app.shared.dependencies import (
@@ -71,12 +71,31 @@ async def rename_org_html(
     session: RlsSession,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-    name: str = Form(..., min_length=1, max_length=255),
+    name: str = Form(default=""),
 ):
     repo = OrganizationRepository(session)
     org = await repo.get(org_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    name = name.strip()
+    if not name:
+        org_handle = request.path_params.get("org_handle", org.handle)
+        ctx = await page_context(
+            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
+        )
+        ctx["name_error"] = "Name cannot be empty."
+        return templates.TemplateResponse(
+            request, "organizations/settings.html", ctx, status_code=422
+        )
+    if len(name) > 255:
+        org_handle = request.path_params.get("org_handle", org.handle)
+        ctx = await page_context(
+            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
+        )
+        ctx["name_error"] = "Name must be 255 characters or fewer."
+        return templates.TemplateResponse(
+            request, "organizations/settings.html", ctx, status_code=422
+        )
     await repo.rename(org, name)
     return RedirectResponse(url=f"/{org.handle}/settings", status_code=303)
 
@@ -167,6 +186,57 @@ async def org_members(
         invitations=invitations,
     )
     return templates.TemplateResponse(request, "organizations/members.html", ctx)
+
+
+# ── Leave (HTMX) ──────────────────────────────────────────────────────────────
+
+
+@router.delete("/members/me", response_class=HTMLResponse)
+async def leave_org_html(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
+) -> Response:
+    user_id = uuid.UUID(current_user.id)
+    repo = OrganizationRepository(session)
+    org = await repo.get(org_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    try:
+        await ensure_not_last_owner(repo, org_id, user_id)
+    except LastOwnerViolation:
+        org_handle = request.path_params.get("org_handle", org.handle)
+        raw_members = await repo.list_members(org_id)
+        emails = await resolve_user_emails([m.auth_user_id for m in raw_members])
+        members = [
+            MemberRead(
+                auth_user_id=m.auth_user_id,
+                email=emails.get(m.auth_user_id, ""),
+                role=m.role,
+                created_at=m.created_at,
+            )
+            for m in raw_members
+        ]
+        ctx = await page_context(
+            session,
+            current_user,
+            current_user=current_user,
+            org=org,
+            org_handle=org_handle,
+            caller_role=membership.role.value,
+            members=members,
+            invitations=[],
+        )
+        ctx["leave_error"] = "You are the last owner. Transfer ownership before leaving."
+        return templates.TemplateResponse(
+            request, "organizations/members.html", ctx, status_code=403
+        )
+    await repo.remove_member(org_id, user_id)
+    response = Response(status_code=200)
+    response.headers["HX-Redirect"] = "/profile"
+    return response
 
 
 # ── Invite (HTMX) ─────────────────────────────────────────────────────────────

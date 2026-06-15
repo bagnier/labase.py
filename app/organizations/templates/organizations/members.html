@@ -11,6 +11,12 @@
 {% block content %}
 <div class="max-w-2xl space-y-8">
 
+  {% if leave_error %}
+    <div role="alert" class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+      {{ leave_error }}
+    </div>
+  {% endif %}
+
   <!-- ── Members ──────────────────────────────────────────────── -->
   <div>
     <div class="flex items-center justify-between mb-4">
@@ -88,9 +94,8 @@
           {% elif m.email == current_user.email %}
             <!-- Leave button for current user -->
             <button class="text-xs border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
-                    hx-delete="/organizations/{{ org.id }}/members/me"
+                    hx-delete="/{{ org_handle }}/members/me"
                     hx-target="body"
-                    hx-push-url="/profile"
                     hx-confirm="Leave {{ org.name }}?">
               Leave
             </button>
