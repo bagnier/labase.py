@@ -5,7 +5,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from fastapi.responses import HTMLResponse, Response
 
 from app.auth.domain.service import AuthenticatedUser
-from app.organizations.domain.models import Organization
 from app.profile.contract.shell import shell_context
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
 from app.shared.http import render_list, wants_full_page
@@ -28,7 +27,7 @@ async def _render(
     session: RlsSession,
     current_user: AuthenticatedUser,
     repo: TodoRepo,
-    org: Organization,
+    org,
 ) -> Response:
     shell = await shell_context(session, current_user) if wants_full_page(request) else None
     return render_list(

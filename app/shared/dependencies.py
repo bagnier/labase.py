@@ -8,6 +8,7 @@ from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.auth.infra.session import get_rls_session
 from app.organizations.domain.models import Membership, Organization
+from app.organizations.domain.models import OrgRole as OrgRole
 from app.organizations.infra.context import (
     get_current_membership,
     get_current_org,

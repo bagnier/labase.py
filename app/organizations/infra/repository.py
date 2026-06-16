@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 
 from app.organizations.contract.hooks import emit_org_created
 from app.organizations.domain.models import (
@@ -167,3 +167,18 @@ class OrganizationRepository(BaseRepository[Organization]):
 
     async def revoke_invitation(self, invitation: OrgInvitation) -> None:
         invitation.status = InvitationStatus.revoked
+
+    async def get_invitation_by_token(self, token: uuid.UUID) -> dict | None:
+        result = await self.session.execute(
+            text("SELECT * FROM public.get_invitation_by_token(:token)"),
+            {"token": str(token)},
+        )
+        row = result.mappings().first()
+        return dict(row) if row is not None else None
+
+    async def accept_org_invitation(self, token: uuid.UUID) -> None:
+        """Must be called with an RLS session so auth.uid() is set from the JWT."""
+        await self.session.execute(
+            text("SELECT public.accept_org_invitation(:token)"),
+            {"token": str(token)},
+        )

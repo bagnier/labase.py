@@ -16,7 +16,6 @@ from app.files.infra.storage import (
     storage_path,
     user_storage_client,
 )
-from app.organizations.domain.models import Membership, Organization, OrgRole
 from app.profile.contract.shell import shell_context
 from app.shared.dependencies import (
     AdminSession,
@@ -24,6 +23,8 @@ from app.shared.dependencies import (
     CurrentOrg,
     CurrentOrgModel,
     CurrentUser,
+    Membership,
+    OrgRole,
     RlsSession,
 )
 from app.shared.http import parse_field, render_list, wants_full_page, wants_json
@@ -66,7 +67,7 @@ async def _render(
     session: RlsSession,
     current_user: AuthenticatedUser,
     files: list,
-    org: Organization,
+    org,
 ) -> Response:
     shell = await shell_context(session, current_user) if wants_full_page(request) else None
     return render_list(
