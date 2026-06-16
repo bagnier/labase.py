@@ -252,7 +252,6 @@ async def leave_organization(
     request: Request,
     bg: BackgroundTasks,
     current_user: CurrentUser,
-    session: RlsSession,
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentMembership,
@@ -266,21 +265,10 @@ async def leave_organization(
     except LastOwnerViolation as exc:
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-        org_handle = request.path_params.get("org_handle", org.handle)
-        members = await _members_payload(repo, org_id)
-        ctx = await page_context(
-            session,
-            current_user,
-            current_user=current_user,
-            org=org,
-            org_handle=org_handle,
-            caller_role=membership.role.value,
-            members=members,
-            invitations=[],
-        )
-        ctx["leave_error"] = "You are the last owner. Transfer ownership before leaving."
-        return templates.TemplateResponse(
-            request, "organizations/members.html", ctx, status_code=403
+        msg = "You are the last owner. Transfer ownership before leaving."
+        return HTMLResponse(
+            f'<div role="alert" class="alert-error">{msg}</div>',
+            status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
     record_audit_event(
@@ -386,7 +374,11 @@ async def remove_member(
     )
     if wants_json(request):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return HTMLResponse("", status_code=status.HTTP_200_OK)
+    members = await _members_payload(repo, org_id)
+    count = len(members)
+    label = f"{count} member{'s' if count != 1 else ''}"
+    oob = f'<p id="member-count" hx-swap-oob="true" class="text-sm text-gray-500">{label}</p>'
+    return HTMLResponse(oob, status_code=status.HTTP_200_OK)
 
 
 # ── Invitations ─────────────────────────────────────────────────────────────────

@@ -59,7 +59,8 @@
       <!-- Leave button for current user -->
       <button data-leave class="btn-secondary btn-sm"
               hx-delete="/{{ org_handle }}/members/me"
-              hx-target="body"
+              hx-target="#leave-error"
+              hx-swap="innerHTML"
               hx-confirm="Leave {{ org.name }}?">
         Leave
       </button>

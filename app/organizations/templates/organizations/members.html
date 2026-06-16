@@ -11,16 +11,18 @@
 {% block content %}
 <div class="max-w-2xl space-y-8">
 
-  {% if leave_error %}
-    <div role="alert" class="alert-error">{{ leave_error }}</div>
-  {% endif %}
+  <div id="leave-error">
+    {% if leave_error %}
+      <div role="alert" class="alert-error">{{ leave_error }}</div>
+    {% endif %}
+  </div>
 
   <!-- ── Members ──────────────────────────────────────────────── -->
   <div x-data="{ inviting: false }">
     <div class="flex items-center justify-between mb-4">
       <div>
         <h1 class="page-title">{{ org.name }} — Members</h1>
-        <p class="text-sm text-gray-500">{{ members | length }} member{{ 's' if members | length != 1 }}</p>
+        <p id="member-count" class="text-sm text-gray-500">{{ members | length }} member{{ 's' if members | length != 1 }}</p>
       </div>
       {% if caller_role == "owner" %}
         <button data-invite-toggle @click="inviting = !inviting" class="btn-primary">
