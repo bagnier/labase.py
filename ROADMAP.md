@@ -62,7 +62,7 @@
 
 - [ ] @handle
 - [ ] photo de profil
-- [ ] disable user
+- [ ] disable / delete user
 - [ ] Forgot password (/auth/forgot-password + /auth/reset-password)
 - [ ] Password change (authenticated) — POST /profile/password
 - [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email

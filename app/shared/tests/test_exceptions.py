@@ -103,6 +103,16 @@ async def test_handle_http_error_401_html_accept():
 
 
 @pytest.mark.asyncio
+async def test_handle_http_error_401_no_accept_redirects():
+    req = _mock_request()
+    exc = HTTPException(status_code=401)
+    resp = await handle_http_error(req, exc)
+    assert isinstance(resp, RedirectResponse)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/auth/login?next=/test"
+
+
+@pytest.mark.asyncio
 async def test_handle_http_error_403_json():
     req = _mock_request(headers={"accept": "application/json"})
     exc = HTTPException(status_code=403, detail="Forbidden")

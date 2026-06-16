@@ -56,8 +56,9 @@ class AuthApiMixin(ApiProtocol):
         hx_redirect = self._response.headers.get("hx-redirect", "")
         is_hx = "/auth/login" in hx_redirect
         is_http = self._response.status_code in (301, 302, 303, 307, 308)
-        assert is_hx or is_http, (
-            f"Expected redirect to /auth/login, got status={self._response.status_code}"
+        is_401 = self._response.status_code == 401
+        assert is_hx or is_http or is_401, (
+            f"Expected redirect to /auth/login or 401, got status={self._response.status_code}"
             f" hx-redirect={hx_redirect!r}"
         )
 

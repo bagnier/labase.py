@@ -219,14 +219,16 @@ class OrgFileBrowserMixin(BrowserProtocol):
         ctx = self._secondary_context_for(email)
         share_url = getattr(self, "_share_link_url", None)
         assert share_url, "No share link stored"
-        self._last_response = ctx.request.get(f"{self._base_url}{share_url}")
+        url = share_url if share_url.startswith("http") else f"{self._base_url}{share_url}"
+        self._last_response = ctx.request.get(url)
 
     def access_share_link_unauthenticated(self) -> None:
         assert self._context
         share_url = getattr(self, "_share_link_url", None)
         assert share_url, "No share link stored"
         anon_ctx = self._context.browser.new_context()
-        self._last_response = anon_ctx.request.get(f"{self._base_url}{share_url}")
+        url = share_url if share_url.startswith("http") else f"{self._base_url}{share_url}"
+        self._last_response = anon_ctx.request.get(url)
 
     # ── assertions ────────────────────────────────────────────────────────────
 

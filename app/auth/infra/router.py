@@ -38,7 +38,6 @@ _AUTH_ERROR_MESSAGES: dict[str, str] = {
 
 
 def _format_weak_password_reasons(reasons: list[str]) -> str:
-    # Supabase may send reasons as JSON-encoded strings (e.g. '"length"'); strip quotes.
     cleaned = [r.strip('"') for r in reasons]
     labels = [_WEAK_PASSWORD_REASONS.get(r, r) for r in cleaned]
     return ", ".join(labels) if labels else "requirements not met"
@@ -46,7 +45,8 @@ def _format_weak_password_reasons(reasons: list[str]) -> str:
 
 def _friendly_auth_error(e: AuthApiError) -> str:
     code = str(e.code) if e.code else ""
-    return _AUTH_ERROR_MESSAGES.get(code, e.message)
+    msg = _AUTH_ERROR_MESSAGES.get(code, e.message)
+    return msg.strip('"')
 
 
 _INFO_MESSAGES: dict[str, str] = {

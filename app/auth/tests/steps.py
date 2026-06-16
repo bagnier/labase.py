@@ -95,7 +95,7 @@ def step_sign_in_rejected(driver):
 
 @then("access is denied")
 def step_access_denied(driver):
-    driver.assert_unauthorized()
+    driver.assert_redirected_to_login()
 
 
 @then("they are asked to verify their email")

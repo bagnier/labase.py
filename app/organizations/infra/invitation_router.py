@@ -9,10 +9,11 @@ from sqlalchemy.exc import DBAPIError
 
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.dependencies import AdminSession, CurrentUser, RlsSession
+from app.shared.dependencies import AdminSession, CurrentUser, OptionalCurrentUser, RlsSession
 from app.shared.http import wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.supabase import auth_user_exists
 
 log = structlog.get_logger("labase.organizations.invitations")
 
@@ -37,6 +38,7 @@ async def get_invitation(
     token: uuid.UUID,
     admin_session: AdminSession,
     repo: AdminOrgRepo,
+    current_user: OptionalCurrentUser,
 ):
     result = await admin_session.execute(
         text("SELECT * FROM public.get_invitation_by_token(:token)"),
@@ -82,7 +84,12 @@ async def get_invitation(
     elif inv["status"] == "revoked":
         state = "invalid"
     else:
-        state = "valid"
+        email = inv.get("email", "")
+        if current_user is not None:
+            state = "valid"
+        else:
+            account_exists = await auth_user_exists(admin_session, email)
+            state = "valid_login" if account_exists else "valid_register"
     return templates.TemplateResponse(
         request,
         "invitations/accept.html",

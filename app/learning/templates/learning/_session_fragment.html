@@ -1,4 +1,5 @@
-<div id="learning-session" data-due-count="{{ cards|length }}" class="scene mx-auto max-w-sm space-y-4">
+<div id="learning-session" data-due-count="{{ cards|length }}">
+<div class="scene mx-auto max-w-sm space-y-4">
   {% for card in cards %}
   <div class="lcard relative select-none" data-card-id="{{ card.external_id }}" data-card-level="{{ card.level }}"
        data-deck="{{ card.deck }}">
@@ -52,3 +53,4 @@
   {% endfor %}
 </div>
 {% endif %}
+</div>

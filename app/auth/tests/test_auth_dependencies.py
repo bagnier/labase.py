@@ -108,8 +108,14 @@ def test_profile_browser_redirect_to_login_when_unauthenticated(driver):
     assert response.headers["location"] == "/auth/login?next=/profile"
 
 
-def test_profile_api_client_still_gets_401_when_unauthenticated(driver):
-    response = driver._run(driver._c.get("/profile", follow_redirects=False))
+def test_profile_api_client_gets_401_with_json_accept(driver):
+    response = driver._run(
+        driver._c.get(
+            "/profile",
+            headers={"Accept": "application/json"},
+            follow_redirects=False,
+        )
+    )
     assert response.status_code == 401
 
 

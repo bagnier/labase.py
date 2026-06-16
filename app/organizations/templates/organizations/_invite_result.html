@@ -8,7 +8,7 @@
     <code class="flex-1 text-xs bg-white border border-emerald-200 rounded px-2 py-1.5 text-gray-700 break-all"
           data-invitation-link="{{ link }}">{{ link }}</code>
     <button type="button"
-            onclick="navigator.clipboard.writeText('{{ link }}')"
+            onclick="navigator.clipboard.writeText('{{ link }}').then(() => { const b = this; b.textContent = 'Copied!'; setTimeout(() => b.textContent = 'Copy', 2000); })"
             class="text-xs text-emerald-700 hover:text-emerald-900 border border-emerald-300 rounded px-2 py-1.5 flex-none">
       Copy
     </button>

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -50,6 +51,12 @@ app.add_middleware(RequestLogger)
 app.add_middleware(CORSMiddleware, **cors_config(_settings.cors_origins))
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR.parent / "static")), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    return Response(status_code=204)
+
 
 # Public — no auth required
 app.include_router(public_router)
