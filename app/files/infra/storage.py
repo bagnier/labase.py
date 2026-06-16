@@ -1,4 +1,5 @@
 import uuid
+from urllib.parse import urlparse, urlunparse
 
 from storage3 import AsyncStorageClient
 
@@ -28,6 +29,14 @@ def service_storage_client() -> AsyncStorageClient:
             "apikey": s.supabase_service_role_key,
         },
     )
+
+
+def rewrite_signed_url(signed_url: str) -> str:
+    """Replace the origin of a signed URL with the configured public storage URL."""
+    s = get_settings()
+    parsed = urlparse(signed_url)
+    target = urlparse(s.supabase_storage_url)
+    return urlunparse(parsed._replace(scheme=target.scheme, netloc=target.netloc))
 
 
 def storage_path(org_id: uuid.UUID, file_id: uuid.UUID, filename: str) -> str:
