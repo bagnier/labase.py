@@ -1,8 +1,6 @@
 import uuid
 from datetime import date, timedelta
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 import tests.db as db
 from app.learning.tests import setup
 from app.shared import clock
@@ -66,7 +64,7 @@ class LearningApiMixin(ApiProtocol):
         assert resp.status_code == 200, f"GET {path} -> {resp.status_code}: {resp.text}"
         return resp.json()
 
-    async def _materialize(self, org_id: uuid.UUID, session: AsyncSession) -> None:
+    async def _materialize(self, org_id: uuid.UUID, session) -> None:
         for pos, (name, resource, cards) in enumerate(self._deck_defs):
             await setup.create_deck(session, org_id, name, resource, pos, cards)
 

@@ -21,12 +21,8 @@ class TodoBrowserMixin(BrowserProtocol):
         raise AssertionError(f"Todo '{title}' not found in DOM")
 
     def have_todo_items(self, titles: list[str]) -> None:
-        assert self._context
         for title in reversed(titles):
-            self._context.request.post(
-                self._todos_url(),
-                form={"title": title},
-            )
+            self.add_todo(title)
 
     def view_todo_list(self) -> None:
         self._last_response = self._p.goto(self._todos_url(), wait_until="load")
@@ -63,12 +59,10 @@ class TodoBrowserMixin(BrowserProtocol):
     def rename_todo(self, title: str, new_title: str) -> None:
         self._goto_todos()
         todo_id = self._dom_todo_id_by_title(title)
-        assert self._context
-        self._context.request.patch(
-            f"{self._todos_url()}/{todo_id}",
-            form={"title": new_title},
-        )
-        self._goto_todos()
+        self._p.click(f"[data-edit-id='{todo_id}']")
+        form_input = self._p.locator(f"#rename-form-{todo_id} input[name=title]")
+        form_input.fill(new_title)
+        self._wait_htmx_response(f"/todos/{todo_id}", "PATCH", lambda: form_input.press("Enter"))
 
     def delete_todo(self, title: str) -> None:
         self._goto_todos()
@@ -82,22 +76,33 @@ class TodoBrowserMixin(BrowserProtocol):
 
     def move_todo_above(self, title: str, above: str) -> None:
         self._p.goto(self._todos_url(), wait_until="load")
-        ids = {t: self._dom_todo_id_by_title(t) for t in (title, above)}
-        assert self._context
-        self._context.request.put(
-            f"{self._todos_url()}/{ids[title]}/position",
-            data={"above_id": ids[above]},
-        )
+        source_id = self._dom_todo_id_by_title(title)
+        target_id = self._dom_todo_id_by_title(above)
+        slug = getattr(self, "_active_org_handle", "")
+        url = f"/{slug}/todos/{source_id}/position"
+        with self._p.expect_response(
+            lambda r: f"/todos/{source_id}/position" in r.url and r.request.method == "PUT"
+        ):
+            self._p.evaluate(
+                """([url, above_id]) => fetch(url, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({above_id})
+                })""",
+                [url, target_id],
+            )
         self._p.goto(self._todos_url(), wait_until="load")
 
     def move_todo_to_end(self, title: str) -> None:
         self._p.goto(self._todos_url(), wait_until="load")
-        todo_id = self._dom_todo_id_by_title(title)
-        assert self._context
-        self._context.request.put(
-            f"{self._todos_url()}/{todo_id}/position",
-            data={"above_id": None},
-        )
+        source_id = self._dom_todo_id_by_title(title)
+        rows = self._dom_todo_rows()
+        last_row = rows[-1]
+        source = f".todo-item:has(input[data-todo-id='{source_id}']) .drag-handle"
+        with self._p.expect_response(
+            lambda r: f"/todos/{source_id}/position" in r.url and r.request.method == "PUT"
+        ):
+            self._p.locator(source).drag_to(last_row, target_position={"x": 10, "y": 40})
         self._p.goto(self._todos_url(), wait_until="load")
 
     def assert_todo_list_order(self, titles: list[str]) -> None:

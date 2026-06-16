@@ -1,12 +1,6 @@
-from app.auth.tests.admin_helpers import find_users
-from app.organizations.tests.admin_helpers import (
-    add_membership,
-    memberships_for_user,
-    orgs_for_user,
-)
 from tests.e2e.drivers.protocols import BrowserProtocol
 
-_PASSWORD = "Secret1!"
+_PASSWORD = "Secret1!"  # shared constant across all test mixins
 
 
 class OrgBrowserMixin(BrowserProtocol):
@@ -27,70 +21,91 @@ class OrgBrowserMixin(BrowserProtocol):
             return ctx._page  # type: ignore[attr-defined]
         return self._p
 
+    def _setup_context(self, ctx, email: str) -> None:
+        """Register and login in a fresh browser context via page navigation."""
+        page = ctx.new_page()
+        page.goto(f"{self._base_url}/auth/register")
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", _PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_load_state("domcontentloaded")
+        page.goto(f"{self._base_url}/auth/login")
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", _PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_url("**/profile", timeout=10000)
+        page.close()
+
     def _secondary_context_for(self, email: str):  # type: ignore[return]
         assert self._context
         if not hasattr(self, "_secondary_browser_contexts"):
             self._secondary_browser_contexts: dict = {}
         if email not in self._secondary_browser_contexts:
             ctx = self._context.browser.new_context()
-            ctx.request.post(
-                f"{self._base_url}/auth/register",
-                form={"email": email, "password": _PASSWORD},
-            )
-            ctx.request.post(
-                f"{self._base_url}/auth/login",
-                form={"email": email, "password": _PASSWORD},
-            )
+            self._setup_context(ctx, email)
             self._secondary_browser_contexts[email] = ctx
         return self._secondary_browser_contexts[email]
-
-    def _get_user_id(self, email: str) -> str:
-        users = find_users(email)
-        assert users, f"User {email!r} not found in Supabase"
-        return users[0].id
 
     def _acting_email(self) -> str:
         email = getattr(self, "_acting_as_email", None) or getattr(self, "_primary_email", None)
         assert email, "No acting email"
         return email
 
+    def _read_org_cards_from_profile(self, page) -> list[dict]:
+        page.goto(f"{self._base_url}/profile", wait_until="load")
+        cards = page.locator("[data-organisation-card]").all()
+        result = []
+        for card in cards:
+            name = card.get_attribute("data-organisation-card") or ""
+            href = card.locator("a[href*='/dashboard']").get_attribute("href") or ""
+            handle = href.strip("/").split("/")[0]
+            result.append({"name": name, "handle": handle})
+        return result
+
     def _fetch_orgs_for(self, email: str) -> list[dict]:
-        return orgs_for_user(self._get_user_id(email))
+        acting = getattr(self, "_primary_email", None)
+        if email == acting:
+            return self._read_org_cards_from_profile(self._p)
+        ctx = self._secondary_context_for(email)
+        page = ctx.new_page()
+        try:
+            return self._read_org_cards_from_profile(page)
+        finally:
+            page.close()
 
     def _active_slug(self) -> str:
         slug = getattr(self, "_active_org_handle", "")
         if slug:
             return slug
-        return self._fetch_orgs_for(self._acting_email())[0]["handle"]
-
-    def _memberships_for(self, email: str) -> list[dict]:
-        return memberships_for_user(self._get_user_id(email))
+        orgs = self._read_org_cards_from_profile(self._p)
+        assert orgs, "No org found on profile page"
+        handle = orgs[0]["handle"]
+        self._active_org_handle = handle  # type: ignore[attr-defined]
+        return handle
 
     # ── basic org assertions ──────────────────────────────────────────────────
 
     def assert_org_count(self, count: int) -> None:
-        email = getattr(self, "_last_registered_email", None) or getattr(
-            self, "_primary_email", None
-        )
-        assert email, "No registered email stored"
-        memberships = self._memberships_for(email)
-        assert len(memberships) == count, (
-            f"Expected {count} org(s), got {len(memberships)}: {memberships}"
-        )
+        # After registration (no auto-login), the page lands on /auth/login.
+        # Sign in before reading the profile so the org list is visible.
+        if "/auth/login" in self._p.url:
+            email = getattr(self, "_last_registered_email", None)
+            if email:
+                self.sign_in(email, _PASSWORD)  # type: ignore[arg-type]
+        orgs = self._read_org_cards_from_profile(self._p)
+        assert len(orgs) == count, f"Expected {count} org(s), got {len(orgs)}: {orgs}"
 
     def assert_is_owner(self) -> None:
         email = getattr(self, "_last_registered_email", None) or getattr(
             self, "_primary_email", None
         )
         assert email, "No registered email stored"
-        memberships = self._memberships_for(email)
-        assert memberships, "No memberships found"
-        assert memberships[0]["role"] == "owner", (
-            f"Expected role=owner, got {memberships[0].get('role')!r}"
-        )
+        slug = self._active_slug()
+        self._p.goto(f"{self._base_url}/{slug}/members", wait_until="load")
+        el = self._p.query_selector(f"[data-member-email='{email}'][data-member-role='owner']")
+        assert el is not None, f"{email!r} is not shown as owner on members page"
 
     def view_org_list_as(self, email: str) -> None:
-        self._secondary_context_for(email)
         self._org_list_response = self._fetch_orgs_for(email)  # type: ignore[attr-defined]
 
     def assert_other_org_absent(self, email: str) -> None:
@@ -106,35 +121,53 @@ class OrgBrowserMixin(BrowserProtocol):
         slug = org_name.lower().replace(" ", "-")
         owner_email = f"owner-{slug}@example.com"
         owner_ctx = self._context.browser.new_context()
-        owner_ctx.request.post(
-            f"{self._base_url}/auth/register",
-            form={"email": owner_email, "password": _PASSWORD},
-        )
-        owner_ctx.request.post(
-            f"{self._base_url}/auth/login",
-            form={"email": owner_email, "password": _PASSWORD},
-        )
-        org = self._fetch_orgs_for(owner_email)[0]
-        owner_ctx.request.patch(
-            f"{self._base_url}/{org['handle']}",
-            form={"name": org_name},
-        )
-        # Ensure the member user exists
-        self._secondary_context_for(email)
-        add_membership(org["id"], self._get_user_id(email))
+        self._setup_context(owner_ctx, owner_email)
+        # Read the owner's org handle from profile
+        owner_page = owner_ctx.new_page()
+        orgs = self._read_org_cards_from_profile(owner_page)
+        assert orgs, f"No org for {owner_email}"
+        handle = orgs[0]["handle"]
+        # Rename the org via settings page
+        owner_page.goto(f"{self._base_url}/{handle}/settings", wait_until="load")
+        owner_page.fill("input[name=name]", org_name)
+        with owner_page.expect_response(
+            lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
+        ):
+            owner_page.click("form:has(input[name=name]) button[type=submit]")
+        # Invite the member
+        owner_page.goto(f"{self._base_url}/{handle}/members", wait_until="load")
+        owner_page.click("[data-invite-toggle]")
+        owner_page.fill("#invite-form input[name=email]", email)
+        with owner_page.expect_response(
+            lambda r: "/invitations" in r.url and r.request.method == "POST"
+        ):
+            owner_page.click("#invite-form button[type=submit]")
+        link_el = owner_page.query_selector("#invite-result [data-invitation-link]")
+        assert link_el, "No invitation link found after sending invite"
+        link = link_el.get_attribute("data-invitation-link") or ""
+        token = link.rsplit("/", 1)[-1]
+        owner_page.close()
+        # Ensure member user exists and accept invitation
+        member_ctx = self._secondary_context_for(email)
+        if not hasattr(member_ctx, "_page") or member_ctx._page is None:  # type: ignore[attr-defined]
+            member_ctx._page = member_ctx.new_page()  # type: ignore[attr-defined]
+        member_page = member_ctx._page  # type: ignore[attr-defined]
+        member_page.goto(f"{self._base_url}/invitations/{token}", wait_until="load")
+        member_page.click("[data-accept]")
+        member_page.wait_for_load_state("load")
 
     def view_org_list(self) -> None:
-        self._org_list_response = self._fetch_orgs_for(self._acting_email())  # type: ignore[attr-defined]
+        self._org_list_response = self._read_org_cards_from_profile(self._p)  # type: ignore[attr-defined]
 
     def assert_org_in_list(self, org_name: str) -> None:
         org_list = getattr(self, "_org_list_response", None)
         if org_list is None:
-            org_list = self._fetch_orgs_for(self._acting_email())
+            org_list = self._read_org_cards_from_profile(self._p)
         names = [o["name"] for o in org_list]
         assert org_name in names, f"Expected {org_name!r} in org list: {names}"
 
     def assert_org_absent(self, org_name: str) -> None:
-        names = [o["name"] for o in self._fetch_orgs_for(self._acting_email())]
+        names = [o["name"] for o in self._read_org_cards_from_profile(self._p)]
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:

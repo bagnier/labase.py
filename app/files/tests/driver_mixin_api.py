@@ -2,11 +2,21 @@ import uuid
 
 import httpx
 
-from app.auth.tests.admin_helpers import create_user as _admin_create_user
-from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
+from app.auth.tests.admin_helpers import (
+    create_user as _admin_create_user,
+)
+from app.auth.tests.admin_helpers import (
+    delete_user_if_exists,
+    find_users,
+)
 from app.main import app
 from app.organizations.infra.repository import OrganizationRepository
-from app.organizations.tests.admin_helpers import add_membership, set_membership_role
+from app.organizations.tests.admin_helpers import (
+    add_membership as _admin_add_membership,
+)
+from app.organizations.tests.admin_helpers import (
+    set_membership_role as _admin_set_role,
+)
 from app.shared.persistence.database import admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
@@ -98,12 +108,13 @@ class OrgFileApiMixin(ApiProtocol):
     # ── sign-in with org naming ───────────────────────────────────────────────
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
+        # Supabase Storage RLS policies query the *committed* database, so the org must
+        # exist outside the test transaction. We create the user and org via admin APIs
+        # (bypassing the transaction rollback) and clean up in cleanup_test_orgs().
         self._ensure_multi_user()
         self._primary_email = email
         self._last_registered_email = email
         delete_user_if_exists(email)
-        # Use admin API to create user: avoids GoTrue timing race where the new
-        # auth.users row isn't visible via direct Postgres FK check when using sign_up.
         user_id_str = _admin_create_user(email, _PASSWORD)
         self.track_auth_email(email)
 
@@ -116,8 +127,9 @@ class OrgFileApiMixin(ApiProtocol):
                 await session.commit()
                 return str(org.id), org.handle
 
-        org_id, self._active_org_handle = self._run(_create_org())
+        org_id, handle = self._run(_create_org())
         self.track_org_id(org_id)
+        self._active_org_handle = handle
         self._run(self._c.post("/auth/login", data={"email": email, "password": _PASSWORD}))
 
     # ── file operations ───────────────────────────────────────────────────────
@@ -197,10 +209,13 @@ class OrgFileApiMixin(ApiProtocol):
     # ── multi-user operations ─────────────────────────────────────────────────
 
     def add_member_to_org(self, email: str) -> None:
+        # Membership must be committed to the real DB so Supabase Storage RLS can verify
+        # it when the member uploads files. Same constraint as sign_in_within_org.
         self._ensure_multi_user()
-        self._client_for(email)
-        add_membership(self._get_primary_org_id(), self._user_id_for_email(email))
-        # Secondary client points at primary org slug
+        self._client_for(email)  # ensure user is created and logged in
+        org_id = self._get_primary_org_id()
+        user_id = self._user_id_for_email(email)
+        _admin_add_membership(org_id, user_id, role="member")
         self._secondary_handles[email] = self._active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
@@ -219,28 +234,29 @@ class OrgFileApiMixin(ApiProtocol):
         client = self._client_for(email)
         resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
         if resp.status_code == 200 and resp.json():
-            org_id = resp.json()[0]["id"]
             slug = resp.json()[0]["handle"]
             self._secondary_handles[email] = slug
             self._run(
                 client.patch(
-                    f"/organizations/{org_id}",
-                    json={"name": org_name},
+                    f"/{slug}",
+                    data={"name": org_name},
                     headers={"accept": "application/json"},
                 )
             )
 
     def promote_to_owner(self) -> None:
+        # Uses admin helper to bypass last-owner constraint during test setup.
         self._ensure_multi_user()
-        set_membership_role(
-            self._get_primary_org_id(), self._user_id_for_email(self._primary_email), "owner"
-        )
+        org_id = self._get_primary_org_id()
+        user_id = self._user_id_for_email(self._primary_email)
+        _admin_set_role(org_id, user_id, "owner")
 
     def demote_to_member(self) -> None:
+        # Uses admin helper to bypass last-owner constraint during test setup.
         self._ensure_multi_user()
-        set_membership_role(
-            self._get_primary_org_id(), self._user_id_for_email(self._primary_email), "member"
-        )
+        org_id = self._get_primary_org_id()
+        user_id = self._user_id_for_email(self._primary_email)
+        _admin_set_role(org_id, user_id, "member")
 
     def generate_share_link(self, filename: str) -> None:
         self._ensure_multi_user()

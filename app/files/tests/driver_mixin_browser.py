@@ -1,5 +1,7 @@
-from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
-from app.organizations.tests.admin_helpers import add_membership, orgs_for_user, set_membership_role
+import contextlib
+import tempfile
+
+from app.auth.tests.admin_helpers import delete_user_if_exists
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -39,55 +41,34 @@ class OrgFileBrowserMixin(BrowserProtocol):
             self._secondary_browser_contexts: dict = {}
         if email not in self._secondary_browser_contexts:
             ctx = self._context.browser.new_context()
-            ctx.request.post(
-                f"{self._base_url}/auth/register",
-                form={"email": email, "password": _PASSWORD},
-            )
-            ctx.request.post(
-                f"{self._base_url}/auth/login",
-                form={"email": email, "password": _PASSWORD},
-            )
+            self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
             self._secondary_browser_contexts[email] = ctx
         return self._secondary_browser_contexts[email]
-
-    def _get_user_id(self, email: str) -> str:
-        users = find_users(email)
-        assert users, f"User {email!r} not found in Supabase"
-        return users[0].id
-
-    def _get_primary_org_id(self) -> str:
-        return orgs_for_user(self._get_user_id(self._primary_email))[0]["id"]
 
     # ── basic file ops ────────────────────────────────────────────────────────
 
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:
-        assert self._context
-        self._context.request.post(
-            self._files_url(),
-            multipart={
-                "file": {
-                    "name": filename,
-                    "mimeType": "application/octet-stream",
-                    "buffer": content,
-                }
-            },
+        slug = getattr(self, "_active_org_handle", "")
+        self._goto_files()
+        self._p.set_input_files(
+            "input[type=file][name=file]",
+            {"name": filename, "mimeType": "application/octet-stream", "buffer": content},
         )
+        self._click_and_capture(self._p, "button[type=submit]", "POST", f"/{slug}/files")
 
     def have_uploaded_file(self, filename: str) -> None:
         self.upload_file(filename)
 
     def upload_oversized_file(self, size_mb: int) -> None:
-        assert self._context
-        content = b"\x00" * (size_mb * 1024 * 1024)
-        self._last_response = self._context.request.post(
-            self._files_url(),
-            multipart={
-                "file": {
-                    "name": "big.bin",
-                    "mimeType": "application/octet-stream",
-                    "buffer": content,
-                }
-            },
+        slug = getattr(self, "_active_org_handle", "")
+        # Playwright caps in-memory buffers at 50 MB; write to a tempfile instead.
+        with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
+            tmp.write(b"\x00" * (size_mb * 1024 * 1024))
+            tmp_path = tmp.name
+        self._goto_files()
+        self._p.set_input_files("input[type=file][name=file]", tmp_path)
+        self._last_response = self._click_and_capture(
+            self._p, "button[type=submit]", "POST", f"/{slug}/files"
         )
 
     def view_file_list(self) -> None:
@@ -95,11 +76,19 @@ class OrgFileBrowserMixin(BrowserProtocol):
 
     def download_file(self, filename: str) -> None:
         self._goto_files()
-        assert self._context
         file_id = self._dom_file_id_by_name(filename)
-        self._last_response = self._context.request.get(
-            f"{self._files_url()}/{file_id}/download",
-        )
+        url = f"{self._files_url()}/{file_id}/download"
+        # The endpoint returns 302 → Supabase signed URL → browser starts a file download.
+        # Capture the 302 via expect_response; suppress the navigation error that follows.
+        with (
+            self._p.expect_response(
+                lambda r: f"/files/{file_id}/download" in r.url and r.request.method == "GET",
+                timeout=10000,
+            ) as resp_info,
+            contextlib.suppress(Exception),
+        ):
+            self._p.goto(url, wait_until="networkidle")
+        self._last_response = resp_info.value
 
     def delete_file(self, filename: str) -> None:
         self._goto_files()
@@ -130,28 +119,31 @@ class OrgFileBrowserMixin(BrowserProtocol):
     # ── sign-in with org naming ───────────────────────────────────────────────
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
-        assert self._context
         delete_user_if_exists(email)
-        self._context.request.post(
-            f"{self._base_url}/auth/register",
-            form={"email": email, "password": _PASSWORD},
-        )
+        self.ensure_registered(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
         self.sign_in(email, _PASSWORD)  # type: ignore[attr-defined]
-        org = orgs_for_user(self._get_user_id(email))[0]
-        self._context.request.patch(
-            f"{self._base_url}/{org['handle']}",
-            form={"name": org_name},
-        )
-        self._active_org_handle = org["handle"]  # type: ignore[attr-defined]
+        # self._p is on /profile after sign_in; extract handle from org card link
+        link = self._p.locator("[data-organisation-card] a[href*='/dashboard']").first
+        href = link.get_attribute("href") or ""
+        handle = href.strip("/").split("/")[0]
+        assert handle, f"Could not extract org handle for {email}"
+        self._active_org_handle = handle  # type: ignore[attr-defined]
         self._primary_email = email  # type: ignore[attr-defined]
         self._last_registered_email = email
+        # Rename via settings page
+        self._p.goto(f"{self._base_url}/{handle}/settings", wait_until="load")
+        self._p.fill("input[name=name]", org_name)
+        with self._p.expect_response(
+            lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
+        ):
+            self._p.click("form:has(input[name=name]) button[type=submit]")
 
     # ── multi-user operations ─────────────────────────────────────────────────
 
     def add_member_to_org(self, email: str) -> None:
-        assert self._context
-        self._secondary_context_for(email)
-        add_membership(self._get_primary_org_id(), self._get_user_id(email))
+        self._secondary_context_for(email)  # ensures member user exists
+        self.invite_member(email, "member")  # ty: ignore[unresolved-attribute]
+        self.accept_invitation(email)  # ty: ignore[unresolved-attribute]
         if not hasattr(self, "_secondary_handles"):
             self._secondary_handles: dict = {}
         self._secondary_handles[email] = getattr(self, "_active_org_handle", "")
@@ -162,35 +154,52 @@ class OrgFileBrowserMixin(BrowserProtocol):
             email, getattr(self, "_active_org_handle", "")
         )
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
-        ctx.request.post(
-            f"{self._base_url}/{slug}/files",
-            multipart={
-                "file": {
-                    "name": filename,
-                    "mimeType": "application/octet-stream",
-                    "buffer": content,
-                }
-            },
-        )
+        page = ctx.new_page()
+        try:
+            page.goto(f"{self._base_url}/{slug}/files", wait_until="load")
+            page.set_input_files(
+                "input[type=file][name=file]",
+                {"name": filename, "mimeType": "application/octet-stream", "buffer": content},
+            )
+            with page.expect_response(
+                lambda r: f"/{slug}/files" in r.url and r.request.method == "POST",
+                timeout=30000,
+            ):
+                page.click("button[type=submit]")
+        finally:
+            page.close()
 
     def create_user_in_org(self, email: str, org_name: str) -> None:
         ctx = self._secondary_context_for(email)
-        org = orgs_for_user(self._get_user_id(email))[0]
+        page = ctx.new_page()
+        try:
+            orgs = self._read_org_cards_from_profile(page)  # ty: ignore[unresolved-attribute]
+            assert orgs, f"No org for {email}"
+            handle = orgs[0]["handle"]
+        finally:
+            page.close()
         if not hasattr(self, "_secondary_handles"):
             self._secondary_handles = {}
-        self._secondary_handles[email] = org["handle"]
-        ctx.request.patch(
-            f"{self._base_url}/{org['handle']}",
-            form={"name": org_name},
-        )
+        self._secondary_handles[email] = handle
+        # Rename via settings page
+        settings_page = ctx.new_page()
+        try:
+            settings_page.goto(f"{self._base_url}/{handle}/settings", wait_until="load")
+            settings_page.fill("input[name=name]", org_name)
+            with settings_page.expect_response(
+                lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
+            ):
+                settings_page.click("form:has(input[name=name]) button[type=submit]")
+        finally:
+            settings_page.close()
 
     def promote_to_owner(self) -> None:
         primary_email = getattr(self, "_primary_email", "")
-        set_membership_role(self._get_primary_org_id(), self._get_user_id(primary_email), "owner")
+        self.set_member_role(primary_email, "owner")  # ty: ignore[unresolved-attribute]
 
     def demote_to_member(self) -> None:
         primary_email = getattr(self, "_primary_email", "")
-        set_membership_role(self._get_primary_org_id(), self._get_user_id(primary_email), "member")
+        self.set_member_role(primary_email, "member")  # ty: ignore[unresolved-attribute]
 
     def generate_share_link(self, filename: str) -> None:
         self._goto_files()
@@ -220,20 +229,40 @@ class OrgFileBrowserMixin(BrowserProtocol):
         finally:
             page.close()
 
+    def _goto_and_capture_download(self, page, url: str) -> None:
+        """Navigate to a URL that redirects to a storage download; capture the redirect response."""
+        with (
+            page.expect_response(
+                lambda r: r.request.method == "GET" and r.status in (200, 302),
+                timeout=10000,
+            ) as resp_info,
+            contextlib.suppress(Exception),
+        ):
+            page.goto(url, wait_until="networkidle")
+        self._last_response = resp_info.value
+
     def access_share_link_as(self, email: str) -> None:
         ctx = self._secondary_context_for(email)
         share_url = getattr(self, "_share_link_url", None)
         assert share_url, "No share link stored"
         url = share_url if share_url.startswith("http") else f"{self._base_url}{share_url}"
-        self._last_response = ctx.request.get(url)
+        page = ctx.new_page()
+        try:
+            self._goto_and_capture_download(page, url)
+        finally:
+            page.close()
 
     def access_share_link_unauthenticated(self) -> None:
         assert self._context
         share_url = getattr(self, "_share_link_url", None)
         assert share_url, "No share link stored"
-        anon_ctx = self._context.browser.new_context()
         url = share_url if share_url.startswith("http") else f"{self._base_url}{share_url}"
-        self._last_response = anon_ctx.request.get(url)
+        anon_ctx = self._context.browser.new_context()
+        page = anon_ctx.new_page()
+        try:
+            self._goto_and_capture_download(page, url)
+        finally:
+            page.close()
 
     # ── assertions ────────────────────────────────────────────────────────────
 
@@ -274,16 +303,14 @@ class OrgFileBrowserMixin(BrowserProtocol):
         )
 
     def upload_file_with_raw_filename(self, filename: str) -> None:
-        assert self._context
-        self._last_response = self._context.request.post(
-            self._files_url(),
-            multipart={
-                "file": {
-                    "name": filename,
-                    "mimeType": "application/octet-stream",
-                    "buffer": b"content",
-                }
-            },
+        slug = getattr(self, "_active_org_handle", "")
+        self._goto_files()
+        self._p.set_input_files(
+            "input[type=file][name=file]",
+            {"name": filename, "mimeType": "application/octet-stream", "buffer": b"content"},
+        )
+        self._last_response = self._click_and_capture(
+            self._p, "button[type=submit]", "POST", f"/{slug}/files"
         )
 
     def assert_upload_rejected(self, status: int) -> None:

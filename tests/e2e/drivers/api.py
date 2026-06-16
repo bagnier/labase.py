@@ -71,31 +71,34 @@ class ApiDriver(
             self._test_auth_emails.append(email)
 
     def track_org_id(self, org_id: str) -> None:
-        """Registers an org_id for deletion in teardown (org committed outside the test TX)."""
+        """Registers an org committed to the real DB during the current test.
+
+        File tests must create the primary org outside the test transaction so
+        that Supabase Storage RLS policies can see it. Those orgs are cleaned up
+        here rather than via transaction rollback.
+        """
         if org_id not in self._test_org_ids:
             self._test_org_ids.append(org_id)
+
+    def cleanup_test_orgs(self) -> None:
+        """Deletes orgs committed to the real DB (outside the test transaction)."""
+        if not self._test_org_ids:
+            return
+
+        async def _delete() -> None:
+            async with admin_session_factory()() as session:
+                ids = [uuid.UUID(oid) for oid in self._test_org_ids]
+                await session.execute(delete(Organization).where(Organization.id.in_(ids)))
+                await session.commit()
+
+        self._run(_delete())
+        self._test_org_ids.clear()
 
     def cleanup_test_auth_users(self) -> None:
         """Deletes all Supabase auth users created during the current test."""
         for email in self._test_auth_emails:
             self._delete_user_if_exists(email)
         self._test_auth_emails.clear()
-
-    def cleanup_test_orgs(self) -> None:
-        """Deletes orgs committed outside the test TX (created via direct admin session)."""
-        if not self._test_org_ids:
-            return
-
-        async def _delete():
-            async with admin_session_factory()() as session, session.begin():
-                await session.execute(
-                    delete(Organization).where(
-                        Organization.id.in_([uuid.UUID(oid) for oid in self._test_org_ids])
-                    )
-                )
-
-        self._run(_delete())
-        self._test_org_ids.clear()
 
     def reset_session(self) -> None:
         transport = httpx.ASGITransport(app=app)

@@ -90,12 +90,7 @@ class LearningBrowserMixin(BrowserProtocol):
             email = f"{key}@example.com"
             delete_user_if_exists(email)
             ctx = self._context.browser.new_context()
-            ctx.request.post(
-                f"{self._base_url}/auth/register", form={"email": email, "password": _PASSWORD}
-            )
-            ctx.request.post(
-                f"{self._base_url}/auth/login", form={"email": email, "password": _PASSWORD}
-            )
+            self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
             uid = find_users(email)[0].id
             orgs = orgs_for_user(uid)
             assert orgs, f"No org for {email}"
@@ -271,7 +266,9 @@ class LearningBrowserMixin(BrowserProtocol):
 
     def assert_last_review_today(self, ext: str) -> None:
         state = self._card_state(self._current(), ext)
-        assert state["last_reviewed_on"] == self._today().isoformat()
+        assert state["last_reviewed_on"] == self._today().isoformat(), (
+            f"last_reviewed_on={state['last_reviewed_on']!r} != today={self._today().isoformat()!r}"
+        )
 
     def assert_next_review_in(self, ext: str, days: int) -> None:
         state = self._card_state(self._current(), ext)

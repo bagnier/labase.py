@@ -9,11 +9,13 @@ class ProfileBrowserMixin(BrowserProtocol):
         self._last_response = self._p.goto(self._profile_url(), wait_until="load")
 
     def update_handle(self, name: str) -> None:
-        assert self._context
-        self._last_response = self._context.request.post(
-            self._profile_url(),
-            form={"handle": name},
-        )
+        self._p.goto(self._profile_url(), wait_until="load")
+        self._p.fill("input[name=handle]", name)
+        with self._p.expect_response(
+            lambda r: "/profile" in r.url and r.request.method == "POST"
+        ) as resp_info:
+            self._p.click("form:has(input[name=handle]) button[type=submit]")
+        self._last_response = resp_info.value
 
     def assert_handle(self, name: str | None) -> None:
         self._p.goto(self._profile_url(), wait_until="load")

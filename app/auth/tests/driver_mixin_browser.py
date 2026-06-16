@@ -22,11 +22,13 @@ class AuthBrowserMixin(BrowserProtocol):
             self._p.wait_for_load_state("domcontentloaded")
 
     def ensure_registered(self, email: str, password: str) -> None:
-        assert self._context
-        self._context.request.post(
-            f"{self._base_url}/auth/register",
-            form={"email": email, "password": password},
-        )
+        page = self._p.context.new_page()
+        page.goto(f"{self._base_url}/auth/register")
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", password)
+        page.click("button[type=submit]")
+        page.wait_for_load_state("domcontentloaded")
+        page.close()
 
     def register(self, email: str, password: str) -> None:
         self._last_registered_email = email
@@ -48,15 +50,12 @@ class AuthBrowserMixin(BrowserProtocol):
         self.register(email, password)
 
     def _store_active_org_handle(self) -> None:
-        assert self._context
-        resp = self._context.request.get(
-            f"{self._base_url}/organizations",
-            headers={"accept": "application/json"},
-        )
-        if resp.status == 200:
-            orgs = resp.json()
-            if orgs:
-                self._active_org_handle = orgs[0]["handle"]  # type: ignore[attr-defined]
+        # self._p is on /profile after sign_in; extract handle from the org card link
+        link = self._p.locator("[data-organisation-card] a[href*='/dashboard']").first
+        href = link.get_attribute("href") or ""
+        handle = href.strip("/").split("/")[0]
+        if handle:
+            self._active_org_handle = handle  # type: ignore[attr-defined]
 
     def sign_in_as_fresh_user(self) -> None:
         email = f"{uuid4()}@test.local"

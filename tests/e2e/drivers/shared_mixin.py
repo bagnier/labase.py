@@ -53,11 +53,16 @@ class SharedBrowserMixin(BrowserProtocol):
     # Browser driver runs the app in a subprocess: drive its clock via the
     # test-only endpoint, mirroring the pinned value locally for advance/_today.
     def _push_clock(self) -> None:
-        assert self._context
         value: datetime.datetime | None = getattr(self, "_clock_value", None)
-        self._context.request.post(
-            f"{self._base_url}/__test__/clock",
-            data={"now": value.isoformat() if value else None},
+        now_str = value.isoformat() if value else ""
+        # fetch() from about:blank fails; navigate to a real page first if needed.
+        if not self._p.url.startswith("http"):
+            self._p.goto(f"{self._base_url}/auth/login", wait_until="domcontentloaded")
+        self._p.evaluate(
+            "async now => { await fetch('/__test__/clock', {method:'POST',"
+            " body: JSON.stringify({now}),"
+            " headers: {'Content-Type': 'application/json'}}); }",
+            now_str,
         )
 
     def set_current_date(self, date: str) -> None:

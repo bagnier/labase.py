@@ -46,6 +46,8 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     if not isinstance(driver, ApiDriver):
         yield
         driver._restore_clock()
+        if hasattr(driver, "_reset_learning"):
+            driver._reset_learning()
         cleanup.truncate_app_tables()
         return
 
