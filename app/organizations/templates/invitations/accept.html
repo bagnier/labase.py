@@ -36,7 +36,7 @@
             Sign in to accept
           </a>
         {% else %}
-          <a href="/auth/register" class="btn-primary w-full justify-center" data-accept>
+          <a href="/auth/register?next=/invitations/{{ token }}" class="btn-primary w-full justify-center" data-accept>
             Create account to accept
           </a>
         {% endif %}

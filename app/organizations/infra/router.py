@@ -443,11 +443,38 @@ async def create_invitation(
     if invitation is not None:
         base_url = str(request.base_url).rstrip("/")
         link = f"{base_url}/invitations/{invitation.token}"
-    return templates.TemplateResponse(
-        request,
-        "organizations/_invite_result.html",
-        {"email": email, "link": link, "error": error},
-    )
+
+    if invitation is None or error is not None:
+        return templates.TemplateResponse(
+            request,
+            "organizations/_invite_result.html",
+            {"email": email, "link": link, "error": error},
+        )
+
+    # Success: return invite result + OOB swap to refresh the pending invitations list.
+    org = await repo.get(org_id)
+    org_handle = request.path_params.get("org_handle", org.handle if org else "")
+    raw_invs = await repo.list_invitations(org_id)
+    invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
+    result_html = bytes(
+        templates.TemplateResponse(
+            request,
+            "organizations/_invite_result.html",
+            {"email": email, "link": link, "error": None},
+        ).body
+    ).decode()
+    oob_html = bytes(
+        templates.TemplateResponse(
+            request,
+            "organizations/_pending_invitations.html",
+            {
+                "caller_role": membership.role.value,
+                "invitations": invitations,
+                "org_handle": org_handle,
+            },
+        ).body
+    ).decode()
+    return HTMLResponse(result_html + oob_html)
 
 
 @org_router.get("/invitations", response_model=list[InvitationRead])
@@ -455,7 +482,7 @@ async def list_invitations(
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
-    membership: CurrentMembership,
+    membership: CurrentOwnerMembership,
 ) -> list[InvitationRead]:
     invitations = await repo.list_invitations(org_id)
     return [InvitationRead.model_validate(inv) for inv in invitations]
