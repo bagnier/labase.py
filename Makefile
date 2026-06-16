@@ -1,4 +1,4 @@
-.PHONY: dev up down logs db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act
+.PHONY: dev up down logs db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act client-gen
 
 # --- Setup ---
 install:
@@ -9,8 +9,12 @@ install:
 	$(MAKE) js-build
 
 js-build:
-	mkdir -p static/fonts
+	mkdir -p static/css static/fonts static/js
 	npm run build
+
+client-gen:
+	PYTHONPATH=. uv run python scripts/export_openapi.py > /tmp/openapi.json
+	uv run openapi-python-client generate --path /tmp/openapi.json --output-path client/ --overwrite
 
 # --- Local Supabase ---
 db-start:

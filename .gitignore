@@ -29,6 +29,9 @@ static/css/tailwind.css
 static/fonts/
 static/js/
 
+## Generated API client (from `make client-gen`)
+client/
+
 ## Generated doc (from `make schema` & `make schema-supabase`)
 docs/schema/
 docs/schema-supabase/
