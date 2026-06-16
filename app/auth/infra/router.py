@@ -4,8 +4,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
-from app.auth.domain.service import login, logout
+from app.auth.domain.service import AuthenticatedUser, login, logout
 from app.auth.infra.cookies import set_auth_cookies
+from app.auth.infra.security import try_get_current_user
 from app.registration import register_user
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
@@ -33,6 +34,7 @@ _AUTH_ERROR_MESSAGES: dict[str, str] = {
     "email_address_not_authorized": "This email address is not authorized.",
     "signup_disabled": "Sign-ups are disabled.",
     "invalid_email": "Invalid email address.",
+    "email_address_invalid": "Invalid email address.",
     "email_not_confirmed": "Please verify your email before signing in.",
 }
 
@@ -50,7 +52,7 @@ def _friendly_auth_error(e: AuthApiError) -> str:
 
 
 _INFO_MESSAGES: dict[str, str] = {
-    "registered": "Account created. Please verify your email then sign in.",
+    "registered": "Account created. You can now sign in.",
 }
 
 
@@ -63,8 +65,13 @@ def _safe_next(next_url: str | None) -> str:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
-    request: Request, info: str | None = None, next: str | None = None
-) -> HTMLResponse:
+    request: Request,
+    info: str | None = None,
+    next: str | None = None,
+    current_user: AuthenticatedUser | None = Depends(try_get_current_user),
+) -> Response:
+    if current_user is not None:
+        return RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(
         request, "login.html", {"info": _INFO_MESSAGES.get(info or ""), "next": next}
     )
@@ -84,7 +91,7 @@ async def login_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Email and password are required.", "next": next},
+            {"error": "Email and password are required.", "email": email, "next": next},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
@@ -99,7 +106,7 @@ async def login_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": error, "next": next},
+            {"error": error, "email": email, "next": next},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
     except Exception:
@@ -107,7 +114,11 @@ async def login_endpoint(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "A system error occurred. Please try again later.", "next": next},
+            {
+                "error": "A system error occurred. Please try again later.",
+                "email": email,
+                "next": next,
+            },
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
@@ -141,7 +152,7 @@ async def register_endpoint(
         return templates.TemplateResponse(
             request,
             "register.html",
-            {"error": "Email and password are required."},
+            {"error": "Email and password are required.", "email": email},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
@@ -160,6 +171,6 @@ async def register_endpoint(
     return templates.TemplateResponse(
         request,
         "register.html",
-        {"error": error},
+        {"error": error, "email": email},
         status_code=status.HTTP_400_BAD_REQUEST,
     )
