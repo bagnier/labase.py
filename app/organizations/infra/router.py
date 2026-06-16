@@ -231,9 +231,12 @@ async def update_org_handle(
             session, current_user, org=org, org_handle=org_handle, role=membership.role.value
         )
         ctx["handle_error"] = error
-        return templates.TemplateResponse(
+        ctx["handle_value"] = handle
+        response = templates.TemplateResponse(
             request, "organizations/settings.html", ctx, status_code=code
         )
+        response.headers["HX-Push-Url"] = "false"
+        return response
     await repo.update_handle(org, handle)
     if wants_json(request):
         return JSONResponse(
