@@ -52,7 +52,7 @@ def _friendly_auth_error(e: AuthApiError) -> str:
 
 
 _INFO_MESSAGES: dict[str, str] = {
-    "registered": "Account created. You can now sign in.",
+    "registered": "Account created. Please verify your email before signing in.",
 }
 
 

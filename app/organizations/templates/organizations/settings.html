@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/role_badge.html" import role_badge %}
 
 {% block title %}Settings — {{ org.name }} — labase{% endblock %}
 
@@ -15,11 +16,7 @@
     <h1 class="page-title" data-org-name="{{ org.name }}">{{ org.name }}</h1>
     <p class="text-sm text-gray-500 mt-0.5">
       Your role:
-      {% if role == "owner" %}
-        <span class="inline-block bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">owner</span>
-      {% else %}
-        <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full">member</span>
-      {% endif %}
+      {{ role_badge(role) }}
     </p>
   </div>
 

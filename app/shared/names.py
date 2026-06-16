@@ -30,3 +30,14 @@ def is_valid_handle(handle: str) -> bool:
 
 def is_reserved(handle: str) -> bool:
     return handle in RESERVED
+
+
+def validate_handle(handle: str) -> tuple[int, str] | None:
+    """Return (status_code, error_message) if invalid, None if valid."""
+    if not handle:
+        return 422, "Handle cannot be empty."
+    if not is_valid_handle(handle):
+        return 422, "Handle must be lowercase alphanumeric with hyphens, max 39 chars."
+    if is_reserved(handle):
+        return 422, f"'{handle}' is a reserved name."
+    return None

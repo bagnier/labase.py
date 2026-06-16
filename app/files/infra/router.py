@@ -28,7 +28,7 @@ from app.shared.dependencies import (
     OrgRole,
     RlsSession,
 )
-from app.shared.http import parse_field, render_list, wants_full_page, wants_json
+from app.shared.http import or_404, parse_field, render_list, wants_full_page, wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
@@ -154,10 +154,7 @@ async def download_file(
     current_user: CurrentUser,
     repo: FileRepo,
 ):
-    org_file = await repo.get(file_id)
-    if org_file is None:
-        raise HTTPException(404, "Not found")
-
+    org_file = or_404(await repo.get(file_id))
     storage = user_storage_client(current_user.access_token)
     result = await storage.from_(BUCKET).create_signed_url(org_file.storage_path, _SIGNED_URL_TTL)
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
@@ -176,10 +173,7 @@ async def delete_file(
     membership: CurrentMembership,
     repo: FileRepo,
 ):
-    org_file = await repo.get(file_id)
-    if org_file is None:
-        raise HTTPException(404, "Not found")
-
+    org_file = or_404(await repo.get(file_id))
     if not _can_modify(org_file.user_id, membership):
         raise HTTPException(403, "Forbidden")
 
@@ -211,10 +205,7 @@ async def rename_file(
 ):
     filename = await parse_field(request, "filename")
 
-    org_file = await repo.get(file_id)
-    if org_file is None:
-        raise HTTPException(404, "Not found")
-
+    org_file = or_404(await repo.get(file_id))
     if not _can_modify(org_file.user_id, membership):
         raise HTTPException(403, "Forbidden")
 
@@ -231,10 +222,7 @@ async def generate_share_link(
     current_user: CurrentUser,
     repo: FileRepo,
 ):
-    org_file = await repo.get(file_id)
-    if org_file is None:
-        raise HTTPException(404, "Not found")
-
+    org_file = or_404(await repo.get(file_id))
     token = await repo.add_share_token(file_id)
     url = str(request.base_url) + f"files/share/{token.token}"
     if wants_json(request):

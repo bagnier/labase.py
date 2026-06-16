@@ -1,13 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.auth.domain.service import AuthenticatedUser
 from app.profile.contract.shell import shell_context
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
-from app.shared.http import render_list, wants_full_page
+from app.shared.http import or_404, render_list, wants_full_page
 from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
@@ -88,9 +88,7 @@ async def patch_todo(
     done: bool | None = Form(default=None),
     title: str | None = Form(default=None),
 ):
-    todo = await repo.get(todo_id)
-    if todo is None:
-        raise HTTPException(404)
+    todo = or_404(await repo.get(todo_id))
     if done is not None:
         todo.done = done
     if title is not None:

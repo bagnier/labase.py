@@ -6,7 +6,7 @@
     "build:js": "mkdir -p static/js && cp node_modules/htmx.org/dist/htmx.min.js static/js/htmx.min.js && cp node_modules/sortablejs/Sortable.min.js static/js/sortable.min.js && cp node_modules/alpinejs/dist/cdn.min.js static/js/alpine.min.js",
     "build:fonts": "cp node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2 static/fonts/",
     "build:icons": "mkdir -p static/fonts && cp node_modules/@phosphor-icons/web/src/regular/Phosphor.woff2 static/fonts/",
-    "build:css": "tailwindcss -i static/css/input.css -o static/tailwind.css --minify --config app/shared/tailwind.config.js"
+    "build:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css --minify --config app/shared/tailwind.config.js"
   },
   "dependencies": {
     "@fontsource/inter": "5.2.8",

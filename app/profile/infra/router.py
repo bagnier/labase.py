@@ -10,7 +10,7 @@ from app.profile.infra.repository import ProfileRepository
 from app.shared.dependencies import CurrentUser, RlsSession
 from app.shared.http import wants_json
 from app.shared.http.templates import templates
-from app.shared.names import is_reserved, is_valid_handle
+from app.shared.names import validate_handle
 
 router = APIRouter()
 
@@ -57,16 +57,6 @@ async def profile_page(
     return templates.TemplateResponse(request, "profile.html", ctx)
 
 
-def _validate_handle(handle: str) -> tuple[int, str] | None:
-    if not handle:
-        return 422, "Handle cannot be empty."
-    if not is_valid_handle(handle):
-        return 422, "Handle must be lowercase alphanumeric with hyphens, max 39 chars."
-    if is_reserved(handle):
-        return 422, f"'{handle}' is a reserved name."
-    return None
-
-
 @router.post("/profile", response_model=None)
 async def profile_update(
     request: Request,
@@ -82,7 +72,7 @@ async def profile_update(
         )
     handle = handle.strip().lower()
 
-    error = _validate_handle(handle)
+    error = validate_handle(handle)
     if error is None and not await repo.is_handle_available(handle, profile.id):
         error = (409, f"'{handle}' is already taken.")
 

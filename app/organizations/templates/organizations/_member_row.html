@@ -1,3 +1,4 @@
+{% from "macros/role_badge.html" import role_badge %}
 <div id="member-row-{{ m.auth_user_id }}"
      class="flex items-center justify-between px-4 py-3"
      data-member-email="{{ m.email }}"
@@ -14,11 +15,7 @@
     </div>
   </div>
   <div class="flex items-center gap-3">
-    {% if m.role == "owner" %}
-      <span class="inline-block bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">owner</span>
-    {% else %}
-      <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full">member</span>
-    {% endif %}
+    {{ role_badge(m.role) }}
 
     {% if caller_role == "owner" and m.email != current_user.email %}
       <!-- Owner actions on other members -->

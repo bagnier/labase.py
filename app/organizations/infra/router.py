@@ -22,9 +22,9 @@ from app.shared.dependencies import (
     CurrentUser,
     RlsSession,
 )
-from app.shared.http import wants_json
+from app.shared.http import or_404, wants_json
 from app.shared.http.templates import templates
-from app.shared.names import is_reserved, is_valid_handle
+from app.shared.names import validate_handle
 from app.shared.observability.audit import record_audit_event
 
 # Collection router — multi-org, not scoped by a handle. Mounted at the root.
@@ -42,7 +42,7 @@ async def _get_org_repo(session: RlsSession) -> OrganizationRepository:
 OrgRepo = Annotated[OrganizationRepository, Depends(_get_org_repo)]
 
 
-async def _members_payload(repo: OrganizationRepository, org_id: uuid.UUID) -> list[MemberRead]:
+async def _build_members(repo: OrganizationRepository, org_id: uuid.UUID) -> list[MemberRead]:
     raw_members = await repo.list_members(org_id)
     emails = await resolve_user_emails([m.auth_user_id for m in raw_members])
     return [
@@ -97,9 +97,7 @@ async def org_dashboard(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> HTMLResponse:
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await page_context(session, current_user, org=org, org_handle=org_handle)
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
@@ -114,9 +112,7 @@ async def org_settings(
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
 ):
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await page_context(
         session, current_user, org=org, org_handle=org_handle, role=membership.role.value
@@ -133,10 +129,8 @@ async def list_members(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ):
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    members = await _members_payload(repo, org_id)
+    org = or_404(await repo.get(org_id))
+    members = await _build_members(repo, org_id)
     if wants_json(request):
         return JSONResponse([m.model_dump(mode="json") for m in members])
     invitations: list[InvitationRead] = []
@@ -170,9 +164,7 @@ async def rename_organization(
     membership: CurrentOwnerMembership,
     name: str = Form(default=""),
 ):
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org = or_404(await repo.get(org_id))
     name = name.strip()
     error = None
     if not name:
@@ -210,17 +202,12 @@ async def update_org_handle(
     membership: CurrentOwnerMembership,
     handle: str = Form(...),
 ):
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org = or_404(await repo.get(org_id))
     handle = handle.strip().lower()
-    error = None
-    code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    if not is_valid_handle(handle):
-        error = "Handle must be lowercase alphanumeric with hyphens, max 39 chars."
-    elif is_reserved(handle):
-        error = f"'{handle}' is a reserved name."
-    elif not await repo.is_handle_available(handle, org_id):
+    validation_error = validate_handle(handle)
+    error = validation_error[1] if validation_error else None
+    code = validation_error[0] if validation_error else status.HTTP_422_UNPROCESSABLE_ENTITY
+    if error is None and not await repo.is_handle_available(handle, org_id):
         error = f"'{handle}' is already taken."
         code = status.HTTP_409_CONFLICT
     if error is not None:
@@ -260,9 +247,7 @@ async def leave_organization(
     membership: CurrentMembership,
 ) -> Response:
     user_id = uuid.UUID(current_user.id)
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    or_404(await repo.get(org_id))
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
@@ -295,9 +280,7 @@ async def update_member_role(
     membership: CurrentOwnerMembership,
     role: str = Form(...),
 ) -> Response:
-    org = await repo.get(org_id)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    org = or_404(await repo.get(org_id))
     try:
         new_role = OrgRole(role)
     except ValueError as exc:
@@ -377,7 +360,7 @@ async def remove_member(
     )
     if wants_json(request):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    members = await _members_payload(repo, org_id)
+    members = await _build_members(repo, org_id)
     count = len(members)
     label = f"{count} member{'s' if count != 1 else ''}"
     oob = f'<p id="member-count" hx-swap-oob="true" class="text-sm text-gray-500">{label}</p>'
@@ -493,9 +476,7 @@ async def revoke_invitation(
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
 ) -> Response:
-    invitation = await repo.get_invitation_by_id(org_id, invitation_id)
-    if invitation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
     record_audit_event(
         bg,

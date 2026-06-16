@@ -1,7 +1,8 @@
 import uuid
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +24,7 @@ from app.learning.infra.repository import CatalogRow, LearningRepository
 from app.profile.contract.shell import shell_context
 from app.shared import clock
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
-from app.shared.http import wants_json
+from app.shared.http import or_404, wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
@@ -41,17 +42,17 @@ async def _get_learning_repo(
 LearningRepo = Annotated[LearningRepository, Depends(_get_learning_repo)]
 
 
-def _level(row: CatalogRow) -> int:
+def _card_level(row: CatalogRow) -> int:
     return row.state.level if row.state else 0
 
 
-def _due_rows(rows: list[CatalogRow], today) -> list[CatalogRow]:
+def _due_rows(rows: list[CatalogRow], today: date) -> list[CatalogRow]:
     by_external = {r.card.external_id: r for r in rows}
     ordered = select_due_cards(
         [
             DueCard(
                 external_id=r.card.external_id,
-                level=_level(r),
+                level=_card_level(r),
                 deck_position=r.deck.position,
                 card_position=r.card.position,
                 next_review_on=r.state.next_review_on if r.state else None,
@@ -75,7 +76,7 @@ async def _render_session(
         ReviewCardRead(
             external_id=r.card.external_id,
             question=r.card.question,
-            level=_level(r),
+            level=_card_level(r),
             deck=r.deck.name,
         )
         for r in rows
@@ -109,9 +110,7 @@ async def subscribe(
     org: CurrentOrgModel,
     deck: str = Form(...),
 ):
-    found = await repo.get_deck_by_name(deck)
-    if found is None:
-        raise HTTPException(404, "Deck not found")
+    found = or_404(await repo.get_deck_by_name(deck))
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
     return await _render_session(request, session, current_user, rows, org, repo)
@@ -136,9 +135,7 @@ async def card_detail(
     current_user: CurrentUser,
     repo: LearningRepo,
 ):
-    card = await repo.get_card_by_external(external_id)
-    if card is None:
-        raise HTTPException(404, "Card not found")
+    card = or_404(await repo.get_card_by_external(external_id))
     state = await repo.get_state(card.id)
     if wants_json(request):
         return JSONResponse(
@@ -175,9 +172,7 @@ async def mark_card(
     org: CurrentOrgModel,
     outcome: Outcome = Form(...),
 ):
-    card = await repo.get_card_by_external(external_id)
-    if card is None:
-        raise HTTPException(404, "Card not found")
+    card = or_404(await repo.get_card_by_external(external_id))
     today_date = clock.now().date()
     state = await repo.get_state(card.id)
     schedule = apply_outcome(state.level if state else 0, today_date, outcome)
@@ -204,7 +199,7 @@ async def resources(
     org: CurrentOrgModel,
 ):
     rows = await repo.catalog()
-    needing = [r for r in rows if needs_resources(_level(r))]
+    needing = [r for r in rows if needs_resources(_card_level(r))]
     pairs = compute_resources(
         [
             CardResource(
