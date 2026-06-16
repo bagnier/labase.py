@@ -1,10 +1,3 @@
-import uuid
-
-import tests.db as db
-from app.auth.tests.admin_helpers import create_user as _admin_create
-from app.organizations.domain.models import Membership, OrgRole
-from app.organizations.infra.repository import OrganizationRepository
-from app.shared.persistence.database import admin_session_factory
 from tests.e2e.drivers.protocols import ApiProtocol
 
 _PASSWORD = "Secret1!"
@@ -21,12 +14,16 @@ class OrgApiMixin(ApiProtocol):
         return resp.json()
 
     def _orgs_for_current_user(self) -> list[dict]:
-        """Fetch orgs for the current user, using test TX directly if not authenticated."""
         email = getattr(self, "_last_registered_email", None) or getattr(
             self, "_primary_email", None
         )
-        if email and db.in_test_transaction():
-            return self._run(db.fetch_orgs_for_email(email))
+        if email:
+            client = self._client_for(email)
+            resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
+            assert resp.status_code == 200, (
+                f"GET /organizations returned {resp.status_code}: {resp.text}"
+            )
+            return resp.json()
         return self._fetch_org_list()
 
     def assert_org_count(self, count: int) -> None:
@@ -47,8 +44,6 @@ class OrgApiMixin(ApiProtocol):
     def assert_other_org_absent(self, email: str) -> None:
         assert self._org_list_response is not None, "Call view_org_list_as first"
         names = [o["name"] for o in self._org_list_response]
-        # The other user's org should not appear; we verify by checking no org whose slug
-        # is owned by `email` appears — simplest proxy: fetch that user's own org name
         client = self._client_for(email)
         resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
         other_names = [o["name"] for o in resp.json()]
@@ -56,24 +51,35 @@ class OrgApiMixin(ApiProtocol):
             assert name not in names, f"Other user's org {name!r} appears in list: {names}"
 
     def join_org_as_member(self, org_name: str, email: str) -> None:
-        # Create throwaway owner directly (bypasses test transaction — committed to real DB)
         slug = org_name.lower().replace(" ", "-")
         owner_email = f"owner-{slug}@example.com"
-        owner_uid = uuid.UUID(_admin_create(owner_email, _PASSWORD))
-        self.track_auth_email(owner_email)
+        owner = self._make_client_for(owner_email)
 
-        member_uid = uuid.UUID(self._user_id_for_email(email))
+        orgs = self._run(owner.get("/organizations", headers={"accept": "application/json"})).json()
+        assert orgs, f"No org found for {owner_email}"
+        handle = orgs[0]["handle"]
 
-        async def _setup() -> str:
-            async with admin_session_factory()() as session:
-                repo = OrganizationRepository(session)
-                org = await repo.create_with_owner(name=org_name, auth_user_id=owner_uid)
-                session.add(Membership(org_id=org.id, auth_user_id=member_uid, role=OrgRole.member))
-                await session.commit()
-                return str(org.id)
+        self._run(
+            owner.patch(
+                f"/{handle}", data={"name": org_name}, headers={"accept": "application/json"}
+            )
+        )
 
-        org_id = self._run(_setup())
-        self.track_org_id(org_id)
+        inv = self._run(
+            owner.post(
+                f"/{handle}/invitations",
+                data={"email": email},
+                headers={"accept": "application/json"},
+            )
+        )
+        assert inv.status_code == 201, f"Invitation failed: {inv.text}"
+        token = inv.json()["token"]
+
+        member = self._client_for(email)
+        acc = self._run(
+            member.post(f"/invitations/{token}/accept", headers={"accept": "application/json"})
+        )
+        assert acc.status_code == 200, f"Accept invitation failed: {acc.text}"
 
     def view_org_list(self) -> None:
         resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))

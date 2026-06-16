@@ -1,6 +1,5 @@
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
-from app.organizations.tests.admin_helpers import add_membership, set_membership_role
-from tests.db import primary_org_for_user, rename_org
+from app.organizations.tests.admin_helpers import add_membership, orgs_for_user, set_membership_role
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -57,7 +56,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
         return users[0].id
 
     def _get_primary_org_id(self) -> str:
-        return primary_org_for_user(self._get_user_id(self._primary_email))["id"]
+        return orgs_for_user(self._get_user_id(self._primary_email))[0]["id"]
 
     # ── basic file ops ────────────────────────────────────────────────────────
 
@@ -138,8 +137,11 @@ class OrgFileBrowserMixin(BrowserProtocol):
             form={"email": email, "password": _PASSWORD},
         )
         self.sign_in(email, _PASSWORD)  # type: ignore[attr-defined]
-        org = primary_org_for_user(self._get_user_id(email))
-        rename_org(org["id"], org_name)
+        org = orgs_for_user(self._get_user_id(email))[0]
+        self._context.request.patch(
+            f"{self._base_url}/{org['handle']}",
+            form={"name": org_name},
+        )
         self._active_org_handle = org["handle"]  # type: ignore[attr-defined]
         self._primary_email = email  # type: ignore[attr-defined]
         self._last_registered_email = email
@@ -172,12 +174,15 @@ class OrgFileBrowserMixin(BrowserProtocol):
         )
 
     def create_user_in_org(self, email: str, org_name: str) -> None:
-        self._secondary_context_for(email)
-        org = primary_org_for_user(self._get_user_id(email))
+        ctx = self._secondary_context_for(email)
+        org = orgs_for_user(self._get_user_id(email))[0]
         if not hasattr(self, "_secondary_handles"):
             self._secondary_handles = {}
         self._secondary_handles[email] = org["handle"]
-        rename_org(org["id"], org_name)
+        ctx.request.patch(
+            f"{self._base_url}/{org['handle']}",
+            form={"name": org_name},
+        )
 
     def promote_to_owner(self) -> None:
         primary_email = getattr(self, "_primary_email", "")

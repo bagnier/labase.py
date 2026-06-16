@@ -35,11 +35,8 @@ class LearningApiMixin(ApiProtocol):
         self._learn_current = None
 
     async def _seed(self, fn):
-        assert db._test_connection is not None, "No test transaction"
-        async with AsyncSession(bind=db._test_connection, expire_on_commit=False) as s:
-            result = await fn(s)
-            await s.commit()
-            return result
+        async with db.test_session() as s:
+            return await fn(s)
 
     # ── users / orgs ──────────────────────────────────────────────────────────
     def _user(self, name: str) -> str:

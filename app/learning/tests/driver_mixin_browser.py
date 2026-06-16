@@ -9,8 +9,8 @@ from sqlalchemy.pool import NullPool
 
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from app.learning.tests import setup
+from app.organizations.tests.admin_helpers import orgs_for_user
 from app.shared.config import get_settings
-from tests.db import primary_org_for_user
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -97,7 +97,9 @@ class LearningBrowserMixin(BrowserProtocol):
                 f"{self._base_url}/auth/login", form={"email": email, "password": _PASSWORD}
             )
             uid = find_users(email)[0].id
-            org = primary_org_for_user(uid)
+            orgs = orgs_for_user(uid)
+            assert orgs, f"No org for {email}"
+            org = orgs[0]
             self._learn_ctx[key] = ctx
             self._learn_page[key] = ctx.new_page()
             self._learn_handle[key] = org["handle"]

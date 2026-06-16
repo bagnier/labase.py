@@ -10,6 +10,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+import tests.cleanup as cleanup
 import tests.db as db
 from app.auth.infra.session import get_rls_session
 from app.main import app
@@ -45,7 +46,7 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     if not isinstance(driver, ApiDriver):
         yield
         driver._restore_clock()
-        db.truncate_app_tables()
+        cleanup.truncate_app_tables()
         return
 
     conn = driver._run(db.begin_test_transaction(_admin_engine()))
@@ -88,7 +89,7 @@ def driver(request) -> ApiDriver | BrowserDriver:
 
     def finalize() -> None:
         d.stop()
-        asyncio.run(db.purge_leftover_test_data())
+        asyncio.run(cleanup.purge_leftover_test_data())
 
     request.addfinalizer(finalize)
     return d

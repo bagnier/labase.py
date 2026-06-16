@@ -1,6 +1,9 @@
 from app.auth.tests.admin_helpers import find_users
-from app.organizations.tests.admin_helpers import add_membership, memberships_for_user
-from tests.db import orgs_for_user, primary_org_for_user, rename_org
+from app.organizations.tests.admin_helpers import (
+    add_membership,
+    memberships_for_user,
+    orgs_for_user,
+)
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"
@@ -51,11 +54,14 @@ class OrgBrowserMixin(BrowserProtocol):
         assert email, "No acting email"
         return email
 
+    def _fetch_orgs_for(self, email: str) -> list[dict]:
+        return orgs_for_user(self._get_user_id(email))
+
     def _active_slug(self) -> str:
         slug = getattr(self, "_active_org_handle", "")
         if slug:
             return slug
-        return primary_org_for_user(self._get_user_id(self._acting_email()))["handle"]
+        return self._fetch_orgs_for(self._acting_email())[0]["handle"]
 
     def _memberships_for(self, email: str) -> list[dict]:
         return memberships_for_user(self._get_user_id(email))
@@ -85,13 +91,13 @@ class OrgBrowserMixin(BrowserProtocol):
 
     def view_org_list_as(self, email: str) -> None:
         self._secondary_context_for(email)
-        self._org_list_response = orgs_for_user(self._get_user_id(email))  # type: ignore[attr-defined]
+        self._org_list_response = self._fetch_orgs_for(email)  # type: ignore[attr-defined]
 
     def assert_other_org_absent(self, email: str) -> None:
         org_list = getattr(self, "_org_list_response", None)
         assert org_list is not None, "Call view_org_list_as first"
         names = [o["name"] for o in org_list]
-        other_names = [o["name"] for o in orgs_for_user(self._get_user_id(email))]
+        other_names = [o["name"] for o in self._fetch_orgs_for(email)]
         for name in other_names:
             assert name not in names, f"Other user's org {name!r} appears in list: {names}"
 
@@ -108,26 +114,27 @@ class OrgBrowserMixin(BrowserProtocol):
             f"{self._base_url}/auth/login",
             form={"email": owner_email, "password": _PASSWORD},
         )
-        new_org_id = primary_org_for_user(self._get_user_id(owner_email))["id"]
-        rename_org(new_org_id, org_name)
+        org = self._fetch_orgs_for(owner_email)[0]
+        owner_ctx.request.patch(
+            f"{self._base_url}/{org['handle']}",
+            form={"name": org_name},
+        )
         # Ensure the member user exists
         self._secondary_context_for(email)
-        add_membership(new_org_id, self._get_user_id(email))
+        add_membership(org["id"], self._get_user_id(email))
 
     def view_org_list(self) -> None:
-        self._org_list_response = orgs_for_user(  # type: ignore[attr-defined]
-            self._get_user_id(self._acting_email())
-        )
+        self._org_list_response = self._fetch_orgs_for(self._acting_email())  # type: ignore[attr-defined]
 
     def assert_org_in_list(self, org_name: str) -> None:
         org_list = getattr(self, "_org_list_response", None)
         if org_list is None:
-            org_list = orgs_for_user(self._get_user_id(self._acting_email()))
+            org_list = self._fetch_orgs_for(self._acting_email())
         names = [o["name"] for o in org_list]
         assert org_name in names, f"Expected {org_name!r} in org list: {names}"
 
     def assert_org_absent(self, org_name: str) -> None:
-        names = [o["name"] for o in orgs_for_user(self._get_user_id(self._acting_email()))]
+        names = [o["name"] for o in self._fetch_orgs_for(self._acting_email())]
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
@@ -177,10 +184,7 @@ class OrgBrowserMixin(BrowserProtocol):
         )
 
     def assert_member_absent(self, email: str) -> None:
-        slug = (
-            getattr(self, "_active_org_handle", "")
-            or primary_org_for_user(self._get_user_id(self._acting_email()))["handle"]
-        )
+        slug = self._active_slug()
         page = self._p
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         el = page.query_selector(f"[data-member-email='{email}']")
