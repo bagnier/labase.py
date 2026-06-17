@@ -13,7 +13,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.files.infra.repository import OrgFileRepository
-from app.files.infra.storage import BUCKET, service_storage_client, storage_path
+from app.files.infra.storage import BUCKET, admin_storage, storage_path
 
 _WELCOME_FILENAME = "welcome.txt"
 _WELCOME_BODY = (
@@ -26,7 +26,7 @@ _WELCOME_BODY = (
 async def seed(session: AsyncSession, org_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
     file_id = uuid.uuid4()
     path = storage_path(org_id, file_id, _WELCOME_FILENAME)
-    storage = service_storage_client()
+    storage = admin_storage()
     await storage.from_(BUCKET).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
 
     repo = OrgFileRepository(session, org_id)

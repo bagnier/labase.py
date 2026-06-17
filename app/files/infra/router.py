@@ -12,8 +12,8 @@ from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.storage import (
     BUCKET,
+    admin_storage,
     rewrite_signed_url,
-    service_storage_client,
     storage_path,
     user_storage_client,
 )
@@ -250,7 +250,7 @@ async def public_share_download(
     if org_file is None:
         raise HTTPException(404, "File not found")
 
-    storage = service_storage_client()
+    storage = admin_storage()
     result = await storage.from_(BUCKET).create_signed_url(org_file.storage_path, _SIGNED_URL_TTL)
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
     return RedirectResponse(url=signed_url, status_code=302)
