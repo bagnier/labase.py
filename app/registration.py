@@ -5,6 +5,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.domain.service import RegisterResult, register
+from app.auth.infra.security import decode_jwt
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.persistence.supabase import get_admin_supabase
 
@@ -33,3 +34,16 @@ async def register_user(
         await asyncio.to_thread(supabase.auth.admin.delete_user, result.user_id)
         raise
     return result, org.id
+
+
+async def confirm_user(access_token: str, session: AsyncSession) -> uuid.UUID:
+    """Create the personal org for a user whose email was just confirmed.
+
+    Returns org_id so the caller can emit the hook.
+    """
+    claims = decode_jwt(access_token)
+    org = await OrganizationRepository(session).create_with_owner(
+        name=claims.get("email", ""),
+        auth_user_id=uuid.UUID(claims["sub"]),
+    )
+    return org.id

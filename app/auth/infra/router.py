@@ -1,5 +1,3 @@
-import uuid
-
 import structlog
 from fastapi import (
     APIRouter,
@@ -20,8 +18,7 @@ from app.auth.domain.service import AuthenticatedUser, confirm_signup, login, lo
 from app.auth.infra.cookies import set_auth_cookies
 from app.auth.infra.security import try_get_current_user
 from app.organizations.contract.hooks import emit_org_created
-from app.organizations.infra.repository import OrganizationRepository
-from app.registration import register_user
+from app.registration import confirm_user, register_user
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
@@ -206,12 +203,8 @@ async def confirm_endpoint(
     """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
     try:
         tokens = await confirm_signup(token_hash, type)
-        claims = _claims_from_token(tokens.access_token)
-        org = await OrganizationRepository(admin_session).create_with_owner(
-            name=claims.get("email", ""),
-            auth_user_id=uuid.UUID(claims["sub"]),
-        )
-        bg.add_task(emit_org_created, org.id, tokens.access_token)
+        org_id = await confirm_user(tokens.access_token, admin_session)
+        bg.add_task(emit_org_created, org_id, tokens.access_token)
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
@@ -220,9 +213,3 @@ async def confirm_endpoint(
         return RedirectResponse(
             "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
         )
-
-
-def _claims_from_token(access_token: str) -> dict:
-    from app.auth.infra.security import decode_jwt
-
-    return decode_jwt(access_token)
