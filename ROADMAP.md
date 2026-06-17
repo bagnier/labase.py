@@ -2,38 +2,6 @@
 
 ### technical
 
-- [x] uv
-- [x] python 3.14
-- [x] fastAPI
-- [x] pytest
-- [x] app separation
-- [x] BDD dual driver, Json & Web
-- [x] SSR HTMX
-- [x] database migrations
-- [x] collaboration via hooks between apps
-- [x] CORS
-- [x] security headers (HSTS, CSP)
-- [x] healthcheck (liveness / readiness)
-- [x] rate-limiting
-- [x] logging
-- [x] observability
-- [x] TLS and HTTP/2
-- [x] OWASP Dependency Check
-- [x] transactions
-- [x] upgrade
-- [x] DB schema
-- [x] generic repository (SpringJPA style)
-- [x] GitHub Actions
-- [x] refactor / simplify migration
-- [x] english all around
-- [x] refactor / simplify features
-- [x] refactor / simplify API uniforme CRUD comme BaseRepository
-- [x] simplify json + form
-- [x] remplacer les SVG par une fonte
-- [x] trop de class tailwind, sementique web
-- [x] reactive web
-
-
 - [ ] logs
 - [ ] async task queue
 - [ ] fulltext index
@@ -44,15 +12,6 @@
 
 ### functional
 
-- [x] authentication
-- [x] account creation
-- [x] organisation creation
-- [x] organisation ownership sharing
-- [x] member add and revoke
-- [x] token-based invitations (accept flow)
-- [x] todo list as CRUD example
-- [x] file management (bucket + share tokens)
-- [x] flashcards as HexArch example
 - [ ] public page
 - [ ] user profile
 - [ ] org dashboard
