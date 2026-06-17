@@ -36,37 +36,27 @@ Organized by **bounded context**, each split into `domain/` (business logic, fra
 HTTP request → infra/router.py → domain/service.py → infra/repository.py → DB / external service
 ```
 
-### Coupling rules
+Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
 
-- `domain/` never imports from `infra/`.
-- Contexts never import each other directly — cross-cutting code lives in `app/shared/`.
-- A context's **inter-app surface** lives in its `contract/` folder (e.g. `profile/contract/shell.py`, `organizations/contract/hooks.py`, `todo/contract/seed.py`). That is the only part another context (or the composition root) may consume; `domain/` and `infra/` stay private. `contract/` ≠ `app/shared/`: the former is a context's owned public API, the latter is cross-cutting code with no owner.
-- The request-scoped primitives that cross context boundaries are gathered in one façade, `app/shared/dependencies.py`: the auth ones (`get_current_user`, `get_rls_session`) plus the `organizations` tenancy resolvers (`CurrentOrg`, `CurrentMembership`, `CurrentOrgModel`, owner gates). This façade is the sanctioned coupling to `auth` and `organizations`, and is the only part of `app/shared/` that imports a context. Cross-context *orchestration* (which knows its participants by nature) lives at the composition root next to `main.py`, not in `shared/`: `app/registration.py` (the sign-up saga creating the Supabase auth user + personal org) and `app/seeding.py` (wiring the `org.created` subscribers).
-- Org-scoped contexts (`todo`, `files`, `learning`) touch `organizations` only for org resolution (`CurrentOrg`, `CurrentMembership`, `Organization`) — never its logic.
+## Principles
 
-### Core principles
+**Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives at the composition root (`registration.py`, `seeding.py`), never in `shared/`.
 
-1. **Explicit page composition.** A page is fragments, each owned by a context. The cross-cutting shell (sidebar nav + display name) is a provider — `profile/contract/shell.py::shell_context` — pulled in explicitly via `page_context(...)`. No middleware or Jinja context processor injects data silently; full pages load the shell, HTMX fragments don't.
-2. **Multi-org users.** Each account gets a personal org at sign-up and can join others; the sidebar lists all of them (`orgs`) and org-scoped data lives under `/{org_slug}/...`.
-3. **Membership reads, ownership writes.** A member sees all of an org's data; owner-only actions are gated by a *single* app check (`CurrentOwnerMembership` / `OwnerMembership`) that exists only to return a clean `403`. Isolation is RLS's job, never re-implemented in Python.
-4. **One query per context, per page.** The shell resolves display name + orgs in one query; org-scoped repositories are already org-filtered. Providers compose without N+1.
-5. **Both JSON & HTML/fragment.** Each router implements both JSON & HTML/fragment, in order to work with HTMX and to expose a great Rest API.
+**Cross-context communication.** `app/shared/` is ownerless infrastructure (clock, HTTP, DB sessions), not a coupling point. Two sanctioned forms: `contract/` for synchronous owned APIs, hooks for event-driven reactions where the emitter doesn't know its subscribers. `app/shared/dependencies.py` is a pragmatic FastAPI façade — the long-term direction is to move context-owned dependencies into their `contract/`.
 
-### Colocation
+**HTTP layer.** `router.py` owns HTTP and nothing else — parsing, serialization, status codes. No business logic, no direct DB access. Each router serves both JSON and HTML/fragment via `wants_json(request)`.
 
-Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD and full-pattern reference, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
+**Data & persistence.** RLS is the single source of truth for isolation — row access is decided by policies in `supabase/migrations/`, never re-implemented in Python. Three session dependencies: `get_rls_session` (default), `get_user_session` (raw), `get_admin_session` (BYPASSRLS). supabase-py handles auth and storage only; business queries go through SQLAlchemy directly.
 
-## Key design decisions
+**Testing.** Tests are complete and sincere — no mocking the persistence layer, no bypassing HTTP, no shortcuts that hide real app state. E2E tests interact exclusively via HTTP endpoints or the browser UI. The same Gherkin scenarios run against both an API driver (fast) and a browser driver (Playwright).
 
-- **RLS is the single source of truth for isolation.** Two pools: *user* (`DATABASE_URL`, role `authenticated`, RLS enforced) and *service* (`DATABASE_URL_SERVICE`, role `postgres`, BYPASSRLS — migrations/admin/registration only). `get_rls_session` sets the RLS context (`SET role authenticated` + JWT claims) **once** per request; FastAPI's dependency cache means the shell, route, and sub-dependencies share that one session. Row access is decided only by policies in `supabase/migrations/`; the app's only authorization is the owner gate (for a friendly `403`).
-  - Three session dependencies — pick deliberately: `get_rls_session` (**default** for authenticated routes — wraps the user session and sets the RLS context), `get_user_session` (user pool but raw — you must call `set_rls_context` yourself), `get_admin_session` (BYPASSRLS — admin jobs and registration only, never user data).
-- **Supabase as infrastructure only.** supabase-py handles auth and storage; business queries go through SQLAlchemy on Postgres directly (complex queries, transactions, pgvector…).
-- **SSR + HTMX, no SPA.** Single repo, single deployment, no CORS, server-side auth — suited to a mostly-CRUD UI.
-- **Plain SQL migrations.** Supabase CLI migrations stay readable and versioned; the first creates `profiles` linked to `auth.users` with RLS and an auto-create trigger on sign-up.
-- **Dual-driver BDD.** The same Gherkin scenarios run against an API driver (`httpx.AsyncClient`, JSON, fast) and a browser driver (HTML, Playwright), exercising both the Rest layer and the real UI without duplicate test logic. Tests share one BYPASSRLS connection, so the `get_rls_session` override sets JWT claims *without* `SET role authenticated` — issuing it would drop BYPASSRLS and break unrelated queries on the shared connection.
-- **Tests are black boxes.** E2E tests (API and browser alike) interact with the app exclusively via its public surface — HTTP endpoints or the browser UI. Driver mixins never query or mutate the database directly; setup and assertions go through the same API the real client uses. The only test-specific DB access is in `tests/db.py` (transaction management: shared connection + automatic rollback) and `tests/cleanup.py` (browser teardown truncation, which has no API equivalent). Programmatic shortcuts that bypass the HTTP layer are not allowed in driver mixins — they produce false confidence and couple tests to the persistence schema.
-- **Cross-app collaboration via hooks.** A context emits a domain event from its `contract/`; others subscribe without importing one another. Today: `organizations/contract/hooks.py` emits `org.created` inside the org-creating transaction, and each app drops welcome data via a pure `seed` hook in its `contract/seed.py`. The composition root (`app/seeding.py`) auto-discovers those `contract/seed.py` modules and wires them to the emitter — so the emitter stays ignorant of its subscribers and adding an app needs no central edit. Seeding is skipped under the `test` schema so BDD scenarios start from an empty org.
-- **npm-built assets, no remote dependencies at runtime.** All JS libraries and fonts are installed via `npm` and copied to `static/js/` at build time (`npm run build`). No CDN URLs in templates — add a library with `npm install`, copy it in `package.json`'s `build:js` step, and reference it as `/static/js/<file>`. Output lands in the gitignored `static/js/`; run `make install` to (re)generate.
+**Time.** `clock.now()` is the single source of time. Never call `datetime.now()` directly.
+
+**Audit events** are best-effort — fired as `BackgroundTasks`, loss on crash is acceptable. Never block a mutation to guarantee a write.
+
+**Multi-tenancy.** Each account gets a personal org at sign-up; org-scoped data lives under `/{org_slug}/...`. Members read, owners write — gated by `CurrentOwnerMembership` for a clean `403`.
+
+**Page composition.** The shell (`profile/contract/shell.py::shell_context`) is pulled in explicitly. No middleware injects data silently — full pages load the shell, HTMX fragments don't.
 
 ## Structure
 

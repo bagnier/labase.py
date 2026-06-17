@@ -1,5 +1,12 @@
 ## goals
 
+### architecture gaps
+
+- [ ] `todo/` mutations (POST/PATCH/DELETE) don't return JSON — violates "Both JSON & HTML/fragment" principle
+- [ ] replace raw `datetime.now(UTC)` calls with `clock.now()` in `profile/infra/repository.py`, `files/infra/router.py`, `organizations/tests/test_invitations.py`
+- [ ] `auth/infra/router.py` imports `OrganizationRepository` from `organizations/infra/` directly — move org creation logic to `registration.py` (composition root)
+- [ ] migrate context-owned dependencies from `shared/dependencies.py` into their respective `contract/` (e.g. `CurrentOrg` → `organizations/contract/`, `get_current_user` → `auth/contract/`)
+
 ### technical
 
 - [ ] logs
