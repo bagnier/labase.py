@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from app.shared.dependencies import CurrentUser
+from app.auth.contract.current import CurrentUser
 from app.shared.http.templates import templates
 
 router = APIRouter(tags=["console"])

@@ -6,12 +6,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.exc import DBAPIError
 
+from app.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSession
 from app.organizations.domain.models import InvitationRead, InvitationStatus
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.dependencies import AdminSession, CurrentUser, OptionalCurrentUser, RlsSession
 from app.shared.http import wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import AdminSession
 from app.shared.persistence.supabase import auth_user_exists
 
 log = structlog.get_logger("labase.organizations.invitations")

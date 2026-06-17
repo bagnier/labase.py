@@ -42,7 +42,7 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 
 **Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives at the composition root (`registration.py`, `seeding.py`), never in `shared/`.
 
-**Cross-context communication.** `app/shared/` is ownerless infrastructure (clock, HTTP, DB sessions), not a coupling point. Two sanctioned forms: `contract/` for synchronous owned APIs, hooks for event-driven reactions where the emitter doesn't know its subscribers. `app/shared/dependencies.py` is a pragmatic FastAPI façade — the long-term direction is to move context-owned dependencies into their `contract/`.
+**Cross-context communication.** `app/shared/` is ownerless infrastructure (clock, HTTP, DB sessions), not a coupling point. Two sanctioned forms: `contract/` for synchronous owned APIs, hooks for event-driven reactions where the emitter doesn't know its subscribers. Each context's FastAPI dependencies live in its own `contract/current.py` (`CurrentUser`/`RlsSession` in `auth/`, `CurrentOrg`/`CurrentMembership` in `organizations/`); `app/shared/` holds only ownerless infra, such as the BYPASSRLS `AdminSession`.
 
 **HTTP layer.** `router.py` owns HTTP and nothing else — parsing, serialization, status codes. No business logic, no direct DB access. Each router serves both JSON and HTML/fragment via `wants_json(request)`.
 

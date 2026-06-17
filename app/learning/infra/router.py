@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.contract.current import CurrentUser, RlsSession
 from app.auth.domain.service import AuthenticatedUser
 from app.learning.domain.models import (
     CardResource,
@@ -21,9 +22,9 @@ from app.learning.domain.service import (
     select_due_cards,
 )
 from app.learning.infra.repository import CatalogRow, LearningRepository
+from app.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from app.profile.contract.shell import shell_context
 from app.shared import clock
-from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
 from app.shared.http import or_404, wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event

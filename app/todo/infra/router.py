@@ -4,9 +4,10 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.auth.contract.current import CurrentUser, RlsSession
 from app.auth.domain.service import AuthenticatedUser
+from app.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from app.profile.contract.shell import shell_context
-from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
 from app.shared.http import or_404, parse_body, parse_field, render_list, wants_full_page
 from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead

@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
 
+from app.auth.contract.current import CurrentUser, RlsSession
 from app.auth.domain.service import AuthenticatedUser
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
@@ -16,21 +17,19 @@ from app.files.infra.storage import (
     storage_path,
     user_storage_client,
 )
-from app.profile.contract.shell import shell_context
-from app.shared.clock import now
-from app.shared.dependencies import (
-    AdminSession,
+from app.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
     CurrentOrgModel,
-    CurrentUser,
     Membership,
     OrgRole,
-    RlsSession,
 )
+from app.profile.contract.shell import shell_context
+from app.shared.clock import now
 from app.shared.http import or_404, parse_field, render_list, wants_full_page, wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
+from app.shared.persistence.database import AdminSession
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])

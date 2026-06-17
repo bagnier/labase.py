@@ -4,10 +4,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.auth.contract.current import CurrentUser, RlsSession
 from app.profile.contract.shell import shell_context
 from app.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
-from app.shared.dependencies import CurrentUser, RlsSession
 from app.shared.http import wants_json
 from app.shared.http.templates import templates
 from app.shared.names import validate_handle

@@ -3,7 +3,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Cookie,
-    Depends,
     Form,
     Query,
     Request,
@@ -11,18 +10,17 @@ from fastapi import (
     status,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
-from app.auth.domain.service import AuthenticatedUser, confirm_signup, login, logout
+from app.auth.contract.current import OptionalCurrentUser
+from app.auth.domain.service import confirm_signup, login, logout
 from app.auth.infra.cookies import set_auth_cookies
-from app.auth.infra.security import try_get_current_user
 from app.organizations.contract.hooks import emit_org_created
 from app.registration import confirm_user, register_user
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
-from app.shared.persistence.database import get_admin_session
+from app.shared.persistence.database import AdminSession
 
 log = structlog.get_logger("labase.auth")
 
@@ -77,9 +75,9 @@ def _safe_next(next_url: str | None) -> str:
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
     request: Request,
+    current_user: OptionalCurrentUser,
     info: str | None = None,
     next: str | None = None,
-    current_user: AuthenticatedUser | None = Depends(try_get_current_user),
 ) -> Response:
     if current_user is not None:
         return RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
@@ -154,9 +152,9 @@ async def register_page(request: Request) -> HTMLResponse:
 async def register_endpoint(
     request: Request,
     bg: BackgroundTasks,
+    admin_session: AdminSession,
     email: str = Form(""),
     password: str = Form(""),
-    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> Response:
     ip = request.client.host if request.client else None
     if not email or not password:
@@ -195,10 +193,10 @@ async def register_endpoint(
 async def confirm_endpoint(
     request: Request,
     bg: BackgroundTasks,
+    admin_session: AdminSession,
     token_hash: str = Query(...),
     type: str = Query(...),
     next: str = Query(default="/profile"),
-    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> Response:
     """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
     try:

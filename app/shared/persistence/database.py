@@ -1,8 +1,9 @@
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import lru_cache
+from typing import Annotated
 
-from fastapi import Request
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.shared.config import get_settings
@@ -73,3 +74,7 @@ async def get_user_session(request: Request) -> AsyncGenerator[AsyncSession]:
 async def get_admin_session(request: Request) -> AsyncGenerator[AsyncSession]:
     async for session in _session(admin_session_factory, request):
         yield session
+
+
+# BYPASSRLS session — shared infra, owned by no context.
+AdminSession = Annotated[AsyncSession, Depends(get_admin_session)]
