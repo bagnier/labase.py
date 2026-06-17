@@ -1,9 +1,9 @@
 import uuid
-from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from app.profile.domain.models import Profile, ProfileCreate, ProfileUpdate
+from app.shared.clock import now
 from app.shared.handle_service import handle_is_available, unique_handle
 from app.shared.names import slugify
 from app.shared.persistence.repository import BaseRepository
@@ -31,7 +31,7 @@ class ProfileRepository(BaseRepository[Profile]):
         base = slugify(email.split("@")[0]) or "user"
         handle = await unique_handle(base, self.session, exclude_profile_id=profile.id)
         profile.handle = handle
-        profile.updated_at = datetime.now(UTC)
+        profile.updated_at = now()
         self.session.add(profile)
         return profile
 
@@ -41,6 +41,6 @@ class ProfileRepository(BaseRepository[Profile]):
     async def update(self, profile: Profile, data: ProfileUpdate) -> Profile:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(profile, field, value)
-        profile.updated_at = datetime.now(UTC)
+        profile.updated_at = now()
         self.session.add(profile)
         return profile

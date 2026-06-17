@@ -1,12 +1,12 @@
 """Tests for invitation_router.py branches not covered by BDD scenarios."""
 
 import uuid
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.auth.domain.service import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.main import app
+from app.shared.clock import now
 from app.shared.persistence.database import get_admin_session, get_user_session
 
 
@@ -97,7 +97,7 @@ def test_get_invitation_valid_json_returns_invitation(driver):
         "role": "member",
         "token": token,
         "status": "pending",
-        "created_at": datetime.now(UTC),
+        "created_at": now(),
     }
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     try:

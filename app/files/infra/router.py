@@ -1,6 +1,5 @@
 import re
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
@@ -18,6 +17,7 @@ from app.files.infra.storage import (
     user_storage_client,
 )
 from app.profile.contract.shell import shell_context
+from app.shared.clock import now
 from app.shared.dependencies import (
     AdminSession,
     CurrentMembership,
@@ -243,7 +243,7 @@ async def public_share_download(
     share_token = await repo.get_share_token(token)
     if share_token is None:
         raise HTTPException(404, "Link not found")
-    if share_token.expires_at < datetime.now(UTC):
+    if share_token.expires_at < now():
         raise HTTPException(410, "Link expired")
 
     org_file = await repo.get(share_token.file_id)
