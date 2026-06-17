@@ -16,29 +16,54 @@ class TodoApiMixin(ApiProtocol):
 
     def have_todo_items(self, titles: list[str]) -> None:
         for title in reversed(titles):
-            self._run(self._c.post(self._todos_url(), data={"title": title}))
+            self._run(
+                self._c.post(
+                    self._todos_url(),
+                    json={"title": title},
+                    headers={"accept": "application/json"},
+                )
+            )
 
     def view_todo_list(self) -> None:
         self._response = self._run(self._c.get(self._todos_url()))
 
     def add_todo(self, title: str) -> None:
-        self._response = self._run(self._c.post(self._todos_url(), data={"title": title}))
+        self._response = self._run(
+            self._c.post(
+                self._todos_url(),
+                json={"title": title},
+                headers={"accept": "application/json"},
+            )
+        )
 
     def mark_todo_done(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
         self._response = self._run(
-            self._c.patch(self._todos_url(f"/{todo_id}"), data={"done": "true"})
+            self._c.patch(
+                self._todos_url(f"/{todo_id}"),
+                json={"done": True},
+                headers={"accept": "application/json"},
+            )
         )
 
     def rename_todo(self, title: str, new_title: str) -> None:
         todo_id = self._todo_id_by_title(title)
         self._response = self._run(
-            self._c.patch(self._todos_url(f"/{todo_id}"), data={"title": new_title})
+            self._c.patch(
+                self._todos_url(f"/{todo_id}"),
+                json={"title": new_title},
+                headers={"accept": "application/json"},
+            )
         )
 
     def delete_todo(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self._response = self._run(self._c.delete(self._todos_url(f"/{todo_id}")))
+        self._response = self._run(
+            self._c.delete(
+                self._todos_url(f"/{todo_id}"),
+                headers={"accept": "application/json"},
+            )
+        )
 
     def move_todo_above(self, title: str, above: str) -> None:
         resp = self._run(self._c.get(self._todos_url(), headers={"accept": "application/json"}))

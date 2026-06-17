@@ -1,13 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.auth.domain.service import AuthenticatedUser
 from app.profile.contract.shell import shell_context
 from app.shared.dependencies import CurrentOrg, CurrentOrgModel, CurrentUser, RlsSession
-from app.shared.http import or_404, render_list, wants_full_page
+from app.shared.http import or_404, parse_body, parse_field, render_list, wants_full_page
 from app.shared.observability.audit import record_audit_event
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
@@ -63,8 +63,8 @@ async def add_todo(
     repo: TodoRepo,
     org: CurrentOrgModel,
     org_id: CurrentOrg,
-    title: str = Form(...),
 ):
+    title = await parse_field(request, "title")
     todo = await repo.add(uuid.UUID(current_user.id), title)
     record_audit_event(
         bg,
@@ -85,9 +85,12 @@ async def patch_todo(
     session: RlsSession,
     repo: TodoRepo,
     org: CurrentOrgModel,
-    done: bool | None = Form(default=None),
-    title: str | None = Form(default=None),
 ):
+    body = await parse_body(request)
+    done_raw = body.get("done")
+    done = str(done_raw).lower() in ("true", "1", "on") if done_raw is not None else None
+    title_raw = body.get("title")
+    title = str(title_raw) if title_raw is not None else None
     todo = or_404(await repo.get(todo_id))
     if done is not None:
         todo.done = done

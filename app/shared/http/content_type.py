@@ -1,10 +1,19 @@
 from fastapi import Request
 
 
+def has_json_body(request: Request) -> bool:
+    return "application/json" in request.headers.get("content-type", "")
+
+
+async def parse_body(request: Request) -> dict:
+    if has_json_body(request):
+        return await request.json()
+    return dict(await request.form())
+
+
 async def parse_field(request: Request, field: str) -> str:
-    if "application/json" in request.headers.get("content-type", ""):
-        return str((await request.json()).get(field, ""))
-    return str((await request.form()).get(field, ""))
+    body = await parse_body(request)
+    return str(body.get(field, ""))
 
 
 def wants_json(request: Request) -> bool:
