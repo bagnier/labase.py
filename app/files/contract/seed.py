@@ -1,19 +1,17 @@
 """Welcome file the files context drops into a freshly created organisation.
 
 Public surface consumed by the composition root (:mod:`app.seeding`) via the
-``org.created`` hook. Runs inside the org-creating transaction.
-
-The Storage upload itself is not transactional: if the surrounding transaction
-rolls back afterwards, the uploaded blob is orphaned (minor, acceptable). We
-therefore upload first, then insert the DB row.
+``org.created`` hook. Runs post-commit as a background task.
 """
 
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.files.infra.repository import OrgFileRepository
-from app.files.infra.storage import BUCKET, admin_storage, storage_path
+from app.files.infra.storage import BUCKET, storage_path, user_storage_client
+from app.organizations.domain.models import Membership, OrgRole
+from app.shared.persistence.database import admin_session_factory
 
 _WELCOME_FILENAME = "welcome.txt"
 _WELCOME_BODY = (
@@ -23,17 +21,26 @@ _WELCOME_BODY = (
 )
 
 
-async def seed(session: AsyncSession, org_id: uuid.UUID, owner_user_id: uuid.UUID) -> None:
+async def seed(org_id: uuid.UUID, access_token: str) -> None:
+    async with admin_session_factory()() as session:
+        owner_id = await session.scalar(
+            select(Membership.auth_user_id).where(
+                Membership.org_id == org_id, Membership.role == OrgRole.owner
+            )
+        )
+
     file_id = uuid.uuid4()
     path = storage_path(org_id, file_id, _WELCOME_FILENAME)
-    storage = admin_storage()
+    storage = user_storage_client(access_token)
     await storage.from_(BUCKET).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
 
-    repo = OrgFileRepository(session, org_id)
-    await repo.add(
-        user_id=owner_user_id,
-        filename=_WELCOME_FILENAME,
-        storage_path=path,
-        content_type="text/plain",
-        size_bytes=len(_WELCOME_BODY),
-    )
+    async with admin_session_factory()() as session:
+        repo = OrgFileRepository(session, org_id)
+        await repo.add(
+            user_id=owner_id,
+            filename=_WELCOME_FILENAME,
+            storage_path=path,
+            content_type="text/plain",
+            size_bytes=len(_WELCOME_BODY),
+        )
+        await session.commit()

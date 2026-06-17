@@ -59,10 +59,37 @@ async def refresh_session(refresh_token: str) -> AuthTokens:
     )
 
 
-async def register(email: str, password: str) -> str:
-    """Returns the new user's UUID (auth.users.id)."""
+@dataclass
+class RegisterResult:
+    user_id: str
+    access_token: str | None  # None when email confirmation is required
+
+
+async def register(email: str, password: str) -> RegisterResult:
+    """Signs up a new user. access_token is None when email confirmation is required."""
     supabase = await get_user_supabase()
     res = await supabase.auth.sign_up({"email": email, "password": password})
     if res.user is None:
         raise ValueError("Registration failed: no user returned")
-    return res.user.id
+    return RegisterResult(
+        user_id=res.user.id,
+        access_token=res.session.access_token if res.session else None,
+    )
+
+
+async def confirm_signup(token_hash: str, type: str = "signup") -> AuthTokens:
+    """Exchange an email confirmation token for a session."""
+    from typing import cast
+
+    from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
+
+    supabase = await get_user_supabase()
+    res = await supabase.auth.verify_otp(
+        VerifyTokenHashParams(token_hash=token_hash, type=cast(EmailOtpType, type))
+    )
+    if res.session is None:
+        raise ValueError("Email confirmation failed: no session returned")
+    return AuthTokens(
+        access_token=res.session.access_token,
+        refresh_token=res.session.refresh_token,
+    )

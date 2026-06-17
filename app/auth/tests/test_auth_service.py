@@ -113,13 +113,16 @@ async def test_refresh_session_none_raises_value_error():
 
 @pytest.mark.asyncio
 async def test_register_user_compensates_when_org_creation_fails():
+    from app.auth.domain.service import RegisterResult
+
     fake_user_id = str(uuid4())
+    fake_result = RegisterResult(user_id=fake_user_id, access_token="tok")
     fake_admin = MagicMock()
     fake_admin.auth.admin.delete_user = MagicMock()
     fake_session = MagicMock()
 
     with (
-        patch("app.registration.register", AsyncMock(return_value=fake_user_id)),
+        patch("app.registration.register", AsyncMock(return_value=fake_result)),
         patch(
             "app.registration.OrganizationRepository.create_with_owner",
             AsyncMock(side_effect=RuntimeError("db down")),

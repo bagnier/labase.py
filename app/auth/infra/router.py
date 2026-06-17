@@ -1,12 +1,26 @@
+import uuid
+
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Cookie,
+    Depends,
+    Form,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
-from app.auth.domain.service import AuthenticatedUser, login, logout
+from app.auth.domain.service import AuthenticatedUser, confirm_signup, login, logout
 from app.auth.infra.cookies import set_auth_cookies
 from app.auth.infra.security import try_get_current_user
+from app.organizations.contract.hooks import emit_org_created
+from app.organizations.infra.repository import OrganizationRepository
 from app.registration import register_user
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
@@ -156,7 +170,10 @@ async def register_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        await register_user(email, password, admin_session)
+        result, org_id = await register_user(email, password, admin_session)
+        if org_id is not None:
+            assert result.access_token is not None  # org_id is set only when access_token is set
+            bg.add_task(emit_org_created, org_id, result.access_token)
         return RedirectResponse(
             "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
         )
@@ -174,3 +191,38 @@ async def register_endpoint(
         {"error": error, "email": email},
         status_code=status.HTTP_400_BAD_REQUEST,
     )
+
+
+@router.get("/confirm")
+@rate_limit("10/minute")
+async def confirm_endpoint(
+    request: Request,
+    bg: BackgroundTasks,
+    token_hash: str = Query(...),
+    type: str = Query(...),
+    next: str = Query(default="/profile"),
+    admin_session: AsyncSession = Depends(get_admin_session),
+) -> Response:
+    """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
+    try:
+        tokens = await confirm_signup(token_hash, type)
+        claims = _claims_from_token(tokens.access_token)
+        org = await OrganizationRepository(admin_session).create_with_owner(
+            name=claims.get("email", ""),
+            auth_user_id=uuid.UUID(claims["sub"]),
+        )
+        bg.add_task(emit_org_created, org.id, tokens.access_token)
+        resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
+        set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
+        return resp
+    except Exception:
+        log.exception("auth.confirm_error", token_hash=token_hash[:8])
+        return RedirectResponse(
+            "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+
+def _claims_from_token(access_token: str) -> dict:
+    from app.auth.infra.security import decode_jwt
+
+    return decode_jwt(access_token)

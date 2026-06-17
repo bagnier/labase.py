@@ -2,17 +2,15 @@
 
 Organizations owns and emits this event; other contexts subscribe to it without
 importing one another. The only place that wires emitter to subscribers is the
-composition root (:mod:`app.seeding`). Subscribers run inside the org-creating
-transaction, so they seed their welcome data atomically with the new org.
+composition root (:mod:`app.seeding`). Subscribers run post-commit as background
+tasks, so the org is guaranteed to exist in the DB when they execute.
 """
 
 import uuid
 from collections.abc import Awaitable, Callable
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-# (session, org_id, owner_user_id) -> None, run inside the creating transaction.
-OrgCreatedHook = Callable[[AsyncSession, uuid.UUID, uuid.UUID], Awaitable[None]]
+# (org_id, access_token) -> None, run post-commit as a background task.
+OrgCreatedHook = Callable[[uuid.UUID, str], Awaitable[None]]
 
 _org_created_hooks: list[OrgCreatedHook] = []
 
@@ -21,13 +19,7 @@ def register_org_created(hook: OrgCreatedHook) -> None:
     _org_created_hooks.append(hook)
 
 
-async def emit_org_created(
-    session: AsyncSession, org_id: uuid.UUID, owner_user_id: uuid.UUID
-) -> None:
-    """Run every registered hook in the same transaction as the org creation.
-
-    No-op when no hook is registered — e.g. callers that use the repository
-    directly without going through the composition root (:mod:`app.seeding`).
-    """
+async def emit_org_created(org_id: uuid.UUID, access_token: str) -> None:
+    """Run every registered hook after the org-creating transaction has committed."""
     for hook in _org_created_hooks:
-        await hook(session, org_id, owner_user_id)
+        await hook(org_id, access_token)
