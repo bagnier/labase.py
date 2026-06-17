@@ -1,3 +1,6 @@
+import uuid
+
+from app.auth.tests.admin_helpers import find_users
 from tests.e2e.drivers.protocols import BrowserProtocol
 
 _PASSWORD = "Secret1!"  # shared constant across all test mixins
@@ -82,6 +85,23 @@ class OrgBrowserMixin(BrowserProtocol):
         handle = orgs[0]["handle"]
         self._active_org_handle = handle  # type: ignore[attr-defined]
         return handle
+
+    def _user_id_for(self, email: str) -> str:
+        users = find_users(email)
+        assert users, f"User {email!r} not found in Supabase"
+        return users[0].id
+
+    def _probe_blocked(self, method: str, path: str, **fetch_kwargs) -> None:
+        """The owner-only UI control is hidden for the acting user. UI-hiding alone is
+        not proof of server enforcement, so fire the request the control would have
+        triggered — from the acting user's authenticated context — and store the
+        response so assert_action_forbidden can require the server itself to reject it.
+        """
+        page = self._acting_page()
+        self._last_response = page.request.fetch(  # type: ignore[attr-defined]
+            f"{self._base_url}{path}", method=method, **fetch_kwargs
+        )
+        self._action_blocked_by_ui = False  # type: ignore[attr-defined]
 
     # ── basic org assertions ──────────────────────────────────────────────────
 
@@ -177,8 +197,7 @@ class OrgBrowserMixin(BrowserProtocol):
         page.goto(f"{self._base_url}/{slug}/settings", wait_until="load")
         # The editable name form is owner-only; absent for members (settings is 403).
         if page.query_selector("input[name=name]") is None:
-            self._last_response = None  # type: ignore[attr-defined]
-            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            self._probe_blocked("PATCH", f"/{slug}", form={"name": new_name})
             return
         page.fill("input[name=name]", new_name)
         self._last_response = self._click_and_capture(
@@ -192,8 +211,6 @@ class OrgBrowserMixin(BrowserProtocol):
         self._secondary_context_for(email)
 
     def assert_action_forbidden(self) -> None:
-        if getattr(self, "_action_blocked_by_ui", False):
-            return  # the control is not even rendered for this user
         last = getattr(self, "_last_response", None)
         assert last is not None, "No response stored — cannot check forbidden"
         status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
@@ -230,8 +247,9 @@ class OrgBrowserMixin(BrowserProtocol):
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
         if manage is None:
-            self._last_response = None  # type: ignore[attr-defined]
-            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            self._probe_blocked(
+                "PATCH", f"/{slug}/members/{self._user_id_for(email)}", form={"role": role}
+            )
             return
         manage.click()  # open the dropdown (group-focus-within)
         action = "[data-promote]" if role == "owner" else "[data-demote]"
@@ -246,8 +264,7 @@ class OrgBrowserMixin(BrowserProtocol):
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
         if manage is None:
-            self._last_response = None  # type: ignore[attr-defined]
-            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            self._probe_blocked("DELETE", f"/{slug}/members/{self._user_id_for(email)}")
             return
         manage.click()
         self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
@@ -260,8 +277,7 @@ class OrgBrowserMixin(BrowserProtocol):
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         if page.query_selector("[data-leave]") is None:
-            self._last_response = None  # type: ignore[attr-defined]
-            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            self._probe_blocked("DELETE", f"/{slug}/members/me")
             return
         self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
             page, "[data-leave]", "DELETE", "/members/me"
@@ -280,8 +296,7 @@ class OrgBrowserMixin(BrowserProtocol):
         page = self._acting_page()
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         if page.query_selector("[data-invite-toggle]") is None:
-            self._last_response = None  # type: ignore[attr-defined]
-            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            self._probe_blocked("POST", f"/{slug}/invitations", form={"email": email, "role": role})
             return
         page.click("[data-invite-toggle]")
         page.fill("#invite-form input[name=email]", email)
@@ -346,8 +361,11 @@ class OrgBrowserMixin(BrowserProtocol):
         page.goto(f"{self._base_url}/{slug}/members", wait_until="load")
         revoke = page.query_selector(f"[data-invitation-email='{email}'] [data-revoke]")
         if revoke is None:
-            self._last_response = None  # type: ignore[attr-defined]
-            self._action_blocked_by_ui = True  # type: ignore[attr-defined]
+            # A member can't see the invitation list, so the real invitation id is
+            # not available here. The CurrentOwnerMembership gate resolves before the
+            # handler looks up the id, so any id proves enforcement: a member gets 403;
+            # a broken gate would fall through to 404 and fail this assertion.
+            self._probe_blocked("DELETE", f"/{slug}/invitations/{uuid.uuid4()}")
             return
         self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
             page, f"[data-invitation-email='{email}'] [data-revoke]", "DELETE", "/invitations/"
