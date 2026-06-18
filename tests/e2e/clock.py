@@ -1,51 +1,42 @@
-"""Programmatic test clock, fully independent of the drivers.
+"""Programmatic test clock.
 
-Both run modes run the app under our control — in-process (API) or as a
-subprocess we spawn with our environment (browser) — so one cross-process
-mechanism pins "now": write the frozen instant to a file that
-app.shared.clock.now() reads (path in LABASE_CLOCK_FILE, inherited by the
-subprocess). The file is the single source of truth, so these are stateless
-functions: no instance to own or pass around, no coupling to a driver.
+Holds a frozen instant (``_frozen``) and exposes its ``now()`` to be monkeypatched
+over ``app.shared.clock.now`` for the duration of a test (see tests.plugin). Both
+drivers run the app in-process, so that single patch reaches every clock.now()
+call — no file, no cross-process mechanism, no test seam in production code. Steps
+drive the frozen instant through set_current_date / advance_days / ensure / reset.
 """
 
-import os
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
+
+_frozen: datetime | None = None
 
 
-def _path() -> Path:
-    return Path(os.environ["LABASE_CLOCK_FILE"])
-
-
-def _read() -> datetime | None:
-    try:
-        raw = _path().read_text().strip()
-    except FileNotFoundError:
-        return None
-    return datetime.fromisoformat(raw) if raw else None
-
-
-def _write(value: datetime | None) -> None:
-    _path().write_text(value.isoformat() if value else "")
+def now() -> datetime:
+    """Patched over app.shared.clock.now during tests (see tests.plugin)."""
+    return _frozen if _frozen is not None else datetime.now(UTC)
 
 
 def set_current_date(value: str) -> None:
-    _write(datetime.fromisoformat(value).replace(tzinfo=UTC))
+    global _frozen
+    _frozen = datetime.fromisoformat(value).replace(tzinfo=UTC)
 
 
 def advance_days(days: int) -> None:
-    _write((_read() or datetime.now(UTC)) + timedelta(days=days))
+    global _frozen
+    _frozen = (_frozen or datetime.now(UTC)) + timedelta(days=days)
 
 
 def ensure(default_iso: str) -> None:
     """Pin a deterministic instant if no scenario step has set one yet."""
-    if _read() is None:
+    if _frozen is None:
         set_current_date(default_iso)
 
 
 def reset() -> None:
-    _write(None)
+    global _frozen
+    _frozen = None
 
 
 def today() -> date:
-    return (_read() or datetime.now(UTC)).date()
+    return now().date()

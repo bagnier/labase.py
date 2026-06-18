@@ -9,13 +9,8 @@ isolation fixtures live in ``tests.e2e.plugin`` (pulled in below).
 """
 
 import os
-import tempfile
 
 os.environ.setdefault("ENV_FILE", ".env.test")
-# File the test Clock writes and app.shared.clock.now() reads. Set before app
-# import and inherited by the server subprocess, so one mechanism pins "now" in
-# both API (in-process) and browser (subprocess) modes.
-os.environ.setdefault("LABASE_CLOCK_FILE", tempfile.mkstemp(prefix="labase-clock-")[1])
 
 import pytest
 import pytest_asyncio
@@ -47,8 +42,13 @@ def clock():
 
 
 @pytest.fixture(autouse=True)
-def reset_clock():
-    """Unpin the clock after every test, so a pinned date never leaks across tests."""
+def reset_clock(monkeypatch):
+    """Route app.shared.clock.now onto the test clock, and unpin it after the test.
+
+    Both drivers run the app in-process, so a plain monkeypatch reaches every
+    runtime clock.now() call — including the in-thread browser server.
+    """
+    monkeypatch.setattr("app.shared.clock.now", test_clock.now)
     yield
     test_clock.reset()
 

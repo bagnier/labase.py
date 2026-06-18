@@ -21,8 +21,12 @@ class Profile(Base):
     email: Mapped[str] = mapped_column(String)
     handle: Mapped[str | None]
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
     __mapper_args__ = {"version_id_col": version}
 

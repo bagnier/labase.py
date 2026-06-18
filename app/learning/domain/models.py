@@ -28,7 +28,9 @@ class Deck(Base):
     version: Mapped[int] = mapped_column(default=1)
 
     __mapper_args__ = {"version_id_col": version}
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
 
 class Card(Base):
@@ -48,7 +50,9 @@ class Card(Base):
     version: Mapped[int] = mapped_column(default=1)
 
     __mapper_args__ = {"version_id_col": version}
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
 
 class DeckSubscription(Base):
@@ -61,7 +65,9 @@ class DeckSubscription(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     user_id: Mapped[uuid.UUID]
     deck_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("decks.id", ondelete="CASCADE"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
 
 class CardState(Base):

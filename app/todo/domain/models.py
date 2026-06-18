@@ -21,7 +21,9 @@ class TodoItem(Base):
     version: Mapped[int] = mapped_column(default=1)
 
     __mapper_args__ = {"version_id_col": version}
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
 
 class TodoCreate(BaseModel):

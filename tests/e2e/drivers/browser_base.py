@@ -1,9 +1,10 @@
 """Technical substrate to execute browser (e2e) tests via Playwright.
 
 Owns the in-process app server (hypercorn scheduled on a shared BackgroundLoop,
-not a subprocess), the Playwright page, the deterministic clock (driven through
-the test-only endpoint), HTML assertions and HTMX interaction helpers. Feature
-mixins inherit this; the concrete BrowserDriver assembles them. No typing
+not a subprocess), the Playwright page, HTML assertions and HTMX interaction
+helpers. Because the server runs in-process, the deterministic clock is pinned by
+monkeypatching app.shared.clock.now (see tests.plugin) — no test-only endpoint.
+Feature mixins inherit this; the concrete BrowserDriver assembles them. No typing
 Protocol: this base *is* the shared contract.
 """
 

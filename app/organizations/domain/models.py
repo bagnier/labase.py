@@ -23,8 +23,12 @@ class Organization(Base):
     name: Mapped[str]
     handle: Mapped[str] = mapped_column(default="")
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
     __mapper_args__ = {"version_id_col": version}
 
@@ -38,8 +42,12 @@ class Membership(Base):
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
     __mapper_args__ = {"version_id_col": version}
 
@@ -67,8 +75,12 @@ class OrgInvitation(Base):
         default=InvitationStatus.pending,
     )
     version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=clock.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
     __mapper_args__ = {"version_id_col": version}
 
