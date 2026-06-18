@@ -10,7 +10,7 @@ import asyncio
 
 import pytest
 
-import tests.cleanup as cleanup
+from tests.e2e import cleanup
 from tests.e2e.drivers.api import ApiDriver
 from tests.e2e.drivers.browser import BrowserDriver
 
