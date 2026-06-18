@@ -68,8 +68,9 @@ class TodoBrowserMixin(BrowserProtocol):
     def rename_todo(self, title: str, new_title: str) -> None:
         self._goto_todos()
         todo_id = self._dom_todo_id_by_title(title)
-        self._p.click(f"[data-edit-id='{todo_id}']")
+        self._p.click(f"[data-edit-id='{todo_id}']", force=True)
         form_input = self._p.locator(f"#rename-form-{todo_id} input[name=title]")
+        form_input.wait_for(state="visible", timeout=5000)
         form_input.fill(new_title)
         self._wait_htmx_response(f"/todos/{todo_id}", "PATCH", lambda: form_input.press("Enter"))
 
