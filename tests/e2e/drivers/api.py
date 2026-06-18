@@ -1,10 +1,10 @@
-from app.auth.tests.driver_mixin import AuthApiMixin
-from app.console.tests.driver_mixin import ConsoleApiMixin
-from app.files.tests.driver_mixin import OrgFileApiMixin
-from app.learning.tests.driver_mixin import LearningApiMixin
-from app.organizations.tests.driver_mixin import OrgApiMixin
-from app.profile.tests.driver_mixin import ProfileApiMixin
-from app.todo.tests.driver_mixin import TodoApiMixin
+from app.auth.tests.e2e import AuthApiMixin
+from app.console.tests.e2e import ConsoleApiMixin
+from app.files.tests.e2e import OrgFileApiMixin
+from app.learning.tests.e2e import LearningApiMixin
+from app.organizations.tests.e2e import OrgApiMixin
+from app.profile.tests.e2e import ProfileApiMixin
+from app.todo.tests.e2e import TodoApiMixin
 from tests.e2e.drivers.api_base import ApiBase
 
 

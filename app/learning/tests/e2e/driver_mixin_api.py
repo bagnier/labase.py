@@ -3,8 +3,9 @@ from datetime import date, timedelta
 
 import tests.e2e.clock as test_clock
 import tests.e2e.drivers.api_transaction as db
-from app.learning.tests import setup
 from tests.e2e.drivers.api_base import ApiBase
+
+from . import setup
 
 
 class LearningApiMixin(ApiBase):

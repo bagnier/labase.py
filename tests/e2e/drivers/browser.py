@@ -1,10 +1,10 @@
-from app.auth.tests.driver_mixin import AuthBrowserMixin
-from app.console.tests.driver_mixin import ConsoleBrowserMixin
-from app.files.tests.driver_mixin import OrgFileBrowserMixin
-from app.learning.tests.driver_mixin import LearningBrowserMixin
-from app.organizations.tests.driver_mixin import OrgBrowserMixin
-from app.profile.tests.driver_mixin import ProfileBrowserMixin
-from app.todo.tests.driver_mixin import TodoBrowserMixin
+from app.auth.tests.e2e import AuthBrowserMixin
+from app.console.tests.e2e import ConsoleBrowserMixin
+from app.files.tests.e2e import OrgFileBrowserMixin
+from app.learning.tests.e2e import LearningBrowserMixin
+from app.organizations.tests.e2e import OrgBrowserMixin
+from app.profile.tests.e2e import ProfileBrowserMixin
+from app.todo.tests.e2e import TodoBrowserMixin
 from tests.e2e.drivers.browser_base import BrowserBase
 
 

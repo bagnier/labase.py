@@ -21,13 +21,13 @@ from app.shared.config import get_settings
 
 pytest_plugins = [
     "tests.e2e.plugin",
-    "app.auth.tests.steps",
-    "app.console.tests.steps",
-    "app.profile.tests.steps",
-    "app.todo.tests.steps",
-    "app.learning.tests.steps",
-    "app.files.tests.steps",
-    "app.organizations.tests.steps",
+    "app.auth.tests.e2e.steps",
+    "app.console.tests.e2e.steps",
+    "app.profile.tests.e2e.steps",
+    "app.todo.tests.e2e.steps",
+    "app.learning.tests.e2e.steps",
+    "app.files.tests.e2e.steps",
+    "app.organizations.tests.e2e.steps",
 ]
 
 

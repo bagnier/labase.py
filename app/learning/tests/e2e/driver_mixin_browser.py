@@ -9,10 +9,11 @@ from sqlalchemy.pool import NullPool
 
 import tests.e2e.clock as test_clock
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
-from app.learning.tests import setup
 from app.organizations.tests.admin_helpers import orgs_for_user
 from app.shared.config import get_settings
 from tests.e2e.drivers.browser_base import BrowserBase
+
+from . import setup
 
 _PASSWORD = "Secret1!"
 
