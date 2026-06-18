@@ -9,7 +9,7 @@ from sqlalchemy.pool import NullPool
 
 from app.shared.config import get_settings
 
-_TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local", "labase.dev"]
+_TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local"]
 
 
 def _service_engine():
