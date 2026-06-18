@@ -1,12 +1,13 @@
-"""Global pytest plugin: test isolation, the driver fixture and BDD step plugins.
+"""Global pytest entry point: clock bootstrap, the ``--driver`` option and the
+``pytest_plugins`` registration of the BDD steps and e2e driver fixtures.
 
-Registered via ``-p tests.plugin`` in pyproject so its fixtures, options and the
-autouse isolation are available to every test under ``app/`` and ``tests/`` —
-which a directory-scoped conftest.py could not provide. Keeping it as an explicit
-plugin lets the project root stay free of a conftest.py.
+Registered via ``-p tests.plugin`` in pyproject so its options and the plugins it
+pulls in are available to every test under ``app/`` and ``tests/`` — which a
+directory-scoped conftest.py could not provide. Keeping it as an explicit plugin
+lets the project root stay free of a conftest.py. The driver and per-test
+isolation fixtures live in ``tests.e2e.plugin`` (pulled in below).
 """
 
-import asyncio
 import os
 import tempfile
 
@@ -20,13 +21,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-import tests.cleanup as cleanup
 import tests.e2e.clock as test_clock
 from app.shared.config import get_settings
-from tests.e2e.drivers.api import ApiDriver
-from tests.e2e.drivers.browser import BrowserDriver
 
 pytest_plugins = [
+    "tests.e2e.plugin",
     "app.auth.tests.steps",
     "app.console.tests.steps",
     "app.profile.tests.steps",
@@ -48,23 +47,10 @@ def clock():
 
 
 @pytest.fixture(autouse=True)
-def _reset_clock():
+def reset_clock():
     """Unpin the clock after every test, so a pinned date never leaks across tests."""
     yield
     test_clock.reset()
-
-
-@pytest.fixture(autouse=True)
-def db_rollback(driver: ApiDriver | BrowserDriver):
-    """Each test/scenario runs inside its driver's isolation boundary.
-
-    ApiDriver wraps the test in a rolled-back transaction shared by all sessions;
-    BrowserDriver truncates app tables after the fact. Each driver owns its own
-    strategy via setup_test/teardown_test (see tests/e2e/drivers/).
-    """
-    driver.setup_test()
-    yield
-    driver.teardown_test()
 
 
 @pytest_asyncio.fixture()
@@ -85,17 +71,3 @@ async def db_session():
             await conn.rollback()
     finally:
         await engine.dispose()
-
-
-@pytest.fixture(scope="session")
-def driver(request) -> ApiDriver | BrowserDriver:
-    name = request.config.getoption("--driver")
-    d = BrowserDriver() if name == "browser" else ApiDriver()
-    d.start()
-
-    def finalize() -> None:
-        d.stop()
-        asyncio.run(cleanup.purge_leftover_test_data())
-
-    request.addfinalizer(finalize)
-    return d

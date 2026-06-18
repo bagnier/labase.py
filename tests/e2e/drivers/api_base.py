@@ -20,7 +20,7 @@ from app.shared.persistence.database import (
     get_admin_session,
     get_user_session,
 )
-from tests import db
+from tests.e2e.drivers import api_transaction as db
 
 _PASSWORD = "Secret1!"
 

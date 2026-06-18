@@ -1,6 +1,12 @@
-"""Shared test transaction state — one BYPASSRLS connection, automatic rollback."""
+"""Transactional isolation for the **API driver** — not used by the browser driver.
 
-import contextlib
+One BYPASSRLS connection wrapped in a transaction that is rolled back after each
+test: every FastAPI session is overridden onto it (see ApiBase.setup_test), so the
+whole test is discarded with a single rollback instead of per-table cleanup. The
+browser driver, which talks to a real server subprocess, uses table truncation
+instead (see browser_base / tests.cleanup).
+"""
+
 import json
 from collections.abc import AsyncGenerator
 
@@ -15,10 +21,6 @@ from app.shared.persistence.database import _user_session_factory, get_user_sess
 _test_connection: AsyncConnection | None = None
 
 
-def in_test_transaction() -> bool:
-    return _test_connection is not None
-
-
 async def begin_test_transaction(engine) -> AsyncConnection:
     conn = await engine.connect()
     await conn.begin()
@@ -30,13 +32,18 @@ async def end_test_transaction(conn: AsyncConnection) -> None:
     await conn.close()
 
 
-@contextlib.asynccontextmanager
-async def test_session() -> AsyncGenerator[AsyncSession]:
-    """Session bound to the active test transaction connection."""
+async def seed_fixtures(fn):
+    """Run ``fn(session)`` on the active test transaction and commit.
+
+    Lets tests inject fixtures straight onto the rolled-back transaction (no HTTP),
+    so the writes are visible to the app and discarded at teardown — without callers
+    reaching into _test_connection. API-driver only (browser mode has no transaction).
+    """
     assert _test_connection is not None, "No active test transaction"
     async with AsyncSession(bind=_test_connection, expire_on_commit=False) as s:
-        yield s
+        result = await fn(s)
         await s.commit()
+        return result
 
 
 async def override_get_session() -> AsyncGenerator[AsyncSession]:

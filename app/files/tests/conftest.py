@@ -6,7 +6,9 @@ _BROWSER_XFAIL = {
 }
 
 
-def pytest_collection_modifyitems(items):
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--driver") != "browser":
+        return  # the instability is browser-only; in API mode these pass cleanly
     for item in items:
         if item.name in _BROWSER_XFAIL:
             item.add_marker(

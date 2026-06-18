@@ -1,8 +1,8 @@
 import uuid
 from datetime import date, timedelta
 
-import tests.db as db
 import tests.e2e.clock as test_clock
+import tests.e2e.drivers.api_transaction as db
 from app.learning.tests import setup
 from tests.e2e.drivers.api_base import ApiBase
 
@@ -31,10 +31,6 @@ class LearningApiMixin(ApiBase):
         self._learn_uid = {}
         self._deck_defs = []
         self._learn_current = None
-
-    async def _seed(self, fn):
-        async with db.test_session() as s:
-            return await fn(s)
 
     # ── users / orgs ──────────────────────────────────────────────────────────
     def _user(self, name: str) -> str:
@@ -75,7 +71,7 @@ class LearningApiMixin(ApiBase):
     def want_to_learn(self, name: str, deck: str) -> None:
         key = self._user(name)
         org_id = self._learn_org[key]
-        self.run(self._seed(lambda s: self._materialize(org_id, s)))
+        self.run(db.seed_fixtures(lambda s: self._materialize(org_id, s)))
         resp = self._api(key, "post", "/subscriptions", data={"deck": deck})
         assert resp.status_code == 200, f"subscribe -> {resp.status_code}: {resp.text}"
 
@@ -89,7 +85,7 @@ class LearningApiMixin(ApiBase):
             cid = await setup.card_id_by_external(s, org_id, ext)
             await setup.set_state(s, org_id, uid, cid, level, last)
 
-        self.run(self._seed(_do))
+        self.run(db.seed_fixtures(_do))
 
     def preset_deck(self, name: str, deck: str, level: int, days_ago: int) -> None:
         key = self._user(name)
@@ -101,7 +97,7 @@ class LearningApiMixin(ApiBase):
             for cid in await setup.deck_card_ids(s, deck_id):
                 await setup.set_state(s, org_id, uid, cid, level, last)
 
-        self.run(self._seed(_do))
+        self.run(db.seed_fixtures(_do))
 
     def preset_table(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
@@ -114,7 +110,7 @@ class LearningApiMixin(ApiBase):
                 last = date(int(y), int(m), int(d))
                 await setup.set_state(s, org_id, uid, cid, int(r["Niveau"]), last)
 
-        self.run(self._seed(_do))
+        self.run(db.seed_fixtures(_do))
 
     # ── session actions ─────────────────────────────────────────────────────────
     def start_session(self, name: str) -> None:
