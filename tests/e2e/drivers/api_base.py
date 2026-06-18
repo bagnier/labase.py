@@ -7,9 +7,6 @@ Feature mixins inherit this; the concrete ApiDriver just assembles them.
 No typing Protocol: this base *is* the shared contract.
 """
 
-import asyncio
-import threading
-
 import httpx
 
 from app.auth.infra.session import get_rls_session
@@ -21,14 +18,14 @@ from app.shared.persistence.database import (
     get_user_session,
 )
 from tests.e2e.drivers import api_transaction as db
+from tests.e2e.drivers.background_loop import BackgroundLoop
 
 _PASSWORD = "Secret1!"
 
 
 class ApiBase:
     def __init__(self) -> None:
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._thread: threading.Thread | None = None
+        self._bg = BackgroundLoop()
         self._client: httpx.AsyncClient | None = None
         self._response: httpx.Response | None = None
         self._last_registered_email: str | None = None
@@ -37,22 +34,16 @@ class ApiBase:
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
-        self._thread.start()
+        self._bg.start()
         self._client = self.make_client()
 
     def stop(self) -> None:
-        if self._client and self._loop:
-            asyncio.run_coroutine_threadsafe(self._client.aclose(), self._loop).result()
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._thread:
-            self._thread.join()
+        if self._client:
+            self._bg.run(self._client.aclose())
+        self._bg.stop()
 
     def run(self, coro):
-        assert self._loop
-        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+        return self._bg.run(coro)
 
     def make_client(self) -> httpx.AsyncClient:
         transport = httpx.ASGITransport(app=app)

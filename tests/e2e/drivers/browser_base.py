@@ -1,25 +1,24 @@
 """Technical substrate to execute browser (e2e) tests via Playwright.
 
-Owns the app subprocess lifecycle, the Playwright page, the deterministic clock
-(driven through the test-only endpoint), HTML assertions and HTMX interaction
-helpers. Feature mixins inherit this; the concrete BrowserDriver assembles them.
-No typing Protocol: this base *is* the shared contract.
+Owns the in-process app server (hypercorn scheduled on a shared BackgroundLoop,
+not a subprocess), the Playwright page, the deterministic clock (driven through
+the test-only endpoint), HTML assertions and HTMX interaction helpers. Feature
+mixins inherit this; the concrete BrowserDriver assembles them. No typing
+Protocol: this base *is* the shared contract.
 """
 
-import atexit
-import contextlib
+import asyncio
 import os
-import signal
 import socket
-import subprocess
-import sys
-import tempfile
 import time
-from pathlib import Path
 
+from hypercorn.asyncio import serve
+from hypercorn.config import Config
 from playwright.sync_api import Browser, Page, Response, sync_playwright
 
+from app.main import app
 from tests.e2e import cleanup
+from tests.e2e.drivers.background_loop import BackgroundLoop
 
 
 def _free_port() -> int:
@@ -28,37 +27,17 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-# One pidfile per started server: if a run dies without calling stop() (SIGKILL, crash),
-# the next run finds and kills orphaned servers via _reap_stale_servers().
-_PID_DIR = Path(tempfile.gettempdir()) / "labase-e2e-servers"
-
-
-def _cmdline(pid: int) -> str:
-    out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True)
-    return out.stdout
-
-
-def _reap_stale_servers() -> None:
-    if not _PID_DIR.is_dir():
-        return
-    for pidfile in _PID_DIR.glob("*.pid"):
-        try:
-            pid = int(pidfile.read_text().strip())
-        except ValueError:
-            pidfile.unlink(missing_ok=True)
-            continue
-        # Verify the command line before killing: the pid may have been reused.
-        if "hypercorn app.main:app" in _cmdline(pid):
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                os.killpg(pid, signal.SIGKILL)
-        pidfile.unlink(missing_ok=True)
+async def _make_event() -> asyncio.Event:
+    """Create the shutdown Event inside the background loop it will be awaited on."""
+    return asyncio.Event()
 
 
 class BrowserBase:
     def __init__(self) -> None:
         self._base_url: str = os.environ.get("APP_URL", "")
-        self._server: subprocess.Popen | None = None
-        self._pidfile: Path | None = None
+        self._bg: BackgroundLoop | None = None
+        self._shutdown: asyncio.Event | None = None
+        self._server_future = None
         self._pw = None
         self._browser = None
         self._context = None
@@ -74,22 +53,20 @@ class BrowserBase:
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
         if not self._base_url:
-            _reap_stale_servers()
             port = _free_port()
             self._base_url = f"http://127.0.0.1:{port}"
-            # start_new_session: the server and its multiprocessing workers form their
-            # own process group — stop() can kill the entire group via killpg
-            # (terminate() alone left the worker holding the postgres pool alive).
-            self._server = subprocess.Popen(
-                [sys.executable, "-m", "hypercorn", "app.main:app", "--bind", f"127.0.0.1:{port}"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
+            # In-process server: hypercorn scheduled on a daemon-thread event loop,
+            # so the test and the app share memory (enables monkeypatching). Playwright
+            # still drives a real browser, so we bind a real TCP port.
+            self._bg = BackgroundLoop()
+            self._bg.start()
+            config = Config()
+            config.bind = [f"127.0.0.1:{port}"]
+            config.accesslog = config.errorlog = None
+            self._shutdown = self._bg.run(_make_event())
+            self._server_future = self._bg.submit(
+                serve(app, config, shutdown_trigger=self._shutdown.wait)
             )
-            _PID_DIR.mkdir(exist_ok=True)
-            self._pidfile = _PID_DIR / f"{self._server.pid}.pid"
-            self._pidfile.write_text(str(self._server.pid))
-            atexit.register(self._stop_server)
             self._wait_for_server()
 
         self._pw = sync_playwright().start()
@@ -121,22 +98,20 @@ class BrowserBase:
         if self._pw:
             self._pw.stop()
         self._stop_server()
-        atexit.unregister(self._stop_server)
 
     def _stop_server(self) -> None:
-        if not self._server:
+        if not self._bg:
             return
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(self._server.pid, signal.SIGTERM)
-        try:
-            self._server.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            os.killpg(self._server.pid, signal.SIGKILL)
-            self._server.wait()
-        if self._pidfile:
-            self._pidfile.unlink(missing_ok=True)
-            self._pidfile = None
-        self._server = None
+        if self._shutdown:
+            self._bg.call_soon(self._shutdown.set)
+        if self._server_future:
+            # Let serve() shut down gracefully while the loop is still running,
+            # then tear the loop down — avoids "Task was destroyed" warnings.
+            self._server_future.result(timeout=10)
+        self._bg.stop()
+        self._bg = None
+        self._shutdown = None
+        self._server_future = None
 
     def reset_session(self) -> None:
         for ctx in self._secondary_browser_contexts.values():
