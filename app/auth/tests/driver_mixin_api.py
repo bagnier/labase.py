@@ -1,15 +1,12 @@
 from uuid import uuid4
 
-from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
-from tests.e2e.drivers.protocols import ApiProtocol
+from app.auth.tests.admin_helpers import find_users
+from tests.e2e.drivers.api_base import ApiBase
 
 
-class AuthApiMixin(ApiProtocol):
-    def _delete_user_if_exists(self, email: str) -> None:
-        delete_user_if_exists(email)
-
+class AuthApiMixin(ApiBase):
     def _store_active_slug(self) -> None:
-        resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))
+        resp = self._json("GET", "/organizations")
         if resp.status_code == 200 and resp.json():
             self._active_org_handle = resp.json()[0]["handle"]
 

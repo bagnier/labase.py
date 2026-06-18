@@ -2,12 +2,12 @@ import contextlib
 import tempfile
 
 from app.auth.tests.admin_helpers import delete_user_if_exists
-from tests.e2e.drivers.protocols import BrowserProtocol
+from tests.e2e.drivers.browser_base import BrowserBase
 
 _PASSWORD = "Secret1!"
 
 
-class OrgFileBrowserMixin(BrowserProtocol):
+class OrgFileBrowserMixin(BrowserBase):
     _share_link_url: str | None
 
     def _files_url(self, slug: str | None = None) -> str:
@@ -40,7 +40,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
         if not hasattr(self, "_secondary_browser_contexts"):
             self._secondary_browser_contexts: dict = {}
         if email not in self._secondary_browser_contexts:
-            ctx = self._context.browser.new_context()
+            ctx = self._b.new_context()
             self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
             self._secondary_browser_contexts[email] = ctx
         return self._secondary_browser_contexts[email]
@@ -258,7 +258,7 @@ class OrgFileBrowserMixin(BrowserProtocol):
         share_url = getattr(self, "_share_link_url", None)
         assert share_url, "No share link stored"
         url = share_url if share_url.startswith("http") else f"{self._base_url}{share_url}"
-        anon_ctx = self._context.browser.new_context()
+        anon_ctx = self._b.new_context()
         page = anon_ctx.new_page()
         try:
             self._goto_and_capture_download(page, url)

@@ -1,9 +1,9 @@
 from collections.abc import Callable
 
-from tests.e2e.drivers.protocols import BrowserProtocol
+from tests.e2e.drivers.browser_base import BrowserBase
 
 
-class TodoBrowserMixin(BrowserProtocol):
+class TodoBrowserMixin(BrowserBase):
     def _todos_url(self) -> str:
         slug = getattr(self, "_active_org_handle", "")
         return f"{self._base_url}/{slug}/todos"

@@ -8,17 +8,20 @@ plugin lets the project root stay free of a conftest.py.
 
 import asyncio
 import os
+import tempfile
 
 os.environ.setdefault("ENV_FILE", ".env.test")
-# Mount the test-only clock endpoint so the browser driver can pin "today" in the
-# app subprocess. Set before app import; inherited by the subprocess via os.environ.
-os.environ.setdefault("ENABLE_TEST_CLOCK", "1")
+# File the test Clock writes and app.shared.clock.now() reads. Set before app
+# import and inherited by the server subprocess, so one mechanism pins "now" in
+# both API (in-process) and browser (subprocess) modes.
+os.environ.setdefault("LABASE_CLOCK_FILE", tempfile.mkstemp(prefix="labase-clock-")[1])
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import tests.cleanup as cleanup
+import tests.e2e.clock as test_clock
 from app.shared.config import get_settings
 from tests.e2e.drivers.api import ApiDriver
 from tests.e2e.drivers.browser import BrowserDriver
@@ -36,6 +39,19 @@ pytest_plugins = [
 
 def pytest_addoption(parser):
     parser.addoption("--driver", default="api", choices=["api", "browser"])
+
+
+@pytest.fixture
+def clock():
+    """The test clock for date-pinning steps — independent of the driver."""
+    return test_clock
+
+
+@pytest.fixture(autouse=True)
+def _reset_clock():
+    """Unpin the clock after every test, so a pinned date never leaks across tests."""
+    yield
+    test_clock.reset()
 
 
 @pytest.fixture(autouse=True)

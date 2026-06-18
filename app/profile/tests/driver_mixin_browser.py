@@ -1,7 +1,7 @@
-from tests.e2e.drivers.protocols import BrowserProtocol
+from tests.e2e.drivers.browser_base import BrowserBase
 
 
-class ProfileBrowserMixin(BrowserProtocol):
+class ProfileBrowserMixin(BrowserBase):
     def _profile_url(self) -> str:
         return f"{self._base_url}/profile"
 

@@ -1,12 +1,12 @@
 import uuid
 
 from app.auth.tests.admin_helpers import find_users
-from tests.e2e.drivers.protocols import BrowserProtocol
+from tests.e2e.drivers.browser_base import BrowserBase
 
 _PASSWORD = "Secret1!"  # shared constant across all test mixins
 
 
-class OrgBrowserMixin(BrowserProtocol):
+class OrgBrowserMixin(BrowserBase):
     def _acting_context(self):  # type: ignore[return]
         """Return the active context: secondary if sign_in_as_member was called, else primary."""
         acting_email = getattr(self, "_acting_as_email", None)
@@ -44,7 +44,7 @@ class OrgBrowserMixin(BrowserProtocol):
         if not hasattr(self, "_secondary_browser_contexts"):
             self._secondary_browser_contexts: dict = {}
         if email not in self._secondary_browser_contexts:
-            ctx = self._context.browser.new_context()
+            ctx = self._b.new_context()
             self._setup_context(ctx, email)
             self._secondary_browser_contexts[email] = ctx
         return self._secondary_browser_contexts[email]
@@ -140,7 +140,7 @@ class OrgBrowserMixin(BrowserProtocol):
         assert self._context
         slug = org_name.lower().replace(" ", "-")
         owner_email = f"owner-{slug}@example.com"
-        owner_ctx = self._context.browser.new_context()
+        owner_ctx = self._b.new_context()
         self._setup_context(owner_ctx, owner_email)
         # Read the owner's org handle from profile
         owner_page = owner_ctx.new_page()

@@ -7,9 +7,7 @@ from app.auth.tests.admin_helpers import (
 )
 from app.auth.tests.admin_helpers import (
     delete_user_if_exists,
-    find_users,
 )
-from app.main import app
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.tests.admin_helpers import (
     add_membership as _admin_add_membership,
@@ -18,12 +16,12 @@ from app.organizations.tests.admin_helpers import (
     set_membership_role as _admin_set_role,
 )
 from app.shared.persistence.database import admin_session_factory
-from tests.e2e.drivers.protocols import ApiProtocol
+from tests.e2e.drivers.api_base import ApiBase
 
 _PASSWORD = "Secret1!"
 
 
-class OrgFileApiMixin(ApiProtocol):
+class OrgFileApiMixin(ApiBase):
     _primary_email: str
     _secondary_clients: dict[str, httpx.AsyncClient]
     _secondary_handles: dict[str, str]
@@ -50,7 +48,6 @@ class OrgFileApiMixin(ApiProtocol):
         self._active_org_handle = ""
         self._org_list_response = None  # reset cached org list from OrgApiMixin
         self._primary_client_backup = None  # type: ignore[assignment]
-        self._restore_clock()
 
     def _org_url(self, path: str, slug: str | None = None) -> str:
         s = slug or getattr(self, "_active_org_handle", "")
@@ -61,12 +58,12 @@ class OrgFileApiMixin(ApiProtocol):
         return f"/{slug}{path}"
 
     def _fetch_slug_for(self, client: httpx.AsyncClient) -> str:
-        resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
+        resp = self._json("GET", "/organizations", client)
         assert resp.status_code == 200 and resp.json(), "Cannot fetch org slug"
         return resp.json()[0]["handle"]
 
     def _list_files_with(self, client: httpx.AsyncClient, slug: str) -> list[dict]:
-        resp = self._run(client.get(f"/{slug}/files", headers={"accept": "application/json"}))
+        resp = self._json("GET", f"/{slug}/files", client)
         assert resp.status_code == 200, f"list_files got {resp.status_code}: {resp.text}"
         return resp.json()
 
@@ -80,30 +77,9 @@ class OrgFileApiMixin(ApiProtocol):
         raise AssertionError(f"File '{filename}' not found in list")
 
     def _get_primary_org_id(self) -> str:
-        resp = self._run(self._c.get("/organizations", headers={"accept": "application/json"}))
+        resp = self._json("GET", "/organizations")
         assert resp.status_code == 200 and resp.json(), "Cannot find primary org"
         return resp.json()[0]["id"]
-
-    def _make_client_for(self, email: str) -> httpx.AsyncClient:
-        transport = httpx.ASGITransport(app=app)
-        client = httpx.AsyncClient(
-            transport=transport, base_url="http://testserver", follow_redirects=False
-        )
-        self._run(client.post("/auth/register", data={"email": email, "password": _PASSWORD}))
-        self._run(client.post("/auth/login", data={"email": email, "password": _PASSWORD}))
-        self.track_auth_email(email)
-        return client
-
-    def _client_for(self, email: str) -> httpx.AsyncClient:
-        self._ensure_multi_user()
-        if email not in self._secondary_clients:
-            self._secondary_clients[email] = self._make_client_for(email)
-        return self._secondary_clients[email]
-
-    def _user_id_for_email(self, email: str) -> str:
-        users = find_users(email)
-        assert users, f"User {email!r} not found in Supabase"
-        return users[0].id
 
     # ── sign-in with org naming ───────────────────────────────────────────────
 
@@ -187,23 +163,15 @@ class OrgFileApiMixin(ApiProtocol):
         if file_id is None:
             self.delete_todo(filename)
             return
-        self._response = self._run(
-            self._c.delete(
-                self._org_url(f"/files/{file_id}"), headers={"accept": "application/json"}
-            )
-        )
+        self._response = self._json("DELETE", self._org_url(f"/files/{file_id}"))
 
     def rename_file(self, old_filename: str, new_filename: str) -> None:
         file_id = self._find_file_id(old_filename)
         if file_id is None:
             self.rename_todo(old_filename, new_filename)
             return
-        self._response = self._run(
-            self._c.patch(
-                self._org_url(f"/files/{file_id}"),
-                json={"filename": new_filename},
-                headers={"accept": "application/json"},
-            )
+        self._response = self._json(
+            "PATCH", self._org_url(f"/files/{file_id}"), json={"filename": new_filename}
         )
 
     # ── multi-user operations ─────────────────────────────────────────────────
@@ -232,17 +200,11 @@ class OrgFileApiMixin(ApiProtocol):
     def create_user_in_org(self, email: str, org_name: str) -> None:
         self._ensure_multi_user()
         client = self._client_for(email)
-        resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
+        resp = self._json("GET", "/organizations", client)
         if resp.status_code == 200 and resp.json():
             slug = resp.json()[0]["handle"]
             self._secondary_handles[email] = slug
-            self._run(
-                client.patch(
-                    f"/{slug}",
-                    data={"name": org_name},
-                    headers={"accept": "application/json"},
-                )
-            )
+            self._json("PATCH", f"/{slug}", client, data={"name": org_name})
 
     def promote_to_owner(self) -> None:
         # Uses admin helper to bypass last-owner constraint during test setup.
@@ -261,20 +223,14 @@ class OrgFileApiMixin(ApiProtocol):
     def generate_share_link(self, filename: str) -> None:
         self._ensure_multi_user()
         file_id = self._file_id_by_name(filename)
-        resp = self._run(
-            self._c.post(
-                self._org_url(f"/files/{file_id}/share"), headers={"accept": "application/json"}
-            )
-        )
+        resp = self._json("POST", self._org_url(f"/files/{file_id}/share"))
         assert resp.status_code == 200, f"share link generation failed: {resp.text}"
         self._share_link_url = resp.json()["url"]
 
     def view_file_list_as(self, email: str) -> None:
         client = self._client_for(email)
         slug = self._secondary_handles.get(email, self._active_org_handle)
-        self._response = self._run(
-            client.get(f"/{slug}/files", headers={"accept": "application/json"})
-        )
+        self._response = self._json("GET", f"/{slug}/files", client)
         assert self._response.status_code == 200, (
             f"view_file_list_as got {self._response.status_code}"
         )
@@ -289,10 +245,7 @@ class OrgFileApiMixin(ApiProtocol):
     def access_share_link_unauthenticated(self) -> None:
         self._ensure_multi_user()
         assert self._share_link_url, "No share link stored"
-        transport = httpx.ASGITransport(app=app)
-        anon = httpx.AsyncClient(
-            transport=transport, base_url="http://testserver", follow_redirects=False
-        )
+        anon = self._make_client()
         self._response = self._run(anon.get(self._share_link_url))
 
     # ── assertions ────────────────────────────────────────────────────────────

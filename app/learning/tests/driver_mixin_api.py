@@ -2,12 +2,12 @@ import uuid
 from datetime import date, timedelta
 
 import tests.db as db
+import tests.e2e.clock as test_clock
 from app.learning.tests import setup
-from app.shared import clock
-from tests.e2e.drivers.protocols import ApiProtocol
+from tests.e2e.drivers.api_base import ApiBase
 
 
-class LearningApiMixin(ApiProtocol):
+class LearningApiMixin(ApiBase):
     # ── state ────────────────────────────────────────────────────────────────
     def _ensure_learn(self) -> None:
         if not hasattr(self, "_learn_clients"):
@@ -22,7 +22,7 @@ class LearningApiMixin(ApiProtocol):
     _DEFAULT_DATE = "2024-09-01"
 
     def _today(self) -> date:
-        return clock.now().date()
+        return test_clock.today()
 
     def _reset_learning(self) -> None:
         self._learn_clients = {}
@@ -44,7 +44,7 @@ class LearningApiMixin(ApiProtocol):
         if key not in self._learn_clients:
             email = f"{key}@example.com"
             client = self._make_client_for(email)
-            resp = self._run(client.get("/organizations", headers={"accept": "application/json"}))
+            resp = self._json("GET", "/organizations", client)
             assert resp.status_code == 200 and resp.json(), f"no org for {email}: {resp.text}"
             org = resp.json()[0]
             self._learn_clients[key] = client
@@ -54,13 +54,11 @@ class LearningApiMixin(ApiProtocol):
         return key
 
     def _api(self, key: str, method: str, path: str, **kw):
-        client = self._learn_clients[key]
         url = f"/{self._learn_handle[key]}/learning{path}"
-        resp = self._run(getattr(client, method)(url, **kw))
-        return resp
+        return self._json(method, url, self._learn_clients[key], **kw)
 
-    def _json(self, key: str, path: str):
-        resp = self._api(key, "get", path, headers={"accept": "application/json"})
+    def _learn_json(self, key: str, path: str):
+        resp = self._api(key, "GET", path)
         assert resp.status_code == 200, f"GET {path} -> {resp.status_code}: {resp.text}"
         return resp.json()
 
@@ -71,7 +69,7 @@ class LearningApiMixin(ApiProtocol):
     # ── catalog & subscription ─────────────────────────────────────────────────
     def define_deck(self, name: str, resource: str | None, cards: list[dict]) -> None:
         self._ensure_learn()
-        self.ensure_clock(self._DEFAULT_DATE)
+        test_clock.ensure(self._DEFAULT_DATE)
         self._deck_defs.append((name, resource, cards))
 
     def want_to_learn(self, name: str, deck: str) -> None:
@@ -132,12 +130,12 @@ class LearningApiMixin(ApiProtocol):
 
     def mark_all_learned(self, name: str) -> None:
         key = self._user(name)
-        for card in self._json(key, "/sessions")["cards"]:
+        for card in self._learn_json(key, "/sessions")["cards"]:
             self.mark(name, card["external_id"], "learned")
 
     def reveal_answer(self, name: str, ext: str, answer: str) -> None:
         key = self._user(name)
-        detail = self._json(key, f"/cards/{ext}")
+        detail = self._learn_json(key, f"/cards/{ext}")
         assert detail["answer"] == answer, f"answer {detail['answer']!r} != {answer!r}"
 
     def look_resources(self, name: str) -> None:
@@ -146,12 +144,12 @@ class LearningApiMixin(ApiProtocol):
     # ── assertions ──────────────────────────────────────────────────────────────
     def assert_due_count(self, name: str, n: int) -> None:
         key = self._user(name)
-        count = self._json(key, "/sessions")["count"]
+        count = self._learn_json(key, "/sessions")["count"]
         assert count == n, f"expected {n} due cards, got {count}"
 
     def assert_first_card(self, name: str, ext: str, question: str) -> None:
         key = self._user(name)
-        cards = self._json(key, "/sessions")["cards"]
+        cards = self._learn_json(key, "/sessions")["cards"]
         assert cards, "no due cards"
         assert cards[0]["external_id"] == ext, f"first card {cards[0]['external_id']} != {ext}"
         assert cards[0]["question"] == question, (
@@ -160,21 +158,21 @@ class LearningApiMixin(ApiProtocol):
 
     def assert_order(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
-        cards = self._json(key, "/sessions")["cards"]
+        cards = self._learn_json(key, "/sessions")["cards"]
         actual = [(c["external_id"], c["level"]) for c in cards]
         expected = [(r["ID"], int(r["Niveau"])) for r in rows]
         assert actual == expected, f"order {actual} != {expected}"
 
     def assert_resources(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
-        items = self._json(key, "/resources")
+        items = self._learn_json(key, "/resources")
         actual = [(i["deck"], i["resource"]) for i in items]
         expected = [(r["Paquet"], r["Ressources"]) for r in rows]
         assert actual == expected, f"resources {actual} != {expected}"
 
     def assert_no_resources(self, name: str) -> None:
         key = self._user(name)
-        items = self._json(key, "/resources")
+        items = self._learn_json(key, "/resources")
         assert items == [], f"expected no resources, got {items}"
 
     def _current(self) -> str:
@@ -182,17 +180,17 @@ class LearningApiMixin(ApiProtocol):
         return self._learn_current
 
     def assert_level(self, ext: str, level: int) -> None:
-        detail = self._json(self._current(), f"/cards/{ext}")
+        detail = self._learn_json(self._current(), f"/cards/{ext}")
         assert detail["level"] == level, f"level {detail['level']} != {level}"
 
     def assert_last_review_today(self, ext: str) -> None:
-        detail = self._json(self._current(), f"/cards/{ext}")
+        detail = self._learn_json(self._current(), f"/cards/{ext}")
         assert detail["last_reviewed_on"] == self._today().isoformat(), (
             f"last review {detail['last_reviewed_on']} != today {self._today().isoformat()}"
         )
 
     def assert_next_review_in(self, ext: str, days: int) -> None:
-        detail = self._json(self._current(), f"/cards/{ext}")
+        detail = self._learn_json(self._current(), f"/cards/{ext}")
         expected = (self._today() + timedelta(days=days)).isoformat()
         assert detail["next_review_on"] == expected, (
             f"next review {detail['next_review_on']} != {expected}"

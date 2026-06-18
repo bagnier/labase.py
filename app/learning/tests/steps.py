@@ -61,20 +61,20 @@ def step_want_to_learn(driver, name, deck):
 
 
 @given(parsers.parse("la date du jour est le {fr_date}"))
-def step_set_date(driver, fr_date):
-    driver.set_current_date(_iso(fr_date))
+def step_set_date(clock, fr_date):
+    clock.set_current_date(_iso(fr_date))
 
 
 @given("un jour passe")
 @when("un jour passe")
-def step_one_day(driver):
-    driver.advance_days(1)
+def step_one_day(clock):
+    clock.advance_days(1)
 
 
 @given(parsers.parse("{n:d} jours passent"))
 @when(parsers.parse("{n:d} jours passent"))
-def step_n_days(driver, n):
-    driver.advance_days(n)
+def step_n_days(clock, n):
+    clock.advance_days(n)
 
 
 # ── Preset progress ───────────────────────────────────────────────────────────

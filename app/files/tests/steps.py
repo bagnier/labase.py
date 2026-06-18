@@ -2,8 +2,8 @@ from pytest_bdd import given, parsers, then, when
 
 
 @given(parsers.parse('the current date is "{date}"'))
-def step_set_current_date(driver, date):
-    driver.set_current_date(date)
+def step_set_current_date(clock, date):
+    clock.set_current_date(date)
 
 
 @given(parsers.parse('they have uploaded "{filename}" to the org'))

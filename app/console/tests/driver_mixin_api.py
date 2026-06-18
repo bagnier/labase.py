@@ -1,7 +1,7 @@
-from tests.e2e.drivers.protocols import ApiProtocol
+from tests.e2e.drivers.api_base import ApiBase
 
 
-class ConsoleApiMixin(ApiProtocol):
+class ConsoleApiMixin(ApiBase):
     def visit_console(self) -> None:
         self._response = self._run(self._c.get("/console"))
 

@@ -1,22 +1,18 @@
-from tests.e2e.drivers.protocols import ApiProtocol
+from tests.e2e.drivers.api_base import ApiBase
 
 
-class ProfileApiMixin(ApiProtocol):
-    _JSON = {"accept": "application/json"}
-
+class ProfileApiMixin(ApiBase):
     def view_profile(self) -> None:
-        self._response = self._run(self._c.get("/profile", headers=self._JSON))
+        self._response = self._json("GET", "/profile")
 
     def view_dashboard(self) -> None:
-        self._response = self._run(self._c.get("/profile", headers=self._JSON))
+        self._response = self._json("GET", "/profile")
 
     def update_handle(self, name: str) -> None:
-        self._response = self._run(
-            self._c.post("/profile", data={"handle": name}, headers=self._JSON)
-        )
+        self._response = self._json("POST", "/profile", data={"handle": name})
 
     def assert_handle(self, name: str | None) -> None:
-        resp = self._run(self._c.get("/profile", headers=self._JSON))
+        resp = self._json("GET", "/profile")
         assert resp.status_code == 200, f"GET /profile returned {resp.status_code}"
         if name:
             assert resp.json().get("handle") == name, (
@@ -33,23 +29,21 @@ class ProfileApiMixin(ApiProtocol):
         # REST translation of "email is read-only": the API surfaces the email but exposes no
         # way to mutate it (POST /profile only accepts `handle`). So we assert the email is
         # returned, then unchanged after an update.
-        before = self._run(self._c.get("/profile", headers=self._JSON)).json()
+        before = self._json("GET", "/profile").json()
         email = before.get("email")
         assert email, f"Expected an email in profile JSON, got {before}"
-        self._run(
-            self._c.post(
-                "/profile",
-                data={"handle": "read-only-probe", "email": "attacker@evil.test"},
-                headers=self._JSON,
-            )
+        self._json(
+            "POST",
+            "/profile",
+            data={"handle": "read-only-probe", "email": "attacker@evil.test"},
         )
-        after = self._run(self._c.get("/profile", headers=self._JSON)).json()
+        after = self._json("GET", "/profile").json()
         assert after.get("email") == email, (
             f"Email must be read-only: was {email!r}, now {after.get('email')!r}"
         )
 
     def visit_profile_unauthenticated(self) -> None:
-        self._response = self._run(self._c.get("/profile", headers=self._JSON))
+        self._response = self._json("GET", "/profile")
 
     # The following steps are "navigation/discoverability" claims in the feature. A REST client
     # has no page chrome (footer/nav), so we validate the RESTful equivalent: the target
@@ -57,21 +51,21 @@ class ProfileApiMixin(ApiProtocol):
 
     def assert_link_to_org_dashboard(self) -> None:
         handle = getattr(self, "_active_org_handle", "")
-        resp = self._run(self._c.get(f"/{handle}/dashboard", headers=self._JSON))
+        resp = self._json("GET", f"/{handle}/dashboard")
         assert resp.status_code == 200, (
             f"Org dashboard /{handle}/dashboard not reachable: {resp.status_code}"
         )
 
     def assert_link_to_todos(self) -> None:
         handle = getattr(self, "_active_org_handle", "")
-        resp = self._run(self._c.get(f"/{handle}/todos", headers=self._JSON))
+        resp = self._json("GET", f"/{handle}/todos")
         assert resp.status_code == 200, (
             f"Todo list /{handle}/todos not reachable: {resp.status_code}"
         )
 
     def assert_profile_link_in_footer(self) -> None:
         # Discoverability: the profile resource is reachable at its canonical URL.
-        resp = self._run(self._c.get("/profile", headers=self._JSON))
+        resp = self._json("GET", "/profile")
         assert resp.status_code == 200 and resp.json().get("email"), (
             f"Profile not reachable as a resource: {resp.status_code}"
         )
@@ -79,5 +73,5 @@ class ProfileApiMixin(ApiProtocol):
     def assert_no_profile_nav_link(self) -> None:
         # No REST equivalent of "absent from the nav chrome"; the discoverability stand-in is
         # that the profile is its own canonical resource (/profile), not embedded elsewhere.
-        resp = self._run(self._c.get("/profile", headers=self._JSON))
+        resp = self._json("GET", "/profile")
         assert resp.status_code == 200, f"Profile resource not reachable: {resp.status_code}"

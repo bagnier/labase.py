@@ -2,21 +2,22 @@ import asyncio
 import contextlib
 import threading
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
+import tests.e2e.clock as test_clock
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
 from app.learning.tests import setup
 from app.organizations.tests.admin_helpers import orgs_for_user
 from app.shared.config import get_settings
-from tests.e2e.drivers.protocols import BrowserProtocol
+from tests.e2e.drivers.browser_base import BrowserBase
 
 _PASSWORD = "Secret1!"
 
 
-class LearningBrowserMixin(BrowserProtocol):
+class LearningBrowserMixin(BrowserBase):
     # ── state ────────────────────────────────────────────────────────────────
     def _ensure_learn(self) -> None:
         if not hasattr(self, "_learn_ctx"):
@@ -31,9 +32,7 @@ class LearningBrowserMixin(BrowserProtocol):
     _DEFAULT_DATE = "2024-09-01"
 
     def _today(self) -> date:
-        value: datetime | None = getattr(self, "_clock_value", None)
-        assert value is not None, "test clock not pinned — call ensure_clock first"
-        return value.date()
+        return test_clock.today()
 
     def _reset_learning(self) -> None:
         for ctx in getattr(self, "_learn_ctx", {}).values():
@@ -89,7 +88,7 @@ class LearningBrowserMixin(BrowserProtocol):
             assert self._context
             email = f"{key}@example.com"
             delete_user_if_exists(email)
-            ctx = self._context.browser.new_context()
+            ctx = self._b.new_context()
             self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
             uid = find_users(email)[0].id
             orgs = orgs_for_user(uid)
@@ -124,7 +123,7 @@ class LearningBrowserMixin(BrowserProtocol):
     # ── catalog & subscription ─────────────────────────────────────────────────
     def define_deck(self, name: str, resource: str | None, cards: list[dict]) -> None:
         self._ensure_learn()
-        self.ensure_clock(self._DEFAULT_DATE)
+        test_clock.ensure(self._DEFAULT_DATE)
         self._deck_defs.append((name, resource, cards))
 
     def want_to_learn(self, name: str, deck: str) -> None:

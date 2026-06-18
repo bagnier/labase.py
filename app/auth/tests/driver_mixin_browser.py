@@ -1,10 +1,10 @@
 from uuid import uuid4
 
 from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
-from tests.e2e.drivers.protocols import BrowserProtocol
+from tests.e2e.drivers.browser_base import BrowserBase
 
 
-class AuthBrowserMixin(BrowserProtocol):
+class AuthBrowserMixin(BrowserBase):
     def _delete_user_if_exists(self, email: str) -> None:
         delete_user_if_exists(email)
 
