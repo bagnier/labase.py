@@ -45,7 +45,9 @@ def test_get_invitation_unknown_token_html_returns_invalid_state(driver):
     token = uuid.uuid4()
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=None)
     try:
-        resp = driver._run(driver._c.get(f"/invitations/{token}", headers={"accept": "text/html"}))
+        resp = driver.run(
+            driver.client.get(f"/invitations/{token}", headers={"accept": "text/html"})
+        )
         assert resp.status_code == 404
         assert "invalid" in resp.text.lower()
     finally:
@@ -56,8 +58,8 @@ def test_get_invitation_unknown_token_json_returns_404(driver):
     token = uuid.uuid4()
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=None)
     try:
-        resp = driver._run(
-            driver._c.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        resp = driver.run(
+            driver.client.get(f"/invitations/{token}", headers={"accept": "application/json"})
         )
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
@@ -78,8 +80,8 @@ def test_get_invitation_revoked_json_returns_404(driver):
     }
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     try:
-        resp = driver._run(
-            driver._c.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        resp = driver.run(
+            driver.client.get(f"/invitations/{token}", headers={"accept": "application/json"})
         )
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
@@ -101,8 +103,8 @@ def test_get_invitation_valid_json_returns_invitation(driver):
     }
     app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
     try:
-        resp = driver._run(
-            driver._c.get(f"/invitations/{token}", headers={"accept": "application/json"})
+        resp = driver.run(
+            driver.client.get(f"/invitations/{token}", headers={"accept": "application/json"})
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -141,8 +143,8 @@ def test_get_invitation_already_accepted_html_shows_state(driver):
     ):
         app.dependency_overrides[get_admin_session] = _override
         try:
-            resp = driver._run(
-                driver._c.get(f"/invitations/{token}", headers={"accept": "text/html"})
+            resp = driver.run(
+                driver.client.get(f"/invitations/{token}", headers={"accept": "text/html"})
             )
             assert resp.status_code == 200
             assert "already_accepted" in resp.text or "accepted" in resp.text.lower()
@@ -176,8 +178,8 @@ def test_accept_already_accepted_invitation_is_idempotent(driver):
             "app.organizations.infra.invitation_router.OrganizationRepository.get",
             AsyncMock(return_value=mock_org),
         ):
-            resp = driver._run(
-                driver._c.post(
+            resp = driver.run(
+                driver.client.post(
                     f"/invitations/{token}/accept",
                     headers={"accept": "application/json"},
                 )
@@ -207,8 +209,8 @@ def test_accept_non_pending_invitation_returns_404(driver):
     app.dependency_overrides[get_user_session] = _mock_rls_session()
     app.dependency_overrides[get_current_user] = _mock_user()
     try:
-        resp = driver._run(
-            driver._c.post(
+        resp = driver.run(
+            driver.client.post(
                 f"/invitations/{token}/accept",
                 headers={"accept": "application/json"},
             )

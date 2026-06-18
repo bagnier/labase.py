@@ -7,7 +7,7 @@ class OrgApiMixin(ApiBase):
     _org_list_response: list[dict] | None = None
 
     def _fetch_org_list(self) -> list[dict]:
-        resp = self._json("GET", "/organizations")
+        resp = self.json_client("GET", "/organizations")
         assert resp.status_code == 200, (
             f"GET /organizations returned {resp.status_code}: {resp.text}"
         )
@@ -19,7 +19,7 @@ class OrgApiMixin(ApiBase):
         )
         if email:
             client = self._client_for(email)
-            resp = self._json("GET", "/organizations", client)
+            resp = self.json_client("GET", "/organizations", client)
             assert resp.status_code == 200, (
                 f"GET /organizations returned {resp.status_code}: {resp.text}"
             )
@@ -37,7 +37,7 @@ class OrgApiMixin(ApiBase):
 
     def view_org_list_as(self, email: str) -> None:
         client = self._client_for(email)
-        resp = self._json("GET", "/organizations", client)
+        resp = self.json_client("GET", "/organizations", client)
         assert resp.status_code == 200
         self._org_list_response = resp.json()
 
@@ -45,7 +45,7 @@ class OrgApiMixin(ApiBase):
         assert self._org_list_response is not None, "Call view_org_list_as first"
         names = [o["name"] for o in self._org_list_response]
         client = self._client_for(email)
-        resp = self._json("GET", "/organizations", client)
+        resp = self.json_client("GET", "/organizations", client)
         other_names = [o["name"] for o in resp.json()]
         for name in other_names:
             assert name not in names, f"Other user's org {name!r} appears in list: {names}"
@@ -55,22 +55,22 @@ class OrgApiMixin(ApiBase):
         owner_email = f"owner-{slug}@example.com"
         owner = self._make_client_for(owner_email)
 
-        orgs = self._json("GET", "/organizations", owner).json()
+        orgs = self.json_client("GET", "/organizations", owner).json()
         assert orgs, f"No org found for {owner_email}"
         handle = orgs[0]["handle"]
 
-        self._json("PATCH", f"/{handle}", owner, data={"name": org_name})
+        self.json_client("PATCH", f"/{handle}", owner, data={"name": org_name})
 
-        inv = self._json("POST", f"/{handle}/invitations", owner, data={"email": email})
+        inv = self.json_client("POST", f"/{handle}/invitations", owner, data={"email": email})
         assert inv.status_code == 201, f"Invitation failed: {inv.text}"
         token = inv.json()["token"]
 
         member = self._client_for(email)
-        acc = self._json("POST", f"/invitations/{token}/accept", member)
+        acc = self.json_client("POST", f"/invitations/{token}/accept", member)
         assert acc.status_code == 200, f"Accept invitation failed: {acc.text}"
 
     def view_org_list(self) -> None:
-        resp = self._json("GET", "/organizations")
+        resp = self.json_client("GET", "/organizations")
         assert resp.status_code == 200
         self._org_list_response = resp.json()
 
@@ -89,7 +89,7 @@ class OrgApiMixin(ApiBase):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
-        self._response = self._json("PATCH", f"/{self._handle()}", data={"name": new_name})
+        self._response = self.json_client("PATCH", f"/{self._handle()}", data={"name": new_name})
 
     def sign_in_as_member(self, email: str) -> None:
         if not getattr(self, "_primary_client_backup", None):
@@ -112,7 +112,7 @@ class OrgApiMixin(ApiBase):
         return self._user_id_for_email(email)
 
     def view_member_list(self) -> None:
-        self._response = self._json("GET", f"/{self._handle()}/members")
+        self._response = self.json_client("GET", f"/{self._handle()}/members")
         assert self._response.status_code == 200, (
             f"GET /{self._handle()}/members returned"
             f" {self._response.status_code}: {self._response.text}"
@@ -120,7 +120,7 @@ class OrgApiMixin(ApiBase):
         self._member_list_response = self._response.json()
 
     def assert_member_with_role(self, email: str, role: str) -> None:
-        resp = self._json("GET", f"/{self._handle()}/members")
+        resp = self.json_client("GET", f"/{self._handle()}/members")
         assert resp.status_code == 200, f"GET members returned {resp.status_code}: {resp.text}"
         members = resp.json()
         found = next((m for m in members if m["email"] == email), None)
@@ -131,8 +131,8 @@ class OrgApiMixin(ApiBase):
 
     def assert_member_absent(self, email: str) -> None:
         # Use primary client (owner) if current client may have lost org access (e.g. after leave)
-        client = getattr(self, "_primary_client_backup", None) or self._c
-        resp = self._json("GET", f"/{self._handle()}/members", client)
+        client = getattr(self, "_primary_client_backup", None) or self.client
+        resp = self.json_client("GET", f"/{self._handle()}/members", client)
         assert resp.status_code == 200, (
             f"GET /{self._handle()}/members returned {resp.status_code}: {resp.text}"
         )
@@ -141,16 +141,16 @@ class OrgApiMixin(ApiBase):
 
     def set_member_role(self, email: str, role: str) -> None:
         user_id = self._user_id_for(email)
-        self._response = self._json(
+        self._response = self.json_client(
             "PATCH", f"/{self._handle()}/members/{user_id}", data={"role": role}
         )
 
     def remove_member(self, email: str) -> None:
         user_id = self._user_id_for(email)
-        self._response = self._json("DELETE", f"/{self._handle()}/members/{user_id}")
+        self._response = self.json_client("DELETE", f"/{self._handle()}/members/{user_id}")
 
     def leave_org(self) -> None:
-        self._response = self._json("DELETE", f"/{self._handle()}/members/me")
+        self._response = self.json_client("DELETE", f"/{self._handle()}/members/me")
         if self._response.status_code not in (204, 403):
             raise AssertionError(
                 f"leave_org DELETE /{self._handle()}/members/me returned "
@@ -164,12 +164,14 @@ class OrgApiMixin(ApiBase):
         )
 
     def _fetch_pending_invitations(self) -> list[dict]:
-        resp = self._json("GET", f"/{self._handle()}/invitations")
+        resp = self.json_client("GET", f"/{self._handle()}/invitations")
         assert resp.status_code == 200, f"GET invitations returned {resp.status_code}: {resp.text}"
         return resp.json()
 
     def invite_member(self, email: str, role: str) -> None:
-        self._response = self._json("POST", f"/{self._handle()}/invitations", data={"email": email})
+        self._response = self.json_client(
+            "POST", f"/{self._handle()}/invitations", data={"email": email}
+        )
         if self._response.status_code == 201:
             inv = self._response.json()
             self._last_invitation_token = inv.get("token")
@@ -196,13 +198,13 @@ class OrgApiMixin(ApiBase):
         invitations = self._fetch_pending_invitations()
         inv = next((i for i in invitations if i["email"] == email), None)
         assert inv is not None, f"No pending invitation for {email!r} to revoke"
-        self._response = self._json("DELETE", f"/{self._handle()}/invitations/{inv['id']}")
+        self._response = self.json_client("DELETE", f"/{self._handle()}/invitations/{inv['id']}")
 
     def accept_invitation(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored — call invite_member first"
         client = self._client_for(email)
-        self._response = self._json("POST", f"/invitations/{token}/accept", client)
+        self._response = self.json_client("POST", f"/invitations/{token}/accept", client)
         assert self._response.status_code == 200, (
             f"POST /invitations/{token}/accept returned"
             f" {self._response.status_code}: {self._response.text}"
@@ -213,13 +215,13 @@ class OrgApiMixin(ApiBase):
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored"
         client = self._client_for(email)
-        self._response = self._json("POST", f"/invitations/{token}/accept", client)
+        self._response = self.json_client("POST", f"/invitations/{token}/accept", client)
 
     def follow_invitation_link_again(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored"
         client = self._client_for(email)
-        self._response = self._json("POST", f"/invitations/{token}/accept", client)
+        self._response = self.json_client("POST", f"/invitations/{token}/accept", client)
         self._last_accept_response = (
             self._response.json() if self._response.status_code == 200 else None
         )
@@ -246,7 +248,7 @@ class OrgApiMixin(ApiBase):
 
     def view_org_dashboard(self) -> None:
         slug = getattr(self, "_active_org_handle", "")
-        self._response = self._run(self._c.get(f"/{slug}/dashboard"))
+        self._response = self.run(self.client.get(f"/{slug}/dashboard"))
 
     def assert_org_dashboard_visible(self) -> None:
         assert self._response is not None
@@ -255,4 +257,4 @@ class OrgApiMixin(ApiBase):
         )
 
     def visit_org_dashboard_unauthenticated(self) -> None:
-        self._response = self._run(self._c.get("/any-org/dashboard"))
+        self._response = self.run(self.client.get("/any-org/dashboard"))

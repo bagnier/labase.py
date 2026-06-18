@@ -8,6 +8,18 @@ class AuthBrowserMixin(BrowserBase):
     def _delete_user_if_exists(self, email: str) -> None:
         delete_user_if_exists(email)
 
+    # ── HTML page access (auth smoke flows) ────────────────────────────────────
+    def visit(self, path: str) -> None:
+        self._last_response = self._p.goto(f"{self._base_url}{path}", wait_until="load")
+
+    def assert_page_accessible(self, path: str, contains: str) -> None:
+        self._p.goto(f"{self._base_url}{path}", wait_until="load")
+        assert contains in self._p.content(), f"'{contains}' not found on {path}"
+
+    def assert_page_loaded(self) -> None:
+        assert self._last_response is not None
+        assert self._last_response.status == 200, f"Expected 200, got {self._last_response.status}"
+
     def sign_in(self, email: str, password: str) -> None:
         self._p.goto(f"{self._base_url}/auth/login")
         self._p.fill("input[name=email]", email)

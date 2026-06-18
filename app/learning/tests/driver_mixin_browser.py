@@ -34,6 +34,10 @@ class LearningBrowserMixin(BrowserBase):
     def _today(self) -> date:
         return test_clock.today()
 
+    def teardown_test(self) -> None:
+        self._reset_learning()
+        super().teardown_test()
+
     def _reset_learning(self) -> None:
         for ctx in getattr(self, "_learn_ctx", {}).values():
             with contextlib.suppress(Exception):

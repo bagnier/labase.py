@@ -44,7 +44,7 @@ class LearningApiMixin(ApiBase):
         if key not in self._learn_clients:
             email = f"{key}@example.com"
             client = self._make_client_for(email)
-            resp = self._json("GET", "/organizations", client)
+            resp = self.json_client("GET", "/organizations", client)
             assert resp.status_code == 200 and resp.json(), f"no org for {email}: {resp.text}"
             org = resp.json()[0]
             self._learn_clients[key] = client
@@ -55,7 +55,7 @@ class LearningApiMixin(ApiBase):
 
     def _api(self, key: str, method: str, path: str, **kw):
         url = f"/{self._learn_handle[key]}/learning{path}"
-        return self._json(method, url, self._learn_clients[key], **kw)
+        return self.json_client(method, url, self._learn_clients[key], **kw)
 
     def _learn_json(self, key: str, path: str):
         resp = self._api(key, "GET", path)
@@ -75,7 +75,7 @@ class LearningApiMixin(ApiBase):
     def want_to_learn(self, name: str, deck: str) -> None:
         key = self._user(name)
         org_id = self._learn_org[key]
-        self._run(self._seed(lambda s: self._materialize(org_id, s)))
+        self.run(self._seed(lambda s: self._materialize(org_id, s)))
         resp = self._api(key, "post", "/subscriptions", data={"deck": deck})
         assert resp.status_code == 200, f"subscribe -> {resp.status_code}: {resp.text}"
 
@@ -89,7 +89,7 @@ class LearningApiMixin(ApiBase):
             cid = await setup.card_id_by_external(s, org_id, ext)
             await setup.set_state(s, org_id, uid, cid, level, last)
 
-        self._run(self._seed(_do))
+        self.run(self._seed(_do))
 
     def preset_deck(self, name: str, deck: str, level: int, days_ago: int) -> None:
         key = self._user(name)
@@ -101,7 +101,7 @@ class LearningApiMixin(ApiBase):
             for cid in await setup.deck_card_ids(s, deck_id):
                 await setup.set_state(s, org_id, uid, cid, level, last)
 
-        self._run(self._seed(_do))
+        self.run(self._seed(_do))
 
     def preset_table(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
@@ -114,7 +114,7 @@ class LearningApiMixin(ApiBase):
                 last = date(int(y), int(m), int(d))
                 await setup.set_state(s, org_id, uid, cid, int(r["Niveau"]), last)
 
-        self._run(self._seed(_do))
+        self.run(self._seed(_do))
 
     # ── session actions ─────────────────────────────────────────────────────────
     def start_session(self, name: str) -> None:

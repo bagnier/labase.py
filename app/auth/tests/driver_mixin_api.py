@@ -5,25 +5,38 @@ from tests.e2e.drivers.api_base import ApiBase
 
 
 class AuthApiMixin(ApiBase):
+    # ── HTML page access (auth smoke flows) ────────────────────────────────────
+    def visit(self, path: str) -> None:
+        self._response = self.run(self.client.get(path))
+
+    def assert_page_accessible(self, path: str, contains: str) -> None:
+        resp = self.run(self.client.get(path))
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        assert contains in resp.text, f"'{contains}' not found in response"
+
+    def assert_page_loaded(self) -> None:
+        assert self._response is not None
+        assert self._response.status_code == 200, f"Expected 200, got {self._response.status_code}"
+
     def _store_active_slug(self) -> None:
-        resp = self._json("GET", "/organizations")
+        resp = self.json_client("GET", "/organizations")
         if resp.status_code == 200 and resp.json():
             self._active_org_handle = resp.json()[0]["handle"]
 
     def sign_in(self, email: str, password: str) -> None:
-        self._response = self._run(
-            self._c.post("/auth/login", data={"email": email, "password": password})
+        self._response = self.run(
+            self.client.post("/auth/login", data={"email": email, "password": password})
         )
         self._store_active_slug()
 
     def ensure_registered(self, email: str, password: str) -> None:
-        self._run(self._c.post("/auth/register", data={"email": email, "password": password}))
+        self.run(self.client.post("/auth/register", data={"email": email, "password": password}))
         self.track_auth_email(email)
 
     def register(self, email: str, password: str) -> None:
         self._last_registered_email = email
-        self._response = self._run(
-            self._c.post("/auth/register", data={"email": email, "password": password})
+        self._response = self.run(
+            self.client.post("/auth/register", data={"email": email, "password": password})
         )
         self.track_auth_email(email)
 
@@ -42,7 +55,7 @@ class AuthApiMixin(ApiBase):
         self._store_active_slug()
 
     def logout_action(self) -> None:
-        self._response = self._run(self._c.post("/auth/logout"))
+        self._response = self.run(self.client.post("/auth/logout"))
 
     def assert_unauthorized(self) -> None:
         assert self._response is not None
