@@ -26,10 +26,20 @@ Feature: Todo list
     When they move "Buy groceries" to the end
     Then the items appear in order: "Call dentist", "Read book", "Buy groceries"
 
+  Scenario: Added todo item are not completed
+    When they add a todo item "Buy groceries"
+    Then "Buy groceries" is shown as not completed
+
   Scenario: Mark a todo item as done
     Given they have a todo item "Buy groceries"
     When they mark "Buy groceries" as done
     Then "Buy groceries" is shown as completed
+
+  Scenario: Mark a todo item as not done
+    Given they have a todo item "Buy groceries"
+    When they mark "Buy groceries" as done
+    When they mark "Buy groceries" as not done
+    Then "Buy groceries" is shown as not completed
 
   Scenario: Rename a todo item
     Given they have a todo item "Buy groceries"

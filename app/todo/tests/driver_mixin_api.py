@@ -46,6 +46,16 @@ class TodoApiMixin(ApiProtocol):
             )
         )
 
+    def mark_todo_not_done(self, title: str) -> None:
+        todo_id = self._todo_id_by_title(title)
+        self._response = self._run(
+            self._c.patch(
+                self._todos_url(f"/{todo_id}"),
+                json={"done": False},
+                headers={"accept": "application/json"},
+            )
+        )
+
     def rename_todo(self, title: str, new_title: str) -> None:
         todo_id = self._todo_id_by_title(title)
         self._response = self._run(
@@ -96,6 +106,14 @@ class TodoApiMixin(ApiProtocol):
         for t in resp.json():
             if t["title"] == title:
                 assert t["done"], f"Todo '{title}' is not marked as done"
+                return
+        raise AssertionError(f"Todo '{title}' not found")
+
+    def assert_todo_not_completed(self, title: str) -> None:
+        resp = self._run(self._c.get(self._todos_url(), headers={"accept": "application/json"}))
+        for t in resp.json():
+            if t["title"] == title:
+                assert not t["done"], f"Todo '{title}' should not be marked as done"
                 return
         raise AssertionError(f"Todo '{title}' not found")
 

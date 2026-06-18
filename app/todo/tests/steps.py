@@ -58,9 +58,19 @@ def step_assert_todo_visible(driver, title):
     driver.assert_todo_visible(title)
 
 
+@when(parsers.parse('they mark "{title}" as not done'))
+def step_mark_todo_not_done(driver, title):
+    driver.mark_todo_not_done(title)
+
+
 @then(parsers.parse('"{title}" is shown as completed'))
 def step_assert_todo_completed(driver, title):
     driver.assert_todo_completed(title)
+
+
+@then(parsers.parse('"{title}" is shown as not completed'))
+def step_assert_todo_not_completed(driver, title):
+    driver.assert_todo_not_completed(title)
 
 
 @then(parsers.parse('"{title}" no longer appears in their todo list'))

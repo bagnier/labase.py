@@ -56,6 +56,15 @@ class TodoBrowserMixin(BrowserProtocol):
             lambda: self._p.click(f"input[data-todo-id='{todo_id}']"),
         )
 
+    def mark_todo_not_done(self, title: str) -> None:
+        self._goto_todos()
+        todo_id = self._dom_todo_id_by_title(title)
+        self._wait_htmx_response(
+            f"/todos/{todo_id}",
+            "PATCH",
+            lambda: self._p.click(f"input[data-todo-id='{todo_id}']"),
+        )
+
     def rename_todo(self, title: str, new_title: str) -> None:
         self._goto_todos()
         todo_id = self._dom_todo_id_by_title(title)
@@ -119,6 +128,15 @@ class TodoBrowserMixin(BrowserProtocol):
                 span = row.locator("span.flex-1")
                 classes = span.get_attribute("class") or ""
                 assert "line-through" in classes, f"Todo '{title}' is not shown as completed in DOM"
+                return
+        raise AssertionError(f"Todo '{title}' not found in DOM")
+
+    def assert_todo_not_completed(self, title: str) -> None:
+        for row in self._dom_todo_rows():
+            if row.locator("span.flex-1").inner_text().strip() == title:
+                span = row.locator("span.flex-1")
+                classes = span.get_attribute("class") or ""
+                assert "line-through" not in classes, f"Todo '{title}' is shown as completed in DOM"
                 return
         raise AssertionError(f"Todo '{title}' not found in DOM")
 

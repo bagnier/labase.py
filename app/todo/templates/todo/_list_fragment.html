@@ -3,7 +3,7 @@
   <div class="todo-item flex items-center gap-3 px-4 py-3 group" data-id="{{ todo.id }}">
     <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
     <input type="checkbox" data-todo-id="{{ todo.id }}" {% if todo.done %}checked{% endif %}
-      hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-vals='{"done": "true"}' hx-target="#todo-list" hx-swap="outerHTML"
+      hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-vals='js:{"done": event.target.checked}' hx-target="#todo-list" hx-swap="outerHTML"
       class="w-4 h-4 rounded border-gray-300 text-indigo-500 cursor-pointer flex-none" />
     <span class="flex-1 text-sm {% if todo.done %}text-gray-400 line-through{% else %}text-gray-900{% endif %}"
           data-title-id="{{ todo.id }}">{{ todo.title }}</span>
