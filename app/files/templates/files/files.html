@@ -11,12 +11,15 @@
 
   <form hx-post="/{{ org_handle }}/files" hx-encoding="multipart/form-data" hx-target="#file-list" hx-swap="outerHTML"
         class="flex gap-2 items-center">
-    <label class="flex-1 flex items-center gap-3 cursor-pointer">
-      <span class="btn-secondary flex-none whitespace-nowrap" onclick="this.closest('label').querySelector('input').click()">Choose File</span>
+    <div class="flex-1 flex items-center gap-3">
+      <div class="relative flex-none">
+        <span class="btn-secondary whitespace-nowrap pointer-events-none">Choose File</span>
+        <input type="file" name="file" required
+               class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+               onchange="document.getElementById('file-name').textContent = this.files[0]?.name ?? 'No file chosen'" />
+      </div>
       <span id="file-name" class="text-sm text-gray-500 truncate">No file chosen</span>
-      <input type="file" name="file" required class="sr-only"
-        onchange="document.getElementById('file-name').textContent = this.files[0]?.name ?? 'No file chosen'" />
-    </label>
+    </div>
     <button type="submit" class="btn-primary flex-none">Upload</button>
   </form>
 

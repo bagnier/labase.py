@@ -50,9 +50,10 @@ class OrgFileBrowserMixin(BrowserProtocol):
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:
         slug = getattr(self, "_active_org_handle", "")
         self._goto_files()
-        self._p.set_input_files(
-            "input[type=file][name=file]",
-            {"name": filename, "mimeType": "application/octet-stream", "buffer": content},
+        with self._p.expect_file_chooser(timeout=5000) as fc_info:
+            self._p.click("input[type=file][name=file]")
+        fc_info.value.set_files(
+            {"name": filename, "mimeType": "application/octet-stream", "buffer": content}
         )
         self._click_and_capture(self._p, "button[type=submit]", "POST", f"/{slug}/files")
 
