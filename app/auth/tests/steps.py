@@ -2,46 +2,40 @@ from pytest_bdd import given, parsers, then, when
 
 
 @given("the application is running")
-def step_app_running(driver):
-    driver.reset_session()
+def step_app_running():
+    """Session reset is centralised in the db_rollback fixture; nothing to do here."""
 
 
 @given(parsers.parse('a user is signed in as "{email}" within org "{org_name}"'))
 def step_user_signed_in_within_org(driver, email, org_name):
-    driver.reset_session()
     driver.sign_in_within_org(email, org_name)
 
 
 @given(parsers.parse('a user is signed in as "{email}" as owner of "{org_name}"'))
 def step_user_signed_in_as_owner_of(driver, email, org_name):
-    driver.reset_session()
     driver.sign_in_within_org(email, org_name)
 
 
 @given(parsers.parse('a user is registered with email "{email}" and password "{password}"'))
 def step_user_registered(driver, email, password):
-    driver.reset_session()
     driver.register_disposable(email, password)
     driver._last_registered_email = email
 
 
 @given(parsers.parse('a user is signed in as "{email}"'))
 def step_user_signed_in_email_only(driver, email):
-    driver.reset_session()
     driver.ensure_registered(email, "Test1234!")
     driver.sign_in(email, "Test1234!")
 
 
 @given(parsers.parse('a user is signed in as "{email}" with password "{password}"'))
 def step_user_signed_in(driver, email, password):
-    driver.reset_session()
     driver.ensure_registered(email, password)
     driver.sign_in(email, password)
 
 
 @given("a user is signed in")
 def step_signed_in_fresh(driver):
-    driver.reset_session()
     driver.sign_in_as_fresh_user()
 
 

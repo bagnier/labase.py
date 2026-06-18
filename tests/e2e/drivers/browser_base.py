@@ -140,7 +140,8 @@ class BrowserBase:
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:
-        """No transaction wrapping: the app runs in its own process."""
+        """No transaction wrapping: the in-thread server commits to the real DB,
+        so isolation is done by truncation in teardown_test (not a rollback)."""
 
     def teardown_test(self) -> None:
         """Truncate app tables. Feature mixins extend this (via super())."""

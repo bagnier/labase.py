@@ -36,7 +36,12 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     ApiDriver wraps the test in a rolled-back transaction shared by all sessions;
     BrowserDriver truncates app tables after the fact. Each driver owns its own
     strategy via setup_test/teardown_test (see tests/e2e/drivers/).
+
+    reset_session() then clears the (session-scoped) driver's per-scenario state —
+    client/cookies, browser context, acting-as user — so every scenario starts
+    clean without each entry @given having to remember to do it.
     """
     driver.setup_test()
+    driver.reset_session()
     yield
     driver.teardown_test()

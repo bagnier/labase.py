@@ -38,8 +38,7 @@ class ApiBase:
         self._client = self.make_client()
 
     def stop(self) -> None:
-        if self._client:
-            self._bg.run(self._client.aclose())
+        self._close_clients()
         self._bg.stop()
 
     def run(self, coro):
@@ -56,9 +55,16 @@ class ApiBase:
         assert self._client
         return self._client
 
-    def reset_session(self) -> None:
-        self._client = self.make_client()
+    def _close_clients(self) -> None:
+        for client in [self._client, *self._secondary_clients.values()]:
+            if client:
+                self._bg.run(client.aclose())
+        self._client = None
         self._secondary_clients = {}
+
+    def reset_session(self) -> None:
+        self._close_clients()
+        self._client = self.make_client()
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:
