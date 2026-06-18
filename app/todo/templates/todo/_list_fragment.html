@@ -1,30 +1,28 @@
-<div id="todo-list" class="list-panel shadow-sm">
-  {% for todo in todos %}
-  <div class="todo-item flex items-center gap-3 px-4 py-3 group" data-id="{{ todo.id }}">
-    <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
-    <input type="checkbox" data-todo-id="{{ todo.id }}" {% if todo.done %}checked{% endif %}
-      hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-vals='js:{"done": event.target.checked}' hx-target="#todo-list" hx-swap="outerHTML"
-      class="w-4 h-4 rounded border-gray-300 text-indigo-500 cursor-pointer flex-none" />
-    <span class="flex-1 text-sm {% if todo.done %}text-gray-400 line-through{% else %}text-gray-900{% endif %}"
-          data-title-id="{{ todo.id }}">{{ todo.title }}</span>
-    <button type="button" data-edit-id="{{ todo.id }}"
-            onclick="startEdit('{{ todo.id }}')"
-            class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500">
-      <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
-    </button>
-    <button data-delete-id="{{ todo.id }}" hx-delete="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="outerHTML" hx-confirm="Delete this task?"
-      class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500">
-      <i class="ph ph-x ph-sm" aria-hidden="true"></i>
-    </button>
-    <form id="rename-form-{{ todo.id }}" class="hidden flex-1"
-          hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="outerHTML">
-      <input type="text" name="title" value="{{ todo.title }}"
-             class="input w-full text-sm py-0.5"
-             onblur="submitRename('{{ todo.id }}')"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();submitRename('{{ todo.id }}')}else if(event.key==='Escape'){cancelEdit('{{ todo.id }}','{{ todo.title|e }}')}"/>
-    </form>
-  </div>
-  {% else %}
-  <p class="px-4 py-6 text-sm text-center text-gray-400">No tasks yet.</p>
-  {% endfor %}
+{% for todo in todos %}
+<div class="todo-item flex items-center gap-3 px-4 py-3 group" data-id="{{ todo.id }}">
+  <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
+  <input type="checkbox" data-todo-id="{{ todo.id }}" {% if todo.done %}checked{% endif %}
+    hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-vals='js:{"done": event.target.checked}' hx-target="#todo-list" hx-swap="innerHTML"
+    class="w-4 h-4 rounded border-gray-300 text-indigo-500 cursor-pointer flex-none" />
+  <span class="flex-1 text-sm {% if todo.done %}text-gray-400 line-through{% else %}text-gray-900{% endif %}"
+        data-title-id="{{ todo.id }}">{{ todo.title }}</span>
+  <button type="button" data-edit-id="{{ todo.id }}"
+          onclick="startEdit('{{ todo.id }}')"
+          class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500">
+    <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
+  </button>
+  <button data-delete-id="{{ todo.id }}" hx-delete="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="innerHTML" hx-confirm="Delete this task?"
+    class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500">
+    <i class="ph ph-x ph-sm" aria-hidden="true"></i>
+  </button>
+  <form id="rename-form-{{ todo.id }}" class="hidden flex-1"
+        hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="innerHTML">
+    <input type="text" name="title" value="{{ todo.title }}"
+           class="input w-full text-sm py-0.5"
+           onblur="submitRename('{{ todo.id }}')"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();submitRename('{{ todo.id }}')}else if(event.key==='Escape'){cancelEdit('{{ todo.id }}','{{ todo.title|e }}')}"/>
+  </form>
 </div>
+{% else %}
+<p class="px-4 py-6 text-sm text-center text-gray-400">No tasks yet.</p>
+{% endfor %}
