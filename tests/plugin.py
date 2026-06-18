@@ -1,3 +1,11 @@
+"""Global pytest plugin: test isolation, the driver fixture and BDD step plugins.
+
+Registered via ``-p tests.plugin`` in pyproject so its fixtures, options and the
+autouse isolation are available to every test under ``app/`` and ``tests/`` —
+which a directory-scoped conftest.py could not provide. Keeping it as an explicit
+plugin lets the project root stay free of a conftest.py.
+"""
+
 import asyncio
 import os
 
@@ -11,11 +19,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import tests.cleanup as cleanup
-import tests.db as db
-from app.auth.infra.session import get_rls_session
-from app.main import app
 from app.shared.config import get_settings
-from app.shared.persistence.database import _admin_engine, get_admin_session, get_user_session
 from tests.e2e.drivers.api import ApiDriver
 from tests.e2e.drivers.browser import BrowserDriver
 
@@ -36,40 +40,24 @@ def pytest_addoption(parser):
 
 @pytest.fixture(autouse=True)
 def db_rollback(driver: ApiDriver | BrowserDriver):
-    """Each test/scenario runs inside a transaction that is rolled back at the end.
+    """Each test/scenario runs inside its driver's isolation boundary.
 
-    All sessions (user, admin, rls) share the same postgres connection on which
-    SQLAlchemy emits SAVEPOINTs. conn.rollback() in teardown discards everything.
-    set_rls_context is bypassed (the postgres connection has BYPASSRLS) — RLS tests
-    stay in test_rls.py with the db_session fixture.
+    ApiDriver wraps the test in a rolled-back transaction shared by all sessions;
+    BrowserDriver truncates app tables after the fact. Each driver owns its own
+    strategy via setup_test/teardown_test (see tests/e2e/drivers/).
     """
-    if not isinstance(driver, ApiDriver):
-        yield
-        driver._restore_clock()
-        if hasattr(driver, "_reset_learning"):
-            driver._reset_learning()
-        cleanup.truncate_app_tables()
-        return
-
-    conn = driver._run(db.begin_test_transaction(_admin_engine()))
-    db._test_connection = conn
-    app.dependency_overrides[get_user_session] = db.override_get_session
-    app.dependency_overrides[get_admin_session] = db.override_get_session
-    app.dependency_overrides[get_rls_session] = db.override_get_rls_session
+    driver.setup_test()
     yield
-    app.dependency_overrides.pop(get_user_session, None)
-    app.dependency_overrides.pop(get_admin_session, None)
-    app.dependency_overrides.pop(get_rls_session, None)
-    db._test_connection = None
-    driver._restore_clock()
-    driver._run(db.end_test_transaction(conn))
-    driver.cleanup_test_orgs()
-    driver.cleanup_test_auth_users()
+    driver.teardown_test()
 
 
 @pytest_asyncio.fixture()
 async def db_session():
-    """Rolled-back transactional session for direct integration tests (no HTTP)."""
+    """RLS-enforcing session (user role) for direct integration tests (no HTTP).
+
+    Uses a throwaway engine: set_rls_context does a session-level ``SET role``,
+    so the connection must be disposed rather than returned to a shared pool.
+    """
     settings = get_settings()
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     engine = create_async_engine(settings.database_url, connect_args=connect_args)

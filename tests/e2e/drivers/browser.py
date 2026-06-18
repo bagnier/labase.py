@@ -18,6 +18,7 @@ from app.learning.tests.driver_mixin import LearningBrowserMixin
 from app.organizations.tests.driver_mixin import OrgBrowserMixin
 from app.profile.tests.driver_mixin import ProfileBrowserMixin
 from app.todo.tests.driver_mixin import TodoBrowserMixin
+from tests import cleanup
 from tests.e2e.drivers.shared_mixin import SharedBrowserMixin
 
 
@@ -78,6 +79,15 @@ class BrowserDriver(
         self._secondary_browser_contexts: dict = {}
         self._acting_as_email: str = ""
         self._primary_context_backup = None
+
+    def setup_test(self) -> None:
+        """No transaction wrapping: the app runs in its own process."""
+
+    def teardown_test(self) -> None:
+        """Reset clock and learning state, then truncate app tables."""
+        self._restore_clock()
+        self._reset_learning()
+        cleanup.truncate_app_tables()
 
     def start(self) -> None:
         if not self._base_url:

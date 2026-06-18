@@ -5,6 +5,7 @@ import uuid
 import httpx
 from sqlalchemy import delete
 
+from app.auth.infra.session import get_rls_session
 from app.auth.tests.driver_mixin import AuthApiMixin
 from app.console.tests.driver_mixin import ConsoleApiMixin
 from app.files.tests.driver_mixin import OrgFileApiMixin
@@ -13,8 +14,14 @@ from app.main import app
 from app.organizations.domain.models import Organization
 from app.organizations.tests.driver_mixin import OrgApiMixin
 from app.profile.tests.driver_mixin import ProfileApiMixin
-from app.shared.persistence.database import admin_session_factory
+from app.shared.persistence.database import (
+    _admin_engine,
+    admin_session_factory,
+    get_admin_session,
+    get_user_session,
+)
 from app.todo.tests.driver_mixin import TodoApiMixin
+from tests import db
 from tests.e2e.drivers.shared_mixin import SharedApiMixin
 
 
@@ -36,6 +43,28 @@ class ApiDriver(
         self._last_registered_email: str | None = None
         self._test_auth_emails: list[str] = []
         self._test_org_ids: list[str] = []
+        self._test_conn = None
+
+    def setup_test(self) -> None:
+        """Open the rolled-back test transaction and route all sessions onto it."""
+        conn = self._run(db.begin_test_transaction(_admin_engine()))
+        db._test_connection = conn
+        self._test_conn = conn
+        app.dependency_overrides[get_user_session] = db.override_get_session
+        app.dependency_overrides[get_admin_session] = db.override_get_session
+        app.dependency_overrides[get_rls_session] = db.override_get_rls_session
+
+    def teardown_test(self) -> None:
+        """Roll back the test transaction and clean up out-of-transaction data."""
+        app.dependency_overrides.pop(get_user_session, None)
+        app.dependency_overrides.pop(get_admin_session, None)
+        app.dependency_overrides.pop(get_rls_session, None)
+        db._test_connection = None
+        self._restore_clock()
+        self._run(db.end_test_transaction(self._test_conn))
+        self._test_conn = None
+        self.cleanup_test_orgs()
+        self.cleanup_test_auth_users()
 
     def start(self) -> None:
         self._loop = asyncio.new_event_loop()
