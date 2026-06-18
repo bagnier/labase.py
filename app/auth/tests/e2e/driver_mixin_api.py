@@ -57,10 +57,6 @@ class AuthApiMixin(ApiBase):
     def logout_action(self) -> None:
         self._response = self.run(self.client.post("/auth/logout"))
 
-    def assert_unauthorized(self) -> None:
-        assert self._response is not None
-        assert self._response.status_code == 401, f"Expected 401, got {self._response.status_code}"
-
     def assert_redirected_to_login(self) -> None:
         assert self._response is not None
         hx_redirect = self._response.headers.get("hx-redirect", "")

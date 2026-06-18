@@ -9,7 +9,7 @@ class ProfileApiMixin(ApiBase):
         self._response = self.json_client("GET", "/profile")
 
     def update_handle(self, name: str) -> None:
-        self._response = self.json_client("POST", "/profile", data={"handle": name})
+        self._response = self.json_client("POST", "/profile", json={"handle": name})
 
     def assert_handle(self, name: str | None) -> None:
         resp = self.json_client("GET", "/profile")
@@ -35,7 +35,7 @@ class ProfileApiMixin(ApiBase):
         self.json_client(
             "POST",
             "/profile",
-            data={"handle": "read-only-probe", "email": "attacker@evil.test"},
+            json={"handle": "read-only-probe", "email": "attacker@evil.test"},
         )
         after = self.json_client("GET", "/profile").json()
         assert after.get("email") == email, (

@@ -73,7 +73,7 @@ class LearningApiMixin(ApiBase):
         key = self._user(name)
         org_id = self._learn_org[key]
         self.run(db.seed_fixtures(lambda s: self._materialize(org_id, s)))
-        resp = self._api(key, "post", "/subscriptions", data={"deck": deck})
+        resp = self._api(key, "post", "/subscriptions", json={"deck": deck})
         assert resp.status_code == 200, f"subscribe -> {resp.status_code}: {resp.text}"
 
     # ── preset progress ─────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ class LearningApiMixin(ApiBase):
 
     def mark(self, name: str, ext: str, outcome: str) -> None:
         key = self._user(name)
-        resp = self._api(key, "post", f"/cards/{ext}/reviews", data={"outcome": outcome})
+        resp = self._api(key, "post", f"/cards/{ext}/reviews", json={"outcome": outcome})
         assert resp.status_code == 200, f"mark -> {resp.status_code}: {resp.text}"
 
     def mark_all_learned(self, name: str) -> None:

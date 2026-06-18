@@ -59,9 +59,9 @@ class OrgApiMixin(ApiBase):
         assert orgs, f"No org found for {owner_email}"
         handle = orgs[0]["handle"]
 
-        self.json_client("PATCH", f"/{handle}", owner, data={"name": org_name})
+        self.json_client("PATCH", f"/{handle}", owner, json={"name": org_name})
 
-        inv = self.json_client("POST", f"/{handle}/invitations", owner, data={"email": email})
+        inv = self.json_client("POST", f"/{handle}/invitations", owner, json={"email": email})
         assert inv.status_code == 201, f"Invitation failed: {inv.text}"
         token = inv.json()["token"]
 
@@ -89,7 +89,7 @@ class OrgApiMixin(ApiBase):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
-        self._response = self.json_client("PATCH", f"/{self._handle()}", data={"name": new_name})
+        self._response = self.json_client("PATCH", f"/{self._handle()}", json={"name": new_name})
 
     def sign_in_as_member(self, email: str) -> None:
         if not getattr(self, "_primary_client_backup", None):
@@ -142,7 +142,7 @@ class OrgApiMixin(ApiBase):
     def set_member_role(self, email: str, role: str) -> None:
         user_id = self._user_id_for(email)
         self._response = self.json_client(
-            "PATCH", f"/{self._handle()}/members/{user_id}", data={"role": role}
+            "PATCH", f"/{self._handle()}/members/{user_id}", json={"role": role}
         )
 
     def remove_member(self, email: str) -> None:
@@ -170,7 +170,7 @@ class OrgApiMixin(ApiBase):
 
     def invite_member(self, email: str, role: str) -> None:
         self._response = self.json_client(
-            "POST", f"/{self._handle()}/invitations", data={"email": email}
+            "POST", f"/{self._handle()}/invitations", json={"email": email}
         )
         if self._response.status_code == 201:
             inv = self._response.json()

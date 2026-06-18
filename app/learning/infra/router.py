@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,7 @@ from app.learning.infra.repository import CatalogRow, LearningRepository
 from app.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from app.profile.contract.shell import shell_context
 from app.shared import clock
-from app.shared.http import or_404, wants_json
+from app.shared.http import or_404, parse_body, wants_json
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
 
@@ -109,8 +109,9 @@ async def subscribe(
     session: RlsSession,
     repo: LearningRepo,
     org: CurrentOrgModel,
-    deck: str = Form(...),
 ):
+    body = await parse_body(request)
+    deck = str(body.get("deck", ""))
     found = or_404(await repo.get_deck_by_name(deck))
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
@@ -171,8 +172,9 @@ async def mark_card(
     org_id: CurrentOrg,
     repo: LearningRepo,
     org: CurrentOrgModel,
-    outcome: Outcome = Form(...),
 ):
+    body = await parse_body(request)
+    outcome = Outcome(str(body.get("outcome", "")))
     card = or_404(await repo.get_card_by_external(external_id))
     today_date = clock.now().date()
     state = await repo.get_state(card.id)

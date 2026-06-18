@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from app.auth.contract.current import CurrentUser, RlsSession
@@ -21,7 +21,7 @@ from app.organizations.domain.models import (
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository
 from app.profile.contract.shell import page_context
-from app.shared.http import or_404, wants_json
+from app.shared.http import or_404, parse_body, wants_json
 from app.shared.http.templates import templates
 from app.shared.names import validate_handle
 from app.shared.observability.audit import record_audit_event
@@ -63,9 +63,10 @@ async def create_organization(
     request: Request,
     current_user: CurrentUser,
     repo: OrgRepo,
-    name: str = Form(..., min_length=1, max_length=255),
 ) -> JSONResponse | RedirectResponse:
-    org = await repo.create_with_owner(name.strip(), uuid.UUID(current_user.id))
+    body = await parse_body(request)
+    name = str(body.get("name", "")).strip()
+    org = await repo.create_with_owner(name, uuid.UUID(current_user.id))
     if wants_json(request):
         result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
         return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
@@ -161,10 +162,10 @@ async def rename_organization(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-    name: str = Form(default=""),
 ):
+    body = await parse_body(request)
+    name = str(body.get("name", "")).strip()
     org = or_404(await repo.get(org_id))
-    name = name.strip()
     error = None
     if not name:
         error = "Name cannot be empty."
@@ -199,10 +200,10 @@ async def update_org_handle(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-    handle: str = Form(...),
 ):
+    body = await parse_body(request)
+    handle = str(body.get("handle", "")).strip().lower()
     org = or_404(await repo.get(org_id))
-    handle = handle.strip().lower()
     validation_error = validate_handle(handle)
     error = validation_error[1] if validation_error else None
     code = validation_error[0] if validation_error else status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -277,8 +278,9 @@ async def update_member_role(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-    role: str = Form(...),
 ) -> Response:
+    body = await parse_body(request)
+    role = str(body.get("role", ""))
     org = or_404(await repo.get(org_id))
     try:
         new_role = OrgRole(role)
@@ -377,8 +379,9 @@ async def create_invitation(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-    email: str = Form(...),
 ) -> Response:
+    body = await parse_body(request)
+    email = str(body.get("email", ""))
     error: str | None = None
     invitation = None
 

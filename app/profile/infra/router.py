@@ -1,14 +1,14 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.auth.contract.current import CurrentUser, RlsSession
 from app.profile.contract.shell import shell_context
 from app.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
-from app.shared.http import wants_json
+from app.shared.http import parse_body, wants_json
 from app.shared.http.templates import templates
 from app.shared.names import validate_handle
 
@@ -63,8 +63,9 @@ async def profile_update(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
-    handle: str = Form(default=""),
 ) -> HTMLResponse | JSONResponse:
+    body = await parse_body(request)
+    handle = str(body.get("handle", ""))
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
     if profile is None:
         profile = await repo.create(

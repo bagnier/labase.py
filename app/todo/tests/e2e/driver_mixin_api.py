@@ -19,7 +19,7 @@ class TodoApiMixin(ApiBase):
             self.json_client("POST", self._todos_url(), json={"title": title})
 
     def view_todo_list(self) -> None:
-        self._response = self.run(self.client.get(self._todos_url()))
+        self._response = self.json_client("GET", self._todos_url())
 
     def add_todo(self, title: str) -> None:
         self._response = self.json_client("POST", self._todos_url(), json={"title": title})

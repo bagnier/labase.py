@@ -84,15 +84,6 @@ class OrgFileApiMixin(ApiBase):
         s = slug or getattr(self, "_active_org_handle", "")
         return f"/{s}{path}"
 
-    def _org_url_for(self, email: str, path: str) -> str:
-        slug = self._secondary_handles.get(email, getattr(self, "_active_org_handle", ""))
-        return f"/{slug}{path}"
-
-    def _fetch_slug_for(self, client: httpx.AsyncClient) -> str:
-        resp = self.json_client("GET", "/organizations", client)
-        assert resp.status_code == 200 and resp.json(), "Cannot fetch org slug"
-        return resp.json()[0]["handle"]
-
     def _list_files_with(self, client: httpx.AsyncClient, slug: str) -> list[dict]:
         resp = self.json_client("GET", f"/{slug}/files", client)
         assert resp.status_code == 200, f"list_files got {resp.status_code}: {resp.text}"
@@ -176,7 +167,7 @@ class OrgFileApiMixin(ApiBase):
         )
 
     def view_file_list(self) -> None:
-        self._response = self.run(self.client.get(self._org_url("/files")))
+        self._response = self.json_client("GET", self._org_url("/files"))
         self._last_file_list: list[dict] | None = None
 
     def download_file(self, filename: str) -> None:
@@ -235,7 +226,7 @@ class OrgFileApiMixin(ApiBase):
         if resp.status_code == 200 and resp.json():
             slug = resp.json()[0]["handle"]
             self._secondary_handles[email] = slug
-            self.json_client("PATCH", f"/{slug}", client, data={"name": org_name})
+            self.json_client("PATCH", f"/{slug}", client, json={"name": org_name})
 
     def promote_to_owner(self) -> None:
         # Uses admin helper to bypass last-owner constraint during test setup.
