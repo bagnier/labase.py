@@ -6,10 +6,22 @@ from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 
 class OrgFileBrowserMixin(BrowserBase):
+    primary_email: str
+    active_org_handle: str
+    last_registered_email: str | None
+    secondary_handles: dict[str, str]
     _share_link_url: str | None
 
+    def reset_session(self) -> None:
+        self.primary_email = ""
+        self.active_org_handle = ""
+        self.last_registered_email = None
+        self.secondary_handles = {}
+        self._share_link_url = None
+        super().reset_session()
+
     def _files_url(self, slug: str | None = None) -> str:
-        s = slug or getattr(self, "active_org_handle", "")
+        s = slug or self.active_org_handle
         return f"{self.base_url}/{s}/files"
 
     def _goto_files(self) -> None:
@@ -36,7 +48,7 @@ class OrgFileBrowserMixin(BrowserBase):
     # ── basic file ops ────────────────────────────────────────────────────────
 
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:
-        slug = getattr(self, "active_org_handle", "")
+        slug = self.active_org_handle
         self._goto_files()
         with self.page.expect_file_chooser(timeout=5000) as fc_info:
             self.page.click("input[type=file][name=file]")
@@ -49,7 +61,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self.upload_file(filename)
 
     def upload_oversized_file(self, size_mb: int) -> None:
-        slug = getattr(self, "active_org_handle", "")
+        slug = self.active_org_handle
         # Playwright caps in-memory buffers at 50 MB; write to a tempfile instead.
         with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
             tmp.write(b"\x00" * (size_mb * 1024 * 1024))
@@ -83,7 +95,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self._goto_files()
         file_id = self._dom_find_file_id(filename)
         assert file_id is not None, f"File '{filename}' not found in DOM"
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.click_and_capture(
             self.page,
             f"[data-file-id='{file_id}'] [data-delete-id]",
             "DELETE",
@@ -97,7 +109,7 @@ class OrgFileBrowserMixin(BrowserBase):
         row = f"[data-file-id='{file_id}']"
         self.page.click(f"{row} [data-rename-id]")  # reveal the form
         self.page.fill(f"{row} [data-rename-form] input[name=filename]", new_filename)
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.click_and_capture(
             self.page,
             f"{row} [data-rename-form] button[type=submit]",
             "PATCH",
@@ -115,8 +127,8 @@ class OrgFileBrowserMixin(BrowserBase):
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
         assert handle, f"Could not extract org handle for {email}"
-        self.active_org_handle = handle  # ty: ignore[unresolved-attribute]
-        self.primary_email = email  # ty: ignore[unresolved-attribute]
+        self.active_org_handle = handle
+        self.primary_email = email
         self.last_registered_email = email
         # Rename via settings page
         self.page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
@@ -132,15 +144,11 @@ class OrgFileBrowserMixin(BrowserBase):
         self.context_for(email)  # ensures member user exists
         self.invite_member(email, "member")  # ty: ignore[unresolved-attribute]
         self.accept_invitation(email)  # ty: ignore[unresolved-attribute]
-        if not hasattr(self, "_secondary_handles"):
-            self.secondary_handles: dict = {}
-        self.secondary_handles[email] = getattr(self, "active_org_handle", "")
+        self.secondary_handles[email] = self.active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
         ctx = self.context_for(email)
-        slug = getattr(self, "_secondary_handles", {}).get(
-            email, getattr(self, "active_org_handle", "")
-        )
+        slug = self.secondary_handles.get(email, self.active_org_handle)
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
         page = ctx.new_page()
         try:
@@ -166,8 +174,6 @@ class OrgFileBrowserMixin(BrowserBase):
             handle = orgs[0]["handle"]
         finally:
             page.close()
-        if not hasattr(self, "_secondary_handles"):
-            self.secondary_handles = {}
         self.secondary_handles[email] = handle
         # Rename via settings page
         settings_page = ctx.new_page()
@@ -182,17 +188,15 @@ class OrgFileBrowserMixin(BrowserBase):
             settings_page.close()
 
     def promote_to_owner(self) -> None:
-        primary_email = getattr(self, "primary_email", "")
-        self.set_member_role(primary_email, "owner")  # ty: ignore[unresolved-attribute]
+        self.set_member_role(self.primary_email, "owner")  # ty: ignore[unresolved-attribute]
 
     def demote_to_member(self) -> None:
-        primary_email = getattr(self, "primary_email", "")
-        self.set_member_role(primary_email, "member")  # ty: ignore[unresolved-attribute]
+        self.set_member_role(self.primary_email, "member")  # ty: ignore[unresolved-attribute]
 
     def generate_share_link(self, filename: str) -> None:
         self._goto_files()
         file_id = self._dom_file_id_by_name(filename)
-        self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.click_and_capture(
             self.page,
             f"[data-file-id='{file_id}'] [data-share-id]",
             "POST",
@@ -200,20 +204,16 @@ class OrgFileBrowserMixin(BrowserBase):
         )
         url_input = self.page.locator(f"#share-result-{file_id} [data-share-url]")
         url_input.wait_for(state="visible")
-        self._share_link_url = url_input.input_value()  # ty: ignore[unresolved-attribute]
+        self._share_link_url = url_input.input_value()
 
     def view_file_list_as(self, email: str) -> None:
         ctx = self.context_for(email)
-        slug = getattr(self, "_secondary_handles", {}).get(
-            email, getattr(self, "active_org_handle", "")
-        )
+        slug = self.secondary_handles.get(email, self.active_org_handle)
         page = ctx.new_page()
         try:
             self.last_response = page.goto(f"{self.base_url}/{slug}/files", wait_until="load")
             rows = page.locator("#file-list > div[data-file-id]").all()
-            self._last_file_names = [  # ty: ignore[unresolved-attribute]
-                row.locator("a").inner_text().strip() for row in rows
-            ]
+            self._last_file_names = [row.locator("a").inner_text().strip() for row in rows]
         finally:
             page.close()
 
@@ -231,7 +231,7 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def access_share_link_as(self, email: str) -> None:
         ctx = self.context_for(email)
-        share_url = getattr(self, "_share_link_url", None)
+        share_url = self._share_link_url
         assert share_url, "No share link stored"
         url = share_url if share_url.startswith("http") else f"{self.base_url}{share_url}"
         page = ctx.new_page()
@@ -241,8 +241,8 @@ class OrgFileBrowserMixin(BrowserBase):
             page.close()
 
     def access_share_link_unauthenticated(self) -> None:
-        assert self._context
-        share_url = getattr(self, "_share_link_url", None)
+        assert self.context
+        share_url = self._share_link_url
         assert share_url, "No share link stored"
         url = share_url if share_url.startswith("http") else f"{self.base_url}{share_url}"
         anon_ctx = self._browser.new_context()
@@ -259,7 +259,7 @@ class OrgFileBrowserMixin(BrowserBase):
         # DOM — never via the JSON API.
         last_names = getattr(self, "_last_file_names", None)
         if last_names is not None:
-            self._last_file_names = None  # ty: ignore[unresolved-attribute]
+            self._last_file_names = None
             return last_names
         self._goto_files()
         return self._dom_file_names()
@@ -291,7 +291,7 @@ class OrgFileBrowserMixin(BrowserBase):
         )
 
     def upload_file_with_raw_filename(self, filename: str) -> None:
-        slug = getattr(self, "active_org_handle", "")
+        slug = self.active_org_handle
         self._goto_files()
         self.page.set_input_files(
             "input[type=file][name=file]",

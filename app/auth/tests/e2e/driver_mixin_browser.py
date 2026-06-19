@@ -5,6 +5,12 @@ from tests.e2e.drivers.browser_base import BrowserBase
 
 
 class AuthBrowserMixin(BrowserBase):
+    last_registered_email: str | None
+
+    def reset_session(self) -> None:
+        self.last_registered_email = None
+        super().reset_session()
+
     def _delete_user_if_exists(self, email: str) -> None:
         delete_user_if_exists(email)
 
@@ -67,7 +73,7 @@ class AuthBrowserMixin(BrowserBase):
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
         if handle:
-            self.active_org_handle = handle  # type: ignore[attr-defined]
+            self.active_org_handle = handle
 
     def sign_in_as_fresh_user(self) -> None:
         email = f"{uuid4()}@test.local"
@@ -79,10 +85,6 @@ class AuthBrowserMixin(BrowserBase):
     def logout_action(self) -> None:
         self.page.evaluate("fetch('/auth/logout',{method:'POST'})")
         self.page.goto(f"{self.base_url}/auth/login", wait_until="load")
-
-    def assert_unauthorized(self) -> None:
-        # Browser is redirected to /auth/login (302); check final URL
-        assert "/auth/login" in self.page.url, f"Expected /auth/login, got {self.page.url}"
 
     def assert_redirected_to_login(self) -> None:
         assert "/auth/login" in self.page.url, (

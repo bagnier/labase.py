@@ -1,21 +1,29 @@
 import uuid
 
+from playwright.sync_api import Page
+
 from app.auth.tests.admin_helpers import find_users
 from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 
 class OrgBrowserMixin(BrowserBase):
-    def _acting_context(self):  # type: ignore[return]
-        if self.acting_email:
-            return self.context_for(self.acting_email)
-        return self._context
+    _org_list_response: list[dict] | None = None
+    _pending_invitations: list[dict] | None = None
+    _last_invitation_token: str | None = None
+    _last_accept_response: dict | None = None
+    _last_error_text: str | None = None
+    _invitation_action_failed: bool = False
 
-    def _acting_page(self):  # type: ignore[return]
-        if self.acting_email:
-            return self.page_for(self.acting_email)
-        return self.page
+    def reset_session(self) -> None:
+        self._org_list_response = None
+        self._pending_invitations = None
+        self._last_invitation_token = None
+        self._last_accept_response = None
+        self._last_error_text = None
+        self._invitation_action_failed = False
+        super().reset_session()
 
-    def _read_org_cards_from_profile(self, page) -> list[dict]:
+    def _read_org_cards_from_profile(self, page: Page) -> list[dict]:
         page.goto(f"{self.base_url}/profile", wait_until="load")
         cards = page.locator("[data-organisation-card]").all()
         result = []
@@ -27,25 +35,27 @@ class OrgBrowserMixin(BrowserBase):
         return result
 
     def _fetch_orgs_for(self, email: str) -> list[dict]:
-        acting = getattr(self, "primary_email", None)
-        if email == acting:
+        if email == getattr(self, "primary_email", ""):
             return self._read_org_cards_from_profile(self.page)
-        ctx = self.context_for(email)
-        page = ctx.new_page()
+        page = self.context_for(email).new_page()
         try:
             return self._read_org_cards_from_profile(page)
         finally:
             page.close()
 
     def _active_slug(self) -> str:
-        slug = getattr(self, "active_org_handle", "")
-        if slug:
-            return slug
+        if self.active_org_handle:
+            return self.active_org_handle
         orgs = self._read_org_cards_from_profile(self.page)
         assert orgs, "No org found on profile page"
-        handle = orgs[0]["handle"]
-        self.active_org_handle = handle  # ty: ignore[unresolved-attribute]
-        return handle
+        self.active_org_handle = orgs[0]["handle"]
+        return self.active_org_handle
+
+    def _goto_members(self) -> Page:
+        """Navigate the acting user's page to the active org's members page."""
+        page = self.page
+        page.goto(f"{self.base_url}/{self._active_slug()}/members", wait_until="load")
+        return page
 
     def _user_id_for(self, email: str) -> str:
         users = find_users(email)
@@ -58,47 +68,39 @@ class OrgBrowserMixin(BrowserBase):
         triggered — from the acting user's authenticated context — and store the
         response so assert_action_forbidden can require the server itself to reject it.
         """
-        page = self._acting_page()
-        self.last_response = page.request.fetch(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.page.request.fetch(
             f"{self.base_url}{path}", method=method, **fetch_kwargs
         )
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
 
     # ── basic org assertions ──────────────────────────────────────────────────
 
     def assert_org_count(self, count: int) -> None:
         # After registration (no auto-login), the page lands on /auth/login.
         # Sign in before reading the profile so the org list is visible.
-        if "/auth/login" in self.page.url:
-            email = getattr(self, "last_registered_email", None)
-            if email:
-                self.sign_in(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
+        email = getattr(self, "last_registered_email", None)
+        if "/auth/login" in self.page.url and email:
+            self.sign_in(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
         orgs = self._read_org_cards_from_profile(self.page)
         assert len(orgs) == count, f"Expected {count} org(s), got {len(orgs)}: {orgs}"
 
     def assert_is_owner(self) -> None:
-        email = getattr(self, "last_registered_email", None) or getattr(
-            self, "_primary_email", None
-        )
+        email = getattr(self, "last_registered_email", None)
         assert email, "No registered email stored"
-        slug = self._active_slug()
-        self.page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        self.page.goto(f"{self.base_url}/{self._active_slug()}/members", wait_until="load")
         el = self.page.query_selector(f"[data-member-email='{email}'][data-member-role='owner']")
         assert el is not None, f"{email!r} is not shown as owner on members page"
 
     def view_org_list_as(self, email: str) -> None:
-        self._org_list_response = self._fetch_orgs_for(email)  # ty: ignore[unresolved-attribute]
+        self._org_list_response = self._fetch_orgs_for(email)
 
     def assert_other_org_absent(self, email: str) -> None:
-        org_list = getattr(self, "_org_list_response", None)
-        assert org_list is not None, "Call view_org_list_as first"
-        names = [o["name"] for o in org_list]
+        assert self._org_list_response is not None, "Call view_org_list_as first"
+        names = [o["name"] for o in self._org_list_response]
         other_names = [o["name"] for o in self._fetch_orgs_for(email)]
         for name in other_names:
             assert name not in names, f"Other user's org {name!r} appears in list: {names}"
 
     def join_org_as_member(self, org_name: str, email: str) -> None:
-        assert self._context
         slug = org_name.lower().replace(" ", "-")
         owner_email = f"owner-{slug}@example.com"
         owner_ctx = self.context_for(owner_email)
@@ -134,10 +136,10 @@ class OrgBrowserMixin(BrowserBase):
         member_page.wait_for_load_state("load")
 
     def view_org_list(self) -> None:
-        self._org_list_response = self._read_org_cards_from_profile(self.page)  # ty: ignore[unresolved-attribute]
+        self._org_list_response = self._read_org_cards_from_profile(self.page)
 
     def assert_org_in_list(self, org_name: str) -> None:
-        org_list = getattr(self, "_org_list_response", None)
+        org_list = self._org_list_response
         if org_list is None:
             org_list = self._read_org_cards_from_profile(self.page)
         names = [o["name"] for o in org_list]
@@ -148,38 +150,30 @@ class OrgBrowserMixin(BrowserBase):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def rename_org(self, new_name: str) -> None:
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
         slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/settings", wait_until="load")
+        self.page.goto(f"{self.base_url}/{slug}/settings", wait_until="load")
         # The editable name form is owner-only; absent for members (settings is 403).
-        if page.query_selector("input[name=name]") is None:
+        if self.page.query_selector("input[name=name]") is None:
             self._probe_blocked("PATCH", f"/{slug}", form={"name": new_name})
             return
-        page.fill("input[name=name]", new_name)
+        self.page.fill("input[name=name]", new_name)
         self.last_response = self.click_and_capture(
-            page, "form:has(input[name=name]) button[type=submit]", "PATCH", f"/{slug}"
+            self.page, "form:has(input[name=name]) button[type=submit]", "PATCH", f"/{slug}"
         )
 
     def sign_in_as_member(self, email: str) -> None:
-        self.acting_email = email
+        self.set_acting_email(email)
         self.context_for(email)
 
     def assert_action_forbidden(self) -> None:
-        last = getattr(self, "last_response", None)
-        assert last is not None, "No response stored — cannot check forbidden"
-        status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
-        assert status_code == 403, f"Expected 403, got {status_code}"
+        assert self.last_response is not None, "No response stored — cannot check forbidden"
+        assert self.last_response.status == 403, f"Expected 403, got {self.last_response.status}"
 
     def view_member_list(self) -> None:
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        self._goto_members()
 
     def assert_member_with_role(self, email: str, role: str) -> None:
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         selector = f"[data-member-email='{email}'][data-member-role='{role}']"
         el = page.query_selector(selector)
         member_list = page.query_selector("#member-list")
@@ -189,54 +183,45 @@ class OrgBrowserMixin(BrowserBase):
         )
 
     def assert_member_absent(self, email: str) -> None:
-        slug = self._active_slug()
-        page = self.page
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         el = page.query_selector(f"[data-member-email='{email}']")
         assert el is None, f"{email!r} should be absent from members page but was found"
 
     def set_member_role(self, email: str, role: str) -> None:
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
         if manage is None:
             self._probe_blocked(
-                "PATCH", f"/{slug}/members/{self._user_id_for(email)}", form={"role": role}
+                "PATCH",
+                f"/{self._active_slug()}/members/{self._user_id_for(email)}",
+                form={"role": role},
             )
             return
         manage.click()  # open the dropdown (group-focus-within)
         action = "[data-promote]" if role == "owner" else "[data-demote]"
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.click_and_capture(
             page, f"[data-member-email='{email}'] {action}", "PATCH", "/members/"
         )
 
     def remove_member(self, email: str) -> None:
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
         if manage is None:
-            self._probe_blocked("DELETE", f"/{slug}/members/{self._user_id_for(email)}")
+            self._probe_blocked(
+                "DELETE", f"/{self._active_slug()}/members/{self._user_id_for(email)}"
+            )
             return
         manage.click()
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.click_and_capture(
             page, f"[data-member-email='{email}'] [data-remove]", "DELETE", "/members/"
         )
 
     def leave_org(self) -> None:
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         if page.query_selector("[data-leave]") is None:
-            self._probe_blocked("DELETE", f"/{slug}/members/me")
+            self._probe_blocked("DELETE", f"/{self._active_slug()}/members/me")
             return
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
-            page, "[data-leave]", "DELETE", "/members/me"
-        )
+        self.last_response = self.click_and_capture(page, "[data-leave]", "DELETE", "/members/me")
 
     def assert_workspace_card(self, org_name: str) -> None:
         self.page.goto(f"{self.base_url}/profile", wait_until="load")
@@ -245,34 +230,31 @@ class OrgBrowserMixin(BrowserBase):
         )
 
     def invite_member(self, email: str, role: str) -> None:
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
-        self._last_error_text = None  # ty: ignore[unresolved-attribute]
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        self._last_error_text = None
+        page = self._goto_members()
         if page.query_selector("[data-invite-toggle]") is None:
-            self._probe_blocked("POST", f"/{slug}/invitations", form={"email": email, "role": role})
+            self._probe_blocked(
+                "POST", f"/{self._active_slug()}/invitations", form={"email": email, "role": role}
+            )
             return
         page.click("[data-invite-toggle]")
         page.fill("#invite-form input[name=email]", email)
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.click_and_capture(
             page, "#invite-form button[type=submit]", "POST", "/invitations"
         )
         error_el = page.query_selector("#invite-result [data-error]")
         if error_el is not None:
-            self._last_error_text = error_el.inner_text()  # ty: ignore[unresolved-attribute]
+            self._last_error_text = error_el.inner_text()
             return
         link_el = page.query_selector("#invite-result [data-invitation-link]")
         if link_el is not None:
             link = link_el.get_attribute("data-invitation-link") or ""
             if link:
-                self._last_invitation_token = link.rsplit("/", 1)[-1]  # ty: ignore[unresolved-attribute]
-                self._last_invitation_email = email  # ty: ignore[unresolved-attribute]
+                self._last_invitation_token = link.rsplit("/", 1)[-1]
 
     def _fetch_pending_invitations(self) -> list[dict]:
         """Read pending invitations from the rendered members page (no JSON API)."""
-        page = self._acting_page()
-        rows = page.query_selector_all("[data-invitation-email]")
+        rows = self.page.query_selector_all("[data-invitation-email]")
         return [
             {
                 "email": row.get_attribute("data-invitation-email"),
@@ -283,67 +265,56 @@ class OrgBrowserMixin(BrowserBase):
         ]
 
     def view_pending_invitations(self) -> None:
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
-        self._pending_invitations = self._fetch_pending_invitations()  # ty: ignore[unresolved-attribute]
+        self._goto_members()
+        self._pending_invitations = self._fetch_pending_invitations()
 
     def assert_invitation_pending(self, email: str, role: str) -> None:
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         el = page.query_selector(f"[data-invitation-email='{email}']")
         assert el is not None, f"No pending invitation row for {email!r} on members page"
-        invitations = (
-            getattr(self, "_pending_invitations", None) or self._fetch_pending_invitations()
-        )
+        invitations = self._pending_invitations or self._fetch_pending_invitations()
         found = next((i for i in invitations if i["email"] == email), None)
         assert found is not None, f"No pending invitation for {email!r}: {invitations}"
         assert found["role"] == role, f"Expected role={role!r}, got {found['role']!r}"
         assert found["status"] == "pending", f"Expected status=pending, got {found['status']!r}"
 
     def assert_invitation_absent(self, email: str) -> None:
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         el = page.query_selector(f"[data-invitation-email='{email}']")
         assert el is None, f"{email!r} invitation should be absent but found on members page"
 
     def revoke_invitation(self, email: str) -> None:
-        self._action_blocked_by_ui = False  # ty: ignore[unresolved-attribute]
-        slug = self._active_slug()
-        page = self._acting_page()
-        page.goto(f"{self.base_url}/{slug}/members", wait_until="load")
+        page = self._goto_members()
         revoke = page.query_selector(f"[data-invitation-email='{email}'] [data-revoke]")
         if revoke is None:
             # A member can't see the invitation list, so the real invitation id is
             # not available here. The CurrentOwnerMembership gate resolves before the
             # handler looks up the id, so any id proves enforcement: a member gets 403;
             # a broken gate would fall through to 404 and fail this assertion.
-            self._probe_blocked("DELETE", f"/{slug}/invitations/{uuid.uuid4()}")
+            self._probe_blocked("DELETE", f"/{self._active_slug()}/invitations/{uuid.uuid4()}")
             return
-        self.last_response = self.click_and_capture(  # ty: ignore[unresolved-attribute]
+        self.last_response = self.click_and_capture(
             page, f"[data-invitation-email='{email}'] [data-revoke]", "DELETE", "/invitations/"
         )
 
     def accept_invitation(self, email: str) -> None:
-        token = getattr(self, "_last_invitation_token", None)
+        token = self._last_invitation_token
         assert token, "No invitation token stored"
         page = self._open_invitation_page(email, token)
         accept_btn = page.query_selector("[data-accept]")
         assert accept_btn is not None, "Accept button not found on invitation page"
         page.click("[data-accept]")
         page.wait_for_load_state("load")
-        self.last_response = None  # ty: ignore[unresolved-attribute]
-        self._last_accept_response = {"redirect": page.url}  # ty: ignore[unresolved-attribute]
+        self.last_response = None
+        self._last_accept_response = {"redirect": page.url}
 
-    def _open_invitation_page(self, email: str, token: str):  # type: ignore[return]
+    def _open_invitation_page(self, email: str, token: str) -> Page:
         page = self.page_for(email)
         page.goto(f"{self.base_url}/invitations/{token}", wait_until="load")
         return page
 
     def try_accept_revoked_invitation(self, email: str) -> None:
-        token = getattr(self, "_last_invitation_token", None)
+        token = self._last_invitation_token
         assert token, "No invitation token stored"
         page = self._open_invitation_page(email, token)
         # A revoked token renders the invalid state — no accept control is offered.
@@ -353,10 +324,10 @@ class OrgBrowserMixin(BrowserBase):
         assert page.query_selector("[data-error]") is not None, (
             "Expected the invalid-invitation message on the page"
         )
-        self._invitation_action_failed = True  # ty: ignore[unresolved-attribute]
+        self._invitation_action_failed = True
 
     def follow_invitation_link_again(self, email: str) -> None:
-        token = getattr(self, "_last_invitation_token", None)
+        token = self._last_invitation_token
         assert token, "No invitation token stored"
         page = self._open_invitation_page(email, token)
         # An already-accepted token shows the membership acknowledgement, not an accept form.
@@ -367,22 +338,19 @@ class OrgBrowserMixin(BrowserBase):
             "Expected the already-accepted acknowledgement on the page"
         )
         # The user is already a member: their org dashboard is the resolved destination.
-        self._last_accept_response = {  # ty: ignore[unresolved-attribute]
-            "redirect": f"/{self._active_slug()}/dashboard"
-        }
+        self._last_accept_response = {"redirect": f"/{self._active_slug()}/dashboard"}
 
     def assert_redirected_to_org_dashboard(self) -> None:
-        last_accept = getattr(self, "_last_accept_response", None)
+        last_accept = self._last_accept_response
         if last_accept and "redirect" in last_accept:
             assert "/dashboard" in last_accept["redirect"], (
                 f"Expected redirect to dashboard/org, got: {last_accept['redirect']}"
             )
             return
-        last = getattr(self, "last_response", None)
-        if last is not None:
-            status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
-            assert status_code == 200, f"Expected 200, got {status_code}"
-            data = last.json()
+        if self.last_response is not None:
+            status = self.last_response.status
+            assert status == 200, f"Expected 200, got {status}"
+            data = self.last_response.json()
             assert "redirect" in data and "/dashboard" in data["redirect"], (
                 f"Expected redirect to /<slug>/dashboard, got: {data}"
             )
@@ -390,25 +358,24 @@ class OrgBrowserMixin(BrowserBase):
     def assert_action_fails_with(self, message: str) -> None:
         # A revoked/used invitation link renders an error page with no accept control;
         # the browser proves the failure from that rendered state, not an API error string.
-        if getattr(self, "_invitation_action_failed", False):
-            self._invitation_action_failed = False  # ty: ignore[unresolved-attribute]
+        if self._invitation_action_failed:
+            self._invitation_action_failed = False
             return
         # Invite errors surface as a rendered HTML fragment (200 + [data-error]).
-        err = getattr(self, "_last_error_text", None)
+        err = self._last_error_text
         if err:
-            self._last_error_text = None  # ty: ignore[unresolved-attribute]
+            self._last_error_text = None
             assert message.lower() in err.lower(), f"Expected error {message!r} in {err!r}"
             return
-        last = getattr(self, "last_response", None)
-        assert last is not None, "No response stored"
-        status_code = getattr(last, "status", None) or getattr(last, "status_code", None)
+        assert self.last_response is not None, "No response stored"
+        status_code = self.last_response.status
         assert status_code in (400, 409, 404, 422), f"Expected error status, got {status_code}"
-        body = last.json()
+        body = self.last_response.json()
         detail = body.get("detail", "")
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
 
     def view_org_dashboard(self) -> None:
-        slug = getattr(self, "active_org_handle", "")
+        slug = self.active_org_handle
         self.last_response = self.page.goto(f"{self.base_url}/{slug}/dashboard", wait_until="load")
 
     def assert_org_dashboard_visible(self) -> None:
