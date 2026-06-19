@@ -99,7 +99,7 @@ letsencrypt:
 	certbot certonly --standalone -d $(DOMAIN) --agree-tos --non-interactive
 	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
 
-ci: js-build lint typecheck audit coverage-erase test test-e2e coverage-xml
+ci: js-build lint format typecheck audit coverage-erase test test-e2e coverage-xml
 
 act:
 	act push -j ci -P ubuntu-latest=catthehacker/ubuntu:act-24.04 --container-architecture linux/amd64 --network host
