@@ -2,7 +2,11 @@
 
 {% block title %}Resources — labase{% endblock %}
 
-{% block breadcrumb %}<span class="text-gray-400">Learning · Resources</span>{% endblock %}
+{% block breadcrumb %}
+  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <span class="text-gray-700">Learning · Resources</span>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-xl space-y-4">
