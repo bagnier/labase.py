@@ -197,6 +197,23 @@ class OrgApiMixin(ApiBase):
         assert inv is not None, f"No pending invitation for {email!r} to revoke"
         self.response = self.client().delete(f"/{self._handle()}/invitations/{inv['id']}")
 
+    def register_via_invitation_and_accept(self, email: str) -> None:
+        token = getattr(self, "_last_invitation_token", None)
+        assert token, "No invitation token stored"
+        client = self._make_client()
+        next_url = f"/invitations/{token}"
+        client.post(
+            "/auth/register", data={"email": email, "password": _PASSWORD, "next": next_url}
+        )
+        client.post("/auth/login", data={"email": email, "password": _PASSWORD, "next": next_url})
+        resp = client.post(f"/invitations/{token}/accept")
+        assert resp.status_code == 200, (
+            f"POST /invitations/{token}/accept returned {resp.status_code}: {resp.text}"
+        )
+        self._clients[email] = client
+        self._track_auth_email(email)
+        self.response = resp
+
     def accept_invitation(self, email: str) -> None:
         token = getattr(self, "_last_invitation_token", None)
         assert token, "No invitation token stored — call invite_member first"

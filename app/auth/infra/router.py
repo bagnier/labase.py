@@ -157,8 +157,8 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
 
 
 @router.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "register.html")
+async def register_page(request: Request, next: str | None = None) -> HTMLResponse:
+    return templates.TemplateResponse(request, "register.html", {"next": next})
 
 
 @router.post("/register")
@@ -171,6 +171,7 @@ async def register_endpoint(
     body = await parse_body(request)
     email = body.get("email", "")
     password = body.get("password", "")
+    next = body.get("next", "")
     ip = request.client.host if request.client else None
     if not email or not password:
         if wants_json(request):
@@ -181,7 +182,7 @@ async def register_endpoint(
         return templates.TemplateResponse(
             request,
             "register.html",
-            {"error": "Email and password are required.", "email": email},
+            {"error": "Email and password are required.", "email": email, "next": next},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
@@ -194,9 +195,10 @@ async def register_endpoint(
                 {"message": "Account created. Please verify your email."},
                 status_code=status.HTTP_201_CREATED,
             )
-        return RedirectResponse(
-            "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
-        )
+        login_url = "/auth/login?info=registered"
+        if next:
+            login_url += f"&next={next}"
+        return RedirectResponse(login_url, status_code=status.HTTP_303_SEE_OTHER)
     except AuthWeakPasswordError as e:
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
     except AuthApiError as e:
@@ -210,7 +212,7 @@ async def register_endpoint(
     return templates.TemplateResponse(
         request,
         "register.html",
-        {"error": error, "email": email},
+        {"error": error, "email": email, "next": next},
         status_code=status.HTTP_400_BAD_REQUEST,
     )
 

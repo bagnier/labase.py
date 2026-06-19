@@ -13,13 +13,21 @@
         <p class="text-sm font-medium">{{ inv.email }}</p>
         <p class="meta-text">Sent on {{ inv.created_at.strftime('%Y-%m-%d') }}</p>
       </div>
-      <button data-revoke class="btn-danger btn-sm"
-              hx-delete="/{{ org_handle }}/invitations/{{ inv.id }}"
-              hx-target="#inv-row-{{ inv.id }}"
-              hx-swap="outerHTML"
-              hx-confirm="Revoke invitation for {{ inv.email }}?">
-        Revoke
-      </button>
+      <div class="flex items-center gap-2">
+        <button data-copy-link
+                data-invitation-link="/invitations/{{ inv.token }}"
+                class="btn-secondary btn-sm"
+                onclick="navigator.clipboard.writeText(location.origin + this.dataset.invitationLink).then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy link', 2000) })">
+          Copy link
+        </button>
+        <button data-revoke class="btn-danger btn-sm"
+                hx-delete="/{{ org_handle }}/invitations/{{ inv.id }}"
+                hx-target="#inv-row-{{ inv.id }}"
+                hx-swap="outerHTML"
+                hx-confirm="Revoke invitation for {{ inv.email }}?">
+          Revoke
+        </button>
+      </div>
     </div>
     {% endfor %}
   </div>

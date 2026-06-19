@@ -3,7 +3,7 @@ import uuid
 from playwright.sync_api import Page
 
 from app.auth.tests.admin_helpers import find_users
-from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
+from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
 
 class OrgBrowserMixin(BrowserBase):
@@ -296,6 +296,37 @@ class OrgBrowserMixin(BrowserBase):
         self.last_response = self.click_and_capture(
             page, f"[data-invitation-email='{email}'] [data-revoke]", "DELETE", "/invitations/"
         )
+
+    def register_via_invitation_and_accept(self, email: str) -> None:
+        token = self._last_invitation_token
+        assert token, "No invitation token stored"
+        visitor_ctx = self.context_for(_VISITOR)
+        page = visitor_ctx.new_page()
+        # Visit the invitation link — should show "Create account to accept"
+        page.goto(f"{self.base_url}/invitations/{token}", wait_until="load")
+        page.click("[data-accept]")  # "Create account to accept" link → /auth/register?next=...
+        page.wait_for_load_state("load")
+        # Register
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", _PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_load_state("load")
+        # Should land on login page with next preserved; fill login form
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", _PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_load_state("load")
+        # Should be back on the invitation page — click accept
+        accept_btn = page.query_selector("[data-accept]")
+        assert accept_btn is not None, (
+            f"Accept button not found after register+login redirect — landed on {page.url}"
+        )
+        page.click("[data-accept]")
+        page.wait_for_load_state("load")
+        # Promote visitor context to this user so subsequent steps work
+        self._contexts[email] = visitor_ctx
+        self._pages[email] = page
+        self._last_accept_response = {"redirect": page.url}
 
     def accept_invitation(self, email: str) -> None:
         token = self._last_invitation_token

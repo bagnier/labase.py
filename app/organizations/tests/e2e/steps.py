@@ -125,6 +125,11 @@ def step_revoke_invitation(driver, email):
     driver.revoke_invitation(email)
 
 
+@when(parsers.parse('"{email}" registers through the invitation link and accepts it'))
+def step_register_via_invitation(driver, email):
+    driver.register_via_invitation_and_accept(email)
+
+
 @when(parsers.parse('"{email}" accepts the invitation'))
 def step_accept_invitation(driver, email):
     driver.accept_invitation(email)

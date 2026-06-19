@@ -52,6 +52,12 @@ Feature: Organisation invitations
 
   # Accept invitation
 
+  Scenario: New user registers through the invitation link and joins the organisation
+    When they invite "bob@example.com" to the organisation with role "member"
+    And "bob@example.com" registers through the invitation link and accepts it
+    Then "bob@example.com" appears in the member list with role "member"
+    And "bob@example.com" does not appear in the pending invitations list
+
   Scenario: Invited user accepts an invitation and joins the organisation
     When they invite "bob@example.com" to the organisation with role "member"
     And "bob@example.com" accepts the invitation
