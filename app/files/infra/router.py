@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import uuid
 from typing import Annotated
 
@@ -41,13 +42,14 @@ async def _get_file_repo(session: RlsSession, org_id: CurrentOrg) -> OrgFileRepo
 
 FileRepo = Annotated[OrgFileRepository, Depends(_get_file_repo)]
 
-_UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_UNSAFE_FILENAME = re.compile(r"[^a-zA-Z0-9._-]")
 
 
 def _sanitize_filename(name: str) -> str:
     name = name.strip()
     if not name or ".." in name.split("/")[0] or "/" in name or "\\" in name:
         raise ValueError("Invalid filename")
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     cleaned = _UNSAFE_FILENAME.sub("_", name)
     if not cleaned or cleaned.lstrip(".") == "":
         raise ValueError("Invalid filename")
