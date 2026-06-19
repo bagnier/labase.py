@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 import tests.e2e.clock as test_clock
 import tests.e2e.drivers.api_transaction as db
+from app.auth.tests.admin_helpers import user_id_for_email
 from tests.e2e.drivers.api_base import ApiBase
 
 from . import setup
@@ -33,17 +34,17 @@ class LearningApiMixin(ApiBase):
         if key not in self._learn_handle:
             email = f"{key}@example.com"
             client = self.client_for(email)
-            resp = self.json_client("GET", "/organizations", client)
+            resp = client.get("/organizations")
             assert resp.status_code == 200 and resp.json(), f"no org for {email}: {resp.text}"
             org = resp.json()[0]
             self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])
-            self._learn_uid[key] = uuid.UUID(self.user_id_for_email(email))
+            self._learn_uid[key] = uuid.UUID(user_id_for_email(email))
         return key
 
     def _api(self, key: str, method: str, path: str, **kw):
         url = f"/{self._learn_handle[key]}/learning{path}"
-        return self.json_client(method, url, self.client_for(f"{key}@example.com"), **kw)
+        return self.client_for(f"{key}@example.com").request(method, url, **kw)
 
     def _learn_json(self, key: str, path: str):
         resp = self._api(key, "GET", path)

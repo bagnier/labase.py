@@ -40,7 +40,7 @@ class TodoBrowserMixin(BrowserBase):
     def add_todo(self, title: str) -> None:
         self._goto_todos()
         self.page.fill("input[name=title]", title)
-        form_path = f"/{getattr(self, '_active_org_handle', '')}/todos"
+        form_path = f"/{getattr(self, 'active_org_handle', '')}/todos"
         self._wait_htmx_response(
             form_path,
             "POST",

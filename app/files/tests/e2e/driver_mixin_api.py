@@ -8,6 +8,7 @@ from app.auth.tests.admin_helpers import (
 )
 from app.auth.tests.admin_helpers import (
     delete_user_if_exists,
+    user_id_for_email,
 )
 from app.organizations.domain.models import Organization
 from app.organizations.infra.repository import OrganizationRepository
@@ -18,7 +19,7 @@ from app.organizations.tests.admin_helpers import (
     set_membership_role as _admin_set_role,
 )
 from app.shared.persistence.database import admin_session_factory
-from tests.e2e.drivers.api_base import ApiBase
+from tests.e2e.drivers.api_base import _VISITOR, ApiBase
 
 _PASSWORD = "Secret1!"
 
@@ -28,6 +29,7 @@ class OrgFileApiMixin(ApiBase):
     secondary_handles: dict[str, str]
     share_link_url: str | None
     active_org_handle: str
+    last_registered_email: str | None
 
     def __init__(self) -> None:
         super().__init__()
@@ -35,13 +37,15 @@ class OrgFileApiMixin(ApiBase):
 
     # ── lifecycle hooks (extend the substrate via super()) ─────────────────────
     def reset_session(self) -> None:
+        self.response: httpx.Response | None = None
         self.secondary_handles = {}
         self.share_link_url = None
         self.primary_email = ""
         self.active_org_handle = ""
+        self.last_registered_email = None
         super().reset_session()
 
-    def cleanup_committed_data(self) -> None:
+    def _cleanup_committed_data(self) -> None:
         self._cleanup_orgs()
 
     # ── external (non-transactional) orgs ──────────────────────────────────────
@@ -69,13 +73,13 @@ class OrgFileApiMixin(ApiBase):
         s = slug or getattr(self, "active_org_handle", "")
         return f"/{s}{path}"
 
-    def _list_files_with(self, client: httpx.AsyncClient, slug: str) -> list[dict]:
-        resp = self.json_client("GET", f"/{slug}/files", client)
+    def _list_files_with(self, client: httpx.Client, slug: str) -> list[dict]:
+        resp = client.get(f"/{slug}/files")
         assert resp.status_code == 200, f"list_files got {resp.status_code}: {resp.text}"
         return resp.json()
 
     def _list_files(self) -> list[dict]:
-        return self._list_files_with(self.client, getattr(self, "active_org_handle", ""))
+        return self._list_files_with(self.client(), getattr(self, "active_org_handle", ""))
 
     def _file_id_by_name(self, filename: str) -> str:
         for f in self._list_files():
@@ -84,7 +88,7 @@ class OrgFileApiMixin(ApiBase):
         raise AssertionError(f"File '{filename}' not found in list")
 
     def _get_primary_org_id(self) -> str:
-        resp = self.json_client("GET", "/organizations")
+        resp = self.client().get("/organizations")
         assert resp.status_code == 200 and resp.json(), "Cannot find primary org"
         return resp.json()[0]["id"]
 
@@ -98,7 +102,7 @@ class OrgFileApiMixin(ApiBase):
         self.last_registered_email = email
         delete_user_if_exists(email)
         user_id_str = _admin_create_user(email, _PASSWORD)
-        self.track_auth_email(email)
+        self._track_auth_email(email)
 
         async def _create_org() -> tuple[str, str]:
             async with admin_session_factory()() as session:
@@ -112,28 +116,24 @@ class OrgFileApiMixin(ApiBase):
         org_id, handle = self.run(_create_org())
         self.track_org_id(org_id)
         self.active_org_handle = handle
-        self.json_client("POST", "/auth/login", json={"email": email, "password": _PASSWORD})
+        self.client().post("/auth/login", json={"email": email, "password": _PASSWORD})
         self.set_acting_email(email)
 
     # ── file operations ───────────────────────────────────────────────────────
 
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:
-        self.response = self.run(
-            self.client.post(
-                self._org_url("/files"),
-                files={"file": (filename, content, "application/octet-stream")},
-            )
+        self.response = self.client().post(
+            self._org_url("/files"),
+            files={"file": (filename, content, "application/octet-stream")},
         )
 
     def have_uploaded_file(self, filename: str) -> None:
         self.upload_file(filename)
 
     def upload_file_with_raw_filename(self, filename: str) -> None:
-        self.response = self.run(
-            self.client.post(
-                self._org_url("/files"),
-                files={"file": (filename, b"content", "application/octet-stream")},
-            )
+        self.response = self.client().post(
+            self._org_url("/files"),
+            files={"file": (filename, b"content", "application/octet-stream")},
         )
 
     def assert_upload_rejected(self, status: int) -> None:
@@ -144,20 +144,18 @@ class OrgFileApiMixin(ApiBase):
 
     def upload_oversized_file(self, size_mb: int) -> None:
         content = b"\x00" * (size_mb * 1024 * 1024)
-        self.response = self.run(
-            self.client.post(
-                self._org_url("/files"),
-                files={"file": ("big.bin", content, "application/octet-stream")},
-            )
+        self.response = self.client().post(
+            self._org_url("/files"),
+            files={"file": ("big.bin", content, "application/octet-stream")},
         )
 
     def view_file_list(self) -> None:
-        self.response = self.json_client("GET", self._org_url("/files"))
+        self.response = self.client().get(self._org_url("/files"))
         self._last_file_list: list[dict] | None = None
 
     def download_file(self, filename: str) -> None:
         file_id = self._file_id_by_name(filename)
-        self.response = self.run(self.client.get(self._org_url(f"/files/{file_id}/download")))
+        self.response = self.client().get(self._org_url(f"/files/{file_id}/download"))
 
     def _find_file_id(self, filename: str) -> str | None:
         for f in self._list_files():
@@ -168,13 +166,13 @@ class OrgFileApiMixin(ApiBase):
     def delete_file(self, filename: str) -> None:
         file_id = self._find_file_id(filename)
         assert file_id is not None, f"File '{filename}' not found"
-        self.response = self.json_client("DELETE", self._org_url(f"/files/{file_id}"))
+        self.response = self.client().delete(self._org_url(f"/files/{file_id}"))
 
     def rename_file(self, old_filename: str, new_filename: str) -> None:
         file_id = self._find_file_id(old_filename)
         assert file_id is not None, f"File '{old_filename}' not found"
-        self.response = self.json_client(
-            "PATCH", self._org_url(f"/files/{file_id}"), json={"filename": new_filename}
+        self.response = self.client().patch(
+            self._org_url(f"/files/{file_id}"), json={"filename": new_filename}
         )
 
     # ── multi-user operations ─────────────────────────────────────────────────
@@ -184,7 +182,7 @@ class OrgFileApiMixin(ApiBase):
         # it when the member uploads files. Same constraint as sign_in_within_org.
         self.client_for(email)  # ensure user is created and logged in
         org_id = self._get_primary_org_id()
-        user_id = self.user_id_for_email(email)
+        user_id = user_id_for_email(email)
         _admin_add_membership(org_id, user_id, role="member")
         self.secondary_handles[email] = self.active_org_handle
 
@@ -192,43 +190,41 @@ class OrgFileApiMixin(ApiBase):
         client = self.client_for(email)
         slug = self.secondary_handles.get(email, self.active_org_handle)
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
-        self.run(
-            client.post(
-                f"/{slug}/files",
-                files={"file": (filename, content, "application/octet-stream")},
-            )
+        client.post(
+            f"/{slug}/files",
+            files={"file": (filename, content, "application/octet-stream")},
         )
 
     def create_user_in_org(self, email: str, org_name: str) -> None:
         client = self.client_for(email)
-        resp = self.json_client("GET", "/organizations", client)
+        resp = client.get("/organizations")
         if resp.status_code == 200 and resp.json():
             slug = resp.json()[0]["handle"]
             self.secondary_handles[email] = slug
-            self.json_client("PATCH", f"/{slug}", client, json={"name": org_name})
+            client.patch(f"/{slug}", json={"name": org_name})
 
     def promote_to_owner(self) -> None:
         # Uses admin helper to bypass last-owner constraint during test setup.
         org_id = self._get_primary_org_id()
-        user_id = self.user_id_for_email(self.primary_email)
+        user_id = user_id_for_email(self.primary_email)
         _admin_set_role(org_id, user_id, "owner")
 
     def demote_to_member(self) -> None:
         # Uses admin helper to bypass last-owner constraint during test setup.
         org_id = self._get_primary_org_id()
-        user_id = self.user_id_for_email(self.primary_email)
+        user_id = user_id_for_email(self.primary_email)
         _admin_set_role(org_id, user_id, "member")
 
     def generate_share_link(self, filename: str) -> None:
         file_id = self._file_id_by_name(filename)
-        resp = self.json_client("POST", self._org_url(f"/files/{file_id}/share"))
+        resp = self.client().post(self._org_url(f"/files/{file_id}/share"))
         assert resp.status_code == 200, f"share link generation failed: {resp.text}"
         self.share_link_url = resp.json()["url"]
 
     def view_file_list_as(self, email: str) -> None:
         client = self.client_for(email)
         slug = self.secondary_handles.get(email, self.active_org_handle)
-        self.response = self.json_client("GET", f"/{slug}/files", client)
+        self.response = client.get(f"/{slug}/files")
         assert self.response.status_code == 200, (
             f"view_file_list_as got {self.response.status_code}"
         )
@@ -236,13 +232,11 @@ class OrgFileApiMixin(ApiBase):
 
     def access_share_link_as(self, email: str) -> None:
         assert self.share_link_url, "No share link stored"
-        client = self.client_for(email)
-        self.response = self.run(client.get(self.share_link_url))
+        self.response = self.client_for(email).get(self.share_link_url)
 
     def access_share_link_unauthenticated(self) -> None:
         assert self.share_link_url, "No share link stored"
-        anon = self.make_client()
-        self.response = self.run(anon.get(self.share_link_url))
+        self.response = self.client_for(_VISITOR).get(self.share_link_url)
 
     # ── assertions ────────────────────────────────────────────────────────────
 

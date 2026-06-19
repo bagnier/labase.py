@@ -7,7 +7,7 @@ class TodoApiMixin(ApiBase):
         return f"/{slug}/todos{path}"
 
     def _todo_id_by_title(self, title: str) -> str:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         todos = resp.json()
         for t in todos:
             if t["title"] == title:
@@ -16,64 +16,59 @@ class TodoApiMixin(ApiBase):
 
     def have_todo_items(self, titles: list[str]) -> None:
         for title in reversed(titles):
-            self.json_client("POST", self._todos_url(), json={"title": title})
+            self.client().post(self._todos_url(), json={"title": title}).raise_for_status()
 
     def view_todo_list(self) -> None:
-        self.response = self.json_client("GET", self._todos_url())
+        self.client().get(self._todos_url()).raise_for_status()
 
     def add_todo(self, title: str) -> None:
-        self.response = self.json_client("POST", self._todos_url(), json={"title": title})
+        self.client().post(self._todos_url(), json={"title": title}).raise_for_status()
 
     def mark_todo_done(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self.response = self.json_client(
-            "PATCH", self._todos_url(f"/{todo_id}"), json={"done": True}
-        )
+        self.client().patch(self._todos_url(f"/{todo_id}"), json={"done": True}).raise_for_status()
 
     def mark_todo_not_done(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self.response = self.json_client(
-            "PATCH", self._todos_url(f"/{todo_id}"), json={"done": False}
-        )
+        self.client().patch(self._todos_url(f"/{todo_id}"), json={"done": False}).raise_for_status()
 
     def rename_todo(self, title: str, new_title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self.response = self.json_client(
-            "PATCH", self._todos_url(f"/{todo_id}"), json={"title": new_title}
-        )
+        resp = self.client().patch(self._todos_url(f"/{todo_id}"), json={"title": new_title})
+        resp.raise_for_status()
 
     def delete_todo(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self.response = self.json_client("DELETE", self._todos_url(f"/{todo_id}"))
+        self.client().delete(self._todos_url(f"/{todo_id}")).raise_for_status()
 
     def move_todo_above(self, title: str, above: str) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         todos = resp.json()
         ids = {t["title"]: t["id"] for t in todos}
-        self.response = self.json_client(
-            "PUT", self._todos_url(f"/{ids[title]}/position"), json={"above_id": ids[above]}
-        )
+        self.client().put(
+            self._todos_url(f"/{ids[title]}/position"), json={"above_id": ids[above]}
+        ).raise_for_status()
 
     def move_todo_to_end(self, title: str) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         todos = resp.json()
         ids = {t["title"]: t["id"] for t in todos}
-        self.response = self.json_client(
-            "PUT", self._todos_url(f"/{ids[title]}/position"), json={"above_id": None}
-        )
+        self.client().put(
+            self._todos_url(f"/{ids[title]}/position"), json={"above_id": None}
+        ).raise_for_status()
 
     def assert_todo_list_order(self, titles: list[str]) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         actual = [t["title"] for t in resp.json()]
         assert actual == titles, f"Expected order {titles}, got {actual}"
 
     def assert_todo_visible(self, title: str) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         titles = [t["title"] for t in resp.json()]
         assert title in titles, f"'{title}' not found in todo list: {titles}"
 
     def assert_todo_completed(self, title: str) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         for t in resp.json():
             if t["title"] == title:
                 assert t["done"], f"Todo '{title}' is not marked as done"
@@ -81,7 +76,7 @@ class TodoApiMixin(ApiBase):
         raise AssertionError(f"Todo '{title}' not found")
 
     def assert_todo_not_completed(self, title: str) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         for t in resp.json():
             if t["title"] == title:
                 assert not t["done"], f"Todo '{title}' should not be marked as done"
@@ -89,6 +84,6 @@ class TodoApiMixin(ApiBase):
         raise AssertionError(f"Todo '{title}' not found")
 
     def assert_todo_absent(self, title: str) -> None:
-        resp = self.json_client("GET", self._todos_url())
+        resp = self.client().get(self._todos_url())
         titles = [t["title"] for t in resp.json()]
         assert title not in titles, f"'{title}' should be absent but found in: {titles}"

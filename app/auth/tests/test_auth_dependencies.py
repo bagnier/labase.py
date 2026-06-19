@@ -97,24 +97,20 @@ async def test_expired_token_without_refresh_returns_401(client):
 
 
 def test_profile_browser_redirect_to_login_when_unauthenticated(driver):
-    response = driver.run(
-        driver.client.get(
-            "/profile",
-            headers={"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"},
-            follow_redirects=False,
-        )
+    response = driver.client().get(
+        "/profile",
+        headers={"Accept": "text/html,application/xhtml+xml,*/*;q=0.8"},
+        follow_redirects=False,
     )
     assert response.status_code == 302
     assert response.headers["location"] == "/auth/login?next=/profile"
 
 
 def test_profile_api_client_gets_401_with_json_accept(driver):
-    response = driver.run(
-        driver.client.get(
-            "/profile",
-            headers={"Accept": "application/json"},
-            follow_redirects=False,
-        )
+    response = driver.client().get(
+        "/profile",
+        headers={"Accept": "application/json"},
+        follow_redirects=False,
     )
     assert response.status_code == 401
 
@@ -134,39 +130,35 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
 
 
 def test_login_unexpected_exception_returns_503(driver):
+    creds = {"email": "x@test.local", "password": "pw"}
     with patch("app.auth.infra.router.login", side_effect=RuntimeError("unexpected")):
-        response = driver.run(
-            driver.client.post("/auth/login", data={"email": "x@test.local", "password": "pw"})
-        )
+        response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 503
     assert "system error" in response.text.lower()
 
 
 def test_login_email_not_confirmed_returns_401_with_message(driver):
     err = AuthApiError("Email not confirmed", 400, "email_not_confirmed")
+    creds = {"email": "x@test.local", "password": "pw"}
     with patch("app.auth.infra.router.login", side_effect=err):
-        response = driver.run(
-            driver.client.post("/auth/login", data={"email": "x@test.local", "password": "pw"})
-        )
+        response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 401
     assert "verify your email" in response.text.lower()
 
 
 def test_login_wrong_password_returns_401_with_generic_message(driver):
     err = AuthApiError("Invalid login credentials", 400, "invalid_credentials")
+    creds = {"email": "x@test.local", "password": "pw"}
     with patch("app.auth.infra.router.login", side_effect=err):
-        response = driver.run(
-            driver.client.post("/auth/login", data={"email": "x@test.local", "password": "pw"})
-        )
+        response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 401
     assert "invalid email or password" in response.text.lower()
 
 
 def test_register_unexpected_exception_returns_400(driver):
+    creds = {"email": "x@test.local", "password": "pw"}
     with patch("app.auth.infra.router.register_user", side_effect=RuntimeError("unexpected")):
-        response = driver.run(
-            driver.client.post("/auth/register", data={"email": "x@test.local", "password": "pw"})
-        )
+        response = driver.client().post("/auth/register", data=creds)
     assert response.status_code == 400
     assert "unexpected error" in response.text.lower()
 

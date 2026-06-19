@@ -39,3 +39,9 @@ def create_user(email: str, password: str) -> str:
 
 def delete_user(uid: str) -> None:
     get_admin_supabase().auth.admin.delete_user(uid)
+
+
+def user_id_for_email(email: str) -> str:
+    users = find_users(email)
+    assert users, f"User {email!r} not found in Supabase"
+    return users[0].id
