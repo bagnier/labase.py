@@ -20,16 +20,6 @@ _PASSWORD = "Secret1!"
 
 class LearningBrowserMixin(BrowserBase):
     # ── state ────────────────────────────────────────────────────────────────
-    def _ensure_learn(self) -> None:
-        if not hasattr(self, "_learn_ctx"):
-            self._learn_ctx: dict = {}
-            self._learn_page: dict = {}
-            self._learn_handle: dict = {}
-            self._learn_org: dict = {}
-            self._learn_uid: dict = {}
-            self._deck_defs: list = []
-            self._learn_current: str | None = None
-
     _DEFAULT_DATE = "2024-09-01"
 
     def _today(self) -> date:
@@ -43,13 +33,13 @@ class LearningBrowserMixin(BrowserBase):
         for ctx in getattr(self, "_learn_ctx", {}).values():
             with contextlib.suppress(Exception):
                 ctx.close()
-        self._learn_ctx = {}
-        self._learn_page = {}
-        self._learn_handle = {}
-        self._learn_org = {}
-        self._learn_uid = {}
-        self._deck_defs = []
-        self._learn_current = None
+        self._learn_ctx: dict = {}
+        self._learn_page: dict = {}
+        self._learn_handle: dict = {}
+        self._learn_org: dict = {}
+        self._learn_uid: dict = {}
+        self._deck_defs: list = []
+        self._learn_current: str | None = None
 
     def _seed(self, fn):
         result: dict = {}
@@ -86,7 +76,6 @@ class LearningBrowserMixin(BrowserBase):
 
     # ── users / orgs ──────────────────────────────────────────────────────────
     def _user(self, name: str) -> str:
-        self._ensure_learn()
         key = name.lower()
         self._learn_current = key
         if key not in self._learn_ctx:
@@ -127,7 +116,6 @@ class LearningBrowserMixin(BrowserBase):
 
     # ── catalog & subscription ─────────────────────────────────────────────────
     def define_deck(self, name: str, resource: str | None, cards: list[dict]) -> None:
-        self._ensure_learn()
         test_clock.ensure(self._DEFAULT_DATE)
         self._deck_defs.append((name, resource, cards))
 

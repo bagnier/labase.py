@@ -9,33 +9,26 @@ from . import setup
 
 
 class LearningApiMixin(ApiBase):
-    # ── state ────────────────────────────────────────────────────────────────
-    def _ensure_learn(self) -> None:
-        if not hasattr(self, "_learn_clients"):
-            self._learn_clients: dict = {}
-            self._learn_handle: dict = {}
-            self._learn_org: dict = {}
-            self._learn_uid: dict = {}
-            self._deck_defs: list = []
-            self._learn_current: str | None = None
-
     # Default deterministic "today" for scenarios that don't pin one explicitly.
     _DEFAULT_DATE = "2024-09-01"
 
     def _today(self) -> date:
         return test_clock.today()
 
+    def reset_session(self) -> None:
+        self._reset_learning()
+        super().reset_session()
+
     def _reset_learning(self) -> None:
-        self._learn_clients = {}
-        self._learn_handle = {}
-        self._learn_org = {}
-        self._learn_uid = {}
-        self._deck_defs = []
-        self._learn_current = None
+        self._learn_clients: dict = {}
+        self._learn_handle: dict = {}
+        self._learn_org: dict = {}
+        self._learn_uid: dict = {}
+        self._deck_defs: list = []
+        self._learn_current: str | None = None
 
     # ── users / orgs ──────────────────────────────────────────────────────────
     def _user(self, name: str) -> str:
-        self._ensure_learn()
         key = name.lower()
         self._learn_current = key
         if key not in self._learn_clients:
@@ -65,7 +58,6 @@ class LearningApiMixin(ApiBase):
 
     # ── catalog & subscription ─────────────────────────────────────────────────
     def define_deck(self, name: str, resource: str | None, cards: list[dict]) -> None:
-        self._ensure_learn()
         test_clock.ensure(self._DEFAULT_DATE)
         self._deck_defs.append((name, resource, cards))
 
