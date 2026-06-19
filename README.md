@@ -50,6 +50,8 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 
 **Testing.** Tests are complete and sincere — no mocking the persistence layer, no bypassing HTTP, no shortcuts that hide real app state. E2E tests interact exclusively via HTTP endpoints or the browser UI. The same Gherkin scenarios run against both an API driver (fast) and a browser driver (Playwright).
 
+Both drivers share a substrate in `tests/e2e/drivers/` (`ApiBase` / `BrowserBase`) that each context's feature mixins extend; the concrete driver just assembles those mixins. Every user gets an isolated session — its own httpx client, or its own browser context with a distinct cookie jar — so multi-user scenarios never bleed auth state. Isolation differs by driver: the API driver wraps each scenario in a rolled-back transaction; the browser driver runs an in-process Hypercorn server (so test and app share memory) and truncates app tables between scenarios.
+
 **Time.** `clock.now()` is the single source of time. Never call `datetime.now()` directly.
 
 **Audit events** are best-effort — fired as `BackgroundTasks`, loss on crash is acceptable. Never block a mutation to guarantee a write.
@@ -189,7 +191,7 @@ make typecheck    # ty check
 make quality      # lint + format + typecheck
 
 make test         # pytest unit/integration (generates coverage)
-make test-e2e     # pytest-bdd browser driver + Playwright E2E (requires running app)
+make test-e2e     # pytest-bdd browser driver + Playwright E2E
 make test-all     # test + test-e2e + coverage XML
 
 make ci           # js-build + lint + typecheck + test + test-e2e + coverage XML
