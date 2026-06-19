@@ -82,7 +82,7 @@ class LearningBrowserMixin(BrowserBase):
             assert self._context
             email = f"{key}@example.com"
             delete_user_if_exists(email)
-            ctx = self._b.new_context()
+            ctx = self._browser.new_context()
             self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
             uid = find_users(email)[0].id
             orgs = orgs_for_user(uid)

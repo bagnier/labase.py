@@ -138,8 +138,3 @@ class ApiBase:
         users = find_users(email)
         assert users, f"User {email!r} not found in Supabase"
         return users[0].id
-
-    # ── cross-feature methods (real impl provided by feature mixins) ───────────
-    def delete_todo(self, title: str) -> None: ...
-
-    def rename_todo(self, title: str, new_title: str) -> None: ...

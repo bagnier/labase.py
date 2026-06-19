@@ -18,12 +18,12 @@ Feature: Todo list
 
   Scenario: Reorder todo items manually
     Given they have todo items "Buy groceries", "Call dentist", "Read book"
-    When they move "Read book" above "Buy groceries"
+    When they move the todo item "Read book" above "Buy groceries"
     Then the items appear in order: "Read book", "Buy groceries", "Call dentist"
 
   Scenario: Move a todo item to the end of the list
     Given they have todo items "Buy groceries", "Call dentist", "Read book"
-    When they move "Buy groceries" to the end
+    When they move the todo item "Buy groceries" to the end
     Then the items appear in order: "Call dentist", "Read book", "Buy groceries"
 
   Scenario: Added todo item are not completed
@@ -32,22 +32,22 @@ Feature: Todo list
 
   Scenario: Mark a todo item as done
     Given they have a todo item "Buy groceries"
-    When they mark "Buy groceries" as done
+    When they mark the todo item "Buy groceries" as done
     Then "Buy groceries" is shown as completed
 
   Scenario: Mark a todo item as not done
     Given they have a todo item "Buy groceries"
-    When they mark "Buy groceries" as done
-    When they mark "Buy groceries" as not done
+    When they mark the todo item "Buy groceries" as done
+    When they mark the todo item "Buy groceries" as not done
     Then "Buy groceries" is shown as not completed
 
   Scenario: Rename a todo item
     Given they have a todo item "Buy groceries"
-    When they rename "Buy groceries" to "Buy vegetables"
+    When they rename the todo item "Buy groceries" to "Buy vegetables"
     Then "Buy vegetables" appears in their todo list
     And "Buy groceries" no longer appears in their todo list
 
   Scenario: Delete a todo item
     Given they have a todo item "Buy groceries"
-    When they delete "Buy groceries"
+    When they delete the todo item "Buy groceries"
     Then "Buy groceries" no longer appears in their todo list

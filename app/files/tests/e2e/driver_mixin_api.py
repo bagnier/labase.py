@@ -182,16 +182,12 @@ class OrgFileApiMixin(ApiBase):
 
     def delete_file(self, filename: str) -> None:
         file_id = self._find_file_id(filename)
-        if file_id is None:
-            self.delete_todo(filename)
-            return
+        assert file_id is not None, f"File '{filename}' not found"
         self._response = self.json_client("DELETE", self._org_url(f"/files/{file_id}"))
 
     def rename_file(self, old_filename: str, new_filename: str) -> None:
         file_id = self._find_file_id(old_filename)
-        if file_id is None:
-            self.rename_todo(old_filename, new_filename)
-            return
+        assert file_id is not None, f"File '{old_filename}' not found"
         self._response = self.json_client(
             "PATCH", self._org_url(f"/files/{file_id}"), json={"filename": new_filename}
         )

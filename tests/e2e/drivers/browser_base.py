@@ -39,7 +39,7 @@ class BrowserBase:
         self._bg: BackgroundLoop | None = None
         self._shutdown: asyncio.Event | None = None
         self._server_future = None
-        self._pw = None
+        self._playwright = None
         self._browser = None
         self._context = None
         self._page: Page | None = None
@@ -70,8 +70,8 @@ class BrowserBase:
             )
             self._wait_for_server()
 
-        self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch()
+        self._playwright = sync_playwright().start()
+        self._browser = self._playwright.chromium.launch()
         self._open_context()
 
     def _open_context(self) -> None:
@@ -96,8 +96,8 @@ class BrowserBase:
             self._context.close()
         if self._browser:
             self._browser.close()
-        if self._pw:
-            self._pw.stop()
+        if self._playwright:
+            self._playwright.stop()
         self._stop_server()
 
     def _stop_server(self) -> None:
@@ -129,12 +129,12 @@ class BrowserBase:
         self._org_list_response = None  # type: ignore[attr-defined]
 
     @property
-    def _p(self) -> Page:
+    def _page(self) -> Page:
         assert self._page
         return self._page
 
     @property
-    def _b(self) -> Browser:
+    def _browser(self) -> Browser:
         assert self._browser
         return self._browser
 
@@ -165,10 +165,3 @@ class BrowserBase:
         ) as info:
             page.click(selector)
         return info.value
-
-    # ── cross-feature methods (real impl provided by feature mixins) ───────────
-    def sign_in(self, email: str, password: str) -> None: ...
-
-    def delete_todo(self, title: str) -> None: ...
-
-    def rename_todo(self, title: str, new_title: str) -> None: ...

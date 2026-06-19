@@ -45,14 +45,14 @@ Feature: Org file storage
 
   Scenario: Delete own file
     Given they have uploaded "rapport.pdf" to the org
-    When they delete "rapport.pdf"
+    When they delete the file "rapport.pdf"
     Then "rapport.pdf" no longer appears in the file list
 
   Scenario: Member cannot delete another member's file
     Given they are a member of the org
     And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
-    When they delete "budget.xlsx"
+    When they delete the file "budget.xlsx"
     Then the action is denied
     And "budget.xlsx" appears in the file list
 
@@ -60,14 +60,14 @@ Feature: Org file storage
     Given "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
     And they are an owner of the org
-    When they delete "budget.xlsx"
+    When they delete the file "budget.xlsx"
     Then "budget.xlsx" no longer appears in the file list
 
   # Rename
 
   Scenario: Rename own file
     Given they have uploaded "rapport.pdf" to the org
-    When they rename "rapport.pdf" to "rapport-v2.pdf"
+    When they rename the file "rapport.pdf" to "rapport-v2.pdf"
     Then "rapport-v2.pdf" appears in the file list
     And "rapport.pdf" no longer appears in the file list
 
@@ -75,7 +75,7 @@ Feature: Org file storage
     Given they are a member of the org
     And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
-    When they rename "budget.xlsx" to "budget-final.xlsx"
+    When they rename the file "budget.xlsx" to "budget-final.xlsx"
     Then the action is denied
 
   # Org isolation

@@ -22,27 +22,27 @@ def step_add_todo(driver, title):
     driver.add_todo(title)
 
 
-@when(parsers.parse('they mark "{title}" as done'))
+@when(parsers.parse('they mark the todo item "{title}" as done'))
 def step_mark_todo_done(driver, title):
     driver.mark_todo_done(title)
 
 
-@when(parsers.parse('they rename "{title}" to "{new_title}"'))
+@when(parsers.parse('they rename the todo item "{title}" to "{new_title}"'))
 def step_rename_todo(driver, title, new_title):
     driver.rename_todo(title, new_title)
 
 
-@when(parsers.parse('they delete "{title}"'))
+@when(parsers.parse('they delete the todo item "{title}"'))
 def step_delete_todo(driver, title):
     driver.delete_todo(title)
 
 
-@when(parsers.parse('they move "{title}" above "{above}"'))
+@when(parsers.parse('they move the todo item "{title}" above "{above}"'))
 def step_move_todo_above(driver, title, above):
     driver.move_todo_above(title, above)
 
 
-@when(parsers.parse('they move "{title}" to the end'))
+@when(parsers.parse('they move the todo item "{title}" to the end'))
 def step_move_todo_to_end(driver, title):
     driver.move_todo_to_end(title)
 
@@ -58,7 +58,7 @@ def step_assert_todo_visible(driver, title):
     driver.assert_todo_visible(title)
 
 
-@when(parsers.parse('they mark "{title}" as not done'))
+@when(parsers.parse('they mark the todo item "{title}" as not done'))
 def step_mark_todo_not_done(driver, title):
     driver.mark_todo_not_done(title)
 

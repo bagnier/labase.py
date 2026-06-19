@@ -44,7 +44,7 @@ def step_download_file(driver, filename):
     driver.download_file(filename)
 
 
-@when(parsers.parse('they delete "{filename}"'))
+@when(parsers.parse('they delete the file "{filename}"'))
 def step_delete_file(driver, filename):
     driver.delete_file(filename)
 
@@ -89,7 +89,7 @@ def step_generate_share_link(driver, filename):
     driver.generate_share_link(filename)
 
 
-@when(parsers.parse('they rename "{filename}" to "{new_filename}"'))
+@when(parsers.parse('they rename the file "{filename}" to "{new_filename}"'))
 def step_rename_file(driver, filename, new_filename):
     driver.rename_file(filename, new_filename)
 

@@ -15,10 +15,10 @@ class OrgFileBrowserMixin(BrowserBase):
         return f"{self._base_url}/{s}/files"
 
     def _goto_files(self) -> None:
-        self._p.goto(self._files_url(), wait_until="load")
+        self._page.goto(self._files_url(), wait_until="load")
 
     def _dom_file_rows(self) -> list:
-        return self._p.locator("#file-list > div[data-file-id]").all()
+        return self._page.locator("#file-list > div[data-file-id]").all()
 
     def _dom_file_names(self) -> list[str]:
         return [row.locator("a").inner_text().strip() for row in self._dom_file_rows()]
@@ -40,7 +40,7 @@ class OrgFileBrowserMixin(BrowserBase):
         if not hasattr(self, "_secondary_browser_contexts"):
             self._secondary_browser_contexts: dict = {}
         if email not in self._secondary_browser_contexts:
-            ctx = self._b.new_context()
+            ctx = self._browser.new_context()
             self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
             self._secondary_browser_contexts[email] = ctx
         return self._secondary_browser_contexts[email]
@@ -50,12 +50,12 @@ class OrgFileBrowserMixin(BrowserBase):
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:
         slug = getattr(self, "_active_org_handle", "")
         self._goto_files()
-        with self._p.expect_file_chooser(timeout=5000) as fc_info:
-            self._p.click("input[type=file][name=file]")
+        with self._page.expect_file_chooser(timeout=5000) as fc_info:
+            self._page.click("input[type=file][name=file]")
         fc_info.value.set_files(
             {"name": filename, "mimeType": "application/octet-stream", "buffer": content}
         )
-        self._click_and_capture(self._p, "button[type=submit]", "POST", f"/{slug}/files")
+        self._click_and_capture(self._page, "button[type=submit]", "POST", f"/{slug}/files")
 
     def have_uploaded_file(self, filename: str) -> None:
         self.upload_file(filename)
@@ -67,9 +67,9 @@ class OrgFileBrowserMixin(BrowserBase):
             tmp.write(b"\x00" * (size_mb * 1024 * 1024))
             tmp_path = tmp.name
         self._goto_files()
-        self._p.set_input_files("input[type=file][name=file]", tmp_path)
+        self._page.set_input_files("input[type=file][name=file]", tmp_path)
         self._last_response = self._click_and_capture(
-            self._p, "button[type=submit]", "POST", f"/{slug}/files"
+            self._page, "button[type=submit]", "POST", f"/{slug}/files"
         )
 
     def view_file_list(self) -> None:
@@ -82,36 +82,35 @@ class OrgFileBrowserMixin(BrowserBase):
         # The endpoint returns 302 → Supabase signed URL → browser starts a file download.
         # Capture the 302 via expect_response; suppress the navigation error that follows.
         with (
-            self._p.expect_response(
+            self._page.expect_response(
                 lambda r: f"/files/{file_id}/download" in r.url and r.request.method == "GET",
                 timeout=10000,
             ) as resp_info,
             contextlib.suppress(Exception),
         ):
-            self._p.goto(url, wait_until="networkidle")
+            self._page.goto(url, wait_until="networkidle")
         self._last_response = resp_info.value
 
     def delete_file(self, filename: str) -> None:
         self._goto_files()
         file_id = self._dom_find_file_id(filename)
-        if file_id is None:
-            self.delete_todo(filename)
-            return
+        assert file_id is not None, f"File '{filename}' not found in DOM"
         self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
-            self._p, f"[data-file-id='{file_id}'] [data-delete-id]", "DELETE", f"/files/{file_id}"
+            self._page,
+            f"[data-file-id='{file_id}'] [data-delete-id]",
+            "DELETE",
+            f"/files/{file_id}",
         )
 
     def rename_file(self, old_filename: str, new_filename: str) -> None:
         self._goto_files()
         file_id = self._dom_find_file_id(old_filename)
-        if file_id is None:
-            self.rename_todo(old_filename, new_filename)
-            return
+        assert file_id is not None, f"File '{old_filename}' not found in DOM"
         row = f"[data-file-id='{file_id}']"
-        self._p.click(f"{row} [data-rename-id]")  # reveal the form
-        self._p.fill(f"{row} [data-rename-form] input[name=filename]", new_filename)
+        self._page.click(f"{row} [data-rename-id]")  # reveal the form
+        self._page.fill(f"{row} [data-rename-form] input[name=filename]", new_filename)
         self._last_response = self._click_and_capture(  # type: ignore[attr-defined]
-            self._p,
+            self._page,
             f"{row} [data-rename-form] button[type=submit]",
             "PATCH",
             f"/files/{file_id}",
@@ -123,8 +122,8 @@ class OrgFileBrowserMixin(BrowserBase):
         delete_user_if_exists(email)
         self.ensure_registered(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
         self.sign_in(email, _PASSWORD)  # type: ignore[attr-defined]
-        # self._p is on /profile after sign_in; extract handle from org card link
-        link = self._p.locator("[data-organisation-card] a[href*='/dashboard']").first
+        # self._page is on /profile after sign_in; extract handle from org card link
+        link = self._page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
         assert handle, f"Could not extract org handle for {email}"
@@ -132,12 +131,12 @@ class OrgFileBrowserMixin(BrowserBase):
         self._primary_email = email  # type: ignore[attr-defined]
         self._last_registered_email = email
         # Rename via settings page
-        self._p.goto(f"{self._base_url}/{handle}/settings", wait_until="load")
-        self._p.fill("input[name=name]", org_name)
-        with self._p.expect_response(
+        self._page.goto(f"{self._base_url}/{handle}/settings", wait_until="load")
+        self._page.fill("input[name=name]", org_name)
+        with self._page.expect_response(
             lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
         ):
-            self._p.click("form:has(input[name=name]) button[type=submit]")
+            self._page.click("form:has(input[name=name]) button[type=submit]")
 
     # ── multi-user operations ─────────────────────────────────────────────────
 
@@ -206,12 +205,12 @@ class OrgFileBrowserMixin(BrowserBase):
         self._goto_files()
         file_id = self._dom_file_id_by_name(filename)
         self._click_and_capture(  # type: ignore[attr-defined]
-            self._p,
+            self._page,
             f"[data-file-id='{file_id}'] [data-share-id]",
             "POST",
             f"/files/{file_id}/share",
         )
-        url_input = self._p.locator(f"#share-result-{file_id} [data-share-url]")
+        url_input = self._page.locator(f"#share-result-{file_id} [data-share-url]")
         url_input.wait_for(state="visible")
         self._share_link_url = url_input.input_value()  # type: ignore[attr-defined]
 
@@ -258,7 +257,7 @@ class OrgFileBrowserMixin(BrowserBase):
         share_url = getattr(self, "_share_link_url", None)
         assert share_url, "No share link stored"
         url = share_url if share_url.startswith("http") else f"{self._base_url}{share_url}"
-        anon_ctx = self._b.new_context()
+        anon_ctx = self._browser.new_context()
         page = anon_ctx.new_page()
         try:
             self._goto_and_capture_download(page, url)
@@ -306,12 +305,12 @@ class OrgFileBrowserMixin(BrowserBase):
     def upload_file_with_raw_filename(self, filename: str) -> None:
         slug = getattr(self, "_active_org_handle", "")
         self._goto_files()
-        self._p.set_input_files(
+        self._page.set_input_files(
             "input[type=file][name=file]",
             {"name": filename, "mimeType": "application/octet-stream", "buffer": b"content"},
         )
         self._last_response = self._click_and_capture(
-            self._p, "button[type=submit]", "POST", f"/{slug}/files"
+            self._page, "button[type=submit]", "POST", f"/{slug}/files"
         )
 
     def assert_upload_rejected(self, status: int) -> None:

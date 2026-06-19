@@ -10,31 +10,31 @@ class AuthBrowserMixin(BrowserBase):
 
     # ── HTML page access (auth smoke flows) ────────────────────────────────────
     def visit(self, path: str) -> None:
-        self._last_response = self._p.goto(f"{self._base_url}{path}", wait_until="load")
+        self._last_response = self._page.goto(f"{self._base_url}{path}", wait_until="load")
 
     def assert_page_accessible(self, path: str, contains: str) -> None:
-        self._p.goto(f"{self._base_url}{path}", wait_until="load")
-        assert contains in self._p.content(), f"'{contains}' not found on {path}"
+        self._page.goto(f"{self._base_url}{path}", wait_until="load")
+        assert contains in self._page.content(), f"'{contains}' not found on {path}"
 
     def assert_page_loaded(self) -> None:
         assert self._last_response is not None
         assert self._last_response.status == 200, f"Expected 200, got {self._last_response.status}"
 
     def sign_in(self, email: str, password: str) -> None:
-        self._p.goto(f"{self._base_url}/auth/login")
-        self._p.fill("input[name=email]", email)
-        self._p.fill("input[name=password]", password)
-        with self._p.expect_response(
+        self._page.goto(f"{self._base_url}/auth/login")
+        self._page.fill("input[name=email]", email)
+        self._page.fill("input[name=password]", password)
+        with self._page.expect_response(
             lambda r: "/auth/login" in r.url and r.request.method == "POST"
         ) as resp_info:
-            self._p.click("button[type=submit]")
+            self._page.click("button[type=submit]")
         if resp_info.value.status == 303 or resp_info.value.headers.get("hx-redirect"):
-            self._p.wait_for_url(f"{self._base_url}/profile", timeout=5000)
+            self._page.wait_for_url(f"{self._base_url}/profile", timeout=5000)
         else:
-            self._p.wait_for_load_state("domcontentloaded")
+            self._page.wait_for_load_state("domcontentloaded")
 
     def ensure_registered(self, email: str, password: str) -> None:
-        page = self._p.context.new_page()
+        page = self._page.context.new_page()
         page.goto(f"{self._base_url}/auth/register")
         page.fill("input[name=email]", email)
         page.fill("input[name=password]", password)
@@ -44,15 +44,15 @@ class AuthBrowserMixin(BrowserBase):
 
     def register(self, email: str, password: str) -> None:
         self._last_registered_email = email
-        self._p.goto(f"{self._base_url}/auth/register")
-        self._p.fill("input[name=email]", email)
-        self._p.fill("input[name=password]", password)
-        with self._p.expect_response(
+        self._page.goto(f"{self._base_url}/auth/register")
+        self._page.fill("input[name=email]", email)
+        self._page.fill("input[name=password]", password)
+        with self._page.expect_response(
             lambda r: "/auth/register" in r.url and r.request.method == "POST"
         ) as resp_info:
-            self._p.click("button[type=submit]")
+            self._page.click("button[type=submit]")
         self._last_response = resp_info.value
-        self._p.wait_for_load_state("domcontentloaded")
+        self._page.wait_for_load_state("domcontentloaded")
 
     def register_fresh(self, password: str) -> None:
         self.register(f"{uuid4()}@test.local", password)
@@ -62,8 +62,8 @@ class AuthBrowserMixin(BrowserBase):
         self.register(email, password)
 
     def _store_active_org_handle(self) -> None:
-        # self._p is on /profile after sign_in; extract handle from the org card link
-        link = self._p.locator("[data-organisation-card] a[href*='/dashboard']").first
+        # self._page is on /profile after sign_in; extract handle from the org card link
+        link = self._page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
         if handle:
@@ -77,29 +77,31 @@ class AuthBrowserMixin(BrowserBase):
         self._store_active_org_handle()
 
     def logout_action(self) -> None:
-        self._p.evaluate("fetch('/auth/logout',{method:'POST'})")
-        self._p.goto(f"{self._base_url}/auth/login", wait_until="load")
+        self._page.evaluate("fetch('/auth/logout',{method:'POST'})")
+        self._page.goto(f"{self._base_url}/auth/login", wait_until="load")
 
     def assert_unauthorized(self) -> None:
         # Browser is redirected to /auth/login (302); check final URL
-        assert "/auth/login" in self._p.url, f"Expected /auth/login, got {self._p.url}"
+        assert "/auth/login" in self._page.url, f"Expected /auth/login, got {self._page.url}"
 
     def assert_redirected_to_login(self) -> None:
-        assert "/auth/login" in self._p.url, f"Expected redirect to /auth/login, got {self._p.url}"
+        assert "/auth/login" in self._page.url, (
+            f"Expected redirect to /auth/login, got {self._page.url}"
+        )
 
     def assert_login_rejected(self) -> None:
         # HTMX 2.x drops 4xx responses without swapping — verify by checking
         # we were not redirected to the dashboard (i.e., sign-in was refused)
-        assert "/profile" not in self._p.url, (
-            f"Expected sign-in to fail but ended up at {self._p.url}"
+        assert "/profile" not in self._page.url, (
+            f"Expected sign-in to fail but ended up at {self._page.url}"
         )
 
     def assert_redirected_to_dashboard(self) -> None:
-        self._p.wait_for_url(f"{self._base_url}/profile", timeout=5000)
-        assert "/profile" in self._p.url, f"Expected /profile, got {self._p.url}"
+        self._page.wait_for_url(f"{self._base_url}/profile", timeout=5000)
+        assert "/profile" in self._page.url, f"Expected /profile, got {self._page.url}"
 
     def assert_registration_successful(self) -> None:
-        assert "verify" in self._p.content(), "'verify' not found in registration response"
+        assert "verify" in self._page.content(), "'verify' not found in registration response"
         assert self._last_registered_email is not None
         assert find_users(self._last_registered_email), (
             f"User {self._last_registered_email!r} not found in Supabase after registration"
@@ -111,7 +113,7 @@ class AuthBrowserMixin(BrowserBase):
 
     def assert_registration_failed_with_message(self, message: str) -> None:
         self.assert_registration_failed()
-        self._p.wait_for_selector("[class*='red']", timeout=3000)
-        assert message in self._p.content(), (
+        self._page.wait_for_selector("[class*='red']", timeout=3000)
+        assert message in self._page.content(), (
             f"'{message}' not found in page after registration failure"
         )
