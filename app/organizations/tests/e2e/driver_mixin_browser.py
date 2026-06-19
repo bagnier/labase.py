@@ -417,3 +417,22 @@ class OrgBrowserMixin(BrowserBase):
 
     def visit_org_dashboard_unauthenticated(self) -> None:
         self.last_response = self.page.goto(f"{self.base_url}/any-org/dashboard", wait_until="load")
+
+    # ── Dashboard overviews (verified via the rendered web view) ─────────────────
+    def _overview_text(self, key: str) -> str:
+        slug = self.active_org_handle
+        self.page.goto(f"{self.base_url}/{slug}/dashboard", wait_until="load")
+        card = self.page.locator(f"[data-overview='{key}']")
+        assert card.count() > 0, f"Overview {key!r} not found on dashboard"
+        return card.inner_text()
+
+    def assert_overview_visible(self, key: str) -> None:
+        self._overview_text(key)
+
+    def assert_overview_shows(self, key: str, text: str) -> None:
+        content = self._overview_text(key)
+        assert text in content, f"{text!r} not shown in {key} overview: {content!r}"
+
+    def assert_overview_lists(self, key: str, text: str) -> None:
+        content = self._overview_text(key)
+        assert text in content, f"{text!r} not listed in {key} overview: {content!r}"

@@ -60,6 +60,22 @@ class LearningApiMixin(ApiBase):
         test_clock.ensure(self._DEFAULT_DATE)
         self._deck_defs.append((name, resource, cards))
 
+    def _active_org_id(self) -> uuid.UUID:
+        handle = getattr(self, "active_org_handle", "")
+        for org in self.client().get("/organizations").json():
+            if org["handle"] == handle:
+                return uuid.UUID(org["id"])
+        raise AssertionError(f"No active org for handle {handle!r}")
+
+    def seed_org_deck(self, name: str, n_cards: int) -> None:
+        test_clock.ensure(self._DEFAULT_DATE)
+        org_id = self._active_org_id()
+        cards = [
+            {"external_id": f"{name[:3].upper()}{i}", "question": f"Q{i}?", "answer": f"A{i}"}
+            for i in range(n_cards)
+        ]
+        self.run(db.seed_fixtures(lambda s: setup.create_deck(s, org_id, name, None, 0, cards)))
+
     def want_to_learn(self, name: str, deck: str) -> None:
         key = self._user(name)
         org_id = self._learn_org[key]

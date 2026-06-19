@@ -269,3 +269,26 @@ class OrgApiMixin(ApiBase):
 
     def visit_org_dashboard_unauthenticated(self) -> None:
         self.response = self.client().get("/any-org/dashboard")
+
+    # ── Dashboard overviews (verified via the REST JSON endpoint) ────────────────
+    def _overview(self, key: str) -> dict:
+        slug = getattr(self, "active_org_handle", "")
+        resp = self.client().get(f"/{slug}/dashboard/overviews.json")
+        assert resp.status_code == 200, (
+            f"GET overviews.json returned {resp.status_code}: {resp.text}"
+        )
+        for ov in resp.json():
+            if ov["key"] == key:
+                return ov
+        raise AssertionError(f"Overview {key!r} not found in {[o['key'] for o in resp.json()]}")
+
+    def assert_overview_visible(self, key: str) -> None:
+        self._overview(key)
+
+    def assert_overview_shows(self, key: str, text: str) -> None:
+        lines = self._overview(key)["data"].get("lines", [])
+        assert any(text in line for line in lines), f"{text!r} not in {key} lines {lines}"
+
+    def assert_overview_lists(self, key: str, text: str) -> None:
+        recent = self._overview(key)["data"].get("recent", [])
+        assert any(text in item for item in recent), f"{text!r} not in {key} recent {recent}"

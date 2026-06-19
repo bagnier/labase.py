@@ -168,3 +168,21 @@ def step_view_org_dashboard(driver):
 @then("the org dashboard is visible")
 def step_org_dashboard_visible(driver):
     driver.assert_org_dashboard_visible()
+
+
+# ── Dashboard overviews ───────────────────────────────────────────────────────
+
+
+@then(parsers.parse('the "{key}" overview is visible on the dashboard'))
+def step_overview_visible(driver, key):
+    driver.assert_overview_visible(key)
+
+
+@then(parsers.parse('the "{key}" overview shows "{text}"'))
+def step_overview_shows(driver, key, text):
+    driver.assert_overview_shows(key, text)
+
+
+@then(parsers.parse('the "{key}" overview lists "{text}"'))
+def step_overview_lists(driver, key, text):
+    driver.assert_overview_lists(key, text)

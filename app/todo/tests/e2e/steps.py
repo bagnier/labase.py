@@ -22,6 +22,7 @@ def step_add_todo(driver, title):
     driver.add_todo(title)
 
 
+@given(parsers.parse('they mark the todo item "{title}" as done'))
 @when(parsers.parse('they mark the todo item "{title}" as done'))
 def step_mark_todo_done(driver, title):
     driver.mark_todo_done(title)

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "macros/metric_card.html" import metric_card %}
 
 {% block title %}Dashboard — labase{% endblock %}
 
@@ -17,23 +16,10 @@
     <p class="text-sm text-gray-500 mt-0.5">Welcome, {{ handle }}</p>
   </div>
 
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    {{ metric_card("Utilisateurs", "indigo",  "users") }}
-    {{ metric_card("Actifs",       "emerald", "trend-up") }}
-    {{ metric_card("Revenus",      "amber",   "currency-dollar") }}
-  </div>
-
-  <div class="card flex items-center justify-between">
-    <div class="flex items-center gap-4">
-      <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-none">
-        <i class="ph ph-clipboard-text ph-md text-indigo-500" aria-hidden="true"></i>
-      </div>
-      <div>
-        <h3 class="section-title">My to-do list</h3>
-        <p class="text-sm text-gray-400">Manage your tasks and track your progress.</p>
-      </div>
-    </div>
-    <a href="/{{ org_handle }}/todos" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">View my tasks →</a>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for o in overviews %}
+      {% include o.template %}
+    {% endfor %}
   </div>
 
 </div>

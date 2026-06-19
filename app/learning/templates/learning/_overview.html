@@ -1,0 +1,14 @@
+<section class="card" data-overview="{{ o.key }}">
+  <div class="flex items-center gap-3 mb-3">
+    <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-none">
+      <i class="ph ph-{{ o.icon }} text-amber-500" aria-hidden="true"></i>
+    </div>
+    <h3 class="section-title">{{ o.title }}</h3>
+  </div>
+  <div class="flex flex-wrap gap-2 mb-2">
+    {% for line in o.data.lines %}
+      <span class="text-xs font-semibold bg-gray-100 text-gray-600 rounded px-2 py-0.5">{{ line }}</span>
+    {% endfor %}
+  </div>
+  <a href="/{{ org_handle }}/{{ o.href }}" class="inline-block mt-3 text-sm font-medium text-amber-600 hover:text-amber-800">Open →</a>
+</section>

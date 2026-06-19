@@ -11,6 +11,7 @@ from app.organizations.contract.current import (
     CurrentOrg,
     CurrentOwnerMembership,
 )
+from app.organizations.contract.overviews import collect_overviews
 from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
 from app.organizations.domain.models import (
     InvitationRead,
@@ -100,7 +101,18 @@ async def org_dashboard(
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await page_context(session, current_user, org=org, org_handle=org_handle)
+    ctx["overviews"] = await collect_overviews(session, org_id)
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
+
+
+@org_router.get("/dashboard/overviews.json")
+async def org_dashboard_overviews(
+    session: RlsSession,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
+) -> JSONResponse:
+    overviews = await collect_overviews(session, org_id)
+    return JSONResponse([{"key": o.key, "title": o.title, "data": o.data} for o in overviews])
 
 
 @org_router.get("/settings", response_class=HTMLResponse)

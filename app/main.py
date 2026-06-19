@@ -16,6 +16,7 @@ from app.learning.infra.router import router as learning_router
 from app.organizations.infra.invitation_router import router as invitations_router
 from app.organizations.infra.router import org_router as organizations_org_router
 from app.organizations.infra.router import router as organizations_router
+from app.overviews import register_overviews
 from app.profile.infra.router import router as profile_router
 from app.public.infra.router import router as public_router
 from app.seeding import register_seeders
@@ -39,6 +40,10 @@ app.state.limiter = limiter
 # scenarios start from an empty org (seeding is exercised against real Supabase).
 if _settings.db_schema != "test":
     register_seeders()
+
+# Auto-discover each app's dashboard overview. Always wired (incl. under the test
+# schema) since the dashboard renders these on every request.
+register_overviews()
 
 app.exception_handler(RateLimitExceeded)(handle_rate_limit)
 app.exception_handler(500)(handle_unhandled_error)

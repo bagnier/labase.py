@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+  Rough mockup — org dashboard overviews (auto-discovered, one card per app).
+  Static, inline CSS. Shows: populated state (todo/files/learning) + empty states.
+  Each card is the app's own _overview.html partial; the dashboard just stitches them.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dashboard overviews — mockup</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background:#f8fafc; color:#0f172a; margin:0; padding:2rem; }
+    .page-title { font-size:1.5rem; font-weight:700; margin:0; }
+    .muted { color:#64748b; font-size:.85rem; }
+    .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; margin-top:1.5rem; }
+    .card { background:#fff; border:1px solid #e2e8f0; border-radius:.9rem; padding:1.1rem; }
+    .card-head { display:flex; align-items:center; gap:.6rem; margin-bottom:.8rem; }
+    .icon { width:2.2rem; height:2.2rem; border-radius:.7rem; display:grid; place-items:center; font-size:1.1rem; }
+    .ic-todo { background:#eef2ff; color:#6366f1; }
+    .ic-files { background:#ecfdf5; color:#10b981; }
+    .ic-learn { background:#fff7ed; color:#f59e0b; }
+    .title { font-weight:600; font-size:.95rem; }
+    .lines { display:flex; gap:.5rem; flex-wrap:wrap; margin:.2rem 0 .7rem; }
+    .pill { background:#f1f5f9; border-radius:.5rem; padding:.15rem .5rem; font-size:.8rem; font-weight:600; }
+    .recent { list-style:none; padding:0; margin:0; }
+    .recent li { font-size:.82rem; color:#475569; padding:.15rem 0; border-top:1px solid #f1f5f9; }
+    .empty { font-size:.82rem; color:#94a3b8; font-style:italic; }
+    .link { display:inline-block; margin-top:.7rem; font-size:.82rem; font-weight:600; color:#6366f1; text-decoration:none; }
+    h2.section { margin:2rem 0 0; font-size:.9rem; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; }
+  </style>
+</head>
+<body>
+  <h1 class="page-title">Overview</h1>
+  <p class="muted">Welcome, alice — Acme</p>
+
+  <h2 class="section">Populated</h2>
+  <div class="grid">
+
+    <!-- todo/_overview.html (data-overview="todo") -->
+    <section class="card" data-overview="todo">
+      <div class="card-head">
+        <div class="icon ic-todo">✓</div>
+        <span class="title">To-do</span>
+      </div>
+      <div class="lines">
+        <span class="pill">1 open</span>
+        <span class="pill">1 done</span>
+      </div>
+      <ul class="recent">
+        <li>Write the report</li>
+      </ul>
+      <a class="link" href="/acme/todos">View tasks →</a>
+    </section>
+
+    <!-- files/_overview.html (data-overview="files") -->
+    <section class="card" data-overview="files">
+      <div class="card-head">
+        <div class="icon ic-files">🗀</div>
+        <span class="title">Files</span>
+      </div>
+      <div class="lines">
+        <span class="pill">2 files</span>
+        <span class="pill">250 KB</span>
+      </div>
+      <ul class="recent">
+        <li>report.pdf</li>
+        <li>notes.txt</li>
+      </ul>
+      <a class="link" href="/acme/files">Browse files →</a>
+    </section>
+
+    <!-- learning/_overview.html (data-overview="learning") -->
+    <section class="card" data-overview="learning">
+      <div class="card-head">
+        <div class="icon ic-learn">🎓</div>
+        <span class="title">Learning</span>
+      </div>
+      <div class="lines">
+        <span class="pill">1 deck</span>
+        <span class="pill">2 cards</span>
+      </div>
+      <a class="link" href="/acme/learning">Open decks →</a>
+    </section>
+
+  </div>
+
+  <h2 class="section">Empty state</h2>
+  <div class="grid">
+    <section class="card" data-overview="todo">
+      <div class="card-head"><div class="icon ic-todo">✓</div><span class="title">To-do</span></div>
+      <p class="empty">No tasks yet</p>
+      <a class="link" href="/acme/todos">Add a task →</a>
+    </section>
+    <section class="card" data-overview="files">
+      <div class="card-head"><div class="icon ic-files">🗀</div><span class="title">Files</span></div>
+      <p class="empty">No files yet</p>
+      <a class="link" href="/acme/files">Upload a file →</a>
+    </section>
+    <section class="card" data-overview="learning">
+      <div class="card-head"><div class="icon ic-learn">🎓</div><span class="title">Learning</span></div>
+      <p class="empty">No decks yet</p>
+      <a class="link" href="/acme/learning">Explore decks →</a>
+    </section>
+  </div>
+</body>
+</html>

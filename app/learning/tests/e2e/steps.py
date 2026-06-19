@@ -43,6 +43,11 @@ def step_define_deck(driver, name, datatable):
     driver.define_deck(name, None, _cards(datatable))
 
 
+@given(parsers.parse('the org has a learning deck "{name}" with {n:d} cards'))
+def step_seed_org_deck(driver, name, n):
+    driver.seed_org_deck(name, n)
+
+
 @given(
     parsers.parse(
         'le paquet "{name}" à la resource "{resource}" est constitué des cartes suivantes :'
