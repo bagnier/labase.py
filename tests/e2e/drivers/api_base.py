@@ -1,11 +1,6 @@
-"""Technical substrate to execute API tests, in-process over httpx/ASGI.
-
-Owns what every *ApiMixin needs to run but that is not feature behaviour: the
-event loop, the http client(s), JSON content negotiation, the rolled-back test
-transaction and the authenticated multi-user clients shared across features.
-Feature mixins inherit this; the concrete ApiDriver just assembles them.
-No typing Protocol: this base *is* the shared contract.
-"""
+"""Technical substrate for API tests: event loop, unified multi-user client
+management, JSON content negotiation, rolled-back test transaction.
+Feature mixins inherit this; ApiDriver assembles them."""
 
 import httpx
 
@@ -21,21 +16,21 @@ from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.background_loop import BackgroundLoop
 
 _PASSWORD = "Secret1!"
+_VISITOR = "visitor"  # sentinel — unauthenticated client, no associated user
 
 
 class ApiBase:
     def __init__(self) -> None:
         self._bg = BackgroundLoop()
-        self._client: httpx.AsyncClient | None = None
-        self._response: httpx.Response | None = None
-        self._last_registered_email: str | None = None
+        self.response: httpx.Response | None = None
+        self.last_registered_email: str | None = None
         self._test_auth_emails: list[str] = []
-        self._secondary_clients: dict[str, httpx.AsyncClient] = {}
+        self._clients: dict[str, httpx.AsyncClient] = {}
+        self._acting_email: str = _VISITOR
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
         self._bg.start()
-        self._client = self.make_client()
 
     def stop(self) -> None:
         self._close_clients()
@@ -45,43 +40,34 @@ class ApiBase:
         return self._bg.run(coro)
 
     def make_client(self) -> httpx.AsyncClient:
-        transport = httpx.ASGITransport(app=app)
         return httpx.AsyncClient(
-            transport=transport, base_url="http://testserver", follow_redirects=False
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+            follow_redirects=False,
         )
 
     @property
     def client(self) -> httpx.AsyncClient:
-        assert self._client
-        return self._client
+        return self.client_for(self._acting_email)
 
     def _close_clients(self) -> None:
-        for client in [self._client, *self._secondary_clients.values()]:
-            if client:
-                self._bg.run(client.aclose())
-        self._client = None
-        self._secondary_clients = {}
+        for c in self._clients.values():
+            self._bg.run(c.aclose())
+        self._clients = {}
 
     def reset_session(self) -> None:
         self._close_clients()
-        self._client = self.make_client()
+        self._acting_email = _VISITOR
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:
-        """Open the rolled-back test transaction and route all sessions onto it."""
         db._test_connection = self.run(db.begin_test_transaction(_admin_engine()))
         app.dependency_overrides[get_user_session] = db.override_get_session
         app.dependency_overrides[get_admin_session] = db.override_get_session
         app.dependency_overrides[get_rls_session] = db.override_get_rls_session
 
     def teardown_test(self) -> None:
-        """Roll back the test transaction, then clean up data committed outside it.
-
-        Order is load-bearing: the test transaction must be rolled back *first* to
-        release its row locks, then feature-committed data (e.g. orgs) is deleted,
-        then the auth users that own it — deleting an owner before its org would
-        violate the membership FK.
-        """
+        """Roll back the test transaction, then clean up data committed outside it."""
         app.dependency_overrides.pop(get_user_session, None)
         app.dependency_overrides.pop(get_admin_session, None)
         app.dependency_overrides.pop(get_rls_session, None)
@@ -89,53 +75,55 @@ class ApiBase:
         db._test_connection = None
         if conn is not None:
             self.run(db.end_test_transaction(conn))
-        self._cleanup_committed_data()
+        self.cleanup_committed_data()
         self._cleanup_auth_users()
 
-    def _cleanup_committed_data(self) -> None:
-        """Hook: feature mixins override this to delete data they committed
-        outside the rolled-back test transaction."""
+    def cleanup_committed_data(self) -> None:
+        """Hook: feature mixins override to delete data committed outside the transaction."""
 
     # ── JSON (REST) calls ──────────────────────────────────────────────────────
-    # Single chokepoint for content-negotiated JSON requests: forces the
-    # ``accept: application/json`` header so the app serves REST instead of HTML.
-    # HTML/HTMX flows keep using self.client directly. A future typed OpenAPI
-    # client could be wired in here without touching call sites.
     def json_client(self, method: str, path: str, client: httpx.AsyncClient | None = None, **kw):
         headers = {"accept": "application/json", **kw.pop("headers", {})}
         return self.run((client or self.client).request(method, path, headers=headers, **kw))
 
-    # ── external (non-transactional) auth users ────────────────────────────────
-    # Supabase auth users live outside the rolled-back test transaction, so they
-    # are tracked here and deleted in teardown rather than rolled back. Shared by
-    # the auth and files features, hence on the base rather than a single mixin.
+    # ── auth user tracking ─────────────────────────────────────────────────────
+    # Supabase auth users live outside the rolled-back transaction; tracked here
+    # and deleted in teardown.
     def track_auth_email(self, email: str) -> None:
         if email not in self._test_auth_emails:
             self._test_auth_emails.append(email)
 
     def _cleanup_auth_users(self) -> None:
         for email in self._test_auth_emails:
-            self._delete_user_if_exists(email)
+            delete_user_if_exists(email)
         self._test_auth_emails.clear()
 
-    def _delete_user_if_exists(self, email: str) -> None:
-        delete_user_if_exists(email)
+    # ── unified multi-user client management ───────────────────────────────────
+    # All clients live in a single dict keyed by email (or _VISITOR for the
+    # unauthenticated client). self.client always returns the acting user's client.
+    def client_for(self, email: str) -> httpx.AsyncClient:
+        if email not in self._clients:
+            if email == _VISITOR:
+                self._clients[email] = self.make_client()
+            else:
+                client = self.make_client()
+                creds = {"email": email, "password": _PASSWORD}
+                self.json_client("POST", "/auth/register", client=client, json=creds)
+                self.json_client("POST", "/auth/login", client=client, json=creds)
+                self.track_auth_email(email)
+                self._clients[email] = client
+        return self._clients[email]
 
-    # ── authenticated multi-user clients (shared by org/files/learning) ─────────
-    def _make_client_for(self, email: str) -> httpx.AsyncClient:
-        client = self.make_client()
-        _creds = {"email": email, "password": _PASSWORD}
-        self.json_client("POST", "/auth/register", client=client, json=_creds)
-        self.json_client("POST", "/auth/login", client=client, json=_creds)
-        self.track_auth_email(email)
-        return client
+    def set_acting_email(self, email: str) -> None:
+        """Adopt `email` as the acting user, re-keying the visitor session if needed."""
+        if _VISITOR in self._clients and email not in self._clients:
+            self._clients[email] = self._clients.pop(_VISITOR)
+        self._acting_email = email
 
-    def _client_for(self, email: str) -> httpx.AsyncClient:
-        if email not in self._secondary_clients:
-            self._secondary_clients[email] = self._make_client_for(email)
-        return self._secondary_clients[email]
+    def clear_acting_email(self) -> None:
+        self._acting_email = _VISITOR
 
-    def _user_id_for_email(self, email: str) -> str:
+    def user_id_for_email(self, email: str) -> str:
         users = find_users(email)
         assert users, f"User {email!r} not found in Supabase"
         return users[0].id

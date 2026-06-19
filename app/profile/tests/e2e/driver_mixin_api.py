@@ -3,13 +3,13 @@ from tests.e2e.drivers.api_base import ApiBase
 
 class ProfileApiMixin(ApiBase):
     def view_profile(self) -> None:
-        self._response = self.json_client("GET", "/profile")
+        self.response = self.json_client("GET", "/profile")
 
     def view_dashboard(self) -> None:
-        self._response = self.json_client("GET", "/profile")
+        self.response = self.json_client("GET", "/profile")
 
     def update_handle(self, name: str) -> None:
-        self._response = self.json_client("POST", "/profile", json={"handle": name})
+        self.response = self.json_client("POST", "/profile", json={"handle": name})
 
     def assert_handle(self, name: str | None) -> None:
         resp = self.json_client("GET", "/profile")
@@ -20,9 +20,9 @@ class ProfileApiMixin(ApiBase):
             )
 
     def assert_last_update_rejected(self) -> None:
-        assert self._response is not None
-        assert self._response.status_code in (422, 409), (
-            f"Expected 422/409, got {self._response.status_code}"
+        assert self.response is not None
+        assert self.response.status_code in (422, 409), (
+            f"Expected 422/409, got {self.response.status_code}"
         )
 
     def assert_email_read_only(self) -> None:
@@ -43,21 +43,21 @@ class ProfileApiMixin(ApiBase):
         )
 
     def visit_profile_unauthenticated(self) -> None:
-        self._response = self.json_client("GET", "/profile")
+        self.response = self.json_client("GET", "/profile")
 
     # The following steps are "navigation/discoverability" claims in the feature. A REST client
     # has no page chrome (footer/nav), so we validate the RESTful equivalent: the target
     # resource is discoverable and reachable via the API (HTTP 200 at its canonical URL).
 
     def assert_link_to_org_dashboard(self) -> None:
-        handle = getattr(self, "_active_org_handle", "")
+        handle = getattr(self, "active_org_handle", "")
         resp = self.json_client("GET", f"/{handle}/dashboard")
         assert resp.status_code == 200, (
             f"Org dashboard /{handle}/dashboard not reachable: {resp.status_code}"
         )
 
     def assert_link_to_todos(self) -> None:
-        handle = getattr(self, "_active_org_handle", "")
+        handle = getattr(self, "active_org_handle", "")
         resp = self.json_client("GET", f"/{handle}/todos")
         assert resp.status_code == 200, (
             f"Todo list /{handle}/todos not reachable: {resp.status_code}"

@@ -3,7 +3,7 @@ from tests.e2e.drivers.api_base import ApiBase
 
 class TodoApiMixin(ApiBase):
     def _todos_url(self, path: str = "") -> str:
-        slug = getattr(self, "_active_org_handle", "")
+        slug = getattr(self, "active_org_handle", "")
         return f"/{slug}/todos{path}"
 
     def _todo_id_by_title(self, title: str) -> str:
@@ -19,38 +19,38 @@ class TodoApiMixin(ApiBase):
             self.json_client("POST", self._todos_url(), json={"title": title})
 
     def view_todo_list(self) -> None:
-        self._response = self.json_client("GET", self._todos_url())
+        self.response = self.json_client("GET", self._todos_url())
 
     def add_todo(self, title: str) -> None:
-        self._response = self.json_client("POST", self._todos_url(), json={"title": title})
+        self.response = self.json_client("POST", self._todos_url(), json={"title": title})
 
     def mark_todo_done(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self._response = self.json_client(
+        self.response = self.json_client(
             "PATCH", self._todos_url(f"/{todo_id}"), json={"done": True}
         )
 
     def mark_todo_not_done(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self._response = self.json_client(
+        self.response = self.json_client(
             "PATCH", self._todos_url(f"/{todo_id}"), json={"done": False}
         )
 
     def rename_todo(self, title: str, new_title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self._response = self.json_client(
+        self.response = self.json_client(
             "PATCH", self._todos_url(f"/{todo_id}"), json={"title": new_title}
         )
 
     def delete_todo(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)
-        self._response = self.json_client("DELETE", self._todos_url(f"/{todo_id}"))
+        self.response = self.json_client("DELETE", self._todos_url(f"/{todo_id}"))
 
     def move_todo_above(self, title: str, above: str) -> None:
         resp = self.json_client("GET", self._todos_url())
         todos = resp.json()
         ids = {t["title"]: t["id"] for t in todos}
-        self._response = self.json_client(
+        self.response = self.json_client(
             "PUT", self._todos_url(f"/{ids[title]}/position"), json={"above_id": ids[above]}
         )
 
@@ -58,7 +58,7 @@ class TodoApiMixin(ApiBase):
         resp = self.json_client("GET", self._todos_url())
         todos = resp.json()
         ids = {t["title"]: t["id"] for t in todos}
-        self._response = self.json_client(
+        self.response = self.json_client(
             "PUT", self._todos_url(f"/{ids[title]}/position"), json={"above_id": None}
         )
 

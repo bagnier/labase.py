@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import threading
 import uuid
 from datetime import date, timedelta
@@ -15,8 +14,6 @@ from tests.e2e.drivers.browser_base import BrowserBase
 
 from . import setup
 
-_PASSWORD = "Secret1!"
-
 
 class LearningBrowserMixin(BrowserBase):
     # ── state ────────────────────────────────────────────────────────────────
@@ -30,11 +27,7 @@ class LearningBrowserMixin(BrowserBase):
         super().teardown_test()
 
     def _reset_learning(self) -> None:
-        for ctx in getattr(self, "_learn_ctx", {}).values():
-            with contextlib.suppress(Exception):
-                ctx.close()
-        self._learn_ctx: dict = {}
-        self._learn_page: dict = {}
+        self._learn_email: dict = {}
         self._learn_handle: dict = {}
         self._learn_org: dict = {}
         self._learn_uid: dict = {}
@@ -78,31 +71,28 @@ class LearningBrowserMixin(BrowserBase):
     def _user(self, name: str) -> str:
         key = name.lower()
         self._learn_current = key
-        if key not in self._learn_ctx:
-            assert self._context
+        if key not in self._learn_email:
             email = f"{key}@example.com"
             delete_user_if_exists(email)
-            ctx = self._browser.new_context()
-            self._setup_context(ctx, email)  # ty: ignore[unresolved-attribute]
+            self.context_for(email)
             uid = find_users(email)[0].id
             orgs = orgs_for_user(uid)
             assert orgs, f"No org for {email}"
             org = orgs[0]
-            self._learn_ctx[key] = ctx
-            self._learn_page[key] = ctx.new_page()
+            self._learn_email[key] = email
             self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])
             self._learn_uid[key] = uuid.UUID(uid)
         return key
 
-    def _page_for(self, key: str):
-        return self._learn_page[key]
+    def _lpage(self, key: str):
+        return self.page_for(self._learn_email[key])
 
     def _url(self, key: str, path: str) -> str:
-        return f"{self._base_url}/{self._learn_handle[key]}/learning{path}"
+        return f"{self.base_url}/{self._learn_handle[key]}/learning{path}"
 
     def _goto_today(self, key: str):
-        page = self._page_for(key)
+        page = self._lpage(key)
         page.goto(self._url(key, "/sessions"), wait_until="load")
         return page
 
@@ -123,7 +113,7 @@ class LearningBrowserMixin(BrowserBase):
         key = self._user(name)
         org_id = self._learn_org[key]
         self._seed(lambda s: self._materialize(org_id, s))
-        resp = self._learn_ctx[key].request.post(
+        resp = self.context_for(self._learn_email[key]).request.post(
             self._url(key, "/subscriptions"), form={"deck": deck}
         )
         assert resp.status == 200, f"subscribe -> {resp.status}"
@@ -199,7 +189,7 @@ class LearningBrowserMixin(BrowserBase):
 
     def look_resources(self, name: str) -> None:
         key = self._user(name)
-        self._page_for(key).goto(self._url(key, "/resources"), wait_until="load")
+        self._lpage(key).goto(self._url(key, "/resources"), wait_until="load")
 
     # ── assertions ──────────────────────────────────────────────────────────────
     def assert_due_count(self, name: str, n: int) -> None:
@@ -229,7 +219,7 @@ class LearningBrowserMixin(BrowserBase):
 
     def assert_resources(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
-        page = self._page_for(key)
+        page = self._lpage(key)
         page.goto(self._url(key, "/resources"), wait_until="load")
         items = page.locator("#learning-resources > [data-resource-deck]").all()
         actual = [
@@ -244,7 +234,7 @@ class LearningBrowserMixin(BrowserBase):
 
     def assert_no_resources(self, name: str) -> None:
         key = self._user(name)
-        page = self._page_for(key)
+        page = self._lpage(key)
         page.goto(self._url(key, "/resources"), wait_until="load")
         assert page.locator("#learning-resources [data-empty]").count() == 1
 

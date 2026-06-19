@@ -1,12 +1,6 @@
-"""Technical substrate to execute browser (e2e) tests via Playwright.
-
-Owns the in-process app server (hypercorn scheduled on a shared BackgroundLoop,
-not a subprocess), the Playwright page, HTML assertions and HTMX interaction
-helpers. Because the server runs in-process, the deterministic clock is pinned by
-monkeypatching app.shared.clock.now (see tests.plugin) — no test-only endpoint.
-Feature mixins inherit this; the concrete BrowserDriver assembles them. No typing
-Protocol: this base *is* the shared contract.
-"""
+"""Technical substrate for browser (e2e) tests: in-process hypercorn server,
+Playwright browser, per-user isolated contexts (distinct cookie jars), and
+HTMX interaction helpers. Feature mixins inherit this; BrowserDriver assembles them."""
 
 import asyncio
 import os
@@ -15,11 +9,13 @@ import time
 
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
-from playwright.sync_api import Browser, Page, Response, sync_playwright
+from playwright.sync_api import Browser, BrowserContext, Page, Response, sync_playwright
 
 from app.main import app
 from tests.e2e import cleanup
 from tests.e2e.drivers.background_loop import BackgroundLoop
+
+_PASSWORD = "Secret1!"
 
 
 def _free_port() -> int:
@@ -29,36 +25,34 @@ def _free_port() -> int:
 
 
 async def _make_event() -> asyncio.Event:
-    """Create the shutdown Event inside the background loop it will be awaited on."""
     return asyncio.Event()
 
 
 class BrowserBase:
     def __init__(self) -> None:
-        self._base_url: str = os.environ.get("APP_URL", "")
+        self.base_url: str = os.environ.get("APP_URL", "")
         self._bg: BackgroundLoop | None = None
         self._shutdown: asyncio.Event | None = None
         self._server_future = None
         self._playwright = None
-        self._browser = None
-        self._context = None
-        self._page: Page | None = None
-        self._last_response: Response | None = None
-        self._last_registered_email: str | None = None
-        self._active_org_handle: str = ""
-        self._primary_email: str = ""
-        self._secondary_browser_contexts: dict = {}
-        self._acting_as_email: str = ""
-        self._primary_context_backup = None
+        self.__browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self.__page: Page | None = None
+        self.last_response: Response | None = None
+        self.last_registered_email: str | None = None
+        self.active_org_handle: str = ""
+        self.primary_email: str = ""
+        # per-user contexts (distinct cookie jars), keyed by email
+        self._contexts: dict[str, BrowserContext] = {}
+        self.acting_email: str = ""
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
-        if not self._base_url:
+        if not self.base_url:
             port = _free_port()
-            self._base_url = f"http://127.0.0.1:{port}"
-            # In-process server: hypercorn scheduled on a daemon-thread event loop,
-            # so the test and the app share memory (enables monkeypatching). Playwright
-            # still drives a real browser, so we bind a real TCP port.
+            self.base_url = f"http://127.0.0.1:{port}"
+            # In-process server: hypercorn on a daemon-thread event loop so the
+            # test and the app share memory (enables monkeypatching).
             self._bg = BackgroundLoop()
             self._bg.start()
             config = Config()
@@ -74,17 +68,34 @@ class BrowserBase:
         self._browser = self._playwright.chromium.launch()
         self._open_context()
 
+    @property
+    def _browser(self) -> Browser:
+        assert self.__browser is not None, "_browser accessed before start()"
+        return self.__browser
+
+    @_browser.setter
+    def _browser(self, value: Browser | None) -> None:
+        self.__browser = value
+
+    @property
+    def page(self) -> Page:
+        assert self.__page is not None, "page accessed before context was opened"
+        return self.__page
+
+    @page.setter
+    def page(self, value: Page | None) -> None:
+        self.__page = value
+
     def _open_context(self) -> None:
-        assert self._browser
         self._context = self._browser.new_context()
-        self._page = self._context.new_page()
+        self.page = self._context.new_page()
 
     def _wait_for_server(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
                 with socket.create_connection(
-                    ("127.0.0.1", int(self._base_url.split(":")[-1])), timeout=0.5
+                    ("127.0.0.1", int(self.base_url.split(":")[-1])), timeout=0.5
                 ):
                     return
             except OSError:
@@ -94,8 +105,8 @@ class BrowserBase:
     def stop(self) -> None:
         if self._context:
             self._context.close()
-        if self._browser:
-            self._browser.close()
+        if self.__browser:
+            self.__browser.close()
         if self._playwright:
             self._playwright.stop()
         self._stop_server()
@@ -106,8 +117,6 @@ class BrowserBase:
         if self._shutdown:
             self._bg.call_soon(self._shutdown.set)
         if self._server_future:
-            # Let serve() shut down gracefully while the loop is still running,
-            # then tear the loop down — avoids "Task was destroyed" warnings.
             self._server_future.result(timeout=10)
         self._bg.stop()
         self._bg = None
@@ -115,40 +124,57 @@ class BrowserBase:
         self._server_future = None
 
     def reset_session(self) -> None:
-        for ctx in self._secondary_browser_contexts.values():
+        for ctx in self._contexts.values():
             ctx.close()
-        self._secondary_browser_contexts = {}
+        self._contexts = {}
         if self._context:
             self._context.close()
         self._open_context()
-        self._last_response = None
-        self._active_org_handle = ""
-        self._primary_email = ""
-        self._acting_as_email = ""
-        self._primary_context_backup = None
-        self._org_list_response = None  # type: ignore[attr-defined]
-
-    @property
-    def _page(self) -> Page:
-        assert self._page
-        return self._page
-
-    @property
-    def _browser(self) -> Browser:
-        assert self._browser
-        return self._browser
+        self.last_response = None
+        self.active_org_handle = ""
+        self.primary_email = ""
+        self.acting_email = ""
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:
-        """No transaction wrapping: the in-thread server commits to the real DB,
-        so isolation is done by truncation in teardown_test (not a rollback)."""
+        pass
 
     def teardown_test(self) -> None:
-        """Truncate app tables. Feature mixins extend this (via super())."""
         cleanup.truncate_app_tables()
 
-    # ── HTMX interaction helpers (real button clicks) ──────────────────────────
-    def _arm_dialogs(self, page) -> None:
+    # ── multi-user context management ──────────────────────────────────────────
+    def _setup_context(self, ctx: BrowserContext, email: str) -> None:
+        """Register and login `email` in a fresh browser context."""
+        page = ctx.new_page()
+        page.goto(f"{self.base_url}/auth/register")
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", _PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_load_state("domcontentloaded")
+        page.goto(f"{self.base_url}/auth/login")
+        page.fill("input[name=email]", email)
+        page.fill("input[name=password]", _PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_url("**/profile", timeout=10000)
+        page.close()
+
+    def context_for(self, email: str) -> BrowserContext:
+        """Get or create an isolated browser context (distinct cookie jar) for `email`."""
+        if email not in self._contexts:
+            ctx = self._browser.new_context()
+            self._setup_context(ctx, email)
+            self._contexts[email] = ctx
+        return self._contexts[email]
+
+    def page_for(self, email: str) -> Page:
+        """Get or create the persistent page for `email`'s isolated context."""
+        ctx = self.context_for(email)
+        if not hasattr(ctx, "_page") or ctx._page is None:
+            ctx._page = ctx.new_page()  # type: ignore[attr-defined]
+        return ctx._page  # type: ignore[attr-defined]
+
+    # ── HTMX interaction helpers ───────────────────────────────────────────────
+    def _arm_dialogs(self, page: Page) -> None:
         """Auto-accept hx-confirm dialogs, once per page."""
         armed = getattr(self, "_dialogs_armed", None)
         if armed is None:
@@ -157,7 +183,7 @@ class BrowserBase:
             page.on("dialog", lambda d: d.accept())
             armed.add(id(page))
 
-    def _click_and_capture(self, page, selector: str, method: str, path_token: str):
+    def click_and_capture(self, page: Page, selector: str, method: str, path_token: str):
         """Click a control and return the HTMX response it triggers."""
         self._arm_dialogs(page)
         with page.expect_response(

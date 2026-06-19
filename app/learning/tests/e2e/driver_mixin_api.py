@@ -20,7 +20,6 @@ class LearningApiMixin(ApiBase):
         super().reset_session()
 
     def _reset_learning(self) -> None:
-        self._learn_clients: dict = {}
         self._learn_handle: dict = {}
         self._learn_org: dict = {}
         self._learn_uid: dict = {}
@@ -31,21 +30,20 @@ class LearningApiMixin(ApiBase):
     def _user(self, name: str) -> str:
         key = name.lower()
         self._learn_current = key
-        if key not in self._learn_clients:
+        if key not in self._learn_handle:
             email = f"{key}@example.com"
-            client = self._make_client_for(email)
+            client = self.client_for(email)
             resp = self.json_client("GET", "/organizations", client)
             assert resp.status_code == 200 and resp.json(), f"no org for {email}: {resp.text}"
             org = resp.json()[0]
-            self._learn_clients[key] = client
             self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])
-            self._learn_uid[key] = uuid.UUID(self._user_id_for_email(email))
+            self._learn_uid[key] = uuid.UUID(self.user_id_for_email(email))
         return key
 
     def _api(self, key: str, method: str, path: str, **kw):
         url = f"/{self._learn_handle[key]}/learning{path}"
-        return self.json_client(method, url, self._learn_clients[key], **kw)
+        return self.json_client(method, url, self.client_for(f"{key}@example.com"), **kw)
 
     def _learn_json(self, key: str, path: str):
         resp = self._api(key, "GET", path)
