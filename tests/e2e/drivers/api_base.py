@@ -124,8 +124,9 @@ class ApiBase:
     # ── authenticated multi-user clients (shared by org/files/learning) ─────────
     def _make_client_for(self, email: str) -> httpx.AsyncClient:
         client = self.make_client()
-        self.run(client.post("/auth/register", data={"email": email, "password": _PASSWORD}))
-        self.run(client.post("/auth/login", data={"email": email, "password": _PASSWORD}))
+        _creds = {"email": email, "password": _PASSWORD}
+        self.json_client("POST", "/auth/register", client=client, json=_creds)
+        self.json_client("POST", "/auth/login", client=client, json=_creds)
         self.track_auth_email(email)
         return client
 

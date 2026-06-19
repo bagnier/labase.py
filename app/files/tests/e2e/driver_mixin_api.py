@@ -128,7 +128,7 @@ class OrgFileApiMixin(ApiBase):
         org_id, handle = self.run(_create_org())
         self.track_org_id(org_id)
         self._active_org_handle = handle
-        self.run(self.client.post("/auth/login", data={"email": email, "password": _PASSWORD}))
+        self.json_client("POST", "/auth/login", json={"email": email, "password": _PASSWORD})
 
     # ── file operations ───────────────────────────────────────────────────────
 

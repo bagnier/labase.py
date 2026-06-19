@@ -3,13 +3,12 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Cookie,
-    Form,
     Query,
     Request,
     Response,
     status,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from app.auth.contract.current import OptionalCurrentUser
@@ -17,6 +16,7 @@ from app.auth.domain.service import confirm_signup, login, logout
 from app.auth.infra.cookies import set_auth_cookies
 from app.organizations.contract.hooks import emit_org_created
 from app.registration import confirm_user, register_user
+from app.shared.http import parse_body, wants_json
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
@@ -88,15 +88,18 @@ async def login_page(
 
 @router.post("/login")
 @rate_limit("10/minute")
-async def login_endpoint(
-    request: Request,
-    bg: BackgroundTasks,
-    email: str = Form(""),
-    password: str = Form(""),
-    next: str = Form(""),
-) -> Response:
+async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+    body = await parse_body(request)
+    email = body.get("email", "")
+    password = body.get("password", "")
+    next = body.get("next", "")
     ip = request.client.host if request.client else None
     if not email or not password:
+        if wants_json(request):
+            return JSONResponse(
+                {"detail": "Email and password are required."},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -105,6 +108,10 @@ async def login_endpoint(
         )
     try:
         tokens = await login(email, password)
+        if wants_json(request):
+            resp = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
+            set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
+            return resp
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
@@ -112,6 +119,8 @@ async def login_endpoint(
         record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -120,6 +129,11 @@ async def login_endpoint(
         )
     except Exception:
         log.exception("auth.login_error", ip=ip, email=email)
+        if wants_json(request):
+            return JSONResponse(
+                {"detail": "A system error occurred. Please try again later."},
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -153,11 +167,17 @@ async def register_endpoint(
     request: Request,
     bg: BackgroundTasks,
     admin_session: AdminSession,
-    email: str = Form(""),
-    password: str = Form(""),
 ) -> Response:
+    body = await parse_body(request)
+    email = body.get("email", "")
+    password = body.get("password", "")
     ip = request.client.host if request.client else None
     if not email or not password:
+        if wants_json(request):
+            return JSONResponse(
+                {"detail": "Email and password are required."},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         return templates.TemplateResponse(
             request,
             "register.html",
@@ -169,6 +189,11 @@ async def register_endpoint(
         if org_id is not None:
             assert result.access_token is not None  # org_id is set only when access_token is set
             bg.add_task(emit_org_created, org_id, result.access_token)
+        if wants_json(request):
+            return JSONResponse(
+                {"message": "Account created. Please verify your email."},
+                status_code=status.HTTP_201_CREATED,
+            )
         return RedirectResponse(
             "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
         )
@@ -180,6 +205,8 @@ async def register_endpoint(
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."
+    if wants_json(request):
+        return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
     return templates.TemplateResponse(
         request,
         "register.html",

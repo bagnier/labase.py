@@ -24,19 +24,19 @@ class AuthApiMixin(ApiBase):
             self._active_org_handle = resp.json()[0]["handle"]
 
     def sign_in(self, email: str, password: str) -> None:
-        self._response = self.run(
-            self.client.post("/auth/login", data={"email": email, "password": password})
+        self._response = self.json_client(
+            "POST", "/auth/login", json={"email": email, "password": password}
         )
         self._store_active_slug()
 
     def ensure_registered(self, email: str, password: str) -> None:
-        self.run(self.client.post("/auth/register", data={"email": email, "password": password}))
+        self.json_client("POST", "/auth/register", json={"email": email, "password": password})
         self.track_auth_email(email)
 
     def register(self, email: str, password: str) -> None:
         self._last_registered_email = email
-        self._response = self.run(
-            self.client.post("/auth/register", data={"email": email, "password": password})
+        self._response = self.json_client(
+            "POST", "/auth/register", json={"email": email, "password": password}
         )
         self.track_auth_email(email)
 
@@ -78,17 +78,23 @@ class AuthApiMixin(ApiBase):
             "location", ""
         )
         is_hx = self._response.headers.get("hx-redirect") == "/profile"
-        assert is_303 or is_hx, (
-            f"Expected 303 redirect to /profile or HX-Redirect, "
+        is_json = self._response.status_code == 200 and "access_token" in self._response.json()
+        assert is_303 or is_hx or is_json, (
+            f"Expected 303 redirect to /profile, HX-Redirect, or JSON 200 with access_token, "
             f"got status={self._response.status_code} "
             f"location={self._response.headers.get('location')!r}"
         )
 
     def assert_registration_successful(self) -> None:
         assert self._response is not None
-        assert self._response.status_code == 303, f"Expected 303, got {self._response.status_code}"
-        assert "/auth/login" in self._response.headers.get("location", ""), (
-            f"Expected redirect to /auth/login, got {self._response.headers.get('location')!r}"
+        is_303 = self._response.status_code == 303 and "/auth/login" in self._response.headers.get(
+            "location", ""
+        )
+        is_json = self._response.status_code == 201
+        assert is_303 or is_json, (
+            f"Expected 303 redirect to /auth/login or JSON 201, "
+            f"got status={self._response.status_code} "
+            f"location={self._response.headers.get('location')!r}"
         )
         assert self._last_registered_email is not None
         assert find_users(self._last_registered_email), (
@@ -102,6 +108,7 @@ class AuthApiMixin(ApiBase):
     def assert_registration_failed_with_message(self, message: str) -> None:
         self.assert_registration_failed()
         assert self._response is not None
-        assert message in self._response.text, (
-            f"'{message}' not found in:\n{self._response.text[:500]}"
-        )
+        ct = self._response.headers.get("content-type", "")
+        is_json_resp = ct.startswith("application/json")
+        body = self._response.json().get("detail", "") if is_json_resp else self._response.text
+        assert message in body, f"'{message}' not found in:\n{str(body)[:500]}"
