@@ -2,7 +2,7 @@ import contextlib
 import tempfile
 
 from app.auth.tests.admin_helpers import delete_user_if_exists
-from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
+from tests.e2e.drivers.browser_base import BrowserBase
 
 
 class OrgFileBrowserMixin(BrowserBase):
@@ -120,9 +120,10 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
         delete_user_if_exists(email)
-        self.ensure_registered(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
-        self.sign_in(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
-        # self._page is on /profile after sign_in; extract handle from org card link
+        self.context_for(email)  # isolated context: registers + logs in via _setup_context
+        self.set_acting_email(email)  # self.page → email's isolated context
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        # self.page is on /profile; extract handle from org card link
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
