@@ -76,10 +76,10 @@ quality: lint format typecheck
 
 # --- Tests ---
 test:
-	env -i ENV_FILE=.env.test HOME=$(HOME) PATH=$(PATH) uv run pytest
+	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest
 
 test-e2e:
-	env -i ENV_FILE=.env.test HOME=$(HOME) PATH=$(PATH) uv run pytest app/ -k test_scenarios --driver=browser --no-cov
+	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest app/ -k test_scenarios --driver=browser --no-cov
 
 coverage-erase:
 	uv run coverage erase
