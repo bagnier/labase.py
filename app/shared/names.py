@@ -1,8 +1,7 @@
 import re
 
 # Reserved slugs are claimed at composition time: each context claims its own via
-# ``host.reserve(...)`` in its ``contract/integration.py:register`` (and main claims the
-# infra-owned ``static``/``api``). The registry starts empty — no central hardcoded list.
+# ``host.reserve(...)`` in its ``contract/integration.py:register``.
 _reserved: set[str] = set()
 
 

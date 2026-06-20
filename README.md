@@ -38,11 +38,46 @@ HTTP request → infra/router.py → domain/service.py → infra/repository.py �
 
 Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
 
+### Integration & event bus
+
+Each bounded context exposes a single `register(app, host)` entry point in its `contract/integration.py`. The composition root (`app/main.py`) calls them in dependency order — no context knows about another.
+
+**`Host`** (`app/integration.py`) carries two things:
+
+- `events: EventBus` — type-keyed async pub/sub; handlers are registered by the Python type of the event, so there are no magic string names and no shared imports between contexts.
+- `reserve(*slugs)` — claims URL path segments so no org handle can shadow them.
+
+**`EventBus`** exposes two primitives:
+
+| Method | Semantic | On failure | Used for |
+| --- | --- | --- | --- |
+| `emit(event)` | push / command — runs all handlers, returns their results | propagates first exception (caller can compensate) | `UserCreated`, `OrgCreated` |
+| `collect(query)` | pull / query — runs all handlers, aggregates successful returns | logs & skips the failing handler | `OverviewQuery` (dashboard) |
+
+**Sign-up event chain:**
+
+```
+signup → emit(UserCreated)
+  → organizations: creates personal org, returns org_id
+  → emit(OrgCreated(org_id))
+      → files:    seeds welcome.txt
+      → learning: seeds Welcome deck
+      → todo:     seeds 3 welcome todos
+```
+
+**Dashboard query:**
+
+```
+GET /{org}/ → collect(OverviewQuery)
+  ← files, learning, todo each return an Overview (icon, title, counts, recent items)
+     one context failing does not break the dashboard
+```
+
 ## Principles
 
-**Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives at the composition root (`registration.py`, `seeding.py`), never in `shared/`.
+**Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives at the composition root (`registration.py`), never in `shared/`.
 
-**Cross-context communication.** `app/shared/` is ownerless infrastructure (clock, HTTP, DB sessions), not a coupling point. Two sanctioned forms: `contract/` for synchronous owned APIs, hooks for event-driven reactions where the emitter doesn't know its subscribers. Each context's FastAPI dependencies live in its own `contract/current.py` (`CurrentUser`/`RlsSession` in `auth/`, `CurrentOrg`/`CurrentMembership` in `organizations/`); `app/shared/` holds only ownerless infra, such as the BYPASSRLS `AdminSession`.
+**Cross-context communication.** Two sanctioned forms: `contract/` for synchronous owned APIs (FastAPI dependencies, public types), and the `EventBus` for event-driven reactions where the emitter doesn't know its subscribers. Each context's FastAPI dependencies live in its own `contract/current.py` — `CurrentUser`, `OptionalCurrentUser`, `RlsSession` in `auth/`; `CurrentOrg`, `CurrentMembership`, `CurrentOwnerMembership` in `organizations/`. `app/shared/` is ownerless infra (clock, HTTP, DB sessions) — not a coupling point; it holds only things no single context owns, such as the BYPASSRLS `AdminSession`.
 
 **HTTP layer.** `router.py` owns HTTP and nothing else — parsing, serialization, status codes. No business logic, no direct DB access. Each router serves both JSON and HTML/fragment via `wants_json(request)`.
 
@@ -58,21 +93,20 @@ Both drivers share a substrate in `tests/e2e/drivers/` (`ApiBase` / `BrowserBase
 
 **Multi-tenancy.** Each account gets a personal org at sign-up; org-scoped data lives under `/{org_slug}/...`. Members read, owners write — gated by `CurrentOwnerMembership` for a clean `403`.
 
-**Page composition.** The shell (`profile/contract/shell.py::shell_context`) is pulled in explicitly. No middleware injects data silently — full pages load the shell, HTMX fragments don't.
+**Page composition.** The shell (`profile/contract/shell.py`) is pulled in explicitly via `page_context` (full pages) or `shell_context` (partial). No middleware injects data silently — full pages load the shell, HTMX fragments don't.
 
 ## Structure
 
 Every bounded context follows the same layout — `domain/` (models, service), `infra/`
 (router, repository), `templates/`, `tests/`, and an optional `contract/` (its public
 inter-app surface). Three top-level modules form the composition root — the only place
-allowed to know several contexts at once: `main.py`, `registration.py`, `seeding.py`:
+allowed to know several contexts at once: `main.py`, `registration.py`:
 
 ```
 labase.py/
 ├── app/
 │   ├── main.py            # FastAPI app, router registration, 401 handler
 │   ├── registration.py    # Composition root: sign-up saga (auth user + personal org)
-│   ├── seeding.py         # Composition root: wires org.created subscribers
 │   ├── shared/            # Cross-context infra: persistence (engines, rls), http
 │   │                      #   (security, templates, limiter), observability, templates/
 │   ├── auth/              # Authentication — get_current_user, get_rls_session, cookies
