@@ -2,8 +2,8 @@
 
 Single composition entry (:func:`register`, called from :mod:`app.main`): mounts the
 collection, invitation and org-scoped routers, claims the ``invitations`` slug, and reacts to
-auth's ``UserCreated`` by creating the user's personal org. The created ``org_id`` is returned
-so the registration orchestrator can chain the downstream ``OrgCreated`` event (seeding).
+auth's ``UserCreated`` by creating the user's personal org then scheduling ``OrgCreated`` so
+apps can seed welcome data.
 """
 
 import uuid
@@ -11,11 +11,13 @@ import uuid
 from fastapi import FastAPI
 
 from app.auth.contract.events import UserCreated
-from app.integration import Host
+from app.integration import Host, host
 from app.organizations.contract import ORG_PREFIX
+from app.organizations.contract.events import OrgCreated
 from app.organizations.infra.invitation_router import router as invitation_router
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.infra.router import org_router, router
+from app.shared.config import get_settings
 from app.shared.persistence.database import admin_session_factory
 
 
@@ -27,11 +29,12 @@ def register(app: FastAPI, host: Host) -> None:
     host.reserve("invitations")
 
 
-async def _create_org(event: UserCreated) -> uuid.UUID:
+async def _create_org(event: UserCreated) -> None:
     async with admin_session_factory()() as session:
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,
             auth_user_id=uuid.UUID(event.user_id),
         )
         await session.commit()
-        return org.id
+    if event.access_token and get_settings().db_schema != "test":
+        await host.events.emit(OrgCreated(org_id=org.id, access_token=event.access_token))

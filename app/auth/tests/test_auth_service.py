@@ -4,9 +4,9 @@ from uuid import uuid4
 import pytest
 from supabase_auth.errors import AuthApiError
 
+from app.auth.application import register_user
 from app.auth.domain.service import login, logout, refresh_session, register
 from app.auth.tests.admin_helpers import delete_user, find_users
-from app.registration import register_user
 from app.shared.persistence.supabase import get_admin_supabase
 
 
@@ -119,19 +119,18 @@ async def test_register_user_compensates_when_org_creation_fails():
     fake_result = RegisterResult(user_id=fake_user_id, access_token="tok")
     fake_admin = MagicMock()
     fake_admin.auth.admin.delete_user = MagicMock()
-    fake_bg = MagicMock()
 
     # Org creation is the org context reacting to UserCreated on the bus; a failure there
     # must delete the just-created auth user so no orphan account survives.
     with (
-        patch("app.registration.register", AsyncMock(return_value=fake_result)),
+        patch("app.auth.application.register", AsyncMock(return_value=fake_result)),
         patch(
-            "app.registration.host.events.emit",
+            "app.auth.application.host.events.emit",
             AsyncMock(side_effect=RuntimeError("db down")),
         ),
-        patch("app.registration.get_admin_supabase", return_value=fake_admin),
+        patch("app.auth.application.get_admin_supabase", return_value=fake_admin),
         pytest.raises(RuntimeError),
     ):
-        await register_user("x@test.local", "pw", fake_bg)
+        await register_user("x@test.local", "pw")
 
     fake_admin.auth.admin.delete_user.assert_called_once_with(fake_user_id)

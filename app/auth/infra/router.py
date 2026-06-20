@@ -11,10 +11,10 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
+from app.auth.application import confirm_user, register_user
 from app.auth.contract.current import OptionalCurrentUser
 from app.auth.domain.service import confirm_signup, login, logout
 from app.auth.infra.cookies import set_auth_cookies
-from app.registration import confirm_user, register_user
 from app.shared.http import parse_body, wants_json
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
@@ -164,7 +164,6 @@ async def register_page(request: Request, next: str | None = None) -> HTMLRespon
 @rate_limit("5/minute")
 async def register_endpoint(
     request: Request,
-    bg: BackgroundTasks,
 ) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
@@ -184,7 +183,7 @@ async def register_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        await register_user(email, password, bg)
+        await register_user(email, password)
         if wants_json(request):
             return JSONResponse(
                 {"message": "Account created. Please verify your email."},
@@ -216,7 +215,6 @@ async def register_endpoint(
 @rate_limit("10/minute")
 async def confirm_endpoint(
     request: Request,
-    bg: BackgroundTasks,
     token_hash: str = Query(...),
     type: str = Query(...),
     next: str = Query(default="/profile"),
@@ -224,7 +222,7 @@ async def confirm_endpoint(
     """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
     try:
         tokens = await confirm_signup(token_hash, type)
-        await confirm_user(tokens.access_token, bg)
+        await confirm_user(tokens.access_token)
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp

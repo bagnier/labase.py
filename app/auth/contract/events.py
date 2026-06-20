@@ -1,8 +1,9 @@
 """Auth's public event — emitted once a new auth user exists.
 
-The org context reacts to this (creating the user's personal org); auth stays ignorant
-of who listens. Carries only identity: anything needing the user's access token uses the
-downstream ``OrgCreated`` event instead.
+The org context reacts to this (creating the user's personal org and scheduling the
+downstream ``OrgCreated`` seeding event). Auth stays ignorant of who listens.
+``access_token`` is ``None`` when email confirmation is pending; the org context skips
+seeding in that case and picks it up when the confirmation callback fires.
 """
 
 from dataclasses import dataclass
@@ -12,3 +13,4 @@ from dataclasses import dataclass
 class UserCreated:
     user_id: str
     email: str
+    access_token: str | None

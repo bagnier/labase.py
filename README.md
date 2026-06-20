@@ -49,17 +49,16 @@ Each bounded context exposes a single `register(app, host)` entry point in its `
 
 **`EventBus`** exposes two primitives:
 
-| Method | Semantic | On failure | Used for |
-| --- | --- | --- | --- |
-| `emit(event)` | push / command — runs all handlers, returns their results | propagates first exception (caller can compensate) | `UserCreated`, `OrgCreated` |
-| `collect(query)` | pull / query — runs all handlers, aggregates successful returns | logs & skips the failing handler | `OverviewQuery` (dashboard) |
+| Method           | Semantic                                                        | On failure                                         | Used for                    |
+| ---------------- | --------------------------------------------------------------- | -------------------------------------------------- | --------------------------- |
+| `emit(event)`    | push / command — runs all handlers, returns their results       | propagates first exception (caller can compensate) | `UserCreated`, `OrgCreated` |
+| `collect(query)` | pull / query — runs all handlers, aggregates successful returns | logs & skips the failing handler                   | `OverviewQuery` (dashboard) |
 
 **Sign-up event chain:**
 
 ```
 signup → emit(UserCreated)
-  → organizations: creates personal org, returns org_id
-  → emit(OrgCreated(org_id))
+  → organizations: creates personal org → emit(OrgCreated)
       → files:    seeds welcome.txt
       → learning: seeds Welcome deck
       → todo:     seeds 3 welcome todos
@@ -75,7 +74,7 @@ GET /{org}/ → collect(OverviewQuery)
 
 ## Principles
 
-**Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives at the composition root (`registration.py`), never in `shared/`.
+**Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives in application services inside the owning context (e.g. `auth/application.py`), never in `shared/`.
 
 **Cross-context communication.** Two sanctioned forms: `contract/` for synchronous owned APIs (FastAPI dependencies, public types), and the `EventBus` for event-driven reactions where the emitter doesn't know its subscribers. Each context's FastAPI dependencies live in its own `contract/current.py` — `CurrentUser`, `OptionalCurrentUser`, `RlsSession` in `auth/`; `CurrentOrg`, `CurrentMembership`, `CurrentOwnerMembership` in `organizations/`. `app/shared/` is ownerless infra (clock, HTTP, DB sessions) — not a coupling point; it holds only things no single context owns, such as the BYPASSRLS `AdminSession`.
 
@@ -99,14 +98,13 @@ Both drivers share a substrate in `tests/e2e/drivers/` (`ApiBase` / `BrowserBase
 
 Every bounded context follows the same layout — `domain/` (models, service), `infra/`
 (router, repository), `templates/`, `tests/`, and an optional `contract/` (its public
-inter-app surface). Three top-level modules form the composition root — the only place
-allowed to know several contexts at once: `main.py`, `registration.py`:
+inter-app surface). One top-level module forms the composition root — the only place
+allowed to know several contexts at once: `main.py`.
 
 ```
 labase.py/
 ├── app/
 │   ├── main.py            # FastAPI app, router registration, 401 handler
-│   ├── registration.py    # Composition root: sign-up saga (auth user + personal org)
 │   ├── shared/            # Cross-context infra: persistence (engines, rls), http
 │   │                      #   (security, templates, limiter), observability, templates/
 │   ├── auth/              # Authentication — get_current_user, get_rls_session, cookies
