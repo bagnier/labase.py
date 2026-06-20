@@ -119,17 +119,19 @@ async def test_register_user_compensates_when_org_creation_fails():
     fake_result = RegisterResult(user_id=fake_user_id, access_token="tok")
     fake_admin = MagicMock()
     fake_admin.auth.admin.delete_user = MagicMock()
-    fake_session = MagicMock()
+    fake_bg = MagicMock()
 
+    # Org creation is the org context reacting to UserCreated on the bus; a failure there
+    # must delete the just-created auth user so no orphan account survives.
     with (
         patch("app.registration.register", AsyncMock(return_value=fake_result)),
         patch(
-            "app.registration.OrganizationRepository.create_with_owner",
+            "app.registration.host.events.emit",
             AsyncMock(side_effect=RuntimeError("db down")),
         ),
         patch("app.registration.get_admin_supabase", return_value=fake_admin),
         pytest.raises(RuntimeError),
     ):
-        await register_user("x@test.local", "pw", fake_session)
+        await register_user("x@test.local", "pw", fake_bg)
 
     fake_admin.auth.admin.delete_user.assert_called_once_with(fake_user_id)

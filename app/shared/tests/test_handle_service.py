@@ -4,6 +4,15 @@ import pytest
 
 from app.shared.names import is_reserved, is_valid_handle, slugify
 
+
+@pytest.fixture(scope="module", autouse=True)
+def _wire_reserved_slugs():
+    """Reserved slugs are claimed at composition: importing app.main wires every context."""
+    import app.main
+
+    assert app.main.app is not None
+
+
 # ── slugify ───────────────────────────────────────────────────────────────────
 
 

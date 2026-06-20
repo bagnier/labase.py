@@ -14,17 +14,16 @@ from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 from app.auth.contract.current import OptionalCurrentUser
 from app.auth.domain.service import confirm_signup, login, logout
 from app.auth.infra.cookies import set_auth_cookies
-from app.organizations.contract.hooks import emit_org_created
 from app.registration import confirm_user, register_user
 from app.shared.http import parse_body, wants_json
 from app.shared.http.limiter import rate_limit
 from app.shared.http.templates import templates
 from app.shared.observability.audit import record_audit_event
-from app.shared.persistence.database import AdminSession
 
 log = structlog.get_logger("labase.auth")
 
 router = APIRouter()
+
 
 _WEAK_PASSWORD_REASONS: dict[str, str] = {
     "too_short": "too short",
@@ -166,7 +165,6 @@ async def register_page(request: Request, next: str | None = None) -> HTMLRespon
 async def register_endpoint(
     request: Request,
     bg: BackgroundTasks,
-    admin_session: AdminSession,
 ) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
@@ -186,10 +184,7 @@ async def register_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        result, org_id = await register_user(email, password, admin_session)
-        if org_id is not None:
-            assert result.access_token is not None  # org_id is set only when access_token is set
-            bg.add_task(emit_org_created, org_id, result.access_token)
+        await register_user(email, password, bg)
         if wants_json(request):
             return JSONResponse(
                 {"message": "Account created. Please verify your email."},
@@ -222,7 +217,6 @@ async def register_endpoint(
 async def confirm_endpoint(
     request: Request,
     bg: BackgroundTasks,
-    admin_session: AdminSession,
     token_hash: str = Query(...),
     type: str = Query(...),
     next: str = Query(default="/profile"),
@@ -230,8 +224,7 @@ async def confirm_endpoint(
     """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
     try:
         tokens = await confirm_signup(token_hash, type)
-        org_id = await confirm_user(tokens.access_token, admin_session)
-        bg.add_task(emit_org_created, org_id, tokens.access_token)
+        await confirm_user(tokens.access_token, bg)
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp

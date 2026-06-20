@@ -6,12 +6,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from app.auth.contract.current import CurrentUser, RlsSession
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
+from app.integration import host
 from app.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
     CurrentOwnerMembership,
 )
-from app.organizations.contract.overviews import collect_overviews
+from app.organizations.contract.overviews import OverviewQuery
 from app.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
 from app.organizations.domain.models import (
     InvitationRead,
@@ -101,7 +102,9 @@ async def org_dashboard(
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await page_context(session, current_user, org=org, org_handle=org_handle)
-    ctx["overviews"] = await collect_overviews(session, org_id)
+    ctx["overviews"] = sorted(
+        await host.events.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
+    )
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 
@@ -111,7 +114,9 @@ async def org_dashboard_overviews(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> JSONResponse:
-    overviews = await collect_overviews(session, org_id)
+    overviews = sorted(
+        await host.events.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
+    )
     return JSONResponse([{"key": o.key, "title": o.title, "data": o.data} for o in overviews])
 
 

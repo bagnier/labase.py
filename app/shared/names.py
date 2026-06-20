@@ -1,21 +1,14 @@
 import re
 
-RESERVED = frozenset(
-    {
-        "auth",
-        "profile",
-        "console",
-        "health",
-        "invitations",
-        "static",
-        "files",
-        "api",
-        "login",
-        "logout",
-        "signup",
-        "admin",
-    }
-)
+# Reserved slugs are claimed at composition time: each context claims its own via
+# ``host.reserve(...)`` in its ``contract/integration.py:register`` (and main claims the
+# infra-owned ``static``/``api``). The registry starts empty — no central hardcoded list.
+_reserved: set[str] = set()
+
+
+def reserve(*slugs: str) -> None:
+    _reserved.update(slugs)
+
 
 _HANDLE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -29,7 +22,7 @@ def is_valid_handle(handle: str) -> bool:
 
 
 def is_reserved(handle: str) -> bool:
-    return handle in RESERVED
+    return handle in _reserved
 
 
 def validate_handle(handle: str) -> tuple[int, str] | None:

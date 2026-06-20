@@ -23,7 +23,7 @@ Feature: Org file storage
 
   Scenario: Upload with XSS characters in filename is sanitized and succeeds
     When they upload a file with filename "<img onerror=alert(1)>.txt"
-    Then "_img onerror=alert(1)_.txt" appears in the file list
+    Then "_img_onerror_alert_1__.txt" appears in the file list
 
   # List
 
