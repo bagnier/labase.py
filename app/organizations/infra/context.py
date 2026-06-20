@@ -1,19 +1,16 @@
 import uuid
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.contract.current import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.auth.infra.session import get_rls_session
+from app.auth.contract.current import CurrentUser, RlsSession
 from app.organizations.domain.models import Membership, Organization, OrgRole
 from app.organizations.infra.repository import OrganizationRepository
 
 
 async def get_current_org(
     request: Request,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> uuid.UUID:
     """Resolve org from {org_handle} path parameter."""
     user_uuid = uuid.UUID(current_user.id)
@@ -37,7 +34,7 @@ async def get_current_org(
 
 
 async def get_current_org_model(
-    session: AsyncSession = Depends(get_rls_session),
+    session: RlsSession,
     org_id: uuid.UUID = Depends(get_current_org),
 ) -> Organization:
     org = await OrganizationRepository(session).get(org_id)
@@ -47,8 +44,8 @@ async def get_current_org_model(
 
 
 async def get_current_membership(
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
     org_id: uuid.UUID = Depends(get_current_org),
 ) -> Membership:
     user_uuid = uuid.UUID(current_user.id)
@@ -61,8 +58,8 @@ async def get_current_membership(
 
 async def get_membership_by_org_id(
     org_id: uuid.UUID,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_rls_session),
+    current_user: CurrentUser,
+    session: RlsSession,
 ) -> Membership:
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))

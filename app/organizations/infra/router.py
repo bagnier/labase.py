@@ -4,8 +4,8 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
+from app.auth.contract.admin import find_user_id_by_email, resolve_user_emails
 from app.auth.contract.current import CurrentUser, RlsSession
-from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
 from app.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
