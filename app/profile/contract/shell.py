@@ -13,8 +13,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.organizations.domain.models import Membership, Organization, OrgRole
+from app.auth.contract.current import AuthenticatedUser
+from app.organizations.contract.queries import get_user_orgs
 from app.profile.domain.models import Profile
 
 log = structlog.get_logger("labase.profile.shell")
@@ -38,30 +38,15 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
     if user is None:
         return {"handle": None, "orgs": []}
     user_id = uuid.UUID(user.id)
-    handle = select(Profile.handle).where(Profile.auth_user_id == user_id).scalar_subquery()
     try:
-        rows = (
-            await session.execute(
-                select(Organization, Membership.role, handle)
-                .join(Membership, Membership.org_id == Organization.id)
-                .where(Membership.auth_user_id == user_id)
-                .order_by(Organization.created_at)
-            )
-        ).all()
+        handle = await session.scalar(select(Profile.handle).where(Profile.auth_user_id == user_id))
+        orgs = await get_user_orgs(session, user_id)
     except Exception:
         log.warning("profile.shell_load_failed")
         return {"handle": None, "orgs": []}
     return {
-        "handle": rows[0][2] if rows else None,
-        "orgs": [
-            NavOrg(
-                id=row[0].id,
-                name=row[0].name,
-                handle=row[0].handle,
-                is_owner=row[1] == OrgRole.owner,
-            )
-            for row in rows
-        ],
+        "handle": handle,
+        "orgs": [NavOrg(id=o.id, name=o.name, handle=o.handle, is_owner=o.is_owner) for o in orgs],
     }
 
 

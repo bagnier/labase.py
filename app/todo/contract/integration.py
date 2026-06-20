@@ -5,12 +5,11 @@ answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrgCreated`
 """
 
 from fastapi import FastAPI
-from sqlalchemy import select
 
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
-from app.organizations.domain.models import Membership, OrgRole
+from app.organizations.contract.queries import get_org_owner_id
 from app.shared.host import Host
 from app.shared.persistence.database import admin_session_factory
 from app.todo.infra.repository import TodoRepository
@@ -48,11 +47,9 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 async def _seed(event: OrgCreated) -> None:
     async with admin_session_factory()() as session:
-        owner_id = await session.scalar(
-            select(Membership.auth_user_id).where(
-                Membership.org_id == event.org_id, Membership.role == OrgRole.owner
-            )
-        )
+        owner_id = await get_org_owner_id(session, event.org_id)
+        if owner_id is None:
+            return
         repo = TodoRepository(session, event.org_id)
         # add() prepends, so insert in reverse to keep list order.
         for title in reversed(_WELCOME_TODOS):

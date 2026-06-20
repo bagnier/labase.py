@@ -6,8 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.contract.current import CurrentUser, RlsSession
-from app.auth.domain.service import AuthenticatedUser
+from app.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from app.learning.domain.models import (
     CardResource,
     DueCard,

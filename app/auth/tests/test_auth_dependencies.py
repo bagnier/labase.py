@@ -7,7 +7,8 @@ from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 from supabase_auth.errors import AuthApiError
 
-from app.auth.domain.service import AuthenticatedUser, AuthTokens, login
+from app.auth.contract.user import AuthenticatedUser
+from app.auth.domain.service import AuthTokens, login
 from app.auth.infra.security import get_current_user
 
 _app = FastAPI()

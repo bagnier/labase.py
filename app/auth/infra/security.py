@@ -4,7 +4,8 @@ import jwt
 import structlog
 from fastapi import Cookie, HTTPException, Response, status
 
-from app.auth.domain.service import AuthenticatedUser, AuthTokens, refresh_session
+from app.auth.contract.user import AuthenticatedUser
+from app.auth.domain.service import AuthTokens, refresh_session
 from app.auth.infra.cookies import set_auth_cookies
 from app.shared.config import get_settings
 

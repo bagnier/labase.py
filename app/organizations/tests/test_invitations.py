@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-from app.auth.domain.service import AuthenticatedUser
+from app.auth.contract.current import AuthenticatedUser
 from app.auth.infra.security import get_current_user
 from app.main import app
 from app.shared.clock import now

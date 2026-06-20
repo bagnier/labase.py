@@ -8,7 +8,6 @@ share router and the org-scoped router, claims the ``files`` slug, answers the d
 import uuid
 
 from fastapi import FastAPI
-from sqlalchemy import select
 
 from app.files.infra.repository import OrgFileRepository
 from app.files.infra.router import public_router, router
@@ -16,7 +15,7 @@ from app.files.infra.storage import BUCKET, storage_path, user_storage_client
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
-from app.organizations.domain.models import Membership, OrgRole
+from app.organizations.contract.queries import get_org_owner_id
 from app.shared.host import Host
 from app.shared.persistence.database import admin_session_factory
 
@@ -66,11 +65,9 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 async def _seed(event: OrgCreated) -> None:
     async with admin_session_factory()() as session:
-        owner_id = await session.scalar(
-            select(Membership.auth_user_id).where(
-                Membership.org_id == event.org_id, Membership.role == OrgRole.owner
-            )
-        )
+        owner_id = await get_org_owner_id(session, event.org_id)
+    if owner_id is None:
+        return
 
     file_id = uuid.uuid4()
     path = storage_path(event.org_id, file_id, _WELCOME_FILENAME)

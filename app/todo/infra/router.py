@@ -4,8 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
-from app.auth.contract.current import CurrentUser, RlsSession
-from app.auth.domain.service import AuthenticatedUser
+from app.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from app.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from app.profile.contract.shell import shell_context
 from app.shared.http import or_404, parse_body, parse_field, render_list, wants_full_page

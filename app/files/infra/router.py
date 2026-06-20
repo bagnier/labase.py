@@ -7,8 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
 
-from app.auth.contract.current import CurrentUser, RlsSession
-from app.auth.domain.service import AuthenticatedUser
+from app.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.storage import (

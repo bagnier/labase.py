@@ -3,17 +3,11 @@ from dataclasses import dataclass
 import httpx
 import structlog
 
+from app.auth.contract.user import AuthenticatedUser as AuthenticatedUser
 from app.shared.config import get_settings
 from app.shared.persistence.supabase import get_user_supabase
 
 log = structlog.get_logger("labase.auth.service")
-
-
-@dataclass
-class AuthenticatedUser:
-    id: str
-    email: str
-    access_token: str = ""
 
 
 @dataclass
