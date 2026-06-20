@@ -11,13 +11,13 @@ import uuid
 from fastapi import FastAPI
 
 from app.auth.contract.events import UserCreated
-from app.integration import Host, host
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.infra.invitation_router import router as invitation_router
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.infra.router import org_router, router
 from app.shared.config import get_settings
+from app.shared.host import Host, host
 from app.shared.persistence.database import admin_session_factory
 
 

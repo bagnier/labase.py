@@ -13,11 +13,11 @@ from sqlalchemy import select
 from app.files.infra.repository import OrgFileRepository
 from app.files.infra.router import public_router, router
 from app.files.infra.storage import BUCKET, storage_path, user_storage_client
-from app.integration import Host
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
 from app.organizations.domain.models import Membership, OrgRole
+from app.shared.host import Host
 from app.shared.persistence.database import admin_session_factory
 
 _RECENT = 3

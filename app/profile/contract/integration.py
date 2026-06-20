@@ -2,8 +2,8 @@
 
 from fastapi import FastAPI
 
-from app.integration import Host
 from app.profile.infra.router import router
+from app.shared.host import Host
 
 
 def register(app: FastAPI, host: Host) -> None:

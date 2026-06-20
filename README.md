@@ -42,7 +42,7 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 
 Each bounded context exposes a single `register(app, host)` entry point in its `contract/integration.py`. The composition root (`app/main.py`) calls them in dependency order — no context knows about another.
 
-**`Host`** (`app/integration.py`) carries two things:
+**`Host`** (`app/shared/host.py`) carries two things:
 
 - `events: EventBus` — type-keyed async pub/sub; handlers are registered by the Python type of the event, so there are no magic string names and no shared imports between contexts.
 - `reserve(*slugs)` — claims URL path segments so no org handle can shadow them.
@@ -105,8 +105,9 @@ allowed to know several contexts at once: `main.py`.
 labase.py/
 ├── app/
 │   ├── main.py            # FastAPI app, router registration, 401 handler
-│   ├── shared/            # Cross-context infra: persistence (engines, rls), http
-│   │                      #   (security, templates, limiter), observability, templates/
+│   ├── shared/            # Cross-context infra: EventBus (bus.py), Host (host.py),
+│   │                      #   contract/integration.py (middleware/CORS/static),
+│   │                      #   persistence, http, observability, templates/
 │   ├── auth/              # Authentication — get_current_user, get_rls_session, cookies
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations
 │   ├── profile/           # User profile + page shell (shell_context / page_context)

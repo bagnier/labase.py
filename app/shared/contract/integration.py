@@ -7,15 +7,15 @@ from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
-from app.integration import Host
 from app.shared.config import get_settings
+from app.shared.host import Host
 from app.shared.http.exceptions import handle_http_error, handle_rate_limit, handle_unhandled_error
 from app.shared.http.limiter import limiter
 from app.shared.http.security import cors_config, security_headers
 from app.shared.observability.logging import setup_logging
 from app.shared.observability.request import RequestLogger
 
-_STATIC_DIR = Path(__file__).parents[2] / "static"
+_STATIC_DIR = Path(__file__).parents[3] / "static"
 
 
 def register(app: FastAPI, host: Host) -> None:

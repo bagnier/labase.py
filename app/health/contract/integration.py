@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 
 from app.health.router import router
-from app.integration import Host
+from app.shared.host import Host
 
 
 def register(app: FastAPI, host: Host) -> None:

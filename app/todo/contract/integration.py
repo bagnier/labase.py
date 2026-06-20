@@ -7,11 +7,11 @@ answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrgCreated`
 from fastapi import FastAPI
 from sqlalchemy import select
 
-from app.integration import Host
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
 from app.organizations.domain.models import Membership, OrgRole
+from app.shared.host import Host
 from app.shared.persistence.database import admin_session_factory
 from app.todo.infra.repository import TodoRepository
 from app.todo.infra.router import router

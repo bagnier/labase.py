@@ -7,12 +7,12 @@ answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrgCreate
 from fastapi import FastAPI
 from sqlalchemy import func, select
 
-from app.integration import Host
 from app.learning.domain.models import Card, Deck
 from app.learning.infra.router import router
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
+from app.shared.host import Host
 from app.shared.persistence.database import admin_session_factory
 
 _WELCOME_DECK = "Welcome"

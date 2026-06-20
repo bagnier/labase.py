@@ -6,7 +6,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from app.auth.contract.current import CurrentUser, RlsSession
 from app.auth.infra.user_repository import find_user_id_by_email, resolve_user_emails
-from app.integration import host
 from app.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
@@ -23,6 +22,7 @@ from app.organizations.domain.models import (
 from app.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from app.organizations.infra.repository import OrganizationRepository
 from app.profile.contract.shell import page_context
+from app.shared.host import host
 from app.shared.http import or_404, parse_body, wants_json
 from app.shared.http.templates import templates
 from app.shared.names import validate_handle
