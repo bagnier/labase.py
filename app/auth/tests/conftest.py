@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.auth.tests.admin_helpers import create_user, delete_user
+from app.auth.tests.given_helpers import create_user, delete_user
 
 
 @pytest.fixture()

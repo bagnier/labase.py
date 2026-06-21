@@ -1,6 +1,6 @@
 import httpx
 
-from app.auth.tests.admin_helpers import user_id_for_email
+from app.auth.tests.given_helpers import user_id_for_email
 from tests.e2e.drivers.api_base import ApiBase
 
 _PASSWORD = "Secret1!"

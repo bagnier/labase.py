@@ -2,7 +2,7 @@ import uuid
 
 from playwright.sync_api import Page
 
-from app.auth.tests.admin_helpers import find_users
+from app.auth.tests.given_helpers import find_users
 from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
 

@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import httpx
 
-from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
+from app.auth.tests.given_helpers import delete_user_if_exists, find_users
 from tests.e2e.drivers.api_base import ApiBase
 
 

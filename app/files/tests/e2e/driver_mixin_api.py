@@ -1,7 +1,7 @@
 import httpx
 
-from app.auth.tests.admin_helpers import create_user, delete_user_if_exists, user_id_for_email
-from app.organizations.tests.admin_helpers import (
+from app.auth.tests.given_helpers import create_user, delete_user_if_exists, user_id_for_email
+from app.organizations.tests.given_helpers import (
     add_membership,
     create_org_for_user,
     delete_org,

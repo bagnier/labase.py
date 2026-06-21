@@ -1,4 +1,4 @@
-"""Admin membership helpers for tests, via the supabase service-role client.
+"""Membership helpers for test setup, via the supabase service-role client.
 
 These writes go through PostgREST: they are committed outside the test transaction —
 the affected orgs must be tracked via track_org_id().
@@ -40,13 +40,6 @@ def set_membership_role(org_id: str, user_id: str, role: str) -> None:
     get_admin_supabase().table("memberships").update({"role": role}).eq("org_id", org_id).eq(
         "auth_user_id", user_id
     ).execute()
-
-
-def memberships_for_user(user_id: str) -> list[dict]:
-    result = (
-        get_admin_supabase().table("memberships").select("*").eq("auth_user_id", user_id).execute()
-    )
-    return cast(list[dict], result.data)
 
 
 def create_org_for_user(name: str, user_id: str) -> dict:

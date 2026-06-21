@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 import httpx
 
 from app.auth.infra.session import get_rls_session
-from app.auth.tests.admin_helpers import delete_user_if_exists
+from app.auth.tests.given_helpers import delete_user_if_exists
 from app.main import app
 from app.shared.persistence.database import (
     _admin_engine,

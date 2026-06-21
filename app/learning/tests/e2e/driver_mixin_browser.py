@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 import tests.e2e.clock as test_clock
-from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
-from app.organizations.tests.admin_helpers import orgs_for_user
+from app.auth.tests.given_helpers import delete_user_if_exists, find_users
+from app.organizations.tests.given_helpers import orgs_for_user
 from app.shared.config import get_settings
 from tests.e2e.drivers.browser_base import BrowserBase
 

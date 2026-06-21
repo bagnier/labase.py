@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.tests.admin_helpers import create_user, delete_user
+from app.auth.tests.given_helpers import create_user, delete_user
 from app.profile.domain.models import Profile
 from app.shared.persistence.rls import set_rls_context
 

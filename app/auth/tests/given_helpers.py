@@ -1,4 +1,4 @@
-"""Admin GoTrue helpers for tests, via the supabase service-role client."""
+"""GoTrue helpers for test setup, via the supabase service-role client."""
 
 from supabase_auth.types import User
 

@@ -6,7 +6,7 @@ from supabase_auth.errors import AuthApiError
 
 from app.auth.application import register_user
 from app.auth.domain.service import login, logout, refresh_session, register
-from app.auth.tests.admin_helpers import delete_user, find_users
+from app.auth.tests.given_helpers import delete_user, find_users
 from app.shared.persistence.supabase import get_admin_supabase
 
 

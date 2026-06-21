@@ -1,7 +1,7 @@
 import contextlib
 import tempfile
 
-from app.auth.tests.admin_helpers import delete_user_if_exists
+from app.auth.tests.given_helpers import delete_user_if_exists
 from tests.e2e.drivers.browser_base import BrowserBase
 
 

@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from app.auth.tests.admin_helpers import delete_user_if_exists, find_users
+from app.auth.tests.given_helpers import delete_user_if_exists, find_users
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
