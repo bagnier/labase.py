@@ -103,7 +103,8 @@ class AuthBrowserMixin(BrowserBase):
         assert "/profile" in self.page.url, f"Expected /profile, got {self.page.url}"
 
     def assert_registration_successful(self) -> None:
-        assert "verify" in self.page.content(), "'verify' not found in registration response"
+        content = self.page.content()
+        assert "Account created" in content, "'Account created' not found in registration response"
         assert self.last_registered_email is not None
         assert find_users(self.last_registered_email), (
             f"User {self.last_registered_email!r} not found in Supabase after registration"

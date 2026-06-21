@@ -16,7 +16,7 @@ os.environ.setdefault("ENV_FILE", ".env")
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.auth.tests.admin_helpers import create_user, delete_user_if_exists, find_users
+from app.auth.tests.given_helpers import create_user, delete_user_if_exists, find_users
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.config import get_settings
 from app.todo.domain.models import TodoItem
@@ -52,7 +52,7 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
     async with engine.begin() as conn, AsyncSession(bind=conn, expire_on_commit=False) as session:
         repo = OrganizationRepository(session)
         org = await repo.create_with_owner(org_name, auth_user_id)
-        print(f"  → org '{org.name}' (slug={org.slug}, id={org.id})")
+        print(f"  → org '{org.name}' (handle={org.handle}, id={org.id})")
 
         for i, title in enumerate(_TODOS):
             session.add(TodoItem(user_id=auth_user_id, org_id=org.id, title=title, position=i))

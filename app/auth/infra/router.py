@@ -60,7 +60,8 @@ def _friendly_auth_error(e: AuthApiError) -> str:
 
 
 _INFO_MESSAGES: dict[str, str] = {
-    "registered": "Account created. Please verify your email before signing in.",
+    "registered_pending_email": "Account created. Please verify your email before signing in.",
+    "registered_active": "Account created. You can now sign in.",
 }
 
 
@@ -183,16 +184,22 @@ async def register_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     try:
-        await register_user(email, password)
+        result = await register_user(email, password)
         if wants_json(request):
             return JSONResponse(
                 {"message": "Account created. Please verify your email."},
                 status_code=status.HTTP_201_CREATED,
             )
-        login_url = "/auth/login?info=registered"
+        info_key = (
+            "registered_pending_email" if result.access_token is None else "registered_active"
+        )
+        login_url = f"/auth/login?info={info_key}"
         if next:
             login_url += f"&next={next}"
-        return RedirectResponse(login_url, status_code=status.HTTP_303_SEE_OTHER)
+        redirect = RedirectResponse(login_url, status_code=status.HTTP_303_SEE_OTHER)
+        redirect.delete_cookie("access_token")
+        redirect.delete_cookie("refresh_token")
+        return redirect
     except AuthWeakPasswordError as e:
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
     except AuthApiError as e:

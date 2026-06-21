@@ -507,4 +507,19 @@ async def revoke_invitation(
     )
     if wants_json(request):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return HTMLResponse("", status_code=status.HTTP_200_OK)
+    org = await repo.get(org_id)
+    org_handle = request.path_params.get("org_handle", org.handle if org else "")
+    raw_invs = await repo.list_invitations(org_id)
+    invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
+    pending_invitations_html = bytes(
+        templates.TemplateResponse(
+            request,
+            "organizations/_pending_invitations.html",
+            {
+                "caller_role": membership.role.value,
+                "invitations": invitations,
+                "org_handle": org_handle,
+            },
+        ).body
+    ).decode()
+    return HTMLResponse(pending_invitations_html, status_code=status.HTTP_200_OK)
