@@ -235,7 +235,6 @@ async def update_org_handle(
             session, current_user, org=org, org_handle=org_handle, role=membership.role.value
         )
         ctx["handle_error"] = error
-        ctx["handle_value"] = handle
         response = templates.TemplateResponse(
             request, "organizations/settings.html", ctx, status_code=code
         )
