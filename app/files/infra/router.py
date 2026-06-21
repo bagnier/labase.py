@@ -199,17 +199,30 @@ async def rename_file(
     file_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
+    org_id: CurrentOrg,
     org: CurrentOrgModel,
     membership: CurrentMembership,
     repo: FileRepo,
 ):
     filename = await parse_field(request, "filename")
 
+    try:
+        safe_name = _sanitize_filename(filename)
+    except ValueError:
+        raise HTTPException(400, "Invalid filename") from None
+
     org_file = or_404(await repo.get(file_id))
     if not _can_modify(org_file.user_id, membership):
         raise HTTPException(403, "Forbidden")
 
-    await repo.rename(org_file, filename)
+    new_path = storage_path(org_id, file_id, safe_name)
+    storage = user_storage_client(current_user.access_token)
+    try:
+        await storage.from_(BUCKET).move(org_file.storage_path, new_path)
+    except StorageApiError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    await repo.rename(org_file, safe_name, new_path)
 
     files = await repo.all()
     return await _render(request, session, current_user, files, org)

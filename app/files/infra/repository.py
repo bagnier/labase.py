@@ -46,8 +46,9 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
         await self.session.flush()
         return org_file
 
-    async def rename(self, org_file: OrgFile, new_filename: str) -> None:
+    async def rename(self, org_file: OrgFile, new_filename: str, new_storage_path: str) -> None:
         org_file.filename = new_filename
+        org_file.storage_path = new_storage_path
 
     async def add_share_token(self, file_id: uuid.UUID) -> OrgFileShareToken:
         token = OrgFileShareToken(
