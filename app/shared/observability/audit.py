@@ -5,6 +5,8 @@ import structlog
 from fastapi import BackgroundTasks
 from sqlalchemy import text
 
+from app.shared.persistence.database import admin_session_factory
+
 log = structlog.get_logger("labase.audit")
 
 
@@ -15,9 +17,6 @@ async def _insert_audit_log(
     ip: str | None,
     payload: dict[str, Any],
 ) -> None:
-    from app.shared.persistence.database import (
-        admin_session_factory,
-    )  # local import avoids circular
 
     try:
         async with admin_session_factory()() as session:

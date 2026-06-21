@@ -21,7 +21,7 @@ from tests.e2e.drivers.transport import ASGISyncTransport
 
 _T = TypeVar("_T")
 _PASSWORD = "Secret1!"
-_VISITOR = "visitor"  # sentinel — unauthenticated client, no associated user
+VISITOR = "visitor"  # sentinel — unauthenticated client, no associated user
 
 
 class ApiBase:
@@ -29,7 +29,7 @@ class ApiBase:
         self._runner = AsyncRunner()
         self._test_auth_emails: list[str] = []
         self._clients: dict[str, httpx.Client] = {}
-        self._acting_email: str = _VISITOR
+        self._acting_email: str = VISITOR
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
@@ -60,7 +60,7 @@ class ApiBase:
 
     def reset_session(self) -> None:
         self._close_clients()
-        self._acting_email = _VISITOR
+        self._acting_email = VISITOR
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:
@@ -98,7 +98,7 @@ class ApiBase:
     def client_for(self, email: str) -> httpx.Client:
         if email not in self._clients:
             client = self._make_client()
-            if email != _VISITOR:
+            if email != VISITOR:
                 creds = {"email": email, "password": _PASSWORD}
                 client.post("/auth/register", json=creds)
                 client.post("/auth/login", json=creds)
@@ -108,9 +108,9 @@ class ApiBase:
 
     def set_acting_email(self, email: str) -> None:
         """Adopt `email` as the acting user, promoting the visitor session if one exists."""
-        if _VISITOR in self._clients and email not in self._clients:
-            self._clients[email] = self._clients.pop(_VISITOR)
+        if VISITOR in self._clients and email not in self._clients:
+            self._clients[email] = self._clients.pop(VISITOR)
         self._acting_email = email
 
     def clear_acting_email(self) -> None:
-        self._acting_email = _VISITOR
+        self._acting_email = VISITOR

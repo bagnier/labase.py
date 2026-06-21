@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from typing import cast
 
 import httpx
 import structlog
+from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
 
 from app.auth.contract.user import AuthenticatedUser as AuthenticatedUser
 from app.shared.config import get_settings
@@ -73,10 +75,6 @@ async def register(email: str, password: str) -> RegisterResult:
 
 async def confirm_signup(token_hash: str, type: str = "signup") -> AuthTokens:
     """Exchange an email confirmation token for a session."""
-    from typing import cast
-
-    from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
-
     supabase = await get_user_supabase()
     res = await supabase.auth.verify_otp(
         VerifyTokenHashParams(token_hash=token_hash, type=cast(EmailOtpType, type))

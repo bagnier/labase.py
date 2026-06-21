@@ -1,25 +1,13 @@
-import uuid
-
 import httpx
-from sqlalchemy import delete
 
-from app.auth.tests.admin_helpers import (
-    create_user as _admin_create_user,
-)
-from app.auth.tests.admin_helpers import (
-    delete_user_if_exists,
-    user_id_for_email,
-)
-from app.organizations.domain.models import Organization
-from app.organizations.infra.repository import OrganizationRepository
+from app.auth.tests.admin_helpers import create_user, delete_user_if_exists, user_id_for_email
 from app.organizations.tests.admin_helpers import (
-    add_membership as _admin_add_membership,
+    add_membership,
+    create_org_for_user,
+    delete_org,
+    set_membership_role,
 )
-from app.organizations.tests.admin_helpers import (
-    set_membership_role as _admin_set_role,
-)
-from app.shared.persistence.database import admin_session_factory
-from tests.e2e.drivers.api_base import _VISITOR, ApiBase
+from tests.e2e.drivers.api_base import VISITOR, ApiBase
 
 _PASSWORD = "Secret1!"
 
@@ -57,16 +45,8 @@ class OrgFileApiMixin(ApiBase):
             self._test_org_ids.append(org_id)
 
     def _cleanup_orgs(self) -> None:
-        if not self._test_org_ids:
-            return
-
-        async def _delete() -> None:
-            async with admin_session_factory()() as session:
-                ids = [uuid.UUID(oid) for oid in self._test_org_ids]
-                await session.execute(delete(Organization).where(Organization.id.in_(ids)))
-                await session.commit()
-
-        self.run(_delete())
+        for org_id in self._test_org_ids:
+            delete_org(org_id)
         self._test_org_ids.clear()
 
     def _org_url(self, path: str, slug: str | None = None) -> str:
@@ -95,27 +75,16 @@ class OrgFileApiMixin(ApiBase):
     # ── sign-in with org naming ───────────────────────────────────────────────
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
-        # Supabase Storage RLS policies query the *committed* database, so the org must
-        # exist outside the test transaction. We create the user and org via admin APIs
-        # (bypassing the transaction rollback) and clean up in _cleanup_orgs().
+        # Supabase Storage RLS queries the *committed* database, so the org must
+        # exist outside any test transaction — hence the admin helper, not HTTP.
         self.primary_email = email
         self.last_registered_email = email
         delete_user_if_exists(email)
-        user_id_str = _admin_create_user(email, _PASSWORD)
+        user_id = create_user(email, _PASSWORD)
         self._track_auth_email(email)
-
-        async def _create_org() -> tuple[str, str]:
-            async with admin_session_factory()() as session:
-                repo = OrganizationRepository(session)
-                org = await repo.create_with_owner(
-                    name=org_name, auth_user_id=uuid.UUID(user_id_str)
-                )
-                await session.commit()
-                return str(org.id), org.handle
-
-        org_id, handle = self.run(_create_org())
-        self.track_org_id(org_id)
-        self.active_org_handle = handle
+        org = create_org_for_user(org_name, user_id)
+        self.track_org_id(org["id"])
+        self.active_org_handle = org["handle"]
         self.client().post("/auth/login", json={"email": email, "password": _PASSWORD})
         self.set_acting_email(email)
 
@@ -183,7 +152,7 @@ class OrgFileApiMixin(ApiBase):
         self.client_for(email)  # ensure user is created and logged in
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(email)
-        _admin_add_membership(org_id, user_id, role="member")
+        add_membership(org_id, user_id, role="member")
         self.secondary_handles[email] = self.active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
@@ -207,13 +176,13 @@ class OrgFileApiMixin(ApiBase):
         # Uses admin helper to bypass last-owner constraint during test setup.
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(self.primary_email)
-        _admin_set_role(org_id, user_id, "owner")
+        set_membership_role(org_id, user_id, "owner")
 
     def demote_to_member(self) -> None:
         # Uses admin helper to bypass last-owner constraint during test setup.
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(self.primary_email)
-        _admin_set_role(org_id, user_id, "member")
+        set_membership_role(org_id, user_id, "member")
 
     def generate_share_link(self, filename: str) -> None:
         file_id = self._file_id_by_name(filename)
@@ -236,7 +205,7 @@ class OrgFileApiMixin(ApiBase):
 
     def access_share_link_unauthenticated(self) -> None:
         assert self.share_link_url, "No share link stored"
-        self.response = self.client_for(_VISITOR).get(self.share_link_url)
+        self.response = self.client_for(VISITOR).get(self.share_link_url)
 
     # ── assertions ────────────────────────────────────────────────────────────
 

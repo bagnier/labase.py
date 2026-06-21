@@ -7,7 +7,7 @@ tests can build a fresh :class:`Host` in isolation.
 from dataclasses import dataclass, field
 
 from app.shared.bus import EventBus
-from app.shared.names import reserve as _reserve_slugs
+from app.shared.slug_registry import reserve as _reserve_slugs
 
 
 @dataclass

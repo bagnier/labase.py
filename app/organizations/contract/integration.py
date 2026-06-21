@@ -13,12 +13,14 @@ from fastapi import FastAPI
 from app.auth.contract.events import UserCreated
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
+from app.organizations.contract.queries import org_handle_taken
 from app.organizations.infra.invitation_router import router as invitation_router
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.infra.router import org_router, router
 from app.shared.config import get_settings
 from app.shared.host import Host, host
 from app.shared.persistence.database import admin_session_factory
+from app.shared.slug_registry import register_open_list
 
 
 def register(app: FastAPI, host: Host) -> None:
@@ -27,6 +29,7 @@ def register(app: FastAPI, host: Host) -> None:
     app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
     host.reserve("invitations")
+    register_open_list("organizations", org_handle_taken)
 
 
 async def _create_org(event: UserCreated) -> None:

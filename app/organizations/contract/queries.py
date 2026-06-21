@@ -7,6 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.organizations.domain.models import Membership, Organization, OrgRole
 
 
+async def org_handle_taken(
+    session: AsyncSession, handle: str, exclude_id: uuid.UUID | None = None
+) -> bool:
+    q = select(Organization).where(Organization.handle == handle)
+    if exclude_id is not None:
+        q = q.where(Organization.id != exclude_id)
+    return await session.scalar(q) is not None
+
+
 async def get_org_owner_id(session: AsyncSession, org_id: uuid.UUID) -> uuid.UUID | None:
     return await session.scalar(
         select(Membership.auth_user_id).where(

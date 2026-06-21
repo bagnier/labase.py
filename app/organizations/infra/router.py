@@ -25,8 +25,8 @@ from app.profile.contract.shell import page_context
 from app.shared.host import host
 from app.shared.http import or_404, parse_body, wants_json
 from app.shared.http.templates import templates
-from app.shared.names import validate_handle
 from app.shared.observability.audit import record_audit_event
+from app.shared.slug_registry import validate_handle
 
 # Collection router — multi-org, not scoped by a handle. Mounted at the root.
 router = APIRouter(prefix="/organizations", tags=["organizations"])

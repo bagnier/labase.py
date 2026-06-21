@@ -9,9 +9,8 @@ from app.organizations.domain.models import (
     OrgInvitation,
     OrgRole,
 )
-from app.shared.handle_service import handle_is_available, unique_handle
-from app.shared.names import slugify
 from app.shared.persistence.repository import BaseRepository
+from app.shared.slug_registry import handle_is_available, slugify, unique_handle
 
 
 class OrganizationRepository(BaseRepository[Organization]):
@@ -78,7 +77,9 @@ class OrganizationRepository(BaseRepository[Organization]):
         )
 
     async def is_handle_available(self, handle: str, org_id: uuid.UUID) -> bool:
-        return await handle_is_available(handle, self.session, exclude_org_id=org_id)
+        return await handle_is_available(
+            handle, self.session, exclude_from="organizations", exclude_id=org_id
+        )
 
     async def list_members(self, org_id: uuid.UUID) -> list[Membership]:
         result = await self.session.execute(

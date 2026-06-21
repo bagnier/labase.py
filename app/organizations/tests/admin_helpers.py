@@ -47,3 +47,25 @@ def memberships_for_user(user_id: str) -> list[dict]:
         get_admin_supabase().table("memberships").select("*").eq("auth_user_id", user_id).execute()
     )
     return cast(list[dict], result.data)
+
+
+def create_org_for_user(name: str, user_id: str) -> dict:
+    """Create an org + owner membership via the service-role client.
+
+    Committed outside any transaction — Supabase Storage RLS needs the org in the committed DB.
+    Returns {"id": str, "handle": str}.
+    """
+    from app.shared.slug_registry import slugify
+
+    handle = slugify(name) or "org"
+    client = get_admin_supabase()
+    result = client.table("organizations").insert({"name": name, "handle": handle}).execute()
+    org_id = cast(list[dict], result.data)[0]["id"]
+    client.table("memberships").insert(
+        {"org_id": org_id, "auth_user_id": user_id, "role": "owner"}
+    ).execute()
+    return {"id": org_id, "handle": handle}
+
+
+def delete_org(org_id: str) -> None:
+    get_admin_supabase().table("organizations").delete().eq("id", org_id).execute()

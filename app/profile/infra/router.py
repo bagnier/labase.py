@@ -10,7 +10,7 @@ from app.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from app.profile.infra.repository import ProfileRepository
 from app.shared.http import parse_body, wants_json
 from app.shared.http.templates import templates
-from app.shared.names import validate_handle
+from app.shared.slug_registry import validate_handle
 
 router = APIRouter()
 
