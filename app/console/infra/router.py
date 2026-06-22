@@ -81,17 +81,51 @@ async def console_index(
     )
 
 
+def _admin_rows(users: list) -> list:
+    return sorted((u for u in users if u.is_admin), key=lambda u: u.email)
+
+
+def _admins_json(admins: list) -> JSONResponse:
+    return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in admins]})
+
+
 # Registered before "/{app}" so "admins" is not captured as an app slug.
 @router.get("/admins", response_class=HTMLResponse)
 async def console_admins(request: Request, current_user: CurrentAdmin) -> Response:
-    users = sorted(await list_server_admins(), key=lambda u: u.email)
+    admins = _admin_rows(await list_server_admins())
     if wants_json(request):
-        return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in users]})
-    admin_count = sum(1 for u in users if u.is_admin)
+        return _admins_json(admins)
     return templates.TemplateResponse(
         request,
         "console/admins.html",
-        {"user": current_user, "users": users, "admin_count": admin_count},
+        {"user": current_user, "admins": admins, "admin_count": len(admins)},
+    )
+
+
+@router.post("/admins", response_class=HTMLResponse)
+async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
+    body = await parse_body(request)
+    email = str(body.get("email") or "").strip()
+    uid = await find_user_id_by_email(email) if email else None
+    if uid is None:
+        if wants_json(request):
+            return JSONResponse(
+                {"detail": f"No account exists for {email}"},
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        admins = _admin_rows(await list_server_admins())
+        return templates.TemplateResponse(
+            request,
+            "console/_admins.html",
+            {"admins": admins, "admin_count": len(admins), "error": email},
+        )
+
+    await set_server_admin(uid, True)
+    admins = _admin_rows(await list_server_admins())
+    if wants_json(request):
+        return _admins_json(admins)
+    return templates.TemplateResponse(
+        request, "console/_admins.html", {"admins": admins, "admin_count": len(admins)}
     )
 
 
@@ -115,12 +149,11 @@ async def update_admin(request: Request, email: str, current_user: CurrentAdmin)
 
     await set_server_admin(uid, is_admin)
 
-    users = sorted(await list_server_admins(), key=lambda u: u.email)
+    admins = _admin_rows(await list_server_admins())
     if wants_json(request):
-        return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in users]})
-    admin_count = sum(1 for u in users if u.is_admin)
+        return _admins_json(admins)
     return templates.TemplateResponse(
-        request, "console/_admins.html", {"users": users, "admin_count": admin_count}
+        request, "console/_admins.html", {"admins": admins, "admin_count": len(admins)}
     )
 
 

@@ -117,6 +117,22 @@ def step_appears_as_regular(driver, email):
     driver.assert_admin_list_status(email, is_admin=False)
 
 
+@then(parsers.parse('"{email}" does not appear in the admin list'))
+def step_absent_from_admin_list(driver, email):
+    driver.assert_email_absent_from_admin_list(email)
+
+
+@given(parsers.parse('the admin adds "{email}" as a server admin by email'))
+@when(parsers.parse('the admin adds "{email}" as a server admin by email'))
+def step_add_by_email(driver, email):
+    driver.add_server_admin_by_email(email)
+
+
+@then(parsers.parse('the admins page reports that no account exists for "{email}"'))
+def step_add_unknown_error(driver, email):
+    driver.assert_admin_add_error(email)
+
+
 @given(parsers.parse('the admin designates "{email}" as a server admin'))
 @when(parsers.parse('the admin designates "{email}" as a server admin'))
 def step_designate(driver, email):

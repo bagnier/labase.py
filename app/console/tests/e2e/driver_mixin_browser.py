@@ -196,13 +196,26 @@ class ConsoleBrowserMixin(BrowserBase):
         expected = "admin" if is_admin else "regular"
         assert actual == expected, f"{email!r}: expected {expected!r}, got {actual!r}"
 
-    def designate_server_admin(self, email: str) -> None:
+    def assert_email_absent_from_admin_list(self, email: str) -> None:
         page = self._goto_admins()
-        row = page.locator(f"[data-admin-email='{email}']")
+        row = page.query_selector(f"[data-admin-email='{email}']")
+        assert row is None, f"{email!r} unexpectedly on admins page"
+
+    def add_server_admin_by_email(self, email: str) -> None:
+        page = self._goto_admins()
+        page.fill("[data-admin-add-form] input[name=email]", email)
         self.last_response = self.click_and_capture(
-            page, f"[data-admin-email='{email}'] button[type=submit]", "PUT", "/console/admins/"
+            page, "[data-admin-add-form] button[type=submit]", "POST", "/console/admins"
         )
-        row.wait_for(state="attached")
+
+    def assert_admin_add_error(self, email: str) -> None:
+        el = self.page.query_selector(f"[data-admin-add-error='{email}']")
+        assert el is not None, f"no add-error shown for {email!r}"
+
+    def designate_server_admin(self, email: str) -> None:
+        # Designation now flows through the add-by-email form (regular users aren't listed).
+        self.add_server_admin_by_email(email)
+        self.page.locator(f"[data-admin-email='{email}']").wait_for(state="attached")
 
     def revoke_server_admin(self, email: str) -> None:
         # Force the request server-side: the UI disables the button for the last admin, so a

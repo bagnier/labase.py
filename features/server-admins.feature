@@ -23,25 +23,31 @@ Feature: Server admin management
 
   # Listing admins
 
-  Scenario: An admin lists every user with their admin status
+  Scenario: The admin list shows only server admins, not regular users
     Given a server admin is signed in as "root@example.com"
     And "bob@example.com" has registered
     When the admin opens the admins page on the console
     Then "root@example.com" appears in the admin list as a server admin
-    And "bob@example.com" appears in the admin list as a regular user
+    And "bob@example.com" does not appear in the admin list
 
-  # Designating a new admin
+  # Adding an admin by email
 
-  Scenario: An admin designates another user as a server admin
+  Scenario: An admin adds another admin by email
     Given a server admin is signed in as "root@example.com"
     And "bob@example.com" has registered
-    When the admin designates "bob@example.com" as a server admin
+    When the admin adds "bob@example.com" as a server admin by email
     Then "bob@example.com" appears in the admin list as a server admin
 
-  Scenario: A newly designated admin can open the console after signing in again
+  Scenario: Adding an admin with an unknown email is rejected
+    Given a server admin is signed in as "root@example.com"
+    When the admin adds "ghost@example.com" as a server admin by email
+    Then the admins page reports that no account exists for "ghost@example.com"
+    And "ghost@example.com" does not appear in the admin list
+
+  Scenario: A newly added admin can open the console after signing in again
     Given a server admin is signed in as "root@example.com"
     And "bob@example.com" has registered
-    And the admin designates "bob@example.com" as a server admin
+    And the admin adds "bob@example.com" as a server admin by email
     When "bob@example.com" signs in again
     Then "bob@example.com" can open the console
 
@@ -51,7 +57,7 @@ Feature: Server admin management
     Given a server admin is signed in as "root@example.com"
     And "bob@example.com" is a server admin
     When the admin revokes the server admin rights of "bob@example.com"
-    Then "bob@example.com" appears in the admin list as a regular user
+    Then "bob@example.com" does not appear in the admin list
 
   # Last-admin guard
 

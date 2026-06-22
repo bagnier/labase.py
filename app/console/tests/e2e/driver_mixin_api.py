@@ -166,6 +166,22 @@ class ConsoleApiMixin(ApiBase):
         actual = rows[email]["is_admin"]
         assert actual == is_admin, f"{email!r}: expected is_admin={is_admin}, got {actual}"
 
+    def assert_email_absent_from_admin_list(self, email: str) -> None:
+        rows = {a["email"] for a in self._admins()}
+        assert email not in rows, f"{email!r} unexpectedly in admin list {sorted(rows)}"
+
+    def add_server_admin_by_email(self, email: str) -> None:
+        self._as_admin()
+        self.response = self.client().post(
+            "/console/admins", json={"email": email}, headers={"accept": "application/json"}
+        )
+
+    def assert_admin_add_error(self, email: str) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 404, (
+            f"Expected 404 adding {email!r}, got {self.response.status_code}: {self.response.text}"
+        )
+
     def _put_admin(self, email: str, is_admin: bool) -> httpx.Response:
         return self.client().put(
             f"/console/admins/{email}",

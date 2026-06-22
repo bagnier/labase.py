@@ -1,3 +1,19 @@
+# Update — admin list shows only admins, add by email
+
+The admins page no longer browses every user. It lists **only** current server admins and
+adds new ones through an explicit **email form**.
+
+- **Listing change:** `GET /console/admins` renders only users whose `is_admin` is true.
+- **Designation change:** moves from a per-row "Designate" button to a top-of-page email
+  form (`POST /console/admins`, field `email`). Unknown email → inline error, **no account
+  is created or invited** (decided with the user). Reuses `find_user_id_by_email` +
+  `set_server_admin`.
+- **Revoke:** unchanged path (`PUT /console/admins/{email}`, `is_admin=false`), keeps the
+  last-admin guard. After a revoke the user simply drops off the admin-only list.
+- No new persistence, events, or repository functions.
+
+---
+
 # Server admin management — integration analysis
 
 Adds the *lifecycle* of the server-admin role that the console already consumes. Today the
