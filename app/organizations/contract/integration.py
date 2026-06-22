@@ -1,6 +1,6 @@
 """How the organizations context plugs into the running app.
 
-Single composition entry (:func:`register`, called from :mod:`app.main`): mounts the
+Single composition entry (:func:`mount`, called from :mod:`app.main`): mounts the
 collection, invitation and org-scoped routers, claims the ``invitations`` slug, and reacts to
 auth's ``UserCreated`` by creating the user's personal org then scheduling ``OrgCreated`` so
 apps can seed welcome data.
@@ -22,8 +22,12 @@ from app.shared.host import Host, host
 from app.shared.persistence.database import admin_session_factory
 from app.shared.slug_registry import register_open_list
 
+# Mounts the org-scoped catch-all router under /{org_handle}; the composition root registers
+# such contexts last so fixed-prefix routers (e.g. /console) are never shadowed.
+MOUNTS_UNDER_ORG_HANDLE = True
 
-def register(app: FastAPI, host: Host) -> None:
+
+def mount(app: FastAPI, host: Host) -> None:
     app.include_router(invitation_router)
     app.include_router(router)  # /organizations collection
     app.include_router(org_router, prefix=ORG_PREFIX)

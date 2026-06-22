@@ -1,6 +1,6 @@
 """How the files context plugs into the running app.
 
-Single composition entry (:func:`register`, called from :mod:`app.main`): mounts the public
+Single composition entry (:func:`mount`, called from :mod:`app.main`): mounts the public
 share router and the org-scoped router, claims the ``files`` slug, answers the dashboard
 ``OverviewQuery``, and drops a welcome file on ``OrgCreated``.
 """
@@ -9,7 +9,9 @@ import uuid
 
 from fastapi import FastAPI
 
-from app.files.infra.repository import OrgFileRepository
+from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from app.console.contract.settings import ConsoleSettingsQuery, SettingDef, SettingsGroup
+from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.router import public_router, router
 from app.files.infra.storage import BUCKET, storage_path, user_storage_client
 from app.organizations.contract import ORG_PREFIX
@@ -29,10 +31,16 @@ _WELCOME_BODY = (
 )
 
 
-def register(app: FastAPI, host: Host) -> None:
+# Mounts an org-scoped router under /{org_handle}; registered last (see app.main).
+MOUNTS_UNDER_ORG_HANDLE = True
+
+
+def mount(app: FastAPI, host: Host) -> None:
     app.include_router(public_router)
     app.include_router(router, prefix=ORG_PREFIX)
     host.events.on(OverviewQuery, _overview)
+    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.events.on(ConsoleSettingsQuery, _console_settings)
     host.events.on(OrgCreated, _seed)
     host.reserve("files")
 
@@ -60,6 +68,23 @@ async def _overview(query: OverviewQuery) -> Overview:
         href="files",
         template="files/_overview.html",
         data={"lines": lines, "recent": [f.filename for f in files[:_RECENT]]},
+    )
+
+
+async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
+    count, total = await FileShareRepository(query.session).count_and_size()
+    lines = [f"{count} files", _human_size(total)] if count else ["No files yet"]
+    return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})
+
+
+async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
+    return SettingsGroup(
+        app="files",
+        defs=[
+            SettingDef("max_upload_mb", "number", "25", "Maximum upload size, in megabytes"),
+            SettingDef("uploads_enabled", "boolean", "true", "Allow members to upload files"),
+            SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),
+        ],
     )
 
 

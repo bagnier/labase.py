@@ -1,4 +1,4 @@
-"""Host — the app-wide wiring object passed to every context's register(app, host).
+"""Host — the app-wide wiring object passed to every context's mount(app, host).
 
 Carries the event bus and the reserved-slug registry. ``host`` is the production singleton;
 tests can build a fresh :class:`Host` in isolation.

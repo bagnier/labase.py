@@ -50,7 +50,8 @@ def truncate_app_tables() -> None:
             async with engine.begin() as conn:
                 await conn.execute(
                     text(
-                        "TRUNCATE TABLE public.audit_logs, public.org_file_share_tokens, "
+                        "TRUNCATE TABLE public.app_settings, "
+                        "public.audit_logs, public.org_file_share_tokens, "
                         "public.org_files, public.todos, "
                         "public.card_states, public.deck_subscriptions, public.cards, "
                         "public.decks, public.org_invitations, "

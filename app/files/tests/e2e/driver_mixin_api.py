@@ -85,7 +85,11 @@ class OrgFileApiMixin(ApiBase):
         org = create_org_for_user(org_name, user_id)
         self.track_org_id(org["id"])
         self.active_org_handle = org["handle"]
-        self.client().post("/auth/login", json={"email": email, "password": _PASSWORD})
+        # Log in on a client dedicated to this email — never the current acting client, which
+        # may belong to another already-signed-in user (e.g. an admin) and would be clobbered.
+        client = self._clients.get(email) or self._make_client()
+        client.post("/auth/login", json={"email": email, "password": _PASSWORD})
+        self._clients[email] = client
         self.set_acting_email(email)
 
     # ── file operations ───────────────────────────────────────────────────────

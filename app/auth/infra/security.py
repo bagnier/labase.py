@@ -2,7 +2,7 @@ from functools import lru_cache
 
 import jwt
 import structlog
-from fastapi import Cookie, HTTPException, Response, status
+from fastapi import Cookie, Depends, HTTPException, Response, status
 
 from app.auth.contract.user import AuthenticatedUser
 from app.auth.domain.service import AuthTokens, refresh_session
@@ -56,9 +56,26 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
+    is_admin = payload.get("app_metadata", {}).get("role") == "admin"
     return AuthenticatedUser(
-        id=payload["sub"], email=payload.get("email", ""), access_token=access_token
+        id=payload["sub"],
+        email=payload.get("email", ""),
+        access_token=access_token,
+        is_admin=is_admin,
     )
+
+
+async def get_current_admin(
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AuthenticatedUser:
+    """Gate for server-admin-only surfaces (the console).
+
+    Anonymous callers already get 401 from ``get_current_user``. A signed-in non-admin gets a
+    plain 404 — a 403 would confirm the protected surface exists.
+    """
+    if not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return user
 
 
 async def try_get_current_user(

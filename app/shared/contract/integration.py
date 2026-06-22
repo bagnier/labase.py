@@ -18,7 +18,7 @@ from app.shared.observability.request import RequestLogger
 _STATIC_DIR = Path(__file__).parents[3] / "static"
 
 
-def register(app: FastAPI, host: Host) -> None:
+def mount(app: FastAPI, host: Host) -> None:
     setup_logging()
     settings = get_settings()
 

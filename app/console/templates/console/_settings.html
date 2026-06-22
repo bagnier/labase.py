@@ -1,0 +1,24 @@
+<div class="settings card !p-0 divide-y divide-gray-100" id="settings">
+  {% for s in settings %}
+    <form class="grid grid-cols-[1fr_220px_90px] gap-4 items-center p-4"
+          data-setting-key="{{ s.key }}" data-setting-type="{{ s.type }}"
+          hx-put="/console/{{ app }}/settings/{{ s.key }}" hx-target="#settings" hx-swap="outerHTML">
+      <div>
+        <span class="font-mono text-xs font-semibold">{{ s.key }}</span>
+        <span class="text-[10px] text-indigo-500 bg-indigo-50 rounded px-1.5 ml-1.5">{{ s.type }}</span>
+        <div class="text-xs text-gray-500 mt-0.5">{{ s.label }}</div>
+      </div>
+      {% if s.type == "boolean" %}
+        <label class="inline-flex items-center gap-2">
+          <input type="hidden" name="value" value="false" />
+          <input type="checkbox" name="value" value="true" {% if s.value == "true" %}checked{% endif %} />
+          <span class="text-sm text-gray-600">Enabled</span>
+        </label>
+      {% else %}
+        <input type="{{ 'number' if s.type == 'number' else 'text' }}" name="value"
+               value="{{ s.value }}" class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" />
+      {% endif %}
+      <button type="submit" class="btn-primary text-sm">Save</button>
+    </form>
+  {% endfor %}
+</div>

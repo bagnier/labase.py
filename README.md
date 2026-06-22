@@ -40,7 +40,7 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 
 ### Integration & event bus
 
-Each bounded context exposes a single `register(app, host)` entry point in its `contract/integration.py`. The composition root (`app/main.py`) calls them in dependency order — no context knows about another.
+Each bounded context exposes a single `mount(app, host)` entry point in its `contract/integration.py`. The composition root (`app/main.py`) calls them in dependency order — no context knows about another.
 
 **`Host`** (`app/shared/host.py`) carries two things:
 

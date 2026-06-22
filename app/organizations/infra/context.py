@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, Request, status
 from app.auth.contract.current import CurrentUser, RlsSession
 from app.organizations.domain.models import Membership, Organization, OrgRole
 from app.organizations.infra.repository import OrganizationRepository
+from app.shared.slug_registry import is_reserved
 
 
 async def get_current_org(
@@ -18,6 +19,10 @@ async def get_current_org(
 
     slug = request.path_params.get("org_handle")
     if slug:
+        # A reserved slug (e.g. /console) must never resolve as an org handle. If routing ever
+        # lets one reach here, fail as 404 — never confirm the reserved surface exists.
+        if is_reserved(slug):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
         # Single join: org by slug that the current user is a member of
         org = await repo.get_by_handle_for_user(slug, user_uuid)
         if org is not None:

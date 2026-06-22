@@ -14,11 +14,9 @@ from app.todo.contract import integration as todo
 
 app = FastAPI(title="labase")
 
-# Composition root: each context declares everything from its contract/integration.register —
-# mounts its routers, subscribes to events, answers collaboration queries, claims its URL slugs.
-# Listed in dependency order (auth → org → org-scoped apps → cross-cutting → infra); routing
-# precedence needs no special ordering since reserved slugs keep org handles off these paths.
-# Event subscriptions are wired unconditionally; seeding is gated at its emission site
-# (organizations._create_org) so BDD scenarios under the test schema start from an empty org.
-for _ctx in (shared, auth, organizations, files, todo, learning, profile, console, public, health):
-    _ctx.register(app, host)
+# Composition root: each context's mount() wires its routers, events, and claimed slugs.
+# Contexts that mount under the `/{org_handle}/...` catch-all (MOUNTS_UNDER_ORG_HANDLE) are
+# mounted last, so fixed-prefix routers like /console/{app} are never shadowed by it.
+_apps = (shared, auth, profile, public, health, console, organizations, files, todo, learning)
+for _app in sorted(_apps, key=lambda c: getattr(c, "MOUNTS_UNDER_ORG_HANDLE", False)):
+    _app.mount(app, host)

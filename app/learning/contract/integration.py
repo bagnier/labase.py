@@ -1,12 +1,14 @@
 """How the learning context plugs into the running app.
 
-Single composition entry (:func:`register`, called from :mod:`app.main`): mounts the router,
+Single composition entry (:func:`mount`, called from :mod:`app.main`): mounts the router,
 answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrgCreated``.
 """
 
 from fastapi import FastAPI
 from sqlalchemy import func, select
 
+from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from app.console.contract.settings import ConsoleSettingsQuery, SettingDef, SettingsGroup
 from app.learning.domain.models import Card, Deck
 from app.learning.infra.router import router
 from app.organizations.contract import ORG_PREFIX
@@ -30,10 +32,38 @@ _WELCOME_CARDS = [
 ]
 
 
-def register(app: FastAPI, host: Host) -> None:
+# Mounts an org-scoped router under /{org_handle}; registered last (see app.main).
+MOUNTS_UNDER_ORG_HANDLE = True
+
+
+def mount(app: FastAPI, host: Host) -> None:
     app.include_router(router, prefix=ORG_PREFIX)
     host.events.on(OverviewQuery, _overview)
+    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.events.on(ConsoleSettingsQuery, _console_settings)
     host.events.on(OrgCreated, _seed)
+
+
+async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
+    decks = await query.session.scalar(select(func.count()).select_from(Deck)) or 0
+    cards = await query.session.scalar(select(func.count()).select_from(Card)) or 0
+    if decks:
+        lines = [f"{decks} deck" + ("s" if decks > 1 else ""), f"{cards} cards"]
+    else:
+        lines = ["No decks yet"]
+    return ConsoleOverview(
+        key="learning", title="Learning", icon="graduation-cap", data={"lines": lines}
+    )
+
+
+async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
+    return SettingsGroup(
+        app="learning",
+        defs=[
+            SettingDef("sharing_enabled", "boolean", "true", "Allow members to share decks"),
+            SettingDef("daily_review_limit", "number", "100", "Max cards reviewed per day"),
+        ],
+    )
 
 
 async def _overview(query: OverviewQuery) -> Overview:

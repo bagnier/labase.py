@@ -41,6 +41,15 @@ def delete_user(uid: str) -> None:
     get_admin_supabase().auth.admin.delete_user(uid)
 
 
+def set_admin_role(uid: str) -> None:
+    """Promote a user to server admin via the admin-only ``app_metadata.role`` claim.
+
+    GoTrue embeds ``app_metadata`` in the access token, so the role lands in the JWT on the
+    user's next sign-in. Must be called *before* sign-in for the token to carry it.
+    """
+    get_admin_supabase().auth.admin.update_user_by_id(uid, {"app_metadata": {"role": "admin"}})
+
+
 def user_id_for_email(email: str) -> str:
     users = find_users(email)
     assert users, f"User {email!r} not found in Supabase"

@@ -10,6 +10,6 @@ from app.auth.infra.router import router
 from app.shared.host import Host
 
 
-def register(app: FastAPI, host: Host) -> None:
+def mount(app: FastAPI, host: Host) -> None:
     app.include_router(router, prefix="/auth", tags=["auth"])
     host.reserve("auth", "login", "logout", "signup")

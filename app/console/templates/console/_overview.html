@@ -1,0 +1,14 @@
+<section class="card" data-overview-key="{{ o.key }}">
+  <div class="flex items-center justify-between">
+    <div class="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-none">
+      <i class="ph ph-{{ o.icon }} text-indigo-500" aria-hidden="true"></i>
+    </div>
+    <span class="text-xs text-gray-400">all organisations</span>
+  </div>
+  <h3 class="section-title mt-3">{{ o.title }}</h3>
+  <div class="flex flex-wrap gap-2 mt-2">
+    {% for line in o.data.lines %}
+      <span class="text-xs font-semibold bg-gray-100 text-gray-600 rounded px-2 py-0.5">{{ line }}</span>
+    {% endfor %}
+  </div>
+</section>

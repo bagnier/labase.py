@@ -1,7 +1,7 @@
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.files.domain.models import OrgFile, OrgFileShareToken
@@ -72,3 +72,12 @@ class FileShareRepository(BaseRepository[OrgFile]):
         return await self.session.scalar(
             select(OrgFileShareToken).where(OrgFileShareToken.token == token)
         )
+
+    async def count_and_size(self) -> tuple[int, int]:
+        """Server-wide file count and total size, across every organisation."""
+        row = (
+            await self.session.execute(
+                select(func.count(OrgFile.id), func.coalesce(func.sum(OrgFile.size_bytes), 0))
+            )
+        ).one()
+        return int(row[0]), int(row[1])

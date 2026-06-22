@@ -10,7 +10,15 @@
 <div class="space-y-6">
   <div>
     <h1 class="page-title">Admin console</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Reserved for SaaS administrators.</p>
+    <p class="text-sm text-gray-500 mt-0.5">Server-wide — every organisation. Click an app to configure it.</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for o in overviews %}
+      <a href="/console/{{ o.key }}" class="block hover:-translate-y-0.5 transition-transform">
+        {% include "console/_overview.html" %}
+      </a>
+    {% endfor %}
   </div>
 </div>
 {% endblock %}
