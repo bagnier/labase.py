@@ -57,30 +57,14 @@
             </button>
           </div>
           <div class="space-y-0.5" x-show="open" x-cloak>
-            {% if "todo" in enabled_apps %}
-            <a href="/{{ nav_org.handle }}/todos" class="nav-link {% if is_current and '/todos' in path %}active{% endif %}">
-              <i class="ph ph-clipboard-text ph-sm flex-none" aria-hidden="true"></i>
-              Todos
+            {% for item in nav_items %}
+            {% if not item.owner_only or nav_org.is_owner %}
+            <a href="/{{ nav_org.handle }}/{{ item.segment }}" class="nav-link {% if is_current and item.match in path %}active{% endif %}">
+              <i class="ph ph-{{ item.icon }} ph-sm flex-none" aria-hidden="true"></i>
+              {{ item.label }}
             </a>
             {% endif %}
-            {% if "learning" in enabled_apps %}
-            <a href="/{{ nav_org.handle }}/learning/sessions" class="nav-link {% if is_current and '/learning' in path %}active{% endif %}">
-              <i class="ph ph-book-open ph-sm flex-none" aria-hidden="true"></i>
-              Learning
-            </a>
-            {% endif %}
-            {% if "files" in enabled_apps %}
-            <a href="/{{ nav_org.handle }}/files" class="nav-link {% if is_current and '/files' in path %}active{% endif %}">
-              <i class="ph ph-folder ph-sm flex-none" aria-hidden="true"></i>
-              Files
-            </a>
-            {% endif %}
-            {% if nav_org.is_owner %}
-            <a href="/{{ nav_org.handle }}/settings" class="nav-link {% if is_current and path.endswith('/settings') %}active{% endif %}">
-              <i class="ph ph-gear ph-sm flex-none" aria-hidden="true"></i>
-              Settings
-            </a>
-            {% endif %}
+            {% endfor %}
           </div>
         </div>
         {% endfor %}

@@ -18,7 +18,7 @@ from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
 from app.organizations.contract.queries import get_org_owner_id
-from app.shared.host import Host
+from app.shared.host import Host, NavItem
 from app.shared.persistence.database import admin_session_factory
 from app.todo.domain.models import TodoItem
 from app.todo.infra.repository import TodoRepository
@@ -44,6 +44,7 @@ def mount(app: FastAPI, host: Host) -> None:
     if not host.enabled("todo"):
         return
     app.include_router(router, prefix=ORG_PREFIX)
+    host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos", order=10))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 

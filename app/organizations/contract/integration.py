@@ -22,7 +22,7 @@ from app.organizations.infra.invitation_router import router as invitation_route
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.infra.router import org_router, router
 from app.shared.config import get_settings
-from app.shared.host import Host, host
+from app.shared.host import Host, NavItem, host
 from app.shared.persistence.database import admin_session_factory
 from app.shared.slug_registry import register_open_list
 
@@ -38,6 +38,9 @@ def mount(app: FastAPI, host: Host) -> None:
     host.events.on(UserCreated, _create_org)
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.events.on(ConsoleSettingsQuery, _console_settings)
+    host.register_nav(
+        NavItem("Settings", "gear", "settings", "/settings", order=100, owner_only=True)
+    )
     host.reserve("invitations")
     register_open_list("organizations", org_handle_taken)
 
