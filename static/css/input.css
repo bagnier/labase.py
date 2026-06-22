@@ -65,6 +65,10 @@
 
 [x-cloak] { display: none !important; }
 
+/* Console settings: transient "Saved ✓" after an HTMX save */
+.saved-flash { animation: saved-flash 2s ease forwards; }
+@keyframes saved-flash { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+
 /* Learning session: 3D card flip */
 .scene { perspective: 1200px; }
 .flip { transform-style: preserve-3d; transition: transform .45s cubic-bezier(.2,.7,.2,1); }

@@ -1,0 +1,30 @@
+<div class="card !p-0 divide-y divide-gray-100" id="admins">
+  {% for u in users %}
+    <div class="grid grid-cols-[1fr_120px_180px] gap-4 items-center p-4"
+         data-admin-email="{{ u.email }}"
+         data-admin-status="{{ 'admin' if u.is_admin else 'regular' }}">
+      <div class="text-sm">{{ u.email }}</div>
+      {% if u.is_admin %}
+        <span class="badge bg-red-50 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full text-center">server admin</span>
+      {% else %}
+        <span class="badge bg-gray-100 text-gray-500 text-xs font-semibold px-2 py-0.5 rounded-full text-center">regular user</span>
+      {% endif %}
+      <div class="text-right">
+        {% if u.is_admin %}
+          <form hx-put="/console/admins/{{ u.email }}" hx-target="#admins" hx-swap="outerHTML">
+            <input type="hidden" name="is_admin" value="false" />
+            <button type="submit" class="btn text-sm text-red-700"
+                    {% if admin_count <= 1 %}disabled title="The server must keep at least one admin"{% endif %}>
+              Revoke
+            </button>
+          </form>
+        {% else %}
+          <form hx-put="/console/admins/{{ u.email }}" hx-target="#admins" hx-swap="outerHTML">
+            <input type="hidden" name="is_admin" value="true" />
+            <button type="submit" class="btn text-sm text-indigo-700">Designate as admin</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>

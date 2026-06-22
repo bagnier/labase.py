@@ -105,6 +105,13 @@
         <div class="flex items-center gap-2 text-sm text-gray-500">
           {% block breadcrumb %}{% endblock %}
         </div>
+        {% if user and user.is_admin %}
+        <a href="/console"
+           class="ml-auto flex-none inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors">
+          <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
+          Admin
+        </a>
+        {% endif %}
       </header>
 
       <!-- Page content -->

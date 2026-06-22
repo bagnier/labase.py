@@ -52,7 +52,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     else:
         lines = ["No decks yet"]
     return ConsoleOverview(
-        key="learning", title="Learning", icon="graduation-cap", data={"lines": lines}
+        key="learning", title="Learning", icon="book-open", data={"lines": lines}
     )
 
 
@@ -81,7 +81,7 @@ async def _overview(query: OverviewQuery) -> Overview:
     return Overview(
         key="learning",
         title="Learning",
-        icon="graduation-cap",
+        icon="book-open",
         href="learning",
         template="learning/_overview.html",
         data={"lines": lines, "recent": []},

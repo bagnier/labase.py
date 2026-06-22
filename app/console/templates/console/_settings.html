@@ -2,7 +2,8 @@
   {% for s in settings %}
     <form class="grid grid-cols-[1fr_220px_90px] gap-4 items-center p-4"
           data-setting-key="{{ s.key }}" data-setting-type="{{ s.type }}"
-          hx-put="/console/{{ app }}/settings/{{ s.key }}" hx-target="#settings" hx-swap="outerHTML">
+          hx-put="/console/{{ app }}/settings/{{ s.key }}" hx-target="#settings" hx-swap="outerHTML"
+          hx-trigger="change">
       <div>
         <span class="font-mono text-xs font-semibold">{{ s.key }}</span>
         <span class="text-[10px] text-indigo-500 bg-indigo-50 rounded px-1.5 ml-1.5">{{ s.type }}</span>
@@ -18,7 +19,11 @@
         <input type="{{ 'number' if s.type == 'number' else 'text' }}" name="value"
                value="{{ s.value }}" class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" />
       {% endif %}
-      <button type="submit" class="btn-primary text-sm">Save</button>
+      <div class="text-right">
+        {% if saved_key == s.key %}
+          <span class="saved-flash text-xs font-medium text-green-600">Saved ✓</span>
+        {% endif %}
+      </div>
     </form>
   {% endfor %}
 </div>

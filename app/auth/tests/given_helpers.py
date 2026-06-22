@@ -50,6 +50,25 @@ def set_admin_role(uid: str) -> None:
     get_admin_supabase().auth.admin.update_user_by_id(uid, {"app_metadata": {"role": "admin"}})
 
 
+def clear_all_admin_roles() -> None:
+    """Strip the ``app_metadata.role`` claim from every GoTrue user.
+
+    Bootstrap promotes the first user only when the server has *zero* admins. Admins linger in
+    GoTrue across scenarios (the rollback/truncate isolation does not touch auth.users), so a
+    bootstrap scenario must reset the count to zero first.
+    """
+    admin = get_admin_supabase().auth.admin
+    page = 1
+    while True:
+        users = admin.list_users(page=page, per_page=1000)
+        for u in users:
+            if (u.app_metadata or {}).get("role"):
+                admin.update_user_by_id(u.id, {"app_metadata": {"role": None}})
+        if len(users) < 1000:
+            return
+        page += 1
+
+
 def user_id_for_email(email: str) -> str:
     users = find_users(email)
     assert users, f"User {email!r} not found in Supabase"

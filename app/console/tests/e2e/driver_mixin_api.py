@@ -1,6 +1,7 @@
 import httpx
 
 from app.auth.tests.given_helpers import (
+    clear_all_admin_roles,
     create_user,
     delete_user_if_exists,
     set_admin_role,
@@ -8,6 +9,7 @@ from app.auth.tests.given_helpers import (
 from tests.e2e.drivers.api_base import ApiBase
 
 _ADMIN_PASSWORD = "Test1234!"
+_USER_PASSWORD = "Secret1!"
 
 
 class ConsoleApiMixin(ApiBase):
@@ -95,3 +97,80 @@ class ConsoleApiMixin(ApiBase):
         assert key in settings, f"setting {key!r} not in {list(settings)}"
         actual = str(settings[key]["value"])
         assert actual == value, f"setting {key!r}: expected {value!r}, got {actual!r}"
+
+    # ── server admins ────────────────────────────────────────────────────────────
+    def ensure_no_server_admin(self) -> None:
+        clear_all_admin_roles()
+
+    def seed_existing_admin(self) -> None:
+        # An admin must exist so a later registrant is *not* auto-promoted by the bootstrap.
+        # Seeded straight into GoTrue (no session) to leave the acting user untouched.
+        email = "seed-admin@example.com"
+        delete_user_if_exists(email)
+        set_admin_role(create_user(email, _ADMIN_PASSWORD))
+        self._track_auth_email(email)
+
+    def _register_and_login(self, email: str, password: str) -> None:
+        client = self._make_client()
+        client.post("/auth/register", json={"email": email, "password": password})
+        client.post("/auth/login", json={"email": email, "password": password})
+        self._clients[email] = client
+        self._track_auth_email(email)
+
+    def register_and_sign_in(self, email: str) -> None:
+        # Registration fires the bootstrap (promotes the first user) *before* this login,
+        # so the issued JWT already carries the admin claim where applicable.
+        self._register_and_login(email, _USER_PASSWORD)
+        self.set_acting_email(email)
+
+    def register_regular_user(self, email: str) -> None:
+        self._register_and_login(email, _USER_PASSWORD)
+
+    def sign_in_again(self, email: str) -> None:
+        # A designation only lands in the JWT on a fresh sign-in — mint a new token.
+        self._clients.pop(email, None)
+        self._register_and_login(email, _USER_PASSWORD)
+        self.set_acting_email(email)
+
+    def assert_can_open_console(self, email: str) -> None:
+        resp = self.client_for(email).get("/console", headers={"accept": "application/json"})
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+    def assert_refused_console(self, email: str) -> None:
+        resp = self.client_for(email).get("/console")
+        assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
+
+    def _admins(self) -> list[dict]:
+        self._as_admin()
+        resp = self.client().get("/console/admins", headers={"accept": "application/json"})
+        assert resp.status_code == 200, f"GET /console/admins: {resp.status_code} {resp.text}"
+        return resp.json()["admins"]
+
+    def open_admins_page(self) -> None:
+        self._admins()
+
+    def assert_admin_list_status(self, email: str, *, is_admin: bool) -> None:
+        rows = {a["email"]: a for a in self._admins()}
+        assert email in rows, f"{email!r} not in admin list {list(rows)}"
+        actual = rows[email]["is_admin"]
+        assert actual == is_admin, f"{email!r}: expected is_admin={is_admin}, got {actual}"
+
+    def _put_admin(self, email: str, is_admin: bool) -> httpx.Response:
+        return self.client().put(
+            f"/console/admins/{email}",
+            json={"is_admin": is_admin},
+            headers={"accept": "application/json"},
+        )
+
+    def designate_server_admin(self, email: str) -> None:
+        self._as_admin()
+        resp = self._put_admin(email, True)
+        assert resp.status_code == 200, f"designate {email!r}: {resp.status_code} {resp.text}"
+
+    def revoke_server_admin(self, email: str) -> None:
+        self._as_admin()
+        self.response = self._put_admin(email, False)
+
+    def try_designate_server_admin(self, email: str) -> None:
+        # Acts as the current (non-admin) user — no admin re-targeting.
+        self.response = self.client().put(f"/console/admins/{email}", json={"is_admin": True})

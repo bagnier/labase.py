@@ -1,10 +1,16 @@
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from app.auth.contract.admin import (
+    find_user_id_by_email,
+    list_server_admins,
+    set_server_admin,
+)
 from app.auth.contract.current import CurrentAdmin
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import ConsoleSettingsQuery, SettingsGroup
 from app.console.domain import service
+from app.console.domain.admins import LastAdminViolation, ensure_not_last_admin
 from app.console.domain.service import InvalidSettingValue, UnknownSetting
 from app.console.infra.repository import AppSettingRepository
 from app.shared.host import host
@@ -13,6 +19,10 @@ from app.shared.http.templates import templates
 from app.shared.persistence.database import AdminSession
 
 router = APIRouter(tags=["console"])
+
+
+def _coerce_bool(raw: object) -> bool:
+    return raw is True or str(raw).lower() == "true"
 
 
 async def _overviews(session: AdminSession) -> list[ConsoleOverview]:
@@ -43,6 +53,49 @@ async def console_index(
         )
     return templates.TemplateResponse(
         request, "console.html", {"user": current_user, "overviews": overviews}
+    )
+
+
+# Registered before "/{app}" so "admins" is not captured as an app slug.
+@router.get("/admins", response_class=HTMLResponse)
+async def console_admins(request: Request, current_user: CurrentAdmin) -> Response:
+    users = sorted(await list_server_admins(), key=lambda u: u.email)
+    if wants_json(request):
+        return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in users]})
+    admin_count = sum(1 for u in users if u.is_admin)
+    return templates.TemplateResponse(
+        request,
+        "console/admins.html",
+        {"user": current_user, "users": users, "admin_count": admin_count},
+    )
+
+
+@router.put("/admins/{email}", response_class=HTMLResponse)
+async def update_admin(request: Request, email: str, current_user: CurrentAdmin) -> Response:
+    body = await parse_body(request)
+    is_admin = _coerce_bool(body.get("is_admin"))
+    uid = await find_user_id_by_email(email)
+    if uid is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    users = await list_server_admins()
+    target_is_admin = any(u.user_id == uid and u.is_admin for u in users)
+    admin_count = sum(1 for u in users if u.is_admin)
+    try:
+        ensure_not_last_admin(
+            is_revoke=not is_admin, target_is_admin=target_is_admin, admin_count=admin_count
+        )
+    except LastAdminViolation as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    await set_server_admin(uid, is_admin)
+
+    users = sorted(await list_server_admins(), key=lambda u: u.email)
+    if wants_json(request):
+        return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in users]})
+    admin_count = sum(1 for u in users if u.is_admin)
+    return templates.TemplateResponse(
+        request, "console/_admins.html", {"users": users, "admin_count": admin_count}
     )
 
 
@@ -85,5 +138,5 @@ async def update_setting(
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})
     return templates.TemplateResponse(
-        request, "console/_settings.html", {"app": app, "settings": settings}
+        request, "console/_settings.html", {"app": app, "settings": settings, "saved_key": key}
     )

@@ -16,7 +16,12 @@ os.environ.setdefault("ENV_FILE", ".env")
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.auth.tests.given_helpers import create_user, delete_user_if_exists, find_users
+from app.auth.tests.given_helpers import (
+    create_user,
+    delete_user_if_exists,
+    find_users,
+    set_admin_role,
+)
 from app.organizations.infra.repository import OrganizationRepository
 from app.shared.config import get_settings
 from app.todo.domain.models import TodoItem
@@ -44,6 +49,10 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
     uid_str = create_user(email, password)
     auth_user_id = uuid.UUID(uid_str)
     print(f"  → auth_user_id={auth_user_id}")
+
+    # First seeded user is the server admin (matches the bootstrap rule for the first registrant).
+    set_admin_role(uid_str)
+    print("  → promoted to server admin")
 
     url = settings.database_url_service or settings.database_url
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}

@@ -14,7 +14,8 @@ Feature: Console domain
     Then access is denied
 
   Scenario: A signed-in non-admin user is refused access to the console
-    Given a user is signed in as "bob@example.com"
+    Given the server already has an admin
+    And a user is signed in as "bob@example.com"
     When they try to open the console
     Then the console is not found
 
@@ -54,6 +55,7 @@ Feature: Console domain
     Then the "files" setting "welcome_message" is shown as "Hello team"
 
   Scenario: A non-admin cannot change an app's settings
-    Given a user is signed in as "bob@example.com"
+    Given the server already has an admin
+    And a user is signed in as "bob@example.com"
     When they try to set the "files" setting "max_upload_mb" to "999"
     Then the console is not found
