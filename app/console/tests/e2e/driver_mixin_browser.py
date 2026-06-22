@@ -124,6 +124,13 @@ class ConsoleBrowserMixin(BrowserBase):
             actual = field.input_value()
         assert actual == value, f"setting {key!r}: expected {value!r}, got {actual!r}"
 
+    def assert_console_supabase_link(self, app: str, fragment: str) -> None:
+        self.open_console_settings(app)
+        link = self.page.locator(f"[data-supabase-app='{app}']")
+        href = link.get_attribute("href")
+        assert href is not None, f"no Supabase link for {app!r}"
+        assert fragment in href, f"{fragment!r} not in {href!r}"
+
     # ── server admins ────────────────────────────────────────────────────────────
     def ensure_no_server_admin(self) -> None:
         clear_all_admin_roles()

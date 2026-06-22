@@ -13,10 +13,12 @@ from app.console.domain import service
 from app.console.domain.admins import LastAdminViolation, ensure_not_last_admin
 from app.console.domain.service import InvalidSettingValue, UnknownSetting
 from app.console.infra.repository import AppSettingRepository
+from app.shared.config import get_settings
 from app.shared.host import host
 from app.shared.http import parse_body, wants_json
 from app.shared.http.templates import templates
 from app.shared.persistence.database import AdminSession
+from app.shared.supabase_studio import studio_link
 
 router = APIRouter(tags=["console"])
 
@@ -40,6 +42,20 @@ async def _settings_group(app: str) -> SettingsGroup:
 
 def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview | None:
     return next((o for o in overviews if o.key == app), None)
+
+
+async def _supabase_link(group: SettingsGroup, session: AdminSession) -> dict[str, str] | None:
+    link = group.supabase
+    if link is None:
+        return None
+    settings = get_settings()
+    if link.table is not None:
+        oid = await AppSettingRepository(session).table_oid(link.table)
+        path = f"editor/{oid}?schema={settings.db_schema}" if oid is not None else "editor"
+    else:
+        path = link.path
+    href = studio_link(settings.supabase_url, path)
+    return {"label": link.label, "href": href}
 
 
 @router.get("", response_class=HTMLResponse)
@@ -107,12 +123,19 @@ async def console_app(
     overview = _overview_for(await _overviews(session), app)
     overrides = await AppSettingRepository(session).overrides(app)
     settings = service.effective_settings(group, overrides)
+    supabase = await _supabase_link(group, session)
     if wants_json(request):
-        return JSONResponse({"app": app, "settings": settings})
+        return JSONResponse({"app": app, "settings": settings, "supabase": supabase})
     return templates.TemplateResponse(
         request,
         "console/app.html",
-        {"user": current_user, "app": app, "overview": overview, "settings": settings},
+        {
+            "user": current_user,
+            "app": app,
+            "overview": overview,
+            "settings": settings,
+            "supabase": supabase,
+        },
     )
 
 

@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.console.domain.models import AppSetting
@@ -9,6 +9,13 @@ class AppSettingRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def table_oid(self, table: str) -> int | None:
+        """Postgres OID of ``table`` (resolved via the search_path), or ``None`` if absent.
+
+        Studio's table editor deep link is OID-keyed, so the console resolves the name here.
+        """
+        return await self.session.scalar(text("SELECT (to_regclass(:t))::oid"), {"t": table})
 
     async def overrides(self, app: str) -> dict[str, str]:
         rows = await self.session.scalars(select(AppSetting).where(AppSetting.app == app))

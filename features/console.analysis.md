@@ -114,4 +114,56 @@ PUT /console/{app}/settings/{key}
 - `app/auth/tests/given_helpers.py`: `promote_to_admin(email)` (write `user_roles`) before sign-in.
 - New console steps + driver mixins (api/browser); register in `conftest.py` and the drivers.
 - Reuses existing auth sign-in steps and the files upload `Given` from the dashboard feature.
+
+---
+
+# Push #2 — overviews for every app + Supabase deep links
+
+## What changes
+
+Today only **files**, **learning**, **todo** answer `ConsoleOverviewQuery`/`ConsoleSettingsQuery`.
+This push:
+
+1. Makes **every** bounded context answer `ConsoleOverviewQuery`, so the console index shows a
+   card per app — `organizations`, `users`, `files`, `learning`, `todo`, `profile`, `public`.
+   `public` is wired now but only returns a placeholder ("Nothing to report yet").
+2. Adds a **per-app Supabase deep link** on each app's settings page, jumping straight to the
+   relevant Studio resource (Storage bucket / Auth users / table editor).
+
+## Dependencies & ownership
+
+- No new table, no migration. Overviews are read-only aggregates; the Supabase link is a
+  computed URL, not stored.
+- Each context answers the queries from its own `contract/integration.py`, importing only
+  `app.console.contract.*` (already done by files/learning/todo).
+- `users` is special: accounts live in Supabase GoTrue, not a table. The auth context counts
+  them via the existing `list_server_admins()` helper (`app/auth/infra/user_repository.py`). Its
+  console "app" id is `users`; its page is `/console/users`.
+
+## Settings groups for setting-less apps
+
+The console card links to `/console/{key}`, which 404s unless the app answers
+`ConsoleSettingsQuery`. So `organizations`, `users`, `profile`, `public` each gain a
+`SettingsGroup` with **empty `defs`** but (except `public`) a populated `supabase` link.
+
+## Supabase link mechanism
+
+- New `SupabaseLink(label, path)` on `SettingsGroup` (`app/console/contract/settings.py`); `path`
+  is a Studio-relative fragment declared by the app:
+  files → `storage/buckets/org-files`; users → `auth/users`;
+  learning/todo/organizations/profile → `editor`.
+- New pure helper `app/shared/supabase_studio.py` derives the Studio base from `SUPABASE_URL`:
+  `*.supabase.co` → `https://supabase.com/dashboard/project/<ref>`; anything else (local) →
+  `http://localhost:54323/project/default`. No new env var.
+- The console router composes `base + "/" + path` and passes it to `app.html`; JSON callers get
+  it under a `supabase` key.
+
+## Testing impact
+
+- New `@then`: a Supabase link pointing at "<fragment>" is shown for the "<app>" app.
+  - API driver: assert the `supabase.href` from `GET /console/{app}` contains the fragment.
+  - Browser driver: assert `[data-supabase-app='{app}']` anchor `href` contains the fragment.
+- Overview visibility/`shows` steps are reused for the new keys.
+- User/org counts asserted by substring ("user", "organisation"), not exact numbers — GoTrue
+  users are not transactional across scenarios, so exact counts would be brittle.
 </content>

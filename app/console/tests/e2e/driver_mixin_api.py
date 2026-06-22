@@ -98,6 +98,17 @@ class ConsoleApiMixin(ApiBase):
         actual = str(settings[key]["value"])
         assert actual == value, f"setting {key!r}: expected {value!r}, got {actual!r}"
 
+    def assert_console_supabase_link(self, app: str, fragment: str) -> None:
+        assert self.settings_response is not None
+        assert self.settings_response.status_code == 200, (
+            f"GET settings: {self.settings_response.status_code} {self.settings_response.text}"
+        )
+        body = self.settings_response.json()
+        assert body["app"] == app, f"expected settings for {app!r}, got {body['app']!r}"
+        supabase = body.get("supabase")
+        assert supabase is not None, f"no Supabase link for {app!r}"
+        assert fragment in supabase["href"], f"{fragment!r} not in {supabase['href']!r}"
+
     # ── server admins ────────────────────────────────────────────────────────────
     def ensure_no_server_admin(self) -> None:
         clear_all_admin_roles()

@@ -56,6 +56,11 @@ def step_setting_shown(driver, app, key, value):
     driver.assert_console_setting_shown(app, key, value)
 
 
+@then(parsers.parse('a Supabase link pointing at "{fragment}" is shown for the "{app}" app'))
+def step_supabase_link_shown(driver, fragment, app):
+    driver.assert_console_supabase_link(app, fragment)
+
+
 # ── Server admins ──────────────────────────────────────────────────────────────
 # Reuses the org "the action is forbidden" step for the last-admin guard.
 

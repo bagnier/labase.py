@@ -10,7 +10,12 @@ import uuid
 from fastapi import FastAPI
 
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import ConsoleSettingsQuery, SettingDef, SettingsGroup
+from app.console.contract.settings import (
+    ConsoleSettingsQuery,
+    SettingDef,
+    SettingsGroup,
+    SupabaseLink,
+)
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.router import public_router, router
 from app.files.infra.storage import BUCKET, storage_path, user_storage_client
@@ -85,6 +90,9 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
             SettingDef("uploads_enabled", "boolean", "true", "Allow members to upload files"),
             SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),
         ],
+        supabase=SupabaseLink(
+            "Open the files bucket in Supabase Storage", f"storage/buckets/{BUCKET}"
+        ),
     )
 
 

@@ -29,6 +29,49 @@ Feature: Console domain
     Then the "files" overview is visible on the console
     And the "files" console overview shows "2 files"
 
+  Scenario: The console shows an overview card for every app
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the console
+    Then the "organizations" overview is visible on the console
+    And the "users" overview is visible on the console
+    And the "files" overview is visible on the console
+    And the "learning" overview is visible on the console
+    And the "todo" overview is visible on the console
+    And the "profile" overview is visible on the console
+    And the "public" overview is visible on the console
+
+  Scenario: The users overview reflects registered accounts
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the console
+    Then the "users" console overview shows "user"
+
+  Scenario: The organizations overview counts organisations across the server
+    Given a server admin is signed in as "root@example.com"
+    And a user is signed in as "alice@example.com" within org "Acme"
+    When the admin opens the console
+    Then the "organizations" console overview shows "organisation"
+
+  Scenario: The public overview is wired but has nothing to report yet
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the console
+    Then the "public" overview is visible on the console
+    And the "public" console overview shows "Nothing to report yet"
+
+  Scenario: The files settings page links into Supabase Storage
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the settings for the "files" app
+    Then a Supabase link pointing at "storage/buckets/org-files" is shown for the "files" app
+
+  Scenario: The users settings page links into Supabase Auth
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the settings for the "users" app
+    Then a Supabase link pointing at "auth/users" is shown for the "users" app
+
+  Scenario: The to-do settings page links straight to its table in the Supabase editor
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the settings for the "todo" app
+    Then a Supabase link pointing at "editor/" is shown for the "todo" app
+
   Scenario: An admin reads an app's current settings of every type
     Given a server admin is signed in as "root@example.com"
     When the admin opens the settings for the "files" app

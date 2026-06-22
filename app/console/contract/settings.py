@@ -20,9 +20,26 @@ class SettingDef:
 
 
 @dataclass(frozen=True)
+class SupabaseLink:
+    """A deep link into Supabase Studio for advanced, out-of-console management.
+
+    The console prefixes the derived Studio base URL onto either:
+    - ``path`` — a static Studio-relative fragment (e.g. ``auth/users``,
+      ``storage/buckets/org-files``); or
+    - ``table`` — a Postgres table name; the console resolves its OID at request time and
+      points the Studio *table editor* straight at it (Studio has no name-based route).
+    """
+
+    label: str
+    path: str = ""
+    table: str | None = None
+
+
+@dataclass(frozen=True)
 class SettingsGroup:
     app: str  # context id, e.g. "files"
     defs: list[SettingDef] = field(default_factory=list)
+    supabase: SupabaseLink | None = None
 
 
 @dataclass(frozen=True)

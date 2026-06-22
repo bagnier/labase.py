@@ -8,7 +8,12 @@ from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import ConsoleSettingsQuery, SettingDef, SettingsGroup
+from app.console.contract.settings import (
+    ConsoleSettingsQuery,
+    SettingDef,
+    SettingsGroup,
+    SupabaseLink,
+)
 from app.learning.domain.models import Card, Deck
 from app.learning.infra.router import router
 from app.organizations.contract import ORG_PREFIX
@@ -63,6 +68,7 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
             SettingDef("sharing_enabled", "boolean", "true", "Allow members to share decks"),
             SettingDef("daily_review_limit", "number", "100", "Max cards reviewed per day"),
         ],
+        supabase=SupabaseLink("Browse decks and cards in Supabase", table="decks"),
     )
 
 

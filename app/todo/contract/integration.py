@@ -8,7 +8,12 @@ from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import ConsoleSettingsQuery, SettingDef, SettingsGroup
+from app.console.contract.settings import (
+    ConsoleSettingsQuery,
+    SettingDef,
+    SettingsGroup,
+    SupabaseLink,
+)
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.overviews import Overview, OverviewQuery
@@ -57,6 +62,7 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
             SettingDef("creation_enabled", "boolean", "true", "Allow members to create tasks"),
             SettingDef("max_items_per_org", "number", "500", "Maximum tasks per organisation"),
         ],
+        supabase=SupabaseLink("Browse tasks in Supabase", table="todos"),
     )
 
 
