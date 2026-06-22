@@ -68,6 +68,25 @@ def truncate_app_tables() -> None:
     _run_blocking(_truncate)
 
 
+def reset_app_switches() -> None:
+    """Clears persisted ``enabled`` overrides so feature switches don't leak across runs.
+
+    The app reads the disabled set at import time (see app.console.contract.features), so a
+    leftover ``enabled = false`` in the shared dev/test DB would unmount an app for the whole
+    suite. Called from ``pytest_configure``, before any test module imports ``app.main``.
+    """
+
+    async def _reset() -> None:
+        engine = _service_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM public.app_settings WHERE key = 'enabled'"))
+        finally:
+            await engine.dispose()
+
+    _run_blocking(_reset)
+
+
 async def purge_leftover_test_data() -> None:
     """Deletes test data that survives teardowns (from test email domains)."""
     engine = _service_engine()

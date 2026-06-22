@@ -18,7 +18,8 @@
 
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for o in overviews %}
-      <a href="/console/{{ o.key }}" class="block hover:-translate-y-0.5 transition-transform">
+      <a href="/console/{{ o.key }}"
+         class="block hover:-translate-y-0.5 transition-transform {% if o.key in disabled %}opacity-60{% endif %}">
         {% include "console/_overview.html" %}
       </a>
     {% endfor %}

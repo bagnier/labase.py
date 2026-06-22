@@ -41,13 +41,16 @@ MOUNTS_UNDER_ORG_HANDLE = True
 
 
 def mount(app: FastAPI, host: Host) -> None:
+    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
+    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.events.on(ConsoleSettingsQuery, _console_settings)
+    host.reserve("files")  # reserved even when disabled, to keep the slug from being squatted
+    if not host.enabled("files"):
+        return
     app.include_router(public_router)
     app.include_router(router, prefix=ORG_PREFIX)
     host.events.on(OverviewQuery, _overview)
-    host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.events.on(ConsoleSettingsQuery, _console_settings)
     host.events.on(OrgCreated, _seed)
-    host.reserve("files")
 
 
 def _human_size(num: int) -> str:

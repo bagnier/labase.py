@@ -13,10 +13,15 @@ from app.shared.slug_registry import reserve as _reserve_slugs
 @dataclass
 class Host:
     events: EventBus = field(default_factory=EventBus)
+    disabled_apps: frozenset[str] = frozenset()
 
     def reserve(self, *slugs: str) -> None:
         """Claim URL slugs so no org handle can shadow them (see :mod:`app.shared.names`)."""
         _reserve_slugs(*slugs)
+
+    def enabled(self, app_id: str) -> bool:
+        """Whether ``app_id`` is switched on for this run (see console feature switches)."""
+        return app_id not in self.disabled_apps
 
 
 host = Host()

@@ -7,6 +7,7 @@ from app.auth.contract.admin import (
     set_server_admin,
 )
 from app.auth.contract.current import CurrentAdmin
+from app.console.contract.features import TOGGLEABLE_APPS
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import ConsoleSettingsQuery, SettingsGroup
 from app.console.domain import service
@@ -63,12 +64,20 @@ async def console_index(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
     overviews = await _overviews(session)
+    disabled = await AppSettingRepository(session).disabled_apps()
     if wants_json(request):
         return JSONResponse(
-            {"overviews": [{"key": o.key, "title": o.title, **o.data} for o in overviews]}
+            {
+                "overviews": [
+                    {"key": o.key, "title": o.title, "disabled": o.key in disabled, **o.data}
+                    for o in overviews
+                ]
+            }
         )
     return templates.TemplateResponse(
-        request, "console.html", {"user": current_user, "overviews": overviews}
+        request,
+        "console.html",
+        {"user": current_user, "overviews": overviews, "disabled": disabled},
     )
 
 
@@ -124,8 +133,12 @@ async def console_app(
     overrides = await AppSettingRepository(session).overrides(app)
     settings = service.effective_settings(group, overrides)
     supabase = await _supabase_link(group, session)
+    toggleable = app in TOGGLEABLE_APPS
+    enabled = overrides.get("enabled", "true") == "true"
     if wants_json(request):
-        return JSONResponse({"app": app, "settings": settings, "supabase": supabase})
+        return JSONResponse(
+            {"app": app, "settings": settings, "supabase": supabase, "enabled": enabled}
+        )
     return templates.TemplateResponse(
         request,
         "console/app.html",
@@ -135,6 +148,8 @@ async def console_app(
             "overview": overview,
             "settings": settings,
             "supabase": supabase,
+            "toggleable": toggleable,
+            "enabled": enabled,
         },
     )
 
@@ -162,4 +177,25 @@ async def update_setting(
         return JSONResponse({"app": app, "settings": settings})
     return templates.TemplateResponse(
         request, "console/_settings.html", {"app": app, "settings": settings, "saved_key": key}
+    )
+
+
+@router.put("/{app}/enabled", response_class=HTMLResponse)
+async def update_enabled(
+    request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
+) -> Response:
+    if app not in TOGGLEABLE_APPS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    body = await parse_body(request)
+    value = "true" if _coerce_bool(body.get("value")) else "false"
+
+    repo = AppSettingRepository(session)
+    await repo.set(app, "enabled", value)
+    await session.commit()
+
+    enabled = value == "true"
+    if wants_json(request):
+        return JSONResponse({"app": app, "enabled": enabled})
+    return templates.TemplateResponse(
+        request, "console/_enabled.html", {"app": app, "enabled": enabled, "toggleable": True}
     )

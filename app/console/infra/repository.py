@@ -17,6 +17,13 @@ class AppSettingRepository:
         """
         return await self.session.scalar(text("SELECT (to_regclass(:t))::oid"), {"t": table})
 
+    async def disabled_apps(self) -> frozenset[str]:
+        """Apps with a persisted ``enabled = false`` override (the admin's standing intent)."""
+        rows = await self.session.scalars(
+            select(AppSetting.app).where(AppSetting.key == "enabled", AppSetting.value == "false")
+        )
+        return frozenset(rows)
+
     async def overrides(self, app: str) -> dict[str, str]:
         rows = await self.session.scalars(select(AppSetting).where(AppSetting.app == app))
         return {row.key: row.value for row in rows}

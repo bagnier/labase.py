@@ -42,10 +42,13 @@ MOUNTS_UNDER_ORG_HANDLE = True
 
 
 def mount(app: FastAPI, host: Host) -> None:
-    app.include_router(router, prefix=ORG_PREFIX)
-    host.events.on(OverviewQuery, _overview)
+    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.events.on(ConsoleSettingsQuery, _console_settings)
+    if not host.enabled("learning"):
+        return
+    app.include_router(router, prefix=ORG_PREFIX)
+    host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 
 

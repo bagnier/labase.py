@@ -14,8 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.contract.current import AuthenticatedUser
+from app.console.contract.features import TOGGLEABLE_APPS
 from app.organizations.contract.queries import get_user_orgs
 from app.profile.domain.models import Profile
+from app.shared.host import host
 
 log = structlog.get_logger("labase.profile.shell")
 
@@ -35,18 +37,20 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
     context): the ``organizations: member read`` policy returns exactly the
     user's orgs, and ``profiles: own read`` exposes the handle.
     """
+    enabled_apps = {a for a in TOGGLEABLE_APPS if host.enabled(a)}
     if user is None:
-        return {"handle": None, "orgs": []}
+        return {"handle": None, "orgs": [], "enabled_apps": enabled_apps}
     user_id = uuid.UUID(user.id)
     try:
         handle = await session.scalar(select(Profile.handle).where(Profile.auth_user_id == user_id))
         orgs = await get_user_orgs(session, user_id)
     except Exception:
         log.warning("profile.shell_load_failed")
-        return {"handle": None, "orgs": []}
+        return {"handle": None, "orgs": [], "enabled_apps": enabled_apps}
     return {
         "handle": handle,
         "orgs": [NavOrg(id=o.id, name=o.name, handle=o.handle, is_owner=o.is_owner) for o in orgs],
+        "enabled_apps": enabled_apps,
     }
 
 

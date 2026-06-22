@@ -18,6 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import tests.e2e.clock as test_clock
 from app.shared.config import get_settings
+from tests.e2e import cleanup
+
+# Clear feature-switch overrides before pytest imports the nested plugins below — which pull in
+# the drivers and therefore ``app.main``, whose disabled set is read at import time. A leftover
+# ``enabled = false`` (e.g. from manual dev testing on the shared DB) would otherwise unmount an
+# app for the whole run.
+cleanup.reset_app_switches()
 
 pytest_plugins = [
     "tests.e2e.plugin",

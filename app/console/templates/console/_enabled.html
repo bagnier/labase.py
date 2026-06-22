@@ -1,0 +1,19 @@
+<div id="enabled" class="card">
+  <form class="flex items-center justify-between gap-4"
+        hx-put="/console/{{ app }}/enabled" hx-target="#enabled" hx-swap="outerHTML"
+        hx-trigger="change">
+    <div>
+      <span class="font-mono text-xs font-semibold">enabled</span>
+      <div class="text-xs text-gray-500 mt-0.5">
+        Disabled apps are removed from the user navigation and their routes are unmounted —
+        only their console page remains.
+      </div>
+      <div class="text-xs text-amber-600 mt-1">Restart required to apply.</div>
+    </div>
+    <label class="inline-flex items-center gap-2 flex-none">
+      <input type="hidden" name="value" value="false" />
+      <input type="checkbox" name="value" value="true" {% if enabled %}checked{% endif %} />
+      <span class="text-sm text-gray-600">{{ "Enabled" if enabled else "Disabled" }}</span>
+    </label>
+  </form>
+</div>
