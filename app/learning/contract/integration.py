@@ -13,6 +13,8 @@ from app.console.contract.settings import (
     SettingDef,
     SettingsGroup,
     SupabaseLink,
+    feature_switch,
+    get_app_settings,
 )
 from app.learning.domain.models import Card, Deck
 from app.learning.infra.router import router
@@ -37,15 +39,15 @@ _WELCOME_CARDS = [
 ]
 
 
-# Mounts an org-scoped router under /{org_handle}; registered last (see app.main).
-MOUNTS_UNDER_ORG_HANDLE = True
+# Mounts an org-scoped router under /{org_handle}; mounted last (see app.main).
 
 
 def mount(app: FastAPI, host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.events.on(ConsoleSettingsQuery, _console_settings)
-    if not host.enabled("learning"):
+    settings = get_app_settings("learning")
+    if not settings.enabled:
         return
     app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20))
@@ -69,6 +71,7 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
     return SettingsGroup(
         app="learning",
         defs=[
+            feature_switch(),
             SettingDef("sharing_enabled", "boolean", "true", "Allow members to share decks"),
             SettingDef("daily_review_limit", "number", "100", "Max cards reviewed per day"),
         ],

@@ -9,7 +9,7 @@ from sqlalchemy.pool import NullPool
 import tests.e2e.clock as test_clock
 from app.auth.tests.given_helpers import delete_user_if_exists, find_users
 from app.organizations.tests.given_helpers import orgs_for_user
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from tests.e2e.drivers.browser_base import BrowserBase
 
 from . import setup
@@ -40,7 +40,7 @@ class LearningBrowserMixin(BrowserBase):
 
         def target() -> None:
             async def go() -> None:
-                settings = get_settings()
+                settings = get_technical_settings()
                 url = settings.database_url_service or settings.database_url
                 connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
                 engine = create_async_engine(url, poolclass=NullPool, connect_args=connect_args)

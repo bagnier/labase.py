@@ -1,20 +1,14 @@
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from app.auth.contract.admin import (
-    find_user_id_by_email,
-    list_server_admins,
-    set_server_admin,
-)
 from app.auth.contract.current import CurrentAdmin
-from app.console.contract.features import TOGGLEABLE_APPS
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import ConsoleSettingsQuery, SettingsGroup
-from app.console.domain import service
-from app.console.domain.admins import LastAdminViolation, ensure_not_last_admin
+from app.console.domain import admins, service
+from app.console.domain.admins import AdminNotFound, LastAdminViolation
 from app.console.domain.service import InvalidSettingValue, UnknownSetting
 from app.console.infra.repository import AppSettingRepository
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from app.shared.host import host
 from app.shared.http import parse_body, wants_json
 from app.shared.http.templates import templates
@@ -23,12 +17,10 @@ from app.shared.supabase_studio import studio_link
 
 router = APIRouter(tags=["console"])
 
-
-def _coerce_bool(raw: object) -> bool:
-    return raw is True or str(raw).lower() == "true"
+_NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
-async def _overviews(session: AdminSession) -> list[ConsoleOverview]:
+async def _collect_overviews(session: AdminSession) -> list[ConsoleOverview]:
     overviews = await host.events.collect(ConsoleOverviewQuery(session))
     return sorted(overviews, key=lambda o: o.key)
 
@@ -38,7 +30,7 @@ async def _settings_group(app: str) -> SettingsGroup:
     for group in groups:
         if group.app == app:
             return group
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    raise _NOT_FOUND
 
 
 def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview | None:
@@ -49,7 +41,7 @@ async def _supabase_link(group: SettingsGroup, session: AdminSession) -> dict[st
     link = group.supabase
     if link is None:
         return None
-    settings = get_settings()
+    settings = get_technical_settings()
     if link.table is not None:
         oid = await AppSettingRepository(session).table_oid(link.table)
         path = f"editor/{oid}?schema={settings.db_schema}" if oid is not None else "editor"
@@ -60,10 +52,10 @@ async def _supabase_link(group: SettingsGroup, session: AdminSession) -> dict[st
 
 
 @router.get("", response_class=HTMLResponse)
-async def console_index(
+async def get_console(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
-    overviews = await _overviews(session)
+    overviews = await _collect_overviews(session)
     disabled = await AppSettingRepository(session).disabled_apps()
     if wants_json(request):
         return JSONResponse(
@@ -81,24 +73,27 @@ async def console_index(
     )
 
 
-def _admin_rows(users: list) -> list:
-    return sorted((u for u in users if u.is_admin), key=lambda u: u.email)
+def _admins_json(rows: list) -> JSONResponse:
+    return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in rows]})
 
 
-def _admins_json(admins: list) -> JSONResponse:
-    return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in admins]})
+def _admins_partial(request: Request, rows: list, *, error: str | None = None) -> Response:
+    ctx = {"admins": rows, "admin_count": len(rows)}
+    if error is not None:
+        ctx["error"] = error
+    return templates.TemplateResponse(request, "console/_admins.html", ctx)
 
 
 # Registered before "/{app}" so "admins" is not captured as an app slug.
 @router.get("/admins", response_class=HTMLResponse)
-async def console_admins(request: Request, current_user: CurrentAdmin) -> Response:
-    admins = _admin_rows(await list_server_admins())
+async def get_admins(request: Request, current_user: CurrentAdmin) -> Response:
+    rows = await admins.list_admins()
     if wants_json(request):
-        return _admins_json(admins)
+        return _admins_json(rows)
     return templates.TemplateResponse(
         request,
         "console/admins.html",
-        {"user": current_user, "admins": admins, "admin_count": len(admins)},
+        {"user": current_user, "admins": rows, "admin_count": len(rows)},
     )
 
 
@@ -106,72 +101,43 @@ async def console_admins(request: Request, current_user: CurrentAdmin) -> Respon
 async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
     body = await parse_body(request)
     email = str(body.get("email") or "").strip()
-    uid = await find_user_id_by_email(email) if email else None
-    if uid is None:
+    try:
+        rows = await admins.grant_admin(email)
+    except AdminNotFound as exc:
         if wants_json(request):
-            return JSONResponse(
-                {"detail": f"No account exists for {email}"},
-                status_code=status.HTTP_404_NOT_FOUND,
-            )
-        admins = _admin_rows(await list_server_admins())
-        return templates.TemplateResponse(
-            request,
-            "console/_admins.html",
-            {"admins": admins, "admin_count": len(admins), "error": email},
-        )
-
-    await set_server_admin(uid, True)
-    admins = _admin_rows(await list_server_admins())
+            return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
+        return _admins_partial(request, await admins.list_admins(), error=exc.email)
     if wants_json(request):
-        return _admins_json(admins)
-    return templates.TemplateResponse(
-        request, "console/_admins.html", {"admins": admins, "admin_count": len(admins)}
-    )
+        return _admins_json(rows)
+    return _admins_partial(request, rows)
 
 
 @router.put("/admins/{email}", response_class=HTMLResponse)
 async def update_admin(request: Request, email: str, current_user: CurrentAdmin) -> Response:
     body = await parse_body(request)
-    is_admin = _coerce_bool(body.get("is_admin"))
-    uid = await find_user_id_by_email(email)
-    if uid is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
-    users = await list_server_admins()
-    target_is_admin = any(u.user_id == uid and u.is_admin for u in users)
-    admin_count = sum(1 for u in users if u.is_admin)
+    is_admin = service.coerce_bool(body.get("is_admin"))
     try:
-        ensure_not_last_admin(
-            is_revoke=not is_admin, target_is_admin=target_is_admin, admin_count=admin_count
-        )
+        rows = await admins.set_admin(email, is_admin=is_admin)
+    except AdminNotFound:
+        raise _NOT_FOUND from None
     except LastAdminViolation as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-
-    await set_server_admin(uid, is_admin)
-
-    admins = _admin_rows(await list_server_admins())
     if wants_json(request):
-        return _admins_json(admins)
-    return templates.TemplateResponse(
-        request, "console/_admins.html", {"admins": admins, "admin_count": len(admins)}
-    )
+        return _admins_json(rows)
+    return _admins_partial(request, rows)
 
 
 @router.get("/{app}", response_class=HTMLResponse)
-async def console_app(
+async def get_app(
     request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
     group = await _settings_group(app)
-    overview = _overview_for(await _overviews(session), app)
+    overview = _overview_for(await _collect_overviews(session), app)
     overrides = await AppSettingRepository(session).overrides(app)
     settings = service.effective_settings(group, overrides)
     supabase = await _supabase_link(group, session)
-    toggleable = app in TOGGLEABLE_APPS
-    enabled = overrides.get("enabled", "true") == "true"
     if wants_json(request):
-        return JSONResponse(
-            {"app": app, "settings": settings, "supabase": supabase, "enabled": enabled}
-        )
+        return JSONResponse({"app": app, "settings": settings, "supabase": supabase})
     return templates.TemplateResponse(
         request,
         "console/app.html",
@@ -181,8 +147,6 @@ async def console_app(
             "overview": overview,
             "settings": settings,
             "supabase": supabase,
-            "toggleable": toggleable,
-            "enabled": enabled,
         },
     )
 
@@ -197,7 +161,7 @@ async def update_setting(
     try:
         stored = service.validate(group, key, value)
     except UnknownSetting:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+        raise _NOT_FOUND from None
     except InvalidSettingValue as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -210,25 +174,4 @@ async def update_setting(
         return JSONResponse({"app": app, "settings": settings})
     return templates.TemplateResponse(
         request, "console/_settings.html", {"app": app, "settings": settings, "saved_key": key}
-    )
-
-
-@router.put("/{app}/enabled", response_class=HTMLResponse)
-async def update_enabled(
-    request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
-) -> Response:
-    if app not in TOGGLEABLE_APPS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    body = await parse_body(request)
-    value = "true" if _coerce_bool(body.get("value")) else "false"
-
-    repo = AppSettingRepository(session)
-    await repo.set(app, "enabled", value)
-    await session.commit()
-
-    enabled = value == "true"
-    if wants_json(request):
-        return JSONResponse({"app": app, "enabled": enabled})
-    return templates.TemplateResponse(
-        request, "console/_enabled.html", {"app": app, "enabled": enabled, "toggleable": True}
     )

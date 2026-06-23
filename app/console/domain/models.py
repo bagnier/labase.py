@@ -6,6 +6,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.shared import clock
 from app.shared.persistence.base import Base
 
+# Stored form of a boolean setting value.
+BOOL_TRUE = "true"
+BOOL_FALSE = "false"
+
+# Reserved key for an app's on/off switch, stored like any other setting override.
+ENABLED_KEY = "enabled"
+
 
 class AppSetting(Base):
     """A persisted *override* for one app setting. Unset keys fall back to the declared default."""

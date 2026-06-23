@@ -3,13 +3,13 @@ from urllib.parse import urlparse, urlunparse
 
 from storage3 import AsyncStorageClient
 
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 
 BUCKET = "org-files"
 
 
 def user_storage_client(access_token: str) -> AsyncStorageClient:
-    s = get_settings()
+    s = get_technical_settings()
     return AsyncStorageClient(
         url=f"{s.supabase_url}/storage/v1/",
         headers={
@@ -21,7 +21,7 @@ def user_storage_client(access_token: str) -> AsyncStorageClient:
 
 def admin_storage() -> AsyncStorageClient:
     """Used only inside app boundary (e.g. public share proxy). Never expose to client."""
-    s = get_settings()
+    s = get_technical_settings()
     return AsyncStorageClient(
         url=f"{s.supabase_url}/storage/v1/",
         headers={
@@ -33,7 +33,7 @@ def admin_storage() -> AsyncStorageClient:
 
 def rewrite_signed_url(signed_url: str) -> str:
     """Replace the origin of a signed URL with the configured public storage URL."""
-    s = get_settings()
+    s = get_technical_settings()
     parsed = urlparse(signed_url)
     target = urlparse(s.supabase_storage_url)
     return urlunparse(parsed._replace(scheme=target.scheme, netloc=target.netloc))

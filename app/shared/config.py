@@ -5,7 +5,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class TechnicalSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=os.getenv("ENV_FILE", ".env"), extra="ignore")
 
     supabase_url: str
@@ -21,12 +21,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]
 
     @model_validator(mode="after")
-    def _default_storage_url(self) -> Settings:
+    def _default_storage_url(self) -> TechnicalSettings:
         if not self.supabase_storage_url:
             self.supabase_storage_url = self.supabase_url
         return self
 
 
 @lru_cache
-def get_settings() -> Settings:
-    return Settings()  # ty: ignore[missing-argument]
+def get_technical_settings() -> TechnicalSettings:
+    return TechnicalSettings()  # ty: ignore[missing-argument]

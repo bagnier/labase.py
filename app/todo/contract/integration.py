@@ -13,6 +13,8 @@ from app.console.contract.settings import (
     SettingDef,
     SettingsGroup,
     SupabaseLink,
+    feature_switch,
+    get_app_settings,
 )
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
@@ -33,15 +35,15 @@ _WELCOME_TODOS = [
 ]
 
 
-# Mounts an org-scoped router under /{org_handle}; registered last (see app.main).
-MOUNTS_UNDER_ORG_HANDLE = True
+# Mounts an org-scoped router under /{org_handle}; mounted last (see app.main).
 
 
 def mount(app: FastAPI, host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.events.on(ConsoleSettingsQuery, _console_settings)
-    if not host.enabled("todo"):
+    settings = get_app_settings("todo")
+    if not settings.enabled:
         return
     app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos", order=10))
@@ -63,6 +65,7 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
     return SettingsGroup(
         app="todo",
         defs=[
+            feature_switch(),
             SettingDef("creation_enabled", "boolean", "true", "Allow members to create tasks"),
             SettingDef("max_items_per_org", "number", "500", "Maximum tasks per organisation"),
         ],

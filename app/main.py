@@ -2,7 +2,6 @@ from fastapi import FastAPI
 
 from app.auth.contract import integration as auth
 from app.console.contract import integration as console
-from app.console.contract.features import load_disabled_apps_sync
 from app.files.contract import integration as files
 from app.health.contract import integration as health
 from app.learning.contract import integration as learning
@@ -16,10 +15,11 @@ from app.todo.contract import integration as todo
 app = FastAPI(title="labase")
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
-# Contexts that mount under the `/{org_handle}/...` catch-all (MOUNTS_UNDER_ORG_HANDLE) are
-# mounted last, so fixed-prefix routers like /console/{app} are never shadowed by it.
-host.disabled_apps = load_disabled_apps_sync()
-
+# Each app reads its own settings inside mount() (console.get_app_settings); toggleable apps
+# gate their wiring on the resulting `.enabled`.
+# Order matters: contexts mounting under the `/{org_handle}/...` catch-all (organizations,
+# files, todo, learning) must come last, so fixed-prefix routers like /console/{app} are never
+# shadowed by it. Keep them at the tail of this tuple.
 _apps = (shared, auth, profile, public, health, console, organizations, files, todo, learning)
-for _app in sorted(_apps, key=lambda c: getattr(c, "MOUNTS_UNDER_ORG_HANDLE", False)):
+for _app in _apps:
     _app.mount(app, host)

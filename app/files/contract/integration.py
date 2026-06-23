@@ -15,6 +15,8 @@ from app.console.contract.settings import (
     SettingDef,
     SettingsGroup,
     SupabaseLink,
+    feature_switch,
+    get_app_settings,
 )
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.router import public_router, router
@@ -36,8 +38,7 @@ _WELCOME_BODY = (
 )
 
 
-# Mounts an org-scoped router under /{org_handle}; registered last (see app.main).
-MOUNTS_UNDER_ORG_HANDLE = True
+# Mounts an org-scoped router under /{org_handle}; mounted last (see app.main).
 
 
 def mount(app: FastAPI, host: Host) -> None:
@@ -45,7 +46,8 @@ def mount(app: FastAPI, host: Host) -> None:
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.events.on(ConsoleSettingsQuery, _console_settings)
     host.reserve("files")  # reserved even when disabled, to keep the slug from being squatted
-    if not host.enabled("files"):
+    settings = get_app_settings("files")
+    if not settings.enabled:
         return
     app.include_router(public_router)
     app.include_router(router, prefix=ORG_PREFIX)
@@ -90,6 +92,7 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
     return SettingsGroup(
         app="files",
         defs=[
+            feature_switch(),
             SettingDef("max_upload_mb", "number", "25", "Maximum upload size, in megabytes"),
             SettingDef("uploads_enabled", "boolean", "true", "Allow members to upload files"),
             SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),

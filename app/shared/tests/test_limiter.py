@@ -43,9 +43,9 @@ async def test_rate_limit_blocks_excess_requests(rate_limited_client):
 
 
 def test_rate_limit_is_noop_when_disabled(monkeypatch):
-    from app.shared.config import get_settings
+    from app.shared.config import get_technical_settings
 
-    original = get_settings()
+    original = get_technical_settings()
     monkeypatch.setattr(original, "rate_limit_enabled", False)
 
     def dummy():

@@ -29,7 +29,6 @@ class NavItem:
 @dataclass
 class Host:
     events: EventBus = field(default_factory=EventBus)
-    disabled_apps: frozenset[str] = frozenset()
     nav_items: list[NavItem] = field(default_factory=list)
 
     def reserve(self, *slugs: str) -> None:
@@ -39,10 +38,6 @@ class Host:
     def register_nav(self, item: NavItem) -> None:
         """Add a sidebar link, contributed by an app from its :func:`mount`."""
         self.nav_items.append(item)
-
-    def enabled(self, app_id: str) -> bool:
-        """Whether ``app_id`` is switched on for this run (see console feature switches)."""
-        return app_id not in self.disabled_apps
 
 
 host = Host()

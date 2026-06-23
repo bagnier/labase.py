@@ -6,7 +6,7 @@ import structlog
 from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
 
 from app.auth.contract.user import AuthenticatedUser as AuthenticatedUser
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from app.shared.persistence.supabase import get_user_supabase
 
 log = structlog.get_logger("labase.auth.service")
@@ -30,7 +30,7 @@ async def login(email: str, password: str) -> AuthTokens:
 
 
 async def logout(access_token: str) -> None:
-    s = get_settings()
+    s = get_technical_settings()
     try:
         async with httpx.AsyncClient() as client:
             await client.post(

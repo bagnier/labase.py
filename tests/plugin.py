@@ -17,7 +17,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import tests.e2e.clock as test_clock
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from tests.e2e import cleanup
 
 # Clear feature-switch overrides before pytest imports the nested plugins below — which pull in
@@ -67,7 +67,7 @@ async def db_session():
     Uses a throwaway engine: set_rls_context does a session-level ``SET role``,
     so the connection must be disposed rather than returned to a shared pool.
     """
-    settings = get_settings()
+    settings = get_technical_settings()
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     engine = create_async_engine(settings.database_url, connect_args=connect_args)
     try:

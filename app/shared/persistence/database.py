@@ -6,12 +6,12 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 
 
 @lru_cache
 def _user_engine():
-    settings = get_settings()
+    settings = get_technical_settings()
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     return create_async_engine(
         settings.database_url, echo=False, pool_pre_ping=True, connect_args=connect_args
@@ -20,7 +20,7 @@ def _user_engine():
 
 @lru_cache
 def _admin_engine():
-    settings = get_settings()
+    settings = get_technical_settings()
     url = settings.database_url_service or settings.database_url
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     return create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)

@@ -1,7 +1,26 @@
-from sqlalchemy import select, text
+from sqlalchemy import Select, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.console.domain.models import AppSetting
+from app.console.domain.models import BOOL_FALSE, ENABLED_KEY, AppSetting
+
+
+def disabled_apps_select() -> Select[tuple[str]]:
+    """Select the slugs of apps with a persisted ``enabled = false`` override.
+
+    Used by the admin-session repository to render the console's toggle state.
+    """
+    return select(AppSetting.app).where(
+        AppSetting.key == ENABLED_KEY, AppSetting.value == BOOL_FALSE
+    )
+
+
+def app_settings_select(app: str) -> Select[tuple[str, str]]:
+    """Select every persisted ``(key, value)`` override for ``app``.
+
+    Used by the startup loader so each app can read its whole settings on a throwaway engine
+    and decide whether it is enabled.
+    """
+    return select(AppSetting.key, AppSetting.value).where(AppSetting.app == app)
 
 
 class AppSettingRepository:
@@ -19,10 +38,7 @@ class AppSettingRepository:
 
     async def disabled_apps(self) -> frozenset[str]:
         """Apps with a persisted ``enabled = false`` override (the admin's standing intent)."""
-        rows = await self.session.scalars(
-            select(AppSetting.app).where(AppSetting.key == "enabled", AppSetting.value == "false")
-        )
-        return frozenset(rows)
+        return frozenset(await self.session.scalars(disabled_apps_select()))
 
     async def overrides(self, app: str) -> dict[str, str]:
         rows = await self.session.scalars(select(AppSetting).where(AppSetting.app == app))

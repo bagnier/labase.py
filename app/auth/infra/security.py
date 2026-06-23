@@ -7,14 +7,14 @@ from fastapi import Cookie, Depends, HTTPException, Response, status
 from app.auth.contract.user import AuthenticatedUser
 from app.auth.domain.service import AuthTokens, refresh_session
 from app.auth.infra.cookies import set_auth_cookies
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 
 log = structlog.get_logger("labase.auth.security")
 
 
 @lru_cache
 def _jwks_client() -> jwt.PyJWKClient:
-    jwks_uri = f"{get_settings().supabase_url}/auth/v1/.well-known/jwks.json"
+    jwks_uri = f"{get_technical_settings().supabase_url}/auth/v1/.well-known/jwks.json"
     return jwt.PyJWKClient(jwks_uri)
 
 

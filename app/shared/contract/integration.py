@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from app.shared.host import Host
 from app.shared.http.exceptions import handle_http_error, handle_rate_limit, handle_unhandled_error
 from app.shared.http.limiter import limiter
@@ -20,7 +20,7 @@ _STATIC_DIR = Path(__file__).parents[3] / "static"
 
 def mount(app: FastAPI, host: Host) -> None:
     setup_logging()
-    settings = get_settings()
+    settings = get_technical_settings()
 
     app.state.limiter = limiter
 

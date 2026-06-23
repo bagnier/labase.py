@@ -7,13 +7,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 
 _TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local"]
 
 
 def _service_engine():
-    settings = get_settings()
+    settings = get_technical_settings()
     url = settings.database_url_service or settings.database_url
     connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
     return create_async_engine(url, poolclass=NullPool, connect_args=connect_args)

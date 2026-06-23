@@ -3,11 +3,11 @@ import sys
 
 import structlog
 
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 
 
 def setup_logging() -> None:
-    settings = get_settings()
+    settings = get_technical_settings()
     level = logging.DEBUG if settings.log_debug else logging.INFO
 
     shared_processors: list[structlog.types.Processor] = [

@@ -23,7 +23,7 @@ from app.auth.tests.given_helpers import (
     set_admin_role,
 )
 from app.organizations.infra.repository import OrganizationRepository
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from app.todo.domain.models import TodoItem
 
 _DEFAULT_EMAIL = "dev@labase.dev"
@@ -33,7 +33,7 @@ _TODOS = ["Read the docs", "Write a test", "Ship it"]
 
 
 async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None:
-    settings = get_settings()
+    settings = get_technical_settings()
 
     if reset:
         print(f"Deleting {email}…")

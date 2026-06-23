@@ -13,7 +13,12 @@ from sqlalchemy import func, select
 
 from app.auth.contract.events import UserCreated
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import ConsoleSettingsQuery, SettingsGroup, SupabaseLink
+from app.console.contract.settings import (
+    ConsoleSettingsQuery,
+    SettingsGroup,
+    SupabaseLink,
+    get_app_settings,
+)
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.queries import org_handle_taken
@@ -21,17 +26,19 @@ from app.organizations.domain.models import Membership, Organization
 from app.organizations.infra.invitation_router import router as invitation_router
 from app.organizations.infra.repository import OrganizationRepository
 from app.organizations.infra.router import org_router, router
-from app.shared.config import get_settings
+from app.shared.config import get_technical_settings
 from app.shared.host import Host, NavItem, host
 from app.shared.persistence.database import admin_session_factory
 from app.shared.slug_registry import register_open_list
 
-# Mounts the org-scoped catch-all router under /{org_handle}; the composition root registers
-# such contexts last so fixed-prefix routers (e.g. /console) are never shadowed.
-MOUNTS_UNDER_ORG_HANDLE = True
+# Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
+# contexts last (see app.main) so fixed-prefix routers (e.g. /console) are never shadowed.
 
 
 def mount(app: FastAPI, host: Host) -> None:
+    # Read this context's persisted settings like every app does at mount. Organizations is the
+    # core context (owns /{org_handle}); it is never gated off, so the switch is not consulted.
+    get_app_settings("organizations")
     app.include_router(invitation_router)
     app.include_router(router)  # /organizations collection
     app.include_router(org_router, prefix=ORG_PREFIX)
@@ -71,5 +78,5 @@ async def _create_org(event: UserCreated) -> None:
             auth_user_id=uuid.UUID(event.user_id),
         )
         await session.commit()
-    if event.access_token and get_settings().db_schema != "test":
+    if event.access_token and get_technical_settings().db_schema != "test":
         await host.events.emit(OrgCreated(org_id=org.id, access_token=event.access_token))
