@@ -21,8 +21,9 @@
   <div x-data="{ inviting: false }">
     <div class="flex items-center justify-between mb-4">
       <div>
+        {% set member_count = members | length %}
         <h1 class="page-title">{{ org.name }} — Members</h1>
-        <p id="member-count" class="text-sm text-gray-500">{{ members | length }} member{{ 's' if members | length != 1 }}</p>
+        <p id="member-count" class="text-sm text-gray-500">{{ member_count }} member{{ 's' if member_count != 1 }}</p>
       </div>
       {% if caller_role == "owner" %}
         <button data-invite-toggle @click="inviting = !inviting" class="btn-primary">

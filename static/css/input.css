@@ -9,7 +9,10 @@
 @tailwind utilities;
 
 .ph { font-family: 'Phosphor' !important; speak: never; font-style: normal; font-weight: normal; font-variant: normal; text-transform: none; line-height: 1; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; display: inline-block; }
+.ph.ph-arrow-left:before      { content: "\e058"; }
+.ph.ph-arrow-square-out:before { content: "\e5de"; }
 .ph.ph-book-open:before       { content: "\e0e6"; }
+.ph.ph-buildings:before       { content: "\e102"; }
 .ph.ph-caret-down:before      { content: "\e136"; }
 .ph.ph-clipboard-text:before  { content: "\e198"; }
 .ph.ph-currency-dollar:before { content: "\e550"; }
@@ -17,7 +20,9 @@
 .ph.ph-file-text:before       { content: "\e23a"; }
 .ph.ph-folder:before          { content: "\e24a"; }
 .ph.ph-gear:before            { content: "\e270"; }
+.ph.ph-globe:before           { content: "\e288"; }
 .ph.ph-lightning:before       { content: "\e2de"; }
+.ph.ph-user-circle:before     { content: "\e4c4"; }
 .ph.ph-pencil:before          { content: "\e3ae"; }
 .ph.ph-share-network:before   { content: "\e408"; }
 .ph.ph-sign-out:before        { content: "\e42a"; }
