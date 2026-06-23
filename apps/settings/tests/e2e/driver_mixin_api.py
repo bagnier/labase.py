@@ -131,10 +131,12 @@ class ConsoleApiMixin(ApiBase):
     def register_and_sign_in(self, email: str) -> None:
         # Registration fires the bootstrap (promotes the first user) *before* this login,
         # so the issued JWT already carries the admin claim where applicable.
+        delete_user_if_exists(email)
         self._register_and_login(email, _USER_PASSWORD)
         self.set_acting_email(email)
 
     def register_regular_user(self, email: str) -> None:
+        delete_user_if_exists(email)
         self._register_and_login(email, _USER_PASSWORD)
 
     def sign_in_again(self, email: str) -> None:

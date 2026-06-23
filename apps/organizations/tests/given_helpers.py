@@ -52,6 +52,7 @@ def create_org_for_user(name: str, user_id: str) -> dict:
 
     handle = slugify(name) or "org"
     client = get_admin_supabase()
+    client.table("organizations").delete().eq("handle", handle).execute()
     result = client.table("organizations").insert({"name": name, "handle": handle}).execute()
     org_id = cast(list[dict], result.data)[0]["id"]
     client.table("memberships").insert(
