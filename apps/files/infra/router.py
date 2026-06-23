@@ -115,11 +115,17 @@ async def upload_file(
 
     content = await file.read()
     if len(content) > settings.max_upload_mb * 1024 * 1024:
-        raise HTTPException(413, "File too large")
+        return HTMLResponse(
+            '<div role="alert" class="alert-error">File too large</div>',
+            status_code=413,
+        )
 
     quota_mb = settings.org_storage_quota_mb
     if quota_mb >= 0 and await repo.total_size() + len(content) > quota_mb * 1024 * 1024:
-        raise HTTPException(413, "Organisation storage quota exceeded")
+        return HTMLResponse(
+            '<div role="alert" class="alert-error">Organisation storage quota exceeded</div>',
+            status_code=413,
+        )
 
     try:
         safe_name = _sanitize_filename(file.filename or "upload")

@@ -73,7 +73,9 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     orgs = await query.session.scalar(select(func.count()).select_from(Organization)) or 0
     members = await query.session.scalar(select(func.count()).select_from(Membership)) or 0
     if orgs:
-        lines = [f"{orgs} organisation" + ("s" if orgs > 1 else ""), f"{members} members"]
+        noun_o = "organisation" + ("s" if orgs != 1 else "")
+        noun_m = "member" + ("s" if members != 1 else "")
+        lines = [f"{orgs} {noun_o}", f"{members} {noun_m}"]
     else:
         lines = ["No organisations yet"]
     return ConsoleOverview(

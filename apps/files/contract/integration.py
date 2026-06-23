@@ -71,7 +71,8 @@ async def _overview(query: OverviewQuery) -> Overview:
     files = await OrgFileRepository(query.session, query.org_id).all()
     if files:
         total = sum(f.size_bytes for f in files)
-        lines = [f"{len(files)} files", _human_size(total)]
+        n = len(files)
+        lines = [f"{n} file" + ("s" if n != 1 else ""), _human_size(total)]
     else:
         lines = ["No files yet"]
     return Overview(
@@ -109,7 +110,10 @@ def _declare_settings() -> None:
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     count, total = await FileShareRepository(query.session).count_and_size()
-    lines = [f"{count} files", _human_size(total)] if count else ["No files yet"]
+    if count:
+        lines = [f"{count} file" + ("s" if count != 1 else ""), _human_size(total)]
+    else:
+        lines = ["No files yet"]
     return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})
 
 
