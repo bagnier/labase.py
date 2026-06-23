@@ -8,6 +8,7 @@ from app.console.domain import admins, service
 from app.console.domain.admins import AdminNotFound, LastAdminViolation
 from app.console.domain.service import InvalidSettingValue, UnknownSetting
 from app.console.infra.repository import AppSettingRepository
+from app.profile.contract.shell import shell_context
 from app.shared.config import get_technical_settings
 from app.shared.host import host
 from app.shared.http import parse_body, wants_json
@@ -68,7 +69,12 @@ async def get_console(
     return templates.TemplateResponse(
         request,
         "console.html",
-        {"user": current_user, "overviews": overviews, "disabled": disabled},
+        {
+            "user": current_user,
+            "overviews": overviews,
+            "disabled": disabled,
+            **await shell_context(session, current_user),
+        },
     )
 
 
@@ -85,14 +91,21 @@ def _admins_partial(request: Request, rows: list, *, error: str | None = None) -
 
 # Registered before "/{app}" so "admins" is not captured as an app slug.
 @router.get("/admins", response_class=HTMLResponse)
-async def get_admins(request: Request, current_user: CurrentAdmin) -> Response:
+async def get_admins(
+    request: Request, current_user: CurrentAdmin, session: AdminSession
+) -> Response:
     rows = await admins.list_admins()
     if wants_json(request):
         return _admins_json(rows)
     return templates.TemplateResponse(
         request,
         "console/admins.html",
-        {"user": current_user, "admins": rows, "admin_count": len(rows)},
+        {
+            "user": current_user,
+            "admins": rows,
+            "admin_count": len(rows),
+            **await shell_context(session, current_user),
+        },
     )
 
 
@@ -146,6 +159,7 @@ async def get_app(
             "overview": overview,
             "settings": settings,
             "supabase": supabase,
+            **await shell_context(session, current_user),
         },
     )
 
