@@ -13,12 +13,7 @@ from sqlalchemy import func, select
 
 from app.auth.contract.events import UserCreated
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import (
-    ConsoleSettingsQuery,
-    SettingsGroup,
-    SupabaseLink,
-    get_app_settings,
-)
+from app.console.contract.settings import SupabaseLink, declare_app_settings
 from app.organizations.contract import ORG_PREFIX
 from app.organizations.contract.events import OrgCreated
 from app.organizations.contract.queries import org_handle_taken
@@ -36,15 +31,18 @@ from app.shared.slug_registry import register_open_list
 
 
 def mount(app: FastAPI, host: Host) -> None:
-    # Read this context's persisted settings like every app does at mount. Organizations is the
-    # core context (owns /{org_handle}); it is never gated off, so the switch is not consulted.
-    get_app_settings("organizations")
+    # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch — just
+    # a Supabase deep link for the console admin page.
+    declare_app_settings(
+        "organizations",
+        defs=[],
+        supabase=SupabaseLink("Browse organisations in Supabase", table="organizations"),
+    )
     app.include_router(invitation_router)
     app.include_router(router)  # /organizations collection
     app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.events.on(ConsoleSettingsQuery, _console_settings)
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=100, owner_only=True)
     )
@@ -61,13 +59,6 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         lines = ["No organisations yet"]
     return ConsoleOverview(
         key="organizations", title="Organisations", icon="buildings", data={"lines": lines}
-    )
-
-
-async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
-    return SettingsGroup(
-        app="organizations",
-        supabase=SupabaseLink("Browse organisations in Supabase", table="organizations"),
     )
 
 

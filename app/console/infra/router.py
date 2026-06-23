@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.auth.contract.current import CurrentAdmin
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import ConsoleSettingsQuery, SettingsGroup
+from app.console.contract.settings import SettingsGroup, declared_settings
 from app.console.domain import admins, service
 from app.console.domain.admins import AdminNotFound, LastAdminViolation
 from app.console.domain.service import InvalidSettingValue, UnknownSetting
@@ -25,12 +25,11 @@ async def _collect_overviews(session: AdminSession) -> list[ConsoleOverview]:
     return sorted(overviews, key=lambda o: o.key)
 
 
-async def _settings_group(app: str) -> SettingsGroup:
-    groups = await host.events.collect(ConsoleSettingsQuery())
-    for group in groups:
-        if group.app == app:
-            return group
-    raise _NOT_FOUND
+def _settings_group(app: str) -> SettingsGroup:
+    group = declared_settings(app)
+    if group is None:
+        raise _NOT_FOUND
+    return group
 
 
 def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview | None:
@@ -78,7 +77,7 @@ def _admins_json(rows: list) -> JSONResponse:
 
 
 def _admins_partial(request: Request, rows: list, *, error: str | None = None) -> Response:
-    ctx = {"admins": rows, "admin_count": len(rows)}
+    ctx: dict[str, object] = {"admins": rows, "admin_count": len(rows)}
     if error is not None:
         ctx["error"] = error
     return templates.TemplateResponse(request, "console/_admins.html", ctx)
@@ -131,10 +130,10 @@ async def update_admin(request: Request, email: str, current_user: CurrentAdmin)
 async def get_app(
     request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
-    group = await _settings_group(app)
+    group = _settings_group(app)
     overview = _overview_for(await _collect_overviews(session), app)
-    overrides = await AppSettingRepository(session).overrides(app)
-    settings = service.effective_settings(group, overrides)
+    values = await AppSettingRepository(session).values(app)
+    settings = service.settings_view(group, values)
     supabase = await _supabase_link(group, session)
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings, "supabase": supabase})
@@ -155,7 +154,7 @@ async def get_app(
 async def update_setting(
     request: Request, app: str, key: str, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
-    group = await _settings_group(app)
+    group = _settings_group(app)
     body = await parse_body(request)
     value = str(body.get("value", ""))
     try:
@@ -169,7 +168,7 @@ async def update_setting(
     await repo.set(app, key, stored)
     await session.commit()
 
-    settings = service.effective_settings(group, await repo.overrides(app))
+    settings = service.settings_view(group, await repo.values(app))
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})
     return templates.TemplateResponse(

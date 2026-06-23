@@ -11,10 +11,9 @@ from fastapi import FastAPI
 
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import (
-    ConsoleSettingsQuery,
     SettingDef,
-    SettingsGroup,
     SupabaseLink,
+    declare_app_settings,
     feature_switch,
     get_app_settings,
 )
@@ -44,10 +43,9 @@ _WELCOME_BODY = (
 def mount(app: FastAPI, host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.events.on(ConsoleSettingsQuery, _console_settings)
+    _declare_settings()
     host.reserve("files")  # reserved even when disabled, to keep the slug from being squatted
-    settings = get_app_settings("files")
-    if not settings.enabled:
+    if not get_app_settings("files").enabled:
         return
     app.include_router(public_router)
     app.include_router(router, prefix=ORG_PREFIX)
@@ -82,15 +80,9 @@ async def _overview(query: OverviewQuery) -> Overview:
     )
 
 
-async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    count, total = await FileShareRepository(query.session).count_and_size()
-    lines = [f"{count} files", _human_size(total)] if count else ["No files yet"]
-    return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})
-
-
-async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
-    return SettingsGroup(
-        app="files",
+def _declare_settings() -> None:
+    declare_app_settings(
+        "files",
         defs=[
             feature_switch(),
             SettingDef("max_upload_mb", "number", "25", "Maximum upload size, in megabytes"),
@@ -101,6 +93,12 @@ async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
             "Open the files bucket in Supabase Storage", f"storage/buckets/{BUCKET}"
         ),
     )
+
+
+async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
+    count, total = await FileShareRepository(query.session).count_and_size()
+    lines = [f"{count} files", _human_size(total)] if count else ["No files yet"]
+    return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})
 
 
 async def _seed(event: OrgCreated) -> None:

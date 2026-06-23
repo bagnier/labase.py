@@ -5,7 +5,7 @@ from app.console.domain.models import BOOL_FALSE, ENABLED_KEY, AppSetting
 
 
 def disabled_apps_select() -> Select[tuple[str]]:
-    """Select the slugs of apps with a persisted ``enabled = false`` override.
+    """Select the slugs of apps whose persisted ``enabled`` value is ``false``.
 
     Used by the admin-session repository to render the console's toggle state.
     """
@@ -15,10 +15,9 @@ def disabled_apps_select() -> Select[tuple[str]]:
 
 
 def app_settings_select(app: str) -> Select[tuple[str, str]]:
-    """Select every persisted ``(key, value)`` override for ``app``.
+    """Select every persisted ``(key, value)`` for ``app``.
 
-    Used by the startup loader so each app can read its whole settings on a throwaway engine
-    and decide whether it is enabled.
+    Used by the mount-time store so each app can read its whole settings on a throwaway engine.
     """
     return select(AppSetting.key, AppSetting.value).where(AppSetting.app == app)
 
@@ -37,10 +36,10 @@ class AppSettingRepository:
         return await self.session.scalar(text("SELECT (to_regclass(:t))::oid"), {"t": table})
 
     async def disabled_apps(self) -> frozenset[str]:
-        """Apps with a persisted ``enabled = false`` override (the admin's standing intent)."""
+        """Apps whose persisted ``enabled`` value is ``false`` (the admin's standing intent)."""
         return frozenset(await self.session.scalars(disabled_apps_select()))
 
-    async def overrides(self, app: str) -> dict[str, str]:
+    async def values(self, app: str) -> dict[str, str]:
         rows = await self.session.scalars(select(AppSetting).where(AppSetting.app == app))
         return {row.key: row.value for row in rows}
 

@@ -9,10 +9,9 @@ from sqlalchemy import func, select
 
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import (
-    ConsoleSettingsQuery,
     SettingDef,
-    SettingsGroup,
     SupabaseLink,
+    declare_app_settings,
     feature_switch,
     get_app_settings,
 )
@@ -41,14 +40,25 @@ _WELCOME_TODOS = [
 def mount(app: FastAPI, host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.events.on(ConsoleSettingsQuery, _console_settings)
-    settings = get_app_settings("todo")
-    if not settings.enabled:
+    _declare_settings()
+    if not get_app_settings("todo").enabled:
         return
     app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos", order=10))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
+
+
+def _declare_settings() -> None:
+    declare_app_settings(
+        "todo",
+        defs=[
+            feature_switch(),
+            SettingDef("creation_enabled", "boolean", "true", "Allow members to create tasks"),
+            SettingDef("max_items_per_org", "number", "500", "Maximum tasks per organisation"),
+        ],
+        supabase=SupabaseLink("Browse tasks in Supabase", table="todos"),
+    )
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
@@ -59,18 +69,6 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     )
     lines = [f"{total - done} open", f"{done} done"] if total else ["No tasks yet"]
     return ConsoleOverview(key="todo", title="To-do", icon="clipboard-text", data={"lines": lines})
-
-
-async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
-    return SettingsGroup(
-        app="todo",
-        defs=[
-            feature_switch(),
-            SettingDef("creation_enabled", "boolean", "true", "Allow members to create tasks"),
-            SettingDef("max_items_per_org", "number", "500", "Maximum tasks per organisation"),
-        ],
-        supabase=SupabaseLink("Browse tasks in Supabase", table="todos"),
-    )
 
 
 async def _overview(query: OverviewQuery) -> Overview:

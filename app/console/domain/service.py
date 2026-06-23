@@ -1,5 +1,5 @@
-"""Settings domain logic — framework-free. Merges declared defaults with persisted overrides
-and validates a written value against its declared type."""
+"""Settings domain logic — framework-free. Pairs a declared setting with its stored value and
+validates a written value against its declared type."""
 
 from typing import TypedDict
 
@@ -15,8 +15,8 @@ class InvalidSettingValue(Exception):
     """A written value does not match the setting's declared type."""
 
 
-class EffectiveSetting(TypedDict):
-    """A declared setting paired with its effective (override-or-default) value."""
+class SettingView(TypedDict):
+    """A declared setting paired with its stored value, for rendering the admin page."""
 
     key: str
     type: SettingType
@@ -29,14 +29,14 @@ def coerce_bool(raw: object) -> bool:
     return raw is True or str(raw).lower() == BOOL_TRUE
 
 
-def effective_settings(group: SettingsGroup, overrides: dict[str, str]) -> list[EffectiveSetting]:
-    """Each declared setting with its effective value (override if present, else default)."""
+def settings_view(group: SettingsGroup, values: dict[str, str]) -> list[SettingView]:
+    """Each declared setting paired with its stored value (declared default if not yet seeded)."""
     return [
-        EffectiveSetting(
+        SettingView(
             key=d.key,
             type=d.type,
             label=d.label,
-            value=_normalise(d, overrides.get(d.key, d.default)),
+            value=_normalise(d, values.get(d.key, d.default)),
         )
         for d in group.defs
     ]

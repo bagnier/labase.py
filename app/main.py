@@ -15,8 +15,6 @@ from app.todo.contract import integration as todo
 app = FastAPI(title="labase")
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
-# Each app reads its own settings inside mount() (console.get_app_settings); toggleable apps
-# gate their wiring on the resulting `.enabled`.
 # Order matters: contexts mounting under the `/{org_handle}/...` catch-all (organizations,
 # files, todo, learning) must come last, so fixed-prefix routers like /console/{app} are never
 # shadowed by it. Keep them at the tail of this tuple.

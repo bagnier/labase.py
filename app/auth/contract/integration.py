@@ -9,14 +9,18 @@ from fastapi import FastAPI
 from app.auth.contract.admin import list_server_admins
 from app.auth.infra.router import router
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import ConsoleSettingsQuery, SettingsGroup, SupabaseLink
+from app.console.contract.settings import SupabaseLink, declare_app_settings
 from app.shared.host import Host
 
 
 def mount(app: FastAPI, host: Host) -> None:
     app.include_router(router, prefix="/auth", tags=["auth"])
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.events.on(ConsoleSettingsQuery, _console_settings)
+    declare_app_settings(
+        "users",
+        defs=[],
+        supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
+    )
     host.reserve("auth", "login", "logout", "signup")
 
 
@@ -25,10 +29,3 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     count = len(await list_server_admins())
     lines = [f"{count} user" + ("s" if count > 1 else "")] if count else ["No users yet"]
     return ConsoleOverview(key="users", title="Users", icon="users", data={"lines": lines})
-
-
-async def _console_settings(query: ConsoleSettingsQuery) -> SettingsGroup:
-    return SettingsGroup(
-        app="users",
-        supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
-    )

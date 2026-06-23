@@ -1,60 +1,38 @@
-"""Per-app settings — declared by apps, stored and served by the console.
+"""Per-app settings — the console's settings service, used by every app from its ``mount()``.
 
-The *write* counterpart to overviews: apps **declare** their settings (keys, types, defaults)
-by answering :class:`ConsoleSettingsQuery`; the console persists overrides and serves the
-effective value. Symmetric to the overview pull, but bidirectional.
+The console is the repository and interface for settings. Each app, in ``mount()``:
+
+1. **declares** the settings it needs (:func:`declare_app_settings`) — the single source that
+   makes them editable in the console admin page *and* readable by the app;
+2. **reads** their values (:func:`get_app_settings`) and wires itself — notably the ``enabled``
+   gate, which is just a declared setting (via :func:`feature_switch`).
+
+The DB stores *the value* of a setting (CRUD), nothing layered on top. A
+:class:`SettingDef`'s ``default`` is merely the value seeded on first declaration. Setting
+*metadata* (type, label, Supabase link) lives in memory — re-declared on every ``mount()``;
+only the value is persisted.
 """
 
 from dataclasses import dataclass, field
 from typing import Literal
 
 from app.console.domain.models import BOOL_FALSE, BOOL_TRUE, ENABLED_KEY
-from app.console.infra.startup import load_app_overrides
+from app.console.infra.store import read_values, seed_values
 
 SettingType = Literal["string", "number", "boolean"]
-
-# A toggleable app declares the reserved on/off switch (:data:`ENABLED_KEY`) like any other
-# setting (via :func:`feature_switch`); the difference is purely in the read —
-# :func:`get_app_settings` consults it before mounting, so a change applies on the next restart.
 
 
 @dataclass(frozen=True)
 class SettingDef:
     key: str
     type: SettingType
-    default: str  # stored as text, coerced by ``type``
+    default: str  # the value seeded on first declaration; stored as text, coerced by ``type``
     label: str
 
 
 def feature_switch(label: str = "Enabled (applies on restart)") -> SettingDef:
-    """The reserved on/off switch a toggleable app adds to its :class:`SettingsGroup`."""
+    """The reserved on/off switch a toggleable app declares — an ordinary boolean setting."""
     return SettingDef(ENABLED_KEY, "boolean", "true", label)
-
-
-@dataclass(frozen=True)
-class AppSettings:
-    """An app's persisted overrides, read once at mount time (:mod:`app.console.infra.startup`).
-
-    ``values`` holds every stored key→value override for the app; ``enabled`` is the decision
-    derived from the reserved :data:`ENABLED_KEY`, surfaced as a field so a toggleable app
-    can gate its ``mount`` without re-deriving the on/off rule.
-    """
-
-    app: str
-    values: dict[str, str] = field(default_factory=dict)
-    enabled: bool = True
-
-
-def get_app_settings(app_id: str) -> AppSettings:
-    """Read ``app_id``'s persisted settings at mount time — the contract entry point.
-
-    The DB read lives in :mod:`app.console.infra.startup`; here it is wrapped into the decision
-    on the reserved :data:`ENABLED_KEY`.
-    """
-    values = load_app_overrides(app_id)
-    return AppSettings(
-        app=app_id, values=values, enabled=values.get(ENABLED_KEY, BOOL_TRUE) != BOOL_FALSE
-    )
 
 
 @dataclass(frozen=True)
@@ -75,11 +53,50 @@ class SupabaseLink:
 
 @dataclass(frozen=True)
 class SettingsGroup:
+    """An app's declared settings: the in-memory metadata the console renders and validates."""
+
     app: str  # context id, e.g. "files"
     defs: list[SettingDef] = field(default_factory=list)
     supabase: SupabaseLink | None = None
 
 
 @dataclass(frozen=True)
-class ConsoleSettingsQuery:
-    """Asked by the console; each app answers with its :class:`SettingsGroup`."""
+class AppSettings:
+    """An app's settings as read at mount time — carries the value of every declared setting.
+
+    ``enabled`` is just one of them; the default only kicks in when the DB is unreachable
+    (degraded mount, e.g. unit tests), since :func:`declare_app_settings` seeds the real row.
+    """
+
+    values: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def enabled(self) -> bool:
+        return self.values.get(ENABLED_KEY, BOOL_TRUE) != BOOL_FALSE
+
+
+# Console-owned registry of declared metadata, filled at mount; the admin page reads it.
+_declarations: dict[str, SettingsGroup] = {}
+
+
+def declare_app_settings(
+    app: str, defs: list[SettingDef], supabase: SupabaseLink | None = None
+) -> None:
+    """Declare ``app``'s settings: register their metadata and seed missing values in the DB."""
+    _declarations[app] = SettingsGroup(app=app, defs=defs, supabase=supabase)
+    seed_values(app, {d.key: d.default for d in defs})
+
+
+def get_app_settings(app: str) -> AppSettings:
+    """Read every persisted value for ``app`` (CRUD read)."""
+    return AppSettings(read_values(app))
+
+
+def declared_settings(app: str) -> SettingsGroup | None:
+    """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
+    return _declarations.get(app)
+
+
+def reset_declarations() -> None:
+    """Clear the registry — for test isolation."""
+    _declarations.clear()

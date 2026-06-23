@@ -10,12 +10,12 @@ from app.shared.persistence.base import Base
 BOOL_TRUE = "true"
 BOOL_FALSE = "false"
 
-# Reserved key for an app's on/off switch, stored like any other setting override.
+# Reserved key for an app's on/off switch, stored like any other setting value.
 ENABLED_KEY = "enabled"
 
 
 class AppSetting(Base):
-    """A persisted *override* for one app setting. Unset keys fall back to the declared default."""
+    """The persisted value of one app setting — seeded on declaration, edited from the console."""
 
     __tablename__ = "app_settings"
 
