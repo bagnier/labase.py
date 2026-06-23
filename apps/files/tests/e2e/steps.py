@@ -1,5 +1,7 @@
 from pytest_bdd import given, parsers, then, when
 
+from apps.files.contract import settings as files_settings
+
 
 @given(parsers.parse('the current date is "{date}"'))
 def step_set_current_date(clock, date):
@@ -54,9 +56,14 @@ def step_file_size_limit():
     pass  # no-op — limit is always enforced
 
 
-@when("they upload a file of 51 MB to the org")
-def step_upload_oversized(driver):
-    driver.upload_oversized_file(51)
+@given(parsers.parse("the organisation storage quota is {mb:d} MB"))
+def step_set_storage_quota(mb):
+    files_settings._raw = {**(files_settings._raw or {}), "org_storage_quota_mb": str(mb)}
+
+
+@when(parsers.parse("they upload a file of {mb:d} MB to the org"))
+def step_upload_oversized(driver, mb):
+    driver.upload_oversized_file(mb)
 
 
 @given(parsers.parse('"{email}" has uploaded "{filename}" to the org'))

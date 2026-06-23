@@ -22,6 +22,17 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
             )
         )
 
+    async def total_size(self) -> int:
+        """Total bytes stored by this organisation, across all its files."""
+        return int(
+            await self.session.scalar(
+                select(func.coalesce(func.sum(OrgFile.size_bytes), 0)).where(
+                    OrgFile.org_id == self.org_id
+                )
+            )
+            or 0
+        )
+
     async def add(
         self,
         user_id: uuid.UUID,

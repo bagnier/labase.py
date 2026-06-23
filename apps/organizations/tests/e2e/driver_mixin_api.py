@@ -1,6 +1,7 @@
 import httpx
 
 from apps.auth.tests.given_helpers import user_id_for_email
+from apps.organizations.contract import settings as org_settings
 from tests.e2e.drivers.api_base import ApiBase
 
 _PASSWORD = "Secret1!"
@@ -12,6 +13,7 @@ class OrgApiMixin(ApiBase):
     def reset_session(self) -> None:
         self._org_list_response = None
         self.response: httpx.Response | None = None
+        org_settings._raw = None  # restore declared defaults between scenarios
         super().reset_session()
 
     def _fetch_org_list(self) -> list[dict]:
@@ -94,6 +96,9 @@ class OrgApiMixin(ApiBase):
 
     def rename_org(self, new_name: str) -> None:
         self.response = self.client().patch(f"/{self._handle()}", json={"name": new_name})
+
+    def try_create_org(self, name: str) -> None:
+        self.response = self.client().post("/organizations", json={"name": name})
 
     def sign_in_as_member(self, email: str) -> None:
         self.set_acting_email(email)

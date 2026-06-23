@@ -1,5 +1,7 @@
 from pytest_bdd import given, parsers, then, when
 
+from apps.organizations.contract import settings as org_settings
+
 
 @then("they have exactly one organisation")
 def step_assert_org_count_one(driver):
@@ -44,6 +46,16 @@ def step_assert_org_absent(driver, org_name):
 @when(parsers.parse('they rename the active organisation to "{new_name}"'))
 def step_rename_org(driver, new_name):
     driver.rename_org(new_name)
+
+
+@given(parsers.parse("the maximum owned organisations per user is {n:d}"))
+def step_set_max_owned_orgs(n):
+    org_settings._raw = {**(org_settings._raw or {}), "max_owned_orgs_per_user": str(n)}
+
+
+@when(parsers.parse('they try to create an organisation named "{name}"'))
+def step_try_create_org(driver, name):
+    driver.try_create_org(name)
 
 
 @given(parsers.parse('"{email}" is a member of the org'))

@@ -3,6 +3,7 @@ import uuid
 from playwright.sync_api import Page
 
 from apps.auth.tests.given_helpers import find_users
+from apps.organizations.contract import settings as org_settings
 from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
 
@@ -21,6 +22,7 @@ class OrgBrowserMixin(BrowserBase):
         self._last_accept_response = None
         self._last_error_text = None
         self._invitation_action_failed = False
+        org_settings._raw = None  # restore declared defaults between scenarios
         super().reset_session()
 
     def _read_org_cards_from_profile(self, page: Page) -> list[dict]:
@@ -159,6 +161,13 @@ class OrgBrowserMixin(BrowserBase):
         self.page.fill("input[name=name]", new_name)
         self.last_response = self.click_and_capture(
             self.page, "form:has(input[name=name]) button[type=submit]", "PATCH", f"/{slug}"
+        )
+
+    def try_create_org(self, name: str) -> None:
+        # Fire the create request from the acting user's authenticated context and capture
+        # the response, so the server itself must enforce the owned-org limit.
+        self.last_response = self.page.request.fetch(
+            f"{self.base_url}/organizations", method="POST", form={"name": name}
         )
 
     def sign_in_as_member(self, email: str) -> None:

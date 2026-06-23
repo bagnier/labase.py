@@ -2,6 +2,7 @@ import contextlib
 import tempfile
 
 from apps.auth.tests.given_helpers import delete_user_if_exists
+from apps.files.contract import settings as files_settings
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -18,6 +19,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self.last_registered_email = None
         self.secondary_handles = {}
         self._share_link_url = None
+        files_settings._raw = None  # restore declared defaults between scenarios
         super().reset_session()
 
     def _files_url(self, slug: str | None = None) -> str:

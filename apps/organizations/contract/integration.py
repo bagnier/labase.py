@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from apps.auth.contract.events import UserCreated
-from apps.organizations.contract import ORG_PREFIX
+from apps.organizations.contract import ORG_PREFIX, settings
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.queries import org_handle_taken
 from apps.organizations.domain.models import Membership, Organization
@@ -20,7 +20,12 @@ from apps.organizations.infra.invitation_router import router as invitation_rout
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import SupabaseLink, declare_app_settings
+from apps.settings.contract.settings import (
+    SettingDef,
+    SettingsChanged,
+    SupabaseLink,
+    declare_app_settings,
+)
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, NavItem, host
 from apps.shared.persistence.database import admin_session_factory
@@ -31,13 +36,27 @@ from apps.shared.slug_registry import register_open_list
 
 
 def mount(app: FastAPI, host: Host) -> None:
-    # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch — just
-    # a Supabase deep link for the console admin page.
-    declare_app_settings(
+    # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch.
+    settings.group = declare_app_settings(
         "organizations",
-        defs=[],
+        defs=[
+            SettingDef(
+                "max_owned_orgs_per_user",
+                "number",
+                "-1",
+                "Max organisations owned per user (-1 = unlimited)",
+            ),
+            SettingDef(
+                "auto_create_personal_org",
+                "boolean",
+                "true",
+                "Create a personal organisation on sign-up",
+            ),
+        ],
         supabase=SupabaseLink("Browse organisations in Supabase", table="organizations"),
     )
+    settings.read()
+    host.events.on(SettingsChanged, settings.reload)
     app.include_router(invitation_router)
     app.include_router(router)  # /organizations collection
     app.include_router(org_router, prefix=ORG_PREFIX)
@@ -63,6 +82,8 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _create_org(event: UserCreated) -> None:
+    if not settings.auto_create_personal_org:
+        return
     async with admin_session_factory()() as session:
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,

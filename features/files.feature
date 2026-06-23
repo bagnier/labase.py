@@ -17,6 +17,11 @@ Feature: Org file storage
     When they upload a file of 51 MB to the org
     Then the action is rejected
 
+  Scenario: Upload is rejected when it would exceed the org storage quota
+    Given the organisation storage quota is 1 MB
+    When they upload a file of 2 MB to the org
+    Then the action is rejected
+
   Scenario: Upload is rejected for a filename with path traversal
     When they upload a file with filename "../../../etc/passwd"
     Then the upload is rejected with status 400

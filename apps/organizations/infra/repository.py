@@ -35,6 +35,17 @@ class OrganizationRepository(BaseRepository[Organization]):
 
         return org
 
+    async def count_owned_by(self, auth_user_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Membership)
+            .where(
+                Membership.auth_user_id == auth_user_id,
+                Membership.role == OrgRole.owner,
+            )
+        )
+        return result.scalar_one()
+
     async def list_with_role_for_user(
         self, auth_user_id: uuid.UUID
     ) -> list[tuple[Organization, OrgRole]]:

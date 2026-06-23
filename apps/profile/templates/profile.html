@@ -61,12 +61,14 @@
       {% endfor %}
     </div>
     {% endif %}
-    <form method="post" action="/organizations" class="flex gap-2">
+    <form hx-post="/organizations" hx-target="#org-create-result" hx-swap="innerHTML"
+          class="flex gap-2">
       <input type="text" name="name" placeholder="Name of the new organisation"
              required minlength="1" maxlength="255"
              class="input flex-1" />
       <button type="submit" class="btn-primary flex-none">Create</button>
     </form>
+    <div id="org-create-result"></div>
   </div>
 
   <div class="card">

@@ -94,6 +94,12 @@ def _declare_settings() -> None:
             SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),
             SettingDef("signed_url_ttl", "number", "60", "Download link lifetime, in seconds"),
             SettingDef("share_link_ttl_days", "number", "7", "Share link lifetime, in days"),
+            SettingDef(
+                "org_storage_quota_mb",
+                "number",
+                "-1",
+                "Storage quota per organisation, in megabytes (-1 = unlimited)",
+            ),
         ],
         supabase=SupabaseLink(
             "Open the files bucket in Supabase Storage", f"storage/buckets/{BUCKET}"

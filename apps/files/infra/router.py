@@ -81,6 +81,8 @@ async def _render(
         extra={
             "welcome_message": settings.welcome_message,
             "uploads_enabled": settings.uploads_enabled,
+            "storage_quota_mb": settings.org_storage_quota_mb,
+            "used_bytes": sum(f.size_bytes for f in files),
         },
     )
 
@@ -114,6 +116,10 @@ async def upload_file(
     content = await file.read()
     if len(content) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(413, "File too large")
+
+    quota_mb = settings.org_storage_quota_mb
+    if quota_mb >= 0 and await repo.total_size() + len(content) > quota_mb * 1024 * 1024:
+        raise HTTPException(413, "Organisation storage quota exceeded")
 
     try:
         safe_name = _sanitize_filename(file.filename or "upload")

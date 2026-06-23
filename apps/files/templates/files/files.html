@@ -17,6 +17,10 @@
   <p class="text-sm text-gray-500">{{ welcome_message }}</p>
   {% endif %}
 
+  {% if storage_quota_mb >= 0 %}
+  <p class="meta-text">{{ (used_bytes / 1024 / 1024) | round(1) }} MB / {{ storage_quota_mb }} MB used</p>
+  {% endif %}
+
   {% if uploads_enabled %}
   <form hx-post="/{{ org_handle }}/files" hx-encoding="multipart/form-data" hx-target="#file-list" hx-swap="outerHTML"
         class="flex gap-2 items-center">

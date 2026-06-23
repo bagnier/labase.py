@@ -16,6 +16,12 @@ Feature: Organisation management
     When "alice@example.com" views their organisation list
     Then "bob@example.com"'s organisation does not appear in the list
 
+  Scenario: A user cannot own more organisations than allowed
+    Given a user is signed in as "alice@example.com" within org "Acme"
+    And the maximum owned organisations per user is 1
+    When they try to create an organisation named "Beta"
+    Then the action is forbidden
+
   # List
 
   Scenario: See all organisations they belong to

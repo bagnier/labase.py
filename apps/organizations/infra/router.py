@@ -6,13 +6,18 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from apps.auth.contract.admin import find_user_id_by_email, resolve_user_emails
 from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.organizations.contract import settings
 from apps.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
     CurrentOwnerMembership,
 )
 from apps.organizations.contract.overviews import OverviewQuery
-from apps.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
+from apps.organizations.domain.exceptions import (
+    LastOwnerViolation,
+    OrgLimitReached,
+    PendingInvitationExists,
+)
 from apps.organizations.domain.models import (
     InvitationRead,
     MemberRead,
@@ -65,13 +70,29 @@ async def create_organization(
     request: Request,
     current_user: CurrentUser,
     repo: OrgRepo,
-) -> JSONResponse | RedirectResponse:
+) -> Response:
     body = await parse_body(request)
     name = str(body.get("name", "")).strip()
-    org = await repo.create_with_owner(name, uuid.UUID(current_user.id))
+    user_id = uuid.UUID(current_user.id)
+
+    max_orgs = settings.max_owned_orgs_per_user
+    if max_orgs >= 0 and await repo.count_owned_by(user_id) >= max_orgs:
+        msg = OrgLimitReached.message(max_orgs)
+        if wants_json(request):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
+        return HTMLResponse(
+            f'<div role="alert" class="alert-error">{msg}</div>',
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
+    org = await repo.create_with_owner(name, user_id)
     if wants_json(request):
         result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
         return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
+    if request.headers.get("HX-Request"):
+        response = Response(status_code=status.HTTP_200_OK)
+        response.headers["HX-Redirect"] = f"/{org.handle}/dashboard"
+        return response
     return RedirectResponse(url=f"/{org.handle}/dashboard", status_code=303)
 
 

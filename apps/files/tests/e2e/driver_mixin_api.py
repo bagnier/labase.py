@@ -1,6 +1,7 @@
 import httpx
 
 from apps.auth.tests.given_helpers import create_user, delete_user_if_exists, user_id_for_email
+from apps.files.contract import settings as files_settings
 from apps.organizations.tests.given_helpers import (
     add_membership,
     create_org_for_user,
@@ -31,6 +32,7 @@ class OrgFileApiMixin(ApiBase):
         self.primary_email = ""
         self.active_org_handle = ""
         self.last_registered_email = None
+        files_settings._raw = None  # restore declared defaults between scenarios
         super().reset_session()
 
     def _cleanup_committed_data(self) -> None:
