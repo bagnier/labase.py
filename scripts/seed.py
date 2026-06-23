@@ -16,15 +16,15 @@ os.environ.setdefault("ENV_FILE", ".env")
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.auth.tests.given_helpers import (
+from apps.auth.tests.given_helpers import (
     create_user,
     delete_user_if_exists,
     find_users,
     set_admin_role,
 )
-from app.organizations.infra.repository import OrganizationRepository
-from app.shared.config import get_technical_settings
-from app.todo.domain.models import TodoItem
+from apps.organizations.infra.repository import OrganizationRepository
+from apps.shared.config import get_technical_settings
+from apps.todo.domain.models import TodoItem
 
 _DEFAULT_EMAIL = "dev@labase.dev"
 _DEFAULT_PASSWORD = "Devpass123!"

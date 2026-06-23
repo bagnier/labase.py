@@ -12,7 +12,7 @@ import time
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
-from app.main import app
+from apps.main import app
 from tests.e2e.drivers.background_loop import BackgroundLoop
 
 

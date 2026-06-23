@@ -17,24 +17,24 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import tests.e2e.clock as test_clock
-from app.shared.config import get_technical_settings
+from apps.shared.config import get_technical_settings
 from tests.e2e import cleanup
 
 # Clear feature-switch overrides before pytest imports the nested plugins below — which pull in
-# the drivers and therefore ``app.main``, whose disabled set is read at import time. A leftover
+# the drivers and therefore ``apps.main``, whose disabled set is read at import time. A leftover
 # ``enabled = false`` (e.g. from manual dev testing on the shared DB) would otherwise unmount an
 # app for the whole run.
 cleanup.reset_app_switches()
 
 pytest_plugins = [
     "tests.e2e.plugin",
-    "app.auth.tests.e2e.steps",
-    "app.console.tests.e2e.steps",
-    "app.profile.tests.e2e.steps",
-    "app.todo.tests.e2e.steps",
-    "app.learning.tests.e2e.steps",
-    "app.files.tests.e2e.steps",
-    "app.organizations.tests.e2e.steps",
+    "apps.auth.tests.e2e.steps",
+    "apps.settings.tests.e2e.steps",
+    "apps.profile.tests.e2e.steps",
+    "apps.todo.tests.e2e.steps",
+    "apps.learning.tests.e2e.steps",
+    "apps.files.tests.e2e.steps",
+    "apps.organizations.tests.e2e.steps",
 ]
 
 
@@ -50,12 +50,12 @@ def clock():
 
 @pytest.fixture(autouse=True)
 def reset_clock(monkeypatch):
-    """Route app.shared.clock.now onto the test clock, and unpin it after the test.
+    """Route apps.shared.clock.now onto the test clock, and unpin it after the test.
 
     Both drivers run the app in-process, so a plain monkeypatch reaches every
     runtime clock.now() call — including the in-thread browser server.
     """
-    monkeypatch.setattr("app.shared.clock.now", test_clock.now)
+    monkeypatch.setattr("apps.shared.clock.now", test_clock.now)
     yield
     test_clock.reset()
 

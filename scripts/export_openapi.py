@@ -1,6 +1,6 @@
 import json
 
-from app.main import app
+from apps.main import app
 
 schema = app.openapi()
 

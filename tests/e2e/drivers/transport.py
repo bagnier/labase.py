@@ -1,6 +1,6 @@
 import httpx
 
-from app.main import app
+from apps.main import app
 from tests.e2e.drivers.async_runner import AsyncRunner
 
 

@@ -7,10 +7,10 @@ from typing import Any, TypeVar
 
 import httpx
 
-from app.auth.infra.session import get_rls_session
-from app.auth.tests.given_helpers import delete_user_if_exists
-from app.main import app
-from app.shared.persistence.database import (
+from apps.auth.infra.session import get_rls_session
+from apps.auth.tests.given_helpers import delete_user_if_exists
+from apps.main import app
+from apps.shared.persistence.database import (
     _admin_engine,
     get_admin_session,
     get_user_session,

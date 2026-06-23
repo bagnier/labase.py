@@ -6,7 +6,7 @@ environment variables priority over the `env_file`, so a `SUPABASE_URL` coming
 from `.env` would mask the one in `.env.test`.
 """
 
-from app.shared.config import get_technical_settings
+from apps.shared.config import get_technical_settings
 
 
 def test_test_settings_are_loaded():

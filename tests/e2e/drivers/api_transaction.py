@@ -14,9 +14,9 @@ from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
-from app.auth.domain.service import AuthenticatedUser
-from app.auth.infra.security import get_current_user
-from app.shared.persistence.database import _user_session_factory, get_user_session
+from apps.auth.domain.service import AuthenticatedUser
+from apps.auth.infra.security import get_current_user
+from apps.shared.persistence.database import _user_session_factory, get_user_session
 
 _test_connection: AsyncConnection | None = None
 

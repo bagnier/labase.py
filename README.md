@@ -36,13 +36,13 @@ Organized by **bounded context**, each split into `domain/` (business logic, fra
 HTTP request → infra/router.py → domain/service.py → infra/repository.py → DB / external service
 ```
 
-Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `app/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
+Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `apps/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
 
 ### Integration & event bus
 
-Each bounded context exposes a single `mount(app, host)` entry point in its `contract/integration.py`. The composition root (`app/main.py`) calls them in dependency order — no context knows about another.
+Each bounded context exposes a single `mount(app, host)` entry point in its `contract/integration.py`. The composition root (`apps/main.py`) calls them in dependency order — no context knows about another.
 
-**`Host`** (`app/shared/host.py`) carries two things:
+**`Host`** (`apps/shared/host.py`) carries two things:
 
 - `events: EventBus` — type-keyed async pub/sub; handlers are registered by the Python type of the event, so there are no magic string names and no shared imports between contexts.
 - `reserve(*slugs)` — claims URL path segments so no org handle can shadow them.
@@ -76,7 +76,7 @@ GET /{org}/ → collect(OverviewQuery)
 
 **Context boundaries.** `domain/` never imports from `infra/`. Contexts never import each other — the only inter-app surface is `contract/` (owned public API). Cross-context orchestration lives in application services inside the owning context (e.g. `auth/application.py`), never in `shared/`.
 
-**Cross-context communication.** Two sanctioned forms: `contract/` for synchronous owned APIs (FastAPI dependencies, public types), and the `EventBus` for event-driven reactions where the emitter doesn't know its subscribers. Each context's FastAPI dependencies live in its own `contract/current.py` — `CurrentUser`, `OptionalCurrentUser`, `RlsSession` in `auth/`; `CurrentOrg`, `CurrentMembership`, `CurrentOwnerMembership` in `organizations/`. `app/shared/` is ownerless infra (clock, HTTP, DB sessions) — not a coupling point; it holds only things no single context owns, such as the BYPASSRLS `AdminSession`.
+**Cross-context communication.** Two sanctioned forms: `contract/` for synchronous owned APIs (FastAPI dependencies, public types), and the `EventBus` for event-driven reactions where the emitter doesn't know its subscribers. Each context's FastAPI dependencies live in its own `contract/current.py` — `CurrentUser`, `OptionalCurrentUser`, `RlsSession` in `auth/`; `CurrentOrg`, `CurrentMembership`, `CurrentOwnerMembership` in `organizations/`. `apps/shared/` is ownerless infra (clock, HTTP, DB sessions) — not a coupling point; it holds only things no single context owns, such as the BYPASSRLS `AdminSession`.
 
 **HTTP layer.** `router.py` owns HTTP and nothing else — parsing, serialization, status codes. No business logic, no direct DB access. Each router serves both JSON and HTML/fragment via `wants_json(request)`.
 
@@ -103,7 +103,7 @@ allowed to know several contexts at once: `main.py`.
 
 ```
 labase.py/
-├── app/
+├── apps/
 │   ├── main.py            # FastAPI app, router registration, 401 handler
 │   ├── shared/            # Cross-context infra: EventBus (bus.py), Host (host.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),
@@ -113,7 +113,7 @@ labase.py/
 │   ├── profile/           # User profile + page shell (shell_context / page_context)
 │   ├── files/             # Demo context — Supabase Storage + share tokens
 │   ├── learning/          # Demo context — spaced repetition (HexArch example)
-│   ├── console/           # SaaS admin console
+│   ├── settings/          # App settings / SaaS admin console
 │   ├── public/            # Public landing pages
 │   ├── health/            # Liveness / readiness probes
 │   └── todo/              # Demo context — trivial CRUD, full-pattern reference

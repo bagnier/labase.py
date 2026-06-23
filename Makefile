@@ -60,7 +60,7 @@ format:
 	uv run ruff format .
 
 typecheck:
-	uv run ty check app/
+	uv run ty check apps/
 
 audit:
 	uv run pip-audit
@@ -79,7 +79,7 @@ test:
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest
 
 test-e2e:
-	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest app/ -k test_scenarios --driver=browser --no-cov
+	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ -k test_scenarios --driver=browser --no-cov
 
 coverage-erase:
 	uv run coverage erase

@@ -1,10 +1,10 @@
-from app.auth.tests.e2e import AuthApiMixin
-from app.console.tests.e2e import ConsoleApiMixin
-from app.files.tests.e2e import OrgFileApiMixin
-from app.learning.tests.e2e import LearningApiMixin
-from app.organizations.tests.e2e import OrgApiMixin
-from app.profile.tests.e2e import ProfileApiMixin
-from app.todo.tests.e2e import TodoApiMixin
+from apps.auth.tests.e2e import AuthApiMixin
+from apps.files.tests.e2e import OrgFileApiMixin
+from apps.learning.tests.e2e import LearningApiMixin
+from apps.organizations.tests.e2e import OrgApiMixin
+from apps.profile.tests.e2e import ProfileApiMixin
+from apps.settings.tests.e2e import ConsoleApiMixin
+from apps.todo.tests.e2e import TodoApiMixin
 from tests.e2e.drivers.api_base import ApiBase
 
 

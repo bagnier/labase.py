@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ../app:/app/app          # hot-reload
+      - ../apps:/app/apps          # hot-reload
       - ../static:/app/static
     env_file:
       - ../.env
@@ -23,7 +23,7 @@ services:
     develop:
       watch:
         - action: sync
-          path: ../app
-          target: /app/app
+          path: ../apps
+          target: /app/apps
         - action: rebuild
           path: ../pyproject.toml
