@@ -90,9 +90,10 @@ class ConsoleBrowserMixin(BrowserBase):
 
         with self.page.expect_response(posted):
             if kind == "boolean":
-                # Toggling the checkbox emits change directly.
+                # Toggling the checkbox emits change directly. The input is
+                # sr-only behind a styled track, so force past actionability.
                 if (value == "true") != field.is_checked():
-                    field.click()
+                    field.click(force=True)
                 else:
                     field.dispatch_event("change")
             else:
