@@ -12,11 +12,13 @@ from fastapi import FastAPI
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import (
     SettingDef,
+    SettingsChanged,
     SupabaseLink,
     declare_app_settings,
     feature_switch,
     get_app_settings,
 )
+from app.files.contract import settings
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.router import public_router, router
 from app.files.infra.storage import BUCKET, storage_path, user_storage_client
@@ -47,6 +49,8 @@ def mount(app: FastAPI, host: Host) -> None:
     host.reserve("files")  # reserved even when disabled, to keep the slug from being squatted
     if not get_app_settings("files").enabled:
         return
+    settings.read()
+    host.events.on(SettingsChanged, settings.reload)
     app.include_router(public_router)
     app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Files", "folder", "files", "/files", order=30))
@@ -81,13 +85,15 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 
 def _declare_settings() -> None:
-    declare_app_settings(
+    settings.group = declare_app_settings(
         "files",
         defs=[
             feature_switch(),
             SettingDef("max_upload_mb", "number", "25", "Maximum upload size, in megabytes"),
             SettingDef("uploads_enabled", "boolean", "true", "Allow members to upload files"),
             SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),
+            SettingDef("signed_url_ttl", "number", "60", "Download link lifetime, in seconds"),
+            SettingDef("share_link_ttl_days", "number", "7", "Share link lifetime, in days"),
         ],
         supabase=SupabaseLink(
             "Open the files bucket in Supabase Storage", f"storage/buckets/{BUCKET}"

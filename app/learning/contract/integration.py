@@ -10,11 +10,13 @@ from sqlalchemy import func, select
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import (
     SettingDef,
+    SettingsChanged,
     SupabaseLink,
     declare_app_settings,
     feature_switch,
     get_app_settings,
 )
+from app.learning.contract import settings
 from app.learning.domain.models import Card, Deck
 from app.learning.infra.router import router
 from app.organizations.contract import ORG_PREFIX
@@ -47,6 +49,8 @@ def mount(app: FastAPI, host: Host) -> None:
     _declare_settings()
     if not get_app_settings("learning").enabled:
         return
+    settings.read()
+    host.events.on(SettingsChanged, settings.reload)
     app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20))
     host.events.on(OverviewQuery, _overview)
@@ -54,7 +58,7 @@ def mount(app: FastAPI, host: Host) -> None:
 
 
 def _declare_settings() -> None:
-    declare_app_settings(
+    settings.group = declare_app_settings(
         "learning",
         defs=[
             feature_switch(),

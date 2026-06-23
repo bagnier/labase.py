@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from app.console.contract.settings import (
     SettingDef,
+    SettingsChanged,
     SupabaseLink,
     declare_app_settings,
     feature_switch,
@@ -21,6 +22,7 @@ from app.organizations.contract.overviews import Overview, OverviewQuery
 from app.organizations.contract.queries import get_org_owner_id
 from app.shared.host import Host, NavItem
 from app.shared.persistence.database import admin_session_factory
+from app.todo.contract import settings
 from app.todo.domain.models import TodoItem
 from app.todo.infra.repository import TodoRepository
 from app.todo.infra.router import router
@@ -43,6 +45,8 @@ def mount(app: FastAPI, host: Host) -> None:
     _declare_settings()
     if not get_app_settings("todo").enabled:
         return
+    settings.read()
+    host.events.on(SettingsChanged, settings.reload)
     app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos", order=10))
     host.events.on(OverviewQuery, _overview)
@@ -50,7 +54,7 @@ def mount(app: FastAPI, host: Host) -> None:
 
 
 def _declare_settings() -> None:
-    declare_app_settings(
+    settings.group = declare_app_settings(
         "todo",
         defs=[
             feature_switch(),

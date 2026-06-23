@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from storage3.exceptions import StorageApiError
 
 from app.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
+from app.files.contract import settings
 from app.files.domain.models import OrgFileRead
 from app.files.infra.repository import FileShareRepository, OrgFileRepository
 from app.files.infra.storage import (
@@ -55,10 +56,6 @@ def _sanitize_filename(name: str) -> str:
     return cleaned
 
 
-_MAX_SIZE_BYTES = 50 * 1024 * 1024
-_SIGNED_URL_TTL = 60
-
-
 def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
     return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
 
@@ -81,6 +78,10 @@ async def _render(
         user=current_user,
         org=org,
         shell=shell,
+        extra={
+            "welcome_message": settings.welcome_message,
+            "uploads_enabled": settings.uploads_enabled,
+        },
     )
 
 
@@ -107,8 +108,11 @@ async def upload_file(
     org: CurrentOrgModel,
     repo: FileRepo,
 ):
+    if not settings.uploads_enabled:
+        raise HTTPException(403, "Uploads are disabled")
+
     content = await file.read()
-    if len(content) > _MAX_SIZE_BYTES:
+    if len(content) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(413, "File too large")
 
     try:
@@ -156,7 +160,9 @@ async def download_file(
 ):
     org_file = or_404(await repo.get(file_id))
     storage = user_storage_client(current_user.access_token)
-    result = await storage.from_(BUCKET).create_signed_url(org_file.storage_path, _SIGNED_URL_TTL)
+    result = await storage.from_(BUCKET).create_signed_url(
+        org_file.storage_path, settings.signed_url_ttl
+    )
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
     return RedirectResponse(url=signed_url, status_code=302)
 
@@ -264,6 +270,8 @@ async def public_share_download(
         raise HTTPException(404, "File not found")
 
     storage = admin_storage()
-    result = await storage.from_(BUCKET).create_signed_url(org_file.storage_path, _SIGNED_URL_TTL)
+    result = await storage.from_(BUCKET).create_signed_url(
+        org_file.storage_path, settings.signed_url_ttl
+    )
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
     return RedirectResponse(url=signed_url, status_code=302)

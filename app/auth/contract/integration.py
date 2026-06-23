@@ -6,21 +6,33 @@ orchestrator (:mod:`app.registration`), not here.
 
 from fastapi import FastAPI
 
+from app.auth.contract import settings
 from app.auth.contract.admin import list_server_admins
 from app.auth.infra.router import router
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import SupabaseLink, declare_app_settings
+from app.console.contract.settings import (
+    SettingDef,
+    SettingsChanged,
+    SupabaseLink,
+    declare_app_settings,
+)
 from app.shared.host import Host
 
 
 def mount(app: FastAPI, host: Host) -> None:
     app.include_router(router, prefix="/auth", tags=["auth"])
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    declare_app_settings(
+    settings.group = declare_app_settings(
         "users",
-        defs=[],
+        defs=[
+            SettingDef(
+                "session_ttl_seconds", "number", "604800", "Session cookie lifetime, in seconds"
+            ),
+        ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
     )
+    settings.read()
+    host.events.on(SettingsChanged, settings.reload)
     host.reserve("auth", "login", "logout", "signup")
 
 

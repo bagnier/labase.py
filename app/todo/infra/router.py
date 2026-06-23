@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
@@ -9,6 +9,7 @@ from app.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from app.profile.contract.shell import shell_context
 from app.shared.http import or_404, parse_body, parse_field, render_list, wants_full_page
 from app.shared.observability.audit import record_audit_event
+from app.todo.contract import settings
 from app.todo.domain.models import TodoRead
 from app.todo.infra.repository import TodoRepository
 
@@ -40,6 +41,7 @@ async def _render(
         user=current_user,
         org=org,
         shell=shell,
+        extra={"creation_enabled": settings.creation_enabled},
     )
 
 
@@ -64,6 +66,11 @@ async def add_todo(
     org: CurrentOrgModel,
     org_id: CurrentOrg,
 ):
+    if not settings.creation_enabled:
+        raise HTTPException(403, "Task creation is disabled")
+    if await repo.count() >= settings.max_items_per_org:
+        raise HTTPException(403, "Task limit reached for this organisation")
+
     title = await parse_field(request, "title")
     todo = await repo.add(uuid.UUID(current_user.id), title)
     record_audit_event(

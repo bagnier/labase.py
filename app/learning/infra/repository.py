@@ -1,7 +1,8 @@
 import uuid
 from dataclasses import dataclass
+from datetime import date
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.learning.domain.models import (
@@ -76,6 +77,19 @@ class LearningRepository:
             .order_by(Deck.position, Card.position)
         )
         return [CatalogRow(deck=d, card=c, state=s) for d, c, s in rows.all()]
+
+    async def reviews_today(self, today: date) -> int:
+        """Distinct cards this user already reviewed today (re-marking a card doesn't add)."""
+        return (
+            await self.session.scalar(
+                select(func.count())
+                .select_from(CardState)
+                .where(
+                    CardState.user_id == self.user_id,
+                    CardState.last_reviewed_on == today,
+                )
+            )
+        ) or 0
 
     async def get_state(self, card_id: uuid.UUID) -> CardState | None:
         return await self.session.scalar(

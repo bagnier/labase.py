@@ -25,6 +25,7 @@ def render_list(
     user: Any,
     org: Any = None,
     shell: dict | None = None,
+    extra: dict | None = None,
 ) -> Response:
     if wants_json(request):
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
@@ -32,6 +33,8 @@ def render_list(
     template = fragment if is_htmx else full
     org_handle = request.path_params.get("org_handle", "")
     ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
+    if extra:
+        ctx |= extra
     if not is_htmx and shell:
         ctx |= shell
     return templates.TemplateResponse(request, template, ctx)

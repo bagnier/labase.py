@@ -36,7 +36,7 @@
   {% endfor %}
 </div>
 
-{% if available_decks %}
+{% if available_decks and sharing_enabled %}
 <div class="mt-8 space-y-3">
   <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Available decks</h2>
   {% for deck in available_decks %}

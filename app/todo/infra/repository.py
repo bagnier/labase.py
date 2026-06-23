@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import case, select, update
+from sqlalchemy import case, func, select, update
 
 from app.shared.persistence.repository import OrgScopedRepository
 from app.todo.domain.models import TodoItem
@@ -15,6 +15,13 @@ class TodoRepository(OrgScopedRepository[TodoItem]):
                 select(TodoItem).where(TodoItem.org_id == self.org_id).order_by(TodoItem.position)
             )
         )
+
+    async def count(self) -> int:
+        return (
+            await self.session.scalar(
+                select(func.count()).select_from(TodoItem).where(TodoItem.org_id == self.org_id)
+            )
+        ) or 0
 
     async def add(self, user_id: uuid.UUID, title: str) -> TodoItem:
         await self.session.execute(

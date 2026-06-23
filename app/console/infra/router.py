@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.auth.contract.current import CurrentAdmin
 from app.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from app.console.contract.settings import SettingsGroup, declared_settings
+from app.console.contract.settings import SettingsChanged, SettingsGroup, declared_settings
 from app.console.domain import admins, service
 from app.console.domain.admins import AdminNotFound, LastAdminViolation
 from app.console.domain.service import InvalidSettingValue, UnknownSetting
@@ -182,7 +182,9 @@ async def update_setting(
     await repo.set(app, key, stored)
     await session.commit()
 
-    settings = service.settings_view(group, await repo.values(app))
+    values = await repo.values(app)
+    await host.events.emit(SettingsChanged(app, values))
+    settings = service.settings_view(group, values)
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})
     return templates.TemplateResponse(

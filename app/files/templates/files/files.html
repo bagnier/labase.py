@@ -13,6 +13,11 @@
 
   <h1 class="page-title">Organisation files</h1>
 
+  {% if welcome_message %}
+  <p class="text-sm text-gray-500">{{ welcome_message }}</p>
+  {% endif %}
+
+  {% if uploads_enabled %}
   <form hx-post="/{{ org_handle }}/files" hx-encoding="multipart/form-data" hx-target="#file-list" hx-swap="outerHTML"
         class="flex gap-2 items-center">
     <div class="flex-1 flex items-center gap-3">
@@ -26,6 +31,7 @@
     </div>
     <button type="submit" class="btn-primary flex-none">Upload</button>
   </form>
+  {% endif %}
 
   {% include "files/_list_fragment.html" %}
 

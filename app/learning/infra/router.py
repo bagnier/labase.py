@@ -2,11 +2,12 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
+from app.learning.contract import settings
 from app.learning.domain.models import (
     CardResource,
     DueCard,
@@ -93,6 +94,7 @@ async def _render_session(
         "user": current_user,
         "cards": cards,
         "available_decks": available,
+        "sharing_enabled": settings.sharing_enabled,
         "org_handle": org_handle,
         "org": org,
     }
@@ -109,6 +111,8 @@ async def subscribe(
     repo: LearningRepo,
     org: CurrentOrgModel,
 ):
+    if not settings.sharing_enabled:
+        raise HTTPException(403, "Deck sharing is disabled")
     body = await parse_body(request)
     deck = str(body.get("deck", ""))
     found = or_404(await repo.get_deck_by_name(deck))
@@ -177,6 +181,9 @@ async def mark_card(
     card = or_404(await repo.get_card_by_external(external_id))
     today_date = clock.now().date()
     state = await repo.get_state(card.id)
+    already_today = state is not None and state.last_reviewed_on == today_date
+    if not already_today and await repo.reviews_today(today_date) >= settings.daily_review_limit:
+        raise HTTPException(429, "Daily review limit reached")
     schedule = apply_outcome(state.level if state else 0, today_date, outcome)
     await repo.apply_schedule(card.id, schedule)
     record_audit_event(
