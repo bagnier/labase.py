@@ -97,7 +97,7 @@ async def _overview(query: OverviewQuery) -> Overview:
         key="learning",
         title="Learning",
         icon="book-open",
-        href="learning",
+        href="learning/sessions",
         template="learning/_overview.html",
         data={"lines": lines, "recent": []},
     )
