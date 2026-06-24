@@ -431,6 +431,7 @@ async def view_page(
             page=page,
             body=body,
             can_edit=can_edit,
+            org=org,
             org_handle=org_handle,
             page_nav_links=page_nav_links,
         )

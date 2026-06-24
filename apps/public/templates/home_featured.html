@@ -29,8 +29,12 @@
     {% endif %}
 
     <div class="flex items-center gap-2 flex-none">
+      {% if current_user %}
+      <a href="/profile" class="btn-secondary btn-sm">My profile</a>
+      {% else %}
       <a href="/auth/login" class="btn-secondary btn-sm">Sign in</a>
       <a href="/auth/register" class="btn-primary btn-sm">Register</a>
+      {% endif %}
     </div>
   </header>
 

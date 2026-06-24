@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from apps.auth.contract.current import OptionalCurrentUser
 from apps.pages.domain.models import PageVisibility
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
@@ -17,7 +18,9 @@ router = APIRouter(tags=["public"])
 
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request, admin: AdminSession) -> HTMLResponse:
+async def index(
+    request: Request, admin: AdminSession, current_user: OptionalCurrentUser
+) -> HTMLResponse:
     handle: str = settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         return templates.TemplateResponse(request, "home.html")
@@ -29,7 +32,13 @@ async def index(request: Request, admin: AdminSession) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "home_featured.html",
-        {"org": org, "org_handle": handle, "pages": pages, "page_nav": nav_items},
+        {
+            "org": org,
+            "org_handle": handle,
+            "pages": pages,
+            "page_nav": nav_items,
+            "current_user": current_user,
+        },
     )
 
 
