@@ -11,16 +11,15 @@
 {% block content %}
 <div class="max-w-3xl space-y-6">
 
-  <h1 class="page-title">Pages</h1>
-
-  {% if can_create %}
-  <form method="post" action="/{{ org_handle }}/pages" id="new-page-form" class="space-y-2 card">
-    <input type="text" name="title" placeholder="Title" required class="input w-full" />
-    <input type="text" name="slug" placeholder="slug (optional)" class="input w-full" />
-    <textarea name="content" placeholder="Markdown body…" class="input w-full" rows="4"></textarea>
-    <button type="submit" class="btn-primary">Create page</button>
-  </form>
-  {% endif %}
+  <div class="flex items-center justify-between">
+    <h1 class="page-title">Pages</h1>
+    {% if can_create %}
+    <form method="post" action="/{{ org_handle }}/pages" class="flex items-center gap-2">
+      <input type="text" name="title" placeholder="Page title…" required class="input w-48" />
+      <button type="submit" class="btn-primary">New page</button>
+    </form>
+    {% endif %}
+  </div>
 
   <script type="application/json" id="pages-data">{{ pages_data | tojson }}</script>
 

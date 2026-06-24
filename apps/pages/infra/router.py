@@ -85,7 +85,7 @@ async def create_page(
     )
     if wants_json(request):
         return JSONResponse(PageRead.model_validate(page).model_dump(mode="json"), status_code=201)
-    return RedirectResponse(f"/{org.handle}/pages", status_code=303)
+    return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
 
 
 @router.get("/{slug}/edit", response_class=HTMLResponse)

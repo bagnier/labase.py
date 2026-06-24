@@ -30,6 +30,7 @@ static/fonts/
 static/js/htmx.min.js
 static/js/sortable.min.js
 static/js/alpine.min.js
+static/js/codemirror-editor.js
 
 ## Generated API client (from `make client-gen`)
 client/

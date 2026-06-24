@@ -24,29 +24,40 @@
       <label class="block text-xs font-medium text-gray-500 mb-1">Slug</label>
       <input type="text" name="slug" value="{{ page.slug }}" class="input w-full" />
     </div>
-    {% if is_owner %}
-    <div>
-      <label class="block text-xs font-medium text-gray-500 mb-1">Visibility</label>
-      <select name="visibility" class="input !w-auto" aria-label="Visibility">
-        <option value="draft" {% if page.visibility == 'draft' %}selected{% endif %}>Draft — only editors</option>
-        <option value="members" {% if page.visibility == 'members' %}selected{% endif %}>Members — everyone in the org</option>
-        <option value="public" {% if page.visibility == 'public' %}selected{% endif %}>Public — anyone with the link</option>
-      </select>
-    </div>
-    {% endif %}
     <div>
       <label class="block text-xs font-medium text-gray-500 mb-1">Content (Markdown)</label>
-      <textarea name="content" class="input w-full" rows="10">{{ page.content }}</textarea>
+      <div class="w-full" id="editor-mount">
+        <textarea name="content" class="input w-full" rows="10">{{ page.content }}</textarea>
+      </div>
     </div>
     <div class="flex items-center justify-between pt-1">
-      <button type="submit" class="btn-primary">Save</button>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn-primary">Save</button>
+        {% if is_owner %}
+        <select name="visibility" class="input !w-auto" aria-label="Visibility">
+          <option value="draft" {% if page.visibility == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="members" {% if page.visibility == 'members' %}selected{% endif %}>Members</option>
+          <option value="public" {% if page.visibility == 'public' %}selected{% endif %}>Public</option>
+        </select>
+        {% endif %}
+      </div>
       <button type="button" id="delete-page-btn" class="text-sm text-red-600 hover:text-red-800 font-medium"
               hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
-              hx-confirm="Delete “{{ page.title }}”? This cannot be undone."
+              hx-confirm="Delete "{{ page.title }}"? This cannot be undone."
               hx-swap="none">
         Delete page
       </button>
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/codemirror-editor.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const textarea = document.querySelector('#editor-mount textarea[name="content"]')
+    if (textarea) initMarkdownEditor(textarea)
+  })
+</script>
 {% endblock %}
