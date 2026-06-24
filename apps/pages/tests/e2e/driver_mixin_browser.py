@@ -33,12 +33,14 @@ class PagesBrowserMixin(BrowserBase):
     # ── actions ────────────────────────────────────────────────────────────────
     def _create_via_form(self, title: str, slug: str | None, content: str) -> None:
         self._goto_list()
-        self.page.fill("#new-page-form input[name=title]", title)
+        self.page.click('a[href$="/pages/new/edit"]')
+        self.page.wait_for_selector("#edit-page-form", timeout=5000)
+        self.page.fill("input[name=title]", title)
         if slug is not None:
-            self.page.fill("#new-page-form input[name=slug]", slug)
-        self.page.fill("#new-page-form textarea[name=content]", _decode(content))
-        self.page.click("#new-page-form button[type=submit]")
-        self.page.wait_for_load_state("load")
+            self.page.fill("input[name=slug]", slug)
+        if content:
+            self.page.fill("textarea[name=content]", _decode(content))
+        self._submit_edit_form()
 
     def create_page(self, title: str, content: str) -> None:
         self._create_via_form(title, None, content)
