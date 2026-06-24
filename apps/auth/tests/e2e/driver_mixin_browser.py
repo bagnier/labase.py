@@ -116,7 +116,7 @@ class AuthBrowserMixin(BrowserBase):
 
     def assert_registration_failed_with_message(self, message: str) -> None:
         self.assert_registration_failed()
-        self.page.wait_for_selector("[class*='red']", timeout=3000)
+        self.page.wait_for_selector(".alert-error", timeout=3000)
         assert message in self.page.content(), (
             f"'{message}' not found in page after registration failure"
         )
