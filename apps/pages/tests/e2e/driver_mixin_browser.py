@@ -12,16 +12,6 @@ class PagesBrowserMixin(BrowserBase):
     def _pages_url(self, path: str = "", handle: str | None = None) -> str:
         return f"{self.base_url}/{handle or self._handle()}/pages{path}"
 
-    def _fetch(self, method: str, path: str, body: dict | None = None):
-        resp = self.page.request.fetch(
-            self._pages_url(path),
-            method=method,
-            headers={"Accept": "application/json"},
-            data=body or {},
-        )
-        self.last_response = resp
-        return resp
-
     def _goto_list(self, handle: str | None = None):
         resp = self.page.goto(self._pages_url(handle=handle), wait_until="load")
         # The list is an Alpine component; it flags itself ready once rendered.
@@ -58,28 +48,54 @@ class PagesBrowserMixin(BrowserBase):
 
     def create_published_page(self, title: str, slug: str, visibility: str) -> None:
         self._create_via_form(title, slug, "")
-        self._fetch("POST", f"/{slug}/visibility", {"visibility": visibility})
+        self._set_visibility_via_form(slug, visibility)
+
+    def _goto_edit(self, slug: str) -> None:
+        self.page.goto(self._pages_url(f"/{slug}/edit"), wait_until="load")
+
+    def _submit_edit_form(self) -> None:
+        self.page.click("#edit-page-form button[type=submit]")
+        self.page.wait_for_load_state("load")
 
     def change_slug(self, slug: str, new_slug: str) -> None:
-        self._fetch("PATCH", f"/{slug}", {"slug": new_slug})
+        self._goto_edit(slug)
+        self.page.fill("input[name=slug]", new_slug)
+        self._submit_edit_form()
 
     def update_content(self, slug: str, content: str) -> None:
-        self._fetch("PATCH", f"/{slug}", {"content": _decode(content)})
+        self._goto_edit(slug)
+        self.page.fill("textarea[name=content]", _decode(content))
+        self._submit_edit_form()
 
     def delete_page(self, slug: str) -> None:
-        self._fetch("DELETE", f"/{slug}")
+        self._goto_edit(slug)
+        self.page.on("dialog", lambda d: d.accept())
+        self.page.click("#delete-page-btn")
+        self.page.wait_for_load_state("load")
+
+    def _set_visibility_via_form(self, slug: str, visibility: str) -> None:
+        self._goto_edit(slug)
+        self.page.select_option("select[name=visibility]", visibility)
+        self._submit_edit_form()
 
     def publish_to_members(self, slug: str) -> None:
-        self._fetch("POST", f"/{slug}/visibility", {"visibility": "members"})
+        self._set_visibility_via_form(slug, "members")
 
     def publish_public(self, slug: str) -> None:
-        self._fetch("POST", f"/{slug}/visibility", {"visibility": "public"})
+        self._set_visibility_via_form(slug, "public")
 
     def try_publish_to_members(self, slug: str) -> None:
-        self._fetch("POST", f"/{slug}/visibility", {"visibility": "members"})
+        # The visibility control is hidden for members; probe the endpoint directly
+        # to verify server-side enforcement (UI-hiding alone is not proof).
+        self.last_response = self.page.request.fetch(
+            self._pages_url(f"/{slug}/visibility"),
+            method="POST",
+            headers={"Accept": "application/json"},
+            data={"visibility": "members"},
+        )
 
     def owner_publish_to_members(self, slug: str) -> None:
-        self._fetch("POST", f"/{slug}/visibility", {"visibility": "members"})
+        self._set_visibility_via_form(slug, "members")
 
     def view_page(self, slug: str) -> None:
         self.last_response = self.page.goto(self._pages_url(f"/{slug}"), wait_until="load")
@@ -87,11 +103,11 @@ class PagesBrowserMixin(BrowserBase):
     def view_pages_list(self) -> None:
         self._goto_list()
 
-    def visitor_open(self, slug: str, org_name: str) -> None:
+    def visitor_open(self, slug: str, _org_name: str) -> None:
         page = self.page_for(_VISITOR)
         self.last_response = page.goto(self._pages_url(f"/{slug}"), wait_until="load")
 
-    def visitor_open_list(self, org_name: str) -> None:
+    def visitor_open_list(self, _org_name: str) -> None:
         page = self.page_for(_VISITOR)
         self.last_response = page.goto(self._pages_url(), wait_until="load")
 
@@ -145,7 +161,7 @@ class PagesBrowserMixin(BrowserBase):
     def assert_visible_to_members(self, slug: str) -> None:
         self.assert_page_visibility(slug, "members")
 
-    def assert_visitor_can_view(self, slug: str, org_name: str) -> None:
+    def assert_visitor_can_view(self, slug: str, _org_name: str) -> None:
         page = self.page_for(_VISITOR)
         resp = page.goto(self._pages_url(f"/{slug}"), wait_until="load")
         assert resp is not None and resp.status == 200, (

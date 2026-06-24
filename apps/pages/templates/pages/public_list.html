@@ -20,10 +20,10 @@
   <main class="max-w-3xl mx-auto px-6 py-10">
     <h1 class="text-2xl font-semibold text-gray-900 mb-6">Pages</h1>
     {% if pages %}
-    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 shadow-sm">
+    <div id="pages-list" class="bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 shadow-sm">
       {% for p in pages %}
       <a href="/{{ org_handle }}/pages/{{ p.slug }}"
-         class="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors group"
+         class="page-title-link flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors group"
          data-slug="{{ p.slug }}">
         <i class="ph ph-file-text ph-sm text-gray-400 group-hover:text-indigo-500 flex-none transition-colors" aria-hidden="true"></i>
         <span class="text-sm text-gray-800 group-hover:text-indigo-600 transition-colors">{{ p.title }}</span>
