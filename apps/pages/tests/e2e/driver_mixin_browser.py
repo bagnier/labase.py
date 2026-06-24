@@ -51,7 +51,9 @@ class PagesBrowserMixin(BrowserBase):
         self._set_visibility_via_form(slug, visibility)
 
     def _goto_edit(self, slug: str) -> None:
-        self.page.goto(self._pages_url(f"/{slug}/edit"), wait_until="load")
+        self._goto_list()
+        self.page.click(f"#pages-list .page-row[data-slug='{slug}'] .page-edit-link")
+        self.page.wait_for_load_state("load")
 
     def _submit_edit_form(self) -> None:
         self.page.click("#edit-page-form button[type=submit]")
@@ -98,7 +100,9 @@ class PagesBrowserMixin(BrowserBase):
         self._set_visibility_via_form(slug, "members")
 
     def view_page(self, slug: str) -> None:
-        self.last_response = self.page.goto(self._pages_url(f"/{slug}"), wait_until="load")
+        self._goto_list()
+        self.page.click(f"#pages-list .page-row[data-slug='{slug}'] .page-title-link")
+        self.page.wait_for_load_state("load")
 
     def view_pages_list(self) -> None:
         self._goto_list()
@@ -150,9 +154,7 @@ class PagesBrowserMixin(BrowserBase):
         assert text in items, f"list item '{text}' not found in: {items}"
 
     def assert_rendered_shown(self) -> None:
-        assert self.last_response is not None and self.last_response.status == 200, (
-            f"expected 200, got {self.last_response.status if self.last_response else 'n/a'}"
-        )
+        assert self.page.locator("article").count() > 0, "rendered page article not found"
 
     def assert_cannot_edit(self, slug: str) -> None:
         self.page.goto(self._pages_url(f"/{slug}"), wait_until="load")
@@ -195,7 +197,9 @@ class PagesBrowserMixin(BrowserBase):
     # ── nav actions ────────────────────────────────────────────────────────────
 
     def open_nav_manager(self) -> None:
-        self._goto_nav_manager()
+        self._goto_list()
+        self.page.click('a[href$="/pages/nav"]')
+        self.page.wait_for_load_state("load")
 
     def given_in_nav(self, title: str) -> None:
         self._goto_nav_manager()

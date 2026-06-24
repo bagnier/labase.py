@@ -31,6 +31,12 @@ Feature: Page navigation
     When they open the navigation manager
     Then "Secret" is not listed as a navigation candidate
 
+  Scenario: Navigation added via the manager appears in the page sidebar
+    When they open the navigation manager
+    And they add "About" to the navigation
+    And they view the page "about"
+    Then the page navigation shows a link to "About"
+
   Scenario: A member sees the navigation when viewing a page
     Given "About" is in the navigation
     And "Team" is in the navigation
