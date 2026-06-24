@@ -66,6 +66,24 @@
   .section-title { @apply text-sm font-semibold text-gray-700; }
   .meta-text     { @apply text-xs text-gray-400; }
 
+  /* Markdown body — styles generated HTML from mistune (child elements carry no classes) */
+  .md-body h1 { @apply text-2xl font-semibold text-gray-900 mb-4 mt-6; }
+  .md-body h2 { @apply text-xl font-semibold text-gray-800 mb-3 mt-5; }
+  .md-body h3 { @apply text-lg font-medium text-gray-800 mb-2 mt-4; }
+  .md-body p  { @apply text-sm text-gray-700 leading-relaxed mb-3; }
+  .md-body ul { @apply list-disc pl-5 mb-3 space-y-1 text-sm text-gray-700; }
+  .md-body ol { @apply list-decimal pl-5 mb-3 space-y-1 text-sm text-gray-700; }
+  .md-body li { @apply leading-relaxed; }
+  .md-body a  { @apply text-indigo-600 hover:text-indigo-800 underline; }
+  .md-body pre { @apply bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto mb-3 text-sm font-mono; }
+  .md-body code { @apply bg-gray-100 text-gray-800 text-xs px-1.5 py-0.5 rounded font-mono; }
+  .md-body pre code { @apply bg-transparent p-0; }
+  .md-body blockquote { @apply border-l-4 border-gray-200 pl-4 italic text-gray-500 mb-3; }
+  .md-body hr { @apply border-gray-200 my-6; }
+  .md-body table { @apply w-full text-sm border-collapse mb-3; }
+  .md-body th { @apply text-left font-semibold text-gray-700 border-b border-gray-200 pb-2 pr-4; }
+  .md-body td { @apply border-b border-gray-100 py-2 pr-4; }
+
   /* Icon sizes */
   .ph-4  { font-size: 0.875rem; line-height: 1; }
   .ph-sm { font-size: 1rem;     line-height: 1; }

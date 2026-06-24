@@ -1,3 +1,5 @@
+import re
+
 import httpx
 
 from tests.e2e.drivers.api_base import VISITOR, ApiBase
@@ -112,7 +114,7 @@ class PagesApiMixin(ApiBase):
 
     def assert_rendered_heading(self, text: str) -> None:
         assert self.response is not None
-        assert f"<h1>{text}</h1>" in self.response.text, (
+        assert re.search(rf"<h1[^>]*>{re.escape(text)}</h1>", self.response.text), (
             f"heading '{text}' not found in: {self.response.text}"
         )
 

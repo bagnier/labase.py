@@ -1,30 +1,38 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ org.name }} — Pages</title>
-  <style>
-    body { font: 16px/1.6 system-ui, sans-serif; color: #1f2430; max-width: 720px; margin: 0 auto; padding: 40px 20px; }
-    h1 { font-size: 24px; }
-    ul { list-style: none; padding: 0; }
-    li { padding: 10px 0; border-bottom: 1px solid #eef0f3; }
-    a { color: #2f6fed; text-decoration: none; }
-    .empty { color: #8a93a2; }
-  </style>
+  <link rel="stylesheet" href="/static/css/tailwind.css" />
 </head>
-<body>
-  <h1>{{ org.name }}</h1>
-  {% if pages %}
-  <ul id="pages-list">
-    {% for p in pages %}
-    <li class="page-row" data-slug="{{ p.slug }}">
-      <a class="page-title-link" href="/{{ org_handle }}/pages/{{ p.slug }}">{{ p.title }}</a>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="empty">No public pages yet.</p>
-  {% endif %}
+<body class="h-full bg-gray-50 text-gray-900 antialiased">
+  <header class="h-14 bg-white border-b border-gray-200 flex items-center px-6 gap-4">
+    <a href="/" class="flex items-center gap-2 flex-none">
+      <div class="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center">
+        <i class="ph ph-lightning ph-4 text-white" aria-hidden="true"></i>
+      </div>
+      <span class="text-sm font-semibold text-gray-900">labase</span>
+    </a>
+    <i class="ph ph-caret-down ph-4 -rotate-90 text-gray-300" aria-hidden="true"></i>
+    <span class="text-sm text-gray-700 font-medium truncate">{{ org.name }}</span>
+  </header>
+  <main class="max-w-3xl mx-auto px-6 py-10">
+    <h1 class="text-2xl font-semibold text-gray-900 mb-6">Pages</h1>
+    {% if pages %}
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 shadow-sm">
+      {% for p in pages %}
+      <a href="/{{ org_handle }}/pages/{{ p.slug }}"
+         class="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors group"
+         data-slug="{{ p.slug }}">
+        <i class="ph ph-file-text ph-sm text-gray-400 group-hover:text-indigo-500 flex-none transition-colors" aria-hidden="true"></i>
+        <span class="text-sm text-gray-800 group-hover:text-indigo-600 transition-colors">{{ p.title }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-gray-400">No public pages yet.</p>
+    {% endif %}
+  </main>
 </body>
 </html>

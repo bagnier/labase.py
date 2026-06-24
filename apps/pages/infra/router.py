@@ -299,13 +299,19 @@ async def view_page(
     can_edit = role == OrgRole.owner or (
         role is not None and page.visibility == PageVisibility.draft
     )
+    body = render_markdown(page.content)
+    if current_user:
+        ctx = await page_context(
+            admin,
+            current_user,
+            page=page,
+            body=body,
+            can_edit=can_edit,
+            org_handle=org_handle,
+        )
+        return templates.TemplateResponse(request, "pages/view.html", ctx)
     return templates.TemplateResponse(
         request,
-        "pages/view.html",
-        {
-            "page": page,
-            "body": render_markdown(page.content),
-            "can_edit": can_edit,
-            "org_handle": org_handle,
-        },
+        "pages/view_public.html",
+        {"page": page, "body": body, "can_edit": can_edit, "org_handle": org_handle},
     )
