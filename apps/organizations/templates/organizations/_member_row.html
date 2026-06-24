@@ -20,12 +20,17 @@
     {% if caller_role == "owner" and m.email != current_user.email %}
       <!-- Owner actions on other members -->
       <div class="relative group" tabindex="0">
-        <button data-manage class="btn-secondary btn-sm">
+        <button data-manage
+                aria-label="Manage {{ m.email }}"
+                aria-haspopup="true"
+                class="btn-secondary btn-sm">
           Manage <i class="ph ph-caret-down ph-4" aria-hidden="true"></i>
         </button>
-        <div class="hidden group-focus-within:block absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
+        <div role="menu"
+             class="hidden group-focus-within:block absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
           {% if m.role == "member" %}
-            <button data-promote class="block w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            <button data-promote role="menuitem"
+                    class="block w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
                     hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                     hx-vals='{"role": "owner"}'
                     hx-target="#member-row-{{ m.auth_user_id }}"
@@ -33,7 +38,8 @@
               Promote to owner
             </button>
           {% else %}
-            <button data-demote class="block w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            <button data-demote role="menuitem"
+                    class="block w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
                     hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                     hx-vals='{"role": "member"}'
                     hx-target="#member-row-{{ m.auth_user_id }}"
@@ -42,7 +48,8 @@
             </button>
           {% endif %}
           <hr class="border-gray-100">
-          <button data-remove class="block w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+          <button data-remove role="menuitem"
+                  class="block w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50"
                   hx-delete="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                   hx-target="#member-row-{{ m.auth_user_id }}"
                   hx-swap="outerHTML"
@@ -54,7 +61,7 @@
 
     {% elif m.email == current_user.email %}
       <!-- Leave button for current user -->
-      <button data-leave class="btn-secondary btn-sm"
+      <button data-leave aria-label="Leave {{ org.name }}" class="btn-secondary btn-sm"
               hx-delete="/{{ org_handle }}/members/me"
               hx-target="#leave-error"
               hx-swap="innerHTML"

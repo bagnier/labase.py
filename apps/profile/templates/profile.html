@@ -71,7 +71,7 @@
     <div id="org-create-result"></div>
   </div>
 
-  <div class="card">
+  <section class="card">
     <h2 class="section-title mb-3">Session</h2>
     <form method="post" action="/auth/logout">
       <button type="submit" class="btn-secondary">
@@ -79,17 +79,17 @@
         Sign out
       </button>
     </form>
-  </div>
+  </section>
 
-  <div class="card border-red-100">
-    <h2 class="section-title mb-1">Danger zone</h2>
+  <section class="card border-red-100">
+    <h2 class="section-title mb-3">Danger zone</h2>
     <p class="text-sm text-gray-500 mb-4">These actions are irreversible. Proceed with caution.</p>
     <button type="button" disabled
             class="btn-danger border border-red-200 opacity-50 cursor-not-allowed">
       Delete my account
     </button>
     <p class="text-xs text-gray-400 mt-2">Account deletion is not available yet. Contact support if you need your account removed.</p>
-  </div>
+  </section>
 
 </div>
 {% endblock %}

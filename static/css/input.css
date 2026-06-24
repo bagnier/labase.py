@@ -48,11 +48,11 @@
 
 @layer components {
   /* Navigation */
-  .nav-link { @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors; }
+  .nav-link { @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400; }
   .nav-link.active { @apply text-white bg-white/10; }
 
   /* Buttons */
-  .btn           { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm; }
+  .btn           { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1; }
   .btn-primary   { @apply btn bg-indigo-500 text-white hover:bg-indigo-600; }
   .btn-secondary { @apply btn bg-white text-gray-700 border border-gray-200 hover:bg-gray-50; }
   .btn-danger    { @apply btn text-red-600 hover:text-red-800 shadow-none; }

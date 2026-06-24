@@ -18,7 +18,7 @@
          class="fixed inset-0 bg-black/30 z-30 lg:hidden"></div>
 
     <!-- Sidebar -->
-    <aside class="w-56 bg-sidebar flex flex-col border-r border-white/5
+    <aside aria-label="Sidebar" class="w-56 bg-sidebar flex flex-col border-r border-white/5
                   fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200
                   lg:static lg:translate-x-0"
            :class="{ 'translate-x-0': navOpen, '-translate-x-full': !navOpen }">
@@ -31,7 +31,8 @@
           </div>
           <span class="text-white font-semibold text-sm tracking-tight">labase</span>
         </a>
-        <button @click="navOpen = false" class="lg:hidden text-gray-400 hover:text-white p-1 -mr-1">
+        <button @click="navOpen = false" aria-label="Close navigation"
+                class="lg:hidden text-gray-400 hover:text-white p-1 -mr-1">
           <i class="ph ph-x ph-sm" aria-hidden="true"></i>
         </button>
       </div>
@@ -89,12 +90,13 @@
       <!-- Top bar -->
       <header class="h-14 bg-white border-b border-gray-200 flex items-center gap-3 px-4 flex-none">
         <!-- Burger (mobile only) -->
-        <button @click="navOpen = true" class="lg:hidden flex-none text-gray-500 hover:text-gray-800 -ml-1 p-1">
+        <button @click="navOpen = true" aria-label="Open navigation" :aria-expanded="navOpen"
+                class="lg:hidden flex-none text-gray-500 hover:text-gray-800 -ml-1 p-1">
           <i class="ph ph-list ph-md" aria-hidden="true"></i>
         </button>
-        <div class="flex items-center gap-2 text-sm text-gray-500">
+        <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-sm text-gray-500">
           {% block breadcrumb %}{% endblock %}
-        </div>
+        </nav>
         {% if user and user.is_admin %}
         <a href="/console"
            class="ml-auto flex-none inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors">

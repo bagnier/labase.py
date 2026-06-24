@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-3xl space-y-6">
+<div class="max-w-2xl space-y-6">
 
   <div class="flex items-center justify-between">
     <h1 class="page-title">Pages</h1>
@@ -27,7 +27,7 @@
        x-init="$nextTick(() => $el.dataset.ready = '1')">
 
     <!-- Toolbar: search + filters, grouped on one line -->
-    <div class="flex items-center gap-2 mb-3">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
       <input type="search" x-model="search" placeholder="Search pages…"
              class="input flex-1 min-w-0" aria-label="Search pages" />
       <select x-model="filter" class="input !w-auto flex-none" aria-label="Filter by visibility">
@@ -56,20 +56,23 @@
           <span class="badge text-xs font-semibold rounded px-2 py-0.5 bg-gray-100 text-gray-600"
                 :data-visibility="page.visibility" x-text="page.visibility"></span>
 
-          <a class="page-preview-link text-gray-400 hover:text-indigo-600" title="Preview"
+          <a class="page-preview-link text-gray-400 hover:text-indigo-600"
+             :aria-label="`Preview ${page.title}`"
              :href="`/${handle}/pages/${page.slug}`">
             <i class="ph ph-eye ph-sm" aria-hidden="true"></i>
           </a>
 
           <template x-if="canEdit(page)">
-            <a class="page-edit-link text-gray-400 hover:text-indigo-600" title="Edit"
+            <a class="page-edit-link text-gray-400 hover:text-indigo-600"
+               :aria-label="`Edit ${page.title}`"
                :href="`/${handle}/pages/${page.slug}/edit`">
               <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
             </a>
           </template>
 
           <template x-if="canEdit(page)">
-            <button type="button" class="page-delete-btn text-gray-400 hover:text-red-500" title="Delete"
+            <button type="button" class="page-delete-btn text-gray-400 hover:text-red-500"
+                    :aria-label="`Delete ${page.title}`"
                     @click="del(page)">
               <i class="ph ph-trash ph-sm" aria-hidden="true"></i>
             </button>

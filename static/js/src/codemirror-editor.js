@@ -112,6 +112,7 @@ function buildToolbar(view) {
     const el = document.createElement("button")
     el.type = "button"
     el.title = btn.title
+    el.setAttribute("aria-label", btn.title)
     el.className = "cm-toolbar-btn"
     if (btn.icon) {
       const icon = document.createElement("i")

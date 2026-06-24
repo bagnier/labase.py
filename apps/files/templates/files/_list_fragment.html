@@ -17,7 +17,8 @@
               hx-target="#file-list"
               hx-swap="outerHTML">
           <input type="text" name="filename" value="{{ f.filename }}" required
-                 class="input flex-1 min-w-0 py-1 px-2 text-xs" />
+                 aria-label="New filename"
+                 class="input flex-1 min-w-0 py-1 text-xs" />
           <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-none">Save</button>
         </form>
       </span>
@@ -25,7 +26,7 @@
         <button type="button" data-rename-id="{{ f.id }}"
                 @click="renaming = !renaming"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500"
-                title="Rename">
+                aria-label="Rename {{ f.filename }}">
           <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
         </button>
         <button type="button" data-share-id="{{ f.id }}"
@@ -33,7 +34,7 @@
                 hx-target="#share-result-{{ f.id }}"
                 hx-swap="innerHTML"
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-500"
-                title="Share">
+                aria-label="Share {{ f.filename }}">
           <i class="ph ph-share-network ph-sm" aria-hidden="true"></i>
         </button>
         <button data-delete-id="{{ f.id }}"
@@ -42,7 +43,7 @@
                 hx-swap="outerHTML"
                 hx-confirm='Delete "{{ f.filename }}"?'
                 class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
-                title="Delete">
+                aria-label="Delete {{ f.filename }}">
           <i class="ph ph-x ph-sm" aria-hidden="true"></i>
         </button>
       </div>

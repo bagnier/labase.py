@@ -1,6 +1,6 @@
 <div class="settings card !p-0 divide-y divide-gray-100" id="settings">
   {% for s in settings %}
-    <form class="grid grid-cols-[1fr_220px_90px] gap-4 items-center p-4"
+    <form class="grid grid-cols-1 sm:grid-cols-[1fr_220px_90px] gap-4 items-center p-4"
           data-setting-key="{{ s.key }}" data-setting-type="{{ s.type }}"
           hx-put="/console/{{ app }}/settings/{{ s.key }}" hx-target="#settings" hx-swap="outerHTML"
           hx-trigger="change">
@@ -18,7 +18,7 @@
         </label>
       {% else %}
         <input type="{{ 'number' if s.type == 'number' else 'text' }}" name="value"
-               value="{{ s.value }}" class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" />
+               value="{{ s.value }}" class="input" />
       {% endif %}
       <div class="text-right">
         {% if saved_key == s.key %}
