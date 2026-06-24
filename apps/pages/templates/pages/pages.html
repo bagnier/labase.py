@@ -14,10 +14,7 @@
   <div class="flex items-center justify-between">
     <h1 class="page-title">Pages</h1>
     {% if can_create %}
-    <form method="post" action="/{{ org_handle }}/pages" class="flex items-center gap-2">
-      <input type="text" name="title" placeholder="Page title…" required class="input w-48" />
-      <button type="submit" class="btn-primary">New page</button>
-    </form>
+    <a href="/{{ org_handle }}/pages/new/edit" class="btn-primary">New page</a>
     {% endif %}
   </div>
 

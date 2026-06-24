@@ -20,7 +20,7 @@ window.initMarkdownEditor = function (textarea) {
     parent: wrapper,
   })
 
-  textarea.closest("form").addEventListener("htmx:configRequest", () => {
-    textarea.value = view.state.doc.toString()
+  textarea.closest("form").addEventListener("htmx:configRequest", (e) => {
+    e.detail.parameters.content = view.state.doc.toString()
   })
 }

@@ -88,6 +88,35 @@ async def create_page(
     return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
 
 
+@router.get("/new/edit")
+async def new_page(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+    _membership: CurrentMembership,
+    repo: PageRepo,
+    org_id: CurrentOrg,
+    org: CurrentOrgModel,
+) -> Response:
+    base = "page"
+    slug = base
+    counter = 2
+    while await repo.slug_taken(slug):
+        slug = f"{base}-{counter}"
+        counter += 1
+    title = "New page"
+    await repo.add(uuid.UUID(current_user.id), title, slug, "")
+    record_audit_event(
+        bg,
+        level="info",
+        event="pages.created",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        slug=slug,
+    )
+    return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
+
+
 @router.get("/{slug}/edit", response_class=HTMLResponse)
 async def edit_page(
     request: Request,
