@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ org.name }}</title>
+  <link rel="stylesheet" href="/static/css/tailwind.css" />
+</head>
+<body class="h-full bg-gray-50 text-gray-900 antialiased">
+  <header class="h-14 bg-white border-b border-gray-200 flex items-center px-6 gap-6">
+    <a href="/" class="flex items-center gap-2 flex-none hover:opacity-80 transition-opacity">
+      <div class="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center">
+        <i class="ph ph-lightning ph-4 text-white" aria-hidden="true"></i>
+      </div>
+      <span class="font-semibold text-gray-900 text-sm">{{ org.name }}</span>
+    </a>
+
+    {% if page_nav %}
+    <nav aria-label="Site navigation" class="flex items-center gap-1 flex-1">
+      {% for link in page_nav %}
+      <a href="/{{ org_handle }}/pages/{{ link.slug }}"
+         class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors">
+        {{ link.title }}
+      </a>
+      {% endfor %}
+    </nav>
+    {% else %}
+    <div class="flex-1"></div>
+    {% endif %}
+
+    <div class="flex items-center gap-2 flex-none">
+      <a href="/auth/login" class="btn-secondary btn-sm">Sign in</a>
+      <a href="/auth/register" class="btn-primary btn-sm">Register</a>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-6 py-10">
+    {% if pages %}
+    <ul class="space-y-3">
+      {% for page in pages %}
+      <li>
+        <a href="/{{ org_handle }}/pages/{{ page.slug }}"
+           class="block bg-white border border-gray-200 rounded-xl px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
+          <span class="font-medium text-gray-900">{{ page.title }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-gray-500 text-sm">No public pages yet.</p>
+    {% endif %}
+  </main>
+</body>
+</html>
