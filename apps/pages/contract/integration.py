@@ -35,8 +35,8 @@ def mount(app: FastAPI, host: Host) -> None:
         return
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(public_router)
     app.include_router(router, prefix=ORG_PREFIX)
+    app.include_router(public_router)
     host.register_nav(NavItem("Pages", "file-text", "pages", "/pages", order=25))
     host.events.on(OverviewQuery, _overview)
 

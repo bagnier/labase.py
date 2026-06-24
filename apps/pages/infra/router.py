@@ -15,6 +15,7 @@ from apps.organizations.contract.current import (
 from apps.pages.domain.models import Page, PageRead, PageVisibility
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
+    PageNavRepository,
     PageRepository,
     org_by_handle,
     role_in_org,
@@ -267,6 +268,98 @@ async def set_visibility(
     return _mutation_response(request, org.handle)
 
 
+async def _get_nav_repo(session: RlsSession, org_id: CurrentOrg) -> PageNavRepository:
+    return PageNavRepository(session, org_id)
+
+
+PageNavRepo = Annotated[PageNavRepository, Depends(_get_nav_repo)]
+
+
+@router.get("/nav", response_class=HTMLResponse)
+async def nav_manager(
+    request: Request,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
+    session: RlsSession,
+    nav_repo: PageNavRepo,
+    org: CurrentOrgModel,
+) -> Response:
+    if membership.role != OrgRole.owner:
+        raise HTTPException(403, "Only owners can manage navigation")
+    candidates = await nav_repo.candidates()
+    if wants_json(request):
+        return JSONResponse([c.model_dump(mode="json") for c in candidates])
+    ctx = await page_context(
+        session,
+        current_user,
+        candidates=candidates,
+        org=org,
+        org_handle=org.handle,
+    )
+    return templates.TemplateResponse(request, "pages/nav.html", ctx)
+
+
+@router.post("/nav")
+async def add_to_nav(
+    request: Request,
+    membership: CurrentMembership,
+    repo: PageRepo,
+    nav_repo: PageNavRepo,
+    org: CurrentOrgModel,
+) -> Response:
+    if membership.role != OrgRole.owner:
+        raise HTTPException(403, "Only owners can manage navigation")
+    body = await parse_body(request)
+    slug = str(body.get("slug", "")).strip()
+    page = or_404(await repo.by_slug(slug))
+    if page.visibility == PageVisibility.draft:
+        raise HTTPException(422, "Draft pages cannot be added to navigation")
+    await nav_repo.add(page.id)
+    if wants_json(request):
+        return JSONResponse({"ok": True})
+    return RedirectResponse(f"/{org.handle}/pages/nav", status_code=303)
+
+
+@router.delete("/nav/{slug}")
+async def remove_from_nav(
+    request: Request,
+    slug: str,
+    membership: CurrentMembership,
+    repo: PageRepo,
+    nav_repo: PageNavRepo,
+    org: CurrentOrgModel,
+) -> Response:
+    if membership.role != OrgRole.owner:
+        raise HTTPException(403, "Only owners can manage navigation")
+    page = or_404(await repo.by_slug(slug))
+    await nav_repo.remove(page.id)
+    if wants_json(request):
+        return JSONResponse({"ok": True})
+    return RedirectResponse(f"/{org.handle}/pages/nav", status_code=303)
+
+
+@router.put("/nav/{slug}/position")
+async def reorder_nav(
+    request: Request,
+    slug: str,
+    membership: CurrentMembership,
+    repo: PageRepo,
+    nav_repo: PageNavRepo,
+) -> Response:
+    if membership.role != OrgRole.owner:
+        raise HTTPException(403, "Only owners can manage navigation")
+    body = await parse_body(request)
+    page = or_404(await repo.by_slug(slug))
+    above_slug = body.get("above_slug")
+    above_id: uuid.UUID | None = None
+    if above_slug:
+        above_page = await repo.by_slug(str(above_slug))
+        if above_page:
+            above_id = above_page.id
+    await nav_repo.move_above(page.id, above_id)
+    return JSONResponse({"ok": True})
+
+
 # ── public-capable routes (root-mounted; serve members and anon visitors) ──────
 
 
@@ -329,7 +422,9 @@ async def view_page(
         role is not None and page.visibility == PageVisibility.draft
     )
     body = render_markdown(page.content)
+    nav_repo = PageNavRepository(admin, org.id)
     if current_user:
+        page_nav_links = await nav_repo.nav_items(public_only=False)
         ctx = await page_context(
             admin,
             current_user,
@@ -337,10 +432,19 @@ async def view_page(
             body=body,
             can_edit=can_edit,
             org_handle=org_handle,
+            page_nav_links=page_nav_links,
         )
         return templates.TemplateResponse(request, "pages/view.html", ctx)
+    public_nav = await nav_repo.nav_items(public_only=True)
     return templates.TemplateResponse(
         request,
         "pages/view_public.html",
-        {"page": page, "body": body, "can_edit": can_edit, "org_handle": org_handle},
+        {
+            "page": page,
+            "body": body,
+            "can_edit": can_edit,
+            "org_handle": org_handle,
+            "org": org,
+            "page_nav": public_nav,
+        },
     )

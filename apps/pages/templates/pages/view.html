@@ -11,18 +11,36 @@
 {% endblock %}
 
 {% block content %}
-<article class="max-w-2xl space-y-6">
-  <div class="flex items-center justify-between gap-4">
-    <h1 class="page-title">{{ page.title }}</h1>
-    {% if can_edit %}
-    <a href="/{{ org_handle }}/pages/{{ page.slug }}/edit" class="btn-secondary btn-sm flex-none">
-      <i class="ph ph-pencil ph-4" aria-hidden="true"></i>
-      Edit
+<div class="flex gap-8 items-start">
+
+  {% if page_nav_links %}
+  <nav aria-label="Page navigation" class="w-44 flex-none -ml-2">
+    {% for link in page_nav_links %}
+    <a href="/{{ org_handle }}/pages/{{ link.slug }}"
+       class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm
+              {% if link.slug == page.slug %}text-indigo-600 font-medium bg-indigo-50{% else %}text-gray-600 hover:bg-gray-100{% endif %}
+              transition-colors">
+      <i class="ph ph-file-text ph-sm flex-none" aria-hidden="true"></i>
+      {{ link.title }}
     </a>
-    {% endif %}
-  </div>
-  <div class="card">
-    <div class="md-body">{{ body | safe }}</div>
-  </div>
-</article>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <article class="flex-1 min-w-0 max-w-2xl space-y-6">
+    <div class="flex items-center justify-between gap-4">
+      <h1 class="page-title">{{ page.title }}</h1>
+      {% if can_edit %}
+      <a href="/{{ org_handle }}/pages/{{ page.slug }}/edit" class="btn-secondary btn-sm flex-none">
+        <i class="ph ph-pencil ph-4" aria-hidden="true"></i>
+        Edit
+      </a>
+      {% endif %}
+    </div>
+    <div class="card">
+      <div class="md-body">{{ body | safe }}</div>
+    </div>
+  </article>
+
+</div>
 {% endblock %}

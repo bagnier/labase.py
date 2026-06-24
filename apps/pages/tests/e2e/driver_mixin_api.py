@@ -77,10 +77,10 @@ class PagesApiMixin(ApiBase):
     def view_pages_list(self) -> None:
         self._pages_list = self._list()
 
-    def visitor_open(self, slug: str, org_name: str) -> None:
+    def visitor_open(self, slug: str, _org_name: str) -> None:
         self.response = self.client_for(VISITOR).get(self._pages_url(f"/{slug}"))
 
-    def visitor_open_list(self, org_name: str) -> None:
+    def visitor_open_list(self, _org_name: str) -> None:
         self._pages_list = self._list(client=self.client_for(VISITOR))
 
     # ── assertions ───────────────────────────────────────────────────────────--
@@ -141,7 +141,7 @@ class PagesApiMixin(ApiBase):
         )
         self.assert_page_visibility(slug, "members")
 
-    def assert_visitor_can_view(self, slug: str, org_name: str) -> None:
+    def assert_visitor_can_view(self, slug: str, _org_name: str) -> None:
         resp = self.client_for(VISITOR).get(self._pages_url(f"/{slug}"))
         assert resp.status_code == 200, f"visitor view got {resp.status_code}: {resp.text}"
 
@@ -155,3 +155,84 @@ class PagesApiMixin(ApiBase):
         assert self._pages_list is not None, "call visitor_open_list first"
         titles = [p["title"] for p in self._pages_list]
         assert titles == [title], f"expected only [{title!r}], got {titles}"
+
+    # ── nav helpers ────────────────────────────────────────────────────────────
+
+    def _nav_url(self, path: str = "") -> str:
+        return f"/{self._handle()}/pages/nav{path}"
+
+    def _nav_candidates(self) -> list[dict]:
+        resp = self.client().get(self._nav_url())
+        assert resp.status_code == 200, f"nav GET got {resp.status_code}: {resp.text}"
+        return resp.json()
+
+    def _slug_for(self, title: str) -> str:
+        candidates = self._nav_candidates()
+        match = next((c for c in candidates if c["title"] == title), None)
+        assert match is not None, f"no candidate with title {title!r}: {candidates}"
+        return match["slug"]
+
+    # ── nav actions ────────────────────────────────────────────────────────────
+
+    def open_nav_manager(self) -> None:
+        self.response = self.client().get(self._nav_url())
+
+    def given_in_nav(self, title: str) -> None:
+        slug = self._slug_for(title)
+        resp = self.client().post(self._nav_url(), json={"slug": slug})
+        assert resp.status_code == 200, f"add to nav got {resp.status_code}: {resp.text}"
+
+    def add_to_nav(self, title: str) -> None:
+        self.given_in_nav(title)
+
+    def remove_from_nav(self, title: str) -> None:
+        slug = self._slug_for(title)
+        resp = self.client().delete(self._nav_url(f"/{slug}"))
+        assert resp.status_code == 200, f"remove from nav got {resp.status_code}: {resp.text}"
+
+    def move_nav_above(self, title: str, other: str) -> None:
+        slug = self._slug_for(title)
+        above_slug = self._slug_for(other)
+        resp = self.client().put(
+            self._nav_url(f"/{slug}/position"),
+            json={"above_slug": above_slug},
+        )
+        assert resp.status_code == 200, f"reorder nav got {resp.status_code}: {resp.text}"
+
+    # ── nav assertions ─────────────────────────────────────────────────────────
+
+    def assert_in_nav(self, title: str) -> None:
+        candidates = self._nav_candidates()
+        match = next((c for c in candidates if c["title"] == title), None)
+        assert match is not None and match["in_nav"], f"'{title}' not in nav: {candidates}"
+
+    def assert_not_in_nav(self, title: str) -> None:
+        candidates = self._nav_candidates()
+        match = next((c for c in candidates if c["title"] == title), None)
+        assert match is None or not match["in_nav"], f"'{title}' should not be in nav: {candidates}"
+
+    def assert_nav_order(self, a: str, b: str) -> None:
+        candidates = self._nav_candidates()
+        in_nav = [c for c in candidates if c["in_nav"]]
+        titles = [c["title"] for c in in_nav]
+        assert titles.index(a) < titles.index(b), (
+            f"expected '{a}' before '{b}', got order: {titles}"
+        )
+
+    def assert_not_nav_candidate(self, title: str) -> None:
+        candidates = self._nav_candidates()
+        titles = [c["title"] for c in candidates]
+        assert title not in titles, f"'{title}' should not be a nav candidate: {titles}"
+
+    def assert_page_nav_shows(self, title: str) -> None:
+        assert self.response is not None
+        assert title in self.response.text, f"nav link to '{title}' not found in page"
+
+    def assert_page_nav_not_shows(self, title: str) -> None:
+        assert self.response is not None
+        content = self.response.text
+        nav_start = content.find('aria-label="Page navigation"')
+        if nav_start == -1:
+            return
+        nav_section = content[nav_start : nav_start + 2000]
+        assert title not in nav_section, f"'{title}' should not appear in page nav"

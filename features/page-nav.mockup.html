@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Page Navigation — Mockup</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f9fafb; color: #111827; }
+
+    /* ── shared ── */
+    .badge { display: inline-block; font-size: 11px; font-weight: 600;
+             padding: 1px 7px; border-radius: 999px; }
+    .badge-public  { background: #dcfce7; color: #15803d; }
+    .badge-members { background: #dbeafe; color: #1d4ed8; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+           border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;
+           border: none; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-secondary { background: #fff; color: #374151; border: 1px solid #e5e7eb; }
+    .drag-handle { cursor: grab; color: #d1d5db; font-size: 16px; user-select: none; }
+    h2 { font-size: 18px; font-weight: 600; }
+    .label { font-size: 13px; color: #6b7280; }
+
+    /* ── SCREEN 1 — Nav manager ── */
+    .screen { max-width: 680px; margin: 40px auto; background: #fff;
+              border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden;
+              box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .screen-header { padding: 20px 24px; border-bottom: 1px solid #f3f4f6;
+                     display: flex; align-items: center; justify-content: space-between; }
+    .screen-header .back { font-size: 12px; color: #6b7280; }
+    .nav-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+               border-bottom: 1px solid #f3f4f6; background: #fff; }
+    .nav-row:last-child { border-bottom: none; }
+    .nav-row.in-nav { background: #fafafa; }
+    .nav-row input[type=checkbox] { width: 16px; height: 16px; accent-color: #4f46e5; cursor: pointer; }
+    .nav-row .title { flex: 1; font-size: 14px; font-weight: 500; }
+    .nav-row .slug  { font-size: 12px; color: #9ca3af; }
+    .empty { padding: 32px; text-align: center; color: #9ca3af; font-size: 14px; }
+
+    /* ── SCREEN 2 — Visitor view (with pages nav sidebar) ── */
+    .visitor-layout { display: flex; min-height: 500px; }
+    .pages-sidebar { width: 220px; border-right: 1px solid #e5e7eb; padding: 20px 0;
+                     background: #fff; flex-shrink: 0; }
+    .pages-sidebar .org-name { padding: 0 20px 12px; font-size: 12px; font-weight: 700;
+                                text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; }
+    .pages-sidebar a { display: flex; align-items: center; gap-8px; padding: 8px 20px;
+                       font-size: 13px; color: #374151; text-decoration: none; }
+    .pages-sidebar a.active { color: #4f46e5; font-weight: 600; background: #eef2ff; }
+    .pages-sidebar a:hover { background: #f9fafb; }
+    .visitor-main { flex: 1; padding: 32px 40px; }
+    .visitor-header { display: flex; align-items: center; justify-content: space-between;
+                      margin-bottom: 20px; }
+    .visitor-header h1 { font-size: 22px; font-weight: 700; }
+    .md-body { font-size: 15px; line-height: 1.7; color: #374151; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+            padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .global-header { display: flex; align-items: center; gap: 12px; padding: 0 24px;
+                     height: 52px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .logo { display: flex; align-items: center; gap: 8px; font-size: 14px;
+            font-weight: 700; color: #111827; text-decoration: none; }
+    .logo-icon { width: 26px; height: 26px; background: #4f46e5; border-radius: 7px;
+                 display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
+
+    h3.section { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: .08em; color: #d1d5db; padding: 0 20px; margin-bottom: 4px;
+                 margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════
+     SCREEN 1 — Nav manager  /{org}/pages/nav
+     ══════════════════════════════════════════════════════ -->
+<div style="padding: 24px 16px; font-size: 13px; color: #6b7280;">
+  SCREEN 1 — Nav manager (owner only) — <code>/acme/pages/nav</code>
+</div>
+
+<div class="screen">
+  <div class="screen-header">
+    <div>
+      <div class="back">← Pages</div>
+      <h2 style="margin-top:4px;">Navigation</h2>
+      <p class="label" style="margin-top:2px;">Check pages to include them in the navigation. Drag to reorder.</p>
+    </div>
+  </div>
+
+  <!-- Row: checked + draggable -->
+  <div class="nav-row in-nav">
+    <span class="drag-handle" title="Drag to reorder">⠿</span>
+    <input type="checkbox" checked aria-label="About in navigation" />
+    <div style="flex:1">
+      <div class="title">About</div>
+      <div class="slug">/acme/pages/about</div>
+    </div>
+    <span class="badge badge-public">public</span>
+  </div>
+
+  <!-- Row: checked + draggable -->
+  <div class="nav-row in-nav">
+    <span class="drag-handle" title="Drag to reorder">⠿</span>
+    <input type="checkbox" checked aria-label="Team in navigation" />
+    <div style="flex:1">
+      <div class="title">Team</div>
+      <div class="slug">/acme/pages/team</div>
+    </div>
+    <span class="badge badge-members">members</span>
+  </div>
+
+  <!-- Row: unchecked -->
+  <div class="nav-row">
+    <span class="drag-handle" style="visibility:hidden">⠿</span>
+    <input type="checkbox" aria-label="Roadmap in navigation" />
+    <div style="flex:1">
+      <div class="title">Roadmap</div>
+      <div class="slug">/acme/pages/roadmap</div>
+    </div>
+    <span class="badge badge-public">public</span>
+  </div>
+
+  <!-- Row: unchecked, members -->
+  <div class="nav-row">
+    <span class="drag-handle" style="visibility:hidden">⠿</span>
+    <input type="checkbox" aria-label="Internal Docs in navigation" />
+    <div style="flex:1">
+      <div class="title">Internal Docs</div>
+      <div class="slug">/acme/pages/internal-docs</div>
+    </div>
+    <span class="badge badge-members">members</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     SCREEN 2 — Visitor view (public page with pages nav)
+     ══════════════════════════════════════════════════════ -->
+<div style="padding: 40px 16px 8px; font-size: 13px; color: #6b7280;">
+  SCREEN 2 — Visitor view — <code>/acme/pages/about</code>
+  (anonymous visitor: sidebar replaces the app nav; only public nav items shown)
+</div>
+
+<div class="screen" style="max-width:820px; border-radius:16px; overflow:hidden;">
+  <!-- Global top bar (replaces app-shell header for visitors) -->
+  <div class="global-header">
+    <a href="/" class="logo">
+      <div class="logo-icon">⚡</div>
+      Acme
+    </a>
+  </div>
+
+  <div class="visitor-layout">
+    <!-- Pages sidebar -->
+    <nav class="pages-sidebar" aria-label="Page navigation">
+      <h3 class="section">Pages</h3>
+      <a href="/acme/pages/about" class="active">About</a>
+      <a href="/acme/pages/roadmap">Roadmap</a>
+      <!-- "Team" not shown: members-only, visitor is anonymous -->
+    </nav>
+
+    <!-- Page content -->
+    <div class="visitor-main">
+      <div class="visitor-header">
+        <h1>About</h1>
+      </div>
+      <div class="card">
+        <div class="md-body">
+          <p>Welcome to Acme. We build great things.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     SCREEN 3 — Member view (same page, logged in)
+     app-shell sidebar extended with page nav links
+     ══════════════════════════════════════════════════════ -->
+<div style="padding: 40px 16px 8px; font-size: 13px; color: #6b7280;">
+  SCREEN 3 — Member view — <code>/acme/pages/about</code>
+  (authenticated member: page nav items appear in the dark app-shell sidebar, below the org's static nav items)
+</div>
+
+<div class="screen" style="max-width:820px; border-radius:16px; overflow:hidden;">
+  <div style="display:flex;min-height:480px;">
+
+    <!-- Dark app-shell sidebar (mimics base.html) -->
+    <aside style="width:196px;background:#1a1a2e;flex-shrink:0;display:flex;flex-direction:column;padding:12px 0;">
+      <!-- Logo -->
+      <div style="padding:12px 16px 14px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:8px;">
+        <div class="logo-icon" style="width:24px;height:24px;font-size:12px;">⚡</div>
+        <span style="color:#fff;font-size:13px;font-weight:700;">labase</span>
+      </div>
+
+      <!-- Org section -->
+      <nav style="flex:1;padding:12px 8px;overflow-y:auto;">
+        <div style="padding:0 8px 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">
+          Acme
+        </div>
+
+        <!-- Static nav items -->
+        <a style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:12px;color:#9ca3af;text-decoration:none;">
+          🏠 <span>Dashboard</span>
+        </a>
+        <a style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:12px;color:#9ca3af;text-decoration:none;">
+          ✅ <span>Todos</span>
+        </a>
+        <a style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:12px;background:rgba(255,255,255,.08);color:#fff;text-decoration:none;">
+          📄 <span>Pages</span>
+        </a>
+
+        <!-- Page nav links (injected via page_nav_links context var) -->
+        <a style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:12px;background:rgba(99,102,241,.2);color:#a5b4fc;text-decoration:none;">
+          📄 <span>About</span>
+        </a>
+        <a style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:12px;color:#9ca3af;text-decoration:none;">
+          📄 <span>Team</span>
+        </a>
+        <!-- "Roadmap" not in nav → not listed -->
+      </nav>
+
+      <!-- User footer -->
+      <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:#6b7280;">
+        alice@example.com
+      </div>
+    </aside>
+
+    <!-- Main content area -->
+    <div style="flex:1;display:flex;flex-direction:column;">
+      <!-- Top bar -->
+      <div class="global-header" style="border-left:none;">
+        <span style="font-size:13px;color:#6b7280;">Acme / Pages / About</span>
+      </div>
+
+      <!-- Page content -->
+      <div class="visitor-main">
+        <div class="visitor-header">
+          <h1>About</h1>
+          <button class="btn btn-secondary" style="font-size:12px">Edit</button>
+        </div>
+        <div class="card">
+          <div class="md-body">
+            <p>Welcome to Acme. We build great things.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div style="height:40px"></div>
+</body>
+</html>

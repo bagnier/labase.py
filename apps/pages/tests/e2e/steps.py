@@ -150,3 +150,66 @@ def step_visitor_open_list(driver, org_name):
 @then(parsers.parse('only "{title}" is listed'))
 def step_only_listed(driver, title):
     driver.assert_only_listed(title)
+
+
+# ── page navigation ────────────────────────────────────────────────────────────
+
+
+@when("they open the navigation manager")
+def step_open_nav_manager(driver):
+    driver.open_nav_manager()
+
+
+@when(parsers.parse('they add "{title}" to the navigation'))
+def step_add_to_nav(driver, title):
+    driver.add_to_nav(title)
+
+
+@when(parsers.parse('they remove "{title}" from the navigation'))
+def step_remove_from_nav(driver, title):
+    driver.remove_from_nav(title)
+
+
+@when(parsers.parse('they move "{title}" above "{other}" in the navigation'))
+def step_move_nav_above(driver, title, other):
+    driver.move_nav_above(title, other)
+
+
+@given(parsers.parse('"{title}" is in the navigation'))
+def step_given_in_nav(driver, title):
+    driver.given_in_nav(title)
+
+
+@given(parsers.parse('"{title}" is in the navigation at position {pos:d}'))
+def step_given_in_nav_at_pos(driver, title, pos):
+    driver.given_in_nav(title)
+
+
+@then(parsers.parse('"{title}" appears in the navigation'))
+def step_assert_in_nav(driver, title):
+    driver.assert_in_nav(title)
+
+
+@then(parsers.parse('"{title}" no longer appears in the navigation'))
+def step_assert_not_in_nav(driver, title):
+    driver.assert_not_in_nav(title)
+
+
+@then(parsers.parse('the navigation shows "{a}" then "{b}"'))
+def step_assert_nav_order(driver, a, b):
+    driver.assert_nav_order(a, b)
+
+
+@then(parsers.parse('"{title}" is not listed as a navigation candidate'))
+def step_assert_not_nav_candidate(driver, title):
+    driver.assert_not_nav_candidate(title)
+
+
+@then(parsers.parse('the page navigation shows a link to "{title}"'))
+def step_assert_page_nav_shows(driver, title):
+    driver.assert_page_nav_shows(title)
+
+
+@then(parsers.parse('the page navigation does not show a link to "{title}"'))
+def step_assert_page_nav_not_shows(driver, title):
+    driver.assert_page_nav_not_shows(title)

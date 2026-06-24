@@ -1,10 +1,10 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.domain.models import Membership, Organization, OrgRole
-from apps.pages.domain.models import Page, PageVisibility
+from apps.pages.domain.models import NavCandidate, NavItemRead, Page, PageNavItem, PageVisibility
 from apps.shared import clock
 from apps.shared.persistence.repository import OrgScopedRepository
 
@@ -83,3 +83,126 @@ async def visible_pages(
 async def count_all(session: AsyncSession) -> int:
     """Server-wide page count, across every organisation (console overview)."""
     return int(await session.scalar(select(func.count()).select_from(Page)) or 0)
+
+
+class PageNavRepository(OrgScopedRepository[PageNavItem]):
+    model = PageNavItem
+
+    async def _items_ordered(self) -> list[PageNavItem]:
+        return list(
+            await self.session.scalars(
+                select(PageNavItem)
+                .where(PageNavItem.org_id == self.org_id)
+                .order_by(PageNavItem.position)
+            )
+        )
+
+    async def candidates(self) -> list[NavCandidate]:
+        """All published pages with their current nav status, nav items first."""
+        nav_rows = await self._items_ordered()
+        nav_by_page: dict[uuid.UUID, PageNavItem] = {n.page_id: n for n in nav_rows}
+        pages = list(
+            await self.session.scalars(
+                select(Page)
+                .where(Page.org_id == self.org_id, Page.visibility != PageVisibility.draft)
+                .order_by(Page.title)
+            )
+        )
+        in_nav = [
+            NavCandidate(
+                page_id=p.id,
+                slug=p.slug,
+                title=p.title,
+                visibility=p.visibility,
+                in_nav=True,
+                position=nav_by_page[p.id].position,
+            )
+            for p in pages
+            if p.id in nav_by_page
+        ]
+        not_in_nav = [
+            NavCandidate(
+                page_id=p.id,
+                slug=p.slug,
+                title=p.title,
+                visibility=p.visibility,
+                in_nav=False,
+                position=None,
+            )
+            for p in pages
+            if p.id not in nav_by_page
+        ]
+        in_nav.sort(key=lambda c: c.position or 0)
+        return in_nav + not_in_nav
+
+    async def nav_items(self, *, public_only: bool = False) -> list[NavItemRead]:
+        """Ordered nav items for page rendering. If public_only, exclude members-only pages."""
+        rows = await self._items_ordered()
+        page_ids = [r.page_id for r in rows]
+        if not page_ids:
+            return []
+        pages_map: dict[uuid.UUID, Page] = {
+            p.id: p for p in await self.session.scalars(select(Page).where(Page.id.in_(page_ids)))
+        }
+        result = []
+        for row in rows:
+            page = pages_map.get(row.page_id)
+            if page is None:
+                continue
+            if public_only and page.visibility != PageVisibility.public:
+                continue
+            result.append(
+                NavItemRead(
+                    page_id=page.id,
+                    slug=page.slug,
+                    title=page.title,
+                    visibility=page.visibility,
+                )
+            )
+        return result
+
+    async def add(self, page_id: uuid.UUID) -> PageNavItem:
+        max_pos = await self.session.scalar(
+            select(func.max(PageNavItem.position)).where(PageNavItem.org_id == self.org_id)
+        )
+        item = PageNavItem(
+            org_id=self.org_id,
+            page_id=page_id,
+            position=(max_pos or 0) + 1,
+        )
+        return await self.save(item)
+
+    async def remove(self, page_id: uuid.UUID) -> None:
+        item = await self.session.scalar(
+            select(PageNavItem).where(
+                PageNavItem.org_id == self.org_id,
+                PageNavItem.page_id == page_id,
+            )
+        )
+        if item is not None:
+            await self.delete(item)
+
+    async def move_above(self, page_id: uuid.UUID, above_id: uuid.UUID | None) -> None:
+        items = await self._items_ordered()
+        item = next((i for i in items if i.page_id == page_id), None)
+        if item is None:
+            return
+        ordered = [i for i in items if i.page_id != page_id]
+        if above_id is None:
+            ordered.append(item)
+        else:
+            idx = next((i for i, n in enumerate(ordered) if n.page_id == above_id), None)
+            if idx is None:
+                return
+            ordered.insert(idx, item)
+        new_positions = {n.id: pos for pos, n in enumerate(ordered)}
+        await self.session.execute(
+            update(PageNavItem)
+            .where(PageNavItem.org_id == self.org_id)
+            .values(
+                position=case(
+                    *[(PageNavItem.id == id_, pos) for id_, pos in new_positions.items()],
+                    else_=PageNavItem.position,
+                )
+            )
+        )

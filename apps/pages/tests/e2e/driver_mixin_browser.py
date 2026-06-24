@@ -180,3 +180,90 @@ class PagesBrowserMixin(BrowserBase):
             for el in self.page_for(_VISITOR).locator("#pages-list .page-title-link").all()
         ]
         assert titles == [title], f"expected only [{title!r}], got {titles}"
+
+    # ── nav helpers ────────────────────────────────────────────────────────────
+
+    def _nav_url(self, path: str = "") -> str:
+        return f"{self.base_url}/{self._handle()}/pages/nav{path}"
+
+    def _goto_nav_manager(self) -> None:
+        self.page.goto(self._nav_url(), wait_until="load")
+
+    def _candidate_row(self, title: str):
+        return self.page.locator("#nav-list .nav-candidate").filter(has_text=title)
+
+    # ── nav actions ────────────────────────────────────────────────────────────
+
+    def open_nav_manager(self) -> None:
+        self._goto_nav_manager()
+
+    def given_in_nav(self, title: str) -> None:
+        self._goto_nav_manager()
+        row = self._candidate_row(title)
+        cb = row.locator(".nav-checkbox")
+        if not cb.is_checked():
+            cb.click()
+            self.page.wait_for_timeout(300)
+
+    def add_to_nav(self, title: str) -> None:
+        row = self._candidate_row(title)
+        cb = row.locator(".nav-checkbox")
+        if not cb.is_checked():
+            cb.click()
+            self.page.wait_for_timeout(300)
+
+    def remove_from_nav(self, title: str) -> None:
+        row = self._candidate_row(title)
+        cb = row.locator(".nav-checkbox")
+        if cb.is_checked():
+            cb.click()
+            self.page.wait_for_timeout(300)
+
+    def move_nav_above(self, title: str, other: str) -> None:
+        source = self._candidate_row(title).locator(".drag-handle")
+        target = self._candidate_row(other).locator(".drag-handle")
+        source.drag_to(target)
+        self.page.wait_for_timeout(300)
+
+    # ── nav assertions ─────────────────────────────────────────────────────────
+
+    def assert_in_nav(self, title: str) -> None:
+        self._goto_nav_manager()
+        cb = self._candidate_row(title).locator(".nav-checkbox")
+        assert cb.is_checked(), f"'{title}' checkbox is not checked"
+
+    def assert_not_in_nav(self, title: str) -> None:
+        self._goto_nav_manager()
+        cb = self._candidate_row(title).locator(".nav-checkbox")
+        assert not cb.is_checked(), f"'{title}' checkbox should not be checked"
+
+    def assert_nav_order(self, a: str, b: str) -> None:
+        self._goto_nav_manager()
+        rows = self.page.locator("#nav-list .nav-candidate[data-in-nav='true']").all()
+        titles = [r.inner_text().strip() for r in rows]
+        a_idx = next((i for i, t in enumerate(titles) if a in t), None)
+        b_idx = next((i for i, t in enumerate(titles) if b in t), None)
+        assert a_idx is not None and b_idx is not None and a_idx < b_idx, (
+            f"expected '{a}' before '{b}', got: {titles}"
+        )
+
+    def assert_not_nav_candidate(self, title: str) -> None:
+        self._goto_nav_manager()
+        rows = self.page.locator("#nav-list .nav-candidate").all()
+        titles = [r.inner_text() for r in rows]
+        assert not any(title in t for t in titles), (
+            f"'{title}' should not appear as nav candidate: {titles}"
+        )
+
+    def assert_page_nav_shows(self, title: str) -> None:
+        nav = self.page.locator('nav[aria-label="Page navigation"]')
+        assert nav.count() > 0, "no page navigation found on page"
+        links = [el.inner_text().strip() for el in nav.locator("a").all()]
+        assert title in links, f"nav link to '{title}' not found: {links}"
+
+    def assert_page_nav_not_shows(self, title: str) -> None:
+        nav = self.page.locator('nav[aria-label="Page navigation"]')
+        if nav.count() == 0:
+            return
+        links = [el.inner_text().strip() for el in nav.locator("a").all()]
+        assert title not in links, f"'{title}' should not appear in page nav: {links}"

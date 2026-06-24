@@ -48,3 +48,32 @@ class PageRead(BaseModel):
     slug: str
     visibility: PageVisibility
     created_at: datetime
+
+
+class PageNavItem(Base):
+    __tablename__ = "page_nav_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id"))
+    position: Mapped[int] = mapped_column(default=0)
+
+
+class NavCandidate(BaseModel):
+    """A published page with its current nav status — used by the nav manager."""
+
+    page_id: uuid.UUID
+    slug: str
+    title: str
+    visibility: PageVisibility
+    in_nav: bool
+    position: int | None
+
+
+class NavItemRead(BaseModel):
+    """A page currently in the nav, in order."""
+
+    page_id: uuid.UUID
+    slug: str
+    title: str
+    visibility: PageVisibility

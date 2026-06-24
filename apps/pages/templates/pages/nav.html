@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Navigation — {{ org.name }}{% endblock %}
+
+{% block breadcrumb %}
+  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <a href="/{{ org_handle }}/pages" class="hover:text-gray-700">Pages</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <span class="text-gray-700">Navigation</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="page-title">Navigation</h1>
+      <p class="text-sm text-gray-500 mt-1">Check pages to include them. Drag to reorder.</p>
+    </div>
+  </div>
+
+  <div id="nav-list" class="list-panel shadow-sm">
+    {% for c in candidates %}
+    <div class="nav-candidate flex items-center gap-3 px-4 py-3 group" data-slug="{{ c.slug }}" data-in-nav="{{ 'true' if c.in_nav else 'false' }}">
+      <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 {% if not c.in_nav %}opacity-0{% else %}opacity-30 group-hover:opacity-100{% endif %} transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
+      <input type="checkbox"
+             data-slug="{{ c.slug }}"
+             {% if c.in_nav %}checked{% endif %}
+             aria-label="Include &ldquo;{{ c.title }}&rdquo; in navigation"
+             class="nav-checkbox w-4 h-4 rounded border-gray-300 text-indigo-500 cursor-pointer flex-none" />
+      <span class="flex-1 text-sm text-gray-900">{{ c.title }}</span>
+      <span class="text-xs font-semibold rounded px-2 py-0.5
+        {% if c.visibility == 'public' %}bg-green-50 text-green-700
+        {% else %}bg-blue-50 text-blue-700{% endif %}">
+        {{ c.visibility }}
+      </span>
+    </div>
+    {% else %}
+    <p class="px-4 py-6 text-sm text-center text-gray-400">No published pages yet.</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sortable.min.js"></script>
+<script>
+(function () {
+  const handle = {{ org_handle | tojson }};
+
+  async function apiNav(method, slug, body) {
+    return fetch(`/${handle}/pages/nav${slug ? '/' + slug : ''}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  // Checkbox toggle
+  document.getElementById('nav-list').addEventListener('change', async (e) => {
+    const cb = e.target.closest('.nav-checkbox');
+    if (!cb) return;
+    const slug = cb.dataset.slug;
+    const row = cb.closest('.nav-candidate');
+    const handle_el = row.querySelector('.drag-handle');
+    if (cb.checked) {
+      await apiNav('POST', null, { slug });
+      row.dataset.inNav = 'true';
+      handle_el.classList.remove('opacity-0');
+      handle_el.classList.add('opacity-30', 'group-hover:opacity-100');
+    } else {
+      await apiNav('DELETE', slug);
+      row.dataset.inNav = 'false';
+      handle_el.classList.add('opacity-0');
+      handle_el.classList.remove('opacity-30', 'group-hover:opacity-100');
+    }
+  });
+
+  // Drag-and-drop reorder (only for checked items)
+  Sortable.create(document.getElementById('nav-list'), {
+    animation: 150,
+    handle: '.drag-handle',
+    filter: '[data-in-nav="false"]',
+    onEnd: ({ item, newIndex }) => {
+      const allRows = [...document.querySelectorAll('#nav-list .nav-candidate')];
+      const inNavRows = allRows.filter(r => r.dataset.inNav === 'true');
+      const slug = item.dataset.slug;
+      const posInNav = inNavRows.indexOf(item);
+      const above = inNavRows[posInNav - 1];
+      fetch(`/${handle}/pages/nav/${slug}/position`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ above_slug: above?.dataset.slug ?? null }),
+      });
+    },
+  });
+})();
+</script>
+{% endblock %}
