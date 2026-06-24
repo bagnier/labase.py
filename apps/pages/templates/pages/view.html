@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  <style>
+    body { font: 16px/1.7 system-ui, sans-serif; color: #1f2430; max-width: 720px; margin: 0 auto; padding: 40px 20px; }
+    article h1 { font-size: 30px; margin-bottom: 24px; }
+    article h2 { font-size: 22px; }
+    article pre { background: #f6f7f9; padding: 12px; border-radius: 8px; overflow: auto; }
+    article code { background: #f6f7f9; padding: 2px 5px; border-radius: 4px; }
+    .edit-link { display: inline-block; margin-top: 28px; font-size: 14px; color: #2f6fed; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <article class="page" data-slug="{{ page.slug }}" data-visibility="{{ page.visibility }}">
+    <h1>{{ page.title }}</h1>
+    <div class="page-body">{{ body | safe }}</div>
+  </article>
+  {% if can_edit %}
+  <a class="edit-link" href="/{{ org_handle }}/pages/{{ page.slug }}/edit">Edit</a>
+  {% endif %}
+</body>
+</html>

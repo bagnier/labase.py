@@ -34,6 +34,7 @@ pytest_plugins = [
     "apps.todo.tests.e2e.steps",
     "apps.learning.tests.e2e.steps",
     "apps.files.tests.e2e.steps",
+    "apps.pages.tests.e2e.steps",
     "apps.organizations.tests.e2e.steps",
 ]
 

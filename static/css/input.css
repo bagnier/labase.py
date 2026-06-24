@@ -24,6 +24,8 @@
 .ph.ph-lightning:before       { content: "\e2de"; }
 .ph.ph-user-circle:before     { content: "\e4c4"; }
 .ph.ph-pencil:before          { content: "\e3ae"; }
+.ph.ph-eye:before             { content: "\e220"; }
+.ph.ph-trash:before           { content: "\e4a6"; }
 .ph.ph-share-network:before   { content: "\e408"; }
 .ph.ph-sign-out:before        { content: "\e42a"; }
 .ph.ph-trend-up:before        { content: "\e4ae"; }

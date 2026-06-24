@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ org.name }} — Pages</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; color: #1f2430; max-width: 720px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 24px; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 10px 0; border-bottom: 1px solid #eef0f3; }
+    a { color: #2f6fed; text-decoration: none; }
+    .empty { color: #8a93a2; }
+  </style>
+</head>
+<body>
+  <h1>{{ org.name }}</h1>
+  {% if pages %}
+  <ul id="pages-list">
+    {% for p in pages %}
+    <li class="page-row" data-slug="{{ p.slug }}">
+      <a class="page-title-link" href="/{{ org_handle }}/pages/{{ p.slug }}">{{ p.title }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No public pages yet.</p>
+  {% endif %}
+</body>
+</html>

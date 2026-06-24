@@ -2,6 +2,7 @@ from apps.auth.tests.e2e import AuthApiMixin
 from apps.files.tests.e2e import OrgFileApiMixin
 from apps.learning.tests.e2e import LearningApiMixin
 from apps.organizations.tests.e2e import OrgApiMixin
+from apps.pages.tests.e2e import PagesApiMixin
 from apps.profile.tests.e2e import ProfileApiMixin
 from apps.settings.tests.e2e import ConsoleApiMixin
 from apps.todo.tests.e2e import TodoApiMixin
@@ -15,6 +16,7 @@ class ApiDriver(
     TodoApiMixin,
     LearningApiMixin,
     OrgFileApiMixin,
+    PagesApiMixin,
     OrgApiMixin,
     ApiBase,
 ):

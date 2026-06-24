@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CMS pages — mockup</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; color: #1f2430; background: #f6f7f9; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; }
+    .state { background: #fff; border: 1px solid #e3e6eb; border-radius: 10px; padding: 20px; margin: 24px 0; }
+    .state > h2 { margin-top: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #8a93a2; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+    .b-draft { background: #eceef1; color: #5b6472; }
+    .b-members { background: #e3effd; color: #1d6fd6; }
+    .b-public { background: #e2f7ea; color: #1a9b54; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef0f3; }
+    .row:last-child { border-bottom: 0; }
+    .row .title { flex: 1; font-weight: 600; }
+    .btn { font-size: 13px; padding: 6px 12px; border-radius: 7px; border: 1px solid #cfd4dc; background: #fff; cursor: pointer; }
+    .btn-primary { background: #2f6fed; color: #fff; border-color: #2f6fed; }
+    .muted { color: #8a93a2; }
+    label { display: block; font-weight: 600; margin: 14px 0 4px; }
+    input[type=text], textarea { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #cfd4dc; border-radius: 7px; font: inherit; }
+    textarea { min-height: 140px; font-family: ui-monospace, monospace; }
+    .rendered { border: 1px dashed #cfd4dc; border-radius: 7px; padding: 16px; }
+    .rendered h1 { font-size: 26px; margin-top: 0; }
+    .toggle { display: inline-flex; gap: 8px; align-items: center; }
+    select { padding: 7px; border-radius: 7px; border: 1px solid #cfd4dc; font: inherit; }
+    .empty { text-align: center; color: #8a93a2; padding: 28px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CMS pages — UI mockup</h1>
+  <p class="muted">Static alignment mockup. <code>hx-*</code> hints only; not production.</p>
+
+  <!-- 1. List: owner view (full controls) -->
+  <div class="state">
+    <h2>Pages list — owner (full CRUD + publish controls)</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>Pages</strong>
+      <a class="btn btn-primary" href="#new">+ New page</a>
+    </div>
+    <div class="row">
+      <span class="title">Welcome</span>
+      <span class="badge b-draft">draft</span>
+      <select aria-label="visibility"><option>draft</option><option>members</option><option>public</option></select>
+      <a class="btn" href="#edit">Edit</a>
+      <button class="btn" hx-delete="/acme/pages/welcome" hx-confirm="Delete?">Delete</button>
+    </div>
+    <div class="row">
+      <span class="title">Internal handbook</span>
+      <span class="badge b-members">members</span>
+      <select aria-label="visibility"><option>draft</option><option selected>members</option><option>public</option></select>
+      <a class="btn" href="#edit">Edit</a>
+      <button class="btn">Delete</button>
+    </div>
+    <div class="row">
+      <span class="title">Homepage</span>
+      <span class="badge b-public">public</span>
+      <select aria-label="visibility"><option>draft</option><option>members</option><option selected>public</option></select>
+      <a class="btn" href="#edit">Edit</a>
+      <button class="btn">Delete</button>
+    </div>
+  </div>
+
+  <!-- 2. List: member view (CRUD drafts; published read-only) -->
+  <div class="state">
+    <h2>Pages list — member (CRUD on drafts; published are read-only)</h2>
+    <div class="row">
+      <span class="title">Welcome</span>
+      <span class="badge b-draft">draft</span>
+      <a class="btn" href="#edit">Edit</a>
+      <button class="btn">Delete</button>
+    </div>
+    <div class="row">
+      <span class="title">Internal handbook</span>
+      <span class="badge b-members">members</span>
+      <a class="btn" href="#view">View</a>
+      <span class="muted">read-only</span>
+    </div>
+  </div>
+
+  <!-- 3. Empty state -->
+  <div class="state">
+    <h2>Empty state</h2>
+    <div class="empty">No pages yet. <a href="#new">Create the first one →</a></div>
+  </div>
+
+  <!-- 4. Create / edit form -->
+  <div class="state" id="new">
+    <h2>Create / edit page</h2>
+    <form hx-post="/acme/pages">
+      <label>Title</label>
+      <input type="text" name="title" value="Welcome" />
+      <label>Slug</label>
+      <input type="text" name="slug" value="welcome" />
+      <p class="muted" style="margin:4px 0">URL: /acme/pages/<strong>welcome</strong></p>
+      <label>Content (Markdown body — no title heading)</label>
+      <textarea name="content"># don't repeat the title here
+
+Just the **body** in Markdown.
+
+- one
+- two</textarea>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn btn-primary" type="submit">Save draft</button>
+        <button class="btn" type="button">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 5. Rendered view (clean, public-friendly) -->
+  <div class="state" id="view">
+    <h2>Rendered page (public / read-only)</h2>
+    <div class="rendered">
+      <h1>Welcome</h1>
+      <p>Just the <strong>body</strong> in Markdown.</p>
+      <ul><li>one</li><li>two</li></ul>
+    </div>
+    <p class="muted" style="margin-top:10px">Owners also see an <em>Edit</em> button here; members/visitors do not.</p>
+  </div>
+
+  <!-- 6. Visitor forbidden -->
+  <div class="state">
+    <h2>Visitor opens a non-public page</h2>
+    <div class="empty">This page is not available.</div>
+  </div>
+</div>
+</body>
+</html>

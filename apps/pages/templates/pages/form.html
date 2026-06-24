@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ page.title }} — labase{% endblock %}
+
+{% block breadcrumb %}
+  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <a href="/{{ org_handle }}/pages" class="hover:text-gray-700">Pages</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <span class="text-gray-700">{{ page.title }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-6">
+  <h1 class="page-title">Edit page</h1>
+
+  <form id="edit-page-form" class="space-y-3 card"
+        hx-patch="/{{ org_handle }}/pages/{{ page.slug }}" hx-swap="none">
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">Title</label>
+      <input type="text" name="title" value="{{ page.title }}" class="input w-full" />
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">Slug</label>
+      <input type="text" name="slug" value="{{ page.slug }}" class="input w-full" />
+    </div>
+    {% if is_owner %}
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">Visibility</label>
+      <select name="visibility" class="input !w-auto" aria-label="Visibility">
+        <option value="draft" {% if page.visibility == 'draft' %}selected{% endif %}>Draft — only editors</option>
+        <option value="members" {% if page.visibility == 'members' %}selected{% endif %}>Members — everyone in the org</option>
+        <option value="public" {% if page.visibility == 'public' %}selected{% endif %}>Public — anyone with the link</option>
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">Content (Markdown)</label>
+      <textarea name="content" class="input w-full" rows="10">{{ page.content }}</textarea>
+    </div>
+    <div class="flex items-center justify-between pt-1">
+      <button type="submit" class="btn-primary">Save</button>
+      <button type="button" id="delete-page-btn" class="text-sm text-red-600 hover:text-red-800 font-medium"
+              hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
+              hx-confirm="Delete “{{ page.title }}”? This cannot be undone."
+              hx-swap="none">
+        Delete page
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

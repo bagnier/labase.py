@@ -40,7 +40,7 @@ schema-supabase:
 	tbls doc --rm-dist --config scripts/.tbls.supabase.yml
 
 # --- App ---
-dev: db-start
+dev: db-start js-build
 	docker compose -f docker/docker-compose.yml up --build
 
 up:

@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Pages — labase{% endblock %}
+
+{% block breadcrumb %}
+  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <span class="text-gray-700">Pages</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+
+  <h1 class="page-title">Pages</h1>
+
+  {% if can_create %}
+  <form method="post" action="/{{ org_handle }}/pages" id="new-page-form" class="space-y-2 card">
+    <input type="text" name="title" placeholder="Title" required class="input w-full" />
+    <input type="text" name="slug" placeholder="slug (optional)" class="input w-full" />
+    <textarea name="content" placeholder="Markdown body…" class="input w-full" rows="4"></textarea>
+    <button type="submit" class="btn-primary">Create page</button>
+  </form>
+  {% endif %}
+
+  <script type="application/json" id="pages-data">{{ pages_data | tojson }}</script>
+
+  <div id="pages-app"
+       data-owner="{{ 'true' if is_owner else 'false' }}"
+       data-handle="{{ org_handle }}"
+       x-data="pagesApp()"
+       x-init="$nextTick(() => $el.dataset.ready = '1')">
+
+    <!-- Toolbar: search + filters, grouped on one line -->
+    <div class="flex items-center gap-2 mb-3">
+      <input type="search" x-model="search" placeholder="Search pages…"
+             class="input flex-1 min-w-0" aria-label="Search pages" />
+      <select x-model="filter" class="input !w-auto flex-none" aria-label="Filter by visibility">
+        <option value="all">All visibilities</option>
+        <option value="draft">Draft</option>
+        <option value="members">Members</option>
+        <option value="public">Public</option>
+      </select>
+      <select x-model="sort" class="input !w-auto flex-none" aria-label="Sort pages">
+        <option value="created_desc">Newest</option>
+        <option value="created_asc">Oldest</option>
+        <option value="title_asc">Title A→Z</option>
+        <option value="title_desc">Title Z→A</option>
+      </select>
+    </div>
+
+    <div id="pages-list" class="list-panel shadow-sm">
+      <template x-for="page in visible()" :key="page.id">
+        <div class="page-row flex items-center gap-3 px-4 py-3 group" :data-slug="page.slug">
+          <a class="page-title-link flex-1 min-w-0 text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline truncate"
+             :href="`/${handle}/pages/${page.slug}`" x-text="page.title"></a>
+
+          <span class="page-updated text-xs text-gray-400 flex-none hidden sm:block"
+                :title="`Last modified ${fmtDate(page.updated)}`" x-text="fmtDate(page.updated)"></span>
+
+          <span class="badge text-xs font-semibold rounded px-2 py-0.5 bg-gray-100 text-gray-600"
+                :data-visibility="page.visibility" x-text="page.visibility"></span>
+
+          <a class="page-preview-link text-gray-400 hover:text-indigo-600" title="Preview"
+             :href="`/${handle}/pages/${page.slug}`">
+            <i class="ph ph-eye ph-sm" aria-hidden="true"></i>
+          </a>
+
+          <template x-if="canEdit(page)">
+            <a class="page-edit-link text-gray-400 hover:text-indigo-600" title="Edit"
+               :href="`/${handle}/pages/${page.slug}/edit`">
+              <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
+            </a>
+          </template>
+
+          <template x-if="canEdit(page)">
+            <button type="button" class="page-delete-btn text-gray-400 hover:text-red-500" title="Delete"
+                    @click="del(page)">
+              <i class="ph ph-trash ph-sm" aria-hidden="true"></i>
+            </button>
+          </template>
+        </div>
+      </template>
+
+      <p x-show="visible().length === 0" class="px-4 py-6 text-sm text-center text-gray-400">
+        No pages match.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function pagesApp() {
+    const root = document.getElementById("pages-app");
+    return {
+      pages: JSON.parse(document.getElementById("pages-data").textContent),
+      isOwner: root.dataset.owner === "true",
+      handle: root.dataset.handle,
+      search: "",
+      filter: "all",
+      sort: "created_desc",
+
+      canEdit(page) {
+        return this.isOwner || page.visibility === "draft";
+      },
+
+      fmtDate(iso) {
+        return new Date(iso).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      },
+
+      visible() {
+        const q = this.search.trim().toLowerCase();
+        let rows = this.pages.filter((p) => {
+          const matchesSearch = !q || p.title.toLowerCase().includes(q) || p.slug.includes(q);
+          const matchesFilter = this.filter === "all" || p.visibility === this.filter;
+          return matchesSearch && matchesFilter;
+        });
+        const cmp = {
+          created_desc: (a, b) => b.created.localeCompare(a.created),
+          created_asc: (a, b) => a.created.localeCompare(b.created),
+          title_asc: (a, b) => a.title.localeCompare(b.title),
+          title_desc: (a, b) => b.title.localeCompare(a.title),
+        }[this.sort];
+        return rows.sort(cmp);
+      },
+
+      async del(page) {
+        if (!confirm(`Delete “${page.title}”?`)) return;
+        const resp = await fetch(`/${this.handle}/pages/${page.slug}`, {
+          method: "DELETE",
+          headers: { Accept: "application/json" },
+        });
+        if (resp.ok) {
+          this.pages = this.pages.filter((p) => p.id !== page.id);
+        } else {
+          alert("Could not delete the page.");
+        }
+      },
+    };
+  }
+</script>
+{% endblock %}
