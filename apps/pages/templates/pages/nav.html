@@ -23,7 +23,7 @@
   <div id="nav-list" class="list-panel shadow-sm">
     {% for c in candidates %}
     <div class="nav-candidate flex items-center gap-3 px-4 py-3 group" data-slug="{{ c.slug }}" data-in-nav="{{ 'true' if c.in_nav else 'false' }}">
-      <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 {% if not c.in_nav %}opacity-0{% else %}opacity-30 group-hover:opacity-100{% endif %} transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
+      <i class="drag-handle ph ph-dots-six-vertical ph-sm text-gray-300 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
       <input type="checkbox"
              data-slug="{{ c.slug }}"
              {% if c.in_nav %}checked{% endif %}
@@ -64,17 +64,12 @@
     if (!cb) return;
     const slug = cb.dataset.slug;
     const row = cb.closest('.nav-candidate');
-    const handle_el = row.querySelector('.drag-handle');
     if (cb.checked) {
       await apiNav('POST', null, { slug });
       row.dataset.inNav = 'true';
-      handle_el.classList.remove('opacity-0');
-      handle_el.classList.add('opacity-30', 'group-hover:opacity-100');
     } else {
       await apiNav('DELETE', slug);
       row.dataset.inNav = 'false';
-      handle_el.classList.add('opacity-0');
-      handle_el.classList.remove('opacity-30', 'group-hover:opacity-100');
     }
   });
 
@@ -82,17 +77,17 @@
   Sortable.create(document.getElementById('nav-list'), {
     animation: 150,
     handle: '.drag-handle',
-    filter: '[data-in-nav="false"]',
-    onEnd: ({ item, newIndex }) => {
-      const allRows = [...document.querySelectorAll('#nav-list .nav-candidate')];
-      const inNavRows = allRows.filter(r => r.dataset.inNav === 'true');
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    onEnd: ({ item }) => {
+      if (item.dataset.inNav !== 'true') return;
       const slug = item.dataset.slug;
-      const posInNav = inNavRows.indexOf(item);
-      const above = inNavRows[posInNav - 1];
+      let next = item.nextElementSibling;
+      while (next && next.dataset.inNav !== 'true') next = next.nextElementSibling;
       fetch(`/${handle}/pages/nav/${slug}/position`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ above_slug: above?.dataset.slug ?? null }),
+        body: JSON.stringify({ above_slug: next?.dataset.slug ?? null }),
       });
     },
   });
