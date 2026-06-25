@@ -230,7 +230,10 @@ class OrgBrowserMixin(BrowserBase):
         if page.query_selector("[data-leave]") is None:
             self._probe_blocked("DELETE", f"/{self._active_slug()}/members/me")
             return
-        self.last_response = self.click_and_capture(page, "[data-leave]", "DELETE", "/members/me")
+        with page.expect_navigation(wait_until="load"):
+            self.last_response = self.click_and_capture(
+                page, "[data-leave]", "DELETE", "/members/me"
+            )
 
     def assert_workspace_card(self, org_name: str) -> None:
         self.page.goto(f"{self.base_url}/profile", wait_until="load")

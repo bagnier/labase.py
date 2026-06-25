@@ -20,6 +20,7 @@ class ConsoleBrowserMixin(BrowserBase):
         self._admin_email = email
         self._admin_acting = self._acting_email  # the context that will hold the admin session
         page = self.page
+        page.context.clear_cookies()
         page.goto(f"{self.base_url}/auth/login")
         page.fill("input[name=email]", email)
         page.fill("input[name=password]", _ADMIN_PASSWORD)

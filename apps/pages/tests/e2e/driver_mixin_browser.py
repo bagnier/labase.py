@@ -1,8 +1,14 @@
+import re
+
 from tests.e2e.drivers.browser_base import _VISITOR, BrowserBase
 
 
 def _decode(content: str) -> str:
     return content.replace("\\n", "\n")
+
+
+def _slugify(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "page"
 
 
 class PagesBrowserMixin(BrowserBase):
@@ -36,8 +42,7 @@ class PagesBrowserMixin(BrowserBase):
         self.page.click('a[href$="/pages/new/edit"]')
         self.page.wait_for_selector("#edit-page-form", timeout=5000)
         self.page.fill("input[name=title]", title)
-        if slug is not None:
-            self.page.fill("input[name=slug]", slug)
+        self.page.fill("input[name=slug]", slug if slug is not None else _slugify(title))
         if content:
             self.page.fill(".cm-content", _decode(content))
         self._submit_edit_form()
