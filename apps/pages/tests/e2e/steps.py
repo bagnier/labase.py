@@ -216,12 +216,14 @@ def step_assert_page_nav_not_shows(driver, title):
 
 
 @given("the org is the featured public org")
-def step_set_featured_org(driver):
+def step_set_featured_org(driver, request):
     handle = driver._handle()
     acting = driver._acting_email
     driver.sign_in_as_admin("nav-admin@example.com")
     driver.set_console_setting("public", "featured_org_handle", handle)
     driver.set_acting_email(acting)
+
+    request.addfinalizer(lambda: driver.set_console_setting("public", "featured_org_handle", ""))
 
 
 @given(parsers.parse('a visitor views the public page "{slug}"'))
