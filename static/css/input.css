@@ -18,6 +18,7 @@
 .ph.ph-currency-dollar:before { content: "\e550"; }
 .ph.ph-dots-six-vertical:before { content: "\eae2"; }
 .ph.ph-file-text:before       { content: "\e23a"; }
+.ph.ph-note-pencil:before     { content: "\e34c"; }
 .ph.ph-folder:before          { content: "\e24a"; }
 .ph.ph-gear:before            { content: "\e270"; }
 .ph.ph-globe:before           { content: "\e288"; }

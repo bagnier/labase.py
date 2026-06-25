@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
@@ -8,6 +10,7 @@ from apps.pages.infra.repository import (
     PageNavRepository,
     PageRepository,
     org_by_handle,
+    role_in_org,
     visible_pages,
 )
 from apps.public.contract import settings
@@ -28,7 +31,8 @@ async def index(
     if org is None:
         return templates.TemplateResponse(request, "home.html")
     pages = await visible_pages(admin, org.id, role=None)
-    nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=True)
+    role = await role_in_org(admin, org.id, uuid.UUID(current_user.id)) if current_user else None
+    nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=(role is None))
     return templates.TemplateResponse(
         request,
         "home_featured.html",
@@ -43,7 +47,9 @@ async def index(
 
 
 @router.get("/{slug}", response_class=HTMLResponse)
-async def public_page(slug: str, request: Request, admin: AdminSession) -> HTMLResponse:
+async def public_page(
+    slug: str, request: Request, admin: AdminSession, current_user: OptionalCurrentUser
+) -> HTMLResponse:
     handle: str = settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         raise HTTPException(404)
@@ -54,7 +60,8 @@ async def public_page(slug: str, request: Request, admin: AdminSession) -> HTMLR
     if page is None or page.visibility != PageVisibility.public:
         raise HTTPException(404)
     body = render_markdown(page.content)
-    nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=True)
+    role = await role_in_org(admin, org.id, uuid.UUID(current_user.id)) if current_user else None
+    nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=(role is None))
     return templates.TemplateResponse(
         request,
         "public_page.html",

@@ -10,8 +10,10 @@ from fastapi import FastAPI
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.pages.contract import settings
-from apps.pages.infra.repository import PageRepository, count_all
+from apps.pages.domain.models import PageVisibility
+from apps.pages.infra.repository import PageNavRepository, PageRepository, count_all
 from apps.pages.infra.router import public_router, router
+from apps.profile.contract.shell import ShellNavItem, ShellOrgQuery
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
     SettingDef,
@@ -37,8 +39,9 @@ def mount(app: FastAPI, host: Host) -> None:
     host.events.on(SettingsChanged, settings.reload)
     app.include_router(router, prefix=ORG_PREFIX)
     app.include_router(public_router)
-    host.register_nav(NavItem("Pages", "file-text", "pages", "/pages", order=25))
+    host.register_nav(NavItem("Pages", "note-pencil", "pages", "/pages", order=25))
     host.events.on(OverviewQuery, _overview)
+    host.events.on(ShellOrgQuery, _shell_nav)
 
 
 def _declare_settings() -> None:
@@ -75,3 +78,12 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     total = await count_all(query.session)
     lines = [f"{total} page" + ("s" if total != 1 else "")] if total else ["No pages yet"]
     return ConsoleOverview(key="pages", title="Pages", icon="file-text", data={"lines": lines})
+
+
+async def _shell_nav(query: ShellOrgQuery) -> list[ShellNavItem]:
+    all_items = await PageNavRepository(query.session, query.org_id).nav_items(public_only=False)
+    return [
+        ShellNavItem(slug=p.slug, title=p.title, href=f"pages/{p.slug}")
+        for p in all_items
+        if p.visibility == PageVisibility.members
+    ]

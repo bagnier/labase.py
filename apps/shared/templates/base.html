@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}labase{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/tailwind.css" />
+  <link rel="stylesheet" href="/static/css/tailwind.css?v={{ css_v }}" />
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":false}]}' />
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/alpine.min.js" defer></script>
@@ -65,6 +65,12 @@
               {{ item.label }}
             </a>
             {% endif %}
+            {% endfor %}
+            {% for item in nav_org.extra_nav %}
+            <a href="/{{ nav_org.handle }}/{{ item.href }}" class="nav-link {% if is_current and '/' + item.href in path %}active{% endif %}">
+              <i class="ph ph-{{ item.icon }} ph-sm flex-none" aria-hidden="true"></i>
+              {{ item.title }}
+            </a>
             {% endfor %}
           </div>
         </div>
