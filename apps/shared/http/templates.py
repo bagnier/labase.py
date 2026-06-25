@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 from fastapi.templating import Jinja2Templates
 
@@ -10,4 +11,5 @@ _CSS = _BASE.parent / "static" / "css" / "tailwind.css"
 templates = Jinja2Templates(
     directory=[str(p) for p in sorted(_BASE.glob("*/templates")) if p.is_dir()],
 )
-templates.env.globals["css_v"] = int(_CSS.stat().st_mtime) if _CSS.exists() else 0
+_globals = cast("dict[str, object]", templates.env.globals)
+_globals["css_v"] = int(_CSS.stat().st_mtime) if _CSS.exists() else 0

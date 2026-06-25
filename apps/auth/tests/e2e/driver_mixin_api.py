@@ -16,7 +16,7 @@ class AuthApiMixin(ApiBase):
 
     # ── HTML page access (auth smoke flows) ────────────────────────────────────
     def visit(self, path: str) -> None:
-        self.response = self.client().get(path)
+        self.response = self.client().get(path, follow_redirects=True)
 
     def assert_page_accessible(self, path: str, contains: str) -> None:
         resp = self.client().get(path)

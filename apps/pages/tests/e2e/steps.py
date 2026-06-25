@@ -213,3 +213,18 @@ def step_assert_page_nav_shows(driver, title):
 @then(parsers.parse('the page navigation does not show a link to "{title}"'))
 def step_assert_page_nav_not_shows(driver, title):
     driver.assert_page_nav_not_shows(title)
+
+
+@given("the org is the featured public org")
+def step_set_featured_org(driver):
+    handle = driver._handle()
+    acting = driver._acting_email
+    driver.sign_in_as_admin("nav-admin@example.com")
+    driver.set_console_setting("public", "featured_org_handle", handle)
+    driver.set_acting_email(acting)
+
+
+@given(parsers.parse('a visitor views the public page "{slug}"'))
+@when(parsers.parse('a visitor views the public page "{slug}"'))
+def step_visitor_view_public_page(driver, slug):
+    driver.visitor_view_public_page(slug)

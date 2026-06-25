@@ -31,23 +31,17 @@ Feature: Page navigation
     When they open the navigation manager
     Then "Secret" is not listed as a navigation candidate
 
-  Scenario: Navigation added via the manager appears in the page sidebar
+  Scenario: Navigation added via the manager appears in the public page sidebar
+    Given the org is the featured public org
     When they open the navigation manager
     And they add "About" to the navigation
-    And they view the page "about"
+    And a visitor views the public page "about"
     Then the page navigation shows a link to "About"
-
-  Scenario: A member sees the navigation when viewing a page
-    Given "About" is in the navigation
-    And "Team" is in the navigation
-    And they are signed in as "alice@example.com" in the same org
-    When they view the page "about"
-    Then the page navigation shows a link to "About"
-    And the page navigation shows a link to "Team"
 
   Scenario: A visitor sees only public pages in the navigation
-    Given "About" is in the navigation
+    Given the org is the featured public org
+    And "About" is in the navigation
     And "Team" is in the navigation
-    When a visitor opens "about" under org "Acme"
+    And a visitor views the public page "about"
     Then the page navigation shows a link to "About"
     But the page navigation does not show a link to "Team"

@@ -80,6 +80,9 @@ class PagesApiMixin(ApiBase):
     def visitor_open(self, slug: str, _org_name: str) -> None:
         self.response = self.client_for(VISITOR).get(self._pages_url(f"/{slug}"))
 
+    def visitor_view_public_page(self, slug: str) -> None:
+        self.response = self.client_for(VISITOR).get(f"/{slug}")
+
     def visitor_open_list(self, _org_name: str) -> None:
         self._pages_list = self._list(client=self.client_for(VISITOR))
 

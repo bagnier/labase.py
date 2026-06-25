@@ -17,10 +17,10 @@ from apps.shared.persistence.database import AdminSession
 router = APIRouter(tags=["public"])
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, response_model=None)
 async def index(
     request: Request, admin: AdminSession, current_user: OptionalCurrentUser
-) -> HTMLResponse:
+) -> HTMLResponse | RedirectResponse:
     handle: str = settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         return templates.TemplateResponse(request, "home.html")
