@@ -2,14 +2,8 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from apps.auth.contract.current import OptionalCurrentUser
-from apps.pages.domain.models import PageVisibility
-from apps.pages.domain.render import render_markdown
-from apps.pages.infra.repository import (
-    PageNavRepository,
-    PageRepository,
-    org_by_handle,
-    visible_pages,
-)
+from apps.organizations.contract.queries import org_by_handle
+from apps.pages.contract.public import get_public_nav, get_public_page, get_public_pages
 from apps.public.contract import settings
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
@@ -27,10 +21,10 @@ async def index(
     org = await org_by_handle(admin, handle)
     if org is None:
         return templates.TemplateResponse(request, "home.html")
-    nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=True)
+    nav_items = await get_public_nav(admin, org.id)
     if nav_items:
         return RedirectResponse(url=f"/{nav_items[0].slug}", status_code=302)
-    pages = await visible_pages(admin, org.id, role=None)
+    pages = await get_public_pages(admin, org.id)
     return templates.TemplateResponse(
         request,
         "home_featured.html",
@@ -54,17 +48,16 @@ async def public_page(
     org = await org_by_handle(admin, handle)
     if org is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    page = await PageRepository(admin, org.id).by_slug(slug)
-    if page is None or page.visibility != PageVisibility.public:
+    view = await get_public_page(admin, org.id, slug)
+    if view is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    body = render_markdown(page.content)
-    nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=True)
+    nav_items = await get_public_nav(admin, org.id)
     return templates.TemplateResponse(
         request,
         "public_page.html",
         {
-            "page": page,
-            "body": body,
+            "page": view.page,
+            "body": view.body,
             "org": org,
             "page_nav": nav_items,
             "current_user": current_user,

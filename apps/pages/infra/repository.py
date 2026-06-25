@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.organizations.domain.models import Membership, Organization, OrgRole
+from apps.organizations.contract.current import OrgRole
 from apps.pages.domain.models import NavCandidate, NavItemRead, Page, PageNavItem, PageVisibility
 from apps.shared import clock
 from apps.shared.persistence.repository import OrgScopedRepository
@@ -43,30 +43,6 @@ class PageRepository(OrgScopedRepository[Page]):
         self.session.add(page)
         await self.session.flush()
         return page
-
-
-async def org_by_handle(session: AsyncSession, handle: str) -> Organization | None:
-    """Resolve an org by its URL handle, ignoring RLS — used by the public view route."""
-    return await session.scalar(select(Organization).where(Organization.handle == handle))
-
-
-async def is_member(session: AsyncSession, org_id: uuid.UUID, auth_user_id: uuid.UUID) -> bool:
-    found = await session.scalar(
-        select(Membership.role).where(
-            Membership.org_id == org_id, Membership.auth_user_id == auth_user_id
-        )
-    )
-    return found is not None
-
-
-async def role_in_org(
-    session: AsyncSession, org_id: uuid.UUID, auth_user_id: uuid.UUID
-) -> OrgRole | None:
-    return await session.scalar(
-        select(Membership.role).where(
-            Membership.org_id == org_id, Membership.auth_user_id == auth_user_id
-        )
-    )
 
 
 async def visible_pages(

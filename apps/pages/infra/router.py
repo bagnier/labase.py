@@ -12,13 +12,12 @@ from apps.organizations.contract.current import (
     Membership,
     OrgRole,
 )
+from apps.organizations.contract.queries import org_by_handle, role_in_org
 from apps.pages.domain.models import Page, PageRead, PageVisibility
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
     PageNavRepository,
     PageRepository,
-    org_by_handle,
-    role_in_org,
     visible_pages,
 )
 from apps.profile.contract.shell import page_context

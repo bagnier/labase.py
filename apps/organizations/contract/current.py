@@ -13,6 +13,7 @@ from fastapi import Depends
 
 from apps.organizations.domain.models import Membership as Membership
 from apps.organizations.domain.models import Organization
+from apps.organizations.domain.models import OrganizationRead as OrganizationRead
 from apps.organizations.domain.models import OrgRole as OrgRole
 from apps.organizations.infra.context import (
     get_current_membership,
