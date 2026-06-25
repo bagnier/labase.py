@@ -422,9 +422,7 @@ async def view_page(
         role is not None and page.visibility == PageVisibility.draft
     )
     body = render_markdown(page.content)
-    nav_repo = PageNavRepository(admin, org.id)
     if current_user:
-        page_nav_links = await nav_repo.nav_items(public_only=False)
         ctx = await page_context(
             admin,
             current_user,
@@ -433,10 +431,8 @@ async def view_page(
             can_edit=can_edit,
             org=org,
             org_handle=org_handle,
-            page_nav_links=page_nav_links,
         )
         return templates.TemplateResponse(request, "pages/view.html", ctx)
-    public_nav = await nav_repo.nav_items(public_only=True)
     return templates.TemplateResponse(
         request,
         "pages/view_public.html",
@@ -446,6 +442,5 @@ async def view_page(
             "can_edit": can_edit,
             "org_handle": org_handle,
             "org": org,
-            "page_nav": public_nav,
         },
     )
