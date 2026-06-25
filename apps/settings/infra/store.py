@@ -49,7 +49,7 @@ def read_values(app: str) -> dict[str, str]:
     try:
         return asyncio.run(_on_throwaway_engine(_work))
     except Exception:
-        log.warning("console.read_values_failed", app=app)
+        log.exception("console.read_values_failed", app=app)
         return {}
 
 
@@ -70,4 +70,4 @@ def seed_values(app: str, initial: dict[str, str]) -> None:
     try:
         asyncio.run(_on_throwaway_engine(_work))
     except Exception:
-        log.warning("console.seed_values_failed", app=app)
+        log.exception("console.seed_values_failed", app=app)

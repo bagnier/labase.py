@@ -66,7 +66,7 @@ async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -
         handle = await session.scalar(select(Profile.handle).where(Profile.auth_user_id == user_id))
         orgs = await get_user_orgs(session, user_id)
     except Exception:
-        log.warning("profile.shell_load_failed")
+        log.exception("profile.shell_load_failed")
         return {"handle": None, "orgs": [], "nav_items": nav_items}
     nav_orgs = []
     for o in orgs:

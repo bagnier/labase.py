@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
@@ -67,9 +67,9 @@ async def add_todo(
     org_id: CurrentOrg,
 ):
     if not settings.creation_enabled:
-        raise HTTPException(403, "Task creation is disabled")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Task creation is disabled")
     if await repo.count() >= settings.max_items_per_org:
-        raise HTTPException(403, "Task limit reached for this organisation")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Task limit reached for this organisation")
 
     title = await parse_field(request, "title")
     todo = await repo.add(uuid.UUID(current_user.id), title)

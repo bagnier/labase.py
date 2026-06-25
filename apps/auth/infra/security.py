@@ -45,7 +45,7 @@ async def get_current_user(
         try:
             tokens: AuthTokens = await refresh_session(refresh_token)
         except Exception as exc:
-            log.warning("auth.token_refresh_failed")
+            log.exception("auth.token_refresh_failed")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
             ) from exc

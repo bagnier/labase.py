@@ -28,7 +28,7 @@ async def register_user(email: str, password: str) -> RegisterResult:
             UserCreated(user_id=result.user_id, email=email, access_token=result.access_token)
         )
     except Exception:
-        log.warning("registration.org_creation_failed_compensating", user_id=result.user_id)
+        log.exception("registration.org_creation_failed_compensating", user_id=result.user_id)
         supabase = get_admin_supabase()
         await asyncio.to_thread(supabase.auth.admin.delete_user, result.user_id)
         raise

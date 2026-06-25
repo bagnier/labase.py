@@ -34,4 +34,4 @@ async def get_rls_session(
             try:
                 await clear_rls_context(session)
             except Exception:
-                log.warning("rls.reset_failed", user_id=current_user.id)
+                log.exception("rls.reset_failed", user_id=current_user.id)

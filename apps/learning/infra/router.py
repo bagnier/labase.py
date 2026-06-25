@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -112,7 +112,7 @@ async def subscribe(
     org: CurrentOrgModel,
 ):
     if not settings.sharing_enabled:
-        raise HTTPException(403, "Deck sharing is disabled")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Deck sharing is disabled")
     body = await parse_body(request)
     deck = str(body.get("deck", ""))
     found = or_404(await repo.get_deck_by_name(deck))
@@ -183,7 +183,7 @@ async def mark_card(
     state = await repo.get_state(card.id)
     already_today = state is not None and state.last_reviewed_on == today_date
     if not already_today and await repo.reviews_today(today_date) >= settings.daily_review_limit:
-        raise HTTPException(429, "Daily review limit reached")
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Daily review limit reached")
     schedule = apply_outcome(state.level if state else 0, today_date, outcome)
     await repo.apply_schedule(card.id, schedule)
     record_audit_event(

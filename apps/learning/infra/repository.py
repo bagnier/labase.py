@@ -61,7 +61,7 @@ class LearningRepository:
             .where(Deck.org_id == self.org_id, Deck.id.not_in(subscribed))
             .order_by(Deck.position)
         )
-        return list(rows.scalars().all())
+        return list(rows.scalars())
 
     async def catalog(self) -> list[CatalogRow]:
         """All cards of the user's subscribed decks with this user's state, in deck/card order."""

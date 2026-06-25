@@ -35,7 +35,7 @@ async def _insert_audit_log(
             )
             await session.commit()
     except Exception:
-        log.warning("audit.write_failed", event=event, user_id=user_id)
+        log.exception("audit.write_failed", event=event, user_id=user_id)
 
 
 def record_audit_event(

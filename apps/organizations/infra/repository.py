@@ -96,7 +96,7 @@ class OrganizationRepository(BaseRepository[Organization]):
         result = await self.session.execute(
             select(Membership).where(Membership.org_id == org_id).order_by(Membership.created_at)
         )
-        return list(result.scalars().all())
+        return list(result.scalars())
 
     async def count_owners(self, org_id: uuid.UUID) -> int:
         result = await self.session.execute(
@@ -150,7 +150,7 @@ class OrganizationRepository(BaseRepository[Organization]):
             .where(OrgInvitation.org_id == org_id, OrgInvitation.status == status)
             .order_by(OrgInvitation.created_at)
         )
-        return list(result.scalars().all())
+        return list(result.scalars())
 
     async def get_invitation_by_email(
         self, org_id: uuid.UUID, email: str, status: InvitationStatus = InvitationStatus.pending

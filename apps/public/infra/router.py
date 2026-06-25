@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from apps.auth.contract.current import OptionalCurrentUser
@@ -50,13 +50,13 @@ async def public_page(
 ) -> HTMLResponse:
     handle: str = settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
-        raise HTTPException(404)
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
     org = await org_by_handle(admin, handle)
     if org is None:
-        raise HTTPException(404)
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
     page = await PageRepository(admin, org.id).by_slug(slug)
     if page is None or page.visibility != PageVisibility.public:
-        raise HTTPException(404)
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
     body = render_markdown(page.content)
     nav_items = await PageNavRepository(admin, org.id).nav_items(public_only=True)
     return templates.TemplateResponse(

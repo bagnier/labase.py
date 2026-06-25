@@ -22,7 +22,7 @@ async def test_rls_profile_isolation(db_session: AsyncSession):
     try:
         await set_rls_context(db_session, uuid.UUID(uid1_str))
         result = await db_session.execute(select(Profile))
-        profiles = list(result.scalars().all())
+        profiles = list(result.scalars())
 
         assert len(profiles) == 1, f"RLS should limit to 1 profile (user1), got {len(profiles)}"
         assert profiles[0].auth_user_id == uuid.UUID(uid1_str)

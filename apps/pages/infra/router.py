@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSession
@@ -70,11 +70,11 @@ async def create_page(
     body = await parse_body(request)
     title = str(body.get("title", "")).strip()
     if not title:
-        raise HTTPException(422, "Title is required")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title is required")
     content = str(body.get("content", ""))
     slug = slugify(str(body.get("slug", "")) or title) or "page"
     if await repo.slug_taken(slug):
-        raise HTTPException(409, "A page with this slug already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT, "A page with this slug already exists")
     page = await repo.add(uuid.UUID(current_user.id), title, slug, content)
     record_audit_event(
         bg,
@@ -130,7 +130,7 @@ async def edit_page(
 ) -> Response:
     page = or_404(await repo.by_slug(slug))
     if not _can_edit(page, membership):
-        raise HTTPException(403, "This page is read-only")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
     ctx = await page_context(
         session,
         current_user,
@@ -155,7 +155,7 @@ async def update_page(
 ) -> Response:
     page = or_404(await repo.by_slug(slug))
     if not _can_edit(page, membership):
-        raise HTTPException(403, "This page is read-only")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
     body = await parse_body(request)
     event = "pages.updated"
     new_slug = body.get("slug")
@@ -163,7 +163,9 @@ async def update_page(
         normalized = slugify(str(new_slug)) or page.slug
         if normalized != page.slug:
             if await repo.slug_taken(normalized, exclude_id=page.id):
-                raise HTTPException(409, "A page with this slug already exists")
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "A page with this slug already exists"
+                )
             page.slug = normalized
             event = "pages.slug_changed"
     if body.get("content") is not None:
@@ -174,10 +176,14 @@ async def update_page(
         try:
             visibility = PageVisibility(str(body["visibility"]))
         except ValueError:
-            raise HTTPException(422, "Invalid visibility") from None
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility"
+            ) from None
         if visibility != page.visibility:
             if membership.role != OrgRole.owner:
-                raise HTTPException(403, "Only owners can change a page's visibility")
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN, "Only owners can change a page's visibility"
+                )
             page.visibility = visibility
             event = _PUBLISH_EVENT[visibility]
     await repo.save(page)
@@ -211,7 +217,7 @@ async def delete_page(
 ) -> Response:
     page = or_404(await repo.by_slug(slug))
     if not _can_edit(page, membership):
-        raise HTTPException(403, "This page is read-only")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
     await repo.delete(page)
     record_audit_event(
         bg,
@@ -248,13 +254,13 @@ async def set_visibility(
     org: CurrentOrgModel,
 ) -> Response:
     if membership.role != OrgRole.owner:
-        raise HTTPException(403, "Only owners can change a page's visibility")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can change a page's visibility")
     page = or_404(await repo.by_slug(slug))
     body = await parse_body(request)
     try:
         visibility = PageVisibility(str(body.get("visibility")))
     except ValueError:
-        raise HTTPException(422, "Invalid visibility") from None
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility") from None
     page.visibility = visibility
     await repo.save(page)
     record_audit_event(
@@ -285,7 +291,7 @@ async def nav_manager(
     org: CurrentOrgModel,
 ) -> Response:
     if membership.role != OrgRole.owner:
-        raise HTTPException(403, "Only owners can manage navigation")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
     candidates = await nav_repo.candidates()
     if wants_json(request):
         return JSONResponse([c.model_dump(mode="json") for c in candidates])
@@ -308,12 +314,14 @@ async def add_to_nav(
     org: CurrentOrgModel,
 ) -> Response:
     if membership.role != OrgRole.owner:
-        raise HTTPException(403, "Only owners can manage navigation")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
     body = await parse_body(request)
     slug = str(body.get("slug", "")).strip()
     page = or_404(await repo.by_slug(slug))
     if page.visibility == PageVisibility.draft:
-        raise HTTPException(422, "Draft pages cannot be added to navigation")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Draft pages cannot be added to navigation"
+        )
     await nav_repo.add(page.id)
     if wants_json(request):
         return JSONResponse({"ok": True})
@@ -330,7 +338,7 @@ async def remove_from_nav(
     org: CurrentOrgModel,
 ) -> Response:
     if membership.role != OrgRole.owner:
-        raise HTTPException(403, "Only owners can manage navigation")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
     page = or_404(await repo.by_slug(slug))
     await nav_repo.remove(page.id)
     if wants_json(request):
@@ -347,7 +355,7 @@ async def reorder_nav(
     nav_repo: PageNavRepo,
 ) -> Response:
     if membership.role != OrgRole.owner:
-        raise HTTPException(403, "Only owners can manage navigation")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
     body = await parse_body(request)
     page = or_404(await repo.by_slug(slug))
     above_slug = body.get("above_slug")
@@ -417,7 +425,7 @@ async def view_page(
     page = or_404(await PageRepository(admin, org.id).by_slug(slug))
     role = await role_in_org(admin, org.id, uuid.UUID(current_user.id)) if current_user else None
     if not _can_view(page.visibility, role):
-        raise HTTPException(403, "This page is not available")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
     can_edit = role == OrgRole.owner or (
         role is not None and page.visibility == PageVisibility.draft
     )

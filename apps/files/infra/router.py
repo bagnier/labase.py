@@ -3,7 +3,7 @@ import unicodedata
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
 
@@ -111,26 +111,26 @@ async def upload_file(
     repo: FileRepo,
 ):
     if not settings.uploads_enabled:
-        raise HTTPException(403, "Uploads are disabled")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Uploads are disabled")
 
     content = await file.read()
     if len(content) > settings.max_upload_mb * 1024 * 1024:
         return HTMLResponse(
             '<div role="alert" class="alert-error">File too large</div>',
-            status_code=413,
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
     quota_mb = settings.org_storage_quota_mb
     if quota_mb >= 0 and await repo.total_size() + len(content) > quota_mb * 1024 * 1024:
         return HTMLResponse(
             '<div role="alert" class="alert-error">Organisation storage quota exceeded</div>',
-            status_code=413,
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
     try:
         safe_name = _sanitize_filename(file.filename or "upload")
     except ValueError:
-        raise HTTPException(400, "Invalid filename") from None
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid filename") from None
 
     file_id = uuid.uuid4()
     path = storage_path(org_id, file_id, safe_name)
@@ -140,7 +140,7 @@ async def upload_file(
     try:
         await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
     except StorageApiError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     org_file = await repo.add(
         user_id=uuid.UUID(current_user.id),
@@ -193,7 +193,7 @@ async def delete_file(
 ):
     org_file = or_404(await repo.get(file_id))
     if not _can_modify(org_file.user_id, membership):
-        raise HTTPException(403, "Forbidden")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
 
     storage = user_storage_client(current_user.access_token)
     await storage.from_(BUCKET).remove([org_file.storage_path])
@@ -227,18 +227,18 @@ async def rename_file(
     try:
         safe_name = _sanitize_filename(filename)
     except ValueError:
-        raise HTTPException(400, "Invalid filename") from None
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid filename") from None
 
     org_file = or_404(await repo.get(file_id))
     if not _can_modify(org_file.user_id, membership):
-        raise HTTPException(403, "Forbidden")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
 
     new_path = storage_path(org_id, file_id, safe_name)
     storage = user_storage_client(current_user.access_token)
     try:
         await storage.from_(BUCKET).move(org_file.storage_path, new_path)
     except StorageApiError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     await repo.rename(org_file, safe_name, new_path)
 
@@ -273,13 +273,13 @@ async def public_share_download(
     repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
-        raise HTTPException(404, "Link not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Link not found")
     if share_token.expires_at < now():
-        raise HTTPException(410, "Link expired")
+        raise HTTPException(status.HTTP_410_GONE, "Link expired")
 
     org_file = await repo.get(share_token.file_id)
     if org_file is None:
-        raise HTTPException(404, "File not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
     storage = admin_storage()
     result = await storage.from_(BUCKET).create_signed_url(
