@@ -58,8 +58,8 @@ class PagesBrowserMixin(BrowserBase):
         self.page.wait_for_load_state("load")
 
     def _submit_edit_form(self) -> None:
-        self.page.click("#edit-page-form button[type=submit]")
-        self.page.wait_for_load_state("load")
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.click("#edit-page-form button[type=submit]")
 
     def change_slug(self, slug: str, new_slug: str) -> None:
         self._goto_edit(slug)
@@ -74,8 +74,8 @@ class PagesBrowserMixin(BrowserBase):
     def delete_page(self, slug: str) -> None:
         self._goto_edit(slug)
         self.page.on("dialog", lambda d: d.accept())
-        self.page.click("#delete-page-btn")
-        self.page.wait_for_load_state("load")
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.click("#delete-page-btn")
 
     def _set_visibility_via_form(self, slug: str, visibility: str) -> None:
         self._goto_edit(slug)
