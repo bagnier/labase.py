@@ -13,19 +13,26 @@ _USER_PASSWORD = "Secret1!"
 class ConsoleBrowserMixin(BrowserBase):
     def sign_in_as_admin(self, email: str) -> None:
         # Admin role must be set *before* login so the issued JWT carries app_metadata.role.
-        # Create + promote out of band (admin API), then log in on the current (visitor) context —
-        # not context_for(), which auto-logs-in at creation with the wrong password / no role.
+        # Use an isolated browser context for the admin so the current acting user's session
+        # is never polluted.
         delete_user_if_exists(email)
         set_admin_role(create_user(email, _ADMIN_PASSWORD))
         self._admin_email = email
-        self._admin_acting = self._acting_email  # the context that will hold the admin session
-        page = self.page
-        page.context.clear_cookies()
-        page.goto(f"{self.base_url}/auth/login")
-        page.fill("input[name=email]", email)
-        page.fill("input[name=password]", _ADMIN_PASSWORD)
-        page.click("button[type=submit]")
-        page.wait_for_url("**/profile", timeout=10000)
+        self._admin_acting = email  # admin lives in their own isolated context
+        # Tear down any stale context from a previous call with this email
+        if email in self._contexts:
+            self._contexts.pop(email).close()
+            self._pages.pop(email, None)
+        ctx = self._browser.new_context()
+        self._contexts[email] = ctx
+        setup_page = ctx.new_page()
+        setup_page.goto(f"{self.base_url}/auth/login")
+        setup_page.fill("input[name=email]", email)
+        setup_page.fill("input[name=password]", _ADMIN_PASSWORD)
+        setup_page.click("button[type=submit]")
+        setup_page.wait_for_url("**/profile", timeout=10000)
+        setup_page.close()
+        self.set_acting_email(email)
 
     def _as_admin(self) -> None:
         # Multi-user scenarios sign in other users (own contexts) after the admin; switch back
