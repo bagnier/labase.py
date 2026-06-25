@@ -39,7 +39,7 @@ class PagesBrowserMixin(BrowserBase):
         if slug is not None:
             self.page.fill("input[name=slug]", slug)
         if content:
-            self.page.fill("textarea[name=content]", _decode(content))
+            self.page.fill(".cm-content", _decode(content))
         self._submit_edit_form()
 
     def create_page(self, title: str, content: str) -> None:
@@ -68,7 +68,7 @@ class PagesBrowserMixin(BrowserBase):
 
     def update_content(self, slug: str, content: str) -> None:
         self._goto_edit(slug)
-        self.page.fill("textarea[name=content]", _decode(content))
+        self.page.fill(".cm-content", _decode(content))
         self._submit_edit_form()
 
     def delete_page(self, slug: str) -> None:
