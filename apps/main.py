@@ -16,14 +16,15 @@ from apps.todo.contract import integration as todo
 app = FastAPI(title="labase")
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
-# Order matters: contexts mounting under the `/{org_handle}/...` catch-all (organizations,
-# files, todo, learning) must come last, so fixed-prefix routers like /console/{app} are never
-# shadowed by it. Keep them at the tail of this tuple.
+# Order matters: FastAPI matches routes in registration order, not by specificity.
+# - public mounts GET /{slug} (single-segment catch-all) and must come LAST so fixed-prefix
+#   routers like /console and /organizations are never shadowed by it.
+# - org-scoped contexts (organizations, files, todo, learning, pages) mount /{org_handle}/...
+#   catch-alls and must also come after fixed-prefix routers for the same reason.
 _apps = (
     shared,
     auth,
     profile,
-    public,
     health,
     console,
     organizations,
@@ -31,6 +32,7 @@ _apps = (
     todo,
     learning,
     pages,
+    public,
 )
 for _app in _apps:
     _app.mount(app, host)
