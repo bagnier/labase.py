@@ -1,6 +1,9 @@
 {
   "name": "labase",
   "private": true,
+  "engines": {
+    "node": "^24"
+  },
   "scripts": {
     "build": "npm run build:js && npm run build:fonts && npm run build:icons && npm run build:css && npm run build:editor",
     "build:editor": "mkdir -p static/js/src && esbuild static/js/src/codemirror-editor.js --bundle --minify --outfile=static/js/codemirror-editor.js",
