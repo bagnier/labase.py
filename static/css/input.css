@@ -13,6 +13,7 @@
 .ph.ph-arrow-square-out:before { content: "\e5de"; }
 .ph.ph-book-open:before       { content: "\e0e6"; }
 .ph.ph-buildings:before       { content: "\e102"; }
+.ph.ph-calendar-dots:before   { content: "\e7b4"; }
 .ph.ph-caret-down:before      { content: "\e136"; }
 .ph.ph-clipboard-text:before  { content: "\e198"; }
 .ph.ph-currency-dollar:before { content: "\e550"; }

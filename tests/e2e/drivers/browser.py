@@ -1,4 +1,5 @@
 from apps.auth.tests.e2e import AuthBrowserMixin
+from apps.calendar.tests.e2e import CalendarBrowserMixin
 from apps.files.tests.e2e import OrgFileBrowserMixin
 from apps.learning.tests.e2e import LearningBrowserMixin
 from apps.organizations.tests.e2e import OrgBrowserMixin
@@ -17,6 +18,7 @@ class BrowserDriver(
     LearningBrowserMixin,
     OrgFileBrowserMixin,
     PagesBrowserMixin,
+    CalendarBrowserMixin,
     OrgBrowserMixin,
     BrowserBase,
 ):
