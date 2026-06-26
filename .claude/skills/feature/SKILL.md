@@ -9,126 +9,40 @@ description: >
 
 # Feature development process
 
-This project uses **pytest-bdd** with two drivers run on every scenario:
+This project uses **pytest-bdd** with two drivers run on every scenario — each scenario
+must pass under **both**:
 
 - `BrowserDriver` (Playwright, end-to-end via browser)
 - `ApiDriver` (direct HTTP calls)
 
-Each BDD scenario must pass under **both** drivers.
+## Four phases — load one reference at a time
 
-## Project layout
+Work the phases **in order**. Do **not** read a phase's reference until you enter that
+phase: each file holds only what's needed there, so loading them all at once is wasted
+context.
 
-Tests are **colocated** with each bounded context. Gherkin `.feature` files live at the root;
-step definitions and per-context driver mixins live under `app/<module>/tests/`.
+| Phase | Goal | Reference (read on entry) |
+|-------|------|---------------------------|
+| 1. Scenarios | Co-write the `.feature` file in dialogue, before any code | `references/scenarios.md` |
+| 2. Impact | Decide integration: events, contracts, dashboard/console/settings/security surfaces | `references/impact.md` |
+| 3. Design | Produce an HTML mockup of the screens | `references/design.md` |
+| 4. Build | Implement test-first, one scenario at a time | `references/build.md` |
 
-```
-features/                  ← Gherkin .feature files (+ <name>.analysis.md, <name>.mockup.html)
-conftest.py                ← driver fixture + pytest_plugins (registers each context's steps.py)
-tests/e2e/drivers/
-  protocols.py             ← ApiProtocol / BrowserProtocol (typing interfaces)
-  api.py                   ← ApiDriver (composes the *ApiMixin classes)
-  browser.py               ← BrowserDriver (composes the *BrowserMixin classes)
-app/
-  <module>/
-    domain/                ← business logic (models.py, service.py)
-    infra/                 ← router, repository, dependencies
-    templates/<module>/    ← Jinja2 + HTMX templates
-    tests/
-      steps.py             ← @given/@when/@then for this context (driver-agnostic)
-      driver_mixin_api.py  ← <Module>ApiMixin (httpx)
-      driver_mixin_browser.py ← <Module>BrowserMixin (Playwright)
-      driver_mixin.py      ← exports both mixins
-      test_scenarios.py    ← scenarios("../../../features/<name>.feature")
-```
+Each phase ends with a written artifact and **waits for user validation** before the next:
+`features/<name>.feature` → `features/<name>.analysis.md` → `features/<name>.mockup.html` → code.
 
-A new context's step module must be registered in the root `conftest.py` `pytest_plugins` list,
-and its mixins added to `ApiDriver` / `BrowserDriver` in `tests/e2e/drivers/`.
+## Writing principle (applies to every reference)
 
-## Scenarios — Write the `.feature` file (iterative, before any code)
-
-- User describes the feature idea in natural language.
-- Together, build the Gherkin scenarios one by one via dialogue.
-  - Write or update the in `features/<name>.feature` file`.
-  - Use english language.
-  - Propose scenarios, discuss edge cases, revise wording.
-  - Reuse existing steps from any context's `app/<module>/tests/steps.py` when possible (e.g. auth/sign-in steps in `app/auth/tests/steps.py`).
-  - Aim for scenarios that are readable by a non-technical user.
-  - Steps must express **user intent**, not technical actions:
-    - ✗ `When they click the submit button`
-    - ✗ `When a POST request is sent to /auth/login`
-    - ✓ `When they sign in with email "alice@example.com" and password "Secret1!"`
-  - Steps must include **concrete values** (emails, passwords, names…), not vague placeholders like "valid credentials" or "some email".
-  - If a `Given` step is identical in every scenario, extract it to a `Background:` block instead of repeating it.
-  - Every precondition must be explicit in the scenario via a `Given` step. No hidden state, no assumed context:
-    - ✗ `When they update their profile` ← who is logged in? how did they get there?
-    - ✓ `Given a user is signed in as "alice@example.com" with password "Secret1!"` / `When they update their display name to "Alice"`
-- **Do not touch any Python code until the `.feature` is agreed upon.**
-- Wait for user validation to go forth.
-
-## Impact — Integration analysis (before any code)
-
-Perform an impact analysis: identify how the new feature interacts with existing bounded contexts.
-
-Ask open questions like:
-
-- Which existing modules, services, or entities does this feature depend on or modify?
-- Does this feature emit or consume domain events? Does it need to hook into existing flows (auth, permissions, notifications…)?
-- Does it share data with another context, or does it own its data entirely?
-- Are there existing endpoints, repositories, or domain models that need to be extended?
-
-Produce a short written summary of the decisions (a few bullet points is enough). Use english language.Update the scenarios accordingly. Store it in `features/<name>.analysis.md`. **No code yet.**
-
-Wait for user validation to go forth.
-
-## Design — UI mockup (before any code)
-
-Produce an **HTML mockup** of the feature's screens and interactions.
-
-- Use a single static `.html` file stored at `features/<name>.mockup.html` (no backend, inline CSS is fine).
-- Show the full page layout for each relevant state (empty state, populated, error…).
-- Mark interactive elements clearly (forms, buttons, links).
-- HTMX attributes (`hx-post`, `hx-swap`…) may appear as hints but are not required.
-- The mockup is for alignment, not production — keep it rough.
-
-Iterate with the user until the layout and interactions are agreed upon. Update the scenarios accordingly. **No Python code yet.**
-
-Wait for user validation to go forth.
-
-## Build — Implement (test-driven, strictly per scenario)
-
-For **each scenario** in the `.feature` file, execute the following steps **in order** before moving to the next scenario. Run `make test` after each sub-step.
-
-### Per-scenario cycle (repeat for every scenario)
-
-#### Step definitions (`app/<module>/tests/steps.py`)
-
-- Add missing `@given` / `@when` / `@then` decorators.
-- Steps must be driver-agnostic: they only call methods on `driver`.
-- Steps that need a new driver method → add a `NotImplementedError` stub first.
-- For a brand-new context, create `app/<module>/tests/steps.py` and register it in the root
-  `conftest.py` `pytest_plugins` list, plus `test_scenarios.py` pointing at the `.feature`.
-- Run `make test` → the scenario must fail with `NotImplementedError`, not a missing step error.
-
-#### Drivers (`app/<module>/tests/driver_mixin_api.py` and `driver_mixin_browser.py`)
-
-- Implement the new methods on **both** mixins, then compose them into `ApiDriver` /
-  `BrowserDriver` (`tests/e2e/drivers/{api,browser}.py`) and extend the protocols in `protocols.py`.
-- If a brand-new driver is needed (e.g. email, queue), create it without asking.
-- Run `make test` → the scenario must fail with an application error (404, missing route…), not a driver error.
-
-#### Application code (`app/<module>/`)
-
-- Implement domain logic first (`domain/`), then infra (`infra/`).
-- Follow the existing pattern: `domain/service.py` → `infra/router.py` + `infra/repository.py`.
-- Run `make test` → **the scenario must pass before moving to the next one.**
-
-### Refactoring
-
-- **Minor** (rename, extract variable, simplify condition): do it immediately.
-- **Major** (new abstraction, cross-module restructure): note as TODO, do it later.
+These references state only what is **specific to this project and not guessable** — the
+`contract/` boundary, the typed event bus, the logging conventions, the strict per-scenario
+cycle. They deliberately skip generic tutorial material (what a FastAPI route or a domain
+model is). Keep that bar when editing them.
 
 ## Rules
 
-- Never skip phase boundaries: no code before Scenarios is settled; no Build before Impact and Design are agreed.
-- The per-scenario cycle in Build is **strict**: feature → steps → drivers → prod code, one scenario at a time.
-- Claude works autonomously through Implement Phase; user reviews diffs and commits.
+- Never skip phase boundaries: no code before Scenarios is settled; no Build before Impact
+  and Design are agreed.
+- The per-scenario cycle in Build is **strict**: feature → steps → drivers → prod code, one
+  scenario at a time. Run `make test` between sub-steps.
+- Claude works autonomously through the Build phase; the user reviews diffs and commits.
+- When done, run `make ci` as a background task before claiming completion.
