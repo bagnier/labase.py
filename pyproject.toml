@@ -28,6 +28,7 @@ dev = [
     "openapi-python-client==0.29.0",
     "pip-audit==2.10.1",
     "playwright==1.60.0",
+    "pre-commit==4.6.0",
     "pytest-asyncio==1.4.0",
     "pytest-bdd==8.1.0",
     "pytest-cov==7.1.0",
