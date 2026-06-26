@@ -271,13 +271,13 @@ class PagesBrowserMixin(BrowserBase):
         )
 
     def assert_page_nav_shows(self, title: str) -> None:
-        nav = self.page.locator('nav[aria-label="Page navigation"]')
+        nav = self.page_for(_VISITOR).locator('nav[aria-label="Page navigation"]')
         assert nav.count() > 0, "no page navigation found on page"
         links = [el.inner_text().strip() for el in nav.locator("a").all()]
         assert title in links, f"nav link to '{title}' not found: {links}"
 
     def assert_page_nav_not_shows(self, title: str) -> None:
-        nav = self.page.locator('nav[aria-label="Page navigation"]')
+        nav = self.page_for(_VISITOR).locator('nav[aria-label="Page navigation"]')
         if nav.count() == 0:
             return
         links = [el.inner_text().strip() for el in nav.locator("a").all()]

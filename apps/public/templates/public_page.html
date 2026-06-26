@@ -35,7 +35,7 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 px-3 py-4 overflow-y-auto">
+    <nav aria-label="Page navigation" class="flex-1 px-3 py-4 overflow-y-auto">
       {% for link in page_nav %}
       <a href="/{{ link.slug }}"
          class="nav-link {% if link.slug == page.slug %}active{% endif %}">
