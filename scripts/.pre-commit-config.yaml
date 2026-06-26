@@ -5,3 +5,7 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+  - repo: https://github.com/thoughtworks/talisman
+    rev: v1.37.0
+    hooks:
+      - id: talisman-commit

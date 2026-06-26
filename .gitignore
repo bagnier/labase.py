@@ -16,6 +16,7 @@ __pycache__/
 .ruff_cache/
 dist/
 htmlcov/
+talisman_report/
 
 # Supabase local state
 supabase/.branches/

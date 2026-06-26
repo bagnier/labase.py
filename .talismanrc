@@ -1,0 +1,17 @@
+# Talisman false-positive allowlist.
+# `ignore_detectors: [filecontent]` is stable across edits (no checksum to refresh),
+# used here for files that are structurally noisy but contain no real secrets:
+#   - lockfiles: sha256 hashes trip the entropy/keyword heuristics
+#   - env templates: documented placeholders, not actual credentials
+# Source code is intentionally NOT ignored: the commit hook only scans staged
+# additions, so it just flags genuinely new secret-looking lines.
+fileignoreconfig:
+  - filename: uv.lock
+    ignore_detectors: [filecontent]
+  - filename: package-lock.json
+    ignore_detectors: [filecontent]
+  - filename: .env.example
+    ignore_detectors: [filecontent, filename]
+  - filename: .env.test
+    ignore_detectors: [filecontent, filename]
+version: "1.0"
