@@ -36,7 +36,14 @@ Organized by **bounded context**, each split into `domain/` (business logic, fra
 HTTP request → infra/router.py → domain/service.py → infra/repository.py → DB / external service
 ```
 
-Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/` (incl. API + browser driver mixins), `<context>/tests/steps.py`. Shared layout sits in `apps/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
+Templates, tests, and BDD steps live with their context: `<context>/templates/`, `<context>/tests/e2e/` (incl. API + browser driver mixins), `<context>/tests/e2e/steps.py`. Shared layout sits in `apps/shared/templates/`, Gherkin `.feature` files in `features/`, and shared E2E drivers in `tests/e2e/drivers/`. The `todo/`, `files/`, and `learning/` contexts are demos — each illustrates a pattern (`todo/` trivial CRUD, `files/` Supabase Storage + share tokens, `learning/` hexagonal architecture). Delete the ones you don't need when starting real work.
+
+> **Building a feature?** The `/feature` skill walks the BDD workflow phase by phase, each with a focused reference:
+> [SKILL.md](.claude/skills/feature/SKILL.md) (overview) ·
+> [scenarios](.claude/skills/feature/references/scenarios.md) (write the `.feature`) ·
+> [impact](.claude/skills/feature/references/impact.md) (integration, surfaces, data) ·
+> [design](.claude/skills/feature/references/design.md) (UI mockup) ·
+> [build](.claude/skills/feature/references/build.md) (TDD + structure, events, observability, security, Tailwind, a11y).
 
 ### Integration & event bus
 
@@ -88,11 +95,17 @@ Both drivers share a substrate in `tests/e2e/drivers/` (`ApiBase` / `BrowserBase
 
 **Time.** `clock.now()` is the single source of time. Never call `datetime.now()` directly.
 
+**Observability.** Structured logging via `structlog.get_logger("labase.<context>.<subject>")` — events are dotted `snake_case` with kwargs, never f-strings or `print`. The `RequestLogger` middleware binds a `request_id` (contextvars) so logs across a request correlate automatically.
+
 **Audit events** are best-effort — fired as `BackgroundTasks`, loss on crash is acceptable. Never block a mutation to guarantee a write.
 
-**Multi-tenancy.** Each account gets a personal org at sign-up; org-scoped data lives under `/{org_slug}/...`. Members read, owners write — gated by `CurrentOwnerMembership` for a clean `403`.
+**Multi-tenancy.** Each account gets a personal org at sign-up; org-scoped data lives under `/{org_handle}/...`. Members read, owners write — gated by `CurrentOwnerMembership` for a clean `403`.
 
-**Page composition.** The shell (`profile/contract/shell.py`) is pulled in explicitly via `page_context` (full pages) or `shell_context` (partial). No middleware injects data silently — full pages load the shell, HTMX fragments don't.
+**Page composition.** The shell (`profile/contract/shell.py`) is pulled in explicitly via `page_context` (full pages) or `shell_context` (partial). No middleware injects data silently — full pages load the shell, HTMX fragments don't. Sidebar entries are registered in `mount()` via `host.register_nav(NavItem(...))`, or contributed dynamically per org through the `ShellOrgQuery` event.
+
+**Toggleable apps.** A context declares its admin-tunable values with `declare_app_settings(...)` and can expose an on/off `feature_switch()`; when disabled, its `mount()` short-circuits but still answers `ConsoleOverviewQuery` so admins can re-enable it. The SaaS admin console (`settings/`) aggregates these server-wide stats (BYPASSRLS, across all orgs).
+
+**Styling.** Tailwind with reusable component classes defined in `@layer components` in `static/css/input.css` (`btn-primary`, `input`, `card`, `list-panel`, `alert-*`, `page-title`…). Reuse them instead of re-spelling utility chains; markup follows semantic, accessible HTML (real landmarks, labelled controls, `aria-hidden` on decorative icons, visible focus rings).
 
 ## Structure
 
@@ -113,12 +126,18 @@ labase.py/
 │   ├── profile/           # User profile + page shell (shell_context / page_context)
 │   ├── files/             # Demo context — Supabase Storage + share tokens
 │   ├── learning/          # Demo context — spaced repetition (HexArch example)
+│   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav
 │   ├── settings/          # App settings / SaaS admin console
-│   ├── public/            # Public landing pages
+│   ├── public/            # Public landing pages + public org pages (/{org_handle}/{slug})
 │   ├── health/            # Liveness / readiness probes
-│   └── todo/              # Demo context — trivial CRUD, full-pattern reference
+│   └── todo/              # Demo context — trivial CRUD, the full-pattern reference:
+│       ├── domain/        #   models.py (ORM + DTO); CRUD skips service.py
+│       ├── infra/         #   router.py (HTML/JSON/HTMX), repository.py
+│       ├── contract/      #   integration.py mount(): nav, settings, overview, seed
+│       ├── templates/todo/#   list + _list_fragment (HTMX) + _overview (card)
+│       └── tests/e2e/     #   steps.py, driver_mixin_{api,browser}.py
 ├── features/              # BDD Gherkin scenarios (plain text, no code)
-├── tests/                 # Top-level conftest + config tests
+├── tests/                 # pytest plugin entry (plugin.py) + config tests; e2e drivers in e2e/
 ├── static/                # Compiled CSS, HTMX, fonts (gitignored)
 ├── supabase/migrations/   # Versioned SQL (Supabase CLI)
 ├── docker/                # Dockerfile(s), docker-compose.yml, entrypoint.sh
@@ -146,7 +165,7 @@ This runs `uv sync`, installs pre-commit hooks, copies `.env.example → .env` (
 
 ### Front-end assets
 
-`static/` is gitignored and must be built before running the app. `make install` copies HTMX and Inter fonts from `node_modules` and compiles `static/input.css` → `static/tailwind.css` via Tailwind CLI.
+`static/` is gitignored and must be built before running the app. `make install` copies HTMX and Inter fonts from `node_modules` and compiles `static/css/input.css` → `static/css/tailwind.css` via Tailwind CLI.
 
 Re-run `make install` whenever you add a new Tailwind class (unused classes are purged) or upgrade a `package.json` dependency.
 
@@ -227,5 +246,5 @@ make test         # pytest unit/integration (generates coverage)
 make test-e2e     # pytest-bdd browser driver + Playwright E2E
 make test-all     # test + test-e2e + coverage XML
 
-make ci           # js-build + lint + typecheck + test + test-e2e + coverage XML
+make ci           # js-build + lint + format + typecheck + audit + test + test-e2e + coverage
 ```
