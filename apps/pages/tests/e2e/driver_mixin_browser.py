@@ -122,6 +122,10 @@ class PagesBrowserMixin(BrowserBase):
         page = self.page_for(_VISITOR)
         self.last_response = page.goto(self._pages_url(), wait_until="load")
 
+    def visitor_view_public_page(self, slug: str) -> None:
+        page = self.page_for(_VISITOR)
+        self.last_response = page.goto(f"{self.base_url}/{slug}", wait_until="load")
+
     # ── assertions ──────────────────────────────────────────────────────────--
     def assert_page_in_list(self, title: str) -> None:
         self._goto_list()
