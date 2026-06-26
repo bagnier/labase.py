@@ -9,13 +9,13 @@ from supabase import AsyncClient, Client, acreate_client, create_client
 
 async def get_user_supabase() -> AsyncClient:
     s = get_technical_settings()
-    return await acreate_client(s.supabase_url, s.supabase_anon_key)
+    return await acreate_client(s.supabase_api_url, s.supabase_publishable_key)
 
 
 @lru_cache
 def get_admin_supabase() -> Client:
     s = get_technical_settings()
-    return create_client(s.supabase_url, s.supabase_service_role_key)
+    return create_client(s.supabase_api_url, s.supabase_secret_key)
 
 
 async def auth_user_exists(admin_session: AsyncSession, email: str) -> bool:

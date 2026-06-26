@@ -12,17 +12,24 @@ from apps.shared.config import get_technical_settings
 @lru_cache
 def _user_engine():
     settings = get_technical_settings()
-    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    connect_args = {
+        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
+    }
     return create_async_engine(
-        settings.database_url, echo=False, pool_pre_ping=True, connect_args=connect_args
+        settings.supabase_database_user_url,
+        echo=False,
+        pool_pre_ping=True,
+        connect_args=connect_args,
     )
 
 
 @lru_cache
 def _admin_engine():
     settings = get_technical_settings()
-    url = settings.database_url_service or settings.database_url
-    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    url = settings.supabase_database_admin_url or settings.supabase_database_user_url
+    connect_args = {
+        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
+    }
     return create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)
 
 

@@ -92,5 +92,5 @@ async def _create_org(event: UserCreated) -> None:
             auth_user_id=uuid.UUID(event.user_id),
         )
         await session.commit()
-    if event.access_token and get_technical_settings().db_schema != "test":
+    if event.access_token and get_technical_settings().supabase_database_schema != "test":
         await host.events.emit(OrgCreated(org_id=org.id, access_token=event.access_token))

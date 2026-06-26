@@ -152,51 +152,22 @@ labase.py/
 - [uv](https://docs.astral.sh/uv/)
 - [Docker](https://www.docker.com/)
 - [Supabase CLI](https://supabase.com/docs/guides/cli)
-- [Node.js](https://nodejs.org/) (Tailwind build)
-- [pre-commit](https://pre-commit.com/) (`uv tool install pre-commit`)
+- [Node.js](https://nodejs.org/) 24+ (Tailwind build)
 
-### Install
-
-```bash
-make install
-```
-
-This runs `uv sync`, installs pre-commit hooks, copies `.env.example → .env` (if not present), and builds front-end assets.
-
-### Front-end assets
-
-`static/` is gitignored and must be built before running the app. `make install` copies HTMX and Inter fonts from `node_modules` and compiles `static/css/input.css` → `static/css/tailwind.css` via Tailwind CLI.
-
-Re-run `make install` whenever you add a new Tailwind class (unused classes are purged) or upgrade a `package.json` dependency.
-
-### `.env` vs `.env.test`
-
-| File        | Used by                                 | Hosts                        |
-| ----------- | --------------------------------------- | ---------------------------- |
-| `.env`      | `docker compose` (app container)        | `host.docker.internal:543xx` |
-| `.env.test` | `make test` / `make test-e2e` (on host) | `localhost:543xx`            |
-
-The app container reaches Supabase via `host.docker.internal` (mapped by `extra_hosts` in `docker/docker-compose.yml`). Tests run directly on the host, so they use `localhost`.
-
-**`DEBUG=true`** must be set in both files while running over plain HTTP. Without it, session cookies are set with the `Secure` flag and the browser (or httpx) silently drops them on non-HTTPS connections, causing every authenticated request to return 401.
-
-### Start Supabase locally
+### Steps
 
 ```bash
-make db-start
+make install      # uv sync + pre-commit hooks + front-end assets (static/)
+make db-start     # start local Supabase (first run pulls ~10 containers; applies migrations)
+make env          # write .env from `supabase status -o env`
+make dev          # Supabase + app via Docker Compose, hot-reload
 ```
 
-`supabase start` downloads and starts about ten Docker containers (Postgres, Auth, Storage, Studio…). The first run takes a few minutes.
+App: http://localhost:8000 · Swagger: http://localhost:8000/docs
 
-Once started, `supabase status` prints the URLs and keys to copy into `.env`:
+### Reference
 
-```
-API URL:          http://localhost:54321
-DB URL:           postgresql://postgres:postgres@localhost:54322/postgres
-Studio URL:       http://localhost:54323
-anon key:         eyJ...
-service_role key: eyJ...
-```
+**Local Supabase endpoints** (from `supabase status`):
 
 | Interface           | URL                    | Purpose                                                     |
 | ------------------- | ---------------------- | ----------------------------------------------------------- |
@@ -204,23 +175,19 @@ service_role key: eyJ...
 | **Supabase API**    | http://localhost:54321 | PostgREST, Auth API, Storage API                            |
 | **Postgres direct** | localhost:54322        | psql or any SQL client (user: `postgres`, pass: `postgres`) |
 
-### Apply migrations
+**`.env` vs `.env.test`:**
 
-```bash
-make migrate      # supabase db push — applies supabase/migrations/
-make db-reset     # wipe and replay all migrations from scratch
-```
+| File        | Used by                                 | Hosts                        |
+| ----------- | --------------------------------------- | ---------------------------- |
+| `.env`      | `docker compose` (app container)        | `host.docker.internal:543xx` |
+| `.env.test` | `make test` / `make test-e2e` (on host) | `localhost:543xx`            |
 
-### Start the application
+`make env` generates `.env` (mapping the Supabase CLI output to `SUPABASE_API_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_DATABASE_USER_URL`, `SUPABASE_DATABASE_ADMIN_URL`, with the asyncpg driver and `host.docker.internal` host). `.env.test` is committed and uses `localhost`.
 
-```bash
-make dev          # Supabase (host) + app via Docker Compose with hot-reload
-```
-
-| Interface             | URL                        |
-| --------------------- | -------------------------- |
-| **App**               | http://localhost:8000      |
-| **OpenAPI / Swagger** | http://localhost:8000/docs |
+Notes:
+- **Front-end assets** — `static/` is gitignored; re-run `make install` after adding a Tailwind class (unused ones are purged) or bumping a `package.json` dependency.
+- **`COOKIES_SECURE=false`** is required over plain HTTP. Otherwise session cookies get the `Secure` flag and are dropped on non-HTTPS, returning 401 on every authenticated request.
+- **Migrations** — `supabase start` and `make db-reset` apply `supabase/migrations/` locally. `make migrate` (`supabase db push`) is for a linked **remote** project.
 
 ## Commands
 
@@ -235,6 +202,7 @@ make db-stop      # Stop local Supabase
 make db-reset     # Wipe and reset local DB
 make migrate      # Apply migrations (supabase db push)
 
+make env          # Write .env from `supabase status -o env`
 make install      # uv sync + pre-commit + .env + npm install + npm run build
 
 make lint         # ruff check --fix

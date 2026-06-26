@@ -34,10 +34,10 @@ async def logout(access_token: str) -> None:
     try:
         async with httpx.AsyncClient() as client:
             await client.post(
-                f"{s.supabase_url}/auth/v1/logout",
+                f"{s.supabase_api_url}/auth/v1/logout",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "apikey": s.supabase_anon_key,
+                    "apikey": s.supabase_publishable_key,
                 },
             )
     except Exception:

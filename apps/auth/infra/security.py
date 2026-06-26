@@ -14,7 +14,7 @@ log = structlog.get_logger("labase.auth.security")
 
 @lru_cache
 def _jwks_client() -> jwt.PyJWKClient:
-    jwks_uri = f"{get_technical_settings().supabase_url}/auth/v1/.well-known/jwks.json"
+    jwks_uri = f"{get_technical_settings().supabase_api_url}/auth/v1/.well-known/jwks.json"
     return jwt.PyJWKClient(jwks_uri)
 
 

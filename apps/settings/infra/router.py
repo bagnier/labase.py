@@ -44,10 +44,14 @@ async def _supabase_link(group: SettingsGroup, session: AdminSession) -> dict[st
     settings = get_technical_settings()
     if link.table is not None:
         oid = await AppSettingRepository(session).table_oid(link.table)
-        path = f"editor/{oid}?schema={settings.db_schema}" if oid is not None else "editor"
+        path = (
+            f"editor/{oid}?schema={settings.supabase_database_schema}"
+            if oid is not None
+            else "editor"
+        )
     else:
         path = link.path
-    href = studio_link(settings.supabase_url, path)
+    href = studio_link(settings.supabase_api_url, path)
     return {"label": link.label, "href": href}
 
 

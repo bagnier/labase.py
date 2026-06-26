@@ -11,10 +11,10 @@ BUCKET = "org-files"
 def user_storage_client(access_token: str) -> AsyncStorageClient:
     s = get_technical_settings()
     return AsyncStorageClient(
-        url=f"{s.supabase_url}/storage/v1/",
+        url=f"{s.supabase_api_url}/storage/v1/",
         headers={
             "Authorization": f"Bearer {access_token}",
-            "apikey": s.supabase_anon_key,
+            "apikey": s.supabase_publishable_key,
         },
     )
 
@@ -23,10 +23,10 @@ def admin_storage() -> AsyncStorageClient:
     """Used only inside app boundary (e.g. public share proxy). Never expose to client."""
     s = get_technical_settings()
     return AsyncStorageClient(
-        url=f"{s.supabase_url}/storage/v1/",
+        url=f"{s.supabase_api_url}/storage/v1/",
         headers={
-            "Authorization": f"Bearer {s.supabase_service_role_key}",
-            "apikey": s.supabase_service_role_key,
+            "Authorization": f"Bearer {s.supabase_secret_key}",
+            "apikey": s.supabase_secret_key,
         },
     )
 

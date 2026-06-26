@@ -69,8 +69,10 @@ async def db_session():
     so the connection must be disposed rather than returned to a shared pool.
     """
     settings = get_technical_settings()
-    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
-    engine = create_async_engine(settings.database_url, connect_args=connect_args)
+    connect_args = {
+        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
+    }
+    engine = create_async_engine(settings.supabase_database_user_url, connect_args=connect_args)
     try:
         async with engine.connect() as conn:
             await conn.begin()

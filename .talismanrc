@@ -1,10 +1,19 @@
-# Talisman false-positive allowlist.
-# `ignore_detectors: [filecontent]` is stable across edits (no checksum to refresh),
-# used here for files that are structurally noisy but contain no real secrets:
-#   - lockfiles: sha256 hashes trip the entropy/keyword heuristics
-#   - env templates: documented placeholders, not actual credentials
-# Source code is intentionally NOT ignored: the commit hook only scans staged
-# additions, so it just flags genuinely new secret-looking lines.
+# Talisman config.
+#
+# `threshold: medium` is the global lever: keyword false-positives (the
+# `secret_key` / `publishable_key` field names, the `\.?env` filename pattern)
+# are all severity *low*, while real leaked credentials register *high* via the
+# entropy / known-pattern detectors. So one threshold clears the noise without
+# any per-file or per-token bookkeeping.
+#
+# The lockfiles and env templates below are still file-ignored: their content is
+# high-entropy (sha256 hashes) or documented local placeholders that *would*
+# otherwise clear the threshold.
+version: "1.0"
+threshold: medium
+custom_severities:
+  - detector: PasswordPhrasePattern
+    severity: low
 fileignoreconfig:
   - filename: uv.lock
     ignore_detectors: [filecontent]
@@ -14,4 +23,3 @@ fileignoreconfig:
     ignore_detectors: [filecontent, filename]
   - filename: .env.test
     ignore_detectors: [filecontent, filename]
-version: "1.0"

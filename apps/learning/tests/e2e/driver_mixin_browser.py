@@ -41,8 +41,12 @@ class LearningBrowserMixin(BrowserBase):
         def target() -> None:
             async def go() -> None:
                 settings = get_technical_settings()
-                url = settings.database_url_service or settings.database_url
-                connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+                url = settings.supabase_database_admin_url or settings.supabase_database_user_url
+                connect_args = {
+                    "server_settings": {
+                        "search_path": f"{settings.supabase_database_schema},public"
+                    }
+                }
                 engine = create_async_engine(url, poolclass=NullPool, connect_args=connect_args)
                 try:
                     async with AsyncSession(engine, expire_on_commit=False) as s:

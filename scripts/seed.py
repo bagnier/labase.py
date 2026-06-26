@@ -54,8 +54,10 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
     set_admin_role(uid_str)
     print("  → promoted to server admin")
 
-    url = settings.database_url_service or settings.database_url
-    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    url = settings.supabase_database_admin_url or settings.supabase_database_user_url
+    connect_args = {
+        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
+    }
     engine = create_async_engine(url, connect_args=connect_args)
 
     async with engine.begin() as conn, AsyncSession(bind=conn, expire_on_commit=False) as session:

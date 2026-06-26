@@ -1,10 +1,9 @@
-.PHONY: dev up down logs db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act client-gen
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act client-gen
 
 # --- Setup ---
 install:
 	uv sync --all-groups
 	pre-commit install --config scripts/.pre-commit-config.yaml
-	@test -f .env || cp .env.example .env
 	npm install
 	$(MAKE) js-build
 
@@ -19,6 +18,9 @@ client-gen:
 # --- Local Supabase ---
 db-start:
 	supabase start
+
+env:
+	uv run python scripts/gen_env.py
 
 db-stop:
 	supabase stop

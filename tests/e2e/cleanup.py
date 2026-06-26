@@ -14,8 +14,10 @@ _TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local"]
 
 def _service_engine():
     settings = get_technical_settings()
-    url = settings.database_url_service or settings.database_url
-    connect_args = {"server_settings": {"search_path": f"{settings.db_schema},public"}}
+    url = settings.supabase_database_admin_url or settings.supabase_database_user_url
+    connect_args = {
+        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
+    }
     return create_async_engine(url, poolclass=NullPool, connect_args=connect_args)
 
 
