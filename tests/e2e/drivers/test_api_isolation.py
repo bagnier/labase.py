@@ -70,6 +70,18 @@ def test_set_acting_email_promotes_the_visitor_client(api: ApiDriver) -> None:
     assert api._acting_email == _ALICE
 
 
+def test_sign_in_syncs_acting_email_with_the_authenticated_session(api: ApiDriver) -> None:
+    """Symmetric guard to the browser driver: sign_in promotes the acting user so
+    the acting client is the one actually logged in."""
+    email = "carol@example.com"
+    api.ensure_registered(email, "Secret1!")
+    api.sign_in(email, "Secret1!")
+
+    assert api._acting_email == email
+    assert VISITOR not in api._clients  # promoted, not duplicated
+    assert _whoami(api.client()).json()["email"] == email
+
+
 def test_reset_session_closes_clients_and_resets_acting(api: ApiDriver) -> None:
     api.client_for(_ALICE)
     api.set_acting_email(_ALICE)

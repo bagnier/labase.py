@@ -36,6 +36,7 @@ class AuthBrowserMixin(BrowserBase):
             self.page.click("button[type=submit]")
         if resp_info.value.status == 303 or resp_info.value.headers.get("hx-redirect"):
             self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
+            self.set_acting_email(email)
         else:
             self.page.wait_for_load_state("domcontentloaded")
 

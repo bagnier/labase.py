@@ -3,8 +3,7 @@
 Asserts that ``context_for(email)`` hands each email its own cookie jar (distinct
 Playwright context), that ``page_for`` caches one page per email, and that the
 acting-email switching and ``reset_session`` behave. Runs only under the browser
-driver (skipped otherwise). The ``test_scenarios`` filename prefix lets the
-``-k test_scenarios`` filter of ``make test-e2e`` pick it up.
+driver (skipped otherwise).
 """
 
 import pytest
@@ -60,6 +59,22 @@ def test_page_follows_acting_email(browser: BrowserDriver) -> None:
 
     browser.clear_acting_email()
     assert browser.context is browser.context_for(_VISITOR)
+
+
+def test_sign_in_syncs_acting_email_with_the_authenticated_session(
+    browser: BrowserDriver,
+) -> None:
+    """Guard the API/browser symmetry: sign_in must promote the acting user so the
+    acting page is the one actually logged in — no orphan visitor context, no
+    duplicate context for the same email."""
+    email = "carol@example.com"
+    browser.ensure_registered(email, "Secret1!")
+    browser.sign_in(email, "Secret1!")
+
+    assert browser._acting_email == email
+    assert email in browser._contexts
+    assert _VISITOR not in browser._contexts  # promoted, not duplicated
+    assert _email_on_profile(browser, email) == email
 
 
 def test_reset_session_reopens_a_fresh_visitor_context(browser: BrowserDriver) -> None:

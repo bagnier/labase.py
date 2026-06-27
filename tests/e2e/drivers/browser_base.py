@@ -133,6 +133,16 @@ class BrowserBase:
         return self.page_for(self._acting_email)
 
     def set_acting_email(self, email: str) -> None:
+        """Adopt `email` as the acting user, promoting the visitor context if one exists.
+
+        Mirrors ApiBase.set_acting_email: when the freshly-authenticated visitor
+        context becomes a named user, re-key it (and its page) rather than spawning
+        a second context that would re-register/re-login the same email.
+        """
+        if _VISITOR in self._contexts and email not in self._contexts:
+            self._contexts[email] = self._contexts.pop(_VISITOR)
+            if _VISITOR in self._pages:
+                self._pages[email] = self._pages.pop(_VISITOR)
         self._acting_email = email
 
     def clear_acting_email(self) -> None:
