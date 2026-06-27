@@ -191,6 +191,37 @@ Notes:
 - **`COOKIES_SECURE=false`** is required over plain HTTP. Otherwise session cookies get the `Secure` flag and are dropped on non-HTTPS, returning 401 on every authenticated request.
 - **Migrations** — `supabase start` and `make db-reset` apply `supabase/migrations/` locally. `make migrate` (`supabase db push`) is for a linked **remote** project.
 
+### Parallel work: isolated worktrees
+
+To develop several features in parallel without their data colliding — and so `make ci`
+never wipes your `make dev` data — each git worktree gets its **own** Postgres schema,
+Storage bucket and app port, all on the **single** shared local Supabase stack (no second
+`supabase start`).
+
+```bash
+make worktree NAME=calendar     # creates worktrees/calendar
+cd worktrees/calendar && make dev   # → its own port (e.g. http://localhost:8019)
+make worktree-rm NAME=calendar  # removes worktree + schema + bucket
+```
+
+Per worktree `<name>`:
+
+| Resource  | Dev (`make dev`)     | Test (`make ci`)        |
+| --------- | -------------------- | ----------------------- |
+| DB schema | `wt_<name>`          | `wt_<name>_test`        |
+| Bucket    | `org-files-<name>`   | `org-files-<name>-test` |
+| App port  | derived from name    | in-process              |
+| Dev user  | `<name>@labase.dev`  | —                       |
+
+The schema is a structural clone of `public` (`scripts/provision_schema.py` — a `pg_dump`
+of `public`, rewritten to the target schema, plus the Storage bucket/policies and a
+per-schema signup trigger). **Auth (GoTrue / `auth.users`) is shared**: isolation there is
+logical — the dev user is namespaced by email, and `make ci` only purges its own
+test-email domains. A `node_modules` symlink and `uv sync` mean a worktree needs no full
+reinstall. The same mechanism makes the main repo's own tests run in a real `test` schema
+(`make provision-test`, run automatically by `make test`), so they no longer touch
+`public` / your `make dev` data.
+
 ## Commands
 
 ```bash
@@ -205,6 +236,9 @@ make db-reset     # Wipe and reset local DB
 make migrate      # Apply migrations (supabase db push)
 
 make env          # Write .env from `supabase status -o env`
+make worktree NAME=x     # New git worktree with its own schema/bucket/port
+make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)
+
 make install      # uv sync + pre-commit + .env + npm install + npm run build
 
 make lint         # ruff check --fix

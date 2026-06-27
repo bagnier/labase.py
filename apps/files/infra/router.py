@@ -12,8 +12,8 @@ from apps.files.contract import settings
 from apps.files.domain.models import OrgFileRead
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.storage import (
-    BUCKET,
     admin_storage,
+    bucket,
     rewrite_signed_url,
     storage_path,
     user_storage_client,
@@ -138,7 +138,7 @@ async def upload_file(
 
     storage = user_storage_client(current_user.access_token)
     try:
-        await storage.from_(BUCKET).upload(path, content, {"content-type": content_type})
+        await storage.from_(bucket()).upload(path, content, {"content-type": content_type})
     except StorageApiError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -172,7 +172,7 @@ async def download_file(
 ):
     org_file = or_404(await repo.get(file_id))
     storage = user_storage_client(current_user.access_token)
-    result = await storage.from_(BUCKET).create_signed_url(
+    result = await storage.from_(bucket()).create_signed_url(
         org_file.storage_path, settings.signed_url_ttl
     )
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
@@ -196,7 +196,7 @@ async def delete_file(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
 
     storage = user_storage_client(current_user.access_token)
-    await storage.from_(BUCKET).remove([org_file.storage_path])
+    await storage.from_(bucket()).remove([org_file.storage_path])
     await repo.delete(org_file)
     record_audit_event(
         bg,
@@ -236,7 +236,7 @@ async def rename_file(
     new_path = storage_path(org_id, file_id, safe_name)
     storage = user_storage_client(current_user.access_token)
     try:
-        await storage.from_(BUCKET).move(org_file.storage_path, new_path)
+        await storage.from_(bucket()).move(org_file.storage_path, new_path)
     except StorageApiError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -282,7 +282,7 @@ async def public_share_download(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
     storage = admin_storage()
-    result = await storage.from_(BUCKET).create_signed_url(
+    result = await storage.from_(bucket()).create_signed_url(
         org_file.storage_path, settings.signed_url_ttl
     )
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")

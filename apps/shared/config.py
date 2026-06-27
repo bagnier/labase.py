@@ -12,6 +12,7 @@ class TechnicalSettings(BaseSettings):
     supabase_publishable_key: str
     supabase_secret_key: str
     supabase_storage_url: str = ""
+    supabase_storage_bucket: str = "org-files"
     supabase_database_user_url: str
     supabase_database_admin_url: str = ""
     supabase_database_schema: str = "public"

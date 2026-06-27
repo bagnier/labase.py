@@ -10,7 +10,7 @@ import uuid
 from apps.files.contract import settings
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
-from apps.files.infra.storage import BUCKET, storage_path, user_storage_client
+from apps.files.infra.storage import bucket, storage_path, user_storage_client
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
@@ -101,7 +101,7 @@ def _declare_settings() -> None:
             ),
         ],
         supabase=SupabaseLink(
-            "Open the files bucket in Supabase Storage", f"storage/buckets/{BUCKET}"
+            "Open the files bucket in Supabase Storage", f"storage/buckets/{bucket()}"
         ),
     )
 
@@ -124,7 +124,7 @@ async def _seed(event: OrgCreated) -> None:
     file_id = uuid.uuid4()
     path = storage_path(event.org_id, file_id, _WELCOME_FILENAME)
     storage = user_storage_client(event.access_token)
-    await storage.from_(BUCKET).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
+    await storage.from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
 
     async with admin_session_factory()() as session:
         repo = OrgFileRepository(session, event.org_id)

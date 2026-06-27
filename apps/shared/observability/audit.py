@@ -22,7 +22,7 @@ async def _insert_audit_log(
         async with admin_session_factory()() as session:
             await session.execute(
                 text(
-                    "INSERT INTO public.audit_logs (level, event, user_id, ip, payload) "
+                    "INSERT INTO audit_logs (level, event, user_id, ip, payload) "
                     "VALUES (:level, :event, CAST(:user_id AS uuid), :ip, CAST(:payload AS jsonb))"
                 ),
                 {

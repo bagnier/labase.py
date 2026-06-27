@@ -1,4 +1,9 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act client-gen
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act client-gen worktree worktree-rm provision-test
+
+# Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
+# Compose is isolated per checkout so several `make dev` can run at once.
+WORKTREE := $(notdir $(CURDIR))
+COMPOSE := docker compose --env-file .env -p labase-$(WORKTREE) -f docker/docker-compose.yml
 
 # --- Setup ---
 install:
@@ -43,16 +48,27 @@ schema-supabase:
 
 # --- App ---
 dev: db-start js-build
-	docker compose -f docker/docker-compose.yml up --build
+	$(COMPOSE) up --build
 
 up:
-	docker compose -f docker/docker-compose.yml up -d
+	$(COMPOSE) up -d
 
 down:
-	docker compose -f docker/docker-compose.yml down
+	$(COMPOSE) down
 
 logs:
-	docker compose -f docker/docker-compose.yml logs -f app
+	$(COMPOSE) logs -f app
+
+# --- Worktrees (isolated schema/bucket/port on the shared Supabase) ---
+worktree:
+	uv run python scripts/worktree.py create $(NAME)
+
+worktree-rm:
+	uv run python scripts/worktree.py remove $(NAME)
+
+# Clone the current public schema into this checkout's test schema (+ its bucket).
+provision-test:
+	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/provision_schema.py --reset
 
 # --- Quality ---
 lint:
@@ -77,10 +93,10 @@ upgrade:
 quality: lint format typecheck
 
 # --- Tests ---
-test:
+test: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest
 
-test-e2e:
+test-e2e: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ -k test_scenarios --driver=browser --no-cov
 
 coverage-erase:

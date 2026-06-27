@@ -5,7 +5,10 @@ from storage3 import AsyncStorageClient
 
 from apps.shared.config import get_technical_settings
 
-BUCKET = "org-files"
+
+def bucket() -> str:
+    """The Storage bucket name for the active env (per-worktree isolation aware)."""
+    return get_technical_settings().supabase_storage_bucket
 
 
 def user_storage_client(access_token: str) -> AsyncStorageClient:

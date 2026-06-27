@@ -180,7 +180,7 @@ class OrganizationRepository(BaseRepository[Organization]):
 
     async def get_invitation_by_token(self, token: uuid.UUID) -> dict | None:
         result = await self.session.execute(
-            text("SELECT * FROM public.get_invitation_by_token(:token)"),
+            text("SELECT * FROM get_invitation_by_token(:token)"),
             {"token": str(token)},
         )
         row = result.mappings().first()
@@ -189,6 +189,6 @@ class OrganizationRepository(BaseRepository[Organization]):
     async def accept_org_invitation(self, token: uuid.UUID) -> None:
         """Must be called with an RLS session so auth.uid() is set from the JWT."""
         await self.session.execute(
-            text("SELECT public.accept_org_invitation(:token)"),
+            text("SELECT accept_org_invitation(:token)"),
             {"token": str(token)},
         )

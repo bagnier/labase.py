@@ -46,20 +46,29 @@ def _run_blocking(coro_factory):
 def truncate_app_tables() -> None:
     """Truncates all application tables — used in browser test teardown."""
 
+    s = get_technical_settings().db_schema
+    tables = [
+        "app_settings",
+        "audit_logs",
+        "org_file_share_tokens",
+        "org_files",
+        "todos",
+        "card_states",
+        "deck_subscriptions",
+        "cards",
+        "decks",
+        "org_invitations",
+        "memberships",
+        "organizations",
+        "profiles",
+    ]
+    truncate = "TRUNCATE TABLE " + ", ".join(f"{s}.{t}" for t in tables) + " CASCADE"
+
     async def _truncate() -> None:
         engine = _service_engine()
         try:
             async with engine.begin() as conn:
-                await conn.execute(
-                    text(
-                        "TRUNCATE TABLE public.app_settings, "
-                        "public.audit_logs, public.org_file_share_tokens, "
-                        "public.org_files, public.todos, "
-                        "public.card_states, public.deck_subscriptions, public.cards, "
-                        "public.decks, public.org_invitations, "
-                        "public.memberships, public.organizations, public.profiles CASCADE"
-                    )
-                )
+                await conn.execute(text(truncate))
                 await conn.execute(
                     text("DELETE FROM auth.users WHERE split_part(email, '@', 2) = ANY(:domains)"),
                     {"domains": _TEST_EMAIL_DOMAINS},
@@ -82,7 +91,8 @@ def reset_app_switches() -> None:
         engine = _service_engine()
         try:
             async with engine.begin() as conn:
-                await conn.execute(text("DELETE FROM public.app_settings WHERE key = 'enabled'"))
+                schema = get_technical_settings().db_schema
+                await conn.execute(text(f"DELETE FROM {schema}.app_settings WHERE key = 'enabled'"))
         finally:
             await engine.dispose()
 

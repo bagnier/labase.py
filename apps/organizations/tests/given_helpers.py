@@ -1,49 +1,43 @@
-"""Membership helpers for test setup, via the supabase service-role client.
+"""Membership helpers for test setup, via SQLAlchemy against the active schema.
 
-These writes go through PostgREST: they are committed outside the test transaction —
-the affected orgs must be tracked via track_org_id().
+These writes go through SQLAlchemy (not PostgREST, which is pinned to ``public``) so they
+land in ``DB_SCHEMA`` — the schema the app reads. They are committed outside the test
+transaction — the affected orgs must be tracked via track_org_id().
 """
 
-from typing import cast
-
-from apps.shared.persistence.supabase import get_admin_supabase
+from tests.e2e.sql_setup import run_sql
 
 
 def orgs_for_user(user_id: str) -> list[dict]:
-    """Returns org rows (id, name, handle, role) for a user via the service-role client."""
-    result = (
-        get_admin_supabase()
-        .table("memberships")
-        .select("role, organizations(id, name, handle)")
-        .eq("auth_user_id", user_id)
-        .order("created_at")
-        .execute()
+    """Returns org rows (id, name, handle, role) for a user, ordered by membership creation."""
+    return run_sql(
+        """
+        select o.id::text as id, o.name, o.handle, m.role
+        from memberships m join organizations o on o.id = m.org_id
+        where m.auth_user_id = :uid
+        order by m.created_at
+        """,
+        {"uid": user_id},
+        fetch=True,
     )
-    return [
-        {
-            "id": row["organizations"]["id"],
-            "name": row["organizations"]["name"],
-            "handle": row["organizations"]["handle"],
-            "role": row["role"],
-        }
-        for row in cast(list[dict], result.data)
-    ]
 
 
 def add_membership(org_id: str, user_id: str, role: str = "member") -> None:
-    get_admin_supabase().table("memberships").insert(
-        {"org_id": org_id, "auth_user_id": user_id, "role": role}
-    ).execute()
+    run_sql(
+        "insert into memberships (org_id, auth_user_id, role) values (:org, :uid, :role)",
+        {"org": org_id, "uid": user_id, "role": role},
+    )
 
 
 def set_membership_role(org_id: str, user_id: str, role: str) -> None:
-    get_admin_supabase().table("memberships").update({"role": role}).eq("org_id", org_id).eq(
-        "auth_user_id", user_id
-    ).execute()
+    run_sql(
+        "update memberships set role = :role where org_id = :org and auth_user_id = :uid",
+        {"role": role, "org": org_id, "uid": user_id},
+    )
 
 
 def create_org_for_user(name: str, user_id: str) -> dict:
-    """Create an org + owner membership via the service-role client.
+    """Create an org + owner membership.
 
     Committed outside any transaction — Supabase Storage RLS needs the org in the committed DB.
     Returns {"id": str, "handle": str}.
@@ -51,15 +45,19 @@ def create_org_for_user(name: str, user_id: str) -> dict:
     from apps.shared.slug_registry import slugify
 
     handle = slugify(name) or "org"
-    client = get_admin_supabase()
-    client.table("organizations").delete().eq("handle", handle).execute()
-    result = client.table("organizations").insert({"name": name, "handle": handle}).execute()
-    org_id = cast(list[dict], result.data)[0]["id"]
-    client.table("memberships").insert(
-        {"org_id": org_id, "auth_user_id": user_id, "role": "owner"}
-    ).execute()
+    run_sql("delete from organizations where handle = :handle", {"handle": handle})
+    rows = run_sql(
+        "insert into organizations (name, handle) values (:name, :handle) returning id::text as id",
+        {"name": name, "handle": handle},
+        fetch=True,
+    )
+    org_id = rows[0]["id"]
+    run_sql(
+        "insert into memberships (org_id, auth_user_id, role) values (:org, :uid, 'owner')",
+        {"org": org_id, "uid": user_id},
+    )
     return {"id": org_id, "handle": handle}
 
 
 def delete_org(org_id: str) -> None:
-    get_admin_supabase().table("organizations").delete().eq("id", org_id).execute()
+    run_sql("delete from organizations where id = :org", {"org": org_id})
