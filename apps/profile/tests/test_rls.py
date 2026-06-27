@@ -20,7 +20,7 @@ async def test_rls_profile_isolation(db_session: AsyncSession):
     uid1_str = create_user(email1, "Test1234!")
     uid2_str = create_user(email2, "Test1234!")
     try:
-        await set_rls_context(db_session, uuid.UUID(uid1_str))
+        await set_rls_context(db_session, {"sub": uid1_str, "role": "authenticated"})
         result = await db_session.execute(select(Profile))
         profiles = list(result.scalars())
 

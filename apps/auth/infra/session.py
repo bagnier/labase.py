@@ -1,4 +1,3 @@
-import uuid
 from collections.abc import AsyncGenerator
 
 import structlog
@@ -26,7 +25,7 @@ async def get_rls_session(
     ``CurrentUser`` where a route requires it.
     """
     if current_user is not None:
-        await set_rls_context(session, uuid.UUID(current_user.id))
+        await set_rls_context(session, current_user.claims)
     try:
         yield session
     finally:

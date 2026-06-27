@@ -62,6 +62,7 @@ async def get_current_user(
         email=payload.get("email", ""),
         access_token=access_token,
         is_admin=is_admin,
+        claims=payload,
     )
 
 

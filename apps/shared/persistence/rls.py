@@ -9,19 +9,26 @@ actions (RLS is the backstop).
 """
 
 import json
-import uuid
+from collections.abc import Mapping
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def set_rls_context(session: AsyncSession, user_id: uuid.UUID) -> None:
-    """Set session-level role + JWT claims so Postgres RLS policies see auth.uid()."""
-    claims = json.dumps({"sub": str(user_id), "role": "authenticated"})
+async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> None:
+    """Set session-level role + JWT claims so Postgres RLS policies see auth.uid().
+
+    ``claims`` is the verified JWT payload, passed through verbatim so policies can
+    read any claim (auth.jwt(), auth.email(), app_metadata...). The Postgres role is
+    pinned server-side to ``authenticated`` and never driven by the token's role claim.
+    """
     conn = await session.connection()
     await conn.execute(text("SET role authenticated"))
     await conn.execute(
-        text("SELECT set_config('request.jwt.claims', :claims, false)").bindparams(claims=claims)
+        text("SELECT set_config('request.jwt.claims', :claims, false)").bindparams(
+            claims=json.dumps(claims)
+        )
     )
 
 
