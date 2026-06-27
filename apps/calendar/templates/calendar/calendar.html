@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar — labase{% endblock %}
+
+{% block breadcrumb %}
+  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
+  <span class="mx-1 text-gray-300">/</span>
+  <span class="text-gray-700">Calendar</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="page-title">Calendar</h1>
+    <a href="/{{ org_handle }}/calendar/new" class="btn-primary btn-sm flex-none">
+      <i class="ph ph-calendar-dots ph-4" aria-hidden="true"></i>
+      New event
+    </a>
+  </div>
+
+  <!-- Month grid (visual) -->
+  <section class="card" aria-label="Month view">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <a class="btn-secondary btn-sm" href="?month={{ prev_month }}" aria-label="Previous month">‹</a>
+        <span class="section-title min-w-32 text-center">{{ month_label }}</span>
+        <a class="btn-secondary btn-sm" href="?month={{ next_month }}" aria-label="Next month">›</a>
+      </div>
+      <a class="btn-secondary btn-sm" href="/{{ org_handle }}/calendar">Today</a>
+    </div>
+    <div class="grid grid-cols-7 gap-1 mb-1">
+      {% for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] %}
+      <div class="px-1 text-xs uppercase tracking-wide text-gray-400">{{ d }}</div>
+      {% endfor %}
+    </div>
+    <div class="grid grid-cols-7 gap-1">
+      {% for week in weeks %}{% for cell in week %}
+      <div class="min-h-16 rounded-lg border p-1 {% if cell.in_month %}border-gray-100 bg-white{% else %}border-transparent bg-gray-50{% endif %} {% if cell.is_today %}ring-1 ring-indigo-500{% endif %}">
+        <div class="text-xs font-medium {% if cell.in_month %}text-gray-500{% else %}text-gray-300{% endif %}">{{ cell.day }}</div>
+        {% for ev in cell.events %}
+        <a href="/{{ org_handle }}/calendar/{{ ev.id }}" class="block truncate text-xs mt-0.5 rounded bg-indigo-50 text-indigo-700 px-1 py-0.5">{{ ev.time }} {{ ev.title }}</a>
+        {% endfor %}
+      </div>
+      {% endfor %}{% endfor %}
+    </div>
+  </section>
+
+  <!-- Agenda list -->
+  <section aria-label="Events">
+    <h2 class="section-title mb-2">Events</h2>
+    <div id="event-list" class="space-y-5">
+      {% if not has_events %}
+      <p class="meta-text" data-empty>No events yet.</p>
+      {% endif %}
+      {% for group in agenda %}
+      <div>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">{{ group.label }}</h3>
+        <ul class="list-panel shadow-sm">
+          {% for ev in group.events %}
+          <li class="flex items-center gap-3 px-4 py-3">
+            <span class="text-sm text-gray-500 tabular-nums w-28 flex-none">{{ ev.time }}</span>
+            <a href="/{{ org_handle }}/calendar/{{ ev.id }}"
+               class="event-title flex-1 font-medium text-gray-900 hover:text-indigo-600"
+               data-event-id="{{ ev.id }}">{{ ev.title }}</a>
+            {% if ev.location %}<span class="meta-text flex-none">{{ ev.location }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+</div>
+{% endblock %}

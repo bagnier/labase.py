@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from apps.auth.contract import integration as auth
+from apps.calendar.contract import integration as calendar
 from apps.files.contract import integration as files
 from apps.health.contract import integration as health
 from apps.learning.contract import integration as learning
@@ -32,6 +33,7 @@ _apps = (
     todo,
     learning,
     pages,
+    calendar,
     public,
 )
 for _app in _apps:

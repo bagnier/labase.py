@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Org calendar — mockup</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; color: #1f2430; background: #f6f7f9; }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; }
+    .state { background: #fff; border: 1px solid #e3e6eb; border-radius: 10px; padding: 20px; margin: 24px 0; }
+    .state > h2 { margin-top: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #8a93a2; }
+    .muted { color: #8a93a2; }
+    .btn { font-size: 13px; padding: 6px 12px; border-radius: 7px; border: 1px solid #cfd4dc; background: #fff; cursor: pointer; text-decoration: none; color: #1f2430; display: inline-block; }
+    .btn-primary { background: #2f6fed; color: #fff; border-color: #2f6fed; }
+    .btn-danger { color: #c0392b; border-color: #e6b8b2; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .toolbar { display: flex; gap: 8px; align-items: center; }
+    .seg { display: inline-flex; border: 1px solid #cfd4dc; border-radius: 7px; overflow: hidden; }
+    .seg button { border: 0; background: #fff; padding: 6px 12px; cursor: pointer; font: inherit; }
+    .seg button[aria-pressed=true] { background: #eef3fe; color: #2f6fed; font-weight: 600; }
+
+    /* month grid */
+    .month-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+    .month-head span { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a93a2; text-align: left; padding-left: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cell { min-height: 86px; border: 1px solid #eef0f3; border-radius: 8px; padding: 6px; background: #fff; }
+    .cell.out { background: #fafbfc; color: #b6bdc9; }
+    .cell.today { border-color: #2f6fed; box-shadow: inset 0 0 0 1px #2f6fed; }
+    .cell .num { font-size: 12px; font-weight: 600; color: #5b6472; }
+    .cell.out .num { color: #c2c8d2; font-weight: 400; }
+    .evt { display: block; font-size: 11px; margin-top: 4px; padding: 2px 6px; border-radius: 5px; background: #e3effd; color: #1d6fd6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+
+    /* agenda list */
+    .day-group { margin-top: 14px; }
+    .day-group:first-child { margin-top: 0; }
+    .day-label { font-size: 12px; font-weight: 700; color: #5b6472; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef0f3; }
+    .row:last-child { border-bottom: 0; }
+    .row .time { width: 116px; color: #5b6472; font-variant-numeric: tabular-nums; }
+    .row .title { flex: 1; font-weight: 600; }
+    .row .place { color: #8a93a2; font-size: 12px; }
+    .empty { text-align: center; color: #8a93a2; padding: 28px; }
+
+    /* form */
+    label { display: block; font-weight: 600; margin: 14px 0 4px; }
+    input[type=text], input[type=date], input[type=time], textarea { box-sizing: border-box; padding: 9px; border: 1px solid #cfd4dc; border-radius: 7px; font: inherit; }
+    input[type=text], textarea { width: 100%; }
+    textarea { min-height: 90px; }
+    .when-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .when-row .field { display: flex; flex-direction: column; }
+    .field-err input { border-color: #d9534f; background: #fdf3f2; }
+    .err { color: #c0392b; font-size: 12px; margin-top: 4px; }
+    .form-actions { margin-top: 16px; display: flex; gap: 8px; }
+
+    /* detail */
+    .detail h3 { margin: 0 0 4px; font-size: 20px; }
+    .detail .when { font-size: 15px; color: #1f2430; margin: 0 0 12px; }
+    .detail dl { display: grid; grid-template-columns: 90px 1fr; gap: 6px 12px; margin: 12px 0 0; }
+    .detail dt { color: #8a93a2; font-size: 13px; }
+
+    /* overview cards */
+    .cards { display: flex; gap: 16px; flex-wrap: wrap; }
+    .card { flex: 1; min-width: 220px; border: 1px solid #e3e6eb; border-radius: 10px; padding: 16px; }
+    .card .head { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+    .card .lines { margin: 10px 0 0; }
+    .card .lines li { list-style: none; }
+    .card .recent { margin: 8px 0 0; padding-left: 16px; color: #5b6472; }
+    .badge-icon { width: 20px; height: 20px; border-radius: 5px; background: #e3effd; color: #1d6fd6; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Org calendar — UI mockup</h1>
+  <p class="muted">Static alignment mockup for <code>features/calendar.feature</code>. <code>hx-*</code> hints only; not production. Org-shared, any member writes, timed events, members-only.</p>
+
+  <!-- 1. Month grid — the browser-facing visual. July 2026; today = 26 Jun (out-of-month, shown faint). -->
+  <div class="state">
+    <h2>Calendar — month view (primary visual)</h2>
+    <div class="topbar">
+      <div class="toolbar">
+        <button class="btn">‹</button>
+        <strong style="min-width:130px;text-align:center">July 2026</strong>
+        <button class="btn">›</button>
+        <button class="btn">Today</button>
+      </div>
+      <div class="toolbar">
+        <span class="seg"><button aria-pressed="true">Month</button><button aria-pressed="false">List</button></span>
+        <a class="btn btn-primary" href="#new">+ New event</a>
+      </div>
+    </div>
+    <div class="month-head">
+      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div class="grid">
+      <!-- week 1: Mon 29 Jun → Sun 5 Jul -->
+      <div class="cell out"><div class="num">29</div></div>
+      <div class="cell out"><div class="num">30</div></div>
+      <div class="cell"><div class="num">1</div><span class="evt" href="#detail">09:00 Standup</span><span class="evt">14:00 Project kickoff</span></div>
+      <div class="cell"><div class="num">2</div><span class="evt">15:00 Review</span></div>
+      <div class="cell"><div class="num">3</div><span class="evt">10:00 Dentist</span></div>
+      <div class="cell"><div class="num">4</div></div>
+      <div class="cell"><div class="num">5</div></div>
+      <!-- week 2 -->
+      <div class="cell"><div class="num">6</div></div>
+      <div class="cell"><div class="num">7</div></div>
+      <div class="cell"><div class="num">8</div></div>
+      <div class="cell"><div class="num">9</div></div>
+      <div class="cell"><div class="num">10</div></div>
+      <div class="cell"><div class="num">11</div></div>
+      <div class="cell"><div class="num">12</div></div>
+      <!-- week 3 (truncated rows for brevity) -->
+      <div class="cell"><div class="num">13</div></div>
+      <div class="cell"><div class="num">14</div></div>
+      <div class="cell"><div class="num">15</div></div>
+      <div class="cell"><div class="num">16</div></div>
+      <div class="cell"><div class="num">17</div></div>
+      <div class="cell"><div class="num">18</div></div>
+      <div class="cell"><div class="num">19</div></div>
+    </div>
+    <p class="muted" style="margin-top:10px">Each chip is an event (click → detail). The grid is the visual; the <strong>List view</strong> below is what the BDD scenarios assert ordering against — both drivers read the same ordered event list.</p>
+  </div>
+
+  <!-- 2. Agenda / list view — what scenarios assert: chronological order, titles, times. -->
+  <div class="state">
+    <h2>Calendar — list view (chronological; drives the scenarios)</h2>
+    <div class="topbar">
+      <strong>Upcoming events</strong>
+      <div class="toolbar">
+        <span class="seg"><button aria-pressed="false">Month</button><button aria-pressed="true">List</button></span>
+        <a class="btn btn-primary" href="#new">+ New event</a>
+      </div>
+    </div>
+    <div class="day-group">
+      <div class="day-label">Wednesday, 1 July 2026</div>
+      <a class="row" href="#detail" style="color:inherit;text-decoration:none">
+        <span class="time">09:00 – 09:30</span><span class="title">Standup</span><span class="place">Room A</span>
+      </a>
+      <a class="row" href="#detail" style="color:inherit;text-decoration:none">
+        <span class="time">14:00 – 15:00</span><span class="title">Project kickoff</span><span class="place">Room A</span>
+      </a>
+    </div>
+    <div class="day-group">
+      <div class="day-label">Thursday, 2 July 2026</div>
+      <div class="row"><span class="time">15:00 – 16:00</span><span class="title">Review</span><span class="place"></span></div>
+    </div>
+    <div class="day-group">
+      <div class="day-label">Friday, 3 July 2026</div>
+      <div class="row"><span class="time">10:00 – 11:00</span><span class="title">Dentist</span><span class="place"></span></div>
+    </div>
+    <p class="muted" style="margin-top:10px">Order is Standup → Project kickoff → Review → Dentist (ascending start). Every member sees the same list; every row links to the event detail.</p>
+  </div>
+
+  <!-- 3. Empty state — the calendar still renders (grid + chrome), just with no events. -->
+  <div class="state">
+    <h2>Empty state (new org) — the calendar still shows, with no events</h2>
+    <div class="topbar">
+      <div class="toolbar">
+        <button class="btn">‹</button>
+        <strong style="min-width:130px;text-align:center">July 2026</strong>
+        <button class="btn">›</button>
+        <button class="btn">Today</button>
+      </div>
+      <div class="toolbar">
+        <span class="seg"><button aria-pressed="true">Month</button><button aria-pressed="false">List</button></span>
+        <a class="btn btn-primary" href="#new">+ New event</a>
+      </div>
+    </div>
+    <div class="month-head">
+      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div class="grid">
+      <div class="cell out"><div class="num">29</div></div>
+      <div class="cell out"><div class="num">30</div></div>
+      <div class="cell"><div class="num">1</div></div>
+      <div class="cell"><div class="num">2</div></div>
+      <div class="cell"><div class="num">3</div></div>
+      <div class="cell"><div class="num">4</div></div>
+      <div class="cell"><div class="num">5</div></div>
+      <div class="cell"><div class="num">6</div></div>
+      <div class="cell"><div class="num">7</div></div>
+      <div class="cell"><div class="num">8</div></div>
+      <div class="cell"><div class="num">9</div></div>
+      <div class="cell"><div class="num">10</div></div>
+      <div class="cell"><div class="num">11</div></div>
+      <div class="cell"><div class="num">12</div></div>
+    </div>
+  </div>
+
+  <!-- 4. New / edit event form -->
+  <div class="state" id="new">
+    <h2>New event (same form used to edit / reschedule, pre-filled)</h2>
+    <form hx-post="/acme/calendar">
+      <label for="f-title">Title</label>
+      <input id="f-title" type="text" name="title" value="Project kickoff" />
+      <div class="when-row">
+        <div class="field">
+          <label for="f-sd">Starts</label>
+          <div style="display:flex;gap:6px"><input id="f-sd" type="date" name="start_date" value="2026-07-01" /><input type="time" name="start_time" value="14:00" /></div>
+        </div>
+        <div class="field">
+          <label for="f-ed">Ends</label>
+          <div style="display:flex;gap:6px"><input id="f-ed" type="date" name="end_date" value="2026-07-01" /><input type="time" name="end_time" value="15:00" /></div>
+        </div>
+      </div>
+      <label for="f-loc">Location <span class="muted">(optional)</span></label>
+      <input id="f-loc" type="text" name="location" value="Room A" />
+      <label for="f-desc">Description <span class="muted">(optional)</span></label>
+      <textarea id="f-desc" name="description">Quarterly planning</textarea>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save event</button>
+        <a class="btn" href="#list">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- 5. Form with validation errors → "the event is rejected" -->
+  <div class="state">
+    <h2>Validation errors (maps to “the event is rejected”, HTTP 422)</h2>
+    <form>
+      <div class="field-err">
+        <label>Title</label>
+        <input type="text" name="title" value="" placeholder="(empty)" />
+        <div class="err">A title is required.</div>
+      </div>
+      <div class="when-row">
+        <div class="field field-err">
+          <label>Starts</label>
+          <div style="display:flex;gap:6px"><input type="date" value="2026-07-01" /><input type="time" value="15:00" /></div>
+        </div>
+        <div class="field field-err">
+          <label>Ends</label>
+          <div style="display:flex;gap:6px"><input type="date" value="2026-07-01" /><input type="time" value="14:00" /></div>
+          <div class="err">The end time must be after the start time.</div>
+        </div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Save event</button></div>
+    </form>
+  </div>
+
+  <!-- 6. Event detail view -->
+  <div class="state" id="detail">
+    <h2>Event detail</h2>
+    <div class="detail">
+      <h3>Project kickoff</h3>
+      <p class="when">1 July 2026, 14:00 – 15:00</p>
+      <dl>
+        <dt>Location</dt><dd>Room A</dd>
+        <dt>Notes</dt><dd>Quarterly planning</dd>
+        <dt>Added by</dt><dd>alice@example.com</dd>
+      </dl>
+      <div class="form-actions">
+        <a class="btn" href="#new">Edit</a>
+        <button class="btn btn-danger" hx-delete="/acme/calendar/{id}" hx-confirm="Delete this event?">Delete</button>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:10px">The <strong>“1 July 2026, 14:00 – 15:00”</strong> string is the cross-driver <code>when</code> value — identical in the HTML and in the JSON API.</p>
+  </div>
+
+  <!-- 7. Dashboard overview card -->
+  <div class="state">
+    <h2>Org dashboard — calendar overview card</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="head"><span class="badge-icon">📅</span> Calendar</div>
+        <ul class="lines"><li>1 upcoming</li></ul>
+        <ul class="recent"><li>Kickoff — 1 Jul, 14:00</li></ul>
+        <p style="margin:10px 0 0"><a href="#list">Open calendar →</a></p>
+      </div>
+      <div class="card">
+        <div class="head"><span class="badge-icon">📅</span> Calendar</div>
+        <ul class="lines"><li class="muted">No upcoming events</li></ul>
+        <p style="margin:10px 0 0"><a href="#new">Add an event →</a></p>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:10px">Left: populated (past “Retro” excluded — only <code>starts_at ≥ now</code> counts). Right: empty state.</p>
+  </div>
+
+  <!-- 8. Admin console overview card -->
+  <div class="state">
+    <h2>Admin console — server-wide calendar overview</h2>
+    <div class="cards">
+      <div class="card" style="max-width:260px">
+        <div class="head"><span class="badge-icon">📅</span> Calendar</div>
+        <ul class="lines"><li>2 events</li></ul>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:10px">Counts every event across all orgs (Kickoff in Acme + Launch in Globex), past and future, via the BYPASSRLS admin session.</p>
+  </div>
+</div>
+</body>
+</html>
