@@ -10,22 +10,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.tests.given_helpers import create_user, delete_user
 from apps.profile.domain.models import Profile
-from apps.shared.persistence.rls import set_rls_context
+from tests.rls import assert_rls_isolation
 
 
 @pytest.mark.asyncio
 async def test_rls_profile_isolation(db_session: AsyncSession):
     email1 = f"{uuid.uuid4()}@rls.local"
     email2 = f"{uuid.uuid4()}@rls.local"
-    uid1_str = create_user(email1, "Test1234!")
-    uid2_str = create_user(email2, "Test1234!")
+    uid1 = create_user(email1, "Test1234!")
+    uid2 = create_user(email2, "Test1234!")
     try:
-        await set_rls_context(db_session, {"sub": uid1_str, "role": "authenticated"})
-        result = await db_session.execute(select(Profile))
-        profiles = list(result.scalars())
-
-        assert len(profiles) == 1, f"RLS should limit to 1 profile (user1), got {len(profiles)}"
-        assert profiles[0].auth_user_id == uuid.UUID(uid1_str)
+        id_query = select(Profile.auth_user_id)
+        # Each user sees their own profile row and never the other's.
+        await assert_rls_isolation(
+            db_session, id_query, item=uuid.UUID(uid1), visible_to=uid1, hidden_from=[uid2]
+        )
+        await assert_rls_isolation(
+            db_session, id_query, item=uuid.UUID(uid2), visible_to=uid2, hidden_from=[uid1]
+        )
     finally:
-        delete_user(uid1_str)
-        delete_user(uid2_str)
+        delete_user(uid1)
+        delete_user(uid2)
