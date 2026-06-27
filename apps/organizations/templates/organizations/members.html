@@ -3,9 +3,8 @@
 {% block title %}Members — {{ org.name }} — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Members</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Members</li>
 {% endblock %}
 
 {% block content %}
@@ -13,7 +12,7 @@
 
   <div id="leave-error">
     {% if leave_error %}
-      <div role="alert" class="alert-error">{{ leave_error }}</div>
+      <div role="alert" class="alert alert-error">{{ leave_error }}</div>
     {% endif %}
   </div>
 
@@ -22,17 +21,17 @@
     <div class="flex items-center justify-between mb-4">
       <div>
         {% set member_count = members | length %}
-        <h1 class="page-title">{{ org.name }} — Members</h1>
-        <p id="member-count" class="text-sm text-gray-500">{{ member_count }} member{{ 's' if member_count != 1 }}</p>
+        <h1 class="text-lg font-semibold">{{ org.name }} — Members</h1>
+        <p id="member-count" class="text-sm text-base-content/70">{{ member_count }} member{{ 's' if member_count != 1 }}</p>
       </div>
       {% if caller_role == "owner" %}
-        <button data-invite-toggle @click="inviting = !inviting" class="btn-primary">
+        <button data-invite-toggle @click="inviting = !inviting" class="btn btn-primary">
           Invite a member
         </button>
       {% endif %}
     </div>
 
-    <div id="member-list" class="list-panel">
+    <div id="member-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300">
       {% for m in members %}
       {% include "organizations/_member_row.html" %}
       {% endfor %}
@@ -40,18 +39,21 @@
 
     <!-- ── Invite form ──────────────────────────────────────────── -->
     {% if caller_role == "owner" %}
-    <div id="invite-form" x-show="inviting" x-cloak class="card mt-6 space-y-4">
-      <h2 class="section-title">Invite a new member</h2>
-      <form hx-post="/{{ org_handle }}/invitations"
-            hx-target="#invite-result"
-            hx-swap="innerHTML"
-            class="flex gap-3 items-start"
-            hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
-        <input type="email" name="email" placeholder="email@example.com" required
-               class="input flex-1" />
-        <button type="submit" class="btn-primary flex-none">Invite</button>
-      </form>
-      <div id="invite-result"></div>
+    <div id="invite-form" x-show="inviting" x-cloak class="card bg-base-100 border border-base-300 shadow-sm mt-6">
+      <div class="card-body space-y-4">
+        <h2 class="card-title text-sm font-semibold">Invite a new member</h2>
+        <form hx-post="/{{ org_handle }}/invitations"
+              hx-target="#invite-result"
+              hx-swap="innerHTML"
+              class="flex gap-3 items-start"
+              hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
+          <input type="email" name="email" placeholder="email@example.com" required
+                 aria-label="Invite email"
+                 class="input w-full flex-1" />
+          <button type="submit" class="btn btn-primary flex-none">Invite</button>
+        </form>
+        <div id="invite-result"></div>
+      </div>
     </div>
     {% endif %}
   </div>

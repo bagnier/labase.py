@@ -1,18 +1,20 @@
-<section class="card" data-overview-key="{{ o.key }}">
-  <div class="flex items-center justify-between">
-    <div class="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-none">
-      <i class="ph ph-{{ o.icon }} text-indigo-500" aria-hidden="true"></i>
+<section class="card bg-base-100 border border-base-300 shadow-sm" data-overview-key="{{ o.key }}">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <div class="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-none">
+        <i class="ph ph-{{ o.icon }} text-primary" aria-hidden="true"></i>
+      </div>
+      {% if disabled is defined and o.key in disabled %}
+        <span class="badge badge-error badge-sm">Disabled</span>
+      {% else %}
+        <span class="text-xs opacity-60">all organisations</span>
+      {% endif %}
     </div>
-    {% if disabled is defined and o.key in disabled %}
-      <span class="text-xs font-semibold bg-red-100 text-red-700 rounded px-2 py-0.5">Disabled</span>
-    {% else %}
-      <span class="text-xs text-gray-400">all organisations</span>
-    {% endif %}
-  </div>
-  <h3 class="section-title mt-3">{{ o.title }}</h3>
-  <div class="flex flex-wrap gap-2 mt-2">
-    {% for line in o.data.lines %}
-      <span class="text-xs font-semibold bg-gray-100 text-gray-600 rounded px-2 py-0.5">{{ line }}</span>
-    {% endfor %}
+    <h3 class="card-title text-sm font-semibold mt-3">{{ o.title }}</h3>
+    <div class="flex flex-wrap gap-2 mt-2">
+      {% for line in o.data.lines %}
+        <span class="badge badge-ghost badge-sm">{{ line }}</span>
+      {% endfor %}
+    </div>
   </div>
 </section>

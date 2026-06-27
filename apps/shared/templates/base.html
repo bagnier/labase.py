@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full" data-theme="{{ app_theme() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,103 +9,24 @@
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/alpine.min.js" defer></script>
 </head>
-<body class="h-full bg-gray-50 text-gray-900 antialiased">
+<body class="h-full bg-base-200 text-base-content antialiased">
   {% block body %}
-  <div class="flex h-full min-h-screen" x-data="{ navOpen: false }">
+  <div class="drawer lg:drawer-open h-full">
+    <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
 
-    <!-- Mobile backdrop -->
-    <div x-show="navOpen" x-cloak @click="navOpen = false"
-         class="fixed inset-0 bg-black/30 z-30 lg:hidden"></div>
-
-    <!-- Sidebar -->
-    <aside aria-label="Sidebar" class="w-56 bg-sidebar flex flex-col border-r border-white/5
-                  fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200
-                  lg:static lg:translate-x-0"
-           :class="{ 'translate-x-0': navOpen, '-translate-x-full': !navOpen }">
-
-      <!-- Logo -->
-      <div class="px-5 py-5 border-b border-white/5 flex items-center justify-between">
-        <a href="/profile" class="flex items-center gap-2.5">
-          <div class="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center">
-            <i class="ph ph-lightning ph-sm text-white" aria-hidden="true"></i>
-          </div>
-          <span class="text-white font-semibold text-sm tracking-tight">labase</span>
-        </a>
-        <button @click="navOpen = false" aria-label="Close navigation"
-                class="lg:hidden text-gray-400 hover:text-white p-1 -mr-1">
-          <i class="ph ph-x ph-sm" aria-hidden="true"></i>
-        </button>
-      </div>
-
-      <!-- Navigation -->
-      <nav class="flex-1 px-3 py-4 overflow-y-auto">
-        {% if not org_nav %}
-        <div class="px-2 py-2">
-          <p class="text-xs text-gray-500">No organisation.</p>
-        </div>
-        {% endif %}
-        {% for nav_org in org_nav %}
-        {% set is_current = nav_org.handle == org_handle %}
-        {% set path = request.url.path %}
-        <div class="{% if not loop.first %}mt-6 pt-5 border-t border-white/5{% endif %}"
-             x-data="{ open: {{ 'true' if is_current else 'false' }} }">
-          <div class="w-full flex items-center justify-between px-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            <a href="/{{ nav_org.handle }}/dashboard"
-               class="truncate hover:text-white transition-colors">{{ nav_org.name }}</a>
-            <button type="button" @click="open = !open"
-                    class="flex-none hover:text-white transition-colors">
-              <i class="ph ph-caret-down ph-4 transition-transform" :style="open ? '' : 'transform: rotate(-90deg)'" aria-hidden="true"></i>
-            </button>
-          </div>
-          <div class="space-y-0.5" x-show="open" x-cloak>
-            {% for item in nav_items %}
-            {% if not item.owner_only or nav_org.is_owner %}
-            <a href="/{{ nav_org.handle }}/{{ item.segment }}" class="nav-link {% if is_current and item.match in path %}active{% endif %}">
-              <i class="ph ph-{{ item.icon }} ph-sm flex-none" aria-hidden="true"></i>
-              {{ item.label }}
-            </a>
-            {% endif %}
-            {% endfor %}
-            {% for item in nav_org.extra_nav %}
-            <a href="/{{ nav_org.handle }}/{{ item.href }}" class="nav-link {% if is_current and '/' + item.href in path %}active{% endif %}">
-              <i class="ph ph-{{ item.icon }} ph-sm flex-none" aria-hidden="true"></i>
-              {{ item.title }}
-            </a>
-            {% endfor %}
-          </div>
-        </div>
-        {% endfor %}
-      </nav>
-
-      <!-- User footer -->
-      <div class="px-4 py-4 border-t border-white/5">
-        <a href="/profile" class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors">
-          <div class="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center flex-none">
-            <span class="text-xs font-semibold text-indigo-300">{{ (profile_handle or user.email) | first | upper }}</span>
-          </div>
-          <div class="min-w-0">
-            <p class="text-xs font-medium text-white truncate">{{ profile_handle }}</p>
-            <p class="text-xs text-gray-500">Active account</p>
-          </div>
-        </a>
-      </div>
-    </aside>
-
-    <!-- Main content -->
-    <div class="flex-1 flex flex-col min-w-0">
+    <!-- Main column -->
+    <div class="drawer-content flex flex-col min-h-screen min-w-0">
       <!-- Top bar -->
-      <header class="h-14 bg-white border-b border-gray-200 flex items-center gap-3 px-4 flex-none">
-        <!-- Burger (mobile only) -->
-        <button @click="navOpen = true" aria-label="Open navigation" :aria-expanded="navOpen"
-                class="lg:hidden flex-none text-gray-500 hover:text-gray-800 -ml-1 p-1">
+      <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-4 gap-2">
+        <label for="nav-drawer" aria-label="Open navigation"
+               class="btn btn-ghost btn-sm btn-square lg:hidden">
           <i class="ph ph-list ph-md" aria-hidden="true"></i>
-        </button>
-        <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-sm text-gray-500">
-          {% block breadcrumb %}{% endblock %}
+        </label>
+        <nav aria-label="Breadcrumb" class="breadcrumbs text-sm flex-1 min-w-0">
+          <ul>{% block breadcrumb %}{% endblock %}</ul>
         </nav>
         {% if user and user.is_admin %}
-        <a href="/console"
-           class="ml-auto flex-none inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700 transition-colors">
+        <a href="/console" class="btn btn-error btn-sm gap-1.5">
           <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
           Admin
         </a>
@@ -118,6 +39,78 @@
       </main>
     </div>
 
+    <!-- Sidebar -->
+    <div class="drawer-side z-40">
+      <label for="nav-drawer" aria-label="Close navigation" class="drawer-overlay"></label>
+      <aside aria-label="Sidebar" class="flex h-full min-h-screen w-56 flex-col bg-base-100 border-r border-base-300">
+        <!-- Logo -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
+          <a href="/profile" class="flex items-center gap-2.5">
+            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-content">
+              <i class="ph ph-lightning ph-sm" aria-hidden="true"></i>
+            </div>
+            <span class="font-semibold text-sm tracking-tight">labase</span>
+          </a>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 overflow-y-auto p-2">
+          {% if not org_nav %}
+          <p class="px-2 py-2 text-xs opacity-60">No organisation.</p>
+          {% endif %}
+          {% for nav_org in org_nav %}
+          {% set is_current = nav_org.handle == org_handle %}
+          {% set path = request.url.path %}
+          <ul class="menu w-full">
+            <li>
+              <details {% if is_current %}open{% endif %}>
+                <summary class="text-xs font-semibold uppercase tracking-wider opacity-70">
+                  <a href="/{{ nav_org.handle }}/dashboard" class="truncate">{{ nav_org.name }}</a>
+                </summary>
+                <ul>
+                  {% for item in nav_items %}
+                  {% if not item.owner_only or nav_org.is_owner %}
+                  <li>
+                    <a href="/{{ nav_org.handle }}/{{ item.segment }}"
+                       class="{% if is_current and item.match in path %}menu-active{% endif %}">
+                      <i class="ph ph-{{ item.icon }} ph-sm" aria-hidden="true"></i>
+                      {{ item.label }}
+                    </a>
+                  </li>
+                  {% endif %}
+                  {% endfor %}
+                  {% for item in nav_org.extra_nav %}
+                  <li>
+                    <a href="/{{ nav_org.handle }}/{{ item.href }}"
+                       class="{% if is_current and '/' + item.href in path %}menu-active{% endif %}">
+                      <i class="ph ph-{{ item.icon }} ph-sm" aria-hidden="true"></i>
+                      {{ item.title }}
+                    </a>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </details>
+            </li>
+          </ul>
+          {% endfor %}
+        </nav>
+
+        <!-- User footer -->
+        <div class="border-t border-base-300 p-2">
+          <a href="/profile" class="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-base-200 transition-colors">
+            <div class="avatar avatar-placeholder">
+              <div class="w-8 rounded-full bg-primary/20 text-primary">
+                <span class="text-xs font-semibold">{{ (profile_handle or user.email) | first | upper }}</span>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <p class="truncate text-xs font-medium">{{ profile_handle }}</p>
+              <p class="text-xs opacity-60">Active account</p>
+            </div>
+          </a>
+        </div>
+      </aside>
+    </div>
   </div>
   {% endblock %}
   {% block scripts %}{% endblock %}

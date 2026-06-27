@@ -41,8 +41,8 @@ class PagesBrowserMixin(BrowserBase):
         self._goto_list()
         self.page.click('a[href$="/pages/new/edit"]')
         self.page.wait_for_selector("#edit-page-form", timeout=5000)
-        self.page.fill("input[name=title]", title)
-        self.page.fill("input[name=slug]", slug if slug is not None else _slugify(title))
+        self.page.get_by_label("Title").fill(title)
+        self.page.get_by_label("Slug").fill(slug if slug is not None else _slugify(title))
         if content:
             self.page.fill(".cm-content", _decode(content))
         self._submit_edit_form()
@@ -64,11 +64,11 @@ class PagesBrowserMixin(BrowserBase):
 
     def _submit_edit_form(self) -> None:
         with self.page.expect_navigation(wait_until="load"):
-            self.page.click("#edit-page-form button[type=submit]")
+            self.page.get_by_role("button", name="Save").click()
 
     def change_slug(self, slug: str, new_slug: str) -> None:
         self._goto_edit(slug)
-        self.page.fill("input[name=slug]", new_slug)
+        self.page.get_by_label("Slug").fill(new_slug)
         self._submit_edit_form()
 
     def update_content(self, slug: str, content: str) -> None:
@@ -80,11 +80,11 @@ class PagesBrowserMixin(BrowserBase):
         self._goto_edit(slug)
         self.page.on("dialog", lambda d: d.accept())
         with self.page.expect_navigation(wait_until="load"):
-            self.page.click("#delete-page-btn")
+            self.page.get_by_role("button", name="Delete page").click()
 
     def _set_visibility_via_form(self, slug: str, visibility: str) -> None:
         self._goto_edit(slug)
-        self.page.select_option("select[name=visibility]", visibility)
+        self.page.get_by_label("Visibility").select_option(visibility)
         self._submit_edit_form()
 
     def publish_to_members(self, slug: str) -> None:

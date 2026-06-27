@@ -3,26 +3,24 @@
 {% block title %}{{ event.title }} — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <a href="/{{ org_handle }}/calendar" class="hover:text-gray-700">Calendar</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700 truncate max-w-48">{{ event.title }}</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li><a href="/{{ org_handle }}/calendar">Calendar</a></li>
+  <li><span class="truncate max-w-48">{{ event.title }}</span></li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-xl space-y-6">
 
   <div class="flex items-center justify-between gap-4">
-    <h1 class="page-title">{{ event.title }}</h1>
+    <h1 class="text-lg font-semibold">{{ event.title }}</h1>
     <div class="flex items-center gap-2 flex-none">
-      <a href="/{{ org_handle }}/calendar/{{ event.id }}/edit" class="btn-secondary btn-sm">
+      <a href="/{{ org_handle }}/calendar/{{ event.id }}/edit" class="btn btn-sm">
         <i class="ph ph-pencil ph-4" aria-hidden="true"></i>
         Edit
       </a>
       <form method="post" action="/{{ org_handle }}/calendar/{{ event.id }}/delete"
             onsubmit="return confirm('Delete this event?')">
-        <button type="submit" class="btn-danger btn-sm">
+        <button type="submit" class="btn btn-error btn-ghost btn-sm">
           <i class="ph ph-trash ph-4" aria-hidden="true"></i>
           Delete
         </button>
@@ -30,20 +28,22 @@
     </div>
   </div>
 
-  <div class="card space-y-4">
-    <p class="when text-base text-gray-900" data-when>{{ when }}</p>
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body space-y-4">
+    <p class="when text-base" data-when>{{ when }}</p>
     {% if event.location or event.description %}
     <dl class="grid grid-cols-[80px_1fr] gap-y-2 text-sm">
       {% if event.location %}
-      <dt class="text-gray-400">Location</dt>
-      <dd class="event-location text-gray-700" data-location>{{ event.location }}</dd>
+      <dt class="text-base-content/50">Location</dt>
+      <dd class="event-location text-base-content/70" data-location>{{ event.location }}</dd>
       {% endif %}
       {% if event.description %}
-      <dt class="text-gray-400">Notes</dt>
-      <dd class="event-description text-gray-700" data-description>{{ event.description }}</dd>
+      <dt class="text-base-content/50">Notes</dt>
+      <dd class="event-description text-base-content/70" data-description>{{ event.description }}</dd>
       {% endif %}
     </dl>
     {% endif %}
+    </div>
   </div>
 
 </div>

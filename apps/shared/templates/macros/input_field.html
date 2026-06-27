@@ -1,16 +1,17 @@
 {% macro input_field(id, name, type="text", label="", placeholder="", value="", disabled=false, required=false, hint="") %}
-<div>
+<fieldset class="fieldset">
   {% if label %}
-  <label class="block text-xs font-medium text-gray-700 mb-1.5" for="{{ id }}">{{ label }}</label>
+  <legend class="fieldset-legend" id="{{ id }}-label">{{ label }}</legend>
   {% endif %}
   <input id="{{ id }}" name="{{ name }}" type="{{ type }}"
+         {% if label %}aria-labelledby="{{ id }}-label"{% endif %}
          {% if value %}value="{{ value }}"{% endif %}
          {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
          {% if disabled %}disabled{% endif %}
          {% if required %}required{% endif %}
-         class="input font-mono {% if disabled %}opacity-60 cursor-not-allowed{% endif %}" />
+         class="input w-full font-mono" />
   {% if hint %}
-  <p class="meta-text mt-1">{{ hint }}</p>
+  <p class="label text-xs">{{ hint }}</p>
   {% endif %}
-</div>
+</fieldset>
 {% endmacro %}

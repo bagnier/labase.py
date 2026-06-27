@@ -28,12 +28,12 @@ class AuthBrowserMixin(BrowserBase):
 
     def sign_in(self, email: str, password: str) -> None:
         self.page.goto(f"{self.base_url}/auth/login")
-        self.page.fill("input[name=email]", email)
-        self.page.fill("input[name=password]", password)
+        self.page.get_by_label("Email").fill(email)
+        self.page.get_by_label("Password").fill(password)
         with self.page.expect_response(
             lambda r: "/auth/login" in r.url and r.request.method == "POST"
         ) as resp_info:
-            self.page.click("button[type=submit]")
+            self.page.get_by_role("button", name="Sign in").click()
         if resp_info.value.status == 303 or resp_info.value.headers.get("hx-redirect"):
             self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
             self.set_acting_email(email)
@@ -43,21 +43,21 @@ class AuthBrowserMixin(BrowserBase):
     def ensure_registered(self, email: str, password: str) -> None:
         page = self.page.context.new_page()
         page.goto(f"{self.base_url}/auth/register")
-        page.fill("input[name=email]", email)
-        page.fill("input[name=password]", password)
-        page.click("button[type=submit]")
+        page.get_by_label("Email").fill(email)
+        page.get_by_label("Password").fill(password)
+        page.get_by_role("button", name="Create my account").click()
         page.wait_for_load_state("domcontentloaded")
         page.close()
 
     def register(self, email: str, password: str) -> None:
         self.last_registered_email = email
         self.page.goto(f"{self.base_url}/auth/register")
-        self.page.fill("input[name=email]", email)
-        self.page.fill("input[name=password]", password)
+        self.page.get_by_label("Email").fill(email)
+        self.page.get_by_label("Password").fill(password)
         with self.page.expect_response(
             lambda r: "/auth/register" in r.url and r.request.method == "POST"
         ) as resp_info:
-            self.page.click("button[type=submit]")
+            self.page.get_by_role("button", name="Create my account").click()
         self.last_response = resp_info.value
         self.page.wait_for_load_state("domcontentloaded")
 

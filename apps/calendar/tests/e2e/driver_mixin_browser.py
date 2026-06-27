@@ -20,20 +20,20 @@ class CalendarBrowserMixin(BrowserBase):
     def _cal_fill_times(self, start: str, end: str) -> None:
         start_date, start_time = start.split(" ")
         end_date, end_time = end.split(" ")
-        self.page.fill("input[name=start_date]", start_date)
-        self.page.fill("input[name=start_time]", start_time)
-        self.page.fill("input[name=end_date]", end_date)
-        self.page.fill("input[name=end_time]", end_time)
+        self.page.get_by_label("Start date").fill(start_date)
+        self.page.get_by_label("Start time").fill(start_time)
+        self.page.get_by_label("End date").fill(end_date)
+        self.page.get_by_label("End time").fill(end_time)
 
     def _cal_open_new_form(self) -> None:
         self._cal_goto()
-        self.page.click("a[href$='/calendar/new']")
-        self.page.wait_for_selector("input[name=title]")
+        self.page.get_by_role("link", name="New event").click()
+        self.page.get_by_label("Title").wait_for()
 
     def _cal_open_edit_form(self, title: str) -> None:
         self.open_event(title)
-        self.page.click("a[href$='/edit']")
-        self.page.wait_for_selector("input[name=title]")
+        self.page.get_by_role("link", name="Edit").click()
+        self.page.get_by_label("Title").wait_for()
 
     def _cal_titles_on_page(self) -> list[str]:
         return [
@@ -50,32 +50,32 @@ class CalendarBrowserMixin(BrowserBase):
 
     def create_event(self, title: str, start: str, end: str) -> None:
         self._cal_open_new_form()
-        self.page.fill("input[name=title]", title)
+        self.page.get_by_label("Title").fill(title)
         self._cal_fill_times(start, end)
-        self.page.click("button[type=submit]")
+        self.page.get_by_role("button", name="Save event").click()
         self.page.wait_for_load_state("load")
 
     def create_event_full(
         self, title: str, start: str, end: str, location: str, description: str
     ) -> None:
         self._cal_open_new_form()
-        self.page.fill("input[name=title]", title)
+        self.page.get_by_label("Title").fill(title)
         self._cal_fill_times(start, end)
-        self.page.fill("input[name=location]", location)
-        self.page.fill("textarea[name=description]", description)
-        self.page.click("button[type=submit]")
+        self.page.get_by_label("Location").fill(location)
+        self.page.get_by_label("Description").fill(description)
+        self.page.get_by_role("button", name="Save event").click()
         self.page.wait_for_load_state("load")
 
     def try_create_event(self, title: str | None, start: str, end: str) -> None:
         self._cal_open_new_form()
         # A single space satisfies the client-side `required` yet the server strips it to empty,
         # so the "no title" case still reaches the server-side 422 (true cross-driver parity).
-        self.page.fill("input[name=title]", title if title is not None else " ")
+        self.page.get_by_label("Title").fill(title if title is not None else " ")
         self._cal_fill_times(start, end)
         with self.page.expect_response(
             lambda r: r.request.method == "POST" and r.url.rstrip("/").endswith("/calendar")
         ) as info:
-            self.page.click("button[type=submit]")
+            self.page.get_by_role("button", name="Save event").click()
         self.last_response = info.value
 
     def open_event(self, title: str) -> None:
@@ -87,20 +87,20 @@ class CalendarBrowserMixin(BrowserBase):
 
     def rename_event(self, title: str, new_title: str) -> None:
         self._cal_open_edit_form(title)
-        self.page.fill("input[name=title]", new_title)
-        self.page.click("button[type=submit]")
+        self.page.get_by_label("Title").fill(new_title)
+        self.page.get_by_role("button", name="Save event").click()
         self.page.wait_for_load_state("load")
 
     def reschedule_event(self, title: str, start: str, end: str) -> None:
         self._cal_open_edit_form(title)
         self._cal_fill_times(start, end)
-        self.page.click("button[type=submit]")
+        self.page.get_by_role("button", name="Save event").click()
         self.page.wait_for_load_state("load")
 
     def delete_event(self, title: str) -> None:
         self.open_event(title)
         self.page.once("dialog", lambda d: d.accept())
-        self.page.click("form[action$='/delete'] button[type=submit]")
+        self.page.get_by_role("button", name="Delete").click()
         self.page.wait_for_load_state("load")
 
     def view_calendar(self) -> None:

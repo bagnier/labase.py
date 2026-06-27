@@ -3,24 +3,23 @@
 {% block title %}Resources — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Learning · Resources</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Learning · Resources</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
-  <h1 class="page-title">Resources to review</h1>
+  <h1 class="text-lg font-semibold">Resources to review</h1>
 
   <div id="learning-resources" class="space-y-1">
     {% for item in resources %}
-    <div class="flex gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm"
+    <div class="flex gap-2 rounded-lg border border-base-300 bg-base-100 px-4 py-2 text-sm"
          data-resource-deck="{{ item.deck }}">
-      <span class="font-medium text-gray-700">{{ item.deck }}</span>
-      <a href="{{ item.resource }}" data-resource class="break-all text-indigo-600">{{ item.resource }}</a>
+      <span class="font-medium">{{ item.deck }}</span>
+      <a href="{{ item.resource }}" data-resource class="link link-primary break-all">{{ item.resource }}</a>
     </div>
     {% else %}
-    <p data-empty class="rounded-xl border border-gray-200 bg-white px-5 py-9 text-center text-gray-500">
+    <p data-empty class="rounded-xl border border-base-300 bg-base-100 px-5 py-9 text-center text-base-content/70">
       No resources to review — nicely done.
     </p>
     {% endfor %}

@@ -1,7 +1,7 @@
 {% macro role_badge(role) %}
 {% if role == "owner" %}
-  <span class="inline-block bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">owner</span>
+  <span class="badge badge-secondary badge-sm">owner</span>
 {% else %}
-  <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full">member</span>
+  <span class="badge badge-ghost badge-sm">member</span>
 {% endif %}
 {% endmacro %}

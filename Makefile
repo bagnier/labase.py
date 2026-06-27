@@ -2,7 +2,8 @@
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
-WORKTREE := $(notdir $(CURDIR))
+# Docker compose project names allow only [a-z0-9_-], so sanitise the dir name (e.g. "labase.py").
+WORKTREE := $(subst .,-,$(notdir $(CURDIR)))
 COMPOSE := docker compose --env-file .env -p labase-$(WORKTREE) -f docker/docker-compose.yml
 
 # --- Setup ---

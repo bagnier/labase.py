@@ -4,74 +4,78 @@
 {% block title %}Settings — {{ org.name }} — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Settings</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Settings</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
 
   <div>
-    <h1 class="page-title" data-org-name="{{ org.name }}">{{ org.name }}</h1>
-    <p class="text-sm text-gray-500 mt-0.5">
+    <h1 class="text-lg font-semibold" data-org-name="{{ org.name }}">{{ org.name }}</h1>
+    <p class="text-sm text-base-content/70 mt-0.5">
       Your role:
       {{ role_badge(role) }}
     </p>
   </div>
 
-  <section class="card space-y-4">
-    <h2 class="section-title">Organisation name</h2>
-    {% if role == "owner" %}
-      <form hx-patch="/{{ org_handle }}"
-            hx-target="body"
-            hx-push-url="true"
-            class="space-y-2">
-        <div class="flex gap-3 items-center">
-          <input type="text" name="name" value="{{ org.name }}" required
-                 class="input flex-1 {% if name_error %}border-red-400{% endif %}" />
-          <button type="submit" class="btn-primary flex-none">Save</button>
-        </div>
-        {% if name_error %}
-          <p class="text-xs text-red-600">{{ name_error }}</p>
-        {% endif %}
-      </form>
-    {% else %}
-      <input type="text" value="{{ org.name }}" disabled
-             class="input opacity-60 cursor-not-allowed" />
-      <p class="meta-text">Only an owner can rename the organisation.</p>
-    {% endif %}
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body space-y-4">
+      <h2 class="card-title text-sm font-semibold">Organisation name</h2>
+      {% if role == "owner" %}
+        <form hx-patch="/{{ org_handle }}"
+              hx-target="body"
+              hx-push-url="true"
+              class="space-y-2">
+          <div class="flex gap-3 items-center">
+            <input type="text" name="name" value="{{ org.name }}" required
+                   aria-label="Organisation name"
+                   class="input w-full flex-1 {% if name_error %}input-error{% endif %}" />
+            <button type="submit" class="btn btn-primary flex-none">Save</button>
+          </div>
+          {% if name_error %}
+            <p class="text-xs text-error">{{ name_error }}</p>
+          {% endif %}
+        </form>
+      {% else %}
+        <input type="text" value="{{ org.name }}" disabled
+               class="input w-full opacity-60 cursor-not-allowed" />
+        <p class="text-xs opacity-60">Only an owner can rename the organisation.</p>
+      {% endif %}
+    </div>
   </section>
 
-  <section class="card space-y-4">
-    <div>
-      <h2 class="section-title">Handle</h2>
-      <p class="meta-text mt-0.5">Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.</p>
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body space-y-4">
+      <div>
+        <h2 class="card-title text-sm font-semibold">Handle</h2>
+        <p class="text-xs opacity-60 mt-0.5">Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.</p>
+      </div>
+      {% if role == "owner" %}
+        <form hx-patch="/{{ org_handle }}/handle"
+              hx-target="body"
+              hx-push-url="true"
+              class="space-y-2">
+          <div class="flex gap-3 items-center">
+            <input type="text" name="handle" value="{{ handle_value if handle_value is defined else org.handle }}" required
+                   class="input w-full flex-1 font-mono {% if handle_error %}input-error{% endif %}" />
+            <button type="submit" class="btn btn-primary flex-none">Save</button>
+          </div>
+          {% if handle_error %}
+            <p class="text-xs text-error">{{ handle_error }}</p>
+          {% endif %}
+        </form>
+      {% else %}
+        <input type="text" value="{{ org.handle }}" disabled
+               class="input w-full font-mono opacity-60 cursor-not-allowed" />
+        <p class="text-xs opacity-60">Only an owner can change the handle.</p>
+      {% endif %}
     </div>
-    {% if role == "owner" %}
-      <form hx-patch="/{{ org_handle }}/handle"
-            hx-target="body"
-            hx-push-url="true"
-            class="space-y-2">
-        <div class="flex gap-3 items-center">
-          <input type="text" name="handle" value="{{ handle_value if handle_value is defined else org.handle }}" required
-                 class="input flex-1 font-mono {% if handle_error %}border-red-400{% endif %}" />
-          <button type="submit" class="btn-primary flex-none">Save</button>
-        </div>
-        {% if handle_error %}
-          <p class="text-xs text-red-600">{{ handle_error }}</p>
-        {% endif %}
-      </form>
-    {% else %}
-      <input type="text" value="{{ org.handle }}" disabled
-             class="input font-mono opacity-60 cursor-not-allowed" />
-      <p class="meta-text">Only an owner can change the handle.</p>
-    {% endif %}
   </section>
 
   <div class="flex gap-4 text-sm">
     <a href="/{{ org_handle }}/members"
-       class="text-indigo-600 hover:text-indigo-800 font-medium">Manage members →</a>
+       class="text-primary font-medium link link-hover">Manage members →</a>
   </div>
 
 </div>

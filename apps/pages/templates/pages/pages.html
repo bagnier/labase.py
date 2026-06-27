@@ -3,22 +3,21 @@
 {% block title %}Pages — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Pages</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Pages</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
 
   <div class="flex items-center justify-between">
-    <h1 class="page-title">Pages</h1>
+    <h1 class="text-lg font-semibold">Pages</h1>
     <div class="flex items-center gap-2">
       {% if is_owner %}
-      <a href="/{{ org_handle }}/pages/nav" class="btn-secondary btn-sm">Manage navigation</a>
+      <a href="/{{ org_handle }}/pages/nav" class="btn btn-sm">Manage navigation</a>
       {% endif %}
       {% if can_create %}
-      <a href="/{{ org_handle }}/pages/new/edit" class="btn-primary">New page</a>
+      <a href="/{{ org_handle }}/pages/new/edit" class="btn btn-primary">New page</a>
       {% endif %}
     </div>
   </div>
@@ -35,13 +34,13 @@
     <div class="flex flex-wrap items-center gap-2 mb-3">
       <input type="search" x-model="search" placeholder="Search pages…"
              class="input flex-1 min-w-0" aria-label="Search pages" />
-      <select x-model="filter" class="input !w-auto flex-none" aria-label="Filter by visibility">
+      <select x-model="filter" class="select w-auto flex-none" aria-label="Filter by visibility">
         <option value="all">All visibilities</option>
         <option value="draft">Draft</option>
         <option value="members">Members</option>
         <option value="public">Public</option>
       </select>
-      <select x-model="sort" class="input !w-auto flex-none" aria-label="Sort pages">
+      <select x-model="sort" class="select w-auto flex-none" aria-label="Sort pages">
         <option value="created_desc">Newest</option>
         <option value="created_asc">Oldest</option>
         <option value="title_asc">Title A→Z</option>
@@ -49,26 +48,26 @@
       </select>
     </div>
 
-    <div id="pages-list" class="list-panel shadow-sm">
+    <div id="pages-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm">
       <template x-for="page in visible()" :key="page.id">
         <div class="page-row flex items-center gap-3 px-4 py-3 group" :data-slug="page.slug">
-          <a class="page-title-link flex-1 min-w-0 text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline truncate"
+          <a class="page-title-link flex-1 min-w-0 text-sm font-medium hover:text-primary hover:underline truncate"
              :href="`/${handle}/pages/${page.slug}`" x-text="page.title"></a>
 
-          <span class="page-updated text-xs text-gray-400 flex-none hidden sm:block"
+          <span class="page-updated text-xs text-base-content/50 flex-none hidden sm:block"
                 :title="`Last modified ${fmtDate(page.updated)}`" x-text="fmtDate(page.updated)"></span>
 
-          <span class="badge text-xs font-semibold rounded px-2 py-0.5 bg-gray-100 text-gray-600"
+          <span class="badge badge-sm"
                 :data-visibility="page.visibility" x-text="page.visibility"></span>
 
-          <a class="page-preview-link text-gray-400 hover:text-indigo-600"
+          <a class="page-preview-link text-base-content/50 hover:text-primary"
              :aria-label="`Preview ${page.title}`"
              :href="`/${handle}/pages/${page.slug}`">
             <i class="ph ph-eye ph-sm" aria-hidden="true"></i>
           </a>
 
           <template x-if="canEdit(page)">
-            <a class="page-edit-link text-gray-400 hover:text-indigo-600"
+            <a class="page-edit-link text-base-content/50 hover:text-primary"
                :aria-label="`Edit ${page.title}`"
                :href="`/${handle}/pages/${page.slug}/edit`">
               <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
@@ -76,7 +75,7 @@
           </template>
 
           <template x-if="canEdit(page)">
-            <button type="button" class="page-delete-btn text-gray-400 hover:text-red-500"
+            <button type="button" class="page-delete-btn text-base-content/50 hover:text-error"
                     :aria-label="`Delete ${page.title}`"
                     @click="del(page)">
               <i class="ph ph-trash ph-sm" aria-hidden="true"></i>
@@ -85,7 +84,7 @@
         </div>
       </template>
 
-      <p x-show="visible().length === 0" class="px-4 py-6 text-sm text-center text-gray-400">
+      <p x-show="visible().length === 0" class="px-4 py-6 text-sm text-center text-base-content/50">
         No pages match.
       </p>
     </div>

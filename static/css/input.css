@@ -4,9 +4,16 @@
 @font-face { font-family: 'Inter'; src: url('/static/fonts/inter-latin-700-normal.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Phosphor'; src: url('/static/fonts/Phosphor.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: block; }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@source "../../apps/**/templates/**/*.html";
+
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark, cupcake, dracula, emerald, corporate, synthwave, retro, nord, business;
+}
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
 
 .ph { font-family: 'Phosphor' !important; speak: never; font-style: normal; font-weight: normal; font-variant: normal; text-transform: none; line-height: 1; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; display: inline-block; }
 .ph.ph-arrow-left:before      { content: "\e058"; }
@@ -49,38 +56,6 @@
 .ph.ph-quotes:before             { content: "\e660"; }
 
 @layer components {
-  /* Navigation */
-  .nav-link { @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400; }
-  .nav-link.active { @apply text-white bg-white/10; }
-
-  /* Buttons */
-  .btn           { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1; }
-  .btn-primary   { @apply btn bg-indigo-500 text-white hover:bg-indigo-600; }
-  .btn-secondary { @apply btn bg-white text-gray-700 border border-gray-200 hover:bg-gray-50; }
-  .btn-danger    { @apply btn text-red-600 hover:text-red-800 shadow-none; }
-  .btn-sm        { @apply px-3 py-1.5 text-xs; }
-
-  /* Forms */
-  .input { @apply w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400; }
-
-  /* Toggle switch: pair a `.switch sr-only peer` checkbox with a `.switch-track` sibling */
-  .switch-track { @apply relative h-5 w-9 flex-none rounded-full bg-gray-300 transition-colors peer-checked:bg-indigo-500 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4; }
-
-  /* Containers */
-  .card       { @apply bg-white border border-gray-200 rounded-xl p-6 shadow-sm; }
-  .list-panel { @apply bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100; }
-
-  /* Alerts */
-  .alert         { @apply rounded-lg px-4 py-3 text-sm border; }
-  .alert-error   { @apply alert bg-red-50 border-red-200 text-red-700; }
-  .alert-success { @apply alert bg-emerald-50 border-emerald-200 text-emerald-700; }
-  .alert-info    { @apply alert bg-blue-50 border-blue-200 text-blue-700; }
-
-  /* Typography */
-  .page-title    { @apply text-lg font-semibold text-gray-900; }
-  .section-title { @apply text-sm font-semibold text-gray-700; }
-  .meta-text     { @apply text-xs text-gray-400; }
-
   /* Markdown body — styles generated HTML from mistune (child elements carry no classes) */
   .md-body h1 { @apply text-2xl font-semibold text-gray-900 mb-4 mt-6; }
   .md-body h2 { @apply text-xl font-semibold text-gray-800 mb-3 mt-5; }
@@ -100,12 +75,14 @@
   .md-body td { @apply border-b border-gray-100 py-2 pr-4; }
 
   /* CodeMirror 6 editor wrapper — mimics .input appearance */
-  .cm-wrapper { @apply rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-400; }
-  .cm-wrapper .cm-editor { @apply text-sm; }
+  .cm-wrapper { @apply rounded-lg border border-base-300 bg-base-100 shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:border-primary; }
+  .cm-wrapper .cm-editor { @apply text-sm bg-base-100 text-base-content; }
   .cm-wrapper .cm-editor.cm-focused { @apply outline-none; }
-  .cm-wrapper .cm-gutters { @apply bg-gray-50 border-r border-gray-100 text-gray-400; }
-  .cm-wrapper .cm-activeLineGutter { @apply bg-gray-100; }
-  .cm-wrapper .cm-activeLine { @apply bg-gray-50; }
+  .cm-wrapper .cm-content { @apply caret-base-content; }
+  .cm-wrapper .cm-gutters { @apply bg-base-200 border-r border-base-300 text-base-content/40; }
+  .cm-wrapper .cm-activeLineGutter { @apply bg-base-300 text-base-content/70; }
+  .cm-wrapper .cm-activeLine { @apply bg-base-200; }
+  .cm-wrapper .cm-cursor { @apply border-base-content; }
 
   /* Icon sizes */
   .ph-4  { font-size: 0.875rem; line-height: 1; }

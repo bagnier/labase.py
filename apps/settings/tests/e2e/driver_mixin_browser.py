@@ -27,9 +27,9 @@ class ConsoleBrowserMixin(BrowserBase):
         self._contexts[email] = ctx
         setup_page = ctx.new_page()
         setup_page.goto(f"{self.base_url}/auth/login")
-        setup_page.fill("input[name=email]", email)
-        setup_page.fill("input[name=password]", _ADMIN_PASSWORD)
-        setup_page.click("button[type=submit]")
+        setup_page.get_by_label("Email").fill(email)
+        setup_page.get_by_label("Password").fill(_ADMIN_PASSWORD)
+        setup_page.get_by_role("button", name="Sign in").click()
         setup_page.wait_for_url("**/profile", timeout=10000)
         setup_page.close()
         self.set_acting_email(email)
@@ -80,18 +80,18 @@ class ConsoleBrowserMixin(BrowserBase):
     def _setting_locator(self, key: str):
         return self.page.locator(f"[data-setting-key='{key}']")
 
-    def _field(self, row, kind: str | None):
-        # Boolean rows carry a hidden + a checkbox both named "value"; target the checkbox.
-        if kind == "boolean":
-            return row.locator("input[type='checkbox']")
-        return row.locator("input[name='value']")
+    def _field(self, row, key: str):
+        # Boolean + text settings expose the setting key as their accessible name
+        # (aria-label). Boolean rows also carry a hidden mirror named "value"; the
+        # accessible name resolves unambiguously to the visible checkbox/switch.
+        return row.get_by_label(key)
 
     def set_console_setting(self, app: str, key: str, value: str) -> None:
         # Settings auto-save: changing a field fires hx-trigger="change" — no Save button.
         self.open_console_settings(app)
         row = self._setting_locator(key)
         kind = row.get_attribute("data-setting-type")
-        field = self._field(row, kind)
+        field = self._field(row, key)
 
         def posted(r):
             return "/settings/" in r.url and r.request.method == "PUT"
@@ -126,7 +126,7 @@ class ConsoleBrowserMixin(BrowserBase):
         self.open_console_settings(app)
         row = self._setting_locator(key)
         kind = row.get_attribute("data-setting-type")
-        field = self._field(row, kind)
+        field = self._field(row, key)
         if kind == "boolean":
             actual = "true" if field.is_checked() else "false"
         else:
@@ -166,9 +166,9 @@ class ConsoleBrowserMixin(BrowserBase):
         self.context_for(email).clear_cookies()
         page = self.page_for(email)
         page.goto(f"{self.base_url}/auth/login")
-        page.fill("input[name=email]", email)
-        page.fill("input[name=password]", _USER_PASSWORD)
-        page.click("button[type=submit]")
+        page.get_by_label("Email").fill(email)
+        page.get_by_label("Password").fill(_USER_PASSWORD)
+        page.get_by_role("button", name="Sign in").click()
         page.wait_for_url("**/profile", timeout=10000)
 
     def sign_in_again(self, email: str) -> None:
@@ -212,9 +212,9 @@ class ConsoleBrowserMixin(BrowserBase):
 
     def add_server_admin_by_email(self, email: str) -> None:
         page = self._goto_admins()
-        page.fill("[data-admin-add-form] input[name=email]", email)
+        page.get_by_label("Admin email").fill(email)
         self.last_response = self.click_and_capture(
-            page, "[data-admin-add-form] button[type=submit]", "POST", "/console/admins"
+            page, page.get_by_role("button", name="Add admin"), "POST", "/console/admins"
         )
 
     def assert_admin_add_error(self, email: str) -> None:

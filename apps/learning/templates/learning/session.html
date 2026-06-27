@@ -3,16 +3,15 @@
 {% block title %}Learning — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Learning</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Learning</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
   <div class="flex items-center justify-between">
-    <h1 class="page-title">Review session</h1>
-    <a href="/{{ org_handle }}/learning/resources" class="btn-secondary">Resources to review</a>
+    <h1 class="text-lg font-semibold">Review session</h1>
+    <a href="/{{ org_handle }}/learning/resources" class="btn btn-sm">Resources to review</a>
   </div>
 
   {% include "learning/_session_fragment.html" %}

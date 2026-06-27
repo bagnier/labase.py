@@ -33,11 +33,11 @@ class OrgFileBrowserMixin(BrowserBase):
         return self.page.locator("#file-list > div[data-file-id]").all()
 
     def _dom_file_names(self) -> list[str]:
-        return [row.locator("a").inner_text().strip() for row in self._dom_file_rows()]
+        return [row.get_by_role("link").inner_text().strip() for row in self._dom_file_rows()]
 
     def _dom_find_file_id(self, filename: str) -> str | None:
         for row in self._dom_file_rows():
-            if row.locator("a").inner_text().strip() == filename:
+            if row.get_by_role("link").inner_text().strip() == filename:
                 return row.get_attribute("data-file-id") or None
         return None
 
@@ -57,7 +57,8 @@ class OrgFileBrowserMixin(BrowserBase):
         fc_info.value.set_files(
             {"name": filename, "mimeType": "application/octet-stream", "buffer": content}
         )
-        self.click_and_capture(self.page, "button[type=submit]", "POST", f"/{slug}/files")
+        upload = self.page.get_by_role("button", name="Upload")
+        self.click_and_capture(self.page, upload, "POST", f"/{slug}/files")
 
     def have_uploaded_file(self, filename: str) -> None:
         self.upload_file(filename)
@@ -70,9 +71,8 @@ class OrgFileBrowserMixin(BrowserBase):
             tmp_path = tmp.name
         self._goto_files()
         self.page.set_input_files("input[type=file][name=file]", tmp_path)
-        self.last_response = self.click_and_capture(
-            self.page, "button[type=submit]", "POST", f"/{slug}/files"
-        )
+        upload = self.page.get_by_role("button", name="Upload")
+        self.last_response = self.click_and_capture(self.page, upload, "POST", f"/{slug}/files")
 
     def view_file_list(self) -> None:
         self._goto_files()
@@ -97,9 +97,10 @@ class OrgFileBrowserMixin(BrowserBase):
         self._goto_files()
         file_id = self._dom_find_file_id(filename)
         assert file_id is not None, f"File '{filename}' not found in DOM"
+        delete_btn = self.page.get_by_role("button", name=f"Delete {filename}")
         self.last_response = self.click_and_capture(
             self.page,
-            f"[data-file-id='{file_id}'] [data-delete-id]",
+            delete_btn,
             "DELETE",
             f"/files/{file_id}",
         )
@@ -108,12 +109,12 @@ class OrgFileBrowserMixin(BrowserBase):
         self._goto_files()
         file_id = self._dom_find_file_id(old_filename)
         assert file_id is not None, f"File '{old_filename}' not found in DOM"
-        row = f"[data-file-id='{file_id}']"
-        self.page.click(f"{row} [data-rename-id]")  # reveal the form
-        self.page.fill(f"{row} [data-rename-form] input[name=filename]", new_filename)
+        row = self.page.locator(f"[data-file-id='{file_id}']")
+        self.page.get_by_role("button", name=f"Rename {old_filename}").click()  # reveal the form
+        row.get_by_label("Filename").fill(new_filename)
         self.last_response = self.click_and_capture(
             self.page,
-            f"{row} [data-rename-form] button[type=submit]",
+            row.get_by_role("button", name="Save"),
             "PATCH",
             f"/files/{file_id}",
         )
@@ -164,7 +165,7 @@ class OrgFileBrowserMixin(BrowserBase):
                 lambda r: f"/{slug}/files" in r.url and r.request.method == "POST",
                 timeout=30000,
             ):
-                page.click("button[type=submit]")
+                page.get_by_role("button", name="Upload").click()
         finally:
             page.close()
 
@@ -199,9 +200,10 @@ class OrgFileBrowserMixin(BrowserBase):
     def generate_share_link(self, filename: str) -> None:
         self._goto_files()
         file_id = self._dom_file_id_by_name(filename)
+        share_btn = self.page.get_by_role("button", name=f"Share {filename}")
         self.click_and_capture(
             self.page,
-            f"[data-file-id='{file_id}'] [data-share-id]",
+            share_btn,
             "POST",
             f"/files/{file_id}/share",
         )
@@ -216,7 +218,7 @@ class OrgFileBrowserMixin(BrowserBase):
         try:
             self.last_response = page.goto(f"{self.base_url}/{slug}/files", wait_until="load")
             rows = page.locator("#file-list > div[data-file-id]").all()
-            self._last_file_names = [row.locator("a").inner_text().strip() for row in rows]
+            self._last_file_names = [row.get_by_role("link").inner_text().strip() for row in rows]
         finally:
             page.close()
 
@@ -300,9 +302,8 @@ class OrgFileBrowserMixin(BrowserBase):
             "input[type=file][name=file]",
             {"name": filename, "mimeType": "application/octet-stream", "buffer": b"content"},
         )
-        self.last_response = self.click_and_capture(
-            self.page, "button[type=submit]", "POST", f"/{slug}/files"
-        )
+        upload = self.page.get_by_role("button", name="Upload")
+        self.last_response = self.click_and_capture(self.page, upload, "POST", f"/{slug}/files")
 
     def assert_upload_rejected(self, status: int) -> None:
         assert self.last_response is not None
@@ -313,8 +314,8 @@ class OrgFileBrowserMixin(BrowserBase):
     def assert_file_metadata(self, filename: str, size: str, email: str, date: str) -> None:
         self._goto_files()
         for row in self._dom_file_rows():
-            if row.locator("a").inner_text().strip() == filename:
-                meta = row.locator(".file-meta").inner_text()
+            if row.get_by_role("link").inner_text().strip() == filename:
+                meta = row.locator(".file-meta").inner_text()  # KEEP: text read, no ARIA action
                 assert email in meta, f"Expected {email!r} in metadata, got: {meta!r}"
                 if size.endswith(" KB"):
                     assert size in meta, f"Expected {size!r} in metadata, got: {meta!r}"

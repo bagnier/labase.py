@@ -401,7 +401,8 @@ async def remove_member(
     members = await _build_members(repo, org_id)
     count = len(members)
     label = f"{count} member{'s' if count != 1 else ''}"
-    oob = f'<p id="member-count" hx-swap-oob="true" class="text-sm text-gray-500">{label}</p>'
+    cls = "text-sm text-base-content/70"
+    oob = f'<p id="member-count" hx-swap-oob="true" class="{cls}">{label}</p>'
     return HTMLResponse(oob, status_code=status.HTTP_200_OK)
 
 

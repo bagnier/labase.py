@@ -3,18 +3,17 @@
 {% block title %}Server admins — Console{% endblock %}
 
 {% block breadcrumb %}
-<a href="/console" class="hover:text-gray-700">Console</a>
-<span class="mx-1 text-gray-300">/</span>
-<span class="text-gray-700">Admins</span>
+<li><a href="/console">Console</a></li>
+<li>Admins</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
-  <a href="/console" class="text-sm text-indigo-600 hover:text-indigo-800">← Console</a>
+  <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
 
   <div>
-    <h1 class="page-title">Server admins</h1>
-    <p class="text-sm text-gray-500 mt-0.5">
+    <h1 class="text-lg font-semibold">Server admins</h1>
+    <p class="text-sm text-base-content/70 mt-0.5">
       Admins oversee every organisation and configure each app. {{ admin_count }} admin{{ 's' if admin_count != 1 else '' }}.
     </p>
   </div>

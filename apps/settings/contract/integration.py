@@ -6,17 +6,25 @@ in GoTrue before registration redirects to sign-in, so the user's first session 
 """
 
 import uuid
+from typing import cast
 
 from apps.auth.contract.admin import count_server_admins, set_server_admin
 from apps.auth.contract.events import UserCreated
+from apps.settings.contract import appearance
 from apps.settings.infra.router import router
 from apps.shared.host import Host
+from apps.shared.http.templates import templates
 
 
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console")
     host.reserve("console", "admin")
     host.events.on(UserCreated, _bootstrap_first_admin)
+    appearance.mount(host)
+    # Live appearance globals, alongside ``css_v`` — every page reads the app-wide theme.
+    jinja_globals = cast("dict[str, object]", templates.env.globals)
+    jinja_globals["app_theme"] = appearance.current_theme
+    jinja_globals["app_themes"] = lambda: appearance.THEMES
 
 
 async def _bootstrap_first_admin(event: UserCreated) -> None:

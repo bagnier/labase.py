@@ -1,37 +1,37 @@
 <!doctype html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full" data-theme="{{ app_theme() }}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ org.name }} — Pages</title>
   <link rel="stylesheet" href="/static/css/tailwind.css" />
 </head>
-<body class="h-full bg-gray-50 text-gray-900 antialiased">
-  <header class="h-14 bg-white border-b border-gray-200 flex items-center px-6 gap-4">
+<body class="h-full bg-base-200 text-base-content antialiased">
+  <header class="h-14 bg-base-100 border-b border-base-300 flex items-center px-6 gap-4">
     <a href="/" class="flex items-center gap-2 flex-none">
-      <div class="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center">
-        <i class="ph ph-lightning ph-4 text-white" aria-hidden="true"></i>
+      <div class="w-6 h-6 rounded-md bg-primary text-primary-content flex items-center justify-center">
+        <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
       </div>
-      <span class="text-sm font-semibold text-gray-900">labase</span>
+      <span class="text-sm font-semibold">labase</span>
     </a>
-    <i class="ph ph-caret-down ph-4 -rotate-90 text-gray-300" aria-hidden="true"></i>
-    <span class="text-sm text-gray-700 font-medium truncate">{{ org.name }}</span>
+    <i class="ph ph-caret-down ph-4 -rotate-90 text-base-content/50" aria-hidden="true"></i>
+    <span class="text-sm text-base-content/70 font-medium truncate">{{ org.name }}</span>
   </header>
   <main class="max-w-2xl mx-auto px-6 py-10">
-    <h1 class="text-2xl font-semibold text-gray-900 mb-6">Pages</h1>
+    <h1 class="text-2xl font-semibold mb-6">Pages</h1>
     {% if pages %}
-    <div id="pages-list" class="bg-white border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 shadow-sm">
+    <div id="pages-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm">
       {% for p in pages %}
       <a href="/{{ org_handle }}/pages/{{ p.slug }}"
-         class="page-title-link flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors group"
+         class="page-title-link flex items-center gap-3 px-5 py-3.5 hover:bg-base-200 transition-colors group"
          data-slug="{{ p.slug }}">
-        <i class="ph ph-file-text ph-sm text-gray-400 group-hover:text-indigo-500 flex-none transition-colors" aria-hidden="true"></i>
-        <span class="text-sm text-gray-800 group-hover:text-indigo-600 transition-colors">{{ p.title }}</span>
+        <i class="ph ph-file-text ph-sm text-base-content/50 group-hover:text-primary flex-none transition-colors" aria-hidden="true"></i>
+        <span class="text-sm group-hover:text-primary transition-colors">{{ p.title }}</span>
       </a>
       {% endfor %}
     </div>
     {% else %}
-    <p class="text-sm text-gray-400">No public pages yet.</p>
+    <p class="text-sm text-base-content/50">No public pages yet.</p>
     {% endif %}
   </main>
 </body>

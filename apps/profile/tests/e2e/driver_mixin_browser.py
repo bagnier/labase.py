@@ -10,16 +10,16 @@ class ProfileBrowserMixin(BrowserBase):
 
     def update_handle(self, name: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
-        self.page.fill("input[name=handle]", name)
+        self.page.get_by_label("Handle").fill(name)
         with self.page.expect_response(
             lambda r: "/profile" in r.url and r.request.method == "POST"
         ) as resp_info:
-            self.page.click("form:has(input[name=handle]) button[type=submit]")
+            self.page.get_by_role("button", name="Save changes").click()
         self.last_response = resp_info.value
 
     def assert_handle(self, name: str | None) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
-        value = self.page.locator("input[name=handle]").input_value()
+        value = self.page.get_by_label("Handle").input_value()
         if name:
             assert value == name, f"Expected handle '{name}', got '{value}'"
         else:

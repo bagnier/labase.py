@@ -12,11 +12,13 @@ class TodoBrowserMixin(BrowserBase):
         return self.page.locator("#todo-list > div").all()
 
     def _dom_todo_titles(self) -> list[str]:
-        return [row.locator("span.flex-1").inner_text().strip() for row in self._dom_todo_rows()]
+        return [
+            row.locator("[data-title-id]").inner_text().strip() for row in self._dom_todo_rows()
+        ]
 
     def _dom_todo_id_by_title(self, title: str) -> str:
         for row in self._dom_todo_rows():
-            if row.locator("span.flex-1").inner_text().strip() == title:
+            if row.locator("[data-title-id]").inner_text().strip() == title:
                 return row.locator("input[data-todo-id]").get_attribute("data-todo-id") or ""
         raise AssertionError(f"Todo '{title}' not found in DOM")
 
@@ -39,12 +41,12 @@ class TodoBrowserMixin(BrowserBase):
 
     def add_todo(self, title: str) -> None:
         self._goto_todos()
-        self.page.fill("input[name=title]", title)
+        self.page.get_by_label("New todo").fill(title)
         form_path = f"/{getattr(self, 'active_org_handle', '')}/todos"
         self._wait_htmx_response(
             form_path,
             "POST",
-            lambda: self.page.locator(f"form[hx-post='{form_path}'] button[type=submit]").click(),
+            lambda: self.page.get_by_role("button", name="Add").click(),
         )
 
     def mark_todo_done(self, title: str) -> None:
@@ -125,19 +127,19 @@ class TodoBrowserMixin(BrowserBase):
 
     def assert_todo_completed(self, title: str) -> None:
         for row in self._dom_todo_rows():
-            if row.locator("span.flex-1").inner_text().strip() == title:
-                span = row.locator("span.flex-1")
-                classes = span.get_attribute("class") or ""
-                assert "line-through" in classes, f"Todo '{title}' is not shown as completed in DOM"
+            if row.locator("[data-title-id]").inner_text().strip() == title:
+                assert row.locator("input[data-todo-id]").is_checked(), (
+                    f"Todo '{title}' is not shown as completed in DOM"
+                )
                 return
         raise AssertionError(f"Todo '{title}' not found in DOM")
 
     def assert_todo_not_completed(self, title: str) -> None:
         for row in self._dom_todo_rows():
-            if row.locator("span.flex-1").inner_text().strip() == title:
-                span = row.locator("span.flex-1")
-                classes = span.get_attribute("class") or ""
-                assert "line-through" not in classes, f"Todo '{title}' is shown as completed in DOM"
+            if row.locator("[data-title-id]").inner_text().strip() == title:
+                assert not row.locator("input[data-todo-id]").is_checked(), (
+                    f"Todo '{title}' is shown as completed in DOM"
+                )
                 return
         raise AssertionError(f"Todo '{title}' not found in DOM")
 

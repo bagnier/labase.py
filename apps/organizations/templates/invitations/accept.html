@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full" data-theme="{{ app_theme() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,71 +7,73 @@
   <link rel="stylesheet" href="/static/css/tailwind.css" />
   <script src="/static/js/htmx.min.js"></script>
 </head>
-<body class="h-full bg-gray-50 text-gray-900 antialiased flex items-center justify-center p-6">
+<body class="h-full bg-base-200 text-base-content antialiased flex items-center justify-center p-6">
 
   <div class="w-full max-w-md">
     <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-500 mb-4">
-        <i class="ph ph-lightning ph-lg text-white" aria-hidden="true"></i>
+      <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-content mb-4">
+        <i class="ph ph-lightning ph-lg" aria-hidden="true"></i>
       </div>
-      <h1 class="text-xl font-bold text-gray-900">labase</h1>
+      <h1 class="text-xl font-bold">labase</h1>
     </div>
 
-    <div class="card rounded-2xl p-8">
+    <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body p-8">
 
       {% if state in ("valid", "valid_login", "valid_register") %}
-        <h2 class="page-title mb-1">You have been invited</h2>
-        <p class="text-sm text-gray-500 mb-6">
+        <h2 class="text-lg font-semibold mb-1">You have been invited</h2>
+        <p class="text-sm text-base-content/70 mb-6">
           Join <strong>{{ org_name }}</strong> as a member.
           {% if email %}<br>Invitation for: <span class="font-medium">{{ email }}</span>{% endif %}
         </p>
         {% if state == "valid" %}
           <form method="POST" action="/invitations/{{ token }}/accept">
-            <button type="submit" data-accept class="btn-primary w-full justify-center">
+            <button type="submit" data-accept class="btn btn-primary w-full">
               Accept invitation
             </button>
           </form>
         {% elif state == "valid_login" %}
-          <a href="/auth/login?next=/invitations/{{ token }}" class="btn-primary w-full justify-center" data-accept>
+          <a href="/auth/login?next=/invitations/{{ token }}" class="btn btn-primary w-full" data-accept>
             Sign in to accept
           </a>
         {% else %}
-          <a href="/auth/register?next=/invitations/{{ token }}" class="btn-primary w-full justify-center" data-accept>
+          <a href="/auth/register?next=/invitations/{{ token }}" class="btn btn-primary w-full" data-accept>
             Create account to accept
           </a>
         {% endif %}
 
       {% elif state == "already_accepted" %}
         <div role="alert" data-error class="text-center space-y-3">
-          <p class="text-sm font-semibold text-gray-800">Invitation already accepted</p>
-          <p class="text-sm text-gray-500">You are already a member of <strong>{{ org_name }}</strong>.</p>
-          <a href="/profile" class="inline-block mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+          <p class="text-sm font-semibold">Invitation already accepted</p>
+          <p class="text-sm text-base-content/70">You are already a member of <strong>{{ org_name }}</strong>.</p>
+          <a href="/profile" class="inline-block mt-4 text-sm text-primary font-medium link link-hover">
             Go to dashboard →
           </a>
         </div>
 
       {% elif state == "wrong_email" %}
         <div role="alert" data-error class="text-center space-y-3">
-          <p class="text-sm font-semibold text-gray-800">Wrong account</p>
-          <p class="text-sm text-gray-500">
+          <p class="text-sm font-semibold">Wrong account</p>
+          <p class="text-sm text-base-content/70">
             This invitation was sent to <strong>{{ email }}</strong>.<br>
             Please sign in with that address and try again.
           </p>
-          <a href="/profile" class="inline-block mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+          <a href="/profile" class="inline-block mt-4 text-sm text-primary font-medium link link-hover">
             Back to home →
           </a>
         </div>
 
       {% else %}
         <div role="alert" data-error class="text-center space-y-3">
-          <p class="text-sm font-semibold text-gray-800">Invalid or expired link</p>
-          <p class="text-sm text-gray-500">This invitation is no longer valid. Ask the organisation admin for a new link.</p>
-          <a href="/profile" class="inline-block mt-4 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+          <p class="text-sm font-semibold">Invalid or expired link</p>
+          <p class="text-sm text-base-content/70">This invitation is no longer valid. Ask the organisation admin for a new link.</p>
+          <a href="/profile" class="inline-block mt-4 text-sm text-primary font-medium link link-hover">
             Back to home →
           </a>
         </div>
       {% endif %}
 
+      </div>
     </div>
   </div>
 

@@ -6,31 +6,31 @@
     <div class="flip rounded-2xl">
       <div class="paper rounded-2xl p-6">
         <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-500" data-deck-name>{{ card.deck }}</span>
-          <span class="rounded-full border border-indigo-500 px-2 py-0.5 text-xs text-indigo-600">level {{ card.level }}</span>
+          <span class="text-sm text-base-content/70" data-deck-name>{{ card.deck }}</span>
+          <span class="badge badge-primary badge-outline">level {{ card.level }}</span>
         </div>
-        <p class="mt-3 text-lg font-semibold text-gray-900" data-question>{{ card.question }}</p>
-        <div class="answer mt-3 hidden border-t border-dashed border-gray-200 pt-3 font-mono text-gray-900"
+        <p class="mt-3 text-lg font-semibold" data-question>{{ card.question }}</p>
+        <div class="answer mt-3 hidden border-t border-dashed border-base-300 pt-3 font-mono"
              id="answer-{{ card.external_id }}" data-answer></div>
         <div class="mt-4 flex flex-wrap gap-2">
           <button type="button" data-reveal
             hx-get="/{{ org_handle }}/learning/cards/{{ card.external_id }}"
             hx-target="#answer-{{ card.external_id }}" hx-swap="innerHTML"
-            class="btn bg-indigo-500 text-white hover:bg-indigo-600">Reveal answer</button>
+            class="btn btn-primary">Reveal answer</button>
           <button type="button" data-mark="again"
             hx-post="/{{ org_handle }}/learning/cards/{{ card.external_id }}/reviews" hx-vals='{"outcome": "again"}'
             hx-target="#learning-session" hx-swap="outerHTML"
-            class="btn bg-amber-500 text-white hover:bg-amber-600">To review</button>
+            class="btn btn-warning">To review</button>
           <button type="button" data-mark="learned"
             hx-post="/{{ org_handle }}/learning/cards/{{ card.external_id }}/reviews" hx-vals='{"outcome": "learned"}'
             hx-target="#learning-session" hx-swap="outerHTML"
-            class="btn bg-emerald-500 text-white hover:bg-emerald-600">Learned</button>
+            class="btn btn-success">Learned</button>
         </div>
       </div>
     </div>
   </div>
   {% else %}
-  <p data-empty class="rounded-xl border border-gray-200 bg-white px-5 py-9 text-center text-gray-500">
+  <p data-empty class="rounded-xl border border-base-300 bg-base-100 px-5 py-9 text-center text-base-content/70">
     🎉 Session complete — no more cards for today.
   </p>
   {% endfor %}
@@ -38,16 +38,16 @@
 
 {% if available_decks and sharing_enabled %}
 <div class="mt-8 space-y-3">
-  <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Available decks</h2>
+  <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/70">Available decks</h2>
   {% for deck in available_decks %}
-  <div class="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
-    <span class="font-medium text-gray-800">{{ deck.name }}</span>
+  <div class="flex items-center justify-between rounded-xl border border-base-300 bg-base-100 px-4 py-3">
+    <span class="font-medium">{{ deck.name }}</span>
     <form method="post" action="/{{ org_handle }}/learning/subscriptions"
           hx-post="/{{ org_handle }}/learning/subscriptions"
           hx-target="#learning-session" hx-swap="outerHTML"
           hx-include="[name=deck]">
       <input type="hidden" name="deck" value="{{ deck.name }}">
-      <button type="submit" class="btn-secondary text-sm">Subscribe</button>
+      <button type="submit" class="btn btn-sm">Subscribe</button>
     </form>
   </div>
   {% endfor %}

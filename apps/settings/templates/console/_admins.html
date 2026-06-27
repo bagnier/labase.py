@@ -1,27 +1,29 @@
 <div id="admins" class="space-y-4">
-  <form class="card flex gap-2 items-center" data-admin-add-form
+  <form class="card bg-base-100 border border-base-300 shadow-sm" data-admin-add-form
         hx-post="/console/admins" hx-target="#admins" hx-swap="outerHTML">
-    <input type="email" name="email" required placeholder="email@example.com"
-           class="input flex-1 text-sm" />
-    <button type="submit" class="btn text-sm text-indigo-700">Add admin</button>
+    <div class="card-body flex-row gap-2 items-center">
+      <input type="email" name="email" required placeholder="email@example.com"
+             aria-label="Admin email" class="input w-full flex-1 text-sm" />
+      <button type="submit" class="btn btn-sm btn-primary">Add admin</button>
+    </div>
   </form>
 
   {% if error %}
-    <p class="text-sm text-red-700" data-admin-add-error="{{ error }}">
+    <p class="text-sm text-error" data-admin-add-error="{{ error }}">
       No account exists for {{ error }}.
     </p>
   {% endif %}
 
-  <div class="card !p-0 divide-y divide-gray-100">
+  <div class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300">
     {% for u in admins %}
       <div class="flex items-center gap-3 p-4"
            data-admin-email="{{ u.email }}"
            data-admin-status="admin">
         <div class="text-sm flex-1">{{ u.email }}</div>
-        <span class="bg-red-50 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">server admin</span>
+        <span class="badge badge-error badge-sm">server admin</span>
         <form hx-put="/console/admins/{{ u.email }}" hx-target="#admins" hx-swap="outerHTML">
           <input type="hidden" name="is_admin" value="false" />
-          <button type="submit" class="btn text-sm text-red-700"
+          <button type="submit" class="btn btn-sm btn-error btn-ghost"
                   {% if admin_count <= 1 %}disabled title="The server must keep at least one admin"{% endif %}>
             Revoke
           </button>

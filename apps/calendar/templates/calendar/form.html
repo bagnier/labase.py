@@ -3,63 +3,63 @@
 {% block title %}{% if event %}Edit event{% else %}New event{% endif %} — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <a href="/{{ org_handle }}/calendar" class="hover:text-gray-700">Calendar</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">{% if event %}Edit{% else %}New event{% endif %}</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li><a href="/{{ org_handle }}/calendar">Calendar</a></li>
+  <li>{% if event %}Edit{% else %}New event{% endif %}</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-xl space-y-6">
-  <h1 class="page-title">{% if event %}Edit event{% else %}New event{% endif %}</h1>
+  <h1 class="text-lg font-semibold">{% if event %}Edit event{% else %}New event{% endif %}</h1>
 
-  <form method="post" action="/{{ org_handle }}/{{ action }}" class="card space-y-4">
+  <form method="post" action="/{{ org_handle }}/{{ action }}" class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body space-y-4">
     <div>
-      <label for="title" class="block text-xs font-medium text-gray-700 mb-1.5">Title</label>
-      <input id="title" name="title" type="text" required class="input"
+      <label for="title" class="block text-xs font-medium text-base-content/70 mb-1.5">Title</label>
+      <input id="title" name="title" type="text" required class="input w-full"
              value="{{ event.title if event else '' }}" />
     </div>
 
     <div class="flex flex-wrap gap-4">
       <fieldset class="space-y-1.5">
-        <legend class="block text-xs font-medium text-gray-700 mb-1.5">Starts</legend>
+        <legend class="block text-xs font-medium text-base-content/70 mb-1.5">Starts</legend>
         <div class="flex gap-2">
-          <input name="start_date" type="date" required class="input !w-auto"
+          <input name="start_date" type="date" required class="input"
                  value="{{ start_date | default('') }}" aria-label="Start date" />
-          <input name="start_time" type="time" required class="input !w-auto"
+          <input name="start_time" type="time" required class="input"
                  value="{{ start_time | default('') }}" aria-label="Start time" />
         </div>
       </fieldset>
       <fieldset class="space-y-1.5">
-        <legend class="block text-xs font-medium text-gray-700 mb-1.5">Ends</legend>
+        <legend class="block text-xs font-medium text-base-content/70 mb-1.5">Ends</legend>
         <div class="flex gap-2">
-          <input name="end_date" type="date" required class="input !w-auto"
+          <input name="end_date" type="date" required class="input"
                  value="{{ end_date | default('') }}" aria-label="End date" />
-          <input name="end_time" type="time" required class="input !w-auto"
+          <input name="end_time" type="time" required class="input"
                  value="{{ end_time | default('') }}" aria-label="End time" />
         </div>
       </fieldset>
     </div>
 
     <div>
-      <label for="location" class="block text-xs font-medium text-gray-700 mb-1.5">
-        Location <span class="text-gray-400">(optional)</span>
+      <label for="location" class="block text-xs font-medium text-base-content/70 mb-1.5">
+        Location <span class="text-base-content/50">(optional)</span>
       </label>
-      <input id="location" name="location" type="text" class="input"
-             value="{{ event.location if event else '' }}" />
+      <input id="location" name="location" type="text" class="input w-full"
+             aria-label="Location" value="{{ event.location if event else '' }}" />
     </div>
 
     <div>
-      <label for="description" class="block text-xs font-medium text-gray-700 mb-1.5">
-        Description <span class="text-gray-400">(optional)</span>
+      <label for="description" class="block text-xs font-medium text-base-content/70 mb-1.5">
+        Description <span class="text-base-content/50">(optional)</span>
       </label>
-      <textarea id="description" name="description" class="input" rows="3">{{ event.description if event else '' }}</textarea>
+      <textarea id="description" name="description" class="textarea w-full" rows="3" aria-label="Description">{{ event.description if event else '' }}</textarea>
     </div>
 
     <div class="flex items-center gap-2 pt-1">
-      <button type="submit" class="btn-primary">Save event</button>
-      <a href="/{{ org_handle }}/calendar" class="btn-secondary">Cancel</a>
+      <button type="submit" class="btn btn-primary">Save event</button>
+      <a href="/{{ org_handle }}/calendar" class="btn">Cancel</a>
+    </div>
     </div>
   </form>
 </div>

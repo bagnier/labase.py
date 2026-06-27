@@ -3,17 +3,16 @@
 {% block title %}Dashboard — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Overview</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Overview</li>
 {% endblock %}
 
 {% block content %}
 <div class="space-y-6">
 
   <div>
-    <h1 class="page-title">Overview</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Welcome, {{ profile_handle }}</p>
+    <h1 class="text-lg font-semibold">Overview</h1>
+    <p class="text-sm text-base-content/70 mt-0.5">Welcome, {{ profile_handle }}</p>
   </div>
 
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

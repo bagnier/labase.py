@@ -3,22 +3,21 @@
 {% block title %}Files — labase{% endblock %}
 
 {% block breadcrumb %}
-  <a href="/{{ org_handle }}/dashboard" class="hover:text-gray-700">{{ org.name }}</a>
-  <span class="mx-1 text-gray-300">/</span>
-  <span class="text-gray-700">Files</span>
+  <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
+  <li>Files</li>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-2xl space-y-6">
 
-  <h1 class="page-title">Organisation files</h1>
+  <h1 class="text-lg font-semibold">Organisation files</h1>
 
   {% if welcome_message %}
-  <p class="text-sm text-gray-500">{{ welcome_message }}</p>
+  <p class="text-sm text-base-content/70">{{ welcome_message }}</p>
   {% endif %}
 
   {% if storage_quota_mb >= 0 %}
-  <p class="meta-text">{{ (used_bytes / 1024 / 1024) | round(1) }} MB / {{ storage_quota_mb }} MB used</p>
+  <p class="text-xs opacity-60">{{ (used_bytes / 1024 / 1024) | round(1) }} MB / {{ storage_quota_mb }} MB used</p>
   {% endif %}
 
   {% if uploads_enabled %}
@@ -26,14 +25,14 @@
         class="flex gap-2 items-center">
     <div class="flex-1 flex items-center gap-3">
       <div class="relative flex-none">
-        <span class="btn-secondary whitespace-nowrap pointer-events-none">Choose File</span>
+        <span class="btn whitespace-nowrap pointer-events-none">Choose File</span>
         <input type="file" name="file" required
                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                onchange="document.getElementById('file-name').textContent = this.files[0]?.name ?? 'No file chosen'" />
       </div>
-      <span id="file-name" class="text-sm text-gray-500 truncate">No file chosen</span>
+      <span id="file-name" class="text-sm text-base-content/70 truncate">No file chosen</span>
     </div>
-    <button type="submit" class="btn-primary flex-none">Upload</button>
+    <button type="submit" class="btn btn-primary flex-none">Upload</button>
   </form>
   {% endif %}
 

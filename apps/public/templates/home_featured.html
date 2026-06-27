@@ -1,28 +1,30 @@
 <!doctype html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full" data-theme="{{ app_theme() }}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ org.name }}</title>
   <link rel="stylesheet" href="/static/css/tailwind.css" />
+  <script src="/static/js/alpine.min.js" defer></script>
 </head>
-<body class="h-full bg-gray-50 text-gray-900 antialiased">
-  <header class="h-14 bg-white border-b border-gray-200 flex items-center px-6 gap-6">
+<body class="h-full bg-base-200 text-base-content antialiased">
+  <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-6 gap-6">
     <a href="/" class="flex items-center gap-2 flex-none hover:opacity-80 transition-opacity">
-      <div class="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center">
-        <i class="ph ph-lightning ph-4 text-white" aria-hidden="true"></i>
+      <div class="w-6 h-6 rounded-md bg-primary text-primary-content flex items-center justify-center">
+        <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
       </div>
-      <span class="font-semibold text-gray-900 text-sm">{{ org.name }}</span>
+      <span class="font-semibold text-sm">{{ org.name }}</span>
     </a>
 
     {% if page_nav %}
-    <nav aria-label="Site navigation" class="flex items-center gap-1 flex-1">
-      {% for link in page_nav %}
-      <a href="/{{ link.slug }}"
-         class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors">
-        {{ link.title }}
-      </a>
-      {% endfor %}
+    <nav aria-label="Site navigation" class="flex-1">
+      <ul class="menu menu-horizontal gap-1">
+        {% for link in page_nav %}
+        <li>
+          <a href="/{{ link.slug }}">{{ link.title }}</a>
+        </li>
+        {% endfor %}
+      </ul>
     </nav>
     {% else %}
     <div class="flex-1"></div>
@@ -30,10 +32,10 @@
 
     <div class="flex items-center gap-2 flex-none">
       {% if current_user %}
-      <a href="/profile" class="btn-secondary btn-sm">My profile</a>
+      <a href="/profile" class="btn btn-sm">My profile</a>
       {% else %}
-      <a href="/auth/login" class="btn-secondary btn-sm">Sign in</a>
-      <a href="/auth/register" class="btn-primary btn-sm">Register</a>
+      <a href="/auth/login" class="btn btn-sm">Sign in</a>
+      <a href="/auth/register" class="btn btn-primary btn-sm">Register</a>
       {% endif %}
     </div>
   </header>
@@ -44,14 +46,16 @@
       {% for page in pages %}
       <li>
         <a href="/{{ page.slug }}"
-           class="block bg-white border border-gray-200 rounded-xl px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
-          <span class="font-medium text-gray-900">{{ page.title }}</span>
+           class="card bg-base-100 border border-base-300 shadow-sm hover:shadow-md transition-shadow block">
+          <div class="card-body px-5 py-4">
+            <span class="font-medium">{{ page.title }}</span>
+          </div>
         </a>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="text-gray-500 text-sm">No public pages yet.</p>
+    <p class="text-base-content/70 text-sm">No public pages yet.</p>
     {% endif %}
   </main>
 </body>

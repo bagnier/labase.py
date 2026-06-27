@@ -1,15 +1,15 @@
 {% if error %}
-<div role="alert" data-error class="alert-error">{{ error }}</div>
+<div role="alert" data-error class="alert alert-error">{{ error }}</div>
 {% else %}
-<div class="alert-success space-y-2">
+<div class="alert alert-success flex-col items-start gap-2">
   <p class="font-medium">Invitation created.</p>
   <p class="text-xs">Share this link with <strong>{{ email }}</strong>:</p>
-  <div class="flex items-center gap-2">
-    <code class="flex-1 text-xs bg-white border border-emerald-200 rounded px-2 py-1.5 text-gray-700 break-all"
+  <div class="flex items-center gap-2 w-full">
+    <code class="flex-1 text-xs bg-base-100 border border-base-300 rounded px-2 py-1.5 break-all"
           data-invitation-link="{{ link }}">{{ link }}</code>
     <button type="button"
             onclick="navigator.clipboard.writeText('{{ link }}').then(() => { const b = this; b.textContent = 'Copied!'; setTimeout(() => b.textContent = 'Copy', 2000); })"
-            class="text-xs text-emerald-700 hover:text-emerald-900 border border-emerald-300 rounded px-2 py-1.5 flex-none">
+            class="btn btn-sm btn-outline flex-none">
       Copy
     </button>
   </div>

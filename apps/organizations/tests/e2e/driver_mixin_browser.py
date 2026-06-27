@@ -113,19 +113,21 @@ class OrgBrowserMixin(BrowserBase):
         handle = orgs[0]["handle"]
         # Rename the org via settings page
         owner_page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
-        owner_page.fill("input[name=name]", org_name)
+        owner_page.get_by_label("Organisation name").fill(org_name)
         with owner_page.expect_response(
             lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
         ):
-            owner_page.click("form:has(input[name=name]) button[type=submit]")
+            owner_page.locator("form:has(input[name=name])").get_by_role(
+                "button", name="Save"
+            ).click()
         # Invite the member
         owner_page.goto(f"{self.base_url}/{handle}/members", wait_until="load")
         owner_page.click("[data-invite-toggle]")
-        owner_page.fill("#invite-form input[name=email]", email)
+        owner_page.get_by_label("Invite email").fill(email)
         with owner_page.expect_response(
             lambda r: "/invitations" in r.url and r.request.method == "POST"
         ):
-            owner_page.click("#invite-form button[type=submit]")
+            owner_page.get_by_role("button", name="Invite", exact=True).click()
         link_el = owner_page.query_selector("#invite-result [data-invitation-link]")
         assert link_el, "No invitation link found after sending invite"
         link = link_el.get_attribute("data-invitation-link") or ""
@@ -155,13 +157,13 @@ class OrgBrowserMixin(BrowserBase):
         slug = self._active_slug()
         self.page.goto(f"{self.base_url}/{slug}/settings", wait_until="load")
         # The editable name form is owner-only; absent for members (settings is 403).
-        if self.page.query_selector("input[name=name]") is None:
+        name_field = self.page.get_by_label("Organisation name")
+        if name_field.count() == 0:
             self._probe_blocked("PATCH", f"/{slug}", form={"name": new_name})
             return
-        self.page.fill("input[name=name]", new_name)
-        self.last_response = self.click_and_capture(
-            self.page, "form:has(input[name=name]) button[type=submit]", "PATCH", f"/{slug}"
-        )
+        name_field.fill(new_name)
+        save = self.page.locator("form:has(input[name=name])").get_by_role("button", name="Save")
+        self.last_response = self.click_and_capture(self.page, save, "PATCH", f"/{slug}")
 
     def try_create_org(self, name: str) -> None:
         # Fire the create request from the acting user's authenticated context and capture
@@ -249,9 +251,9 @@ class OrgBrowserMixin(BrowserBase):
             )
             return
         page.click("[data-invite-toggle]")
-        page.fill("#invite-form input[name=email]", email)
+        page.get_by_label("Invite email").fill(email)
         self.last_response = self.click_and_capture(
-            page, "#invite-form button[type=submit]", "POST", "/invitations"
+            page, page.get_by_role("button", name="Invite", exact=True), "POST", "/invitations"
         )
         error_el = page.query_selector("#invite-result [data-error]")
         if error_el is not None:
@@ -318,14 +320,14 @@ class OrgBrowserMixin(BrowserBase):
         page.click("[data-accept]")  # "Create account to accept" link → /auth/register?next=...
         page.wait_for_load_state("load")
         # Register
-        page.fill("input[name=email]", email)
-        page.fill("input[name=password]", _PASSWORD)
-        page.click("button[type=submit]")
+        page.get_by_label("Email").fill(email)
+        page.get_by_label("Password").fill(_PASSWORD)
+        page.get_by_role("button", name="Create my account").click()
         page.wait_for_load_state("load")
         # Should land on login page with next preserved; fill login form
-        page.fill("input[name=email]", email)
-        page.fill("input[name=password]", _PASSWORD)
-        page.click("button[type=submit]")
+        page.get_by_label("Email").fill(email)
+        page.get_by_label("Password").fill(_PASSWORD)
+        page.get_by_role("button", name="Sign in").click()
         page.wait_for_load_state("load")
         # Should be back on the invitation page — click accept
         accept_btn = page.query_selector("[data-accept]")

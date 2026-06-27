@@ -9,6 +9,7 @@ from playwright.sync_api import (
     APIResponse,
     Browser,
     BrowserContext,
+    Locator,
     Page,
     Response,
     sync_playwright,
@@ -158,11 +159,19 @@ class BrowserBase:
             page.on("dialog", lambda d: d.accept())
             armed.add(id(page))
 
-    def click_and_capture(self, page: Page, selector: str, method: str, path_token: str):
-        """Click a control and return the HTMX response it triggers."""
+    def click_and_capture(
+        self, page: Page, target: str | Locator, method: str, path_token: str
+    ) -> Response:
+        """Click a control and return the HTMX response it triggers.
+
+        ``target`` may be a CSS selector string or a Playwright Locator.
+        """
         self._arm_dialogs(page)
         with page.expect_response(
             lambda r: path_token in r.url and r.request.method == method
         ) as info:
-            page.click(selector)
+            if isinstance(target, str):
+                page.click(target)
+            else:
+                target.click()
         return info.value
