@@ -49,10 +49,12 @@ Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 
 Each bounded context exposes a single `mount(app, host)` entry point in its `contract/integration.py`. The composition root (`apps/main.py`) calls them in dependency order — no context knows about another.
 
-**`Host`** (`apps/shared/host.py`) carries two things:
+**`Host`** (`apps/shared/host.py`) is the wiring object each context's `mount()` registers into:
 
 - `events: EventBus` — type-keyed async pub/sub; handlers are registered by the Python type of the event, so there are no magic string names and no shared imports between contexts.
 - `reserve(*slugs)` — claims URL path segments so no org handle can shadow them.
+- `register_nav(NavItem)` — adds a global sidebar link, collected once as `nav_items`.
+- `register_page_context(namespace, keys, fn)` — adds a page-context slice provider (see *Page composition*).
 
 **`EventBus`** exposes two primitives:
 
@@ -101,7 +103,7 @@ Both drivers share a substrate in `tests/e2e/drivers/` (`ApiBase` / `BrowserBase
 
 **Multi-tenancy.** Each account gets a personal org at sign-up; org-scoped data lives under `/{org_handle}/...`. Members read, owners write — gated by `CurrentOwnerMembership` for a clean `403`.
 
-**Page composition.** The shell (`profile/contract/shell.py`) is pulled in explicitly via `page_context` (full pages) or `shell_context` (partial). No middleware injects data silently — full pages load the shell, HTMX fragments don't. Sidebar entries are registered in `mount()` via `host.register_nav(NavItem(...))`, or contributed dynamically per org through the `ShellOrgQuery` event.
+**Page composition.** A full page's context is built from *slices*, each owned by the app that knows it (profile → `profile_handle`, organizations → `org_nav`). Apps register a provider at `mount()` via `host.register_page_context(namespace, keys, fn)`, declaring their keys (flat, `<app>_<key>`; collisions rejected at startup). The ownerless collector `apps/shared/page.py` merges them — called explicitly via `fullpage_context` (full pages) or `shell_context` (fragments), never injected silently. Sidebar links are either **global** (`host.register_nav`, seeded once as `nav_items`) or **per-org** (the `OrgNavQuery` event).
 
 **Toggleable apps.** A context declares its admin-tunable values with `declare_app_settings(...)` and can expose an on/off `feature_switch()`; when disabled, its `mount()` short-circuits but still answers `ConsoleOverviewQuery` so admins can re-enable it. The SaaS admin console (`settings/`) aggregates these server-wide stats (BYPASSRLS, across all orgs).
 
@@ -123,7 +125,7 @@ labase.py/
 │   │                      #   persistence, http, observability, templates/
 │   ├── auth/              # Authentication — get_current_user, get_rls_session, cookies
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations
-│   ├── profile/           # User profile + page shell (shell_context / page_context)
+│   ├── profile/           # User profile
 │   ├── files/             # Demo context — Supabase Storage + share tokens
 │   ├── learning/          # Demo context — spaced repetition (HexArch example)
 │   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav

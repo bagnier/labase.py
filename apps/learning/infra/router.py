@@ -23,11 +23,11 @@ from apps.learning.domain.service import (
 )
 from apps.learning.infra.repository import CatalogRow, LearningRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
-from apps.profile.contract.shell import shell_context
 from apps.shared import clock
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
+from apps.shared.page import shell_context
 
 router = APIRouter(prefix="/learning", tags=["learning"])
 

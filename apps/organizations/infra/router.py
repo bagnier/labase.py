@@ -26,11 +26,11 @@ from apps.organizations.domain.models import (
 )
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.profile.contract.shell import page_context
 from apps.shared.host import host
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
+from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
 # Collection router — multi-org, not scoped by a handle. Mounted at the root.
@@ -122,7 +122,7 @@ async def org_dashboard(
 ) -> HTMLResponse:
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
-    ctx = await page_context(session, current_user, org=org, org_handle=org_handle)
+    ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle)
     ctx["overviews"] = sorted(
         await host.events.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
     )
@@ -152,7 +152,7 @@ async def org_settings(
 ):
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session, current_user, org=org, org_handle=org_handle, role=membership.role.value
     )
     return templates.TemplateResponse(request, "organizations/settings.html", ctx)
@@ -176,7 +176,7 @@ async def list_members(
         raw_invs = await repo.list_invitations(org_id)
         invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
     org_handle = request.path_params.get("org_handle", org.handle)
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session,
         current_user,
         current_user=current_user,
@@ -213,7 +213,7 @@ async def rename_organization(
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
-        ctx = await page_context(
+        ctx = await fullpage_context(
             session, current_user, org=org, org_handle=org_handle, role=membership.role.value
         )
         ctx["name_error"] = error
@@ -252,7 +252,7 @@ async def update_org_handle(
         if wants_json(request):
             raise HTTPException(status_code=code, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
-        ctx = await page_context(
+        ctx = await fullpage_context(
             session, current_user, org=org, org_handle=org_handle, role=membership.role.value
         )
         ctx["handle_error"] = error

@@ -6,9 +6,9 @@ from fastapi.responses import HTMLResponse, Response
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
-from apps.profile.contract.shell import shell_context
 from apps.shared.http import or_404, parse_body, parse_field, render_list, wants_full_page
 from apps.shared.observability.audit import record_audit_event
+from apps.shared.page import shell_context
 from apps.todo.contract import settings
 from apps.todo.domain.models import TodoRead
 from apps.todo.infra.repository import TodoRepository

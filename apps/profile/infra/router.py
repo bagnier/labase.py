@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from apps.auth.contract.current import CurrentUser, RlsSession
-from apps.profile.contract.shell import shell_context
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
+from apps.shared.page import shell_context
 from apps.shared.slug_registry import validate_handle
 
 router = APIRouter()
@@ -29,7 +29,7 @@ async def _profile_context(
     if profile is not None and profile.handle is None:
         profile = await repo.auto_handle(profile, current_user.email)
     shell = await shell_context(session, current_user)
-    orgs = shell["orgs"]
+    orgs = shell["org_nav"]
     return {
         "user": current_user,
         "profile": profile,

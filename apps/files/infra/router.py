@@ -25,11 +25,11 @@ from apps.organizations.contract.current import (
     Membership,
     OrgRole,
 )
-from apps.profile.contract.shell import shell_context
 from apps.shared.clock import now
 from apps.shared.http import or_404, parse_field, render_list, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
+from apps.shared.page import shell_context
 from apps.shared.persistence.database import AdminSession
 
 router = APIRouter(prefix="/files", tags=["files"])

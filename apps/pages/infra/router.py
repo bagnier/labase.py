@@ -20,10 +20,10 @@ from apps.pages.infra.repository import (
     PageRepository,
     visible_pages,
 )
-from apps.profile.contract.shell import page_context
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
+from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.slug_registry import slugify
 
@@ -130,7 +130,7 @@ async def edit_page(
     page = or_404(await repo.by_slug(slug))
     if not _can_edit(page, membership):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session,
         current_user,
         page=page,
@@ -294,7 +294,7 @@ async def nav_manager(
     candidates = await nav_repo.candidates()
     if wants_json(request):
         return JSONResponse([c.model_dump(mode="json") for c in candidates])
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session,
         current_user,
         candidates=candidates,
@@ -399,7 +399,7 @@ async def list_pages(
         }
         for p in pages
     ]
-    ctx = await page_context(
+    ctx = await fullpage_context(
         admin,
         current_user,
         pages=pages,
@@ -430,7 +430,7 @@ async def view_page(
     )
     body = render_markdown(page.content)
     if current_user:
-        ctx = await page_context(
+        ctx = await fullpage_context(
             admin,
             current_user,
             page=page,

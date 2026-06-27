@@ -10,11 +10,11 @@ from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.calendar.domain.models import CalendarEvent, CalendarEventRead, format_event_time
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
-from apps.profile.contract.shell import page_context
 from apps.shared import clock
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
+from apps.shared.page import fullpage_context
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -138,7 +138,7 @@ async def list_events(
         )
     ref = _ref_month(request)
     today = clock.now().date()
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session,
         current_user,
         org=org,
@@ -161,7 +161,7 @@ async def new_event_form(
     _org_id: CurrentOrg,
     org: CurrentOrgModel,
 ) -> Response:
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session, current_user, org=org, org_handle=org.handle, event=None, action="calendar"
     )
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
@@ -216,7 +216,7 @@ async def view_event(
     event = or_404(await repo.get(event_id))
     if wants_json(request):
         return JSONResponse(CalendarEventRead.model_validate(event).model_dump(mode="json"))
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session,
         current_user,
         org=org,
@@ -237,7 +237,7 @@ async def edit_event_form(
     org: CurrentOrgModel,
 ) -> Response:
     event = or_404(await repo.get(event_id))
-    ctx = await page_context(
+    ctx = await fullpage_context(
         session,
         current_user,
         org=org,

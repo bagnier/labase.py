@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
-from apps.profile.contract.shell import shell_context
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import SettingsChanged, SettingsGroup, declared_settings
 from apps.settings.domain import admins, service
@@ -13,6 +12,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
+from apps.shared.page import shell_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.supabase_studio import studio_link
 
