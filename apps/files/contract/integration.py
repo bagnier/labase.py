@@ -7,8 +7,6 @@ share router and the org-scoped router, claims the ``files`` slug, answers the d
 
 import uuid
 
-from fastapi import FastAPI
-
 from apps.files.contract import settings
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
@@ -42,7 +40,7 @@ _WELCOME_BODY = (
 # Mounts an org-scoped router under /{org_handle}; mounted last (see apps.main).
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     _declare_settings()
@@ -51,8 +49,8 @@ def mount(app: FastAPI, host: Host) -> None:
         return
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(public_router)
-    app.include_router(router, prefix=ORG_PREFIX)
+    host.app.include_router(public_router)
+    host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Files", "folder", "files", "/files", order=30))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)

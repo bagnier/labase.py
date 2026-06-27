@@ -9,7 +9,7 @@ import httpx
 
 from apps.auth.infra.session import get_rls_session
 from apps.auth.tests.given_helpers import delete_user_if_exists
-from apps.main import app
+from apps.main import host
 from apps.shared.persistence.database import (
     _admin_engine,
     get_admin_session,
@@ -18,6 +18,8 @@ from apps.shared.persistence.database import (
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.async_runner import AsyncRunner
 from tests.e2e.drivers.transport import ASGISyncTransport
+
+app = host.app
 
 _T = TypeVar("_T")
 _PASSWORD = "Secret1!"

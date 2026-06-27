@@ -1,7 +1,5 @@
 """How the public context plugs into the running app: mounts the landing-page router."""
 
-from fastapi import FastAPI
-
 from apps.public.contract import settings
 from apps.public.infra.router import router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -13,11 +11,11 @@ from apps.settings.contract.settings import (
 from apps.shared.host import Host
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     _declare_settings()
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(router)
+    host.app.include_router(router)
     host.events.on(ConsoleOverviewQuery, _console_overview)
 
 

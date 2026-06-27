@@ -7,9 +7,11 @@ import pytest
 from starlette.testclient import TestClient
 
 from apps.auth.contract.current import AuthenticatedUser, get_current_user
-from apps.main import app
+from apps.main import host
 from apps.shared.clock import now
 from apps.shared.persistence.database import get_admin_session, get_user_session
+
+app = host.app
 
 
 @pytest.fixture()

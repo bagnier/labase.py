@@ -7,8 +7,6 @@ router, answers the dashboard ``OverviewQuery`` (upcoming events) and the server
 
 from datetime import timedelta
 
-from fastapi import FastAPI
-
 from apps.calendar.contract import settings
 from apps.calendar.infra.repository import CalendarEventRepository, count_all
 from apps.calendar.infra.router import router
@@ -32,7 +30,7 @@ _RECENT = 3
 _WELCOME_TITLE = "Welcome to your team calendar"
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     _declare_settings()
@@ -41,7 +39,7 @@ def mount(app: FastAPI, host: Host) -> None:
         return
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(router, prefix=ORG_PREFIX)
+    host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=20))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)

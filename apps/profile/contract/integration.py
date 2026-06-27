@@ -1,6 +1,5 @@
 """How the profile context plugs into the running app: mounts its router, claims its slug."""
 
-from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from apps.profile.contract.queries import profile_handle_taken
@@ -13,8 +12,8 @@ from apps.shared.host import Host
 from apps.shared.slug_registry import register_open_list
 
 
-def mount(app: FastAPI, host: Host) -> None:
-    app.include_router(router, tags=["profile"])
+def mount(host: Host) -> None:
+    host.app.include_router(router, tags=["profile"])
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_page_context("profile", ("profile_handle",), provide_profile_handle)
     declare_app_settings(

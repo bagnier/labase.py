@@ -19,7 +19,7 @@ def _wire_reserved_slugs():
     """Reserved slugs are claimed at composition: importing apps.main wires every context."""
     import apps.main
 
-    assert apps.main.app is not None
+    assert apps.main.host.app is not None
 
 
 # ── slugify ───────────────────────────────────────────────────────────────────

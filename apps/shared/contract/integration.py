@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
@@ -18,9 +18,10 @@ from apps.shared.observability.request import RequestLogger
 _STATIC_DIR = Path(__file__).parents[3] / "static"
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     setup_logging()
     settings = get_technical_settings()
+    app = host.app
 
     app.state.limiter = limiter
 

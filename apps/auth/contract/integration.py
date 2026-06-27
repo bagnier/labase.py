@@ -4,8 +4,6 @@ Event wiring for sign-up (``UserCreated`` emission, compensation) lives in the r
 orchestrator (:mod:`app.registration`), not here.
 """
 
-from fastapi import FastAPI
-
 from apps.auth.contract import settings
 from apps.auth.contract.admin import list_server_admins
 from apps.auth.infra.router import router
@@ -19,8 +17,8 @@ from apps.settings.contract.settings import (
 from apps.shared.host import Host
 
 
-def mount(app: FastAPI, host: Host) -> None:
-    app.include_router(router, prefix="/auth", tags=["auth"])
+def mount(host: Host) -> None:
+    host.app.include_router(router, prefix="/auth", tags=["auth"])
     host.events.on(ConsoleOverviewQuery, _console_overview)
     settings.group = declare_app_settings(
         "users",

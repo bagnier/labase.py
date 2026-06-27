@@ -1,7 +1,9 @@
 import httpx
 
-from apps.main import app
+from apps.main import host
 from tests.e2e.drivers.async_runner import AsyncRunner
+
+app = host.app
 
 
 class ASGISyncTransport(httpx.BaseTransport):

@@ -12,8 +12,10 @@ import time
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
-from apps.main import app
+from apps.main import host
 from tests.e2e.drivers.background_loop import BackgroundLoop
+
+app = host.app
 
 
 def _free_port() -> int:

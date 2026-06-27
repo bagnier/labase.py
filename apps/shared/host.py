@@ -1,7 +1,7 @@
-"""Host — the app-wide wiring object passed to every context's mount(app, host).
+"""Host — the app-wide wiring object passed to every context's mount(host).
 
-Carries the event bus and the reserved-slug registry. ``host`` is the production singleton;
-tests can build a fresh :class:`Host` in isolation.
+Carries the FastAPI app, the event bus and the reserved-slug registry. ``host`` is the
+production singleton; tests can build a fresh :class:`Host` in isolation.
 """
 
 from __future__ import annotations
@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from fastapi import FastAPI
 
 from apps.shared.bus import EventBus
 from apps.shared.slug_registry import reserve as _reserve_slugs
@@ -52,6 +54,7 @@ class PageContextProvider:
 
 @dataclass
 class Host:
+    app: FastAPI = field(default_factory=lambda: FastAPI(title="labase"))
     events: EventBus = field(default_factory=EventBus)
     nav_items: list[NavItem] = field(default_factory=list)
     page_providers: list[PageContextProvider] = field(default_factory=list)

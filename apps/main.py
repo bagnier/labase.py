@@ -1,5 +1,3 @@
-from fastapi import FastAPI
-
 from apps.auth.contract import integration as auth
 from apps.calendar.contract import integration as calendar
 from apps.files.contract import integration as files
@@ -13,8 +11,6 @@ from apps.settings.contract import integration as console
 from apps.shared.contract import integration as shared
 from apps.shared.host import host
 from apps.todo.contract import integration as todo
-
-app = FastAPI(title="labase")
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
 # Order matters: FastAPI matches routes in registration order, not by specificity.
@@ -37,4 +33,4 @@ _apps = (
     public,
 )
 for _app in _apps:
-    _app.mount(app, host)
+    _app.mount(host)

@@ -1,8 +1,8 @@
 import json
 
-from apps.main import app
+from apps.main import host
 
-schema = app.openapi()
+schema = host.app.openapi()
 
 # org_handle is injected via CurrentOrg dependency and absent from OpenAPI parameters.
 # openapi-python-client rejects paths whose template vars aren't declared as parameters.

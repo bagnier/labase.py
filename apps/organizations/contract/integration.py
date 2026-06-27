@@ -8,7 +8,6 @@ apps can seed welcome data.
 
 import uuid
 
-from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from apps.auth.contract.events import UserCreated
@@ -36,7 +35,7 @@ from apps.shared.slug_registry import register_open_list
 # contexts last (see apps.main) so fixed-prefix routers (e.g. /console) are never shadowed.
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch.
     settings.group = declare_app_settings(
         "organizations",
@@ -58,9 +57,9 @@ def mount(app: FastAPI, host: Host) -> None:
     )
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(invitation_router)
-    app.include_router(router)  # /organizations collection
-    app.include_router(org_router, prefix=ORG_PREFIX)
+    host.app.include_router(invitation_router)
+    host.app.include_router(router)  # /organizations collection
+    host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_page_context("org", ("org_nav",), provide_org_nav)

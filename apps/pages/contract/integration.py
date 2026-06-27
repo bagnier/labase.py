@@ -5,8 +5,6 @@ view router and the org-scoped management router, claims the ``pages`` slug, ans
 dashboard ``OverviewQuery`` and the server-wide ``ConsoleOverviewQuery``.
 """
 
-from fastapi import FastAPI
-
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.shell import OrgNavItem, OrgNavQuery
@@ -28,7 +26,7 @@ from apps.shared.host import Host, NavItem
 _RECENT = 3
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     _declare_settings()
@@ -37,8 +35,8 @@ def mount(app: FastAPI, host: Host) -> None:
         return
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(router, prefix=ORG_PREFIX)
-    app.include_router(public_router)
+    host.app.include_router(router, prefix=ORG_PREFIX)
+    host.app.include_router(public_router)
     host.register_nav(NavItem("Pages", "note-pencil", "pages", "/pages", order=25))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgNavQuery, _org_nav)

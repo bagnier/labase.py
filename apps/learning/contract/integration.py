@@ -4,7 +4,6 @@ Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts t
 answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrgCreated``.
 """
 
-from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from apps.learning.contract import settings
@@ -43,7 +42,7 @@ _WELCOME_CARDS = [
 # Mounts an org-scoped router under /{org_handle}; mounted last (see apps.main).
 
 
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     _declare_settings()
@@ -51,7 +50,7 @@ def mount(app: FastAPI, host: Host) -> None:
         return
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(router, prefix=ORG_PREFIX)
+    host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
