@@ -1,7 +1,7 @@
 """Membership helpers for test setup, via SQLAlchemy against the active schema.
 
 These writes go through SQLAlchemy (not PostgREST, which is pinned to ``public``) so they
-land in ``DB_SCHEMA`` — the schema the app reads. They are committed outside the test
+land in ``SUPABASE_DATABASE_SCHEMA`` — the schema the app reads. They are committed outside the test
 transaction — the affected orgs must be tracked via track_org_id().
 """
 

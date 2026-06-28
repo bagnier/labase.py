@@ -46,7 +46,7 @@ def _run_blocking(coro_factory):
 def truncate_app_tables() -> None:
     """Truncates all application tables — used in browser test teardown."""
 
-    s = get_technical_settings().db_schema
+    s = get_technical_settings().supabase_database_schema
     tables = [
         "app_settings",
         "audit_logs",
@@ -91,7 +91,7 @@ def reset_app_switches() -> None:
         engine = _service_engine()
         try:
             async with engine.begin() as conn:
-                schema = get_technical_settings().db_schema
+                schema = get_technical_settings().supabase_database_schema
                 await conn.execute(text(f"DELETE FROM {schema}.app_settings WHERE key = 'enabled'"))
         finally:
             await engine.dispose()

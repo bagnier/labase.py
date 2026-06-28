@@ -187,7 +187,9 @@ def deprovision(schema: str, bucket: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--schema", default="", help="defaults to DB_SCHEMA from the env file")
+    parser.add_argument(
+        "--schema", default="", help="defaults to SUPABASE_DATABASE_SCHEMA from the env file"
+    )
     parser.add_argument("--bucket", default="", help="defaults to SUPABASE_STORAGE_BUCKET")
     parser.add_argument(
         "--reset", action="store_true", help="drop and rebuild the schema structure"
@@ -195,7 +197,7 @@ def main() -> None:
     parser.add_argument("--drop", action="store_true", help="deprovision (drop schema + bucket)")
     args = parser.parse_args()
     settings = get_technical_settings()
-    args.schema = args.schema or settings.db_schema
+    args.schema = args.schema or settings.supabase_database_schema
     bucket = args.bucket or settings.supabase_storage_bucket
     if args.schema == "public":
         sys.exit("Refusing to provision/drop the 'public' schema.")

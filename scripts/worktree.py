@@ -79,7 +79,7 @@ def create(name: str) -> None:
         ROOT / ".env",
         path / ".env",
         {
-            "DB_SCHEMA": schema,
+            "SUPABASE_DATABASE_SCHEMA": schema,
             "SUPABASE_STORAGE_BUCKET": dev_bucket,
             "APP_PORT": str(port),
         },
@@ -88,7 +88,7 @@ def create(name: str) -> None:
         ROOT / ".env.test",
         path / ".env.test",
         {
-            "DB_SCHEMA": f"{schema}_test",
+            "SUPABASE_DATABASE_SCHEMA": f"{schema}_test",
             "SUPABASE_STORAGE_BUCKET": test_bucket,
         },
     )
@@ -162,7 +162,12 @@ def _py_env(env_file: Path) -> dict[str, str]:
 def _host_overrides(env_file: Path) -> dict[str, str]:
     """Host-reachable variants of the URL/DB settings (host.docker.internal → localhost)
     for tooling that connects from the host rather than the Docker network."""
-    keys = {"SUPABASE_URL", "SUPABASE_STORAGE_URL", "DATABASE_URL", "DATABASE_URL_SERVICE"}
+    keys = {
+        "SUPABASE_API_URL",
+        "SUPABASE_STORAGE_URL",
+        "SUPABASE_DATABASE_USER_URL",
+        "SUPABASE_DATABASE_ADMIN_URL",
+    }
     out: dict[str, str] = {}
     for line in env_file.read_text().splitlines():
         m = re.match(r"\s*([A-Z_]+)\s*=\s*(.*)", line)

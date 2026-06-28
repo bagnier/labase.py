@@ -1,6 +1,6 @@
 """Synchronous SQL helpers for test setup, run against the *active* DB schema.
 
-Test ``given`` helpers must write to the same schema the app reads (``DB_SCHEMA`` —
+Test ``given`` helpers must write to the same schema the app reads (``SUPABASE_DATABASE_SCHEMA`` —
 ``test`` for the main repo, ``wt_<name>_test`` for a worktree). PostgREST is pinned to
 ``public`` and cannot target those schemas, so setup goes through SQLAlchemy instead,
 whose engine sets ``search_path = <schema>,public``. Writes are committed (outside any
@@ -21,8 +21,8 @@ from apps.shared.config import get_technical_settings
 
 def _engine():
     s = get_technical_settings()
-    url = s.database_url_service or s.database_url
-    connect_args = {"server_settings": {"search_path": f"{s.db_schema},public"}}
+    url = s.supabase_database_admin_url or s.supabase_database_user_url
+    connect_args = {"server_settings": {"search_path": f"{s.supabase_database_schema},public"}}
     return create_async_engine(url, poolclass=NullPool, connect_args=connect_args)
 
 
