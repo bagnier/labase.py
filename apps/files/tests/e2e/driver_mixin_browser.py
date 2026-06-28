@@ -30,7 +30,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self.page.goto(self._files_url(), wait_until="load")
 
     def _dom_file_rows(self) -> list:
-        return self.page.locator("#file-list > div[data-file-id]").all()
+        return self.page.locator("#file-list > li[data-file-id]").all()
 
     def _dom_file_names(self) -> list[str]:
         return [row.get_by_role("link").inner_text().strip() for row in self._dom_file_rows()]
@@ -217,7 +217,7 @@ class OrgFileBrowserMixin(BrowserBase):
         page = ctx.new_page()
         try:
             self.last_response = page.goto(f"{self.base_url}/{slug}/files", wait_until="load")
-            rows = page.locator("#file-list > div[data-file-id]").all()
+            rows = page.locator("#file-list > li[data-file-id]").all()
             self._last_file_names = [row.get_by_role("link").inner_text().strip() for row in rows]
         finally:
             page.close()

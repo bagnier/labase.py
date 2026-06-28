@@ -1,33 +1,28 @@
 {% extends "base_public.html" %}
 {% from "macros/alert.html" import alert %}
 {% from "macros/input_field.html" import input_field %}
-
 {% block title %}Sign in — labase{% endblock %}
-
 {% block content %}
-<div class="card bg-base-100 border border-base-300 shadow-sm">
-  <div class="card-body">
-    <div class="mb-2">
-      <h1 class="card-title text-xl">Sign in</h1>
-      <p class="text-sm text-base-content/70 mt-1">Welcome back.</p>
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body">
+      <div class="mb-2">
+        <h1 class="card-title text-xl">Sign in</h1>
+        <p class="text-sm text-base-content/70 mt-1">Welcome back.</p>
+      </div>
+      {{ alert('error', error) }}
+      {{ alert('info', info) }}
+      <form method="post" action="/auth/login" class="space-y-4">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        {{ input_field("email", "email", type="email", label="Email",
+                placeholder="you@example.com", value=email or "", required=true) }}
+        {{ input_field("password", "password", type="password", label="Password",
+                required=true) }}
+        <button type="submit" class="btn btn-primary w-full mt-1">Sign in</button>
+      </form>
     </div>
-
-    {{ alert('error', error) }}
-    {{ alert('info', info) }}
-
-    <form method="post" action="/auth/login" class="space-y-4">
-      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-      {{ input_field("email", "email", type="email", label="Email",
-                     placeholder="you@example.com", value=email or "", required=true) }}
-      {{ input_field("password", "password", type="password", label="Password",
-                     required=true) }}
-      <button type="submit" class="btn btn-primary w-full mt-1">Sign in</button>
-    </form>
   </div>
-</div>
-
-<p class="mt-5 text-center text-sm text-base-content/70">
-  No account yet?
-  <a href="/auth/register" class="link link-primary font-medium">Create an account</a>
-</p>
+  <p class="mt-5 text-center text-sm text-base-content/70">
+    No account yet?
+    <a href="/auth/register" class="link link-primary font-medium">Create an account</a>
+  </p>
 {% endblock %}

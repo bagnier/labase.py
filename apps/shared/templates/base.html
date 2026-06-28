@@ -1,118 +1,120 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full" data-theme="{{ app_theme() }}">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}labase{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/tailwind.css?v={{ css_v }}" />
-  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":false}]}' />
-  <script src="/static/js/htmx.min.js"></script>
-  <script src="/static/js/alpine.min.js" defer></script>
-</head>
-<body class="h-full bg-base-200 text-base-content antialiased">
-  {% block body %}
-  <div class="drawer lg:drawer-open h-full">
-    <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
-
-    <!-- Main column -->
-    <div class="drawer-content flex flex-col min-h-screen min-w-0">
-      <!-- Top bar -->
-      <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-4 gap-2">
-        <label for="nav-drawer" aria-label="Open navigation"
-               class="btn btn-ghost btn-sm btn-square lg:hidden">
-          <i class="ph ph-list ph-md" aria-hidden="true"></i>
-        </label>
-        <nav aria-label="Breadcrumb" class="breadcrumbs text-sm flex-1 min-w-0">
-          <ul>{% block breadcrumb %}{% endblock %}</ul>
-        </nav>
-        {% if user and user.is_admin %}
-        <a href="/console" class="btn btn-error btn-sm gap-1.5">
-          <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
-          Admin
-        </a>
-        {% endif %}
-      </header>
-
-      <!-- Page content -->
-      <main class="flex-1 p-6 overflow-auto">
-        {% block content %}{% endblock %}
-      </main>
-    </div>
-
-    <!-- Sidebar -->
-    <div class="drawer-side z-40">
-      <label for="nav-drawer" aria-label="Close navigation" class="drawer-overlay"></label>
-      <aside aria-label="Sidebar" class="flex h-full min-h-screen w-56 flex-col bg-base-100 border-r border-base-300">
-        <!-- Logo -->
-        <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-          <a href="/profile" class="flex items-center gap-2.5">
-            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-content">
-              <i class="ph ph-lightning ph-sm" aria-hidden="true"></i>
-            </div>
-            <span class="font-semibold text-sm tracking-tight">labase</span>
-          </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}labase{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/tailwind.css?v={{ css_v }}" />
+    <meta name="htmx-config"
+          content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":false}]}' />
+    <script src="/static/js/htmx.min.js"></script>
+    <script src="/static/js/alpine.min.js" defer></script>
+  </head>
+  <body class="h-full bg-base-200 text-base-content antialiased">
+    {% block body %}
+      <div class="drawer lg:drawer-open h-full">
+        <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
+        <!-- Main column -->
+        <div class="drawer-content flex flex-col min-h-screen min-w-0">
+          <!-- Top bar -->
+          <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-4 gap-2">
+            <label for="nav-drawer"
+                   aria-label="Open navigation"
+                   class="btn btn-ghost btn-sm btn-square lg:hidden">
+              <i class="ph ph-list ph-md" aria-hidden="true"></i>
+            </label>
+            <nav aria-label="Breadcrumb" class="breadcrumbs text-sm flex-1 min-w-0">
+              <ul>
+                {% block breadcrumb %}{% endblock %}
+              </ul>
+            </nav>
+            {% if user and user.is_admin %}
+              <a href="/console" class="btn btn-error btn-sm gap-1.5">
+                <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
+                Admin
+              </a>
+            {% endif %}
+          </header>
+          <!-- Page content -->
+          <main class="flex-1 p-6 overflow-auto">
+            {% block content %}
+            {% endblock %}
+          </main>
         </div>
-
-        <!-- Navigation -->
-        <nav class="flex-1 overflow-y-auto p-2">
-          {% if not org_nav %}
-          <p class="px-2 py-2 text-xs opacity-60">No organisation.</p>
-          {% endif %}
-          {% for nav_org in org_nav %}
-          {% set is_current = nav_org.handle == org_handle %}
-          {% set path = request.url.path %}
-          <ul class="menu w-full">
-            <li>
-              <details {% if is_current %}open{% endif %}>
-                <summary class="text-xs font-semibold uppercase tracking-wider opacity-70">
-                  <a href="/{{ nav_org.handle }}/dashboard" class="truncate">{{ nav_org.name }}</a>
-                </summary>
-                <ul>
-                  {% for item in nav_items %}
-                  {% if not item.owner_only or nav_org.is_owner %}
+        <!-- Sidebar -->
+        <div class="drawer-side z-40">
+          <label for="nav-drawer" aria-label="Close navigation" class="drawer-overlay"></label>
+          <aside aria-label="Sidebar"
+                 class="flex h-full min-h-screen w-56 flex-col bg-base-100 border-r border-base-300">
+            <!-- Logo -->
+            <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
+              <a href="/profile" class="flex items-center gap-2.5">
+                <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-content">
+                  <i class="ph ph-lightning ph-sm" aria-hidden="true"></i>
+                </div>
+                <span class="font-semibold text-sm tracking-tight">labase</span>
+              </a>
+            </div>
+            <!-- Navigation -->
+            <nav class="flex-1 overflow-y-auto p-2">
+              {% if not org_nav %}<p class="px-2 py-2 text-xs opacity-60">No organisation.</p>{% endif %}
+              {% for nav_org in org_nav %}
+                {% set is_current = nav_org.handle == org_handle %}
+                {% set path = request.url.path %}
+                <ul class="menu w-full">
                   <li>
-                    <a href="/{{ nav_org.handle }}/{{ item.segment }}"
-                       class="{% if is_current and item.match in path %}menu-active{% endif %}">
-                      <i class="ph ph-{{ item.icon }} ph-sm" aria-hidden="true"></i>
-                      {{ item.label }}
-                    </a>
+                    <details {% if is_current %}open{% endif %}>
+                      <summary class="text-xs font-semibold uppercase tracking-wider opacity-70">
+                        <a href="/{{ nav_org.handle }}/dashboard" class="truncate">{{ nav_org.name }}</a>
+                      </summary>
+                      <ul>
+                        {% for item in nav_items %}
+                          {% if not item.owner_only or nav_org.is_owner %}
+                            {% set active = is_current and item.match in path %}
+                            <li>
+                              <a href="/{{ nav_org.handle }}/{{ item.segment }}"
+                                 {% if active %}class="menu-active" aria-current="page"{% endif %}>
+                                <i class="ph ph-{{ item.icon }} ph-sm" aria-hidden="true"></i>
+                                {{ item.label }}
+                              </a>
+                            </li>
+                          {% endif %}
+                        {% endfor %}
+                        {% for item in nav_org.extra_nav %}
+                          {% set active = is_current and '/' + item.href in path %}
+                          <li>
+                            <a href="/{{ nav_org.handle }}/{{ item.href }}"
+                               {% if active %}class="menu-active" aria-current="page"{% endif %}>
+                              <i class="ph ph-{{ item.icon }} ph-sm" aria-hidden="true"></i>
+                              {{ item.title }}
+                            </a>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </details>
                   </li>
-                  {% endif %}
-                  {% endfor %}
-                  {% for item in nav_org.extra_nav %}
-                  <li>
-                    <a href="/{{ nav_org.handle }}/{{ item.href }}"
-                       class="{% if is_current and '/' + item.href in path %}menu-active{% endif %}">
-                      <i class="ph ph-{{ item.icon }} ph-sm" aria-hidden="true"></i>
-                      {{ item.title }}
-                    </a>
-                  </li>
-                  {% endfor %}
                 </ul>
-              </details>
-            </li>
-          </ul>
-          {% endfor %}
-        </nav>
-
-        <!-- User footer -->
-        <div class="border-t border-base-300 p-2">
-          <a href="/profile" class="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-base-200 transition-colors">
-            <div class="avatar avatar-placeholder">
-              <div class="w-8 rounded-full bg-primary/20 text-primary">
-                <span class="text-xs font-semibold">{{ (profile_handle or user.email) | first | upper }}</span>
-              </div>
+              {% endfor %}
+            </nav>
+            <!-- User footer -->
+            <div class="border-t border-base-300 p-2">
+              <a href="/profile"
+                 class="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-base-200 transition-colors">
+                <div class="avatar avatar-placeholder">
+                  <div class="w-8 rounded-full bg-primary/20 text-primary">
+                    <span class="text-xs font-semibold">{{ (profile_handle or user.email) | first | upper }}</span>
+                  </div>
+                </div>
+                <div class="min-w-0">
+                  <p class="truncate text-xs font-medium">{{ profile_handle }}</p>
+                  <p class="text-xs opacity-60">Active account</p>
+                </div>
+              </a>
             </div>
-            <div class="min-w-0">
-              <p class="truncate text-xs font-medium">{{ profile_handle }}</p>
-              <p class="text-xs opacity-60">Active account</p>
-            </div>
-          </a>
+          </aside>
         </div>
-      </aside>
-    </div>
-  </div>
-  {% endblock %}
-  {% block scripts %}{% endblock %}
-</body>
+      </div>
+    {% endblock %}
+    {% block scripts %}{% endblock %}
+  </body>
 </html>

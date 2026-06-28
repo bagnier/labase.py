@@ -1,8 +1,8 @@
 {% from "macros/role_badge.html" import role_badge %}
-<div id="member-row-{{ m.auth_user_id }}"
-     class="flex items-center justify-between px-4 py-3"
-     data-member-email="{{ m.email }}"
-     data-member-role="{{ m.role.value }}">
+<li id="member-row-{{ m.auth_user_id }}"
+    class="flex items-center justify-between px-4 py-3"
+    data-member-email="{{ m.email }}"
+    data-member-role="{{ m.role.value }}">
   <div class="flex items-center gap-3">
     <div class="avatar avatar-placeholder">
       <div class="w-8 rounded-full {{ 'bg-primary/20 text-primary' if m.role == 'owner' else 'bg-base-300 text-base-content/70' }}">
@@ -18,9 +18,7 @@
   </div>
   <div class="flex items-center gap-3">
     {{ role_badge(m.role) }}
-
     {% if caller_role == "owner" and m.email != current_user.email %}
-      <!-- Owner actions on other members -->
       <div class="dropdown dropdown-end">
         <button data-manage
                 aria-label="Manage {{ m.email }}"
@@ -29,50 +27,47 @@
                 class="btn btn-sm">
           Manage <i class="ph ph-caret-down ph-4" aria-hidden="true"></i>
         </button>
-        <ul role="menu" tabindex="0"
+        <ul role="menu"
+            tabindex="0"
             class="dropdown-content menu z-10 mt-1 min-w-40 bg-base-100 border border-base-300 rounded-box shadow-lg">
           {% if m.role == "member" %}
             <li>
-              <button data-promote role="menuitem"
+              <button data-promote
+                      role="menuitem"
                       hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                       hx-vals='{"role": "owner"}'
                       hx-target="#member-row-{{ m.auth_user_id }}"
-                      hx-swap="outerHTML">
-                Promote to owner
-              </button>
+                      hx-swap="outerHTML">Promote to owner</button>
             </li>
           {% else %}
             <li>
-              <button data-demote role="menuitem"
+              <button data-demote
+                      role="menuitem"
                       hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                       hx-vals='{"role": "member"}'
                       hx-target="#member-row-{{ m.auth_user_id }}"
-                      hx-swap="outerHTML">
-                Demote to member
-              </button>
+                      hx-swap="outerHTML">Demote to member</button>
             </li>
           {% endif %}
           <li>
-            <button data-remove role="menuitem" class="text-error"
+            <button data-remove
+                    role="menuitem"
+                    class="text-error"
                     hx-delete="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                     hx-target="#member-row-{{ m.auth_user_id }}"
                     hx-swap="outerHTML"
-                    hx-confirm="Remove {{ m.email }} from the organisation?">
-              Remove from org
-            </button>
+                    hx-confirm="Remove {{ m.email }} from the organisation?">Remove from org</button>
           </li>
         </ul>
       </div>
-
     {% elif m.email == current_user.email %}
-      <!-- Leave button for current user -->
-      <button data-leave aria-label="Leave {{ org.name }}" class="btn btn-sm"
+      <button data-leave
+              aria-label="Leave {{ org.name }}"
+              class="btn btn-sm"
               hx-delete="/{{ org_handle }}/members/me"
               hx-target="#leave-error"
               hx-swap="innerHTML"
-              hx-confirm="Leave {{ org.name }}?">
-        Leave
-      </button>
+              hx-confirm="Leave {{ org.name }}?">Leave</button>
     {% endif %}
   </div>
-</div>
+</li>

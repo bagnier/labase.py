@@ -1,99 +1,96 @@
 {% extends "base.html" %}
-
 {% block title %}Pages — labase{% endblock %}
-
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
   <li>Pages</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-
-  <div class="flex items-center justify-between">
-    <h1 class="text-lg font-semibold">Pages</h1>
-    <div class="flex items-center gap-2">
-      {% if is_owner %}
-      <a href="/{{ org_handle }}/pages/nav" class="btn btn-sm">Manage navigation</a>
-      {% endif %}
-      {% if can_create %}
-      <a href="/{{ org_handle }}/pages/new/edit" class="btn btn-primary">New page</a>
-      {% endif %}
+  <div class="max-w-2xl space-y-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-lg font-semibold">Pages</h1>
+      <div class="flex items-center gap-2">
+        {% if is_owner %}
+          <a href="/{{ org_handle }}/pages/nav" class="btn">Manage navigation</a>
+        {% endif %}
+        {% if can_create %}
+          <a href="/{{ org_handle }}/pages/new/edit" class="btn btn-primary">New page</a>
+        {% endif %}
+      </div>
     </div>
-  </div>
-
-  <script type="application/json" id="pages-data">{{ pages_data | tojson }}</script>
-
-  <div id="pages-app"
-       data-owner="{{ 'true' if is_owner else 'false' }}"
-       data-handle="{{ org_handle }}"
-       x-data="pagesApp()"
-       x-init="$nextTick(() => $el.dataset.ready = '1')">
-
-    <!-- Toolbar: search + filters, grouped on one line -->
-    <div class="flex flex-wrap items-center gap-2 mb-3">
-      <input type="search" x-model="search" placeholder="Search pages…"
-             class="input flex-1 min-w-0" aria-label="Search pages" />
-      <select x-model="filter" class="select w-auto flex-none" aria-label="Filter by visibility">
-        <option value="all">All visibilities</option>
-        <option value="draft">Draft</option>
-        <option value="members">Members</option>
-        <option value="public">Public</option>
-      </select>
-      <select x-model="sort" class="select w-auto flex-none" aria-label="Sort pages">
-        <option value="created_desc">Newest</option>
-        <option value="created_asc">Oldest</option>
-        <option value="title_asc">Title A→Z</option>
-        <option value="title_desc">Title Z→A</option>
-      </select>
-    </div>
-
-    <div id="pages-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm">
-      <template x-for="page in visible()" :key="page.id">
-        <div class="page-row flex items-center gap-3 px-4 py-3 group" :data-slug="page.slug">
-          <a class="page-title-link flex-1 min-w-0 text-sm font-medium hover:text-primary hover:underline truncate"
-             :href="`/${handle}/pages/${page.slug}`" x-text="page.title"></a>
-
-          <span class="page-updated text-xs text-base-content/50 flex-none hidden sm:block"
-                :title="`Last modified ${fmtDate(page.updated)}`" x-text="fmtDate(page.updated)"></span>
-
-          <span class="badge badge-sm"
-                :data-visibility="page.visibility" x-text="page.visibility"></span>
-
-          <a class="page-preview-link text-base-content/50 hover:text-primary"
-             :aria-label="`Preview ${page.title}`"
-             :href="`/${handle}/pages/${page.slug}`">
-            <i class="ph ph-eye ph-sm" aria-hidden="true"></i>
-          </a>
-
-          <template x-if="canEdit(page)">
-            <a class="page-edit-link text-base-content/50 hover:text-primary"
-               :aria-label="`Edit ${page.title}`"
-               :href="`/${handle}/pages/${page.slug}/edit`">
-              <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
+    <script type="application/json" id="pages-data">{{ pages_data | tojson }}</script>
+    <div id="pages-app"
+         data-owner="{{ 'true' if is_owner else 'false' }}"
+         data-handle="{{ org_handle }}"
+         x-data="pagesApp()"
+         x-init="$nextTick(() => $el.dataset.ready = '1')">
+      <!-- Toolbar: search + filters, grouped on one line -->
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <input type="search"
+               x-model="search"
+               placeholder="Search pages…"
+               class="input flex-1 min-w-0"
+               aria-label="Search pages" />
+        <select x-model="filter"
+                class="select w-auto flex-none"
+                aria-label="Filter by visibility">
+          <option value="all">All visibilities</option>
+          <option value="draft">Draft</option>
+          <option value="members">Members</option>
+          <option value="public">Public</option>
+        </select>
+        <select x-model="sort"
+                class="select w-auto flex-none"
+                aria-label="Sort pages">
+          <option value="created_desc">Newest</option>
+          <option value="created_asc">Oldest</option>
+          <option value="title_asc">Title A→Z</option>
+          <option value="title_desc">Title Z→A</option>
+        </select>
+      </div>
+      <ul id="pages-list" class="list-panel">
+        <template x-for="page in visible()" :key="page.id">
+          <li class="page-row flex items-center gap-3 px-4 py-3 group"
+              :data-slug="page.slug">
+            <a class="page-title-link flex-1 min-w-0 text-sm font-medium hover:text-primary hover:underline truncate"
+               :href="`/${handle}/pages/${page.slug}`"
+               x-text="page.title"></a>
+            <time class="page-updated text-xs text-base-content/50 flex-none hidden sm:block"
+                  :datetime="page.updated"
+                  :title="`Last modified ${fmtDate(page.updated)}`"
+                  x-text="fmtDate(page.updated)"></time>
+            <span class="badge badge-sm"
+                  :data-visibility="page.visibility"
+                  x-text="page.visibility"></span>
+            <a class="page-preview-link text-base-content/50 hover:text-primary"
+               :aria-label="`Preview ${page.title}`"
+               :href="`/${handle}/pages/${page.slug}`">
+              <i class="ph ph-eye ph-sm" aria-hidden="true"></i>
             </a>
-          </template>
-
-          <template x-if="canEdit(page)">
-            <button type="button" class="page-delete-btn text-base-content/50 hover:text-error"
-                    :aria-label="`Delete ${page.title}`"
-                    @click="del(page)">
-              <i class="ph ph-trash ph-sm" aria-hidden="true"></i>
-            </button>
-          </template>
-        </div>
-      </template>
-
-      <p x-show="visible().length === 0" class="px-4 py-6 text-sm text-center text-base-content/50">
-        No pages match.
-      </p>
+            <template x-if="canEdit(page)">
+              <a class="page-edit-link text-base-content/50 hover:text-primary"
+                 :aria-label="`Edit ${page.title}`"
+                 :href="`/${handle}/pages/${page.slug}/edit`">
+                <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
+              </a>
+            </template>
+            <template x-if="canEdit(page)">
+              <button type="button"
+                      class="page-delete-btn text-base-content/50 hover:text-error"
+                      :aria-label="`Delete ${page.title}`"
+                      @click="del(page)">
+                <i class="ph ph-trash ph-sm" aria-hidden="true"></i>
+              </button>
+            </template>
+          </li>
+        </template>
+        <li x-show="visible().length === 0"
+            class="px-4 py-6 text-sm text-center text-base-content/50">No pages match.</li>
+      </ul>
     </div>
   </div>
-</div>
 {% endblock %}
-
 {% block scripts %}
-<script>
+  <script>
   function pagesApp() {
     const root = document.getElementById("pages-app");
     return {
@@ -146,5 +143,5 @@
       },
     };
   }
-</script>
+  </script>
 {% endblock %}

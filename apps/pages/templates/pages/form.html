@@ -1,65 +1,70 @@
 {% extends "base.html" %}
-
+{% from "macros/input_field.html" import input_field %}
 {% block title %}Edit {{ page.title }} — labase{% endblock %}
-
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
   <li><a href="/{{ org_handle }}/pages">Pages</a></li>
   <li>{{ page.title }}</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-  <h1 class="text-lg font-semibold">Edit page</h1>
-
-  <form id="edit-page-form" class="card bg-base-100 border border-base-300 shadow-sm"
-        hx-patch="/{{ org_handle }}/pages/{{ page.slug }}" hx-swap="none">
-    <div class="card-body space-y-4">
-    <div>
-      <label for="page-title" class="block text-xs font-medium text-base-content/70 mb-1.5">Title</label>
-      <input id="page-title" type="text" name="title" value="{{ page.title }}" class="input w-full" />
-    </div>
-    <div>
-      <label for="page-slug" class="block text-xs font-medium text-base-content/70 mb-1.5">Slug</label>
-      <input id="page-slug" type="text" name="slug" value="{{ page.slug }}" class="input w-full" />
-    </div>
-    <div>
-      <label for="page-content" class="block text-xs font-medium text-base-content/70 mb-1.5">Content (Markdown)</label>
-      <div class="w-full" id="editor-mount">
-        <textarea id="page-content" name="content" class="textarea w-full" rows="10">{{ page.content }}</textarea>
+  <div class="max-w-2xl space-y-6">
+    <h1 class="text-lg font-semibold">Edit page</h1>
+    <form id="edit-page-form"
+          class="card bg-base-100 border border-base-300 shadow-sm"
+          hx-patch="/{{ org_handle }}/pages/{{ page.slug }}"
+          hx-swap="none">
+      <div class="card-body space-y-4">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend" id="page-title-label">Title</legend>
+          <input id="page-title"
+                 type="text"
+                 name="title"
+                 value="{{ page.title }}"
+                 aria-labelledby="page-title-label"
+                 class="input w-full" />
+        </fieldset>
+        {{ input_field("page-slug", "slug", label="Slug", value=page.slug, mono=true) }}
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend" id="page-content-label">Content (Markdown)</legend>
+          <div class="w-full" id="editor-mount">
+            <textarea id="page-content"
+                      name="content"
+                      aria-labelledby="page-content-label"
+                      class="textarea w-full"
+                      rows="10">{{ page.content }}</textarea>
+          </div>
+        </fieldset>
+        <div class="flex items-center justify-between pt-1">
+          <div class="flex items-center gap-3">
+            <button type="submit" class="btn btn-primary">Save</button>
+            {% if is_owner %}
+              <select name="visibility" class="select w-auto" aria-label="Visibility">
+                <option value="draft" {% if page.visibility == 'draft' %}selected{% endif %}>Draft</option>
+                <option value="members"
+                        {% if page.visibility == 'members' %}selected{% endif %}>Members</option>
+                <option value="public"
+                        {% if page.visibility == 'public' %}selected{% endif %}>Public</option>
+              </select>
+            {% endif %}
+          </div>
+          <button type="button"
+                  id="delete-page-btn"
+                  class="btn btn-error btn-ghost btn-sm"
+                  aria-label="Delete page"
+                  hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
+                  hx-confirm="Delete &ldquo;{{ page.title }}&rdquo;? This cannot be undone."
+                  hx-swap="none">Delete page</button>
+        </div>
       </div>
-    </div>
-    <div class="flex items-center justify-between pt-1">
-      <div class="flex items-center gap-3">
-        <button type="submit" class="btn btn-primary">Save</button>
-        {% if is_owner %}
-        <select name="visibility" class="select w-auto" aria-label="Visibility">
-          <option value="draft" {% if page.visibility == 'draft' %}selected{% endif %}>Draft</option>
-          <option value="members" {% if page.visibility == 'members' %}selected{% endif %}>Members</option>
-          <option value="public" {% if page.visibility == 'public' %}selected{% endif %}>Public</option>
-        </select>
-        {% endif %}
-      </div>
-      <button type="button" id="delete-page-btn"
-              class="btn btn-error btn-ghost btn-sm"
-              aria-label="Delete page"
-              hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
-              hx-confirm="Delete &ldquo;{{ page.title }}&rdquo;? This cannot be undone."
-              hx-swap="none">
-        Delete page
-      </button>
-    </div>
-    </div>
-  </form>
-</div>
+    </form>
+  </div>
 {% endblock %}
-
 {% block scripts %}
-<script src="/static/js/codemirror-editor.js"></script>
-<script>
+  <script src="/static/js/codemirror-editor.js"></script>
+  <script>
   document.addEventListener('DOMContentLoaded', () => {
     const textarea = document.querySelector('#editor-mount textarea[name="content"]')
     if (textarea) initMarkdownEditor(textarea)
   })
-</script>
+  </script>
 {% endblock %}

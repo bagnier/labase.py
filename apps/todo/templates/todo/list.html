@@ -1,36 +1,36 @@
 {% extends "base.html" %}
-
 {% block title %}Todos — labase{% endblock %}
-
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
   <li>Todos</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-
-  <h1 class="text-lg font-semibold">Todos</h1>
-
-  {% if creation_enabled %}
-  <form hx-post="/{{ org_handle }}/todos" hx-target="#todo-list" hx-swap="innerHTML" class="flex gap-2"
-        hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
-    <input type="text" name="title" aria-label="New todo" placeholder="New task…" required class="input w-full flex-1" />
-    <button type="submit" class="btn btn-primary flex-none">Add</button>
-  </form>
-  {% endif %}
-
-  <div id="todo-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm">
-    {% include "todo/_list_fragment.html" %}
+  <div class="max-w-2xl space-y-6">
+    <h1 class="text-lg font-semibold">Todos</h1>
+    {% if creation_enabled %}
+      <form hx-post="/{{ org_handle }}/todos"
+            hx-target="#todo-list"
+            hx-swap="innerHTML"
+            class="flex gap-2"
+            hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
+        <input type="text"
+               name="title"
+               aria-label="New todo"
+               placeholder="New task…"
+               required
+               class="input w-full flex-1" />
+        <button type="submit" class="btn btn-primary flex-none">Add</button>
+      </form>
+    {% endif %}
+    <ul id="todo-list" class="list-panel">
+      {% include "todo/_list_fragment.html" %}
+    </ul>
   </div>
-
-</div>
 {% endblock %}
-
 {% block scripts %}
-<script src="/static/js/todo.js"></script>
-<script src="/static/js/sortable.min.js"></script>
-<script>
+  <script src="/static/js/todo.js"></script>
+  <script src="/static/js/sortable.min.js"></script>
+  <script>
 (function () {
   const list = document.getElementById('todo-list');
   if (!list) return;
@@ -46,5 +46,5 @@
     },
   });
 })();
-</script>
+  </script>
 {% endblock %}

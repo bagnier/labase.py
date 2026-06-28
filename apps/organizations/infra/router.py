@@ -402,7 +402,7 @@ async def remove_member(
     count = len(members)
     label = f"{count} member{'s' if count != 1 else ''}"
     cls = "text-sm text-base-content/70"
-    oob = f'<p id="member-count" hx-swap-oob="true" class="{cls}">{label}</p>'
+    oob = f'<p id="member-count" aria-live="polite" hx-swap-oob="true" class="{cls}">{label}</p>'
     return HTMLResponse(oob, status_code=status.HTTP_200_OK)
 
 

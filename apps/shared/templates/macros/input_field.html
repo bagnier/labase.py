@@ -1,17 +1,40 @@
-{% macro input_field(id, name, type="text", label="", placeholder="", value="", disabled=false, required=false, hint="") %}
-<fieldset class="fieldset">
-  {% if label %}
-  <legend class="fieldset-legend" id="{{ id }}-label">{{ label }}</legend>
-  {% endif %}
-  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"
-         {% if label %}aria-labelledby="{{ id }}-label"{% endif %}
-         {% if value %}value="{{ value }}"{% endif %}
-         {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
-         {% if disabled %}disabled{% endif %}
-         {% if required %}required{% endif %}
-         class="input w-full font-mono" />
-  {% if hint %}
-  <p class="label text-xs">{{ hint }}</p>
-  {% endif %}
-</fieldset>
+{% macro input_field(id, name, type="text", label="", placeholder="", value="",
+  disabled=false, required=false, optional=false, mono=false, hint="") %}
+  <fieldset class="fieldset">
+    {% if label %}
+      <legend class="fieldset-legend" id="{{ id }}-label">
+        {{ label }}
+        {% if optional %}<span class="font-normal opacity-60">(optional)</span>{% endif %}
+      </legend>
+    {% endif %}
+    <input id="{{ id }}"
+           name="{{ name }}"
+           type="{{ type }}"
+           {% if label %}aria-labelledby="{{ id }}-label"{% endif %}
+           {% if value %}value="{{ value }}"{% endif %}
+           {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+           {% if disabled %}disabled{% endif %}
+           {% if required %}required{% endif %}
+           class="input w-full{% if mono %} font-mono{% endif %}" />
+    {% if hint %}<p class="label text-xs">{{ hint }}</p>{% endif %}
+  </fieldset>
+{% endmacro %}
+{% macro textarea_field(id, name, label="", placeholder="", value="",
+  rows=3, required=false, optional=false, hint="") %}
+  <fieldset class="fieldset">
+    {% if label %}
+      <legend class="fieldset-legend" id="{{ id }}-label">
+        {{ label }}
+        {% if optional %}<span class="font-normal opacity-60">(optional)</span>{% endif %}
+      </legend>
+    {% endif %}
+    <textarea id="{{ id }}"
+              name="{{ name }}"
+              rows="{{ rows }}"
+              {% if label %}aria-labelledby="{{ id }}-label"{% endif %}
+              {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+              {% if required %}required{% endif %}
+              class="textarea w-full">{{ value }}</textarea>
+    {% if hint %}<p class="label text-xs">{{ hint }}</p>{% endif %}
+  </fieldset>
 {% endmacro %}

@@ -1,11 +1,11 @@
 {% macro metric_card(label, color, icon) %}
-{% set fig = {'indigo': 'text-primary', 'emerald': 'text-success', 'amber': 'text-warning'} %}
-<div class="stat bg-base-100 border border-base-300 rounded-box">
-  <div class="stat-figure {{ fig[color] }}">
-    <i class="ph ph-{{ icon }} ph-lg" aria-hidden="true"></i>
+  {% set fig = {"indigo": "text-primary", "emerald": "text-success", "amber": "text-warning"} %}
+  <div class="stat bg-base-100 border border-base-300 rounded-box">
+    <div class="stat-figure {{ fig[color] }}">
+      <i class="ph ph-{{ icon }} ph-lg" aria-hidden="true"></i>
+    </div>
+    <div class="stat-title">{{ label }}</div>
+    <div class="stat-value">—</div>
+    <div class="stat-desc">No data yet</div>
   </div>
-  <div class="stat-title">{{ label }}</div>
-  <div class="stat-value">—</div>
-  <div class="stat-desc">No data yet</div>
-</div>
 {% endmacro %}

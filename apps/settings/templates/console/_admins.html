@@ -1,34 +1,40 @@
 <div id="admins" class="space-y-4">
-  <form class="card bg-base-100 border border-base-300 shadow-sm" data-admin-add-form
-        hx-post="/console/admins" hx-target="#admins" hx-swap="outerHTML">
+  <form class="card list-panel"
+        data-admin-add-form
+        hx-post="/console/admins"
+        hx-target="#admins"
+        hx-swap="outerHTML">
     <div class="card-body flex-row gap-2 items-center">
-      <input type="email" name="email" required placeholder="email@example.com"
-             aria-label="Admin email" class="input w-full flex-1 text-sm" />
+      <input type="email"
+             name="email"
+             required
+             placeholder="email@example.com"
+             aria-label="Admin email"
+             class="input flex-1 text-sm" />
       <button type="submit" class="btn btn-sm btn-primary">Add admin</button>
     </div>
   </form>
-
   {% if error %}
-    <p class="text-sm text-error" data-admin-add-error="{{ error }}">
-      No account exists for {{ error }}.
-    </p>
+    <p class="text-sm text-error" data-admin-add-error="{{ error }}">No account exists for {{ error }}.</p>
   {% endif %}
-
-  <div class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300">
+  <ul class="list-panel">
     {% for u in admins %}
-      <div class="flex items-center gap-3 p-4"
-           data-admin-email="{{ u.email }}"
-           data-admin-status="admin">
-        <div class="text-sm flex-1">{{ u.email }}</div>
+      <li class="flex items-center gap-3 p-4"
+          data-admin-email="{{ u.email }}"
+          data-admin-status="admin">
+        <span class="text-sm flex-1">{{ u.email }}</span>
         <span class="badge badge-error badge-sm">server admin</span>
-        <form hx-put="/console/admins/{{ u.email }}" hx-target="#admins" hx-swap="outerHTML">
+        <form hx-put="/console/admins/{{ u.email }}"
+              hx-target="#admins"
+              hx-swap="outerHTML">
           <input type="hidden" name="is_admin" value="false" />
-          <button type="submit" class="btn btn-sm btn-error btn-ghost"
+          <button type="submit"
+                  class="btn btn-sm btn-error btn-ghost"
                   {% if admin_count <= 1 %}disabled title="The server must keep at least one admin"{% endif %}>
             Revoke
           </button>
         </form>
-      </div>
+      </li>
     {% endfor %}
-  </div>
+  </ul>
 </div>

@@ -1,62 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" class="h-full" data-theme="{{ app_theme() }}">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ org.name }}</title>
-  <link rel="stylesheet" href="/static/css/tailwind.css" />
-  <script src="/static/js/alpine.min.js" defer></script>
-</head>
-<body class="h-full bg-base-200 text-base-content antialiased">
-  <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-6 gap-6">
-    <a href="/" class="flex items-center gap-2 flex-none hover:opacity-80 transition-opacity">
-      <div class="w-6 h-6 rounded-md bg-primary text-primary-content flex items-center justify-center">
-        <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
-      </div>
-      <span class="font-semibold text-sm">{{ org.name }}</span>
-    </a>
-
-    {% if page_nav %}
-    <nav aria-label="Site navigation" class="flex-1">
-      <ul class="menu menu-horizontal gap-1">
-        {% for link in page_nav %}
-        <li>
-          <a href="/{{ link.slug }}">{{ link.title }}</a>
-        </li>
-        {% endfor %}
-      </ul>
-    </nav>
-    {% else %}
-    <div class="flex-1"></div>
-    {% endif %}
-
-    <div class="flex items-center gap-2 flex-none">
-      {% if current_user %}
-      <a href="/profile" class="btn btn-sm">My profile</a>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ org.name }}</title>
+    <link rel="stylesheet" href="/static/css/tailwind.css" />
+    <script src="/static/js/alpine.min.js" defer></script>
+  </head>
+  <body class="h-full bg-base-200 text-base-content antialiased">
+    <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-6 gap-6">
+      <a href="/"
+         class="flex items-center gap-2 flex-none hover:opacity-80 transition-opacity">
+        <div class="w-6 h-6 rounded-md bg-primary text-primary-content flex items-center justify-center">
+          <i class="ph ph-lightning ph-4" aria-hidden="true"></i>
+        </div>
+        <span class="font-semibold text-sm">{{ org.name }}</span>
+      </a>
+      {% if page_nav %}
+        <nav aria-label="Site navigation" class="flex-1">
+          <ul class="menu menu-horizontal gap-1">
+            {% for link in page_nav %}
+              <li>
+                <a href="/{{ link.slug }}">{{ link.title }}</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </nav>
       {% else %}
-      <a href="/auth/login" class="btn btn-sm">Sign in</a>
-      <a href="/auth/register" class="btn btn-primary btn-sm">Register</a>
+        <div class="flex-1"></div>
       {% endif %}
-    </div>
-  </header>
-
-  <main class="max-w-2xl mx-auto px-6 py-10">
-    {% if pages %}
-    <ul class="space-y-3">
-      {% for page in pages %}
-      <li>
-        <a href="/{{ page.slug }}"
-           class="card bg-base-100 border border-base-300 shadow-sm hover:shadow-md transition-shadow block">
-          <div class="card-body px-5 py-4">
-            <span class="font-medium">{{ page.title }}</span>
-          </div>
-        </a>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-base-content/70 text-sm">No public pages yet.</p>
-    {% endif %}
-  </main>
-</body>
+      <div class="flex items-center gap-2 flex-none">
+        {% if current_user %}
+          <a href="/profile" class="btn btn-sm">My profile</a>
+        {% else %}
+          <a href="/auth/login" class="btn btn-sm">Sign in</a>
+          <a href="/auth/register" class="btn btn-primary btn-sm">Register</a>
+        {% endif %}
+      </div>
+    </header>
+    <main class="max-w-2xl mx-auto px-6 py-10">
+      {% if pages %}
+        <ul class="list-panel">
+          {% for page in pages %}
+            <li>
+              <a href="/{{ page.slug }}"
+                 class="block px-5 py-4 font-medium hover:bg-base-200 transition-colors">{{ page.title }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-base-content/70 text-sm">No public pages yet.</p>
+      {% endif %}
+    </main>
+  </body>
 </html>

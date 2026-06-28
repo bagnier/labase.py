@@ -1,90 +1,84 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" class="h-full" data-theme="{{ app_theme() }}">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ page.title }} — {{ org.name }}</title>
-  <link rel="stylesheet" href="/static/css/tailwind.css" />
-  <script src="/static/js/alpine.min.js" defer></script>
-</head>
-<body class="h-full bg-base-200 text-base-content antialiased">
-<div class="flex h-full min-h-screen" x-data="{ navOpen: false }">
-
-  <!-- Mobile backdrop -->
-  <div x-show="navOpen" x-cloak @click="navOpen = false"
-       class="fixed inset-0 bg-black/30 z-30 lg:hidden"></div>
-
-  <!-- Sidebar -->
-  <aside aria-label="Sidebar" class="w-56 bg-base-300 flex flex-col border-r border-base-300
-                fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200
-                lg:static lg:translate-x-0"
-         :class="{ 'translate-x-0': navOpen, '-translate-x-full': !navOpen }">
-
-    <!-- Logo -->
-    <div class="px-5 py-5 border-b border-base-300 flex items-center justify-between">
-      <a href="/" class="flex items-center gap-2.5">
-        <div class="w-7 h-7 rounded-lg bg-primary text-primary-content flex items-center justify-center">
-          <i class="ph ph-lightning ph-sm" aria-hidden="true"></i>
-        </div>
-        <span class="font-semibold text-sm tracking-tight">{{ org.name }}</span>
-      </a>
-      <button @click="navOpen = false" aria-label="Close navigation"
-              class="lg:hidden btn btn-ghost btn-sm btn-square">
-        <i class="ph ph-x ph-sm" aria-hidden="true"></i>
-      </button>
-    </div>
-
-    <!-- Navigation -->
-    <nav aria-label="Page navigation" class="flex-1 overflow-y-auto p-2">
-      <ul class="menu w-full">
-        {% for link in page_nav %}
-        <li>
-          <a href="/{{ link.slug }}"
-             class="{% if link.slug == page.slug %}menu-active{% endif %}">
-            {{ link.title }}
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ page.title }} — {{ org.name }}</title>
+    <link rel="stylesheet" href="/static/css/tailwind.css" />
+    <script src="/static/js/alpine.min.js" defer></script>
+  </head>
+  <body class="h-full bg-base-200 text-base-content antialiased">
+    <div class="flex h-full min-h-screen" x-data="{ navOpen: false }">
+      <!-- Mobile backdrop -->
+      <div x-show="navOpen"
+           x-cloak
+           @click="navOpen = false"
+           class="fixed inset-0 bg-black/30 z-30 lg:hidden"></div>
+      <!-- Sidebar -->
+      <aside aria-label="Sidebar"
+             class="w-56 bg-base-300 flex flex-col border-r border-base-300 fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:static lg:translate-x-0"
+             :class="{ 'translate-x-0': navOpen, '-translate-x-full': !navOpen }">
+        <!-- Logo -->
+        <div class="px-5 py-5 border-b border-base-300 flex items-center justify-between">
+          <a href="/" class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-lg bg-primary text-primary-content flex items-center justify-center">
+              <i class="ph ph-lightning ph-sm" aria-hidden="true"></i>
+            </div>
+            <span class="font-semibold text-sm tracking-tight">{{ org.name }}</span>
           </a>
-        </li>
-        {% endfor %}
-      </ul>
-    </nav>
-
-    <!-- Auth footer -->
-    <div class="px-4 py-4 border-t border-base-300 space-y-1">
-      {% if current_user %}
-      <a href="/profile" class="btn btn-sm w-full">Profile</a>
-      {% else %}
-      <div class="flex gap-2">
-        <a href="/auth/login" class="btn btn-sm flex-1">Sign in</a>
-        <a href="/auth/register" class="btn btn-primary btn-sm flex-1">Register</a>
-      </div>
-      {% endif %}
-    </div>
-  </aside>
-
-  <!-- Main content -->
-  <div class="flex-1 flex flex-col min-w-0">
-    <!-- Top bar -->
-    <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-4 gap-3 flex-none">
-      <button @click="navOpen = true" aria-label="Open navigation" :aria-expanded="navOpen"
-              class="flex-none btn btn-ghost btn-sm btn-square lg:hidden">
-        <i class="ph ph-list ph-md" aria-hidden="true"></i>
-      </button>
-      <span class="text-sm font-medium text-base-content/70 truncate flex-1 lg:hidden">{{ page.title }}</span>
-      <div class="flex-1 hidden lg:block"></div>
-    </header>
-
-    <main class="flex-1 p-6 overflow-auto">
-      <div class="max-w-2xl mx-auto space-y-6">
-        <h1 class="text-2xl font-semibold">{{ page.title }}</h1>
-        <div class="card bg-base-100 border border-base-300 shadow-sm">
-          <div class="card-body">
-            <div class="md-body">{{ body | safe }}</div>
-          </div>
+          <button @click="navOpen = false"
+                  aria-label="Close navigation"
+                  class="lg:hidden btn btn-ghost btn-sm btn-square">
+            <i class="ph ph-x ph-sm" aria-hidden="true"></i>
+          </button>
         </div>
+        <!-- Navigation -->
+        <nav aria-label="Page navigation" class="flex-1 overflow-y-auto p-2">
+          <ul class="menu w-full">
+            {% for link in page_nav %}
+              <li>
+                <a href="/{{ link.slug }}"
+                   class="{% if link.slug == page.slug %}menu-active{% endif %}">{{ link.title }}</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </nav>
+        <!-- Auth footer -->
+        <div class="px-4 py-4 border-t border-base-300 space-y-1">
+          {% if current_user %}
+            <a href="/profile" class="btn btn-sm w-full">Profile</a>
+          {% else %}
+            <div class="flex gap-2">
+              <a href="/auth/login" class="btn btn-sm flex-1">Sign in</a>
+              <a href="/auth/register" class="btn btn-primary btn-sm flex-1">Register</a>
+            </div>
+          {% endif %}
+        </div>
+      </aside>
+      <!-- Main content -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <!-- Top bar -->
+        <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-4 gap-3 flex-none">
+          <button @click="navOpen = true"
+                  aria-label="Open navigation"
+                  :aria-expanded="navOpen"
+                  class="flex-none btn btn-ghost btn-sm btn-square lg:hidden">
+            <i class="ph ph-list ph-md" aria-hidden="true"></i>
+          </button>
+          <span class="text-sm font-medium text-base-content/70 truncate flex-1 lg:hidden">{{ page.title }}</span>
+          <div class="flex-1 hidden lg:block"></div>
+        </header>
+        <main class="flex-1 p-6 overflow-auto">
+          <div class="max-w-2xl mx-auto space-y-6">
+            <h1 class="text-2xl font-semibold">{{ page.title }}</h1>
+            <div class="card bg-base-100 border border-base-300 shadow-sm">
+              <div class="card-body">
+                <div class="md-body">{{ body | safe }}</div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
-    </main>
-  </div>
-
-</div>
-</body>
+    </div>
+  </body>
 </html>

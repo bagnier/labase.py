@@ -1,23 +1,18 @@
 {% extends "base.html" %}
-
 {% block title %}Server admins — Console{% endblock %}
-
 {% block breadcrumb %}
-<li><a href="/console">Console</a></li>
-<li>Admins</li>
+  <li><a href="/console">Console</a></li>
+  <li>Admins</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-  <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
-
-  <div>
-    <h1 class="text-lg font-semibold">Server admins</h1>
-    <p class="text-sm text-base-content/70 mt-0.5">
-      Admins oversee every organisation and configure each app. {{ admin_count }} admin{{ 's' if admin_count != 1 else '' }}.
-    </p>
+  <div class="max-w-2xl space-y-6">
+    <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
+    <div>
+      <h1 class="text-lg font-semibold">Server admins</h1>
+      <p class="text-sm text-base-content/70 mt-0.5">
+        Admins oversee every organisation and configure each app. {{ admin_count }} admin{{ 's' if admin_count != 1 else '' }}.
+      </p>
+    </div>
+    {% include "console/_admins.html" %}
   </div>
-
-  {% include "console/_admins.html" %}
-</div>
 {% endblock %}

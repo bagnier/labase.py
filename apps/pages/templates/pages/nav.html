@@ -1,49 +1,42 @@
 {% extends "base.html" %}
-
 {% block title %}Navigation — {{ org.name }}{% endblock %}
-
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
   <li><a href="/{{ org_handle }}/pages">Pages</a></li>
   <li>Navigation</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-
-  <div class="flex items-center justify-between">
+  <div class="max-w-2xl space-y-6">
     <div>
       <h1 class="text-lg font-semibold">Navigation</h1>
       <p class="text-sm text-base-content/70 mt-1">Check pages to include them. Drag to reorder.</p>
     </div>
+    <ul id="nav-list" class="list-panel">
+      {% for c in candidates %}
+        <li class="nav-candidate flex items-center gap-3 px-4 py-3 group"
+            data-slug="{{ c.slug }}"
+            data-in-nav="{{ 'true' if c.in_nav else 'false' }}">
+          <i class="drag-handle ph ph-dots-six-vertical ph-sm text-base-content/50 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none"
+             aria-hidden="true"></i>
+          <input type="checkbox"
+                 data-slug="{{ c.slug }}"
+                 {% if c.in_nav %}checked{% endif %}
+                 aria-label="Include &ldquo;{{ c.title }}&rdquo; in navigation"
+                 class="nav-checkbox checkbox checkbox-sm cursor-pointer flex-none" />
+          <span class="flex-1 text-sm">{{ c.title }}</span>
+          <span class="badge badge-sm {% if c.visibility == 'public' %}badge-success{% else %}badge-info{% endif %}">
+            {{ c.visibility }}
+          </span>
+        </li>
+      {% else %}
+        <li class="px-4 py-6 text-sm text-center text-base-content/50">No published pages yet.</li>
+      {% endfor %}
+    </ul>
   </div>
-
-  <div id="nav-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm">
-    {% for c in candidates %}
-    <div class="nav-candidate flex items-center gap-3 px-4 py-3 group" data-slug="{{ c.slug }}" data-in-nav="{{ 'true' if c.in_nav else 'false' }}">
-      <i class="drag-handle ph ph-dots-six-vertical ph-sm text-base-content/50 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
-      <input type="checkbox"
-             data-slug="{{ c.slug }}"
-             {% if c.in_nav %}checked{% endif %}
-             aria-label="Include &ldquo;{{ c.title }}&rdquo; in navigation"
-             class="nav-checkbox checkbox checkbox-sm cursor-pointer flex-none" />
-      <span class="flex-1 text-sm">{{ c.title }}</span>
-      <span class="badge badge-sm
-        {% if c.visibility == 'public' %}badge-success{% else %}badge-info{% endif %}">
-        {{ c.visibility }}
-      </span>
-    </div>
-    {% else %}
-    <p class="px-4 py-6 text-sm text-center text-base-content/50">No published pages yet.</p>
-    {% endfor %}
-  </div>
-
-</div>
 {% endblock %}
-
 {% block scripts %}
-<script src="/static/js/sortable.min.js"></script>
-<script>
+  <script src="/static/js/sortable.min.js"></script>
+  <script>
 (function () {
   const handle = {{ org_handle | tojson }};
 
@@ -89,5 +82,5 @@
     },
   });
 })();
-</script>
+  </script>
 {% endblock %}

@@ -1,28 +1,24 @@
 {% extends "base.html" %}
-
 {% block title %}Console — labase{% endblock %}
-
 {% block breadcrumb %}
-<li>Admin</li>
+  <li>Admin</li>
 {% endblock %}
-
 {% block content %}
-<div class="space-y-6">
-  <div class="flex items-start justify-between">
-    <div>
-      <h1 class="text-lg font-semibold">Admin console</h1>
-      <p class="text-sm text-base-content/70 mt-0.5">Server-wide — every organisation. Click an app to configure it.</p>
+  <div class="space-y-6">
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-lg font-semibold">Admin console</h1>
+        <p class="text-sm text-base-content/70 mt-0.5">Server-wide — every organisation. Click an app to configure it.</p>
+      </div>
+      <a href="/console/admins" class="btn btn-sm">Manage admins</a>
     </div>
-    <a href="/console/admins" class="btn btn-sm">Manage admins</a>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {% for o in overviews %}
+        <a href="/console/{{ o.key }}"
+           class="block hover:-translate-y-0.5 transition-transform {% if o.key in disabled %}opacity-60{% endif %}">
+          {% include "console/_overview.html" %}
+        </a>
+      {% endfor %}
+    </div>
   </div>
-
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-    {% for o in overviews %}
-      <a href="/console/{{ o.key }}"
-         class="block hover:-translate-y-0.5 transition-transform {% if o.key in disabled %}opacity-60{% endif %}">
-        {% include "console/_overview.html" %}
-      </a>
-    {% endfor %}
-  </div>
-</div>
 {% endblock %}

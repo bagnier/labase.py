@@ -9,7 +9,7 @@ class TodoBrowserMixin(BrowserBase):
         return f"{self.base_url}/{slug}/todos"
 
     def _dom_todo_rows(self) -> list:
-        return self.page.locator("#todo-list > div").all()
+        return self.page.locator("#todo-list > li").all()
 
     def _dom_todo_titles(self) -> list[str]:
         return [

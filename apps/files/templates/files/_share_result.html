@@ -1,11 +1,11 @@
 <div class="flex items-center gap-2 mt-1" data-share-result>
-  <input type="text" readonly value="{{ url }}"
+  <input type="text"
+         readonly
+         value="{{ url }}"
          class="input input-sm flex-1 min-w-0 text-xs"
          data-share-url
          onclick="this.select()" />
   <button type="button"
           class="btn btn-sm btn-ghost btn-primary flex-none"
-          onclick="navigator.clipboard.writeText('{{ url }}')">
-    Copy
-  </button>
+          onclick="navigator.clipboard.writeText('{{ url }}')">Copy</button>
 </div>

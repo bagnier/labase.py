@@ -10,9 +10,12 @@
     "build:js": "mkdir -p static/js && cp node_modules/htmx.org/dist/htmx.min.js static/js/htmx.min.js && cp node_modules/sortablejs/Sortable.min.js static/js/sortable.min.js && cp node_modules/alpinejs/dist/cdn.min.js static/js/alpine.min.js",
     "build:fonts": "cp node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2 static/fonts/",
     "build:icons": "mkdir -p static/fonts && cp node_modules/@phosphor-icons/web/src/regular/Phosphor.woff2 static/fonts/",
-    "build:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css --minify"
+    "build:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css --minify",
+    "lint": "biome check",
+    "format": "biome check --write"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@tailwindcss/cli": "^4.3.1",
     "daisyui": "^5.6.3",
     "esbuild": "^0.25.0",
@@ -21,11 +24,11 @@
   "dependencies": {
     "@codemirror/lang-markdown": "^6.3.2",
     "@codemirror/language": "^6.10.8",
-    "@fontsource/inter": "5.2.8",
+    "@fontsource/inter": "^5.2.8",
     "@phosphor-icons/web": "^2.1.2",
     "alpinejs": "^3.15.12",
     "codemirror": "^6.0.1",
-    "htmx.org": "2.0.4",
-    "sortablejs": "1.15"
+    "htmx.org": "^2.0.4",
+    "sortablejs": "^1.15"
   }
 }

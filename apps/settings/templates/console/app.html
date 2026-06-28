@@ -1,36 +1,35 @@
 {% extends "base.html" %}
-
 {% block title %}{{ app }} — Console{% endblock %}
-
 {% block breadcrumb %}
-<li><a href="/console">Console</a></li>
-<li>{{ app }}</li>
+  <li><a href="/console">Console</a></li>
+  <li>{{ app }}</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-  <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
-
-  {% if overview %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {% with o = overview %}{% include "console/_overview.html" %}{% endwith %}
-    </div>
-  {% endif %}
-
-  <div>
-    <h2 class="text-sm font-semibold mb-3">Settings</h2>
-    {% include "console/_settings.html" %}
-  </div>
-
-  {% if supabase %}
+  <div class="max-w-2xl space-y-6">
+    <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
+    <h1 class="text-lg font-semibold">{{ app }}</h1>
+    {% if overview %}
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% with o = overview %}
+          {% include "console/_overview.html" %}
+        {% endwith %}
+      </div>
+    {% endif %}
     <div>
-      <h2 class="text-sm font-semibold mb-3">Advanced</h2>
-      <a href="{{ supabase.href }}" target="_blank" rel="noopener"
-         data-supabase-app="{{ app }}"
-         class="inline-flex items-center gap-2 text-sm text-primary hover:underline">
-        <i class="ph ph-arrow-square-out" aria-hidden="true"></i>{{ supabase.label }}
-      </a>
+      <h2 class="text-sm font-semibold mb-3">Settings</h2>
+      {% include "console/_settings.html" %}
     </div>
-  {% endif %}
-</div>
+    {% if supabase %}
+      <div>
+        <h2 class="text-sm font-semibold mb-3">Advanced</h2>
+        <a href="{{ supabase.href }}"
+           target="_blank"
+           rel="noopener"
+           data-supabase-app="{{ app }}"
+           class="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+          <i class="ph ph-arrow-square-out" aria-hidden="true"></i>{{ supabase.label }}
+        </a>
+      </div>
+    {% endif %}
+  </div>
 {% endblock %}

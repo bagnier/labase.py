@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "static/js/src/**/*.js",
+      "static/js/todo.js",
+      "static/js/learning.js",
+      "static/css/input.css"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "complexity": {
+        "noImportantStyles": "off"
+      },
+      "a11y": {
+        "useGenericFontNames": "off"
+      },
+      "correctness": {
+        "noInvalidPositionAtImportRule": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "single" },
+    "globals": ["htmx", "Alpine", "Sortable"]
+  },
+  "css": {
+    "parser": { "tailwindDirectives": true },
+    "formatter": { "enabled": true },
+    "linter": { "enabled": true }
+  }
+}

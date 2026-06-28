@@ -74,9 +74,13 @@ provision-test:
 # --- Quality ---
 lint:
 	uv run ruff check --fix .
+	npx biome lint --write
+	uv run djlint apps --lint
 
 format:
 	uv run ruff format .
+	npx biome format --write
+	uv run djlint apps --reformat
 
 typecheck:
 	uv run ty check apps/

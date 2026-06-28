@@ -1,32 +1,48 @@
 {% for todo in todos %}
-<div class="todo-item flex items-center gap-3 px-4 py-3 group" data-id="{{ todo.id }}">
-  <i class="drag-handle ph ph-dots-six-vertical ph-sm text-base-content/50 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none" aria-hidden="true"></i>
-  <input type="checkbox" data-todo-id="{{ todo.id }}" {% if todo.done %}checked{% endif %}
-    aria-label="Mark &ldquo;{{ todo.title }}&rdquo; as done"
-    hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-vals='js:{"done": event.target.checked}' hx-target="#todo-list" hx-swap="innerHTML"
-    class="checkbox checkbox-sm checkbox-primary cursor-pointer flex-none" />
-  <span class="flex-1 text-sm {% if todo.done %}text-base-content/50 line-through{% endif %}"
-        data-title-id="{{ todo.id }}">{{ todo.title }}</span>
-  <button type="button" data-edit-id="{{ todo.id }}"
-          aria-label="Edit &ldquo;{{ todo.title }}&rdquo;"
-          onclick="startEdit('{{ todo.id }}')"
-          class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary">
-    <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
-  </button>
-  <button data-delete-id="{{ todo.id }}"
-          aria-label="Delete &ldquo;{{ todo.title }}&rdquo;"
-          hx-delete="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="innerHTML" hx-confirm="Delete this task?"
-          class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-error">
-    <i class="ph ph-x ph-sm" aria-hidden="true"></i>
-  </button>
-  <form id="rename-form-{{ todo.id }}" class="hidden flex-1"
-        hx-patch="/{{ org_handle }}/todos/{{ todo.id }}" hx-target="#todo-list" hx-swap="innerHTML">
-    <input type="text" name="title" value="{{ todo.title }}"
-           class="input input-sm w-full text-sm"
-           onblur="submitRename('{{ todo.id }}')"
-           onkeydown="if(event.key==='Enter'){event.preventDefault();submitRename('{{ todo.id }}')}else if(event.key==='Escape'){cancelEdit('{{ todo.id }}','{{ todo.title|e }}')}"/>
-  </form>
-</div>
+  <li class="todo-item flex items-center gap-3 px-4 py-3 group"
+      data-id="{{ todo.id }}">
+    <i class="drag-handle ph ph-dots-six-vertical ph-sm text-base-content/50 opacity-30 group-hover:opacity-100 transition-opacity cursor-grab flex-none"
+       aria-hidden="true"></i>
+    <input type="checkbox"
+           data-todo-id="{{ todo.id }}"
+           {% if todo.done %}checked{% endif %}
+           aria-label="Mark &ldquo;{{ todo.title }}&rdquo; as done"
+           hx-patch="/{{ org_handle }}/todos/{{ todo.id }}"
+           hx-vals='js:{"done": event.target.checked}'
+           hx-target="#todo-list"
+           hx-swap="innerHTML"
+           class="checkbox checkbox-sm checkbox-primary cursor-pointer flex-none" />
+    <span class="flex-1 text-sm {% if todo.done %}text-base-content/50 line-through{% endif %}"
+          data-title-id="{{ todo.id }}">{{ todo.title }}</span>
+    <button type="button"
+            data-edit-id="{{ todo.id }}"
+            aria-label="Edit &ldquo;{{ todo.title }}&rdquo;"
+            onclick="startEdit('{{ todo.id }}')"
+            class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary">
+      <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
+    </button>
+    <button data-delete-id="{{ todo.id }}"
+            aria-label="Delete &ldquo;{{ todo.title }}&rdquo;"
+            hx-delete="/{{ org_handle }}/todos/{{ todo.id }}"
+            hx-target="#todo-list"
+            hx-swap="innerHTML"
+            hx-confirm="Delete this task?"
+            class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-error">
+      <i class="ph ph-x ph-sm" aria-hidden="true"></i>
+    </button>
+    <form id="rename-form-{{ todo.id }}"
+          class="hidden flex-1"
+          hx-patch="/{{ org_handle }}/todos/{{ todo.id }}"
+          hx-target="#todo-list"
+          hx-swap="innerHTML">
+      <input type="text"
+             name="title"
+             value="{{ todo.title }}"
+             class="input input-sm w-full text-sm"
+             onblur="submitRename('{{ todo.id }}')"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();submitRename('{{ todo.id }}')}else if(event.key==='Escape'){cancelEdit('{{ todo.id }}','{{ todo.title|e }}')}" />
+    </form>
+  </li>
 {% else %}
-<p class="px-4 py-6 text-sm text-center text-base-content/50">No tasks yet.</p>
+  <p class="px-4 py-6 text-sm text-center text-base-content/50">No tasks yet.</p>
 {% endfor %}

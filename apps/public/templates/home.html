@@ -1,15 +1,12 @@
 {% extends "base_public.html" %}
-
 {% block title %}labase — Python SaaS base{% endblock %}
-
 {% block content %}
-<div class="text-center mb-8">
-  <h1 class="text-2xl font-bold">Welcome to labase</h1>
-  <p class="text-sm text-base-content/70 mt-2">Python SaaS base, open-source, powered by Supabase.</p>
-</div>
-
-<div class="flex flex-col gap-3">
-  <a href="/auth/login" class="btn btn-primary w-full">Sign in</a>
-  <a href="/auth/register" class="btn w-full">Create an account</a>
-</div>
+  <div class="text-center mb-8">
+    <h1 class="text-2xl font-bold">Welcome to labase</h1>
+    <p class="text-sm text-base-content/70 mt-2">Python SaaS base, open-source, powered by Supabase.</p>
+  </div>
+  <div class="flex flex-col gap-3">
+    <a href="/auth/login" class="btn btn-primary w-full">Sign in</a>
+    <a href="/auth/register" class="btn w-full">Create an account</a>
+  </div>
 {% endblock %}

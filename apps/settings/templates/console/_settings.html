@@ -1,8 +1,11 @@
-<div class="settings bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300" id="settings">
+<div class="settings list-panel" id="settings">
   {% for s in settings %}
     <form class="grid grid-cols-1 sm:grid-cols-[1fr_220px_90px] gap-4 items-center p-4"
-          data-setting-key="{{ s.key }}" data-setting-type="{{ s.type }}"
-          hx-put="/console/{{ app }}/settings/{{ s.key }}" hx-target="#settings" hx-swap="outerHTML"
+          data-setting-key="{{ s.key }}"
+          data-setting-type="{{ s.type }}"
+          hx-put="/console/{{ app }}/settings/{{ s.key }}"
+          hx-target="#settings"
+          hx-swap="outerHTML"
           hx-trigger="change">
       <div>
         <span class="font-mono text-xs font-semibold">{{ s.key }}</span>
@@ -11,24 +14,31 @@
       {% if s.type == "boolean" %}
         <label class="inline-flex items-center gap-2 cursor-pointer">
           <input type="hidden" name="value" value="false" />
-          <input type="checkbox" name="value" value="true" class="toggle"
-                 role="switch" aria-label="{{ s.key }}"
+          <input type="checkbox"
+                 name="value"
+                 value="true"
+                 class="toggle"
+                 role="switch"
+                 aria-label="{{ s.key }}"
                  {% if s.value == "true" %}checked{% endif %} />
           <span class="text-sm text-base-content/70">Enabled</span>
         </label>
       {% elif app == "appearance" and s.key == "theme" %}
         <select name="value" class="select w-full" aria-label="{{ s.key }}">
           {% for t in app_themes() %}
-          <option value="{{ t }}" {% if s.value == t %}selected{% endif %}>{{ t }}</option>
+            <option value="{{ t }}" {% if s.value == t %}selected{% endif %}>{{ t }}</option>
           {% endfor %}
         </select>
       {% else %}
-        <input type="{{ 'number' if s.type == 'number' else 'text' }}" name="value"
-               value="{{ s.value }}" class="input w-full" aria-label="{{ s.key }}" />
+        <input type="{{ 'number' if s.type == 'number' else 'text' }}"
+               name="value"
+               value="{{ s.value }}"
+               class="input w-full"
+               aria-label="{{ s.key }}" />
       {% endif %}
-      <div class="text-right">
+      <div class="text-right" aria-live="polite">
         {% if saved_key == s.key %}
-          <span class="saved-flash text-xs font-medium text-success">Saved ✓</span>
+          <span class="saved-flash text-xs font-medium text-success" role="status">Saved ✓</span>
         {% endif %}
       </div>
     </form>

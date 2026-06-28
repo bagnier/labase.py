@@ -1,56 +1,66 @@
-<div id="file-list" class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm">
+<ul id="file-list" class="list-panel">
   {% for f in files %}
-  <div class="flex flex-col px-4 py-3 group" data-file-id="{{ f.id }}" x-data="{ renaming: false }">
-    <div class="flex items-center gap-3">
-      <i class="ph ph-file-text ph-md text-base-content/50 flex-none" aria-hidden="true"></i>
-      <span class="flex-1 min-w-0">
-        <a href="/{{ org_handle }}/files/{{ f.id }}/download"
-           class="text-sm hover:text-primary hover:underline truncate block">
-          {{ f.filename }}
-        </a>
-        <span class="file-meta text-xs opacity-60">
-          {{ (f.size_bytes / 1024) | round | int }} KB &middot; {{ f.created_at.strftime('%Y-%m-%d') }} &middot; {{ f.uploader_email }}
-        </span>
-        <!-- Rename form (toggled) -->
-        <form x-show="renaming" class="mt-1 flex gap-2 items-center" data-rename-form
-              hx-patch="/{{ org_handle }}/files/{{ f.id }}"
-              hx-target="#file-list"
-              hx-swap="outerHTML">
-          <input type="text" name="filename" value="{{ f.filename }}" required
-                 aria-label="Filename"
-                 class="input input-sm flex-1 min-w-0 text-xs" />
-          <button type="submit" class="btn btn-sm btn-ghost btn-primary flex-none">Save</button>
-        </form>
-      </span>
-      <div class="flex items-center gap-2 flex-none">
-        <button type="button" data-rename-id="{{ f.id }}"
-                @click="renaming = !renaming"
-                class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary"
-                aria-label="Rename {{ f.filename }}">
-          <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
-        </button>
-        <button type="button" data-share-id="{{ f.id }}"
-                hx-post="/{{ org_handle }}/files/{{ f.id }}/share"
-                hx-target="#share-result-{{ f.id }}"
-                hx-swap="innerHTML"
-                class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary"
-                aria-label="Share {{ f.filename }}">
-          <i class="ph ph-share-network ph-sm" aria-hidden="true"></i>
-        </button>
-        <button data-delete-id="{{ f.id }}"
-                hx-delete="/{{ org_handle }}/files/{{ f.id }}"
+    <li class="flex flex-col px-4 py-3 group"
+        data-file-id="{{ f.id }}"
+        x-data="{ renaming: false }">
+      <div class="flex items-center gap-3">
+        <i class="ph ph-file-text ph-md text-base-content/50 flex-none"
+           aria-hidden="true"></i>
+        <span class="flex-1 min-w-0">
+          <a href="/{{ org_handle }}/files/{{ f.id }}/download"
+             class="text-sm hover:text-primary hover:underline truncate block">{{ f.filename }}</a>
+          <span class="file-meta text-xs opacity-60">
+            {{ (f.size_bytes / 1024) | round | int }} KB &middot;
+            <time datetime="{{ f.created_at.strftime('%Y-%m-%d') }}">{{ f.created_at.strftime("%Y-%m-%d") }}</time>
+            &middot; {{ f.uploader_email }}
+          </span>
+          <!-- Rename form (toggled) -->
+          <form x-show="renaming"
+                class="mt-1 flex gap-2 items-center"
+                data-rename-form
+                hx-patch="/{{ org_handle }}/files/{{ f.id }}"
                 hx-target="#file-list"
-                hx-swap="outerHTML"
-                hx-confirm='Delete "{{ f.filename }}"?'
-                class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-error"
-                aria-label="Delete {{ f.filename }}">
-          <i class="ph ph-x ph-sm" aria-hidden="true"></i>
-        </button>
+                hx-swap="outerHTML">
+            <input type="text"
+                   name="filename"
+                   value="{{ f.filename }}"
+                   required
+                   aria-label="Filename"
+                   class="input input-sm flex-1 min-w-0 text-xs" />
+            <button type="submit" class="btn btn-sm btn-ghost btn-primary flex-none">Save</button>
+          </form>
+        </span>
+        <div class="flex items-center gap-2 flex-none">
+          <button type="button"
+                  data-rename-id="{{ f.id }}"
+                  @click="renaming = !renaming"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary"
+                  aria-label="Rename {{ f.filename }}">
+            <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
+          </button>
+          <button type="button"
+                  data-share-id="{{ f.id }}"
+                  hx-post="/{{ org_handle }}/files/{{ f.id }}/share"
+                  hx-target="#share-result-{{ f.id }}"
+                  hx-swap="innerHTML"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary"
+                  aria-label="Share {{ f.filename }}">
+            <i class="ph ph-share-network ph-sm" aria-hidden="true"></i>
+          </button>
+          <button data-delete-id="{{ f.id }}"
+                  hx-delete="/{{ org_handle }}/files/{{ f.id }}"
+                  hx-target="#file-list"
+                  hx-swap="outerHTML"
+                  hx-confirm='Delete "{{ f.filename }}"?'
+                  class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-error"
+                  aria-label="Delete {{ f.filename }}">
+            <i class="ph ph-x ph-sm" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
-    </div>
-    <div id="share-result-{{ f.id }}"></div>
-  </div>
+      <div id="share-result-{{ f.id }}" aria-live="polite"></div>
+    </li>
   {% else %}
-  <p class="px-4 py-6 text-sm text-center text-base-content/50">No files yet.</p>
+    <li class="px-4 py-6 text-sm text-center text-base-content/50">No files yet.</li>
   {% endfor %}
-</div>
+</ul>

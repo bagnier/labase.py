@@ -1,36 +1,38 @@
 <div id="pending-invitations" hx-swap-oob="true">
-{% if caller_role == "owner" and invitations %}
-<div>
-  <h2 class="text-sm font-semibold mb-3">Pending invitations</h2>
-  <div class="bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300">
-    {% for inv in invitations %}
-    <div id="inv-row-{{ inv.id }}"
-         class="flex items-center justify-between px-4 py-3"
-         data-invitation-email="{{ inv.email }}"
-         data-invitation-role="{{ inv.role.value }}"
-         data-invitation-status="{{ inv.status.value }}">
-      <div>
-        <p class="text-sm font-medium">{{ inv.email }}</p>
-        <p class="text-xs opacity-60">Sent on {{ inv.created_at.strftime('%Y-%m-%d') }}</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button data-copy-link
-                data-invitation-link="/invitations/{{ inv.token }}"
-                class="btn btn-sm"
-                onclick="navigator.clipboard.writeText(location.origin + this.dataset.invitationLink).then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy link', 2000) })">
-          Copy link
-        </button>
-        <button data-revoke class="btn btn-error btn-ghost btn-sm"
-                hx-delete="/{{ org_handle }}/invitations/{{ inv.id }}"
-                hx-target="#inv-row-{{ inv.id }}"
-                hx-swap="outerHTML"
-                hx-confirm="Revoke invitation for {{ inv.email }}?">
-          Revoke
-        </button>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
+  {% if caller_role == "owner" and invitations %}
+    <section>
+      <h2 class="text-sm font-semibold mb-3">Pending invitations</h2>
+      <ul class="list-panel">
+        {% for inv in invitations %}
+          <li id="inv-row-{{ inv.id }}"
+              class="flex items-center justify-between px-4 py-3"
+              data-invitation-email="{{ inv.email }}"
+              data-invitation-role="{{ inv.role.value }}"
+              data-invitation-status="{{ inv.status.value }}">
+            <div>
+              <p class="text-sm font-medium">{{ inv.email }}</p>
+              <p class="text-xs opacity-60">
+                Sent on
+                <time datetime="{{ inv.created_at.strftime('%Y-%m-%d') }}">{{ inv.created_at.strftime("%Y-%m-%d") }}</time>
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button data-copy-link
+                      data-invitation-link="/invitations/{{ inv.token }}"
+                      class="btn btn-sm"
+                      onclick="navigator.clipboard.writeText(location.origin + this.dataset.invitationLink).then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy link', 2000) })">
+                Copy link
+              </button>
+              <button data-revoke
+                      class="btn btn-error btn-ghost btn-sm"
+                      hx-delete="/{{ org_handle }}/invitations/{{ inv.id }}"
+                      hx-target="#inv-row-{{ inv.id }}"
+                      hx-swap="outerHTML"
+                      hx-confirm="Revoke invitation for {{ inv.email }}?">Revoke</button>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
 </div>

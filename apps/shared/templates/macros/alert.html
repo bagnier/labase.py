@@ -1,6 +1,6 @@
 {% macro alert(variant, message) %}
-{% if message %}
-{% set cls = {'error': 'alert-error', 'info': 'alert-info', 'success': 'alert-success'} %}
-<div class="alert {{ cls[variant] }} mb-5" role="alert">{{ message }}</div>
-{% endif %}
+  {% if message %}
+    {% set cls = {"error": "alert-error", "info": "alert-info", "success": "alert-success"} %}
+    <div class="alert {{ cls[variant] }} mb-5" role="alert">{{ message }}</div>
+  {% endif %}
 {% endmacro %}

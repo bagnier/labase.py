@@ -1,28 +1,24 @@
 {% extends "base.html" %}
-
 {% block title %}Resources — labase{% endblock %}
-
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
   <li>Learning · Resources</li>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-2xl space-y-6">
-  <h1 class="text-lg font-semibold">Resources to review</h1>
-
-  <div id="learning-resources" class="space-y-1">
-    {% for item in resources %}
-    <div class="flex gap-2 rounded-lg border border-base-300 bg-base-100 px-4 py-2 text-sm"
-         data-resource-deck="{{ item.deck }}">
-      <span class="font-medium">{{ item.deck }}</span>
-      <a href="{{ item.resource }}" data-resource class="link link-primary break-all">{{ item.resource }}</a>
-    </div>
-    {% else %}
-    <p data-empty class="rounded-xl border border-base-300 bg-base-100 px-5 py-9 text-center text-base-content/70">
-      No resources to review — nicely done.
-    </p>
-    {% endfor %}
+  <div class="max-w-2xl space-y-6">
+    <h1 class="text-lg font-semibold">Resources to review</h1>
+    <ul id="learning-resources" class="list-panel">
+      {% for item in resources %}
+        <li class="flex gap-2 px-4 py-2 text-sm"
+            data-resource-deck="{{ item.deck }}">
+          <span class="font-medium">{{ item.deck }}</span>
+          <a href="{{ item.resource }}"
+             data-resource
+             class="link link-primary break-all">{{ item.resource }}</a>
+        </li>
+      {% else %}
+        <li data-empty class="px-5 py-9 text-center text-base-content/70">No resources to review — nicely done.</li>
+      {% endfor %}
+    </ul>
   </div>
-</div>
 {% endblock %}

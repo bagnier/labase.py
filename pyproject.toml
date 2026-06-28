@@ -24,6 +24,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "coverage==7.14.1",
+    "djlint==1.39.4",
     "msgpack==1.2.1",
     "openapi-python-client==0.29.0",
     "pip-audit==2.10.1",
@@ -69,3 +70,13 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "SIM", "DTZ", "UP"]
 ignore = ["B008"]                                 # FastAPI Depends() in function signatures is intentional
+
+[tool.djlint]
+profile = "jinja"
+indent = 2
+max_line_length = 120
+# Rules that don't fit a FastAPI + HTMX + Tailwind app:
+# H006 img dims, H021 inline styles, H023 entity refs (used in aria-labels);
+# J004/J018 url_for (Flask/Django-only); T003 named endblock (stylistic);
+# H030/H031 meta description/keywords (SEO hints; keywords is obsolete).
+ignore = "H006,H021,H023,J004,J018,T003,H030,H031"

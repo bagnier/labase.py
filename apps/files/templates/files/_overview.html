@@ -1,4 +1,5 @@
-<section class="card bg-base-100 border border-base-300 shadow-sm" data-overview="{{ o.key }}">
+<section class="card bg-base-100 border border-base-300 shadow-sm"
+         data-overview="{{ o.key }}">
   <div class="card-body">
     <div class="flex items-center gap-3 mb-3">
       <div class="w-9 h-9 rounded-xl bg-success/10 flex items-center justify-center flex-none">
@@ -17,7 +18,8 @@
       </ul>
     {% endif %}
     <div class="card-actions">
-      <a href="/{{ org_handle }}/{{ o.href }}" class="link link-success inline-block mt-3 text-sm font-medium no-underline hover:underline">Open →</a>
+      <a href="/{{ org_handle }}/{{ o.href }}"
+         class="link link-success inline-block mt-3 text-sm font-medium no-underline hover:underline">Open →</a>
     </div>
   </div>
 </section>

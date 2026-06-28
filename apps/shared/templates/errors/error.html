@@ -1,15 +1,16 @@
 {% extends "base_public.html" %}
 {% block title %}{{ status_code }} — labase{% endblock %}
 {% block content %}
-<div class="text-center">
-  <p class="text-7xl font-bold text-primary mb-4">{{ status_code }}</p>
-  <h1 class="text-2xl font-semibold mb-2">{{ title }}</h1>
-  {% if detail %}
-  <p class="text-sm text-base-content/60 mb-6">{{ detail }}</p>
-  {% endif %}
-  <a href="/profile" class="link link-primary inline-flex items-center gap-2 text-sm font-medium">
-    <i class="ph ph-arrow-left" aria-hidden="true"></i>
-    Back to home
-  </a>
-</div>
+  <div class="text-center">
+    <p class="text-7xl font-bold text-primary mb-4">{{ status_code }}</p>
+    <h1 class="text-2xl font-semibold mb-2">{{ title }}</h1>
+    {% if detail %}
+      <p class="text-sm text-base-content/60 mb-6">{{ detail }}</p>
+    {% endif %}
+    <a href="/profile"
+       class="link link-primary inline-flex items-center gap-2 text-sm font-medium">
+      <i class="ph ph-arrow-left" aria-hidden="true"></i>
+      Back to home
+    </a>
+  </div>
 {% endblock %}
