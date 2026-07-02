@@ -2,9 +2,10 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
+from apps.settings.contract import appearance
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import SettingsChanged, SettingsGroup, declared_settings
-from apps.settings.domain import admins, service
+from apps.settings.domain import admins, service, technical
 from apps.settings.domain.admins import AdminNotFound, LastAdminViolation
 from apps.settings.domain.service import InvalidSettingValue, UnknownSetting
 from apps.settings.infra.audit_log_repository import AuditLogRepository, parse_range_bound
@@ -22,10 +23,35 @@ router = APIRouter(tags=["console"])
 
 _NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
+# Display metadata for folded groups — see _fold_groups.
+_GROUP_DISPLAY: dict[str, tuple[str, str]] = {"settings": ("Settings", "gear-six")}
+
+
+def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
+    """Fold overviews sharing a ``group`` into one tile, so publishers stay independent.
+
+    Each app still answers ``ConsoleOverviewQuery`` with its own overview; this only affects
+    how the grid renders them — same mechanism any future group of tiles can opt into.
+    """
+    grouped: dict[str, list[ConsoleOverview]] = {}
+    folded: list[ConsoleOverview] = []
+    for o in overviews:
+        if o.group is None:
+            folded.append(o)
+        else:
+            grouped.setdefault(o.group, []).append(o)
+    for group, items in grouped.items():
+        title, icon = _GROUP_DISPLAY.get(group, (group, "folder"))
+        lines = [line for o in items for line in o.data.get("lines", [])]
+        folded.append(ConsoleOverview(key=group, title=title, icon=icon, data={"lines": lines}))
+    return folded
+
 
 async def _collect_overviews(session: AdminSession) -> list[ConsoleOverview]:
-    overviews = await host.events.collect(ConsoleOverviewQuery(session))
-    return sorted(overviews, key=lambda o: o.key)
+    overviews = sorted(
+        await host.events.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key
+    )
+    return sorted(_fold_groups(overviews), key=lambda o: o.key)
 
 
 def _settings_group(app: str) -> SettingsGroup:
@@ -199,24 +225,46 @@ async def _search_logs(
     return _paginate(rows, _LOG_PAGE_SIZE)
 
 
-@router.get("/logs", response_class=HTMLResponse)
-async def get_logs(request: Request, current_user: CurrentAdmin, session: AdminSession) -> Response:
+@router.get("/settings", response_class=HTMLResponse)
+async def get_settings_page(
+    request: Request, current_user: CurrentAdmin, session: AdminSession
+) -> Response:
+    theme_group = _settings_group(appearance.THEME_APP)
+    theme_values = await AppSettingRepository(session).values(appearance.THEME_APP)
+    theme_settings = service.settings_view(theme_group, theme_values)
     entries, next_before_id = await _search_logs(
         session, level="", event="", from_dt="", to_dt="", before_id=None
     )
+    env_vars = technical.env_snapshot()
+    process = technical.process_snapshot()
+    technical_config = technical.technical_settings_snapshot()
     if wants_json(request):
-        return JSONResponse({"entries": entries, "next_before_id": next_before_id})
+        return JSONResponse(
+            {
+                "theme": theme_settings,
+                "entries": entries,
+                "next_before_id": next_before_id,
+                "env_vars": env_vars,
+                "process": process,
+                "technical_config": technical_config,
+            }
+        )
     return templates.TemplateResponse(
         request,
-        "console/logs.html",
+        "console/settings.html",
         {
             "user": current_user,
+            "app": appearance.THEME_APP,
+            "settings": theme_settings,
             "entries": entries,
             "next_before_id": next_before_id,
             "level": "",
             "event": "",
             "from_dt": "",
             "to_dt": "",
+            "env_vars": env_vars,
+            "process": process,
+            "technical_config": technical_config,
             **await shell_context(session, current_user),
         },
     )

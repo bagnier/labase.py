@@ -17,6 +17,7 @@ class ConsoleOverview:
     title: str  # human title
     icon: str  # phosphor icon name
     data: dict = field(default_factory=dict)  # JSON-serializable; "lines"
+    group: str | None = None  # fold into one console tile with others sharing this group
 
 
 @dataclass(frozen=True)

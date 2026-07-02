@@ -8,13 +8,7 @@ mount, next to ``css_v``), kept fresh by the ``SettingsChanged`` event like any 
 """
 
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    AppSettings,
-    SettingDef,
-    SettingsChanged,
-    declare_app_settings,
-)
-from apps.shared.host import Host
+from apps.settings.contract.settings import AppSettings
 
 THEME_APP = "appearance"
 THEME_KEY = "theme"
@@ -47,32 +41,11 @@ def current_theme() -> str:
     return value if value in THEMES else DEFAULT_THEME
 
 
-async def _overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
+async def overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     return ConsoleOverview(
         key=THEME_APP,
         title="Appearance",
         icon="globe",
+        group="settings",
         data={"lines": [f"Theme: {current_theme()}"]},
     )
-
-
-def mount(host: Host) -> None:
-    """Declare the theme setting, wire the live handle, and register the console overview.
-
-    The ``app_theme()`` / ``app_themes()`` Jinja globals are registered by the console mount
-    (apps.settings.contract.integration) once templates are importable.
-    """
-    appearance.group = declare_app_settings(
-        THEME_APP,
-        defs=[
-            SettingDef(
-                THEME_KEY,
-                "string",
-                DEFAULT_THEME,
-                "Application theme — applies to everyone (one of the enabled DaisyUI themes)",
-            )
-        ],
-    )
-    appearance.read()
-    host.events.on(SettingsChanged, appearance.reload)
-    host.events.on(ConsoleOverviewQuery, _overview)

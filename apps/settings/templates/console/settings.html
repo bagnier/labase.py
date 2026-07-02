@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Settings — Console{% endblock %}
+{% block breadcrumb %}
+  <li><a href="/console">Console</a></li>
+  <li>Settings</li>
+{% endblock %}
+{% block content %}
+  <div class="space-y-6"
+       x-data="{ tab: 'appearance', live: true }"
+       x-init="setInterval(() => { if (live && tab === 'logs') htmx.trigger($refs.entries, 'poll') }, 5000)">
+    <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
+    <div>
+      <h1 class="text-lg font-semibold">Settings</h1>
+      <p class="text-sm text-base-content/70 mt-0.5">Server-wide — appearance, audit logs, environment and process.</p>
+    </div>
+    <div role="tablist" class="tabs tabs-box w-fit">
+      <button type="button"
+              role="tab"
+              class="tab"
+              :class="{ 'tab-active': tab === 'appearance' }"
+              @click="tab = 'appearance'">Appearance</button>
+      <button type="button"
+              role="tab"
+              class="tab"
+              :class="{ 'tab-active': tab === 'logs' }"
+              @click="tab = 'logs'">Audit logs</button>
+      <button type="button"
+              role="tab"
+              class="tab"
+              :class="{ 'tab-active': tab === 'environment' }"
+              @click="tab = 'environment'">Environment &amp; process</button>
+    </div>
+    <div x-show="tab === 'appearance'" x-cloak class="max-w-2xl">
+      <h2 class="text-sm font-semibold mb-3">Appearance</h2>
+      {% include "console/_settings.html" %}
+    </div>
+    <div x-show="tab === 'logs'" x-cloak class="space-y-4">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <p class="text-sm text-base-content/70">Live event stream across every organisation.</p>
+        <div class="flex items-center gap-2">
+          <span class="badge gap-1.5" :class="live ? 'badge-ghost' : 'badge-warning'">
+            <span class="inline-block w-1.5 h-1.5 rounded-full"
+                  :class="live ? 'bg-success animate-pulse' : 'bg-warning'"
+                  aria-hidden="true"></span>
+            <span x-text="live ? 'Live · refreshes every 5s' : 'Paused — browsing history'"></span>
+          </span>
+          <button type="button"
+                  class="btn btn-sm btn-primary"
+                  x-show="!live"
+                  x-cloak
+                  @click="live = true; $refs.fromInput.value = ''; $refs.toInput.value = ''; htmx.trigger($refs.filters, 'change')">
+            <i class="ph ph-arrow-up" aria-hidden="true"></i>Back to live
+          </button>
+        </div>
+      </div>
+      <form id="log-filters"
+            x-ref="filters"
+            hx-get="/console/logs/entries"
+            hx-target="#log-entries"
+            hx-swap="innerHTML"
+            hx-trigger="change, keyup delay:400ms from:input[type=text]"
+            class="flex items-center gap-2 flex-wrap">
+        <label class="sr-only" for="log-filter-level">Level</label>
+        <select id="log-filter-level" name="level" class="select select-sm w-32">
+          <option value="">All levels</option>
+          <option value="info">info</option>
+          <option value="warning">warning</option>
+          <option value="error">error</option>
+        </select>
+        <label class="sr-only" for="log-filter-event">Event name</label>
+        <input id="log-filter-event"
+               name="event"
+               type="text"
+               placeholder="Filter by event name…"
+               class="input input-sm w-56" />
+        <span class="text-sm text-base-content/50" aria-hidden="true">·</span>
+        <label class="sr-only" for="log-filter-from">From</label>
+        <input id="log-filter-from"
+               name="from_dt"
+               type="datetime-local"
+               x-ref="fromInput"
+               @change="live = false"
+               class="input input-sm w-44 font-mono text-xs" />
+        <span class="text-sm text-base-content/50" aria-hidden="true">→</span>
+        <label class="sr-only" for="log-filter-to">To</label>
+        <input id="log-filter-to"
+               name="to_dt"
+               type="datetime-local"
+               x-ref="toInput"
+               @change="live = false"
+               class="input input-sm w-44 font-mono text-xs" />
+      </form>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>IP</th>
+              <th>Payload</th>
+            </tr>
+          </thead>
+          <tbody id="log-entries"
+                 x-ref="entries"
+                 hx-get="/console/logs/entries"
+                 hx-include="#log-filters"
+                 hx-trigger="poll"
+                 hx-swap="innerHTML">
+            {% include "console/_log_entries.html" %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div x-show="tab === 'environment'" x-cloak>{% include "console/_technical_env.html" %}</div>
+  </div>
+{% endblock %}

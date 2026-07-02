@@ -1,0 +1,89 @@
+<div class="space-y-6">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body p-4 gap-1">
+        <span class="text-xs text-base-content/60">Python</span>
+        <p class="font-mono text-sm">{{ process.python_version }}</p>
+      </div>
+    </div>
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body p-4 gap-1">
+        <span class="text-xs text-base-content/60">PID</span>
+        <p class="font-mono text-sm">{{ process.pid }}</p>
+      </div>
+    </div>
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body p-4 gap-1">
+        <span class="text-xs text-base-content/60">Uptime</span>
+        <p class="font-mono text-sm">{{ process.uptime_seconds // 3600 }}h {{ (process.uptime_seconds % 3600) // 60 }}m</p>
+      </div>
+    </div>
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body p-4 gap-1">
+        <span class="text-xs text-base-content/60">Memory / CPU</span>
+        <p class="font-mono text-sm">{{ process.rss_mb }} MB · {{ process.cpu_percent }}%</p>
+      </div>
+    </div>
+  </div>
+  <div>
+    <h2 class="text-sm font-semibold mb-3">Runtime</h2>
+    <div class="list-panel">
+      <div class="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-2 p-3 border-b border-base-300">
+        <span class="text-xs font-semibold text-base-content/70">Executable</span>
+        <span class="font-mono text-xs break-all">{{ process.executable }}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-2 p-3 border-b border-base-300">
+        <span class="text-xs font-semibold text-base-content/70">Working directory</span>
+        <span class="font-mono text-xs break-all">{{ process.cwd }}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-2 p-3 border-b border-base-300">
+        <span class="text-xs font-semibold text-base-content/70">Platform</span>
+        <span class="font-mono text-xs break-all">{{ process.platform }}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-2 p-3">
+        <span class="text-xs font-semibold text-base-content/70">Started at</span>
+        <span class="font-mono text-xs break-all">{{ process.started_at }}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-2 p-3 border-t border-base-300">
+        <span class="text-xs font-semibold text-base-content/70">Asyncio tasks</span>
+        <span class="font-mono text-xs">{{ process.asyncio_tasks }}</span>
+      </div>
+    </div>
+  </div>
+  <div>
+    <h2 class="text-sm font-semibold mb-3">App configuration</h2>
+    <div class="list-panel">
+      {% for key, value in technical_config.items() %}
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-2 p-3 border-b border-base-300 last:border-0">
+          <span class="font-mono text-xs font-semibold">{{ key }}</span>
+          <span class="font-mono text-xs text-base-content/70 break-all">{{ value }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div>
+    <h2 class="text-sm font-semibold mb-3">Environment variables ({{ env_vars | length }})</h2>
+    <p class="text-xs text-base-content/60 mb-3">
+      <i class="ph ph-lock-simple" aria-hidden="true"></i>
+      Values that look sensitive (secrets, passwords, tokens, keys, database URLs) are masked.
+    </p>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in env_vars %}
+            <tr>
+              <td class="font-mono text-xs">{{ e.name }}</td>
+              <td class="font-mono text-xs break-all {{ 'text-base-content/50 italic' if e.masked else '' }}">{{ e.value }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
