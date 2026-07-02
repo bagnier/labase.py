@@ -6,32 +6,19 @@
 {% endblock %}
 {% block content %}
   <div class="space-y-6"
-       x-data="{ tab: 'appearance', live: true, syncTabFromHash() { const h = window.location.hash.slice(1); this.tab = ['appearance', 'logs', 'environment'].includes(h) ? h : 'appearance' }, selectTab(name) { window.location.hash = name }, }"
+       x-data="{ tab: 'appearance', live: true, syncTabFromHash() { const h = window.location.hash.slice(1); this.tab = ['appearance', 'logs', 'technical'].includes(h) ? h : 'appearance' } }"
        x-init=" syncTabFromHash(); window.addEventListener('hashchange', () => syncTabFromHash()); setInterval(() => { if (live && tab === 'logs') htmx.trigger($refs.entries, 'poll') }, 5000) ">
-    <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
     <div>
       <h1 class="text-lg font-semibold">Settings</h1>
       <p class="text-sm text-base-content/70 mt-0.5">Server-wide — appearance, audit logs, environment and process.</p>
     </div>
-    <div role="tablist" class="tabs tabs-box w-fit">
-      <button type="button"
-              role="tab"
-              class="tab"
-              :class="{ 'tab-active': tab === 'appearance' }"
-              :aria-selected="tab === 'appearance'"
-              @click="selectTab('appearance')">Appearance</button>
-      <button type="button"
-              role="tab"
-              class="tab"
-              :class="{ 'tab-active': tab === 'logs' }"
-              :aria-selected="tab === 'logs'"
-              @click="selectTab('logs')">Audit logs</button>
-      <button type="button"
-              role="tab"
-              class="tab"
-              :class="{ 'tab-active': tab === 'environment' }"
-              :aria-selected="tab === 'environment'"
-              @click="selectTab('environment')">Environment &amp; process</button>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {% for o in group_overviews %}
+        <a href="#{{ o.key }}"
+           class="block hover:-translate-y-0.5 transition-transform rounded-box"
+           :class="{ 'ring-2 ring-primary': tab === '{{ o.key }}' }"
+           :aria-current="tab === '{{ o.key }}' ? 'page' : false">{% include "console/_overview.html" %}</a>
+      {% endfor %}
     </div>
     <div x-show="tab === 'appearance'" x-cloak class="max-w-2xl">
       <h2 class="text-sm font-semibold mb-3">Appearance</h2>
@@ -116,6 +103,6 @@
         </table>
       </div>
     </div>
-    <div x-show="tab === 'environment'" x-cloak>{% include "console/_technical_env.html" %}</div>
+    <div x-show="tab === 'technical'" x-cloak>{% include "console/_technical_env.html" %}</div>
   </div>
 {% endblock %}

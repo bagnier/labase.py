@@ -47,11 +47,16 @@ def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
     return folded
 
 
+async def _raw_overviews(session: AdminSession) -> list[ConsoleOverview]:
+    return sorted(await host.events.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key)
+
+
 async def _collect_overviews(session: AdminSession) -> list[ConsoleOverview]:
-    overviews = sorted(
-        await host.events.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key
-    )
-    return sorted(_fold_groups(overviews), key=lambda o: o.key)
+    return sorted(_fold_groups(await _raw_overviews(session)), key=lambda o: o.key)
+
+
+def _group_members(overviews: list[ConsoleOverview], group: str) -> list[ConsoleOverview]:
+    return [o for o in overviews if o.group == group]
 
 
 def _settings_group(app: str) -> SettingsGroup:
@@ -249,12 +254,14 @@ async def get_settings_page(
                 "technical_config": technical_config,
             }
         )
+    group_overviews = _group_members(await _raw_overviews(session), "settings")
     return templates.TemplateResponse(
         request,
         "console/settings.html",
         {
             "user": current_user,
             "app": appearance.THEME_APP,
+            "group_overviews": group_overviews,
             "settings": theme_settings,
             "entries": entries,
             "next_before_id": next_before_id,
