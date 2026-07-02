@@ -48,6 +48,19 @@ async def _get_org_repo(session: RlsSession) -> OrganizationRepository:
 OrgRepo = Annotated[OrganizationRepository, Depends(_get_org_repo)]
 
 
+def _audit_last_owner_violation(
+    bg: BackgroundTasks, current_user: CurrentUser, org_id: uuid.UUID, **extra: str
+) -> None:
+    record_audit_event(
+        bg,
+        level="warning",
+        event="org.last_owner_violation",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        **extra,
+    )
+
+
 async def _build_members(repo: OrganizationRepository, org_id: uuid.UUID) -> list[MemberRead]:
     raw_members = await repo.list_members(org_id)
     emails = await resolve_user_emails([m.auth_user_id for m in raw_members])
@@ -288,6 +301,7 @@ async def leave_organization(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
+        _audit_last_owner_violation(bg, current_user, org_id)
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         msg = "You are the last owner. Transfer ownership before leaving."
@@ -327,6 +341,7 @@ async def update_member_role(
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
         except LastOwnerViolation as exc:
+            _audit_last_owner_violation(bg, current_user, org_id, target_user_id=str(user_id))
             if wants_json(request):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
             return HTMLResponse(
@@ -380,6 +395,7 @@ async def remove_member(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
+        _audit_last_owner_violation(bg, current_user, org_id, target_user_id=str(user_id))
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         return HTMLResponse(

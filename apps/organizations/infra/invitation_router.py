@@ -131,6 +131,14 @@ async def accept_invitation(
     if current_user.email.lower() != invitation["email"].lower():
         org = await rls_repo.get(invitation["org_id"])
         org_name = org.name if org else ""
+        record_audit_event(
+            bg,
+            level="warning",
+            event="org.invitation_email_mismatch",
+            user_id=current_user.id,
+            org_id=str(invitation["org_id"]),
+            invitation_email=invitation["email"],
+        )
         if wants_json(request):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

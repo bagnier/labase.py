@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
@@ -13,6 +13,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
+from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import shell_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.supabase_studio import studio_link
@@ -130,7 +131,9 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
 
 
 @router.put("/admins/{email}", response_class=HTMLResponse)
-async def update_admin(request: Request, email: str, current_user: CurrentAdmin) -> Response:
+async def update_admin(
+    request: Request, email: str, current_user: CurrentAdmin, bg: BackgroundTasks
+) -> Response:
     body = await parse_body(request)
     is_admin = service.coerce_bool(body.get("is_admin"))
     try:
@@ -138,6 +141,13 @@ async def update_admin(request: Request, email: str, current_user: CurrentAdmin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
+        record_audit_event(
+            bg,
+            level="warning",
+            event="settings.last_admin_violation",
+            user_id=current_user.id,
+            target_email=email,
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     if wants_json(request):
         return _admins_json(rows)

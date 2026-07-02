@@ -2,12 +2,13 @@ from functools import lru_cache
 
 import jwt
 import structlog
-from fastapi import Cookie, Depends, HTTPException, Response, status
+from fastapi import BackgroundTasks, Cookie, Depends, HTTPException, Request, Response, status
 
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.config import get_technical_settings
+from apps.shared.observability.audit import record_audit_event
 
 log = structlog.get_logger("labase.auth.security")
 
@@ -67,6 +68,8 @@ async def get_current_user(
 
 
 async def get_current_admin(
+    request: Request,
+    bg: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> AuthenticatedUser:
     """Gate for server-admin-only surfaces (the console).
@@ -75,6 +78,14 @@ async def get_current_admin(
     plain 404 — a 403 would confirm the protected surface exists.
     """
     if not user.is_admin:
+        record_audit_event(
+            bg,
+            level="warning",
+            event="auth.admin_probe",
+            user_id=user.id,
+            ip=request.client.host if request.client else None,
+            path=request.url.path,
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return user
 
