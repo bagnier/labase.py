@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from apps.auth.contract.current import CurrentUser, RlsSession
@@ -9,6 +9,7 @@ from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
+from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import shell_context
 from apps.shared.slug_registry import validate_handle
 
@@ -60,6 +61,7 @@ async def profile_page(
 @router.post("/profile", response_model=None)
 async def profile_update(
     request: Request,
+    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
@@ -85,7 +87,16 @@ async def profile_update(
         ctx["error"] = message
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
 
+    old_handle = profile.handle
     await repo.update(profile, ProfileUpdate(handle=handle))
+    if old_handle != handle:
+        record_audit_event(
+            bg,
+            level="info",
+            event="profile.handle_changed",
+            user_id=current_user.id,
+            new_handle=handle,
+        )
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(session, current_user, repo)

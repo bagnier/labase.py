@@ -49,7 +49,11 @@ OrgRepo = Annotated[OrganizationRepository, Depends(_get_org_repo)]
 
 
 def _audit_last_owner_violation(
-    bg: BackgroundTasks, current_user: CurrentUser, org_id: uuid.UUID, **extra: str
+    bg: BackgroundTasks,
+    request: Request,
+    current_user: CurrentUser,
+    org_id: uuid.UUID,
+    **extra: str,
 ) -> None:
     record_audit_event(
         bg,
@@ -57,6 +61,7 @@ def _audit_last_owner_violation(
         event="org.last_owner_violation",
         user_id=current_user.id,
         org_id=str(org_id),
+        ip=request.client.host if request.client else None,
         **extra,
     )
 
@@ -81,6 +86,7 @@ async def _build_members(repo: OrganizationRepository, org_id: uuid.UUID) -> lis
 @router.post("", response_model=None)
 async def create_organization(
     request: Request,
+    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
 ) -> Response:
@@ -99,6 +105,14 @@ async def create_organization(
         )
 
     org = await repo.create_with_owner(name, user_id)
+    record_audit_event(
+        bg,
+        level="info",
+        event="org.created",
+        user_id=current_user.id,
+        org_id=str(org.id),
+        name=name,
+    )
     if wants_json(request):
         result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
         return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
@@ -301,7 +315,7 @@ async def leave_organization(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
-        _audit_last_owner_violation(bg, current_user, org_id)
+        _audit_last_owner_violation(bg, request, current_user, org_id)
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         msg = "You are the last owner. Transfer ownership before leaving."
@@ -341,7 +355,9 @@ async def update_member_role(
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
         except LastOwnerViolation as exc:
-            _audit_last_owner_violation(bg, current_user, org_id, target_user_id=str(user_id))
+            _audit_last_owner_violation(
+                bg, request, current_user, org_id, target_user_id=str(user_id)
+            )
             if wants_json(request):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
             return HTMLResponse(
@@ -395,7 +411,7 @@ async def remove_member(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
-        _audit_last_owner_violation(bg, current_user, org_id, target_user_id=str(user_id))
+        _audit_last_owner_violation(bg, request, current_user, org_id, target_user_id=str(user_id))
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         return HTMLResponse(
@@ -461,7 +477,7 @@ async def create_invitation(
                 event="org.invitation_sent",
                 user_id=current_user.id,
                 org_id=str(org_id),
-                invitee_email=email,
+                target_email=email,
             )
 
     if wants_json(request):

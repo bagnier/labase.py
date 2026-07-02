@@ -116,7 +116,7 @@ async def get_admins(
 
 
 @router.post("/admins", response_class=HTMLResponse)
-async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
+async def add_admin(request: Request, current_user: CurrentAdmin, bg: BackgroundTasks) -> Response:
     body = await parse_body(request)
     email = str(body.get("email") or "").strip()
     try:
@@ -125,6 +125,13 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
         if wants_json(request):
             return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
         return _admins_partial(request, await admins.list_admins(), error=exc.email)
+    record_audit_event(
+        bg,
+        level="warning",
+        event="settings.admin_granted",
+        user_id=current_user.id,
+        target_email=email,
+    )
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -147,8 +154,16 @@ async def update_admin(
             event="settings.last_admin_violation",
             user_id=current_user.id,
             target_email=email,
+            ip=request.client.host if request.client else None,
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    record_audit_event(
+        bg,
+        level="warning",
+        event="settings.admin_granted" if is_admin else "settings.admin_revoked",
+        user_id=current_user.id,
+        target_email=email,
+    )
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)

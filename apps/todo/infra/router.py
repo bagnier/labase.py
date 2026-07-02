@@ -87,11 +87,13 @@ async def add_todo(
 @router.patch("/{todo_id}", response_class=HTMLResponse)
 async def patch_todo(
     request: Request,
+    bg: BackgroundTasks,
     todo_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
     repo: TodoRepo,
     org: CurrentOrgModel,
+    org_id: CurrentOrg,
 ):
     body = await parse_body(request)
     done_raw = body.get("done")
@@ -104,6 +106,15 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
+    if title is not None:
+        record_audit_event(
+            bg,
+            level="info",
+            event="todo.updated",
+            user_id=current_user.id,
+            org_id=str(org_id),
+            todo_id=str(todo_id),
+        )
     return await _render(request, session, current_user, repo, org)
 
 

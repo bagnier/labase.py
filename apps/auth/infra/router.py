@@ -165,6 +165,7 @@ async def register_page(request: Request, next: str | None = None) -> HTMLRespon
 @rate_limit("5/minute")
 async def register_endpoint(
     request: Request,
+    bg: BackgroundTasks,
 ) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
@@ -205,6 +206,7 @@ async def register_endpoint(
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
+        record_audit_event(bg, level="warning", event="auth.register_failed", ip=ip, email=email)
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."

@@ -214,6 +214,7 @@ async def delete_file(
 @router.patch("/{file_id}", response_class=HTMLResponse)
 async def rename_file(
     request: Request,
+    bg: BackgroundTasks,
     file_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
@@ -240,7 +241,18 @@ async def rename_file(
     except StorageApiError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    old_filename = org_file.filename
     await repo.rename(org_file, safe_name, new_path)
+    record_audit_event(
+        bg,
+        level="info",
+        event="file.renamed",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        file_id=str(file_id),
+        old_filename=old_filename,
+        new_filename=safe_name,
+    )
 
     files = await repo.all()
     return await _render(request, session, current_user, files, org)
@@ -249,12 +261,23 @@ async def rename_file(
 @router.post("/{file_id}/share")
 async def generate_share_link(
     request: Request,
+    bg: BackgroundTasks,
     file_id: uuid.UUID,
     current_user: CurrentUser,
+    org_id: CurrentOrg,
     repo: FileRepo,
 ):
     org_file = or_404(await repo.get(file_id))
     token = await repo.add_share_token(file_id)
+    record_audit_event(
+        bg,
+        level="info",
+        event="file.share_link_created",
+        user_id=current_user.id,
+        org_id=str(org_id),
+        file_id=str(file_id),
+        token=str(token.token),
+    )
     url = str(request.base_url) + f"files/share/{token.token}"
     if wants_json(request):
         return JSONResponse({"url": url})
@@ -267,20 +290,56 @@ async def generate_share_link(
 
 @public_router.get("/share/{token}")
 async def public_share_download(
+    request: Request,
+    bg: BackgroundTasks,
     token: uuid.UUID,
     admin_session: AdminSession,
 ):
+    ip = request.client.host if request.client else None
     repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
+        record_audit_event(
+            bg,
+            level="warning",
+            event="file.share_link_rejected",
+            ip=ip,
+            token=str(token),
+            reason="invalid",
+        )
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Link not found")
     if share_token.expires_at < now():
+        record_audit_event(
+            bg,
+            level="warning",
+            event="file.share_link_rejected",
+            ip=ip,
+            token=str(token),
+            reason="expired",
+        )
         raise HTTPException(status.HTTP_410_GONE, "Link expired")
 
     org_file = await repo.get(share_token.file_id)
     if org_file is None:
+        record_audit_event(
+            bg,
+            level="warning",
+            event="file.share_link_rejected",
+            ip=ip,
+            token=str(token),
+            reason="file_missing",
+        )
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
+    record_audit_event(
+        bg,
+        level="info",
+        event="file.share_downloaded",
+        org_id=str(org_file.org_id),
+        file_id=str(org_file.id),
+        token=str(token),
+        ip=ip,
+    )
     storage = admin_storage()
     result = await storage.from_(bucket()).create_signed_url(
         org_file.storage_path, settings.signed_url_ttl

@@ -137,7 +137,8 @@ async def accept_invitation(
             event="org.invitation_email_mismatch",
             user_id=current_user.id,
             org_id=str(invitation["org_id"]),
-            invitation_email=invitation["email"],
+            target_email=invitation["email"],
+            ip=request.client.host if request.client else None,
         )
         if wants_json(request):
             raise HTTPException(
