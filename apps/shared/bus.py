@@ -8,14 +8,33 @@ Two primitives:
   successful results.
 """
 
-import logging
+import dataclasses
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
-_log = logging.getLogger(__name__)
+import structlog
+
+log = structlog.get_logger("labase.shared.bus")
 
 E = TypeVar("E")
+
+# Field-name substrings that must never reach the log verbatim (e.g. UserCreated.access_token,
+# OrgCreated.access_token). Matched case-insensitively against each dataclass field's name.
+_REDACT_SUBSTRINGS = ("token", "password", "secret")
+
+
+def _loggable_payload(event: object) -> dict[str, Any]:
+    if not dataclasses.is_dataclass(event) or isinstance(event, type):
+        return {}
+    payload: dict[str, Any] = {}
+    for f in dataclasses.fields(event):
+        value = getattr(event, f.name)
+        if any(s in f.name.lower() for s in _REDACT_SUBSTRINGS):
+            payload[f.name] = "***" if value is not None else None
+        else:
+            payload[f.name] = value
+    return payload
 
 
 class EventBus:
@@ -28,7 +47,12 @@ class EventBus:
         self._subs[event_type].append(handler)
 
     async def emit(self, event: object) -> list[Any]:
-        """Run every handler for this event type in order; propagate exceptions."""
+        """Run every handler for this event type in order; propagate exceptions.
+
+        Every emitted event is logged here — a single, cheap trace point instead of each
+        publisher remembering to log its own event. Secret-shaped fields are redacted by name.
+        """
+        log.info("event.emitted", event_type=type(event).__name__, **_loggable_payload(event))
         return [await handler(event) for handler in self._subs[type(event)]]
 
     async def collect(self, query: object) -> list[Any]:
@@ -38,5 +62,5 @@ class EventBus:
             try:
                 results.append(await handler(query))
             except Exception:
-                _log.exception("query handler %r failed; skipping", handler)
+                log.exception("query.handler_failed", handler=repr(handler))
         return results
