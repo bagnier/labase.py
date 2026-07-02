@@ -7,6 +7,7 @@ from apps.settings.contract.settings import SettingsChanged, SettingsGroup, decl
 from apps.settings.domain import admins, service
 from apps.settings.domain.admins import AdminNotFound, LastAdminViolation
 from apps.settings.domain.service import InvalidSettingValue, UnknownSetting
+from apps.settings.infra.audit_log_repository import AuditLogRepository, parse_range_bound
 from apps.settings.infra.repository import AppSettingRepository
 from apps.shared.config import get_technical_settings
 from apps.shared.host import host
@@ -141,6 +142,91 @@ async def update_admin(request: Request, email: str, current_user: CurrentAdmin)
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
+
+
+_LOG_PAGE_SIZE = 50
+
+
+def _paginate(rows: list[dict], limit: int) -> tuple[list[dict], int | None]:
+    """Split a ``limit + 1``-fetched page: the visible rows and the next cursor, if any."""
+    if len(rows) > limit:
+        return rows[:limit], rows[limit - 1]["id"]
+    return rows, None
+
+
+async def _search_logs(
+    session: AdminSession,
+    *,
+    level: str,
+    event: str,
+    from_dt: str,
+    to_dt: str,
+    before_id: int | None,
+) -> tuple[list[dict], int | None]:
+    rows = await AuditLogRepository(session).search(
+        level=level or None,
+        event=event or None,
+        from_dt=parse_range_bound(from_dt),
+        to_dt=parse_range_bound(to_dt),
+        before_id=before_id,
+        limit=_LOG_PAGE_SIZE,
+    )
+    return _paginate(rows, _LOG_PAGE_SIZE)
+
+
+@router.get("/logs", response_class=HTMLResponse)
+async def get_logs(request: Request, current_user: CurrentAdmin, session: AdminSession) -> Response:
+    entries, next_before_id = await _search_logs(
+        session, level="", event="", from_dt="", to_dt="", before_id=None
+    )
+    if wants_json(request):
+        return JSONResponse({"entries": entries, "next_before_id": next_before_id})
+    return templates.TemplateResponse(
+        request,
+        "console/logs.html",
+        {
+            "user": current_user,
+            "entries": entries,
+            "next_before_id": next_before_id,
+            "level": "",
+            "event": "",
+            "from_dt": "",
+            "to_dt": "",
+            **await shell_context(session, current_user),
+        },
+    )
+
+
+# Registered before "/{app}" so "logs" is not captured as an app slug.
+@router.get("/logs/entries", response_class=HTMLResponse)
+async def get_log_entries(
+    request: Request,
+    current_user: CurrentAdmin,
+    session: AdminSession,
+    level: str = "",
+    event: str = "",
+    from_dt: str = "",
+    to_dt: str = "",
+    before_id: int | None = None,
+) -> Response:
+    entries, next_before_id = await _search_logs(
+        session, level=level, event=event, from_dt=from_dt, to_dt=to_dt, before_id=before_id
+    )
+    if wants_json(request):
+        return JSONResponse({"entries": entries, "next_before_id": next_before_id})
+    return templates.TemplateResponse(
+        request,
+        "console/_log_entries.html",
+        {
+            "entries": entries,
+            "next_before_id": next_before_id,
+            "level": level,
+            "event": event,
+            "from_dt": from_dt,
+            "to_dt": to_dt,
+            "appending": before_id is not None,
+        },
+    )
 
 
 @router.get("/{app}", response_class=HTMLResponse)

@@ -1,0 +1,812 @@
+<!doctype html>
+<title>Mockup — Audit logs console view</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --base-100: #ffffff;
+    --base-200: #f3f4f6;
+    --base-300: #e5e7eb;
+    --base-content: #1f2937;
+    --base-content-muted: #6b7280;
+    --primary: #6419e6;
+    --primary-content: #ffffff;
+    --border: #e5e7eb;
+    --radius-sm: 6px;
+    --radius: 8px;
+    --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  }
+
+  body {
+    font-family: var(--font-ui);
+    font-size: 14px;
+    color: var(--base-content);
+    background: #f0f0f0;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ── Section labels ──────────────────────────────── */
+  .mockup-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 12px;
+  }
+
+  /* ── Console frame ───────────────────────────────── */
+  .frame {
+    background: var(--base-100);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+  }
+
+  /* Fake top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--base-200);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .topbar-dot.red   { background: #ef4444; }
+  .topbar-dot.amber { background: #f59e0b; }
+  .topbar-dot.green { background: #22c55e; }
+  .topbar-url {
+    flex: 1;
+    background: var(--base-300);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: var(--base-content-muted);
+    font-family: var(--font-mono);
+    margin-left: 8px;
+  }
+
+  /* Content area */
+  .page-content {
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Breadcrumb ──────────────────────────────────── */
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--base-content-muted);
+  }
+  .breadcrumb a { color: var(--primary); text-decoration: none; }
+  .breadcrumb-sep { color: var(--base-content-muted); }
+
+  /* ── Page header ─────────────────────────────────── */
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .page-title { font-size: 17px; font-weight: 600; line-height: 1.3; }
+  .page-subtitle { font-size: 13px; color: var(--base-content-muted); margin-top: 3px; }
+
+  .refresh-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--base-content-muted);
+    padding: 5px 10px;
+    background: var(--base-200);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+  .pulse-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .35; }
+  }
+
+  /* ── Filter bar ──────────────────────────────────── */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .filter-sep {
+    color: var(--base-content-muted);
+    font-size: 12px;
+    padding: 0 2px;
+  }
+  .filter-select, .filter-input, .filter-date {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--base-100);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    color: var(--base-content);
+    outline: none;
+  }
+  .filter-select { width: 130px; }
+  .filter-input  { width: 200px; }
+  .filter-date   { width: 148px; font-family: var(--font-mono); font-size: 12px; }
+  .filter-input::placeholder { color: var(--base-content-muted); }
+  .filter-select:focus, .filter-input:focus, .filter-date:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(100,25,230,.12);
+  }
+  .filter-date.active { border-color: #7c3aed; background: #faf5ff; }
+  .filter-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    background: #ede9fe;
+    color: #6419e6;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .filter-badge button {
+    background: none; border: none; cursor: pointer;
+    color: #7c3aed; font-size: 14px; line-height: 1;
+  }
+
+  /* ── Table ───────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  thead { background: var(--base-200); }
+  th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--base-content-muted);
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--base-200);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+
+  /* Timestamp */
+  .ts {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--base-content-muted);
+    white-space: nowrap;
+  }
+
+  /* Level badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .badge-info    { background: #dbeafe; color: #1d4ed8; }
+  .badge-warning { background: #fef3c7; color: #b45309; }
+  .badge-error   { background: #fee2e2; color: #b91c1c; }
+
+  /* Event name */
+  .event-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--base-content);
+  }
+
+  /* User / IP */
+  .uid {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--base-content-muted);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  /* Payload */
+  .payload {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--base-content-muted);
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Back link ───────────────────────────────────── */
+  .back-link {
+    font-size: 13px;
+    color: var(--primary);
+    text-decoration: none;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  /* ── Empty state ─────────────────────────────────── */
+  .empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--base-content-muted);
+    font-size: 13px;
+  }
+  .empty-icon { font-size: 28px; margin-bottom: 10px; opacity: .5; }
+  .empty-title { font-weight: 600; color: var(--base-content); margin-bottom: 4px; }
+
+  /* ── Console grid (card) ─────────────────────────── */
+  .console-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .overview-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    background: var(--base-100);
+    cursor: pointer;
+    transition: transform .12s, box-shadow .12s;
+  }
+  .overview-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .overview-card.highlighted {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(100,25,230,.12);
+  }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .card-icon {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--base-200);
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+  }
+  .card-title { font-weight: 600; font-size: 14px; }
+  .card-lines { display: flex; flex-direction: column; gap: 4px; }
+  .card-line {
+    display: inline-flex;
+    background: var(--base-200);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: var(--base-content-muted);
+    width: fit-content;
+  }
+
+  .new-tag {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--primary);
+    background: #ede9fe;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+</style>
+
+<!-- ═══════════════════════════════════════════════════════════
+     STATE 1 — Console grid showing the new "Audit logs" card
+     ═══════════════════════════════════════════════════════════ -->
+<div>
+  <p class="mockup-label">1 · Console grid — nouvelle carte "Audit logs"</p>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-dot red"></div>
+      <div class="topbar-dot amber"></div>
+      <div class="topbar-dot green"></div>
+      <div class="topbar-url">localhost:8000/console</div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Admin console</div>
+          <div class="page-subtitle">Server-wide — every organisation. Click an app to configure it.</div>
+        </div>
+        <button class="filter-select" style="width:auto;padding:0 14px;cursor:pointer;">Manage admins</button>
+      </div>
+      <div class="console-grid">
+        <div class="overview-card">
+          <div class="card-header"><div class="card-icon">🏢</div><div class="card-title">Organisations</div></div>
+          <div class="card-lines"><span class="card-line">3 organisations</span><span class="card-line">8 members</span></div>
+        </div>
+        <div class="overview-card">
+          <div class="card-header"><div class="card-icon">📅</div><div class="card-title">Calendar</div></div>
+          <div class="card-lines"><span class="card-line">14 events</span></div>
+        </div>
+        <div class="overview-card">
+          <div class="card-header"><div class="card-icon">☑️</div><div class="card-title">To-do</div></div>
+          <div class="card-lines"><span class="card-line">5 open</span><span class="card-line">12 done</span></div>
+        </div>
+        <div class="overview-card highlighted">
+          <div class="card-header">
+            <div class="card-icon">📜</div>
+            <div class="card-title">Audit logs</div>
+            <span class="new-tag">new</span>
+          </div>
+          <div class="card-lines"><span class="card-line">1 247 events recorded</span></div>
+        </div>
+        <div class="overview-card">
+          <div class="card-header"><div class="card-icon">🎨</div><div class="card-title">Appearance</div></div>
+          <div class="card-lines"><span class="card-line">Theme: light</span></div>
+        </div>
+        <div class="overview-card">
+          <div class="card-header"><div class="card-icon">📄</div><div class="card-title">Pages</div></div>
+          <div class="card-lines"><span class="card-line">22 pages</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     STATE 2 — Logs page, populated, no filter
+     ═══════════════════════════════════════════════════════════ -->
+<div>
+  <p class="mockup-label">2 · /console/logs — vue peuplée (pas de filtre)</p>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-dot red"></div>
+      <div class="topbar-dot amber"></div>
+      <div class="topbar-dot green"></div>
+      <div class="topbar-url">localhost:8000/console/logs</div>
+    </div>
+    <div class="page-content">
+      <a class="back-link" href="#">← Console</a>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Audit logs</div>
+          <div class="page-subtitle">Live event stream across every organisation.</div>
+        </div>
+        <div class="refresh-indicator">
+          <div class="pulse-dot"></div>
+          Live · refreshes every 5 s
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <select class="filter-select">
+          <option>All levels</option>
+          <option>info</option>
+          <option>warning</option>
+          <option>error</option>
+        </select>
+        <input class="filter-input" placeholder="Filter by event name…" type="text">
+        <span class="filter-sep">·</span>
+        <input class="filter-date" type="datetime-local" title="From">
+        <span class="filter-sep">→</span>
+        <input class="filter-date" type="datetime-local" title="To">
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>IP</th>
+              <th>Payload</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="ts">14:32:07.412</span></td>
+              <td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">calendar.event_created</span></td>
+              <td><span class="uid">a3f2…9c1b</span></td>
+              <td><span class="uid">82.64.12.4</span></td>
+              <td><span class="payload">org_id: "d9e1…", event_id: "b2c3…"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:31:55.204</span></td>
+              <td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">auth.sign_in</span></td>
+              <td><span class="uid">a3f2…9c1b</span></td>
+              <td><span class="uid">82.64.12.4</span></td>
+              <td><span class="payload">—</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:29:40.887</span></td>
+              <td><span class="badge badge-warning">warning</span></td>
+              <td><span class="event-name">auth.sign_in_failed</span></td>
+              <td></td>
+              <td><span class="uid">91.120.5.18</span></td>
+              <td><span class="payload">email: "unknown@…"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:28:11.009</span></td>
+              <td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">todo.item_created</span></td>
+              <td><span class="uid">7b1a…e24f</span></td>
+              <td><span class="uid">195.83.41.3</span></td>
+              <td><span class="payload">org_id: "f0a1…", title: "Write specs"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:25:03.661</span></td>
+              <td><span class="badge badge-error">error</span></td>
+              <td><span class="event-name">files.upload_failed</span></td>
+              <td><span class="uid">9c4d…1f72</span></td>
+              <td><span class="uid">46.193.78.22</span></td>
+              <td><span class="payload">reason: "quota_exceeded", size_bytes: 52428800</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:22:50.318</span></td>
+              <td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">org.member_invited</span></td>
+              <td><span class="uid">a3f2…9c1b</span></td>
+              <td><span class="uid">82.64.12.4</span></td>
+              <td><span class="payload">email: "bob@example.com", role: "member"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:19:22.100</span></td>
+              <td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">auth.sign_up</span></td>
+              <td><span class="uid">9c4d…1f72</span></td>
+              <td><span class="uid">46.193.78.22</span></td>
+              <td><span class="payload">—</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     STATE 2b — Live mode, "Load older" button visible
+     ═══════════════════════════════════════════════════════════ -->
+<div>
+  <p class="mockup-label">2b · /console/logs — mode live, bouton "Load older" en bas</p>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-dot red"></div>
+      <div class="topbar-dot amber"></div>
+      <div class="topbar-dot green"></div>
+      <div class="topbar-url">localhost:8000/console/logs</div>
+    </div>
+    <div class="page-content">
+      <a class="back-link" href="#">← Console</a>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Audit logs</div>
+          <div class="page-subtitle">Live event stream across every organisation.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="refresh-indicator">
+            <div class="pulse-dot"></div>
+            Live · refreshes every 5 s
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <select class="filter-select"><option>All levels</option><option>info</option><option>warning</option><option>error</option></select>
+        <input class="filter-input" placeholder="Filter by event name…" type="text">
+        <span class="filter-sep">·</span>
+        <input class="filter-date" type="datetime-local" title="From">
+        <span class="filter-sep">→</span>
+        <input class="filter-date" type="datetime-local" title="To">
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Level</th><th>Event</th><th>User</th><th>IP</th><th>Payload</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="ts">14:32:07.412</span></td><td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">calendar.event_created</span></td><td><span class="uid">a3f2…9c1b</span></td><td><span class="uid">82.64.12.4</span></td><td><span class="payload">org_id: "d9e1…", event_id: "b2c3…"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:31:55.204</span></td><td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">auth.sign_in</span></td><td><span class="uid">a3f2…9c1b</span></td><td><span class="uid">82.64.12.4</span></td><td><span class="payload">—</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">14:28:11.009</span></td><td><span class="badge badge-warning">warning</span></td>
+              <td><span class="event-name">auth.sign_in_failed</span></td><td></td><td><span class="uid">91.120.5.18</span></td><td><span class="payload">email: "unknown@…"</span></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" style="padding:12px;border-top:1px solid var(--base-200);text-align:center;">
+                <button class="filter-select" style="width:auto;padding:0 16px;height:30px;cursor:pointer;color:var(--base-content-muted);">
+                  Load older events ↓
+                </button>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     STATE 2c — Historical mode (paused, browsing past)
+     ═══════════════════════════════════════════════════════════ -->
+<div>
+  <p class="mockup-label">2c · Mode historique — auto-refresh coupé, curseur actif</p>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-dot red"></div>
+      <div class="topbar-dot amber"></div>
+      <div class="topbar-dot green"></div>
+      <div class="topbar-url">localhost:8000/console/logs?before_id=3821</div>
+    </div>
+    <div class="page-content">
+      <a class="back-link" href="#">← Console</a>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Audit logs</div>
+          <div class="page-subtitle">Live event stream across every organisation.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div class="refresh-indicator" style="color:#b45309;background:#fef3c7;border-color:#fcd34d;">
+            <div class="pulse-dot" style="background:#f59e0b;animation:none;opacity:.5;"></div>
+            Paused — browsing history
+          </div>
+          <button class="filter-select" style="width:auto;padding:0 12px;height:32px;cursor:pointer;background:var(--primary);color:white;border-color:var(--primary);">
+            ↑ Back to live
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <select class="filter-select"><option>All levels</option></select>
+        <input class="filter-input" placeholder="Filter by event name…" type="text">
+        <span class="filter-sep">·</span>
+        <input class="filter-date active" type="datetime-local" value="2026-07-01T08:00" title="From">
+        <span class="filter-sep">→</span>
+        <input class="filter-date active" type="datetime-local" value="2026-07-01T12:00" title="To">
+        <span class="filter-badge" style="background:#fef3c7;color:#b45309;">2026-07-01 08:00 → 12:00 <button>×</button></span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Level</th><th>Event</th><th>User</th><th>IP</th><th>Payload</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="ts">09:14:03.211</span></td><td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">org.created</span></td><td><span class="uid">c7e1…4d2a</span></td><td><span class="uid">185.22.4.8</span></td><td><span class="payload">name: "Acme Corp"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">09:13:58.004</span></td><td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">auth.sign_up</span></td><td><span class="uid">c7e1…4d2a</span></td><td><span class="uid">185.22.4.8</span></td><td><span class="payload">—</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">08:55:41.780</span></td><td><span class="badge badge-error">error</span></td>
+              <td><span class="event-name">auth.token_refresh_failed</span></td><td><span class="uid">2e9b…c3a0</span></td><td><span class="uid">172.16.0.1</span></td><td><span class="payload">reason: "session_expired"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">08:31:22.109</span></td><td><span class="badge badge-info">info</span></td>
+              <td><span class="event-name">pages.page_published</span></td><td><span class="uid">7b1a…e24f</span></td><td><span class="uid">195.83.41.3</span></td><td><span class="payload">slug: "getting-started", visibility: "public"</span></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" style="padding:12px;border-top:1px solid var(--base-200);text-align:center;">
+                <button class="filter-select" style="width:auto;padding:0 16px;height:30px;cursor:pointer;color:var(--base-content-muted);">
+                  Load older events ↓
+                </button>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     STATE 3 — Filtered: level=error
+     ═══════════════════════════════════════════════════════════ -->
+<div>
+  <p class="mockup-label">3 · Filtre actif — level = error</p>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-dot red"></div>
+      <div class="topbar-dot amber"></div>
+      <div class="topbar-dot green"></div>
+      <div class="topbar-url">localhost:8000/console/logs/entries?level=error</div>
+    </div>
+    <div class="page-content">
+      <a class="back-link" href="#">← Console</a>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Audit logs</div>
+          <div class="page-subtitle">Live event stream across every organisation.</div>
+        </div>
+        <div class="refresh-indicator" style="color:#b91c1c;background:#fee2e2;border-color:#fca5a5;">
+          <div class="pulse-dot" style="background:#ef4444;"></div>
+          Filtered · refreshes every 5 s
+        </div>
+      </div>
+
+      <!-- Filter bar with active filter badge -->
+      <div class="filter-bar">
+        <select class="filter-select" style="border-color:#b91c1c;color:#b91c1c;">
+          <option>error</option>
+          <option>All levels</option>
+          <option>info</option>
+          <option>warning</option>
+        </select>
+        <input class="filter-input" placeholder="Filter by event name…" type="text">
+        <span class="filter-sep">·</span>
+        <input class="filter-date" type="datetime-local" title="From">
+        <span class="filter-sep">→</span>
+        <input class="filter-date" type="datetime-local" title="To">
+        <span class="filter-badge" style="background:#fee2e2;color:#b91c1c;">
+          error <button>×</button>
+        </span>
+      </div>
+
+      <!-- Table (errors only) -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>IP</th>
+              <th>Payload</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="ts">14:25:03.661</span></td>
+              <td><span class="badge badge-error">error</span></td>
+              <td><span class="event-name">files.upload_failed</span></td>
+              <td><span class="uid">9c4d…1f72</span></td>
+              <td><span class="uid">46.193.78.22</span></td>
+              <td><span class="payload">reason: "quota_exceeded", size_bytes: 52428800</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">13:48:17.002</span></td>
+              <td><span class="badge badge-error">error</span></td>
+              <td><span class="event-name">files.upload_failed</span></td>
+              <td><span class="uid">7b1a…e24f</span></td>
+              <td><span class="uid">195.83.41.3</span></td>
+              <td><span class="payload">reason: "storage_unavailable"</span></td>
+            </tr>
+            <tr>
+              <td><span class="ts">11:02:44.551</span></td>
+              <td><span class="badge badge-error">error</span></td>
+              <td><span class="event-name">auth.token_refresh_failed</span></td>
+              <td><span class="uid">2e9b…c3a0</span></td>
+              <td><span class="uid">172.16.0.1</span></td>
+              <td><span class="payload">reason: "session_expired"</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     STATE 4 — Empty state (filter with no match)
+     ═══════════════════════════════════════════════════════════ -->
+<div>
+  <p class="mockup-label">4 · État vide — filtre sans résultat</p>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-dot red"></div>
+      <div class="topbar-dot amber"></div>
+      <div class="topbar-dot green"></div>
+      <div class="topbar-url">localhost:8000/console/logs/entries?event=stripe</div>
+    </div>
+    <div class="page-content">
+      <a class="back-link" href="#">← Console</a>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Audit logs</div>
+          <div class="page-subtitle">Live event stream across every organisation.</div>
+        </div>
+        <div class="refresh-indicator">
+          <div class="pulse-dot"></div>
+          Filtered · refreshes every 5 s
+        </div>
+      </div>
+
+      <!-- Filter bar with text search active -->
+      <div class="filter-bar">
+        <select class="filter-select">
+          <option>All levels</option>
+        </select>
+        <input class="filter-input" value="stripe" type="text" style="border-color:var(--primary);">
+        <span class="filter-sep">·</span>
+        <input class="filter-date" type="datetime-local" title="From">
+        <span class="filter-sep">→</span>
+        <input class="filter-date" type="datetime-local" title="To">
+        <span class="filter-badge">
+          event contains "stripe" <button>×</button>
+        </span>
+      </div>
+
+      <!-- Empty table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Level</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>IP</th>
+              <th>Payload</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="6">
+                <div class="empty">
+                  <div class="empty-icon">🔍</div>
+                  <div class="empty-title">No events match this filter</div>
+                  No audit logs contain "stripe". Try a different event name.
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

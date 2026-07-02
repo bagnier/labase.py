@@ -3,19 +3,17 @@
 ### technical
 
 - [ ] logs
+- [ ] COW, soft deletion, soft update
 - [ ] async task queue
-- [ ] fulltext index
-- [ ] cache
-- [ ] messaging
+- [ ] fulltext index - elastic
+- [ ] documents - mango
+- [ ] cache - redis
+- [ ] messaging - kafka
 - [ ] email
 - [ ] prod deployment doc (secrets, env)
+- [ ] https://12factor.net
+- [ ] https://w.pitula.me/fintech-engineering-handbook/
 
-### functional
-
-- [ ] public page
-- [ ] user profile
-- [ ] org dashboard
-- [ ] admin console
 
 ### advanced auth
 

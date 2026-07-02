@@ -130,6 +130,18 @@
 .ph.ph-sign-out:before {
   content: "\e42a";
 }
+.ph.ph-scroll:before {
+  content: "\eb7a";
+}
+.ph.ph-arrow-up:before {
+  content: "\e08e";
+}
+.ph.ph-arrow-down:before {
+  content: "\e03e";
+}
+.ph.ph-magnifying-glass:before {
+  content: "\e30c";
+}
 .ph.ph-trend-up:before {
   content: "\e4ae";
 }
