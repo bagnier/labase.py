@@ -106,8 +106,17 @@
 .ph.ph-gear:before {
   content: "\e270";
 }
+.ph.ph-gear-six:before {
+  content: "\e272";
+}
 .ph.ph-globe:before {
   content: "\e288";
+}
+.ph.ph-lock-simple:before {
+  content: "\e308";
+}
+.ph.ph-terminal-window:before {
+  content: "\eae8";
 }
 .ph.ph-lightning:before {
   content: "\e2de";

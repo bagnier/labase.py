@@ -6,8 +6,8 @@
 {% endblock %}
 {% block content %}
   <div class="space-y-6"
-       x-data="{ tab: 'appearance', live: true }"
-       x-init="setInterval(() => { if (live && tab === 'logs') htmx.trigger($refs.entries, 'poll') }, 5000)">
+       x-data="{ tab: 'appearance', live: true, syncTabFromHash() { const h = window.location.hash.slice(1); this.tab = ['appearance', 'logs', 'environment'].includes(h) ? h : 'appearance' }, selectTab(name) { window.location.hash = name }, }"
+       x-init=" syncTabFromHash(); window.addEventListener('hashchange', () => syncTabFromHash()); setInterval(() => { if (live && tab === 'logs') htmx.trigger($refs.entries, 'poll') }, 5000) ">
     <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
     <div>
       <h1 class="text-lg font-semibold">Settings</h1>
@@ -18,17 +18,20 @@
               role="tab"
               class="tab"
               :class="{ 'tab-active': tab === 'appearance' }"
-              @click="tab = 'appearance'">Appearance</button>
+              :aria-selected="tab === 'appearance'"
+              @click="selectTab('appearance')">Appearance</button>
       <button type="button"
               role="tab"
               class="tab"
               :class="{ 'tab-active': tab === 'logs' }"
-              @click="tab = 'logs'">Audit logs</button>
+              :aria-selected="tab === 'logs'"
+              @click="selectTab('logs')">Audit logs</button>
       <button type="button"
               role="tab"
               class="tab"
               :class="{ 'tab-active': tab === 'environment' }"
-              @click="tab = 'environment'">Environment &amp; process</button>
+              :aria-selected="tab === 'environment'"
+              @click="selectTab('environment')">Environment &amp; process</button>
     </div>
     <div x-show="tab === 'appearance'" x-cloak class="max-w-2xl">
       <h2 class="text-sm font-semibold mb-3">Appearance</h2>
