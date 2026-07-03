@@ -64,10 +64,10 @@
 - [x] delete confirmation: `hx-confirm` everywhere (kill `onsubmit=confirm()` in `calendar/view.html:20` and Alpine `confirm()` in `pages/pages.html:133`)
 - [x] naming: audit events `org.*`→`organizations.*`, `file.*`→`files.*`, drop calendar's `event_` prefix; logger `labase.console.store`→`labase.settings.*`; `labase.auth` (no subject) ×2
 - [ ] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
-- [ ] `handle_new_user()` redefined in test-schema migration silently drops `display_name`
+- [x] `handle_new_user()` redefined in test-schema migration silently drops `display_name`
 - [ ] `vulture`+`msgpack` dev-deps never invoked
 - [ ] pre-commit covers ruff only (no biome/djlint/ty)
-- [ ] document `SSL_CERTFILE`/`SSL_KEYFILE` in `.env.example`
+- [x] document `SSL_CERTFILE`/`SSL_KEYFILE` in `.env.example`
 
 #### doublons (by payoff)
 
