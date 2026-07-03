@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -81,6 +81,9 @@ lint:
 	uv run djlint apps --lint
 	uv run djlint apps --check
 	uv run pip-audit
+
+deadcode:
+	uv run vulture apps
 
 # fix: auto-fixes what's fixable, re-checks typing/audit like lint does.
 fix:

@@ -65,7 +65,7 @@
 - [x] naming: audit events `org.*`→`organizations.*`, `file.*`→`files.*`, drop calendar's `event_` prefix; logger `labase.console.store`→`labase.settings.*`; `labase.auth` (no subject) ×2
 - [ ] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
 - [x] `handle_new_user()` redefined in test-schema migration silently drops `display_name`
-- [ ] `vulture`+`msgpack` dev-deps never invoked
+- [x] `vulture`+`msgpack` dev-deps never invoked
 - [x] pre-commit covers ruff only (no biome/djlint/ty)
 - [x] document `SSL_CERTFILE`/`SSL_KEYFILE` in `.env.example`
 

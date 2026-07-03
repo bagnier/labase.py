@@ -648,7 +648,6 @@ dependencies = [
 dev = [
     { name = "coverage" },
     { name = "djlint" },
-    { name = "msgpack" },
     { name = "openapi-python-client" },
     { name = "pip-audit" },
     { name = "playwright" },
@@ -687,7 +686,6 @@ requires-dist = [
 dev = [
     { name = "coverage", specifier = "==7.14.1" },
     { name = "djlint", specifier = "==1.39.4" },
-    { name = "msgpack", specifier = "==1.2.1" },
     { name = "openapi-python-client", specifier = "==0.29.0" },
     { name = "pip-audit", specifier = "==2.10.1" },
     { name = "playwright", specifier = "==1.60.0" },
