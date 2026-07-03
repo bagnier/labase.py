@@ -1,3 +1,86 @@
+## remediation (audit 2026-07-03)
+
+### 1. doc-sync — executable docs must not lie (agent-driven base ⇒ doc drift = prod bug)
+
+- [x] fix `.claude/skills/feature/references/build.md`: `mount(app, host)` → `mount(host)` (L127-142, L208)
+- [x] fix `build.md` L119 + `impact.md` L28: `ShellOrgQuery` / `apps/profile/contract/shell.py` → `OrgNavQuery` / `apps/organizations/contract/shell.py`
+- [x] fix `build.md` L155: Tailwind 3.4 → 4.x; document daisyui 5.x (absent from skill, README and CLAUDE.md)
+- [x] README: `mount(app, host)` → `mount(host)` (L50, L52, L114)
+- [x] README structure: add `calendar/`, `styleguide/`, `client/`, `docs/schema*`; add Biome to quality tools; state calendar's status (demo or core?)
+- [x] README: soften "no mocking the persistence layer" — true for E2E, unit suite does mock sessions/engine (organizations, auth, health)
+
+### 2. contract-readiness — what any client contract would re-pay
+
+- [ ] email — two routes, lightest possible:
+  - auth lifecycle (forgot/reset password, confirmation, email change) → GoTrue calls + Supabase email templates, zero app code
+  - app transactional (org invitations — token exists but is never sent) → tiny `Mailer` port in `apps/shared/email.py` (`Email` dataclass + `Protocol` + `SmtpMailer` via aiosmtplib, env-configured); Jinja2 for text/html; sent via `BackgroundTasks` (audit-style best-effort), moves behind the async-substrate queue later without changing the port
+  - dev: SMTP → local Supabase mail catcher (Inbucket/Mailpit, SMTP 54325) — same inbox as GoTrue mail, nothing to install; prod: any SMTP provider, no vendor SDK
+  - tests: unit → `FakeMailer` recording sent emails (single injection point, clock-style); E2E sincere → driver substrate reads the mail catcher HTTP API (mail really sent, really fetched, both drivers share one mailbox client)
+- [ ] forgot/reset password (see advanced auth below)
+- [ ] prod deployment: compose/manifest, secrets story beyond `.env` files, deploy doc
+- [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
+- [ ] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
+- [ ] `SettingsChanged` live-reload is in-process only — with N instances, only the one handling the POST reloads; others serve stale settings silently. Reload via Postgres NOTIFY or TTL re-read
+- [ ] honor `$PORT` in `docker/entrypoint.sh` (currently hardcoded 8000)
+
+### 3. async substrate — prerequisite to every Postgres-as-X brick
+
+- [ ] durable event table (outbox / pgmq-style, `FOR UPDATE SKIP LOCKED`)
+- [ ] worker entrypoint (process or lifespan task) — nothing long-running exists today
+- [ ] background RLS convention: synthesized tenant claims via `set_config`, not blanket BYPASSRLS
+- [ ] then: email sending, FTS indexing, cache expiry become consumers of this brick
+
+### 4. DX gradation — prototype fast, harden later
+
+- [ ] `/feature` skill: add a prototype mode (merged scenarios+impact, optional mockup, API driver only; browser mixin at stabilization)
+- [ ] promote pages' `_mutation_response` + HX-Redirect patterns into `apps/shared/http/` (bifurcation helpers beyond `render_list`)
+- [ ] scaffold `make new-context NAME=x` (or skill) — the 23-file checklist is mechanical
+- [ ] `new-product` skill: delete demos (incl. todos FK/policy inside `000004_organizations.sql`), rename ~50 hardcoded "labase"
+- [ ] test helpers: `given_helpers` cross-imports between test suites (11 sites) — bless or move to a shared test contract
+
+### 5. simplification — closing windows first
+
+- [ ] **squash migration history while no prod exists** (option disappears at first deploy): one clean migration per context, core/demo separated — absorbs the `000004` todos coupling, `15…`/`16…` backfills/renames, RLS bootstrap fix
+- [ ] browser mixin substrate helpers in `BrowserBase` (`submit_labelled_form`, `wait_htmx`, `row_action`…) — halve per-context mixins without touching the "navigate like a human" rule
+- [ ] single `SettingsChanged` subscription in the settings registry reloading all declared groups — removes the per-`mount()` ritual (9 subscribers)
+- [ ] slim page-context slices machinery (~92 lines, 2 providers) to a plain provider dict — or freeze it as-is until slices multiply
+- [ ] decide `client/` fate: unused → remove/extract; used → document it
+- [ ] merge `apps/styleguide/` into `apps/settings/`: becomes a live demo of the admin-chosen theme, integrated into the console (admin-only) next to the appearance settings — one context fewer, and theme changes get an immediate visual check
+- [ ] non-goal: do NOT abstract the `integration.py` mount ossature into a declarative `mount_standard()` — explicit wiring is the point; the answer to that repetition is the `new-context` scaffold
+
+### 6. contradictions & doublons (audit code 2026-07-03)
+
+#### hard contradictions
+
+- [ ] **CI is blind to lint/format**: `make ci` runs mutating variants (`ruff check --fix`, `biome --write`, `djlint --reformat`, Makefile L76-83) so CI can never fail on style — add check-only targets for CI (`ruff check`, `ruff format --check`, `biome check` (exists in package.json, unused), `djlint --check`)
+- [ ] **`pages` serves authenticated members via BYPASSRLS + Python visibility** (`apps/pages/infra/router.py:377-430`) — split the member path back onto `RlsSession`; keep AdminSession for the anonymous branch only
+- [x] **style docs are fiction**: only `.list-panel` is homemade; `btn/card/input/alert-*` are DaisyUI, `page-title` doesn't exist — fix README L110 + `build.md` styling section; DaisyUI is the system
+- [ ] RLS: add missing `with check` on `profiles: own update` and `organizations: owner update` policies (update can currently rewrite rows out of scope, incl. `profiles.auth_user_id`)
+- [ ] optimistic locking bypassed by bulk reorder `update()` in todo (`repository.py:54-63`) and pages nav (`repository.py:175-176`) — version neither checked nor bumped
+- [ ] standard columns drift: `card_states` has no `created_at`; `todos`/`decks`/`cards` have `version` but no `updated_at`+trigger; `page_nav_items` has none; `deck_subscriptions` no `version` → normalize (fold into the migration squash)
+- [ ] `service_role` grants asymmetric (decks/cards yes; todos/org_files/pages/page_nav_items/calendar_events/org_invitations no) — all or none
+- [ ] `org_invitations` RLS uses inline membership subquery instead of `user_orgs()` idiom
+- [ ] error/mutation conventions: pick one HTML error mechanism per failure class (inline form re-render for 422s; raise→error page for GET 404/403); JSON mutations return the object (kill pages' `{"ok": true}`); `HX-Redirect` always on 204; deletes 204/JSON
+- [ ] delete confirmation: `hx-confirm` everywhere (kill `onsubmit=confirm()` in `calendar/view.html:20` and Alpine `confirm()` in `pages/pages.html:133`)
+- [ ] naming: audit events `org.*`→`organizations.*`, `file.*`→`files.*`, drop calendar's `event_` prefix; logger `labase.console.store`→`labase.settings.*`; `labase.auth` (no subject) ×2
+- [ ] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
+- [ ] misc: `handle_new_user()` redefined in test-schema migration silently drops `display_name`; `vulture`+`msgpack` dev-deps never invoked; pre-commit covers ruff only (no biome/djlint/ty); document `SSL_CERTFILE`/`SSL_KEYFILE` in `.env.example`
+
+#### doublons (by payoff)
+
+- [ ] ORM mixins in `shared/persistence/base.py` (`UUIDPk`, `OrgScoped`, `Versioned`, `Timestamped`) — ~12 models recopy the same 6 lines (~60-70 lines, lowest risk)
+- [ ] `integration.py` ritual: extract `overview_from_count()`, `pluralize()`, `seed_with_owner()` helpers (~120-160 lines across 5 contexts) — factor the bodies, NOT the wiring (mount stays explicit, cf. non-goal above)
+- [ ] Jinja macro `overview_card()` — 5 carbon-copy `_overview.html` ("Open →" link coded 5 different ways); pills as `badge`; component class for the `card bg-base-100 border…` shell respelled ×25
+- [ ] `audit(bg, event, user, org_id, **fields)` helper — 38 `record_audit_event` calls repeat the same first 5 args
+- [ ] `PositionedRepository` mixin — `move_above` algorithm duplicated todo/pages (fix the version bypass there too)
+- [ ] `OrgScopedRepository.default_order` — kills 4 `all()` overrides, todo's redundant `count()`, duplicated `count_all()`
+- [ ] a11y parity: `<section aria-label>` on recent pages (pages/settings/calendar views), `aria-live` on HTMX-swapped lists, use `input_field()` macro in `pages/form.html`
+
+### 7. positioning
+
+- [x] README: state the intent — this base is optimized for agent-driven development (skills as executable specs, dual-driver BDD as agent verification substrate, worktrees for parallel agents); it justifies the ceremony
+- [ ] split this ROADMAP: "contract-readiness" vs "Postgres-as-X demonstrators"; move the Supabase feature catalog to a separate note
+
 ## goals
 
 ### technical
@@ -34,13 +117,13 @@
 
 - [ ] AI Integrations - Enhance applications with OpenAI and Hugging Face integrations.
 - [ ] Auth Hooks - Customize authentication flows with serverless functions.
-- [ ] Authorization via Row Level Security - Control the data each user can access with Postgres Policies.
+- [x] Authorization via Row Level Security - Control the data each user can access with Postgres Policies.
 - [ ] Auto-generated GraphQL API via pg_graphql - Fast GraphQL APIs using our custom Postgres GraphQL extension.
 - [ ] Auto-generated REST API via PostgREST - RESTful APIs auto-generated from your database.
 - [ ] Automatic Embeddings - Automated embedding generation using triggers and queues.
-- [ ] CLI - Use our CLI to develop your project locally and deploy.
+- [x] CLI - Use our CLI to develop your project locally and deploy.
 - [ ] Captcha protection - Add Captcha to your sign-in, sign-up, and password reset forms.
-- [ ] Client Library - Python - Integrate Supabase easily into your Python applications.
+- [x] Client Library - Python - Integrate Supabase easily into your Python applications.
 - [ ] Content Delivery Network - Cache large files using the Supabase CDN.
 - [ ] Cron - Schedule recurring Jobs in Postgres.
 - [ ] Custom Identity Providers - Connect any OAuth2 or OIDC identity provider to Supabase Auth.
@@ -51,8 +134,8 @@
 - [ ] Deno Edge Functions - Globally distributed TypeScript functions to execute custom business logic.
 - [ ] Functions
 - [ ] Email Templates - Customizable email templates for all authentication flows.
-- [ ] Email login - Build email logins for your application or website.
-- [ ] File storage - Supabase Storage makes it simple to store and serve files.
+- [x] Email login - Build email logins for your application or website (confirmations disabled locally).
+- [x] File storage - Supabase Storage makes it simple to store and serve files.
 - [ ] Foreign Data Wrappers - Query external data sources as Postgres tables.
 - [ ] Foreign Key Selector - Easily manage foreign key relationships between tables.
 - [ ] Image transformations - Optimize and resize images on-the-fly directly from your Supabase storage buckets.
@@ -68,7 +151,7 @@
 - [ ] Policy Templates - Quickly implement common security policies.
 - [ ] Postgres Extensions - Enhance your database with popular Postgres extensions.
 - [ ] Postgres Roles - Managing access to your Postgres database and configuring permissions.
-- [ ] Postgres database - Every project is a full Postgres database.
+- [x] Postgres database - Every project is a full Postgres database.
 - [ ] Broadcast - Send messages between connected users through websockets.
 - [ ] Broadcast Authorization - Control access to broadcast channels in real-time.
 - [ ] Broadcast from the Database - Trigger broadcast messages directly from Postgres.

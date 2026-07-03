@@ -25,7 +25,7 @@ for each, whether this feature participates (implementation details are in `buil
   admin (BYPASSRLS) session, no `org_id`.
 - **Menu** — does it add a sidebar entry? → a `NavItem(label, icon, segment, match, order,
   owner_only)` via `host.register_nav(...)`. Dynamic per-org entries instead → a
-  `ShellOrgQuery` handler (e.g. pages contributing its published pages).
+  `OrgNavQuery` handler (e.g. pages contributing its published pages).
 - **Seeding** — does a new org need starter data? → subscribe to the `OrgCreated` event and
   write with the admin (BYPASSRLS) session. This is how the sign-up chain seeds welcome data
   (`signup → UserCreated → OrgCreated → {files, learning, todo} seed`).

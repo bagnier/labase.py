@@ -54,7 +54,7 @@ apps/<module>/
              repository.py (Protocol), exceptions.py
   infra/     repository.py (SQLAlchemy impl, extends BaseRepository), router.py (FastAPI),
              context.py (Depends resolvers)
-  contract/  integration.py (mount(app, host)), current.py (re-exported Depends),
+  contract/  integration.py (mount(host)), current.py (re-exported Depends),
              queries.py (cross-app read functions), events.py (event dataclasses)
   templates/<module>/   Jinja2 + HTMX
   tests/e2e/ steps.py, driver_mixin_api.py, driver_mixin_browser.py,
@@ -116,7 +116,7 @@ Implement here the surfaces decided in the Impact phase, all via `host.events.on
   settings.reload)` for live reload. Source: `apps/settings/contract/settings.py`.
 - **Menu**: `host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos",
   order=10, owner_only=False))` (`apps/shared/host.py`). For dynamic per-org entries, handle
-  `ShellOrgQuery` instead (`apps/profile/contract/shell.py`).
+  `OrgNavQuery` instead (`apps/organizations/contract/shell.py`).
 - **Seeding**: `host.events.on(OrgCreated, _seed)`; `_seed(event)` opens
   `admin_session_factory()()` (BYPASSRLS), fetches the owner via `get_org_owner_id(session,
   event.org_id)`, writes starter rows, `commit()`. Source: `apps/todo/contract/integration.py`.
@@ -124,17 +124,17 @@ Implement here the surfaces decided in the Impact phase, all via `host.events.on
 - **Feature switch**: declare `feature_switch()` among the settings, then short-circuit (see
   `mount()` order below).
 
-### `mount(app, host)` order (toggleable app)
+### `mount(host)` order (toggleable app)
 
 ```python
-def mount(app: FastAPI, host: Host) -> None:
+def mount(host: Host) -> None:
     host.events.on(ConsoleOverviewQuery, _console_overview)  # always present, even if disabled
     _declare_settings()                                      # always declarable in console
     if not get_app_settings("<module>").enabled:             # feature switch → short-circuit
         return
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
-    app.include_router(router, prefix=ORG_PREFIX)            # org-scoped: ORG_PREFIX
+    host.app.include_router(router, prefix=ORG_PREFIX)       # org-scoped: ORG_PREFIX
     host.register_nav(NavItem(...))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
@@ -150,16 +150,16 @@ the `render_list(...)` helper (`apps/shared/http/responses.py`) passing both `fr
 `page_context`); HTMX fragments don't — no middleware injects it. Partials are named `_*.html`
 (e.g. `_overview.html`, `_list_fragment.html`).
 
-## Styling — Tailwind component classes (not raw utility soup)
+## Styling — daisyUI components (not raw utility soup)
 
-Tailwind 3.4, built via `npm run build:css` into `static/css/tailwind.css`. **Reuse the
-component classes** defined in `@layer components` in `static/css/input.css` instead of
-re-spelling long utility chains: `btn` / `btn-primary` / `btn-secondary` / `btn-danger` /
-`btn-sm`, `input`, `card`, `list-panel`, `alert` / `alert-error` / `alert-success` /
-`alert-info`, `page-title` / `section-title` / `meta-text`, `nav-link`, `md-body`. Markdown
-output is styled via the `md-body` wrapper. Add a new shared visual pattern as a component
-class in `input.css` (with `@apply`); keep one-off layout (`flex`, `gap-2`, `max-w-2xl`) inline.
-Icons are Phosphor (`<i class="ph ph-<name>">`).
+Tailwind CSS 4 + **daisyUI 5**, built via `npm run build:css` into `static/css/tailwind.css`.
+daisyUI is the component system — **reuse its components** (`btn` / `btn-primary` /
+`btn-sm`, `input`, `card`, `alert` / `alert-error` / `alert-success`, `badge`, `stat`,
+`menu`, `link`…) instead of re-spelling long utility chains. Project-specific component
+classes live in `@layer components` in `static/css/input.css`: `list-panel` (bordered list
+container) and `md-body` (Markdown output wrapper). Add a new shared visual pattern there
+(with `@apply`); keep one-off layout (`flex`, `gap-2`, `max-w-2xl`) inline. Icons are
+Phosphor (`<i class="ph ph-<name>">`).
 
 ## Accessible & semantic HTML
 
@@ -204,8 +204,8 @@ Use `clock.now()` (`apps/shared`) as the single source of time — never `dateti
 ## Composition
 
 Register a brand-new context in `apps/main.py` (`_apps`, in dependency order; `public` stays
-last so its `/{slug}` catch-all doesn't shadow fixed prefixes) and expose its `mount(app,
-host)` from `contract/integration.py`.
+last so its `/{slug}` catch-all doesn't shadow fixed prefixes) and expose its
+`mount(host)` from `contract/integration.py`.
 
 ## Refactoring
 
