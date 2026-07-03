@@ -22,11 +22,7 @@ alter table public.org_invitations enable row level security;
 
 create policy "org_invitations: member read"
   on public.org_invitations for select
-  using (exists(
-    select 1 from public.memberships
-    where memberships.org_id = org_invitations.org_id
-      and memberships.auth_user_id = auth.uid()
-  ));
+  using (org_id in (select public.user_orgs()));
 
 create policy "org_invitations: owner insert"
   on public.org_invitations for insert
@@ -80,3 +76,4 @@ end;
 $$;
 
 grant select, insert, update, delete on public.org_invitations to authenticated;
+grant select, insert, update, delete on public.org_invitations to service_role;

@@ -2,11 +2,15 @@ create table public.profiles (
   id           uuid primary key default gen_random_uuid(),
   auth_user_id uuid not null unique references auth.users(id) on delete cascade,
   email        text not null,
-  display_name text,
+  handle       text,
   version      integer not null default 1,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Partial unique index: nulls allowed (handle set lazily in Python on first profile access)
+create unique index profiles_handle_unique on public.profiles (handle)
+  where handle is not null;
 
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
@@ -24,11 +28,11 @@ create trigger profiles_updated_at
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
-  insert into public.profiles (auth_user_id, email, display_name)
-    values (new.id, new.email, new.email) on conflict do nothing;
+  insert into public.profiles (auth_user_id, email, handle)
+    values (new.id, new.email, null) on conflict do nothing;
   begin
-    insert into test.profiles (auth_user_id, email, display_name)
-      values (new.id, new.email, new.email) on conflict do nothing;
+    insert into test.profiles (auth_user_id, email, handle)
+      values (new.id, new.email, null) on conflict do nothing;
   exception when undefined_table then null;
   end;
   return new;
@@ -47,7 +51,8 @@ create policy "profiles: own read"
 
 create policy "profiles: own update"
   on public.profiles for update
-  using (auth.uid() = auth_user_id);
+  using (auth.uid() = auth_user_id)
+  with check (auth.uid() = auth_user_id);
 
 create policy "profiles: own insert"
   on public.profiles for insert

@@ -40,7 +40,7 @@
 
 ### 5. simplification — closing windows first
 
-- [ ] **squash migration history while no prod exists** (option disappears at first deploy): one clean migration per context, core/demo separated — absorbs the `000004` todos coupling, `15…`/`16…` backfills/renames, RLS bootstrap fix
+- [x] **squash migration history while no prod exists** (option disappears at first deploy): one clean migration per context, core/demo separated — absorbs the `000004` todos coupling, `15…`/`16…` backfills/renames, RLS bootstrap fix
 - [ ] browser mixin substrate helpers in `BrowserBase` (`submit_labelled_form`, `wait_htmx`, `row_action`…) — halve per-context mixins without touching the "navigate like a human" rule
 - [ ] single `SettingsChanged` subscription in the settings registry reloading all declared groups — removes the per-`mount()` ritual (9 subscribers)
 - [ ] slim page-context slices machinery (~92 lines, 2 providers) to a plain provider dict — or freeze it as-is until slices multiply
@@ -55,11 +55,11 @@
 - [x] **CI is blind to lint/format**: `make lint` is now read-only (`ruff check`, `npm run lint` = `biome check`, `djlint --lint`/`--check`) and used by `make ci`; mutating fixes moved to the new `make finalize` target
 - [ ] **`pages` serves authenticated members via BYPASSRLS + Python visibility** (`apps/pages/infra/router.py:377-430`) — split the member path back onto `RlsSession`; keep AdminSession for the anonymous branch only
 - [x] **style docs are fiction**: only `.list-panel` is homemade; `btn/card/input/alert-*` are DaisyUI, `page-title` doesn't exist — fix README L110 + `build.md` styling section; DaisyUI is the system
-- [ ] RLS: add missing `with check` on `profiles: own update` and `organizations: owner update` policies (update can currently rewrite rows out of scope, incl. `profiles.auth_user_id`)
+- [x] RLS: add missing `with check` on `profiles: own update` and `organizations: owner update` policies (update can currently rewrite rows out of scope, incl. `profiles.auth_user_id`)
 - [ ] optimistic locking bypassed by bulk reorder `update()` in todo (`repository.py:54-63`) and pages nav (`repository.py:175-176`) — version neither checked nor bumped
-- [ ] standard columns drift: `card_states` has no `created_at`; `todos`/`decks`/`cards` have `version` but no `updated_at`+trigger; `page_nav_items` has none; `deck_subscriptions` no `version` → normalize (fold into the migration squash)
-- [ ] `service_role` grants asymmetric (decks/cards yes; todos/org_files/pages/page_nav_items/calendar_events/org_invitations no) — all or none
-- [ ] `org_invitations` RLS uses inline membership subquery instead of `user_orgs()` idiom
+- [x] standard columns drift: `card_states` has no `created_at`; `todos`/`decks`/`cards` have `version` but no `updated_at`+trigger; `page_nav_items` has none; `deck_subscriptions` no `version` → normalize (fold into the migration squash)
+- [x] `service_role` grants asymmetric (decks/cards yes; todos/org_files/pages/page_nav_items/calendar_events/org_invitations no) — all or none
+- [x] `org_invitations` RLS uses inline membership subquery instead of `user_orgs()` idiom
 - [ ] error/mutation conventions: pick one HTML error mechanism per failure class (inline form re-render for 422s; raise→error page for GET 404/403); JSON mutations return the object (kill pages' `{"ok": true}`); `HX-Redirect` always on 204; deletes 204/JSON
 - [ ] delete confirmation: `hx-confirm` everywhere (kill `onsubmit=confirm()` in `calendar/view.html:20` and Alpine `confirm()` in `pages/pages.html:133`)
 - [ ] naming: audit events `org.*`→`organizations.*`, `file.*`→`files.*`, drop calendar's `event_` prefix; logger `labase.console.store`→`labase.settings.*`; `labase.auth` (no subject) ×2

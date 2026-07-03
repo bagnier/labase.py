@@ -29,3 +29,4 @@ create policy "calendar_events: org members"
   with check (org_id in (select public.user_orgs()));
 
 grant select, insert, update, delete on public.calendar_events to authenticated;
+grant select, insert, update, delete on public.calendar_events to service_role;

@@ -57,6 +57,15 @@ class PageNavItem(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id"))
     position: Mapped[int] = mapped_column(default=0)
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
+
+    __mapper_args__ = {"version_id_col": version}
 
 
 class NavCandidate(BaseModel):

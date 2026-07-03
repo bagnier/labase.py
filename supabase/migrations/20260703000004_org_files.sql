@@ -26,6 +26,7 @@ create policy "org_files: org members"
   with check (org_id in (select public.user_orgs()));
 
 grant select, insert, update, delete on public.org_files to authenticated;
+grant select, insert, update, delete on public.org_files to service_role;
 
 -- Share tokens: immutable, token is the auth gate — no version, no updated_at, no RLS
 create table public.org_file_share_tokens (
@@ -54,6 +55,13 @@ create policy "org-files: org members select"
 create policy "org-files: org members insert"
   on storage.objects for insert
   with check (
+    bucket_id = 'org-files'
+    and (storage.foldername(name))[1]::uuid in (select public.user_orgs())
+  );
+
+create policy "org-files: org members update"
+  on storage.objects for update
+  using (
     bucket_id = 'org-files'
     and (storage.foldername(name))[1]::uuid in (select public.user_orgs())
   );

@@ -35,3 +35,31 @@ create policy "pages: public read"
 
 grant select, insert, update, delete on public.pages to authenticated;
 grant select on public.pages to anon;
+grant select, insert, update, delete on public.pages to service_role;
+
+create table public.page_nav_items (
+  id         uuid primary key default gen_random_uuid(),
+  org_id     uuid not null references public.organizations(id) on delete cascade,
+  page_id    uuid not null references public.pages(id) on delete cascade,
+  position   integer not null default 0,
+  version    integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (org_id, page_id)
+);
+
+create trigger page_nav_items_updated_at
+  before update on public.page_nav_items
+  for each row execute procedure public.set_updated_at();
+
+create index page_nav_items_org on public.page_nav_items (org_id, position);
+
+alter table public.page_nav_items enable row level security;
+
+create policy "page_nav_items: org members"
+  on public.page_nav_items for all
+  using  (org_id in (select public.user_orgs()))
+  with check (org_id in (select public.user_orgs()));
+
+grant select, insert, update, delete on public.page_nav_items to authenticated;
+grant select, insert, update, delete on public.page_nav_items to service_role;

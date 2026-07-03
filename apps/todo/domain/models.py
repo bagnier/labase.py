@@ -24,6 +24,9 @@ class TodoItem(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: clock.now()
+    )
 
 
 class TodoCreate(BaseModel):
