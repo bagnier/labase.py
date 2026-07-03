@@ -88,7 +88,7 @@ async def test_handle_http_error_401_htmx():
     req = _mock_request(headers={"HX-Request": "true"})
     exc = HTTPException(status_code=401)
     resp = await handle_http_error(req, exc)
-    assert resp.status_code == 200
+    assert resp.status_code == 204
     assert resp.headers["HX-Redirect"] == "/auth/login"
 
 

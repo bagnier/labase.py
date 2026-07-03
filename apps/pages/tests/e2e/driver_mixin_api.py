@@ -183,7 +183,7 @@ class PagesApiMixin(ApiBase):
     def given_in_nav(self, title: str) -> None:
         slug = self._slug_for(title)
         resp = self.client().post(self._nav_url(), json={"slug": slug})
-        assert resp.status_code == 200, f"add to nav got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 201, f"add to nav got {resp.status_code}: {resp.text}"
 
     def add_to_nav(self, title: str) -> None:
         self.given_in_nav(title)
@@ -191,7 +191,7 @@ class PagesApiMixin(ApiBase):
     def remove_from_nav(self, title: str) -> None:
         slug = self._slug_for(title)
         resp = self.client().delete(self._nav_url(f"/{slug}"))
-        assert resp.status_code == 200, f"remove from nav got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 204, f"remove from nav got {resp.status_code}: {resp.text}"
 
     def move_nav_above(self, title: str, other: str) -> None:
         slug = self._slug_for(title)

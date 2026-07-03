@@ -6,7 +6,15 @@ from fastapi.responses import HTMLResponse, Response
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
-from apps.shared.http import or_404, parse_body, parse_field, render_list, wants_full_page
+from apps.shared.http import (
+    delete_response,
+    or_404,
+    parse_body,
+    parse_field,
+    render_list,
+    wants_full_page,
+    wants_json,
+)
 from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import shell_context
 from apps.todo.contract import settings
@@ -140,6 +148,8 @@ async def delete_todo(
             org_id=str(org_id),
             todo_id=str(todo_id),
         )
+    if wants_json(request):
+        return delete_response(request)
     return await _render(request, session, current_user, repo, org)
 
 

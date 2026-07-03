@@ -26,7 +26,14 @@ from apps.organizations.contract.current import (
     OrgRole,
 )
 from apps.shared.clock import now
-from apps.shared.http import or_404, parse_field, render_list, wants_full_page, wants_json
+from apps.shared.http import (
+    delete_response,
+    or_404,
+    parse_field,
+    render_list,
+    wants_full_page,
+    wants_json,
+)
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import shell_context
@@ -207,6 +214,8 @@ async def delete_file(
         file_id=str(file_id),
     )
 
+    if wants_json(request):
+        return delete_response(request)
     files = await repo.all()
     return await _render(request, session, current_user, files, org)
 

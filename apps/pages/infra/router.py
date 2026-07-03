@@ -13,14 +13,14 @@ from apps.organizations.contract.current import (
     OrgRole,
 )
 from apps.organizations.contract.queries import org_by_handle, role_in_org
-from apps.pages.domain.models import Page, PageRead, PageVisibility
+from apps.pages.domain.models import NavItemRead, Page, PageRead, PageVisibility
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
     PageNavRepository,
     PageRepository,
     visible_pages,
 )
-from apps.shared.http import or_404, parse_body, wants_json
+from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import fullpage_context
@@ -45,12 +45,6 @@ def _can_edit(page: Page, membership: Membership) -> bool:
 
 def _can_view(visibility: PageVisibility, role: OrgRole | None) -> bool:
     return visibility == PageVisibility.public or role is not None
-
-
-def _mutation_response(request: Request, org_handle: str) -> Response:
-    if wants_json(request):
-        return JSONResponse({"ok": True})
-    return RedirectResponse(f"/{org_handle}/pages", status_code=303)
 
 
 # ── authed management routes (mounted under /{org_handle}, RLS) ────────────────
@@ -196,11 +190,12 @@ async def update_page(
     )
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
     # page so the save lands on visible, rendered output instead of a silent swap.
-    if request.headers.get("HX-Request") == "true":
-        resp = Response(status_code=204)
-        resp.headers["HX-Redirect"] = f"/{org.handle}/pages/{page.slug}"
-        return resp
-    return _mutation_response(request, org.handle)
+    return mutation_response(
+        request,
+        obj=PageRead.model_validate(page),
+        redirect_url=f"/{org.handle}/pages",
+        htmx_redirect_url=f"/{org.handle}/pages/{page.slug}",
+    )
 
 
 @router.delete("/{slug}")
@@ -227,11 +222,7 @@ async def delete_page(
         slug=slug,
     )
     # Deleting from the edit page (HTMX) → send the browser back to the list.
-    if request.headers.get("HX-Request") == "true":
-        resp = Response(status_code=204)
-        resp.headers["HX-Redirect"] = f"/{org.handle}/pages"
-        return resp
-    return _mutation_response(request, org.handle)
+    return delete_response(request, htmx_redirect_url=f"/{org.handle}/pages")
 
 
 _PUBLISH_EVENT = {
@@ -270,7 +261,9 @@ async def set_visibility(
         org_id=str(org_id),
         slug=slug,
     )
-    return _mutation_response(request, org.handle)
+    return mutation_response(
+        request, obj=PageRead.model_validate(page), redirect_url=f"/{org.handle}/pages"
+    )
 
 
 async def _get_nav_repo(session: RlsSession, org_id: CurrentOrg) -> PageNavRepository:
@@ -322,9 +315,12 @@ async def add_to_nav(
             status.HTTP_422_UNPROCESSABLE_ENTITY, "Draft pages cannot be added to navigation"
         )
     await nav_repo.add(page.id)
-    if wants_json(request):
-        return JSONResponse({"ok": True})
-    return RedirectResponse(f"/{org.handle}/pages/nav", status_code=303)
+    item = NavItemRead(
+        page_id=page.id, slug=page.slug, title=page.title, visibility=page.visibility
+    )
+    return mutation_response(
+        request, obj=item, redirect_url=f"/{org.handle}/pages/nav", status_code=201
+    )
 
 
 @router.delete("/nav/{slug}")
@@ -341,7 +337,7 @@ async def remove_from_nav(
     page = or_404(await repo.by_slug(slug))
     await nav_repo.remove(page.id)
     if wants_json(request):
-        return JSONResponse({"ok": True})
+        return delete_response(request)
     return RedirectResponse(f"/{org.handle}/pages/nav", status_code=303)
 
 
@@ -364,7 +360,10 @@ async def reorder_nav(
         if above_page:
             above_id = above_page.id
     await nav_repo.move_above(page.id, above_id)
-    return JSONResponse({"ok": True})
+    item = NavItemRead(
+        page_id=page.id, slug=page.slug, title=page.title, visibility=page.visibility
+    )
+    return JSONResponse(item.model_dump(mode="json"))
 
 
 # ── public-capable routes (root-mounted; serve members and anon visitors) ──────

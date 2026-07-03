@@ -27,7 +27,7 @@ from apps.organizations.domain.models import (
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.host import host
-from apps.shared.http import or_404, parse_body, wants_json
+from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import fullpage_context
@@ -117,7 +117,7 @@ async def create_organization(
         result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
         return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
     if request.headers.get("HX-Request"):
-        response = Response(status_code=status.HTTP_200_OK)
+        response = Response(status_code=status.HTTP_204_NO_CONTENT)
         response.headers["HX-Redirect"] = f"/{org.handle}/dashboard"
         return response
     return RedirectResponse(url=f"/{org.handle}/dashboard", status_code=303)
@@ -327,11 +327,7 @@ async def leave_organization(
     record_audit_event(
         bg, level="info", event="org.member_left", user_id=current_user.id, org_id=str(org_id)
     )
-    if wants_json(request):
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    response = Response(status_code=200)
-    response.headers["HX-Redirect"] = "/profile"
-    return response
+    return delete_response(request, htmx_redirect_url="/profile")
 
 
 @org_router.patch("/members/{user_id}", response_class=HTMLResponse)
@@ -428,8 +424,10 @@ async def remove_member(
         org_id=str(org_id),
         target_user_id=str(user_id),
     )
+    # HTML stays on the members page and re-renders an OOB count, not a redirect,
+    # so this only ever uses delete_response's JSON branch.
     if wants_json(request):
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return delete_response(request)
     members = await _build_members(repo, org_id)
     count = len(members)
     label = f"{count} member{'s' if count != 1 else ''}"
@@ -558,8 +556,10 @@ async def revoke_invitation(
         org_id=str(org_id),
         invitation_id=str(invitation_id),
     )
+    # HTML re-renders the pending-invitations fragment in place, not a redirect,
+    # so this only ever uses delete_response's JSON branch.
     if wants_json(request):
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return delete_response(request)
     org = await repo.get(org_id)
     org_handle = request.path_params.get("org_handle", org.handle if org else "")
     raw_invs = await repo.list_invitations(org_id)

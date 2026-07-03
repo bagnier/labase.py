@@ -5,9 +5,11 @@ from apps.shared.http.content_type import (
     wants_html,
     wants_json,
 )
-from apps.shared.http.responses import or_404, render_list
+from apps.shared.http.responses import delete_response, mutation_response, or_404, render_list
 
 __all__ = [
+    "delete_response",
+    "mutation_response",
     "or_404",
     "parse_body",
     "parse_field",

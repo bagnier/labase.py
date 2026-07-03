@@ -1,5 +1,5 @@
 import structlog
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from apps.shared.http import wants_json
@@ -69,7 +69,7 @@ async def handle_http_error(request: Request, exc: HTTPException) -> Response:
     )
     if exc.status_code == 401:
         if request.headers.get("HX-Request"):
-            r = Response(status_code=200)
+            r = Response(status_code=status.HTTP_204_NO_CONTENT)
             r.headers["HX-Redirect"] = "/auth/login"
             return r
         if not wants_json(request):

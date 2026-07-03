@@ -119,11 +119,13 @@ def _admins_json(rows: list) -> JSONResponse:
     return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in rows]})
 
 
-def _admins_partial(request: Request, rows: list, *, error: str | None = None) -> Response:
+def _admins_partial(
+    request: Request, rows: list, *, error: str | None = None, status_code: int = status.HTTP_200_OK
+) -> Response:
     ctx: dict[str, object] = {"admins": rows, "admin_count": len(rows)}
     if error is not None:
         ctx["error"] = error
-    return templates.TemplateResponse(request, "console/_admins.html", ctx)
+    return templates.TemplateResponse(request, "console/_admins.html", ctx, status_code=status_code)
 
 
 # Registered before "/{app}" so "admins" is not captured as an app slug.
@@ -155,7 +157,13 @@ async def add_admin(request: Request, current_user: CurrentAdmin, bg: Background
     except AdminNotFound as exc:
         if wants_json(request):
             return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
-        return _admins_partial(request, await admins.list_admins(), error=exc.email)
+        # Matches the JSON branch: "not found by email" is a 404, not a validation failure.
+        return _admins_partial(
+            request,
+            await admins.list_admins(),
+            error=exc.email,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     record_audit_event(
         bg,
         level="warning",

@@ -19,6 +19,7 @@
   </li>
 {% endblock %}
 {% from "macros/input_field.html" import input_field, textarea_field %}
+{% from "macros/alert.html" import alert %}
 {% block content %}
   <div class="max-w-xl space-y-6">
     <h1 class="text-lg font-semibold">
@@ -28,6 +29,7 @@
         New event
       {% endif %}
     </h1>
+    {{ alert("error", error) }}
     <form method="post"
           action="/{{ org_handle }}/{{ action }}"
           class="card bg-base-100 border border-base-300 shadow-sm">

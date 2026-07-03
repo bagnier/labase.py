@@ -167,11 +167,59 @@ async def new_event_form(
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
 
 
+async def _form_error_response(
+    request: Request,
+    session: RlsSession,
+    current_user: CurrentUser,
+    org: CurrentOrgModel,
+    body: dict,
+    *,
+    event: CalendarEvent | dict | None,
+    action: str,
+    error: str,
+) -> Response:
+    ctx = await fullpage_context(
+        session,
+        current_user,
+        org=org,
+        org_handle=org.handle,
+        event=event,
+        action=action,
+        start_date=str(body.get("start_date", "")),
+        start_time=str(body.get("start_time", "")),
+        end_date=str(body.get("end_date", "")),
+        end_time=str(body.get("end_time", "")),
+        error=error,
+    )
+    return templates.TemplateResponse(
+        request, "calendar/form.html", ctx, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+    )
+
+
+async def _reject(
+    request: Request,
+    session: RlsSession,
+    current_user: CurrentUser,
+    org: CurrentOrgModel,
+    body: dict,
+    *,
+    event: CalendarEvent | dict | None,
+    action: str,
+    error: str,
+) -> Response:
+    if wants_json(request):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, error)
+    return await _form_error_response(
+        request, session, current_user, org, body, event=event, action=action, error=error
+    )
+
+
 @router.post("")
 async def create_event(
     request: Request,
     bg: BackgroundTasks,
     current_user: CurrentUser,
+    session: RlsSession,
     repo: CalendarRepo,
     org_id: CurrentOrg,
     org: CurrentOrgModel,
@@ -179,8 +227,29 @@ async def create_event(
     body = await parse_body(request)
     title = str(body.get("title", "")).strip()
     if not title:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A title is required")
-    start, end = _require_times(_combine(body, "start"), _combine(body, "end"))
+        return await _reject(
+            request,
+            session,
+            current_user,
+            org,
+            body,
+            event=body,
+            action="calendar",
+            error="A title is required",
+        )
+    try:
+        start, end = _require_times(_combine(body, "start"), _combine(body, "end"))
+    except HTTPException as exc:
+        return await _reject(
+            request,
+            session,
+            current_user,
+            org,
+            body,
+            event=body,
+            action="calendar",
+            error=str(exc.detail),
+        )
     event = await repo.add(
         uuid.UUID(current_user.id),
         title,
@@ -258,6 +327,7 @@ async def update_event(
     bg: BackgroundTasks,
     event_id: uuid.UUID,
     current_user: CurrentUser,
+    session: RlsSession,
     repo: CalendarRepo,
     org_id: CurrentOrg,
     org: CurrentOrgModel,
@@ -270,7 +340,19 @@ async def update_event(
             event.title = title
     start_raw, end_raw = _combine(body, "start"), _combine(body, "end")
     if start_raw or end_raw:
-        event.starts_at, event.ends_at = _require_times(start_raw, end_raw)
+        try:
+            event.starts_at, event.ends_at = _require_times(start_raw, end_raw)
+        except HTTPException as exc:
+            return await _reject(
+                request,
+                session,
+                current_user,
+                org,
+                body,
+                event=event,
+                action=f"calendar/{event.id}",
+                error=str(exc.detail),
+            )
     if body.get("location") is not None:
         event.location = str(body["location"])
     if body.get("description") is not None:

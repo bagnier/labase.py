@@ -60,7 +60,7 @@
 - [x] standard columns drift: `card_states` has no `created_at`; `todos`/`decks`/`cards` have `version` but no `updated_at`+trigger; `page_nav_items` has none; `deck_subscriptions` no `version` → normalize (fold into the migration squash)
 - [x] `service_role` grants asymmetric (decks/cards yes; todos/org_files/pages/page_nav_items/calendar_events/org_invitations no) — all or none
 - [x] `org_invitations` RLS uses inline membership subquery instead of `user_orgs()` idiom
-- [ ] error/mutation conventions: pick one HTML error mechanism per failure class (inline form re-render for 422s; raise→error page for GET 404/403); JSON mutations return the object (kill pages' `{"ok": true}`); `HX-Redirect` always on 204; deletes 204/JSON
+- [x] error/mutation conventions: pick one HTML error mechanism per failure class (inline form re-render for 422s; raise→error page for GET 404/403); JSON mutations return the object (kill pages' `{"ok": true}`); `HX-Redirect` always on 204; deletes 204/JSON
 - [ ] delete confirmation: `hx-confirm` everywhere (kill `onsubmit=confirm()` in `calendar/view.html:20` and Alpine `confirm()` in `pages/pages.html:133`)
 - [ ] naming: audit events `org.*`→`organizations.*`, `file.*`→`files.*`, drop calendar's `event_` prefix; logger `labase.console.store`→`labase.settings.*`; `labase.auth` (no subject) ×2
 - [ ] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
