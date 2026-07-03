@@ -264,10 +264,8 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), [Docker](https://www.docker.com
 [Supabase CLI](https://supabase.com/docs/guides/cli), [Node.js](https://nodejs.org/) 24+.
 
 ```bash
-make install      # uv sync + pre-commit hooks + front-end assets (static/)
-make db-start     # start local Supabase (first run pulls ~10 containers; applies migrations)
-make env          # write .env from `supabase status -o env`
-make dev          # Supabase + app via Docker Compose, hot-reload
+make install
+make dev
 ```
 
 App: http://localhost:8000 · Swagger: http://localhost:8000/docs
@@ -336,7 +334,7 @@ reinstall. The same mechanism makes the main repo's own tests run in a real `tes
 ### Commands
 
 ```bash
-make dev          # Docker Compose in dev mode (hot-reload)
+make dev          # Start Supabase + Docker Compose in dev mode (hot-reload)
 make up           # Docker Compose in background
 make down         # Stop containers
 make logs         # App logs
@@ -350,18 +348,16 @@ make env          # Write .env from `supabase status -o env`
 make worktree NAME=x     # New git worktree with its own schema/bucket/port
 make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)
 
-make install      # uv sync + pre-commit + .env + npm install + npm run build
+make install      # Supabase + uv sync + pre-commit + npm install + .env + npm run build
 
-make lint         # ruff + biome + djlint (auto-fix)
-make format       # ruff format + biome + djlint
-make typecheck    # ty check
-make quality      # lint + format + typecheck
+make lint         # ruff + ty + biome + djlint + pip-audit, read-only (fails on non-conforming code)
+make fix          # ruff --fix + format + ty + biome + djlint --reformat + pip-audit
 
 make test         # pytest unit/integration (generates coverage)
 make test-e2e     # pytest-bdd browser driver + Playwright E2E
-make test-all     # test + test-e2e + coverage XML
 
-make ci           # js-build + lint + format + typecheck + audit + test + test-e2e + coverage
+make finalize     # js-build + fix + test (run before committing)
+make ci           # js-build + lint + test + test-e2e + coverage, all steps run even if one fails
 ```
 
 ## Demo apps — and how to build your own

@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e test-all ci install js-build quality lint format typecheck coverage-erase coverage-xml coverage-html cert letsencrypt audit upgrade act client-gen worktree worktree-rm provision-test
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -7,10 +7,11 @@ WORKTREE := $(subst .,-,$(notdir $(CURDIR)))
 COMPOSE := docker compose --env-file .env -p labase-$(WORKTREE) -f docker/docker-compose.yml
 
 # --- Setup ---
-install:
+install: db-start
 	uv sync --all-groups
 	pre-commit install --config scripts/.pre-commit-config.yaml
 	npm install
+	$(MAKE) env
 	$(MAKE) js-build
 
 js-build:
@@ -72,20 +73,22 @@ provision-test:
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/provision_schema.py --reset
 
 # --- Quality ---
+# lint: read-only, fails on non-conforming code (used by `make ci`).
 lint:
-	uv run ruff check --fix .
-	npx biome lint --write
-	uv run djlint apps --lint
-
-format:
-	uv run ruff format .
-	npx biome format --write
-	uv run djlint apps --reformat
-
-typecheck:
+	uv run ruff check .
 	uv run ty check apps/
+	npm run lint
+	uv run djlint apps --lint
+	uv run djlint apps --check
+	uv run pip-audit
 
-audit:
+# fix: auto-fixes what's fixable, re-checks typing/audit like lint does.
+fix:
+	uv run ruff check --fix .
+	uv run ruff format .
+	uv run ty check apps/
+	npm run format
+	uv run djlint apps --reformat
 	uv run pip-audit
 
 upgrade:
@@ -94,8 +97,6 @@ upgrade:
 	python3 scripts/upgrade.py relax
 	uv lock --upgrade
 	python3 scripts/upgrade.py repin
-
-quality: lint format typecheck
 
 # --- Tests ---
 test: provision-test
@@ -113,8 +114,6 @@ coverage-xml:
 coverage-html:
 	uv run coverage html -d .cov/html
 
-test-all: coverage-erase test test-e2e coverage-xml
-
 cert:
 	openssl req -x509 -newkey rsa:4096 -keyout dev.key -out dev.crt -days 365 -nodes -subj '/CN=localhost'
 
@@ -122,7 +121,13 @@ letsencrypt:
 	certbot certonly --standalone -d $(DOMAIN) --agree-tos --non-interactive
 	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
 
-ci: js-build lint format typecheck audit coverage-erase test test-e2e coverage-xml
+# -k (keep-going): run every step even if one fails, so no failure is hidden
+# behind an earlier one; the sub-make exits non-zero if any step failed.
+ci:
+	$(MAKE) -k js-build lint coverage-erase test test-e2e coverage-xml
+
+# finalize: js-build + fix (also typechecks + audits) + local tests. Run before committing.
+finalize: js-build fix test
 
 act:
 	act push -j ci -P ubuntu-latest=catthehacker/ubuntu:act-24.04 --container-architecture linux/amd64 --network host

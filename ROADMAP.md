@@ -52,7 +52,7 @@
 
 #### hard contradictions
 
-- [ ] **CI is blind to lint/format**: `make ci` runs mutating variants (`ruff check --fix`, `biome --write`, `djlint --reformat`, Makefile L76-83) so CI can never fail on style — add check-only targets for CI (`ruff check`, `ruff format --check`, `biome check` (exists in package.json, unused), `djlint --check`)
+- [x] **CI is blind to lint/format**: `make lint` is now read-only (`ruff check`, `npm run lint` = `biome check`, `djlint --lint`/`--check`) and used by `make ci`; mutating fixes moved to the new `make finalize` target
 - [ ] **`pages` serves authenticated members via BYPASSRLS + Python visibility** (`apps/pages/infra/router.py:377-430`) — split the member path back onto `RlsSession`; keep AdminSession for the anonymous branch only
 - [x] **style docs are fiction**: only `.list-panel` is homemade; `btn/card/input/alert-*` are DaisyUI, `page-title` doesn't exist — fix README L110 + `build.md` styling section; DaisyUI is the system
 - [ ] RLS: add missing `with check` on `profiles: own update` and `organizations: owner update` policies (update can currently rewrite rows out of scope, incl. `profiles.auth_user_id`)
