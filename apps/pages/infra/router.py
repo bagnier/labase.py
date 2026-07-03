@@ -375,11 +375,13 @@ async def list_pages(
     request: Request,
     org_handle: str,
     admin: AdminSession,
+    rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> Response:
     org = or_404(await org_by_handle(admin, org_handle))
-    role = await role_in_org(admin, org.id, uuid.UUID(current_user.id)) if current_user else None
-    pages = await visible_pages(admin, org.id, role=role)
+    role = await role_in_org(rls, org.id, uuid.UUID(current_user.id)) if current_user else None
+    session = rls if role is not None else admin
+    pages = await visible_pages(session, org.id, role=role)
     if wants_json(request):
         return JSONResponse([PageRead.model_validate(p).model_dump(mode="json") for p in pages])
     if current_user is None:
@@ -400,7 +402,7 @@ async def list_pages(
         for p in pages
     ]
     ctx = await fullpage_context(
-        admin,
+        rls,
         current_user,
         pages=pages,
         pages_data=pages_data,
@@ -418,11 +420,13 @@ async def view_page(
     org_handle: str,
     slug: str,
     admin: AdminSession,
+    rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> Response:
     org = or_404(await org_by_handle(admin, org_handle))
-    page = or_404(await PageRepository(admin, org.id).by_slug(slug))
-    role = await role_in_org(admin, org.id, uuid.UUID(current_user.id)) if current_user else None
+    role = await role_in_org(rls, org.id, uuid.UUID(current_user.id)) if current_user else None
+    session = rls if role is not None else admin
+    page = or_404(await PageRepository(session, org.id).by_slug(slug))
     if not _can_view(page.visibility, role):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
     can_edit = role == OrgRole.owner or (
@@ -431,7 +435,7 @@ async def view_page(
     body = render_markdown(page.content)
     if current_user:
         ctx = await fullpage_context(
-            admin,
+            rls,
             current_user,
             page=page,
             body=body,

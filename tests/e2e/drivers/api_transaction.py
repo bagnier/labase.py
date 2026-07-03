@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from apps.auth.domain.service import AuthenticatedUser
-from apps.auth.infra.security import get_current_user
+from apps.auth.infra.security import try_get_current_user
 from apps.shared.persistence.database import _user_session_factory, get_user_session
 
 _test_connection: AsyncConnection | None = None
@@ -63,16 +63,18 @@ async def override_get_session() -> AsyncGenerator[AsyncSession]:
 
 
 async def override_get_rls_session(
-    current_user: AuthenticatedUser = Depends(get_current_user),
+    current_user: AuthenticatedUser | None = Depends(try_get_current_user),
     session: AsyncSession = Depends(get_user_session),
 ) -> AsyncGenerator[AsyncSession]:
     """Override for get_rls_session: sets request.jwt.claims so auth.uid() is
     available in SECURITY DEFINER functions, without SET role authenticated —
-    the postgres user has BYPASSRLS. RLS tests stay in test_rls.py.
+    the postgres user has BYPASSRLS. RLS tests stay in test_rls.py. Tolerant to
+    anonymous callers, mirroring get_rls_session's own contract.
     """
-    conn = await session.connection()
-    claims = json.dumps({"sub": current_user.id, "role": "authenticated"})
-    await conn.execute(
-        text("SELECT set_config('request.jwt.claims', :claims, true)").bindparams(claims=claims)
-    )
+    if current_user is not None:
+        conn = await session.connection()
+        claims = json.dumps({"sub": current_user.id, "role": "authenticated"})
+        await conn.execute(
+            text("SELECT set_config('request.jwt.claims', :claims, true)").bindparams(claims=claims)
+        )
     yield session

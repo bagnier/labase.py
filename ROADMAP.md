@@ -53,7 +53,7 @@
 #### hard contradictions
 
 - [x] **CI is blind to lint/format**: `make lint` is now read-only (`ruff check`, `npm run lint` = `biome check`, `djlint --lint`/`--check`) and used by `make ci`; mutating fixes moved to the new `make finalize` target
-- [ ] **`pages` serves authenticated members via BYPASSRLS + Python visibility** (`apps/pages/infra/router.py:377-430`) — split the member path back onto `RlsSession`; keep AdminSession for the anonymous branch only
+- [x] **`pages` serves authenticated members via BYPASSRLS + Python visibility** (`apps/pages/infra/router.py:377-430`) — split the member path back onto `RlsSession`; keep AdminSession for the anonymous branch only
 - [x] **style docs are fiction**: only `.list-panel` is homemade; `btn/card/input/alert-*` are DaisyUI, `page-title` doesn't exist — fix README L110 + `build.md` styling section; DaisyUI is the system
 - [x] RLS: add missing `with check` on `profiles: own update` and `organizations: owner update` policies (update can currently rewrite rows out of scope, incl. `profiles.auth_user_id`)
 - [ ] optimistic locking bypassed by bulk reorder `update()` in todo (`repository.py:54-63`) and pages nav (`repository.py:175-176`) — version neither checked nor bumped
