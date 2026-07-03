@@ -9,3 +9,29 @@ repos:
     rev: v1.37.0
     hooks:
       - id: talisman-commit
+  - repo: local
+    hooks:
+      - id: biome
+        name: biome check
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+        files: \.(js|jsx|ts|tsx|json|jsonc)$
+      - id: djlint-lint
+        name: djlint lint
+        entry: uv run djlint apps --lint
+        language: system
+        pass_filenames: false
+        files: \.html$
+      - id: djlint-check
+        name: djlint format check
+        entry: uv run djlint apps --check
+        language: system
+        pass_filenames: false
+        files: \.html$
+      - id: ty
+        name: ty check
+        entry: uv run ty check apps/
+        language: system
+        pass_filenames: false
+        files: \.py$
