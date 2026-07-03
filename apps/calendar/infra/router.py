@@ -11,7 +11,7 @@ from apps.calendar.domain.models import CalendarEvent, CalendarEventRead, format
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
-from apps.shared.http import or_404, parse_body, wants_json
+from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
 from apps.shared.page import fullpage_context
@@ -372,7 +372,6 @@ async def update_event(
 
 
 @router.delete("/{event_id}")
-@router.post("/{event_id}/delete")
 async def delete_event(
     request: Request,
     bg: BackgroundTasks,
@@ -393,6 +392,4 @@ async def delete_event(
             org_id=str(org_id),
             event_id=str(event_id),
         )
-    if wants_json(request):
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return RedirectResponse(f"/{org.handle}/calendar", status_code=303)
+    return delete_response(request, htmx_redirect_url=f"/{org.handle}/calendar")

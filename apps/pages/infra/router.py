@@ -221,8 +221,12 @@ async def delete_page(
         org_id=str(org_id),
         slug=slug,
     )
-    # Deleting from the edit page (HTMX) → send the browser back to the list.
-    return delete_response(request, htmx_redirect_url=f"/{org.handle}/pages")
+    # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
+    # from a list row (X-Skip-Redirect) stays put and removes just that row client-side.
+    htmx_redirect_url = None
+    if request.headers.get("X-Skip-Redirect") != "true":
+        htmx_redirect_url = f"/{org.handle}/pages"
+    return delete_response(request, htmx_redirect_url=htmx_redirect_url)
 
 
 _PUBLISH_EVENT = {

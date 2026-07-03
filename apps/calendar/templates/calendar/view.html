@@ -15,14 +15,14 @@
           <i class="ph ph-pencil ph-4" aria-hidden="true"></i>
           Edit
         </a>
-        <form method="post"
-              action="/{{ org_handle }}/calendar/{{ event.id }}/delete"
-              onsubmit="return confirm('Delete this event?')">
-          <button type="submit" class="btn btn-error btn-ghost btn-sm">
-            <i class="ph ph-trash ph-4" aria-hidden="true"></i>
-            Delete
-          </button>
-        </form>
+        <button type="button"
+                class="btn btn-error btn-ghost btn-sm"
+                hx-delete="/{{ org_handle }}/calendar/{{ event.id }}"
+                hx-confirm="Delete this event?"
+                hx-swap="none">
+          <i class="ph ph-trash ph-4" aria-hidden="true"></i>
+          Delete
+        </button>
       </div>
     </div>
     <div class="card bg-base-100 border border-base-300 shadow-sm">

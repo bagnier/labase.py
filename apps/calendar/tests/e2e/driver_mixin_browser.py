@@ -100,8 +100,8 @@ class CalendarBrowserMixin(BrowserBase):
     def delete_event(self, title: str) -> None:
         self.open_event(title)
         self.page.once("dialog", lambda d: d.accept())
-        self.page.get_by_role("button", name="Delete").click()
-        self.page.wait_for_load_state("load")
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.get_by_role("button", name="Delete").click()
 
     def view_calendar(self) -> None:
         self._cal_goto()
