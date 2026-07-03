@@ -103,7 +103,7 @@ test: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest
 
 test-e2e: provision-test
-	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ -k test_scenarios --driver=browser --no-cov
+	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
 
 coverage-erase:
 	uv run coverage erase
