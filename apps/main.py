@@ -10,7 +10,6 @@ from apps.public.contract import integration as public
 from apps.settings.contract import integration as console
 from apps.shared.contract import integration as shared
 from apps.shared.host import host
-from apps.styleguide.contract import integration as styleguide
 from apps.todo.contract import integration as todo
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
@@ -31,7 +30,6 @@ _apps = (
     learning,
     pages,
     calendar,
-    styleguide,
     public,
 )
 for _app in _apps:

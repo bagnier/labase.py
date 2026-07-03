@@ -24,7 +24,10 @@
           <span class="text-sm text-base-content/70">Enabled</span>
         </label>
       {% elif app == "appearance" and s.key == "theme" %}
-        <select name="value" class="select w-full" aria-label="{{ s.key }}">
+        <select name="value"
+                class="select w-full"
+                aria-label="{{ s.key }}"
+                onchange="document.documentElement.dataset.theme=this.value">
           {% for t in app_themes() %}
             <option value="{{ t }}" {% if s.value == t %}selected{% endif %}>{{ t }}</option>
           {% endfor %}

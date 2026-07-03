@@ -24,6 +24,10 @@
       <h2 class="text-sm font-semibold mb-3">Appearance</h2>
       {% include "console/_settings.html" %}
     </div>
+    <div x-show="tab === 'appearance'" x-cloak class="space-y-4">
+      <h2 class="text-sm font-semibold">Live preview</h2>
+      {% include "console/_styleguide.html" %}
+    </div>
     <div x-show="tab === 'logs'" x-cloak class="space-y-4">
       <div class="flex items-start justify-between gap-4 flex-wrap">
         <p class="text-sm text-base-content/70">Live event stream across every organisation.</p>

@@ -241,8 +241,6 @@ labase.py/
 │   ├── settings/          # App settings / SaaS admin console (stats, settings, audit viewer)
 │   ├── public/            # Public landing pages + public org pages (/{org_handle}/{slug})
 │   ├── health/            # Liveness / readiness probes
-│   ├── styleguide/        # Living demo of the daisyUI components/theme
-│   │                      #   (slated to merge into the settings console — see ROADMAP)
 │   ├── todo/              # Demo — trivial CRUD, the full-pattern reference (see below)
 │   ├── files/             # Demo — Supabase Storage + share tokens
 │   ├── learning/          # Demo — spaced repetition, the most domain-heavy example

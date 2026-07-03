@@ -45,7 +45,7 @@
 - [ ] single `SettingsChanged` subscription in the settings registry reloading all declared groups — removes the per-`mount()` ritual (9 subscribers)
 - [ ] slim page-context slices machinery (~92 lines, 2 providers) to a plain provider dict — or freeze it as-is until slices multiply
 - [ ] decide `client/` fate: unused → remove/extract; used → document it
-- [ ] merge `apps/styleguide/` into `apps/settings/`: becomes a live demo of the admin-chosen theme, integrated into the console (admin-only) next to the appearance settings — one context fewer, and theme changes get an immediate visual check
+- [x] merge `apps/styleguide/` into `apps/settings/`: becomes a live demo of the admin-chosen theme, integrated into the console (admin-only) next to the appearance settings — one context fewer, and theme changes get an immediate visual check
 - [ ] non-goal: do NOT abstract the `integration.py` mount ossature into a declarative `mount_standard()` — explicit wiring is the point; the answer to that repetition is the `new-context` scaffold
 
 ### 6. contradictions & doublons (audit code 2026-07-03)
