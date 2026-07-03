@@ -21,7 +21,7 @@
 - [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
 - [ ] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
 - [ ] `SettingsChanged` live-reload is in-process only — with N instances, only the one handling the POST reloads; others serve stale settings silently. Reload via Postgres NOTIFY or TTL re-read
-- [ ] honor `$PORT` in `docker/entrypoint.sh` (currently hardcoded 8000)
+- [x] honor `$PORT` in `docker/entrypoint.sh` (currently hardcoded 8000)
 
 ### 3. async substrate — prerequisite to every Postgres-as-X brick
 

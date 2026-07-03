@@ -7,4 +7,4 @@ if [ -n "$SSL_CERTFILE" ] && [ -n "$SSL_KEYFILE" ]; then
 fi
 
 # shellcheck disable=SC2086
-exec uv run hypercorn apps.main:app --bind 0.0.0.0:8000 $SSL_ARGS "$@"
+exec uv run hypercorn apps.main:app --bind "0.0.0.0:${PORT:-8000}" $SSL_ARGS "$@"
