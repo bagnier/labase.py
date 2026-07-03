@@ -19,7 +19,7 @@ from apps.settings.domain.models import AppSetting
 from apps.settings.infra.repository import app_settings_select
 from apps.shared.config import get_technical_settings
 
-log = structlog.get_logger("labase.console.store")
+log = structlog.get_logger("labase.settings.store")
 
 
 async def _on_throwaway_engine[T](work: Callable[[AsyncConnection], Awaitable[T]]) -> T:

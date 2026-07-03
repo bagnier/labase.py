@@ -80,7 +80,7 @@ def _audit_ownership_violation(
     record_audit_event(
         bg,
         level="warning",
-        event="org.ownership_violation",
+        event="organizations.ownership_violation",
         user_id=str(membership.auth_user_id),
         org_id=str(membership.org_id),
         ip=request.client.host if request.client else None,

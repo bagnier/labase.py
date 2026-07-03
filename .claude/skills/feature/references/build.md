@@ -97,8 +97,8 @@ Expose what other apps need via `contract/current.py` (dependencies), `contract/
 - **Request tracing**: the `RequestLogger` middleware binds a `request_id` via contextvars —
   nothing to do per feature, but logging structured gets you the correlation for free.
 - **Audit**: for sensitive business actions (member joined/removed, ownership change…), call
-  `record_audit_event(bg, level="info", event="org.member_joined", user_id=..., **payload)`
-  (`apps/shared/observability/audit.py`) — it logs *and* persists via a background task.
+  `record_audit_event(bg, level="info", event="organizations.member_joined", user_id=..., **payload)` (`apps/shared/observability/audit.py`) — it logs *and* persists via a
+  background task.
 
 ## Cross-cutting surfaces (wire in `contract/integration.py`)
 

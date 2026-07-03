@@ -20,7 +20,7 @@ from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
 
-log = structlog.get_logger("labase.auth")
+log = structlog.get_logger("labase.auth.router")
 
 router = APIRouter()
 

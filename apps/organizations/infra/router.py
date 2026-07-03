@@ -58,7 +58,7 @@ def _audit_last_owner_violation(
     record_audit_event(
         bg,
         level="warning",
-        event="org.last_owner_violation",
+        event="organizations.last_owner_violation",
         user_id=current_user.id,
         org_id=str(org_id),
         ip=request.client.host if request.client else None,
@@ -108,7 +108,7 @@ async def create_organization(
     record_audit_event(
         bg,
         level="info",
-        event="org.created",
+        event="organizations.created",
         user_id=current_user.id,
         org_id=str(org.id),
         name=name,
@@ -325,7 +325,11 @@ async def leave_organization(
         )
     await repo.remove_member(org_id, user_id)
     record_audit_event(
-        bg, level="info", event="org.member_left", user_id=current_user.id, org_id=str(org_id)
+        bg,
+        level="info",
+        event="organizations.member_left",
+        user_id=current_user.id,
+        org_id=str(org_id),
     )
     return delete_response(request, htmx_redirect_url="/profile")
 
@@ -365,7 +369,7 @@ async def update_member_role(
     record_audit_event(
         bg,
         level="info",
-        event="org.member_role_changed",
+        event="organizations.member_role_changed",
         user_id=current_user.id,
         org_id=str(org_id),
         target_user_id=str(user_id),
@@ -419,7 +423,7 @@ async def remove_member(
     record_audit_event(
         bg,
         level="info",
-        event="org.member_removed",
+        event="organizations.member_removed",
         user_id=current_user.id,
         org_id=str(org_id),
         target_user_id=str(user_id),
@@ -472,7 +476,7 @@ async def create_invitation(
             record_audit_event(
                 bg,
                 level="info",
-                event="org.invitation_sent",
+                event="organizations.invitation_sent",
                 user_id=current_user.id,
                 org_id=str(org_id),
                 target_email=email,
@@ -551,7 +555,7 @@ async def revoke_invitation(
     record_audit_event(
         bg,
         level="info",
-        event="org.invitation_revoked",
+        event="organizations.invitation_revoked",
         user_id=current_user.id,
         org_id=str(org_id),
         invitation_id=str(invitation_id),

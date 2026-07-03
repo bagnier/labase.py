@@ -134,7 +134,7 @@ async def accept_invitation(
         record_audit_event(
             bg,
             level="warning",
-            event="org.invitation_email_mismatch",
+            event="organizations.invitation_email_mismatch",
             user_id=current_user.id,
             org_id=str(invitation["org_id"]),
             target_email=invitation["email"],
@@ -181,7 +181,7 @@ async def accept_invitation(
     record_audit_event(
         bg,
         level="info",
-        event="org.member_joined",
+        event="organizations.member_joined",
         user_id=current_user.id,
         org_id=str(invitation["org_id"]),
     )

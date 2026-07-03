@@ -15,7 +15,7 @@ from apps.auth.infra.security import decode_jwt
 from apps.shared.host import host
 from apps.shared.persistence.supabase import get_admin_supabase
 
-log = structlog.get_logger("labase.auth")
+log = structlog.get_logger("labase.auth.application")
 
 
 async def register_user(email: str, password: str) -> RegisterResult:

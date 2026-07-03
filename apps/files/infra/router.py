@@ -160,7 +160,7 @@ async def upload_file(
     record_audit_event(
         bg,
         level="info",
-        event="file.uploaded",
+        event="files.uploaded",
         user_id=current_user.id,
         org_id=str(org_id),
         file_id=str(org_file.id),
@@ -208,7 +208,7 @@ async def delete_file(
     record_audit_event(
         bg,
         level="info",
-        event="file.deleted",
+        event="files.deleted",
         user_id=current_user.id,
         org_id=str(org_id),
         file_id=str(file_id),
@@ -255,7 +255,7 @@ async def rename_file(
     record_audit_event(
         bg,
         level="info",
-        event="file.renamed",
+        event="files.renamed",
         user_id=current_user.id,
         org_id=str(org_id),
         file_id=str(file_id),
@@ -281,7 +281,7 @@ async def generate_share_link(
     record_audit_event(
         bg,
         level="info",
-        event="file.share_link_created",
+        event="files.share_link_created",
         user_id=current_user.id,
         org_id=str(org_id),
         file_id=str(file_id),
@@ -311,7 +311,7 @@ async def public_share_download(
         record_audit_event(
             bg,
             level="warning",
-            event="file.share_link_rejected",
+            event="files.share_link_rejected",
             ip=ip,
             token=str(token),
             reason="invalid",
@@ -321,7 +321,7 @@ async def public_share_download(
         record_audit_event(
             bg,
             level="warning",
-            event="file.share_link_rejected",
+            event="files.share_link_rejected",
             ip=ip,
             token=str(token),
             reason="expired",
@@ -333,7 +333,7 @@ async def public_share_download(
         record_audit_event(
             bg,
             level="warning",
-            event="file.share_link_rejected",
+            event="files.share_link_rejected",
             ip=ip,
             token=str(token),
             reason="file_missing",
@@ -343,7 +343,7 @@ async def public_share_download(
     record_audit_event(
         bg,
         level="info",
-        event="file.share_downloaded",
+        event="files.share_downloaded",
         org_id=str(org_file.org_id),
         file_id=str(org_file.id),
         token=str(token),

@@ -261,7 +261,7 @@ async def create_event(
     record_audit_event(
         bg,
         level="info",
-        event="calendar.event_created",
+        event="calendar.created",
         user_id=current_user.id,
         org_id=str(org_id),
         event_id=str(event.id),
@@ -361,7 +361,7 @@ async def update_event(
     record_audit_event(
         bg,
         level="info",
-        event="calendar.event_updated",
+        event="calendar.updated",
         user_id=current_user.id,
         org_id=str(org_id),
         event_id=str(event.id),
@@ -387,7 +387,7 @@ async def delete_event(
         record_audit_event(
             bg,
             level="info",
-            event="calendar.event_deleted",
+            event="calendar.deleted",
             user_id=current_user.id,
             org_id=str(org_id),
             event_id=str(event_id),
