@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.contract.current import OrgRole
@@ -171,14 +171,6 @@ class PageNavRepository(OrgScopedRepository[PageNavItem]):
             if idx is None:
                 return
             ordered.insert(idx, item)
-        new_positions = {n.id: pos for pos, n in enumerate(ordered)}
-        await self.session.execute(
-            update(PageNavItem)
-            .where(PageNavItem.org_id == self.org_id)
-            .values(
-                position=case(
-                    *[(PageNavItem.id == id_, pos) for id_, pos in new_positions.items()],
-                    else_=PageNavItem.position,
-                )
-            )
-        )
+        for pos, entry in enumerate(ordered):
+            entry.position = pos
+        await self.session.flush()

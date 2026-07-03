@@ -36,6 +36,14 @@ async def handle_rate_limit(_request: Request, exc: Exception) -> Response:
     return JSONResponse({"detail": "Too many requests"}, status_code=429, headers=headers)
 
 
+async def handle_stale_data(request: Request, _exc: Exception) -> Response:
+    log.warning("request.conflict", method=request.method, path=request.url.path)
+    detail = "This was changed by someone else. Please retry."
+    if wants_json(request):
+        return JSONResponse({"detail": detail}, status_code=409)
+    return _html_error(request, 409, detail)
+
+
 async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
     log.exception(
         "request.unhandled_error",

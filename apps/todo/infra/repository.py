@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import func, select
 
 from apps.shared.persistence.repository import OrgScopedRepository
 from apps.todo.domain.models import TodoItem
@@ -24,11 +24,8 @@ class TodoRepository(OrgScopedRepository[TodoItem]):
         ) or 0
 
     async def add(self, user_id: uuid.UUID, title: str) -> TodoItem:
-        await self.session.execute(
-            update(TodoItem)
-            .where(TodoItem.org_id == self.org_id)
-            .values(position=TodoItem.position + 1)
-        )
+        for item in await self.all():
+            item.position += 1
         todo = TodoItem(user_id=user_id, org_id=self.org_id, title=title, position=0)
         return await self.save(todo)
 
@@ -50,17 +47,9 @@ class TodoRepository(OrgScopedRepository[TodoItem]):
         return ordered
 
     async def _apply_positions(self, ordered: list[TodoItem]) -> None:
-        new_positions = {item.id: pos for pos, item in enumerate(ordered)}
-        await self.session.execute(
-            update(TodoItem)
-            .where(TodoItem.org_id == self.org_id)
-            .values(
-                position=case(
-                    *[(TodoItem.id == id_, pos) for id_, pos in new_positions.items()],
-                    else_=TodoItem.position,
-                )
-            )
-        )
+        for pos, item in enumerate(ordered):
+            item.position = pos
+        await self.session.flush()
 
     async def move_above(self, todo_id: uuid.UUID, above_id: uuid.UUID | None) -> None:
         items = await self.all()
