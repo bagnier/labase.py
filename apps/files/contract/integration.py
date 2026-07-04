@@ -26,6 +26,7 @@ from apps.settings.contract.settings import (
 )
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.text import pluralize
 
 _RECENT = 3
 
@@ -70,7 +71,7 @@ async def _overview(query: OverviewQuery) -> Overview:
     if files:
         total = sum(f.size_bytes for f in files)
         n = len(files)
-        lines = [f"{n} file" + ("s" if n != 1 else ""), _human_size(total)]
+        lines = [f"{n} {pluralize(n, 'file')}", _human_size(total)]
     else:
         lines = ["No files yet"]
     return Overview(
@@ -109,7 +110,7 @@ def _declare_settings() -> None:
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     count, total = await FileShareRepository(query.session).count_and_size()
     if count:
-        lines = [f"{count} file" + ("s" if count != 1 else ""), _human_size(total)]
+        lines = [f"{count} {pluralize(count, 'file')}", _human_size(total)]
     else:
         lines = ["No files yet"]
     return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})

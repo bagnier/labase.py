@@ -23,6 +23,7 @@ from apps.settings.contract.settings import (
 )
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.text import overview_from_count
 
 _WELCOME_DECK = "Welcome"
 _WELCOME_CARDS = [
@@ -72,7 +73,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     decks = await query.session.scalar(select(func.count()).select_from(Deck)) or 0
     cards = await query.session.scalar(select(func.count()).select_from(Card)) or 0
     if decks:
-        lines = [f"{decks} deck" + ("s" if decks > 1 else ""), f"{cards} cards"]
+        lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:
         lines = ["No decks yet"]
     return ConsoleOverview(
@@ -89,7 +90,7 @@ async def _overview(query: OverviewQuery) -> Overview:
     )
     decks, cards = decks or 0, cards or 0
     if decks:
-        lines = [f"{decks} deck" + ("s" if decks > 1 else ""), f"{cards} cards"]
+        lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:
         lines = ["No decks yet"]
     return Overview(

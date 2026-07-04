@@ -5,7 +5,10 @@ router, answers the dashboard ``OverviewQuery`` (upcoming events) and the server
 ``ConsoleOverviewQuery`` (total events), and seeds a welcome event on ``OrgCreated``.
 """
 
+import uuid
 from datetime import timedelta
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.calendar.contract import settings
 from apps.calendar.infra.repository import CalendarEventRepository, count_all
@@ -13,7 +16,7 @@ from apps.calendar.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import get_org_owner_id
+from apps.organizations.contract.queries import seed_with_owner
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
     SettingsChanged,
@@ -24,7 +27,7 @@ from apps.settings.contract.settings import (
 )
 from apps.shared import clock
 from apps.shared.host import Host, NavItem
-from apps.shared.persistence.database import admin_session_factory
+from apps.shared.text import overview_from_count
 
 _RECENT = 3
 _WELCOME_TITLE = "Welcome to your team calendar"
@@ -69,7 +72,7 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     total = await count_all(query.session)
-    lines = [f"{total} event" + ("s" if total != 1 else "")] if total else ["No events yet"]
+    lines = overview_from_count(total, "event", "No events yet")
     return ConsoleOverview(
         key="calendar", title="Calendar", icon="calendar-dots", data={"lines": lines}
     )
@@ -80,10 +83,8 @@ async def _seed(event: OrgCreated) -> None:
 
     Production-only: ``OrgCreated`` is suppressed in the test schema, so this never runs under
     the E2E drivers (mirrors the todo/files/learning seed handlers)."""
-    async with admin_session_factory()() as session:
-        owner_id = await get_org_owner_id(session, event.org_id)
-        if owner_id is None:
-            return
+
+    async def seed(session: AsyncSession, owner_id: uuid.UUID) -> None:
         start = clock.now().replace(hour=9, minute=0, second=0, microsecond=0)
         await CalendarEventRepository(session, event.org_id).add(
             owner_id,
@@ -92,4 +93,5 @@ async def _seed(event: OrgCreated) -> None:
             start + timedelta(hours=1),
             description="Edit or delete this sample event to get started.",
         )
-        await session.commit()
+
+    await seed_with_owner(event.org_id, seed)

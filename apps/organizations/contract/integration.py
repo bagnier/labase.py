@@ -30,6 +30,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, NavItem, host
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.slug_registry import register_open_list
+from apps.shared.text import pluralize
 
 # Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
 # contexts last (see apps.main) so fixed-prefix routers (e.g. /console) are never shadowed.
@@ -74,9 +75,10 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     orgs = await query.session.scalar(select(func.count()).select_from(Organization)) or 0
     members = await query.session.scalar(select(func.count()).select_from(Membership)) or 0
     if orgs:
-        noun_o = "organisation" + ("s" if orgs != 1 else "")
-        noun_m = "member" + ("s" if members != 1 else "")
-        lines = [f"{orgs} {noun_o}", f"{members} {noun_m}"]
+        lines = [
+            f"{orgs} {pluralize(orgs, 'organisation')}",
+            f"{members} {pluralize(members, 'member')}",
+        ]
     else:
         lines = ["No organisations yet"]
     return ConsoleOverview(

@@ -1,10 +1,12 @@
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.domain.models import Membership, Organization, OrganizationRead, OrgRole
+from apps.shared.persistence.database import admin_session_factory
 
 
 async def org_handle_taken(
@@ -22,6 +24,20 @@ async def get_org_owner_id(session: AsyncSession, org_id: uuid.UUID) -> uuid.UUI
             Membership.org_id == org_id, Membership.role == OrgRole.owner
         )
     )
+
+
+async def seed_with_owner(
+    org_id: uuid.UUID,
+    seed: Callable[[AsyncSession, uuid.UUID], Awaitable[None]],
+) -> None:
+    """Resolve the org's owner and run ``seed`` in the same session, bailing out silently if
+    there's no owner yet (mirrors the todo/calendar/files welcome-data seeders)."""
+    async with admin_session_factory()() as session:
+        owner_id = await get_org_owner_id(session, org_id)
+        if owner_id is None:
+            return
+        await seed(session, owner_id)
+        await session.commit()
 
 
 @dataclass

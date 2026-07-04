@@ -22,6 +22,7 @@ from apps.settings.contract.settings import (
     get_app_settings,
 )
 from apps.shared.host import Host, NavItem
+from apps.shared.text import overview_from_count
 
 _RECENT = 3
 
@@ -61,7 +62,7 @@ def _declare_settings() -> None:
 async def _overview(query: OverviewQuery) -> Overview:
     pages = await PageRepository(query.session, query.org_id).all()
     n = len(pages)
-    lines = [f"{n} page" + ("s" if n != 1 else "")] if pages else ["No pages yet"]
+    lines = overview_from_count(n, "page", "No pages yet")
     return Overview(
         key="pages",
         title="Pages",
@@ -74,7 +75,7 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     total = await count_all(query.session)
-    lines = [f"{total} page" + ("s" if total != 1 else "")] if total else ["No pages yet"]
+    lines = overview_from_count(total, "page", "No pages yet")
     return ConsoleOverview(key="pages", title="Pages", icon="file-text", data={"lines": lines})
 
 

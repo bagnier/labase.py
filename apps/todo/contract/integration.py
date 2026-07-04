@@ -4,12 +4,15 @@ Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts t
 answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrgCreated``.
 """
 
+import uuid
+
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import get_org_owner_id
+from apps.organizations.contract.queries import seed_with_owner
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
     SettingDef,
@@ -20,7 +23,6 @@ from apps.settings.contract.settings import (
     get_app_settings,
 )
 from apps.shared.host import Host, NavItem
-from apps.shared.persistence.database import admin_session_factory
 from apps.todo.contract import settings
 from apps.todo.domain.models import TodoItem
 from apps.todo.infra.repository import TodoRepository
@@ -90,12 +92,10 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 
 async def _seed(event: OrgCreated) -> None:
-    async with admin_session_factory()() as session:
-        owner_id = await get_org_owner_id(session, event.org_id)
-        if owner_id is None:
-            return
+    async def seed(session: AsyncSession, owner_id: uuid.UUID) -> None:
         repo = TodoRepository(session, event.org_id)
         # add() prepends, so insert in reverse to keep list order.
         for title in reversed(_WELCOME_TODOS):
             await repo.add(owner_id, title)
-        await session.commit()
+
+    await seed_with_owner(event.org_id, seed)
