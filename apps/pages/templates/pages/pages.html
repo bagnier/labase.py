@@ -18,11 +18,12 @@
       </div>
     </div>
     <script type="application/json" id="pages-data">{{ pages_data | tojson }}</script>
-    <div id="pages-app"
-         data-owner="{{ 'true' if is_owner else 'false' }}"
-         data-handle="{{ org_handle }}"
-         x-data="pagesApp()"
-         x-init="$nextTick(() => $el.dataset.ready = '1')">
+    <section id="pages-app"
+             aria-label="Pages list"
+             data-owner="{{ 'true' if is_owner else 'false' }}"
+             data-handle="{{ org_handle }}"
+             x-data="pagesApp()"
+             x-init="$nextTick(() => $el.dataset.ready = '1')">
       <!-- Toolbar: search + filters, grouped on one line -->
       <div class="flex flex-wrap items-center gap-2 mb-3">
         <input type="search"
@@ -90,7 +91,7 @@
         <li x-show="visible().length === 0"
             class="px-4 py-6 text-sm text-center text-base-content/50">No pages match.</li>
       </ul>
-    </div>
+    </section>
   </div>
 {% endblock %}
 {% block scripts %}

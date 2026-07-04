@@ -22,7 +22,7 @@
         <button type="submit" class="btn btn-primary flex-none">Add</button>
       </form>
     {% endif %}
-    <ul id="todo-list" class="list-panel">
+    <ul id="todo-list" class="list-panel" aria-live="polite">
       {% include "todo/_list_fragment.html" %}
     </ul>
   </div>

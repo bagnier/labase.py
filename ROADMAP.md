@@ -50,13 +50,8 @@
 - [x] Jinja macro `overview_card()` — 5 carbon-copy `_overview.html` ("Open →" link coded 5 different ways); pills as `badge`; component class for the `card bg-base-100 border…` shell respelled ×25
 - [x] `audit(bg, event, user, org_id, **fields)` helper — 38 `record_audit_event` calls repeat the same first 5 args
 - [ ] `PositionedRepository` mixin — `move_above` algorithm duplicated todo/pages (fix the version bypass there too)
-- [ ] `OrgScopedRepository.default_order` — kills 4 `all()` overrides, todo's redundant `count()`, duplicated `count_all()`
-- [ ] a11y parity: `<section aria-label>` on recent pages (pages/settings/calendar views), `aria-live` on HTMX-swapped lists, use `input_field()` macro in `pages/form.html`
-
-### 7. positioning
-
-- [x] README: state the intent — this base is optimized for agent-driven development (skills as executable specs, dual-driver BDD as agent verification substrate, worktrees for parallel agents); it justifies the ceremony
-- [ ] split this ROADMAP: "contract-readiness" vs "Postgres-as-X demonstrators"; move the Supabase feature catalog to a separate note
+- [x] `OrgScopedRepository.default_order` — kills 4 `all()` overrides, todo's redundant `count()`, duplicated `count_all()`
+- [x] a11y parity: `<section aria-label>` on recent pages (pages/settings/calendar views), `aria-live` on HTMX-swapped lists, use `input_field()` macro in `pages/form.html`
 
 ## goals
 

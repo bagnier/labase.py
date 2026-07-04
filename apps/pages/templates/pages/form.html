@@ -14,15 +14,7 @@
           hx-patch="/{{ org_handle }}/pages/{{ page.slug }}"
           hx-swap="none">
       <div class="card-body space-y-4">
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend" id="page-title-label">Title</legend>
-          <input id="page-title"
-                 type="text"
-                 name="title"
-                 value="{{ page.title }}"
-                 aria-labelledby="page-title-label"
-                 class="input w-full" />
-        </fieldset>
+        {{ input_field("page-title", "title", label="Title", value=page.title) }}
         {{ input_field("page-slug", "slug", label="Slug", value=page.slug, mono=true) }}
         <fieldset class="fieldset">
           <legend class="fieldset-legend" id="page-content-label">Content (Markdown)</legend>
