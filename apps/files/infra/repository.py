@@ -12,15 +12,7 @@ from apps.shared.persistence.repository import BaseRepository, OrgScopedReposito
 
 class OrgFileRepository(OrgScopedRepository[OrgFile]):
     model = OrgFile
-
-    async def all(self) -> list[OrgFile]:
-        return list(
-            await self.session.scalars(
-                select(OrgFile)
-                .where(OrgFile.org_id == self.org_id)
-                .order_by(OrgFile.created_at.desc())
-            )
-        )
+    default_order = OrgFile.created_at.desc()
 
     async def total_size(self) -> int:
         """Total bytes stored by this organisation, across all its files."""

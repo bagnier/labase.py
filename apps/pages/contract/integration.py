@@ -9,8 +9,8 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.fullpage import OrgNavItem, OrgNavQuery
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.pages.contract import settings
-from apps.pages.domain.models import PageVisibility
-from apps.pages.infra.repository import PageNavRepository, PageRepository, count_all
+from apps.pages.domain.models import Page, PageVisibility
+from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
@@ -22,6 +22,7 @@ from apps.settings.contract.settings import (
     get_app_settings,
 )
 from apps.shared.host import Host, NavItem
+from apps.shared.persistence.repository import count_all
 from apps.shared.text import overview_from_count
 
 _RECENT = 3
@@ -74,7 +75,7 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    total = await count_all(query.session)
+    total = await count_all(query.session, Page)
     lines = overview_from_count(total, "page", "No pages yet")
     return ConsoleOverview(key="pages", title="Pages", icon="file-text", data={"lines": lines})
 

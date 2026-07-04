@@ -11,7 +11,8 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.calendar.contract import settings
-from apps.calendar.infra.repository import CalendarEventRepository, count_all
+from apps.calendar.domain.models import CalendarEvent
+from apps.calendar.infra.repository import CalendarEventRepository
 from apps.calendar.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
@@ -27,6 +28,7 @@ from apps.settings.contract.settings import (
 )
 from apps.shared import clock
 from apps.shared.host import Host, NavItem
+from apps.shared.persistence.repository import count_all
 from apps.shared.text import overview_from_count
 
 _RECENT = 3
@@ -71,7 +73,7 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    total = await count_all(query.session)
+    total = await count_all(query.session, CalendarEvent)
     lines = overview_from_count(total, "event", "No events yet")
     return ConsoleOverview(
         key="calendar", title="Calendar", icon="calendar-dots", data={"lines": lines}

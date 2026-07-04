@@ -11,13 +11,7 @@ from apps.shared.persistence.repository import OrgScopedRepository
 
 class PageRepository(OrgScopedRepository[Page]):
     model = Page
-
-    async def all(self) -> list[Page]:
-        return list(
-            await self.session.scalars(
-                select(Page).where(Page.org_id == self.org_id).order_by(Page.created_at.desc())
-            )
-        )
+    default_order = Page.created_at.desc()
 
     async def by_slug(self, slug: str) -> Page | None:
         return await self.session.scalar(
@@ -56,26 +50,13 @@ async def visible_pages(
     return list(await session.scalars(q))
 
 
-async def count_all(session: AsyncSession) -> int:
-    """Server-wide page count, across every organisation (console overview)."""
-    return int(await session.scalar(select(func.count()).select_from(Page)) or 0)
-
-
 class PageNavRepository(OrgScopedRepository[PageNavItem]):
     model = PageNavItem
-
-    async def _items_ordered(self) -> list[PageNavItem]:
-        return list(
-            await self.session.scalars(
-                select(PageNavItem)
-                .where(PageNavItem.org_id == self.org_id)
-                .order_by(PageNavItem.position)
-            )
-        )
+    default_order = PageNavItem.position.asc()
 
     async def candidates(self) -> list[NavCandidate]:
         """All published pages with their current nav status, nav items first."""
-        nav_rows = await self._items_ordered()
+        nav_rows = await self.all()
         nav_by_page: dict[uuid.UUID, PageNavItem] = {n.page_id: n for n in nav_rows}
         pages = list(
             await self.session.scalars(
@@ -113,7 +94,7 @@ class PageNavRepository(OrgScopedRepository[PageNavItem]):
 
     async def nav_items(self, *, public_only: bool = False) -> list[NavItemRead]:
         """Ordered nav items for page rendering. If public_only, exclude members-only pages."""
-        rows = await self._items_ordered()
+        rows = await self.all()
         page_ids = [r.page_id for r in rows]
         if not page_ids:
             return []
@@ -159,7 +140,7 @@ class PageNavRepository(OrgScopedRepository[PageNavItem]):
             await self.delete(item)
 
     async def move_above(self, page_id: uuid.UUID, above_id: uuid.UUID | None) -> None:
-        items = await self._items_ordered()
+        items = await self.all()
         item = next((i for i in items if i.page_id == page_id), None)
         if item is None:
             return

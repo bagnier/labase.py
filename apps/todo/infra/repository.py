@@ -1,27 +1,12 @@
 import uuid
 
-from sqlalchemy import func, select
-
 from apps.shared.persistence.repository import OrgScopedRepository
 from apps.todo.domain.models import TodoItem
 
 
 class TodoRepository(OrgScopedRepository[TodoItem]):
     model = TodoItem
-
-    async def all(self) -> list[TodoItem]:
-        return list(
-            await self.session.scalars(
-                select(TodoItem).where(TodoItem.org_id == self.org_id).order_by(TodoItem.position)
-            )
-        )
-
-    async def count(self) -> int:
-        return (
-            await self.session.scalar(
-                select(func.count()).select_from(TodoItem).where(TodoItem.org_id == self.org_id)
-            )
-        ) or 0
+    default_order = TodoItem.position.asc()
 
     async def add(self, user_id: uuid.UUID, title: str) -> TodoItem:
         for item in await self.all():

@@ -33,6 +33,8 @@ class BaseRepository[T: Base]:
 
 
 class OrgScopedRepository[T: Base](BaseRepository[T]):
+    default_order: ClassVar[Any | None] = None
+
     def __init__(self, session: AsyncSession, org_id: uuid.UUID) -> None:
         super().__init__(session)
         self.org_id = org_id
@@ -49,14 +51,10 @@ class OrgScopedRepository[T: Base](BaseRepository[T]):
         )
 
     async def all(self) -> list[T]:
-        return cast(
-            list[T],
-            list(
-                await self.session.scalars(
-                    select(self.model).where(self.model.org_id == self.org_id)
-                )
-            ),
-        )
+        query = select(self.model).where(self.model.org_id == self.org_id)
+        if self.default_order is not None:
+            query = query.order_by(self.default_order)
+        return cast(list[T], list(await self.session.scalars(query)))
 
     async def count(self) -> int:
         return (
@@ -65,3 +63,8 @@ class OrgScopedRepository[T: Base](BaseRepository[T]):
             )
             or 0
         )
+
+
+async def count_all(session: AsyncSession, model: type[Any]) -> int:
+    """Server-wide count for `model`, across every organisation (console overview)."""
+    return int(await session.scalar(select(func.count()).select_from(model)) or 0)
