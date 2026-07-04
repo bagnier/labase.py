@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -17,10 +15,8 @@ class TodoBrowserMixin(BrowserBase):
         ]
 
     def _dom_todo_id_by_title(self, title: str) -> str:
-        for row in self._dom_todo_rows():
-            if row.locator("[data-title-id]").inner_text().strip() == title:
-                return row.locator("input[data-todo-id]").get_attribute("data-todo-id") or ""
-        raise AssertionError(f"Todo '{title}' not found in DOM")
+        row = self.find_row(self.page, "#todo-list > li", "[data-title-id]", title)
+        return row.locator("input[data-todo-id]").get_attribute("data-todo-id") or ""
 
     def have_todo_items(self, titles: list[str]) -> None:
         for title in reversed(titles):
@@ -32,40 +28,34 @@ class TodoBrowserMixin(BrowserBase):
     def _goto_todos(self) -> None:
         self.page.goto(self._todos_url(), wait_until="load")
 
-    def _wait_htmx_response(self, url_fragment: str, method: str, action: Callable) -> None:
-        with self.page.expect_response(
-            lambda r: url_fragment in r.url and r.request.method == method, timeout=10000
-        ):
-            action()
-        self._goto_todos()
-
     def add_todo(self, title: str) -> None:
         self._goto_todos()
-        self.page.get_by_label("New todo").fill(title)
         form_path = f"/{getattr(self, 'active_org_handle', '')}/todos"
-        self._wait_htmx_response(
-            form_path,
-            "POST",
-            lambda: self.page.get_by_role("button", name="Add").click(),
+        self.submit_labelled_form(
+            self.page,
+            {"New todo": title},
+            self.page.get_by_role("button", name="Add"),
+            method="POST",
+            path_token=form_path,
         )
+        self._goto_todos()
 
     def mark_todo_done(self, title: str) -> None:
         self._goto_todos()
         todo_id = self._dom_todo_id_by_title(title)
-        self._wait_htmx_response(
-            f"/todos/{todo_id}",
+        self.row_action(
+            self.page,
+            "#todo-list > li",
+            "[data-title-id]",
+            title,
+            f"input[data-todo-id='{todo_id}']",
             "PATCH",
-            lambda: self.page.click(f"input[data-todo-id='{todo_id}']"),
+            f"/todos/{todo_id}",
         )
+        self._goto_todos()
 
     def mark_todo_not_done(self, title: str) -> None:
-        self._goto_todos()
-        todo_id = self._dom_todo_id_by_title(title)
-        self._wait_htmx_response(
-            f"/todos/{todo_id}",
-            "PATCH",
-            lambda: self.page.click(f"input[data-todo-id='{todo_id}']"),
-        )
+        self.mark_todo_done(title)
 
     def rename_todo(self, title: str, new_title: str) -> None:
         self._goto_todos()
@@ -74,17 +64,22 @@ class TodoBrowserMixin(BrowserBase):
         form_input = self.page.locator(f"#rename-form-{todo_id} input[name=title]")
         form_input.wait_for(state="visible", timeout=5000)
         form_input.fill(new_title)
-        self._wait_htmx_response(f"/todos/{todo_id}", "PATCH", lambda: form_input.press("Enter"))
+        self.wait_htmx(self.page, "PATCH", f"/todos/{todo_id}", lambda: form_input.press("Enter"))
+        self._goto_todos()
 
     def delete_todo(self, title: str) -> None:
         self._goto_todos()
         todo_id = self._dom_todo_id_by_title(title)
-        self.page.once("dialog", lambda d: d.accept())
-        self._wait_htmx_response(
-            f"/todos/{todo_id}",
+        self.row_action(
+            self.page,
+            "#todo-list > li",
+            "[data-title-id]",
+            title,
+            f"button[data-delete-id='{todo_id}']",
             "DELETE",
-            lambda: self.page.click(f"button[data-delete-id='{todo_id}']"),
+            f"/todos/{todo_id}",
         )
+        self._goto_todos()
 
     def move_todo_above(self, title: str, above: str) -> None:
         self.page.goto(self._todos_url(), wait_until="load")

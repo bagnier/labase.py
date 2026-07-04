@@ -188,10 +188,12 @@ class LearningBrowserMixin(BrowserBase):
         key = self._user(name)
         page = self._goto_today(key)
         card = page.locator(f".lcard[data-card-id='{ext}']")
-        with page.expect_response(
-            lambda r: f"/cards/{ext}/reviews" in r.url and r.request.method == "POST"
-        ):
-            card.locator(f"[data-mark='{outcome}']").click()
+        self.wait_htmx(
+            page,
+            "POST",
+            f"/cards/{ext}/reviews",
+            card.locator(f"[data-mark='{outcome}']").click,
+        )
 
     def mark_all_learned(self, name: str) -> None:
         key = self._user(name)

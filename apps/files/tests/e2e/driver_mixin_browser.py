@@ -42,10 +42,8 @@ class OrgFileBrowserMixin(BrowserBase):
         return None
 
     def _dom_file_id_by_name(self, filename: str) -> str:
-        fid = self._dom_find_file_id(filename)
-        if fid is None:
-            raise AssertionError(f"File '{filename}' not found in DOM")
-        return fid
+        row = self.find_row(self.page, "#file-list > li[data-file-id]", "a", filename)
+        return row.get_attribute("data-file-id") or ""
 
     # ── basic file ops ────────────────────────────────────────────────────────
 
@@ -111,12 +109,13 @@ class OrgFileBrowserMixin(BrowserBase):
         assert file_id is not None, f"File '{old_filename}' not found in DOM"
         row = self.page.locator(f"[data-file-id='{file_id}']")
         self.page.get_by_role("button", name=f"Rename {old_filename}").click()  # reveal the form
-        row.get_by_label("Filename").fill(new_filename)
-        self.last_response = self.click_and_capture(
+        self.last_response = self.submit_labelled_form(
             self.page,
+            {"Filename": new_filename},
             row.get_by_role("button", name="Save"),
-            "PATCH",
-            f"/files/{file_id}",
+            method="PATCH",
+            path_token=f"/files/{file_id}",
+            root=row,
         )
 
     # ── sign-in with org naming ───────────────────────────────────────────────

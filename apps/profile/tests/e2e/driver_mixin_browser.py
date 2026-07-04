@@ -10,12 +10,13 @@ class ProfileBrowserMixin(BrowserBase):
 
     def update_handle(self, name: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
-        self.page.get_by_label("Handle").fill(name)
-        with self.page.expect_response(
-            lambda r: "/profile" in r.url and r.request.method == "POST"
-        ) as resp_info:
-            self.page.get_by_role("button", name="Save changes").click()
-        self.last_response = resp_info.value
+        self.last_response = self.submit_labelled_form(
+            self.page,
+            {"Handle": name},
+            self.page.get_by_role("button", name="Save changes"),
+            method="POST",
+            path_token="/profile",
+        )
 
     def assert_handle(self, name: str | None) -> None:
         self.page.goto(self._profile_url(), wait_until="load")

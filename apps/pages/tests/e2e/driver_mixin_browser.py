@@ -41,11 +41,10 @@ class PagesBrowserMixin(BrowserBase):
         self._goto_list()
         self.page.click('a[href$="/pages/new/edit"]')
         self.page.wait_for_selector("#edit-page-form", timeout=5000)
-        self.page.get_by_label("Title").fill(title)
-        self.page.get_by_label("Slug").fill(slug if slug is not None else _slugify(title))
         if content:
             self.page.fill(".cm-content", _decode(content))
-        self._submit_edit_form()
+        fields = {"Title": title, "Slug": slug if slug is not None else _slugify(title)}
+        self.submit_labelled_form(self.page, fields, self.page.get_by_role("button", name="Save"))
 
     def create_page(self, title: str, content: str) -> None:
         self._create_via_form(title, None, content)
@@ -63,13 +62,13 @@ class PagesBrowserMixin(BrowserBase):
         self.page.wait_for_load_state("load")
 
     def _submit_edit_form(self) -> None:
-        with self.page.expect_navigation(wait_until="load"):
-            self.page.get_by_role("button", name="Save").click()
+        self.submit_labelled_form(self.page, {}, self.page.get_by_role("button", name="Save"))
 
     def change_slug(self, slug: str, new_slug: str) -> None:
         self._goto_edit(slug)
-        self.page.get_by_label("Slug").fill(new_slug)
-        self._submit_edit_form()
+        self.submit_labelled_form(
+            self.page, {"Slug": new_slug}, self.page.get_by_role("button", name="Save")
+        )
 
     def update_content(self, slug: str, content: str) -> None:
         self._goto_edit(slug)

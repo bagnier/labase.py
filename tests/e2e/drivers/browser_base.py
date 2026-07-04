@@ -4,6 +4,7 @@ email, and HTMX interaction helpers. Feature mixins inherit this; BrowserDriver
 assembles them."""
 
 import os
+from collections.abc import Callable
 
 from playwright.sync_api import (
     APIResponse,
@@ -159,6 +160,17 @@ class BrowserBase:
             page.on("dialog", lambda d: d.accept())
             armed.add(id(page))
 
+    def wait_htmx(
+        self, page: Page, method: str, path_token: str, action: Callable[[], None]
+    ) -> Response:
+        """Run ``action`` and return the HTMX response matching method + path_token."""
+        self._arm_dialogs(page)
+        with page.expect_response(
+            lambda r: path_token in r.url and r.request.method == method
+        ) as info:
+            action()
+        return info.value
+
     def click_and_capture(
         self, page: Page, target: str | Locator, method: str, path_token: str
     ) -> Response:
@@ -166,12 +178,55 @@ class BrowserBase:
 
         ``target`` may be a CSS selector string or a Playwright Locator.
         """
-        self._arm_dialogs(page)
-        with page.expect_response(
-            lambda r: path_token in r.url and r.request.method == method
-        ) as info:
-            if isinstance(target, str):
-                page.click(target)
+        action = (lambda: page.click(target)) if isinstance(target, str) else target.click
+        return self.wait_htmx(page, method, path_token, action)
+
+    def find_row(self, page: Page, list_selector: str, text_selector: str, text: str) -> Locator:
+        """Return the row within ``list_selector`` whose ``text_selector`` sub-element
+        matches ``text`` exactly."""
+        for row in page.locator(list_selector).all():
+            if row.locator(text_selector).inner_text().strip() == text:
+                return row
+        raise AssertionError(f"No row matching {text!r} in {list_selector!r}")
+
+    def row_action(
+        self,
+        page: Page,
+        list_selector: str,
+        text_selector: str,
+        text: str,
+        action_selector: str,
+        method: str,
+        path_token: str,
+    ) -> Response:
+        """Find the row matching ``text``, click a control inside it, capture the HTMX
+        response it triggers."""
+        row = self.find_row(page, list_selector, text_selector, text)
+        return self.click_and_capture(page, row.locator(action_selector), method, path_token)
+
+    def submit_labelled_form(
+        self,
+        page: Page,
+        fields: dict[str, str],
+        submit: str | Locator,
+        *,
+        method: str | None = None,
+        path_token: str | None = None,
+        root: Locator | None = None,
+    ) -> Response | None:
+        """Fill labelled fields (optionally scoped to ``root``), then submit.
+
+        HTMX forms pass ``method`` + ``path_token`` and get the captured Response
+        back; full-page-reload forms omit them and get a plain navigation wait.
+        """
+        scope = root if root is not None else page
+        for label, value in fields.items():
+            scope.get_by_label(label).fill(value)
+        if method and path_token:
+            return self.click_and_capture(page, submit, method, path_token)
+        with page.expect_navigation(wait_until="load"):
+            if isinstance(submit, str):
+                page.click(submit)
             else:
-                target.click()
-        return info.value
+                submit.click()
+        return None

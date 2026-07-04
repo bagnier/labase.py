@@ -212,9 +212,12 @@ class ConsoleBrowserMixin(BrowserBase):
 
     def add_server_admin_by_email(self, email: str) -> None:
         page = self._goto_admins()
-        page.get_by_label("Admin email").fill(email)
-        self.last_response = self.click_and_capture(
-            page, page.get_by_role("button", name="Add admin"), "POST", "/console/admins"
+        self.last_response = self.submit_labelled_form(
+            page,
+            {"Admin email": email},
+            page.get_by_role("button", name="Add admin"),
+            method="POST",
+            path_token="/console/admins",
         )
 
     def assert_admin_add_error(self, email: str) -> None:

@@ -41,7 +41,7 @@
 ### 5. simplification — closing windows first
 
 - [x] **squash migration history while no prod exists** (option disappears at first deploy): one clean migration per context, core/demo separated — absorbs the `000004` todos coupling, `15…`/`16…` backfills/renames, RLS bootstrap fix
-- [ ] browser mixin substrate helpers in `BrowserBase` (`submit_labelled_form`, `wait_htmx`, `row_action`…) — halve per-context mixins without touching the "navigate like a human" rule
+- [x] browser mixin substrate helpers in `BrowserBase` (`submit_labelled_form`, `wait_htmx`, `row_action`…) — halve per-context mixins without touching the "navigate like a human" rule
 - [ ] single `SettingsChanged` subscription in the settings registry reloading all declared groups — removes the per-`mount()` ritual (9 subscribers)
 - [ ] slim page-context slices machinery (~92 lines, 2 providers) to a plain provider dict — or freeze it as-is until slices multiply
 - [ ] decide `client/` fate: unused → remove/extract; used → document it

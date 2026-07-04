@@ -113,21 +113,24 @@ class OrgBrowserMixin(BrowserBase):
         handle = orgs[0]["handle"]
         # Rename the org via settings page
         owner_page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
-        owner_page.get_by_label("Organisation name").fill(org_name)
-        with owner_page.expect_response(
-            lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
-        ):
-            owner_page.locator("form:has(input[name=name])").get_by_role(
-                "button", name="Save"
-            ).click()
+        save = owner_page.locator("form:has(input[name=name])").get_by_role("button", name="Save")
+        self.submit_labelled_form(
+            owner_page,
+            {"Organisation name": org_name},
+            save,
+            method="PATCH",
+            path_token=f"/{handle}",
+        )
         # Invite the member
         owner_page.goto(f"{self.base_url}/{handle}/members", wait_until="load")
         owner_page.click("[data-invite-toggle]")
-        owner_page.get_by_label("Invite email").fill(email)
-        with owner_page.expect_response(
-            lambda r: "/invitations" in r.url and r.request.method == "POST"
-        ):
-            owner_page.get_by_role("button", name="Invite", exact=True).click()
+        self.submit_labelled_form(
+            owner_page,
+            {"Invite email": email},
+            owner_page.get_by_role("button", name="Invite", exact=True),
+            method="POST",
+            path_token="/invitations",
+        )
         link_el = owner_page.query_selector("#invite-result [data-invitation-link]")
         assert link_el, "No invitation link found after sending invite"
         link = link_el.get_attribute("data-invitation-link") or ""
@@ -157,13 +160,17 @@ class OrgBrowserMixin(BrowserBase):
         slug = self._active_slug()
         self.page.goto(f"{self.base_url}/{slug}/settings", wait_until="load")
         # The editable name form is owner-only; absent for members (settings is 403).
-        name_field = self.page.get_by_label("Organisation name")
-        if name_field.count() == 0:
+        if self.page.get_by_label("Organisation name").count() == 0:
             self._probe_blocked("PATCH", f"/{slug}", form={"name": new_name})
             return
-        name_field.fill(new_name)
         save = self.page.locator("form:has(input[name=name])").get_by_role("button", name="Save")
-        self.last_response = self.click_and_capture(self.page, save, "PATCH", f"/{slug}")
+        self.last_response = self.submit_labelled_form(
+            self.page,
+            {"Organisation name": new_name},
+            save,
+            method="PATCH",
+            path_token=f"/{slug}",
+        )
 
     def try_create_org(self, name: str) -> None:
         # Fire the create request from the acting user's authenticated context and capture
@@ -251,9 +258,12 @@ class OrgBrowserMixin(BrowserBase):
             )
             return
         page.click("[data-invite-toggle]")
-        page.get_by_label("Invite email").fill(email)
-        self.last_response = self.click_and_capture(
-            page, page.get_by_role("button", name="Invite", exact=True), "POST", "/invitations"
+        self.last_response = self.submit_labelled_form(
+            page,
+            {"Invite email": email},
+            page.get_by_role("button", name="Invite", exact=True),
+            method="POST",
+            path_token="/invitations",
         )
         error_el = page.query_selector("#invite-result [data-error]")
         if error_el is not None:
