@@ -209,6 +209,11 @@
     @apply bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm;
   }
 
+  /* Bordered card shell (the recurring non-DaisyUI card look) */
+  .card-panel {
+    @apply card bg-base-100 border border-base-300 shadow-sm;
+  }
+
   /* Markdown body — styles generated HTML from mistune (child elements carry no classes) */
   .md-body h1 {
     @apply text-2xl font-semibold text-gray-900 mb-4 mt-6;

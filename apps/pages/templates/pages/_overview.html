@@ -1,25 +1,2 @@
-<section class="card bg-base-100 border border-base-300 shadow-sm"
-         data-overview="{{ o.key }}">
-  <div class="card-body">
-    <div class="flex items-center gap-3 mb-3">
-      <div class="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-none">
-        <i class="ph ph-{{ o.icon }} text-primary" aria-hidden="true"></i>
-      </div>
-      <h3 class="card-title text-sm font-semibold">{{ o.title }}</h3>
-    </div>
-    <div class="flex flex-wrap gap-2 mb-2">
-      {% for line in o.data.lines %}
-        <span class="text-xs font-semibold bg-base-300 text-base-content/70 rounded px-2 py-0.5">{{ line }}</span>
-      {% endfor %}
-    </div>
-    {% if o.data.recent %}
-      <ul class="text-sm text-base-content/70 space-y-0.5">
-        {% for item in o.data.recent %}<li class="truncate">{{ item }}</li>{% endfor %}
-      </ul>
-    {% endif %}
-    <div class="card-actions">
-      <a href="/{{ org_handle }}/{{ o.href }}"
-         class="inline-block mt-3 text-sm font-medium text-primary hover:underline">Open →</a>
-    </div>
-  </div>
-</section>
+{% from "macros/overview_card.html" import overview_card %}
+{{ overview_card(o, org_handle, color="primary") }}

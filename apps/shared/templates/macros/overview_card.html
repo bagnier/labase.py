@@ -1,0 +1,26 @@
+{% macro overview_card(o, org_handle, color="primary") %}
+  <section class="card-panel" data-overview="{{ o.key }}">
+    <div class="card-body">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-9 h-9 rounded-xl bg-{{ color }}/10 flex items-center justify-center flex-none">
+          <i class="ph ph-{{ o.icon }} text-{{ color }}" aria-hidden="true"></i>
+        </div>
+        <h3 class="card-title text-sm font-semibold">{{ o.title }}</h3>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-2">
+        {% for line in o.data.lines %}
+          <span class="badge badge-ghost badge-sm">{{ line }}</span>
+        {% endfor %}
+      </div>
+      {% if o.data.recent %}
+        <ul class="text-sm text-base-content/70 space-y-0.5">
+          {% for item in o.data.recent %}<li class="truncate">{{ item }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <div class="card-actions">
+        <a href="/{{ org_handle }}/{{ o.href }}"
+           class="link link-{{ color }} inline-block mt-3 text-sm font-medium no-underline hover:underline">Open →</a>
+      </div>
+    </div>
+  </section>
+{% endmacro %}

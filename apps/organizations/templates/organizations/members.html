@@ -32,10 +32,7 @@
         {% endfor %}
       </ul>
       {% if caller_role == "owner" %}
-        <div id="invite-form"
-             x-show="inviting"
-             x-cloak
-             class="card bg-base-100 border border-base-300 shadow-sm mt-6">
+        <div id="invite-form" x-show="inviting" x-cloak class="card-panel mt-6">
           <div class="card-body space-y-4">
             <h2 class="card-title text-sm font-semibold">Invite a new member</h2>
             <form hx-post="/{{ org_handle }}/invitations"

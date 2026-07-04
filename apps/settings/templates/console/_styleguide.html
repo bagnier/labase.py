@@ -82,7 +82,7 @@
   <section id="sg-cards" aria-labelledby="sg-cards-h" class="space-y-4">
     <h2 id="sg-cards-h" class="text-lg font-semibold">Cards</h2>
     <div class="grid gap-4 sm:grid-cols-2">
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-panel">
         <div class="card-body">
           <h3 class="card-title">Card title</h3>
           <p class="text-sm text-base-content/70">A card uses <code>card-body</code> for padding.</p>
@@ -129,7 +129,7 @@
   <section id="sg-forms" aria-labelledby="sg-forms-h" class="space-y-4">
     <h2 id="sg-forms-h" class="text-lg font-semibold">Forms</h2>
     <div class="grid gap-4 md:grid-cols-2">
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-panel">
         <div class="card-body gap-4">
           {{ input_field("sg-name", "name", label="Name", placeholder="Ada Lovelace", hint="Your display name.") }}
           <label class="select w-full">
@@ -146,7 +146,7 @@
           <input type="file" class="file-input w-full" aria-label="Upload file" />
         </div>
       </div>
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-panel">
         <div class="card-body gap-4">
           <input class="input input-primary w-full"
                  placeholder="Primary input"
