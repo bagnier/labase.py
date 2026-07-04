@@ -5,7 +5,7 @@ from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.slug_registry import is_reserved
 
 
@@ -77,12 +77,12 @@ async def get_membership_by_org_id(
 def _audit_ownership_violation(
     bg: BackgroundTasks, request: Request, membership: Membership
 ) -> None:
-    record_audit_event(
+    audit(
         bg,
+        "organizations.ownership_violation",
         level="warning",
-        event="organizations.ownership_violation",
-        user_id=str(membership.auth_user_id),
-        org_id=str(membership.org_id),
+        user_id=membership.auth_user_id,
+        org_id=membership.org_id,
         ip=request.client.host if request.client else None,
         path=request.url.path,
     )

@@ -29,7 +29,7 @@ from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.host import host
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
@@ -55,12 +55,12 @@ def _audit_last_owner_violation(
     org_id: uuid.UUID,
     **extra: str,
 ) -> None:
-    record_audit_event(
+    audit(
         bg,
+        "organizations.last_owner_violation",
         level="warning",
-        event="organizations.last_owner_violation",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         ip=request.client.host if request.client else None,
         **extra,
     )
@@ -105,12 +105,11 @@ async def create_organization(
         )
 
     org = await repo.create_with_owner(name, user_id)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="organizations.created",
+        "organizations.created",
         user_id=current_user.id,
-        org_id=str(org.id),
+        org_id=org.id,
         name=name,
     )
     if wants_json(request):
@@ -324,12 +323,11 @@ async def leave_organization(
             status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="organizations.member_left",
+        "organizations.member_left",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
     )
     return delete_response(request, htmx_redirect_url="/profile")
 
@@ -366,12 +364,11 @@ async def update_member_role(
     updated = await repo.update_member_role(org_id, user_id, new_role)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="organizations.member_role_changed",
+        "organizations.member_role_changed",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         target_user_id=str(user_id),
         role=new_role.value,
     )
@@ -420,12 +417,11 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="organizations.member_removed",
+        "organizations.member_removed",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         target_user_id=str(user_id),
     )
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
@@ -473,12 +469,11 @@ async def create_invitation(
                 role=OrgRole.member,
                 invited_by=uuid.UUID(current_user.id),
             )
-            record_audit_event(
+            audit(
                 bg,
-                level="info",
-                event="organizations.invitation_sent",
+                "organizations.invitation_sent",
                 user_id=current_user.id,
-                org_id=str(org_id),
+                org_id=org_id,
                 target_email=email,
             )
 
@@ -552,12 +547,11 @@ async def revoke_invitation(
 ) -> Response:
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="organizations.invitation_revoked",
+        "organizations.invitation_revoked",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         invitation_id=str(invitation_id),
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,

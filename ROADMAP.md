@@ -48,7 +48,7 @@
 - [x] ORM mixins in `shared/persistence/base.py` (`UUIDPk`, `OrgScoped`, `Versioned`, `Timestamped`) — ~12 models recopy the same 6 lines (~60-70 lines, lowest risk)
 - [x] `integration.py` ritual: extract `overview_from_count()`, `pluralize()`, `seed_with_owner()` helpers (~120-160 lines across 5 contexts) — factor the bodies, NOT the wiring (mount stays explicit, cf. non-goal above)
 - [x] Jinja macro `overview_card()` — 5 carbon-copy `_overview.html` ("Open →" link coded 5 different ways); pills as `badge`; component class for the `card bg-base-100 border…` shell respelled ×25
-- [ ] `audit(bg, event, user, org_id, **fields)` helper — 38 `record_audit_event` calls repeat the same first 5 args
+- [x] `audit(bg, event, user, org_id, **fields)` helper — 38 `record_audit_event` calls repeat the same first 5 args
 - [ ] `PositionedRepository` mixin — `move_above` algorithm duplicated todo/pages (fix the version bypass there too)
 - [ ] `OrgScopedRepository.default_order` — kills 4 `all()` overrides, todo's redundant `count()`, duplicated `count_all()`
 - [ ] a11y parity: `<section aria-label>` on recent pages (pages/settings/calendar views), `aria-live` on HTMX-swapped lists, use `input_field()` macro in `pages/form.html`

@@ -11,7 +11,7 @@ from apps.organizations.domain.models import InvitationRead, InvitationStatus
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import auth_user_exists
 
@@ -131,12 +131,12 @@ async def accept_invitation(
     if current_user.email.lower() != invitation["email"].lower():
         org = await rls_repo.get(invitation["org_id"])
         org_name = org.name if org else ""
-        record_audit_event(
+        audit(
             bg,
+            "organizations.invitation_email_mismatch",
             level="warning",
-            event="organizations.invitation_email_mismatch",
             user_id=current_user.id,
-            org_id=str(invitation["org_id"]),
+            org_id=invitation["org_id"],
             target_email=invitation["email"],
             ip=request.client.host if request.client else None,
         )
@@ -178,12 +178,11 @@ async def accept_invitation(
 
     org = await rls_repo.get(invitation["org_id"])
     slug = org.handle if org else ""
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="organizations.member_joined",
+        "organizations.member_joined",
         user_id=current_user.id,
-        org_id=str(invitation["org_id"]),
+        org_id=invitation["org_id"],
     )
     redirect_url = f"/{slug}/dashboard"
     if wants_json(request):

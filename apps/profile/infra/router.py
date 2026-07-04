@@ -9,7 +9,7 @@ from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
@@ -90,10 +90,9 @@ async def profile_update(
     old_handle = profile.handle
     await repo.update(profile, ProfileUpdate(handle=handle))
     if old_handle != handle:
-        record_audit_event(
+        audit(
             bg,
-            level="info",
-            event="profile.handle_changed",
+            "profile.handle_changed",
             user_id=current_user.id,
             new_handle=handle,
         )

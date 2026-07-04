@@ -8,7 +8,7 @@ from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.config import get_technical_settings
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 
 log = structlog.get_logger("labase.auth.security")
 
@@ -78,10 +78,10 @@ async def get_current_admin(
     plain 404 — a 403 would confirm the protected surface exists.
     """
     if not user.is_admin:
-        record_audit_event(
+        audit(
             bg,
+            "auth.admin_probe",
             level="warning",
-            event="auth.admin_probe",
             user_id=user.id,
             ip=request.client.host if request.client else None,
             path=request.url.path,

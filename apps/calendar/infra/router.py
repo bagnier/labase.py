@@ -13,7 +13,7 @@ from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -258,12 +258,11 @@ async def create_event(
         location=str(body.get("location", "")),
         description=str(body.get("description", "")),
     )
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="calendar.created",
+        "calendar.created",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         event_id=str(event.id),
     )
     if wants_json(request):
@@ -358,12 +357,11 @@ async def update_event(
     if body.get("description") is not None:
         event.description = str(body["description"])
     await repo.save(event)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="calendar.updated",
+        "calendar.updated",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         event_id=str(event.id),
     )
     if wants_json(request):
@@ -384,12 +382,11 @@ async def delete_event(
     event = await repo.get(event_id)
     if event is not None:
         await repo.delete(event)
-        record_audit_event(
+        audit(
             bg,
-            level="info",
-            event="calendar.deleted",
+            "calendar.deleted",
             user_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             event_id=str(event_id),
         )
     return delete_response(request, htmx_redirect_url=f"/{org.handle}/calendar")

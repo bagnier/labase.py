@@ -1,4 +1,5 @@
 import json
+import uuid
 from typing import Any
 
 import structlog
@@ -38,7 +39,7 @@ async def _insert_audit_log(
         log.exception("audit.write_failed", event=event, user_id=user_id)
 
 
-def record_audit_event(
+def _record_audit_event(
     bg: BackgroundTasks,
     *,
     level: str,
@@ -49,3 +50,25 @@ def record_audit_event(
 ) -> None:
     log.info(event, level=level, user_id=user_id, ip=ip, **payload)
     bg.add_task(_insert_audit_log, level, event, user_id, ip, payload)
+
+
+def audit(
+    bg: BackgroundTasks,
+    event: str,
+    *,
+    level: str = "info",
+    user_id: str | uuid.UUID | None = None,
+    org_id: str | uuid.UUID | None = None,
+    ip: str | None = None,
+    **fields: Any,
+) -> None:
+    if org_id is not None:
+        fields = {"org_id": str(org_id), **fields}
+    _record_audit_event(
+        bg,
+        level=level,
+        event=event,
+        user_id=str(user_id) if user_id is not None else None,
+        ip=ip,
+        **fields,
+    )

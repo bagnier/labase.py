@@ -14,7 +14,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.supabase_studio import studio_link
@@ -164,10 +164,10 @@ async def add_admin(request: Request, current_user: CurrentAdmin, bg: Background
             error=exc.email,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    record_audit_event(
+    audit(
         bg,
+        "settings.admin_granted",
         level="warning",
-        event="settings.admin_granted",
         user_id=current_user.id,
         target_email=email,
     )
@@ -187,19 +187,19 @@ async def update_admin(
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
-        record_audit_event(
+        audit(
             bg,
+            "settings.last_admin_violation",
             level="warning",
-            event="settings.last_admin_violation",
             user_id=current_user.id,
             target_email=email,
             ip=request.client.host if request.client else None,
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    record_audit_event(
+    audit(
         bg,
+        "settings.admin_granted" if is_admin else "settings.admin_revoked",
         level="warning",
-        event="settings.admin_granted" if is_admin else "settings.admin_revoked",
         user_id=current_user.id,
         target_email=email,
     )

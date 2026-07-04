@@ -18,7 +18,7 @@ from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 
 log = structlog.get_logger("labase.auth.router")
 
@@ -116,7 +116,7 @@ async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        record_audit_event(bg, level="warning", event="auth.login_failed", ip=ip, email=email)
+        audit(bg, "auth.login_failed", level="warning", ip=ip, email=email)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         if wants_json(request):
@@ -206,7 +206,7 @@ async def register_endpoint(
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
-        record_audit_event(bg, level="warning", event="auth.register_failed", ip=ip, email=email)
+        audit(bg, "auth.register_failed", level="warning", ip=ip, email=email)
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."

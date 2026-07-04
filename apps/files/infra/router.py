@@ -35,7 +35,7 @@ from apps.shared.http import (
     wants_json,
 )
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 
@@ -157,12 +157,11 @@ async def upload_file(
         size_bytes=len(content),
         uploader_email=current_user.email,
     )
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="files.uploaded",
+        "files.uploaded",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         file_id=str(org_file.id),
         filename=org_file.filename,
     )
@@ -205,12 +204,11 @@ async def delete_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(bucket()).remove([org_file.storage_path])
     await repo.delete(org_file)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="files.deleted",
+        "files.deleted",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         file_id=str(file_id),
     )
 
@@ -252,12 +250,11 @@ async def rename_file(
 
     old_filename = org_file.filename
     await repo.rename(org_file, safe_name, new_path)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="files.renamed",
+        "files.renamed",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         file_id=str(file_id),
         old_filename=old_filename,
         new_filename=safe_name,
@@ -278,12 +275,11 @@ async def generate_share_link(
 ):
     org_file = or_404(await repo.get(file_id))
     token = await repo.add_share_token(file_id)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="files.share_link_created",
+        "files.share_link_created",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         file_id=str(file_id),
         token=str(token.token),
     )
@@ -308,20 +304,20 @@ async def public_share_download(
     repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
-        record_audit_event(
+        audit(
             bg,
+            "files.share_link_rejected",
             level="warning",
-            event="files.share_link_rejected",
             ip=ip,
             token=str(token),
             reason="invalid",
         )
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Link not found")
     if share_token.expires_at < now():
-        record_audit_event(
+        audit(
             bg,
+            "files.share_link_rejected",
             level="warning",
-            event="files.share_link_rejected",
             ip=ip,
             token=str(token),
             reason="expired",
@@ -330,21 +326,20 @@ async def public_share_download(
 
     org_file = await repo.get(share_token.file_id)
     if org_file is None:
-        record_audit_event(
+        audit(
             bg,
+            "files.share_link_rejected",
             level="warning",
-            event="files.share_link_rejected",
             ip=ip,
             token=str(token),
             reason="file_missing",
         )
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
 
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="files.share_downloaded",
-        org_id=str(org_file.org_id),
+        "files.share_downloaded",
+        org_id=org_file.org_id,
         file_id=str(org_file.id),
         token=str(token),
         ip=ip,

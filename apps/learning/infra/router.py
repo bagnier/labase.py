@@ -26,7 +26,7 @@ from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 
 router = APIRouter(prefix="/learning", tags=["learning"])
@@ -186,12 +186,11 @@ async def mark_card(
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Daily review limit reached")
     schedule = apply_outcome(state.level if state else 0, today_date, outcome)
     await repo.apply_schedule(card.id, schedule)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="learning.card_marked",
+        "learning.card_marked",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         card_id=str(card.id),
         outcome=outcome.value,
     )

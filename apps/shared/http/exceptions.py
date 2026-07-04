@@ -57,7 +57,7 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:
     # Every rejected request lands here — a generic, cheap trace even for routes that don't
-    # call record_audit_event themselves. Security-relevant rejections get a proper audit_logs
+    # call audit() themselves. Security-relevant rejections get a proper audit_logs
     # row from their own call site (see apps/shared/observability/audit.py); this is the catch-all.
     log_fn = log.error if exc.status_code >= 500 else log.warning
     log_fn(

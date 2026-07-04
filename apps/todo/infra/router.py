@@ -15,7 +15,7 @@ from apps.shared.http import (
     wants_full_page,
     wants_json,
 )
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.todo.contract import settings
 from apps.todo.domain.models import TodoRead
@@ -81,12 +81,11 @@ async def add_todo(
 
     title = await parse_field(request, "title")
     todo = await repo.add(uuid.UUID(current_user.id), title)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="todo.created",
+        "todo.created",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         todo_id=str(todo.id),
     )
     return await _render(request, session, current_user, repo, org)
@@ -115,12 +114,11 @@ async def patch_todo(
         todo.title = title
     await repo.save(todo)
     if title is not None:
-        record_audit_event(
+        audit(
             bg,
-            level="info",
-            event="todo.updated",
+            "todo.updated",
             user_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             todo_id=str(todo_id),
         )
     return await _render(request, session, current_user, repo, org)
@@ -140,12 +138,11 @@ async def delete_todo(
     todo = await repo.get(todo_id)
     if todo:
         await repo.delete(todo)
-        record_audit_event(
+        audit(
             bg,
-            level="info",
-            event="todo.deleted",
+            "todo.deleted",
             user_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             todo_id=str(todo_id),
         )
     if wants_json(request):

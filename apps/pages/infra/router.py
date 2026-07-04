@@ -22,7 +22,7 @@ from apps.pages.infra.repository import (
 )
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import record_audit_event
+from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.slug_registry import slugify
@@ -69,12 +69,11 @@ async def create_page(
     if await repo.slug_taken(slug):
         raise HTTPException(status.HTTP_409_CONFLICT, "A page with this slug already exists")
     page = await repo.add(uuid.UUID(current_user.id), title, slug, content)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="pages.created",
+        "pages.created",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         slug=slug,
     )
     if wants_json(request):
@@ -100,12 +99,11 @@ async def new_page(
         counter += 1
     title = "New page"
     await repo.add(uuid.UUID(current_user.id), title, slug, "")
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="pages.created",
+        "pages.created",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         slug=slug,
     )
     return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
@@ -180,12 +178,11 @@ async def update_page(
             page.visibility = visibility
             event = _PUBLISH_EVENT[visibility]
     await repo.save(page)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event=event,
+        event,
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         slug=page.slug,
     )
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
@@ -213,12 +210,11 @@ async def delete_page(
     if not _can_edit(page, membership):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
     await repo.delete(page)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event="pages.deleted",
+        "pages.deleted",
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         slug=slug,
     )
     # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
@@ -257,12 +253,11 @@ async def set_visibility(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility") from None
     page.visibility = visibility
     await repo.save(page)
-    record_audit_event(
+    audit(
         bg,
-        level="info",
-        event=_PUBLISH_EVENT[visibility],
+        _PUBLISH_EVENT[visibility],
         user_id=current_user.id,
-        org_id=str(org_id),
+        org_id=org_id,
         slug=slug,
     )
     return mutation_response(
