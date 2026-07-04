@@ -1,10 +1,6 @@
-from datetime import datetime
-
-from sqlalchemy import DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared import clock
-from apps.shared.persistence.base import Base
+from apps.shared.persistence.base import Base, Timestamped, Versioned
 
 # Stored form of a boolean setting value.
 BOOL_TRUE = "true"
@@ -14,7 +10,7 @@ BOOL_FALSE = "false"
 ENABLED_KEY = "enabled"
 
 
-class AppSetting(Base):
+class AppSetting(Base, Versioned, Timestamped):
     """The persisted value of one app setting — seeded on declaration, edited from the console."""
 
     __tablename__ = "app_settings"
@@ -22,12 +18,3 @@ class AppSetting(Base):
     app: Mapped[str] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(primary_key=True)
     value: Mapped[str]  # stored as text; coerced by the app's declared SettingDef.type
-    version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-
-    __mapper_args__ = {"version_id_col": version}

@@ -3,12 +3,11 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime, ForeignKey, Text
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared import clock
-from apps.shared.persistence.base import Base
+from apps.shared.persistence.base import Base, OrgScoped, Timestamped, UUIDPk, Versioned
 
 
 class OrgRole(StrEnum):
@@ -16,24 +15,14 @@ class OrgRole(StrEnum):
     member = "member"
 
 
-class Organization(Base):
+class Organization(Base, UUIDPk, Versioned, Timestamped):
     __tablename__ = "organizations"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str]
     handle: Mapped[str] = mapped_column(default="")
-    version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-
-    __mapper_args__ = {"version_id_col": version}
 
 
-class Membership(Base):
+class Membership(Base, Versioned, Timestamped):
     __tablename__ = "memberships"
 
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
@@ -41,15 +30,6 @@ class Membership(Base):
     role: Mapped[OrgRole] = mapped_column(
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
-    version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-
-    __mapper_args__ = {"version_id_col": version}
 
 
 class InvitationStatus(StrEnum):
@@ -58,11 +38,9 @@ class InvitationStatus(StrEnum):
     revoked = "revoked"
 
 
-class OrgInvitation(Base):
+class OrgInvitation(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
     __tablename__ = "org_invitations"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     email: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[OrgRole] = mapped_column(
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
@@ -74,15 +52,6 @@ class OrgInvitation(Base):
         nullable=False,
         default=InvitationStatus.pending,
     )
-    version: Mapped[int] = mapped_column(default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-
-    __mapper_args__ = {"version_id_col": version}
 
 
 class InvitationRead(BaseModel):
