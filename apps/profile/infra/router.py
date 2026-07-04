@@ -10,7 +10,7 @@ from apps.profile.infra.repository import ProfileRepository
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
-from apps.shared.page import shell_context
+from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
 router = APIRouter()
@@ -29,14 +29,14 @@ async def _profile_context(
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
     if profile is not None and profile.handle is None:
         profile = await repo.auto_handle(profile, current_user.email)
-    shell = await shell_context(session, current_user)
-    orgs = shell["org_nav"]
+    context = await fullpage_context(session, current_user)
+    orgs = context["org_nav"]
     return {
         "user": current_user,
         "profile": profile,
         "org_handle": orgs[0].handle if orgs else "",
         "org": orgs[0] if orgs else None,
-        **shell,
+        **context,
     }
 
 

@@ -36,7 +36,7 @@ from apps.shared.http import (
 )
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
-from apps.shared.page import shell_context
+from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -74,7 +74,7 @@ async def _render(
     files: list,
     org,
 ) -> Response:
-    shell = await shell_context(session, current_user) if wants_full_page(request) else None
+    context = await fullpage_context(session, current_user) if wants_full_page(request) else None
     return render_list(
         request,
         fragment="files/_list_fragment.html",
@@ -84,7 +84,7 @@ async def _render(
         items=files,
         user=current_user,
         org=org,
-        shell=shell,
+        context=context,
         extra={
             "welcome_message": settings.welcome_message,
             "uploads_enabled": settings.uploads_enabled,

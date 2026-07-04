@@ -16,7 +16,7 @@ from apps.shared.http import (
     wants_json,
 )
 from apps.shared.observability.audit import record_audit_event
-from apps.shared.page import shell_context
+from apps.shared.page import fullpage_context
 from apps.todo.contract import settings
 from apps.todo.domain.models import TodoRead
 from apps.todo.infra.repository import TodoRepository
@@ -38,7 +38,7 @@ async def _render(
     repo: TodoRepo,
     org,
 ) -> Response:
-    shell = await shell_context(session, current_user) if wants_full_page(request) else None
+    context = await fullpage_context(session, current_user) if wants_full_page(request) else None
     return render_list(
         request,
         fragment="todo/_list_fragment.html",
@@ -48,7 +48,7 @@ async def _render(
         items=await repo.all(),
         user=current_user,
         org=org,
-        shell=shell,
+        context=context,
         extra={"creation_enabled": settings.creation_enabled},
     )
 

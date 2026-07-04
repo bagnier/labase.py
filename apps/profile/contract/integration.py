@@ -2,8 +2,8 @@
 
 from sqlalchemy import func, select
 
+from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
-from apps.profile.contract.shell import provide_profile_handle
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -15,7 +15,7 @@ from apps.shared.slug_registry import register_open_list
 def mount(host: Host) -> None:
     host.app.include_router(router, tags=["profile"])
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_page_context("profile", ("profile_handle",), provide_profile_handle)
+    host.register_fullpage_provider("profile", provide_profile_handle)
     declare_app_settings(
         "profile",
         defs=[],

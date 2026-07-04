@@ -19,7 +19,7 @@ async def get_rls_session(
     """The single authenticated DB session for a request.
 
     The RLS context (role + JWT claims) is set **once** here; FastAPI caches the
-    dependency, so every consumer in the request (shell provider, route, sub-deps)
+    dependency, so every consumer in the request (fullpage provider, route, sub-deps)
     shares this same session and the single ``SET role`` round-trip. Tolerant to
     anonymous callers — authentication (401) is enforced separately by
     ``CurrentUser`` where a route requires it.

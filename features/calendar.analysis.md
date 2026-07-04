@@ -25,7 +25,7 @@ This context **emits no new events** in v1; it only **consumes** existing contra
 - `apps.settings.contract` — `ConsoleOverview`/`ConsoleOverviewQuery`, `declare_app_settings`,
   `SettingDef`, `feature_switch`, `SupabaseLink`, `SettingsChanged`, `get_app_settings`.
 - `apps.auth.contract.current` — `CurrentUser`, `RlsSession`.
-- `apps.profile.contract.shell` — `page_context` (full HTML pages).
+- `apps.profile.contract.fullpage` — `fullpage_context` (full HTML pages).
 - `apps.shared` — `clock` (single time source; **never** `datetime.now()`),
   `OrgScopedRepository`, `AdminSession` (BYPASSRLS, console count only), `templates`,
   `record_audit_event`, `wants_json` / `parse_body` / `or_404`.

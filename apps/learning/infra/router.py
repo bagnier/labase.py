@@ -27,7 +27,7 @@ from apps.shared import clock
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
-from apps.shared.page import shell_context
+from apps.shared.page import fullpage_context
 
 router = APIRouter(prefix="/learning", tags=["learning"])
 
@@ -99,7 +99,7 @@ async def _render_session(
         "org": org,
     }
     if not is_htmx:
-        ctx |= await shell_context(session, current_user)
+        ctx |= await fullpage_context(session, current_user)
     return templates.TemplateResponse(request, template, ctx)
 
 
@@ -226,5 +226,5 @@ async def resources(
         return JSONResponse([i.model_dump(mode="json") for i in items])
     org_handle = request.path_params.get("org_handle", "")
     ctx = {"user": current_user, "resources": items, "org_handle": org_handle, "org": org}
-    ctx |= await shell_context(session, current_user)
+    ctx |= await fullpage_context(session, current_user)
     return templates.TemplateResponse(request, "learning/resources.html", ctx)

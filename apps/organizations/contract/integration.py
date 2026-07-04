@@ -13,8 +13,8 @@ from sqlalchemy import func, select
 from apps.auth.contract.events import UserCreated
 from apps.organizations.contract import ORG_PREFIX, settings
 from apps.organizations.contract.events import OrgCreated
+from apps.organizations.contract.fullpage import provide_org_nav
 from apps.organizations.contract.queries import org_handle_taken
-from apps.organizations.contract.shell import provide_org_nav
 from apps.organizations.domain.models import Membership, Organization
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
@@ -62,7 +62,7 @@ def mount(host: Host) -> None:
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_page_context("org", ("org_nav",), provide_org_nav)
+    host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=100, owner_only=True)
     )

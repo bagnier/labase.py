@@ -15,7 +15,7 @@ from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import record_audit_event
-from apps.shared.page import shell_context
+from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.supabase_studio import studio_link
 
@@ -110,7 +110,7 @@ async def get_console(
             "user": current_user,
             "overviews": overviews,
             "disabled": disabled,
-            **await shell_context(session, current_user),
+            **await fullpage_context(session, current_user),
         },
     )
 
@@ -143,7 +143,7 @@ async def get_admins(
             "user": current_user,
             "admins": rows,
             "admin_count": len(rows),
-            **await shell_context(session, current_user),
+            **await fullpage_context(session, current_user),
         },
     )
 
@@ -280,7 +280,7 @@ async def get_settings_page(
             "env_vars": env_vars,
             "process": process,
             "technical_config": technical_config,
-            **await shell_context(session, current_user),
+            **await fullpage_context(session, current_user),
         },
     )
 
@@ -337,7 +337,7 @@ async def get_app(
             "overview": overview,
             "settings": settings,
             "supabase": supabase,
-            **await shell_context(session, current_user),
+            **await fullpage_context(session, current_user),
         },
     )
 

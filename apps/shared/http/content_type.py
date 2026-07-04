@@ -27,7 +27,7 @@ def wants_html(request: Request) -> bool:
 def wants_full_page(request: Request) -> bool:
     """True when the response is a standalone HTML page (not JSON, not an HTMX swap).
 
-    Only full pages extend base.html and therefore need the shell context.
+    Only full pages extend base.html and therefore need the fullpage slices.
     """
     if wants_json(request):
         return False

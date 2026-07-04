@@ -6,8 +6,8 @@ dashboard ``OverviewQuery`` and the server-wide ``ConsoleOverviewQuery``.
 """
 
 from apps.organizations.contract import ORG_PREFIX
+from apps.organizations.contract.fullpage import OrgNavItem, OrgNavQuery
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.shell import OrgNavItem, OrgNavQuery
 from apps.pages.contract import settings
 from apps.pages.domain.models import PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository, count_all

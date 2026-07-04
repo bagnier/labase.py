@@ -56,7 +56,7 @@ def render_list(
     items: list[Any],
     user: Any,
     org: Any = None,
-    shell: dict | None = None,
+    context: dict | None = None,
     extra: dict | None = None,
 ) -> Response:
     if wants_json(request):
@@ -67,6 +67,6 @@ def render_list(
     ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
     if extra:
         ctx |= extra
-    if not is_htmx and shell:
-        ctx |= shell
+    if not is_htmx and context:
+        ctx |= context
     return templates.TemplateResponse(request, template, ctx)

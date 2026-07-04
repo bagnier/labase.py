@@ -1,7 +1,7 @@
-"""Organizations' page-context slice: the user's orgs, each with its org-specific nav.
+"""Organizations' fullpage-context slice: the user's orgs, each with its org-specific nav.
 
-Registered as a page context provider at organizations' ``mount()`` and collected by
-:func:`apps.shared.page.shell_context`. For each org, :func:`provide_org_nav` fires
+Registered as a fullpage provider at organizations' ``mount()`` and collected by
+:func:`apps.shared.page.fullpage_context`. For each org, :func:`provide_org_nav` fires
 :class:`OrgNavQuery` — "collect this org's specific nav items" — and any app can answer
 via ``host.events.on(OrgNavQuery, handler)``, returning a list of :class:`OrgNavItem`
 (e.g. ``pages`` returns the org's published pages).
@@ -19,9 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.contract.queries import get_user_orgs
 from apps.shared.host import host
-from apps.shared.page import PageContextQuery
+from apps.shared.page import FullpageQuery
 
-log = structlog.get_logger("labase.organizations.shell")
+log = structlog.get_logger("labase.organizations.fullpage")
 
 
 @dataclass(frozen=True)
@@ -55,8 +55,8 @@ class NavOrg:
     extra_nav: list[OrgNavItem] = field(default_factory=list)
 
 
-async def provide_org_nav(query: PageContextQuery) -> dict:
-    """Page context slice ``org_nav``: the user's orgs, each with its org-specific nav.
+async def provide_org_nav(query: FullpageQuery) -> dict:
+    """Fullpage slice ``org_nav``: the user's orgs, each with its org-specific nav.
 
     Fetches the user's orgs, then for each fires :class:`OrgNavQuery` to collect the
     org-specific nav items other apps contribute. Relies on Postgres RLS (the request
@@ -64,12 +64,12 @@ async def provide_org_nav(query: PageContextQuery) -> dict:
     the user's orgs.
     """
     if query.user is None:
-        return {"org_nav": []}
+        return {"nav": []}
     try:
         orgs = await get_user_orgs(query.session, uuid.UUID(query.user.id))
     except Exception:
         log.exception("organizations.org_nav_load_failed")
-        return {"org_nav": []}
+        return {"nav": []}
     nav_orgs = []
     for o in orgs:
         results = await host.events.collect(OrgNavQuery(query.session, o.id, o.is_owner))
@@ -77,4 +77,4 @@ async def provide_org_nav(query: PageContextQuery) -> dict:
         nav_orgs.append(
             NavOrg(id=o.id, name=o.name, handle=o.handle, is_owner=o.is_owner, extra_nav=extra_nav)
         )
-    return {"org_nav": nav_orgs}
+    return {"nav": nav_orgs}

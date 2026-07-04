@@ -116,7 +116,7 @@ Implement here the surfaces decided in the Impact phase, all via `host.events.on
   settings.reload)` for live reload. Source: `apps/settings/contract/settings.py`.
 - **Menu**: `host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos",
   order=10, owner_only=False))` (`apps/shared/host.py`). For dynamic per-org entries, handle
-  `OrgNavQuery` instead (`apps/organizations/contract/shell.py`).
+  `OrgNavQuery` instead (`apps/organizations/contract/fullpage.py`).
 - **Seeding**: `host.events.on(OrgCreated, _seed)`; `_seed(event)` opens
   `admin_session_factory()()` (BYPASSRLS), fetches the owner via `get_org_owner_id(session,
   event.org_id)`, writes starter rows, `commit()`. Source: `apps/todo/contract/integration.py`.
@@ -146,8 +146,8 @@ def mount(host: Host) -> None:
 Routers serve JSON, an HTMX fragment, or a full page from one handler. Use the helpers in
 `apps/shared/http/` — `wants_json(request)`, `wants_full_page(request)` (false for HTMX) — or
 the `render_list(...)` helper (`apps/shared/http/responses.py`) passing both `fragment="…
-/_x_fragment.html"` and `full=".../x.html"`. Full pages load the shell (`shell_context` /
-`page_context`); HTMX fragments don't — no middleware injects it. Partials are named `_*.html`
+/_x_fragment.html"` and `full=".../x.html"`. Full pages load `fullpage_context`; HTMX
+fragments don't — no middleware injects it. Partials are named `_*.html`
 (e.g. `_overview.html`, `_list_fragment.html`).
 
 ## Styling — daisyUI components (not raw utility soup)

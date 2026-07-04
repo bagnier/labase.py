@@ -1,38 +1,30 @@
-"""Page context assembly — ownerless infra (peer of EventBus / Host).
+"""Fullpage context assembly — ownerless infra (peer of EventBus / Host).
 
 A full HTML page's template context is composed of *slices*, each owned by the app
-that knows it. An app registers a *page context provider* at its ``mount()`` via
-:meth:`~apps.shared.host.Host.register_page_context`, declaring **the exact keys it
-injects** — so the page's context shape is documented at the registration site, not
-discovered at runtime.
+that knows it. An app registers a *fullpage provider* at its ``mount()`` via
+:meth:`~apps.shared.host.Host.register_fullpage_provider`, passing a ``name`` and a
+function that returns raw keys — the collector namespaces them as ``f"{name}_{key}"``
+(name ``profile`` returning ``handle`` lands in the context as ``profile_handle``).
+Keys stay flat — no nested sub-dicts — so templates read ``{{ profile_handle }}``.
 
-The ``namespace`` is the key prefix the slice owns: every key it injects must start
-with ``f"{namespace}_"`` (namespace ``profile`` → key ``profile_handle``, namespace
-``org`` → key ``org_nav``). Keys stay flat — no nested sub-dicts — so templates
-read ``{{ profile_handle }}``. ``user`` and ``nav_items`` are reserved by the collector.
-
-Two guarantees keep the namespace clean:
-
-- **Startup.** ``register_page_context`` rejects a mis-prefixed, reserved, or
-  already-owned key — collisions fail fast when the app mounts.
-- **Runtime.** The merge skips (and logs) any undeclared or clobbering key a provider
-  returns, and isolates a provider that raises.
+If a provider's namespaced key collides with one already in the context, the merge
+logs and overwrites. A provider that raises is isolated and logged; the rest of the
+page still renders.
 
 No global render hook injects data silently — a Jinja "context processor" or ASGI
 middleware would, and that is proscribed by the *Page composition* principle. Routes
-call these functions explicitly: full pages use :func:`fullpage_context`, HTMX
-fragments don't.
+call :func:`fullpage_context` explicitly, only on full pages (not HTMX fragments).
 
-Current slices (grep ``register_page_context`` to confirm):
+Current providers (grep ``register_fullpage_provider`` to confirm):
 
-==================  ===========  =======================================
-key                 namespace    provider
-==================  ===========  =======================================
-``nav_items``       (host)       seeded here from ``host.nav_items``
-``user``            (collector)  added by :func:`fullpage_context`
-``profile_handle``  profile      ``apps.profile.contract.shell``
-``org_nav`` org          ``apps.organizations.contract.shell``
-==================  ===========  =======================================
+==================  =======  =======================================
+key                 name     provider
+==================  =======  =======================================
+``nav_items``       (host)   seeded here from ``host.nav_items``
+``user``            (host)   added by :func:`fullpage_context`
+``profile_handle``  profile  ``apps.profile.contract.fullpage``
+``org_nav``         org      ``apps.organizations.contract.fullpage``
+==================  =======  =======================================
 """
 
 from __future__ import annotations
@@ -52,41 +44,33 @@ log = structlog.get_logger("labase.shared.page")
 
 
 @dataclass(frozen=True)
-class PageContextQuery:
+class FullpageQuery:
     """Passed to each provider; carries the request session and the current user."""
 
     session: AsyncSession
     user: AuthenticatedUser | None
 
 
-async def shell_context(session: AsyncSession, user: AuthenticatedUser | None) -> dict:
-    """The collected page slices (handle, orgs, nav) — without the ``user`` key.
-
-    Used directly by HTMX-aware routes that only merge the shell on full pages.
-    Each provider's return is checked against its declared keys: undeclared or
-    clobbering keys are skipped and logged.
-    """
-    ctx: dict = {"nav_items": sorted(host.nav_items, key=lambda i: i.order)}
-    query = PageContextQuery(session, user)
-    for provider in host.page_providers:
-        try:
-            chunk = await provider.fn(query)
-        except Exception:
-            log.exception("page.provider_failed", namespace=provider.namespace)
-            continue
-        for key, value in chunk.items():
-            if key not in provider.keys:
-                log.warning("page.undeclared_key", namespace=provider.namespace, key=key)
-                continue
-            if key in ctx:
-                log.warning("page.key_collision", namespace=provider.namespace, key=key)
-                continue
-            ctx[key] = value
-    return ctx
-
-
 async def fullpage_context(
     session: AsyncSession, user: AuthenticatedUser | None, **extra: object
 ) -> dict:
-    """Full template context for an authenticated page: shell + user + page extras."""
-    return {"user": user, **await shell_context(session, user), **extra}
+    """Full template context for a page: nav + provider slices + user + page extras.
+
+    Each provider's keys are namespaced as ``f"{name}_{key}"``; a collision with an
+    already-present key is logged and overwritten. A provider that raises is isolated
+    and logged; the rest of the page still renders.
+    """
+    ctx: dict = {"user": user, "nav_items": sorted(host.nav_items, key=lambda i: i.order)}
+    query = FullpageQuery(session, user)
+    for provider in host.fullpage_providers:
+        try:
+            chunk = await provider.fn(query)
+        except Exception:
+            log.exception("page.provider_failed", provider=provider.name)
+            continue
+        for key, value in chunk.items():
+            full_key = f"{provider.name}_{key}"
+            if full_key in ctx:
+                log.warning("page.overwrite", key=full_key, provider=provider.name)
+            ctx[full_key] = value
+    return {**ctx, **extra}
