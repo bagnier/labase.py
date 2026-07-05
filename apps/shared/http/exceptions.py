@@ -25,14 +25,7 @@ def _html_error(request: Request, status_code: int, detail: str) -> Response:
 
 
 async def handle_rate_limit(_request: Request, exc: Exception) -> Response:
-    headers = {}
-    limit = getattr(exc, "limit", None)
-    if limit is not None:
-        item = getattr(limit, "limit", None)
-        if item is not None:
-            granularity = getattr(item.GRANULARITY, "seconds", None)
-            if granularity is not None:
-                headers["Retry-After"] = str(int(granularity * (item.multiples or 1)))
+    headers = {"Retry-After": str(getattr(exc, "retry_after", 60))}
     return JSONResponse({"detail": "Too many requests"}, status_code=429, headers=headers)
 
 

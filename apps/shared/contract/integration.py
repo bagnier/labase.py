@@ -3,7 +3,6 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
-from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
@@ -16,7 +15,7 @@ from apps.shared.http.exceptions import (
     handle_stale_data,
     handle_unhandled_error,
 )
-from apps.shared.http.limiter import limiter
+from apps.shared.http.limiter import RateLimitExceeded
 from apps.shared.http.security import cors_config, csrf_protect, security_headers
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
@@ -28,8 +27,6 @@ def mount(host: Host) -> None:
     setup_logging()
     settings = get_technical_settings()
     app = host.app
-
-    app.state.limiter = limiter
 
     app.exception_handler(RateLimitExceeded)(handle_rate_limit)
     app.exception_handler(StaleDataError)(handle_stale_data)

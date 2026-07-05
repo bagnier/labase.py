@@ -10,7 +10,10 @@
 - [ ] forgot/reset password (see advanced auth below)
 - [ ] prod deployment: compose/manifest, secrets story beyond `.env` files, deploy doc
 - [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
-- [ ] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
+- [x] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
+  → slowapi removed; fixed-window counters in `rate_limit_counters` (atomic upsert,
+  multi-instance correct, fail-open, opportunistic per-key cleanup — a real purge
+  job joins the async substrate later)
 - [ ] `SettingsChanged` live-reload is in-process only — with N instances, only the one handling the POST reloads; others serve stale settings silently. Reload via Postgres NOTIFY or TTL re-read
 
 ### async substrate — prerequisite to every Postgres-as-X brick
