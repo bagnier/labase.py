@@ -26,7 +26,8 @@ class TechnicalSettings(BaseSettings):
     task_worker_interval_seconds: float = 1.0
     # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets
     # SMTP_* to any provider. Sending is best-effort (see apps/shared/email.py).
-    smtp_host: str = "localhost"
+    # 127.0.0.1 (not localhost): keeps DNS out of every local connection.
+    smtp_host: str = "127.0.0.1"
     smtp_port: int = 54325
     smtp_sender: str = "labase <noreply@labase.local>"
     smtp_username: str = ""

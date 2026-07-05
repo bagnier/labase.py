@@ -49,7 +49,7 @@ def build_env(status: dict[str, str]) -> str:
     service_url = to_asyncpg(db_url, user="postgres", password="postgres")
     lines = [
         f"SUPABASE_API_URL={api_url.replace('127.0.0.1', DOCKER_HOST)}",
-        f"SUPABASE_STORAGE_URL={api_url.replace('127.0.0.1', 'localhost')}",
+        f"SUPABASE_STORAGE_URL={api_url}",
         f"SUPABASE_PUBLISHABLE_KEY={status['PUBLISHABLE_KEY']}",
         f"SUPABASE_SECRET_KEY={status['SECRET_KEY']}",
         f"SUPABASE_DATABASE_USER_URL={user_url}",

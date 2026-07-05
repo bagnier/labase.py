@@ -350,8 +350,9 @@ make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)
 
 make install      # Supabase + uv sync + pre-commit + npm install + .env + npm run build
 
-make lint         # ruff + ty + biome + djlint + pip-audit, read-only (fails on non-conforming code)
-make fix          # ruff --fix + format + ty + biome + djlint --reformat + pip-audit
+make lint         # ruff + import-linter + ty + biome + djlint + pip-audit, read-only
+make fix          # ruff --fix + format + import-linter + ty + biome + djlint --reformat
+make doctor       # local stack reachability AND latency (catches a wedged Docker proxy)
 
 make test         # pytest unit/integration (generates coverage)
 make test-e2e     # pytest-bdd browser driver + Playwright E2E

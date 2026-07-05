@@ -1,8 +1,8 @@
 """Mailpit client — the HTTP face of the local Supabase mail catcher.
 
 One mailbox for everything: the app's SmtpMailer and GoTrue both deliver over
-SMTP (localhost:54325), both E2E drivers assert real deliveries through this
-API (localhost:54324). Assertions match on a per-scenario unique marker (an
+SMTP (127.0.0.1:54325), both E2E drivers assert real deliveries through this
+API (127.0.0.1:54324). Assertions match on a per-scenario unique marker (an
 invitation token) so runs and worktrees sharing the catcher never collide.
 """
 
@@ -12,7 +12,7 @@ from datetime import datetime
 
 import httpx
 
-MAILPIT_URL = "http://localhost:54324"
+MAILPIT_URL = "http://127.0.0.1:54324"
 
 _TOKEN_HASH = re.compile(r"token_hash=([A-Za-z0-9_-]+)")
 

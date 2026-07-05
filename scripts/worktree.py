@@ -110,7 +110,7 @@ def create(name: str) -> None:
             env=_py_env(path / env_file),
         )
     # Seed a namespaced dev user/org into the dev schema. seed runs host-side, so the
-    # Docker-only host.docker.internal must become localhost (env vars override the env file).
+    # Docker-only host.docker.internal must become 127.0.0.1 (env vars override the env file).
     _run(
         ["uv", "run", "python", str(ROOT / "scripts" / "seed.py"), "--email", dev_email],
         cwd=ROOT,
@@ -160,7 +160,7 @@ def _py_env(env_file: Path) -> dict[str, str]:
 
 
 def _host_overrides(env_file: Path) -> dict[str, str]:
-    """Host-reachable variants of the URL/DB settings (host.docker.internal → localhost)
+    """Host-reachable variants of the URL/DB settings (host.docker.internal → 127.0.0.1)
     for tooling that connects from the host rather than the Docker network."""
     keys = {
         "SUPABASE_API_URL",
@@ -172,7 +172,7 @@ def _host_overrides(env_file: Path) -> dict[str, str]:
     for line in env_file.read_text().splitlines():
         m = re.match(r"\s*([A-Z_]+)\s*=\s*(.*)", line)
         if m and m.group(1) in keys:
-            out[m.group(1)] = m.group(2).replace("host.docker.internal", "localhost")
+            out[m.group(1)] = m.group(2).replace("host.docker.internal", "127.0.0.1")
     return out
 
 

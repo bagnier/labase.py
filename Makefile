@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -86,7 +86,8 @@ lint:
 deadcode:
 	uv run vulture apps
 
-# fix: auto-fixes what's fixable, re-checks typing/audit like lint does.
+# fix: auto-fixes what's fixable, re-checks typing like lint does.
+# pip-audit (network, ~6s) intentionally stays in lint/CI only.
 fix:
 	uv run ruff check --fix .
 	uv run ruff format .
@@ -94,7 +95,6 @@ fix:
 	uv run ty check apps/
 	npm run format
 	uv run djlint apps --reformat
-	uv run pip-audit
 
 upgrade:
 	cp uv.lock /tmp/uv.lock.bak
@@ -103,9 +103,22 @@ upgrade:
 	uv lock --upgrade
 	python3 scripts/upgrade.py repin
 
+# doctor: reachability AND latency of the local stack (a wedged Docker proxy
+# accepts TCP but multiplies every round-trip — see scripts/doctor.py).
+doctor:
+	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/doctor.py
+
 # --- Tests ---
+# The suite normally runs in ~100s; way beyond that means the environment is
+# degraded (not the tests) — say so instead of letting it pass silently slow.
 test: provision-test
-	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest
+	@start=$$(date +%s); \
+	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest; rc=$$?; \
+	elapsed=$$(( $$(date +%s) - start )); \
+	if [ $$elapsed -gt 240 ]; then \
+		echo "⚠ pytest took $${elapsed}s (~100s expected) — run 'make doctor'"; \
+	fi; \
+	exit $$rc
 
 test-e2e: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
