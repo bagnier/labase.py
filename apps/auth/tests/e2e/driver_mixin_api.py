@@ -148,3 +148,41 @@ class AuthApiMixin(ApiBase):
         is_json_resp = ct.startswith("application/json")
         body = self.response.json().get("detail", "") if is_json_resp else self.response.text
         assert message in body, f"'{message}' not found in:\n{str(body)[:500]}"
+
+    # ── impersonation ──────────────────────────────────────────────────────────
+
+    def _profile_email(self) -> str:
+        resp = self.client().get("/profile", headers={"accept": "application/json"})
+        assert resp.status_code == 200, f"GET /profile: {resp.status_code} {resp.text}"
+        return resp.json().get("email", "")
+
+    def impersonate(self, email: str) -> None:
+        self.response = self.client().post("/auth/impersonate", data={"email": email})
+        assert self.response.status_code in (200, 303), (
+            f"impersonate: {self.response.status_code} {self.response.text}"
+        )
+
+    def assert_viewing_as(self, email: str) -> None:
+        assert self._profile_email() == email, f"not viewing as {email!r}"
+
+    def assert_impersonation_banner(self) -> None:
+        # The API face of the banner: the stash cookie that renders it is present.
+        assert "impersonator_access_token" in self.client().cookies
+
+    def stop_impersonating(self) -> None:
+        self.response = self.client().post("/auth/impersonate/stop")
+        assert self.response.status_code in (200, 303), f"stop: {self.response.status_code}"
+
+    def assert_back_as_admin(self, email: str) -> None:
+        assert self._profile_email() == email
+        assert "impersonator_access_token" not in self.client().cookies
+        console = self.client().get("/console", headers={"accept": "application/json"})
+        assert console.status_code == 200, "restored session should reach the console"
+
+    def try_impersonate(self, email: str) -> None:
+        self.response = self.client().post("/auth/impersonate", data={"email": email})
+
+    def assert_impersonation_refused(self) -> None:
+        assert self.response is not None
+        # Non-admins get the console treatment: a plain 404, never a confirmation.
+        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"

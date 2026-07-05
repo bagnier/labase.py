@@ -11,6 +11,19 @@
     <script src="/static/js/alpine.min.js" defer></script>
   </head>
   <body class="h-full bg-base-200 text-base-content antialiased">
+    {% if request.cookies.get('impersonator_access_token') %}
+      <div role="alert"
+           data-impersonation-banner
+           class="alert alert-warning rounded-none flex items-center justify-between gap-3 py-2">
+        <span class="text-sm">
+          <i class="ph ph-mask-happy" aria-hidden="true"></i>
+          Viewing as <strong>{{ user.email if user else "" }}</strong> — impersonation session, expires automatically.
+        </span>
+        <form method="post" action="/auth/impersonate/stop" class="flex-none">
+          <button type="submit" class="btn btn-sm">Stop impersonating</button>
+        </form>
+      </div>
+    {% endif %}
     {% block body %}
       <div class="drawer lg:drawer-open h-full">
         <input id="nav-drawer" type="checkbox" class="drawer-toggle" />
@@ -25,7 +38,8 @@
             </label>
             <nav aria-label="Breadcrumb" class="breadcrumbs text-sm flex-1 min-w-0">
               <ul>
-                {% block breadcrumb %}{% endblock %}
+                {% block breadcrumb %}
+                {% endblock %}
               </ul>
             </nav>
             {% if user and user.is_admin %}
@@ -37,8 +51,7 @@
           </header>
           <!-- Page content -->
           <main class="flex-1 p-6 overflow-auto">
-            {% block content %}
-            {% endblock %}
+            {% block content %}{% endblock %}
           </main>
         </div>
         <!-- Sidebar -->
@@ -57,7 +70,9 @@
             </div>
             <!-- Navigation -->
             <nav class="flex-1 overflow-y-auto p-2">
-              {% if not org_nav %}<p class="px-2 py-2 text-xs opacity-60">No organisation.</p>{% endif %}
+              {% if not org_nav %}
+                <p class="px-2 py-2 text-xs opacity-60">No organisation.</p>
+              {% endif %}
               {% for nav_org in org_nav %}
                 {% set is_current = nav_org.handle == org_handle %}
                 {% set path = request.url.path %}

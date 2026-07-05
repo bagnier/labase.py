@@ -133,3 +133,38 @@ def step_redirected_to_sign_in(driver):
 @then("it is publicly accessible")
 def step_publicly_accessible(driver):
     driver.assert_page_loaded()
+
+
+@when(parsers.parse('the admin impersonates "{email}"'))
+def step_admin_impersonates(driver, email):
+    driver.impersonate(email)
+
+
+@then(parsers.parse('they are viewing the app as "{email}"'))
+def step_assert_viewing_as(driver, email):
+    driver.assert_viewing_as(email)
+
+
+@then("the impersonation banner is visible")
+def step_assert_impersonation_banner(driver):
+    driver.assert_impersonation_banner()
+
+
+@when("they stop impersonating")
+def step_stop_impersonating(driver):
+    driver.stop_impersonating()
+
+
+@then(parsers.parse('they are back on their admin account "{email}"'))
+def step_assert_back_as_admin(driver, email):
+    driver.assert_back_as_admin(email)
+
+
+@when(parsers.parse('they try to impersonate "{email}"'))
+def step_try_impersonate(driver, email):
+    driver.try_impersonate(email)
+
+
+@then("the impersonation is refused")
+def step_assert_impersonation_refused(driver):
+    driver.assert_impersonation_refused()

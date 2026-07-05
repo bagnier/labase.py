@@ -273,10 +273,14 @@ above). New items:
   `AppSettings.for_org(session, org_id)` merges overrides over server values;
   console app page gains a "Per-organisation overrides" section (audited);
   demo: todo's `creation_enabled`/`max_items_per_org` are now org-aware
-- [ ] **user impersonation** (approved 2026-07-05, next up) — Pegasus ships it, Supabase dashboard has it; precious
+- [x] **user impersonation** (approved 2026-07-05) — Pegasus ships it, Supabase dashboard has it; precious
   for support. Console action "view as user" with a visible banner + forced
   audit event on start/stop (the trail already exists). Time-boxed session,
   admin-gated.
+  → "View as user" form on the console admins page; a real GoTrue session is
+  minted via admin `generate_link(magiclink)` + `verify_otp` (RLS applies as
+  the target); the admin session is stashed in time-boxed cookies whose
+  presence renders the warning banner; start/stop audited at warning level
 - [x] **API keys** (approved 2026-07-05) — the JSON face of content negotiation currently only serves
   cookie sessions; machine integrations need `Authorization: Bearer <key>`.
   Per-org keys (owner-managed), hashed at rest, last-used tracking, revocation;

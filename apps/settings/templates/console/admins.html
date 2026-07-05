@@ -16,5 +16,22 @@
     <section aria-label="Server admins">
       {% include "console/_admins.html" %}
     </section>
+    <section aria-label="Support" class="card-panel">
+      <div class="card-body">
+        <h2 class="card-title text-sm font-semibold">Support</h2>
+        <p class="text-xs text-base-content/70">
+          View the app as a user — time-boxed, banner shown, start and stop are audited.
+        </p>
+        <form method="post" action="/auth/impersonate" class="flex gap-2 max-w-md">
+          <input type="email"
+                 name="email"
+                 placeholder="user@example.com"
+                 aria-label="Impersonate email"
+                 required
+                 class="input input-sm w-full flex-1" />
+          <button type="submit" class="btn btn-sm btn-warning flex-none">View as user</button>
+        </form>
+      </div>
+    </section>
   </div>
 {% endblock %}

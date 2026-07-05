@@ -3,6 +3,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Cookie,
+    HTTPException,
     Query,
     Request,
     Response,
@@ -12,7 +13,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from apps.auth.application import confirm_user, register_user
-from apps.auth.contract.current import OptionalCurrentUser
+from apps.auth.contract.current import CurrentAdmin, CurrentUser, OptionalCurrentUser
+from apps.auth.contract.impersonation import (
+    IMPERSONATION_MAX_SECONDS,
+    IMPERSONATOR_COOKIE,
+    IMPERSONATOR_REFRESH_COOKIE,
+    ImpersonationTargetNotFound,
+    impersonation_tokens,
+)
 from apps.auth.domain.service import (
     PasswordUpdateError,
     confirm_signup,
@@ -22,6 +30,8 @@ from apps.auth.domain.service import (
     update_password,
 )
 from apps.auth.infra.cookies import set_auth_cookies
+from apps.auth.infra.security import decode_jwt
+from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
@@ -226,6 +236,91 @@ async def register_endpoint(
         {"error": error, "email": email, "next": next},
         status_code=status.HTTP_400_BAD_REQUEST,
     )
+
+
+def _set_impersonation_cookie(response: Response, name: str, value: str) -> None:
+    response.set_cookie(
+        name,
+        value,
+        httponly=True,
+        secure=get_technical_settings().cookies_secure,
+        samesite="lax",
+        max_age=IMPERSONATION_MAX_SECONDS,
+    )
+
+
+@router.post("/impersonate")
+async def impersonate_endpoint(
+    request: Request,
+    bg: BackgroundTasks,
+    admin: CurrentAdmin,
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
+) -> Response:
+    body = await parse_body(request)
+    email = str(body.get("email", "")).strip().lower()
+    ip = request.client.host if request.client else None
+    if not email or email == admin.email.lower() or not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Pick another user's email."
+        )
+    try:
+        tokens = await impersonation_tokens(email)
+    except ImpersonationTargetNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No user with this email."
+        ) from None
+    audit(
+        bg,
+        "auth.impersonation_started",
+        level="warning",
+        user_id=admin.id,
+        ip=ip,
+        target_email=email,
+    )
+    if wants_json(request):
+        resp: Response = JSONResponse({"impersonating": email})
+    else:
+        resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
+    # Stash the admin's own session, then become the target — everything time-boxed:
+    # when these cookies expire the disguise and the stash die together.
+    _set_impersonation_cookie(resp, IMPERSONATOR_COOKIE, access_token)
+    _set_impersonation_cookie(resp, IMPERSONATOR_REFRESH_COOKIE, refresh_token or "")
+    _set_impersonation_cookie(resp, "access_token", tokens.access_token)
+    _set_impersonation_cookie(resp, "refresh_token", tokens.refresh_token)
+    return resp
+
+
+@router.post("/impersonate/stop")
+async def stop_impersonation_endpoint(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+) -> Response:
+    stash = request.cookies.get(IMPERSONATOR_COOKIE)
+    refresh_stash = request.cookies.get(IMPERSONATOR_REFRESH_COOKIE, "")
+    if not stash:
+        return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
+    admin_id = None
+    try:
+        admin_id = decode_jwt(stash)["sub"]
+    except Exception:  # expired stash: still drop the disguise, audit without the id
+        log.warning("auth.impersonation_stash_invalid")
+    audit(
+        bg,
+        "auth.impersonation_stopped",
+        level="warning",
+        user_id=admin_id,
+        target_email=current_user.email,
+    )
+    if wants_json(request):
+        resp: Response = JSONResponse({"impersonating": None})
+    else:
+        resp = RedirectResponse("/console", status_code=status.HTTP_303_SEE_OTHER)
+    set_auth_cookies(resp, stash, refresh_stash)
+    resp.delete_cookie(IMPERSONATOR_COOKIE)
+    resp.delete_cookie(IMPERSONATOR_REFRESH_COOKIE)
+    return resp
 
 
 @router.get("/forgot-password", response_class=HTMLResponse)

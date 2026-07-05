@@ -157,3 +157,34 @@ class AuthBrowserMixin(BrowserBase):
         assert message in self.page.content(), (
             f"'{message}' not found in page after registration failure"
         )
+
+    # ── impersonation ──────────────────────────────────────────────────────────
+
+    def impersonate(self, email: str) -> None:
+        self.page.goto(f"{self.base_url}/console/admins", wait_until="load")
+        self.page.get_by_label("Impersonate email").fill(email)
+        self.page.get_by_role("button", name="View as user").click()
+        self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
+
+    def assert_viewing_as(self, email: str) -> None:
+        assert email in self.page.content(), f"{email!r} not on the impersonated page"
+
+    def assert_impersonation_banner(self) -> None:
+        self.page.wait_for_selector("[data-impersonation-banner]", timeout=5000)
+
+    def stop_impersonating(self) -> None:
+        self.page.get_by_role("button", name="Stop impersonating").click()
+        self.page.wait_for_url(f"{self.base_url}/console", timeout=5000)
+
+    def assert_back_as_admin(self, email: str) -> None:
+        assert self.page.locator("[data-impersonation-banner]").count() == 0
+        assert "/console" in self.page.url, f"expected the console, got {self.page.url}"
+
+    def try_impersonate(self, email: str) -> None:
+        probe = getattr(self, "_probe_blocked", None)  # organizations mixin
+        assert probe is not None
+        probe("POST", "/auth/impersonate", form={"email": email})
+
+    def assert_impersonation_refused(self) -> None:
+        assert self.last_response is not None
+        assert self.last_response.status == 404, f"Expected 404, got {self.last_response.status}"
