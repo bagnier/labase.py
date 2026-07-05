@@ -1,7 +1,9 @@
+import uuid
 from datetime import date
 
 import pytest
 
+from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import CardResource, DueCard, Outcome
 from apps.learning.domain.service import (
     apply_outcome,
@@ -9,6 +11,7 @@ from apps.learning.domain.service import (
     is_due,
     needs_resources,
     order_due_cards,
+    review_card,
     select_due_cards,
 )
 
@@ -111,3 +114,63 @@ def test_resources_grouped_by_deck_in_order():
         ("Python avancé", "d2"),
         ("Python avancé", "c2"),
     ]
+
+
+# ── review_card (orchestration through the ReviewRepositoryProtocol port) ─────
+
+CARD_ID = uuid.uuid4()
+
+
+class _FakeReviewRepo:
+    """In-memory port double: state per card + a canned daily count."""
+
+    def __init__(self, state=None, reviews_today=0):
+        self._state = state
+        self._reviews_today = reviews_today
+        self.applied = []
+
+    async def get_state(self, card_id):
+        return self._state
+
+    async def reviews_today(self, today):
+        return self._reviews_today
+
+    async def apply_schedule(self, card_id, schedule):
+        self.applied.append((card_id, schedule))
+
+
+class _State:
+    def __init__(self, level, last_reviewed_on=None):
+        self.level = level
+        self.last_reviewed_on = last_reviewed_on
+
+
+@pytest.mark.asyncio
+async def test_review_card_schedules_from_current_level():
+    repo = _FakeReviewRepo(state=_State(level=2))
+    schedule = await review_card(repo, CARD_ID, Outcome.learned, TODAY, daily_limit=10)
+    assert schedule.level == 3
+    assert repo.applied == [(CARD_ID, schedule)]
+
+
+@pytest.mark.asyncio
+async def test_review_card_treats_unstudied_card_as_level_zero():
+    repo = _FakeReviewRepo(state=None)
+    schedule = await review_card(repo, CARD_ID, Outcome.learned, TODAY, daily_limit=10)
+    assert schedule.level == 1
+
+
+@pytest.mark.asyncio
+async def test_review_card_enforces_daily_limit():
+    repo = _FakeReviewRepo(state=None, reviews_today=3)
+    with pytest.raises(DailyLimitReached):
+        await review_card(repo, CARD_ID, Outcome.learned, TODAY, daily_limit=3)
+    assert repo.applied == []
+
+
+@pytest.mark.asyncio
+async def test_review_card_allows_remarking_a_card_already_reviewed_today():
+    repo = _FakeReviewRepo(state=_State(level=2, last_reviewed_on=TODAY), reviews_today=3)
+    schedule = await review_card(repo, CARD_ID, Outcome.again, TODAY, daily_limit=3)
+    assert schedule.level == 1
+    assert len(repo.applied) == 1

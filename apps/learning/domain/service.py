@@ -1,8 +1,15 @@
-"""Pure spaced-repetition domain logic — no framework or persistence imports."""
+"""Spaced-repetition domain logic — no framework or persistence imports.
 
+Scheduling math is pure; the review use-case orchestrates it through the
+`ReviewRepositoryProtocol` port, so the domain never sees SQLAlchemy.
+"""
+
+import uuid
 from datetime import date, timedelta
 
+from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import CardResource, DueCard, Outcome, Schedule
+from apps.learning.domain.repository import ReviewRepositoryProtocol
 
 # Interval (in days) until the next review, indexed by the card's resulting level.
 # Follows the Fibonacci sequence; the level is capped at MAX_LEVEL.
@@ -27,6 +34,24 @@ def apply_outcome(current_level: int, today: date, outcome: Outcome) -> Schedule
         last_reviewed_on=today,
         next_review_on=today + timedelta(days=interval_for_level(new_level)),
     )
+
+
+async def review_card(
+    repo: ReviewRepositoryProtocol,
+    card_id: uuid.UUID,
+    outcome: Outcome,
+    today: date,
+    daily_limit: int,
+) -> Schedule:
+    """Mark a card: enforce the distinct-cards daily cap (re-marking a card already
+    reviewed today is free), then persist the schedule computed from its level."""
+    state = await repo.get_state(card_id)
+    already_today = state is not None and state.last_reviewed_on == today
+    if not already_today and await repo.reviews_today(today) >= daily_limit:
+        raise DailyLimitReached
+    schedule = apply_outcome(state.level if state else 0, today, outcome)
+    await repo.apply_schedule(card_id, schedule)
+    return schedule
 
 
 def is_due(next_review_on: date | None, today: date) -> bool:

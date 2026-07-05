@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.learning.contract import settings
+from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import (
     CardResource,
     DueCard,
@@ -16,9 +17,9 @@ from apps.learning.domain.models import (
     ReviewCardRead,
 )
 from apps.learning.domain.service import (
-    apply_outcome,
     compute_resources,
     needs_resources,
+    review_card,
     select_due_cards,
 )
 from apps.learning.infra.repository import CatalogRow, LearningRepository
@@ -180,12 +181,12 @@ async def mark_card(
     outcome = Outcome(str(body.get("outcome", "")))
     card = or_404(await repo.get_card_by_external(external_id))
     today_date = clock.now().date()
-    state = await repo.get_state(card.id)
-    already_today = state is not None and state.last_reviewed_on == today_date
-    if not already_today and await repo.reviews_today(today_date) >= settings.daily_review_limit:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Daily review limit reached")
-    schedule = apply_outcome(state.level if state else 0, today_date, outcome)
-    await repo.apply_schedule(card.id, schedule)
+    try:
+        await review_card(repo, card.id, outcome, today_date, settings.daily_review_limit)
+    except DailyLimitReached:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "Daily review limit reached"
+        ) from None
     audit(
         bg,
         "learning.card_marked",

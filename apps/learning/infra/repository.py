@@ -22,7 +22,12 @@ class CatalogRow:
 
 
 class LearningRepository:
-    """Org-scoped catalog with per-user progress (subscriptions/states/reviews)."""
+    """Org-scoped catalog with per-user progress (subscriptions/states/reviews).
+
+    Deliberately NOT an `OrgScopedRepository`: it spans four models (decks, cards,
+    subscriptions, states) as one query surface, so the single-aggregate CRUD base
+    does not apply. It satisfies the domain's `ReviewRepositoryProtocol` port.
+    """
 
     def __init__(self, session: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID) -> None:
         self.session = session
