@@ -3,16 +3,22 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.persistence.base import Base, OrgScoped, Timestamped, UUIDPk, Versioned
+from apps.shared.persistence.base import (
+    Base,
+    OrgScoped,
+    Positioned,
+    Timestamped,
+    UUIDPk,
+    Versioned,
+)
 
 
-class TodoItem(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
+class TodoItem(Base, UUIDPk, OrgScoped, Positioned, Versioned, Timestamped):
     __tablename__ = "todos"
 
     user_id: Mapped[uuid.UUID]
     title: Mapped[str]
     done: Mapped[bool] = mapped_column(default=False)
-    position: Mapped[int] = mapped_column(default=0)
 
 
 class TodoCreate(BaseModel):

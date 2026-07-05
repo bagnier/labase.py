@@ -19,6 +19,12 @@ class OrgScoped:
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
 
 
+class Positioned:
+    """Dense 0-based ordering column, managed by `PositionedRepository`."""
+
+    position: Mapped[int] = mapped_column(default=0)
+
+
 class Versioned:
     version: Mapped[int] = mapped_column(default=1)
 

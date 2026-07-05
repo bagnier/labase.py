@@ -6,7 +6,14 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.persistence.base import Base, OrgScoped, Timestamped, UUIDPk, Versioned
+from apps.shared.persistence.base import (
+    Base,
+    OrgScoped,
+    Positioned,
+    Timestamped,
+    UUIDPk,
+    Versioned,
+)
 
 
 class PageVisibility(StrEnum):
@@ -38,11 +45,10 @@ class PageRead(BaseModel):
     created_at: datetime
 
 
-class PageNavItem(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
+class PageNavItem(Base, UUIDPk, OrgScoped, Positioned, Versioned, Timestamped):
     __tablename__ = "page_nav_items"
 
     page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id"))
-    position: Mapped[int] = mapped_column(default=0)
 
 
 class NavCandidate(BaseModel):

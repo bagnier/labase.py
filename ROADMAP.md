@@ -31,7 +31,9 @@
 
 - [ ] decide `client/` fate: unused → remove/extract; used → document it
 - [ ] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
-- [ ] `PositionedRepository` mixin — `move_above` algorithm duplicated todo/pages (fix the version bypass there too)
+- [x] `PositionedRepository` mixin — `move_above` algorithm duplicated todo/pages (fix the version bypass there too)
+  → mixin + `Positioned` model column in `apps/shared/persistence/`; the version
+  bypass was already fixed by d32b205 (load-then-mutate-then-flush, 409 handler)
 
 ## jhipster gap analysis (2026-07-05)
 

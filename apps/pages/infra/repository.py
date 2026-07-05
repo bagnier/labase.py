@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.organizations.contract.current import OrgRole
 from apps.pages.domain.models import NavCandidate, NavItemRead, Page, PageNavItem, PageVisibility
 from apps.shared import clock
-from apps.shared.persistence.repository import OrgScopedRepository
+from apps.shared.persistence.repository import OrgScopedRepository, PositionedRepository
 
 
 class PageRepository(OrgScopedRepository[Page]):
@@ -50,9 +50,10 @@ async def visible_pages(
     return list(await session.scalars(q))
 
 
-class PageNavRepository(OrgScopedRepository[PageNavItem]):
+class PageNavRepository(PositionedRepository[PageNavItem]):
     model = PageNavItem
     default_order = PageNavItem.position.asc()
+    position_key = "page_id"
 
     async def candidates(self) -> list[NavCandidate]:
         """All published pages with their current nav status, nav items first."""
@@ -138,20 +139,3 @@ class PageNavRepository(OrgScopedRepository[PageNavItem]):
         )
         if item is not None:
             await self.delete(item)
-
-    async def move_above(self, page_id: uuid.UUID, above_id: uuid.UUID | None) -> None:
-        items = await self.all()
-        item = next((i for i in items if i.page_id == page_id), None)
-        if item is None:
-            return
-        ordered = [i for i in items if i.page_id != page_id]
-        if above_id is None:
-            ordered.append(item)
-        else:
-            idx = next((i for i, n in enumerate(ordered) if n.page_id == above_id), None)
-            if idx is None:
-                return
-            ordered.insert(idx, item)
-        for pos, entry in enumerate(ordered):
-            entry.position = pos
-        await self.session.flush()
