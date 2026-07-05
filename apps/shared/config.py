@@ -20,6 +20,14 @@ class TechnicalSettings(BaseSettings):
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
     cors_origins: list[str] = ["*"]
+    # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets
+    # SMTP_* to any provider. Sending is best-effort (see apps/shared/email.py).
+    smtp_host: str = "localhost"
+    smtp_port: int = 54325
+    smtp_sender: str = "labase <noreply@labase.local>"
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = False
 
     @model_validator(mode="after")
     def _default_storage_url(self) -> TechnicalSettings:

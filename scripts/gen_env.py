@@ -57,6 +57,8 @@ def build_env(status: dict[str, str]) -> str:
         "LOG_DEBUG=true",
         "COOKIES_SECURE=false",
         "RATE_LIMIT_ENABLED=false",
+        f"SMTP_HOST={DOCKER_HOST}",
+        "SMTP_PORT=54325",
     ]
     return "\n".join(lines) + "\n"
 

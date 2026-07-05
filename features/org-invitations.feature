@@ -11,6 +11,7 @@ Feature: Organisation invitations
   Scenario: Owner invites a new user as member
     When they invite "bob@example.com" to the organisation with role "member"
     Then an invitation for "bob@example.com" appears in the pending invitations list with role "member"
+    And an invitation email is delivered to "bob@example.com"
 
   Scenario: Member cannot send invitations
     Given "bob@example.com" is a member of the org

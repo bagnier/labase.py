@@ -118,6 +118,11 @@ def step_view_pending_invitations(driver):
     driver.view_pending_invitations()
 
 
+@then(parsers.parse('an invitation email is delivered to "{email}"'))
+def step_assert_invitation_email_delivered(driver, email):
+    driver.assert_invitation_email_delivered(email)
+
+
 @then(
     parsers.parse(
         'an invitation for "{email}" appears in the pending invitations list with role "{role}"'

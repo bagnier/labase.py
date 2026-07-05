@@ -1,0 +1,7 @@
+You have been invited to join {{ org_name }}.
+
+Open this link to accept the invitation:
+
+{{ link }}
+
+If you were not expecting this invitation, you can ignore this email.

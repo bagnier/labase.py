@@ -1,0 +1,44 @@
+"""Mailpit client — the HTTP face of the local Supabase mail catcher.
+
+One mailbox for everything: the app's SmtpMailer and GoTrue both deliver over
+SMTP (localhost:54325), both E2E drivers assert real deliveries through this
+API (localhost:54324). Assertions match on a per-scenario unique marker (an
+invitation token) so runs and worktrees sharing the catcher never collide.
+"""
+
+import time
+
+import httpx
+
+MAILPIT_URL = "http://localhost:54324"
+
+
+def wait_for_message(to: str, containing: str, timeout: float = 10.0) -> dict:
+    """Return the first message to `to` whose text body contains `containing`.
+
+    Polls: delivery happens in a server-side background task after the HTTP
+    response. Raises AssertionError when the deadline passes.
+    """
+    deadline = time.monotonic() + timeout
+    with httpx.Client(base_url=MAILPIT_URL, timeout=5.0) as client:
+        while True:
+            summaries = (
+                client.get("/api/v1/search", params={"query": f"to:{to}"})
+                .raise_for_status()
+                .json()
+                .get("messages", [])
+            )
+            for summary in summaries:
+                detail = client.get(f"/api/v1/message/{summary['ID']}").raise_for_status().json()
+                if containing in (detail.get("Text") or ""):
+                    return detail
+            if time.monotonic() > deadline:
+                raise AssertionError(f"no mail to {to} containing {containing!r} within {timeout}s")
+            time.sleep(0.3)
+
+
+def assert_invitation_delivered(email: str, token: str | None) -> None:
+    """Shared by both driver mixins: the invitation email really reached the inbox."""
+    assert token, "no invitation token captured by the driver"
+    message = wait_for_message(to=email, containing=token)
+    assert "invited" in message.get("Subject", "").lower(), message.get("Subject")

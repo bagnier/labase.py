@@ -25,7 +25,9 @@ from apps.organizations.domain.models import (
     OrgRole,
 )
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
+from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
+from apps.shared.email import send_email
 from apps.shared.host import host
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -477,6 +479,14 @@ async def create_invitation(
                 target_email=email,
             )
 
+    link = ""
+    if invitation is not None:
+        base_url = str(request.base_url).rstrip("/")
+        link = f"{base_url}/invitations/{invitation.token}"
+        inviting_org = await repo.get(org_id)
+        org_name = inviting_org.name if inviting_org else ""
+        bg.add_task(send_email, invitation_email(to=email, org_name=org_name, link=link))
+
     if wants_json(request):
         if error is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error)
@@ -485,11 +495,6 @@ async def create_invitation(
             InvitationRead.model_validate(invitation).model_dump(mode="json"),
             status_code=status.HTTP_201_CREATED,
         )
-
-    link = ""
-    if invitation is not None:
-        base_url = str(request.base_url).rstrip("/")
-        link = f"{base_url}/invitations/{invitation.token}"
 
     if invitation is None or error is not None:
         return templates.TemplateResponse(

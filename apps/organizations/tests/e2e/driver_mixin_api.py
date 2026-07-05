@@ -2,6 +2,7 @@ import httpx
 
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.organizations.contract import settings as org_settings
+from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
 
 _PASSWORD = "Secret1!"
@@ -178,6 +179,9 @@ class OrgApiMixin(ApiBase):
             inv = self.response.json()
             self._last_invitation_token = inv.get("token")
             self._last_invitation_email = email
+
+    def assert_invitation_email_delivered(self, email: str) -> None:
+        mailbox.assert_invitation_delivered(email, getattr(self, "_last_invitation_token", None))
 
     def view_pending_invitations(self) -> None:
         self._pending_invitations = self._fetch_pending_invitations()

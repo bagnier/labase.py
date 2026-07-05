@@ -4,6 +4,7 @@ from playwright.sync_api import Page
 
 from apps.auth.tests.given_helpers import find_users
 from apps.organizations.contract import settings as org_settings
+from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
 
@@ -274,6 +275,9 @@ class OrgBrowserMixin(BrowserBase):
             link = link_el.get_attribute("data-invitation-link") or ""
             if link:
                 self._last_invitation_token = link.rsplit("/", 1)[-1]
+
+    def assert_invitation_email_delivered(self, email: str) -> None:
+        mailbox.assert_invitation_delivered(email, self._last_invitation_token)
 
     def _fetch_pending_invitations(self) -> list[dict]:
         """Read pending invitations from the rendered members page (no JSON API)."""
