@@ -14,7 +14,10 @@
   → slowapi removed; fixed-window counters in `rate_limit_counters` (atomic upsert,
   multi-instance correct, fail-open, opportunistic per-key cleanup — a real purge
   job joins the async substrate later)
-- [ ] `SettingsChanged` live-reload is in-process only — with N instances, only the one handling the POST reloads; others serve stale settings silently. Reload via Postgres NOTIFY or TTL re-read
+- [x] `SettingsChanged` live-reload is in-process only — with N instances, only the one handling the POST reloads; others serve stale settings silently. Reload via Postgres NOTIFY or TTL re-read
+  → TTL re-read: `SettingsRefresher` lifespan task per process (`settings_refresh_seconds`,
+  default 30s, 0 disables) re-reads `app_settings` and re-emits `SettingsChanged`
+  locally on diff; local edits absorbed so the emitting instance never double-fires
 
 ### async substrate — prerequisite to every Postgres-as-X brick
 

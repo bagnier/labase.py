@@ -25,7 +25,9 @@ from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQue
 from apps.settings.contract.settings import SettingDef, SettingsChanged, declare_app_settings
 from apps.settings.contract.technical import overview as technical_overview
 from apps.settings.infra.audit_log_repository import AuditLogRepository
+from apps.settings.infra.refresh import SettingsRefresher
 from apps.settings.infra.router import router
+from apps.shared.config import get_technical_settings
 from apps.shared.host import Host
 from apps.shared.http.templates import templates
 
@@ -52,6 +54,13 @@ def mount(host: Host) -> None:
     host.events.on(ConsoleOverviewQuery, appearance_overview)
 
     host.events.on(ConsoleOverviewQuery, technical_overview)
+
+    # With N instances only the one handling the console POST reloads in-process;
+    # the others converge within one TTL through this per-process re-read loop.
+    refresher = SettingsRefresher(host, get_technical_settings().settings_refresh_seconds)
+    host.events.on(SettingsChanged, refresher.absorb)
+    host.app.router.add_event_handler("startup", refresher.start)
+    host.app.router.add_event_handler("shutdown", refresher.stop)
 
     # Live appearance globals, alongside ``css_v`` — every page reads the app-wide theme.
     jinja_globals = cast("dict[str, object]", templates.env.globals)
