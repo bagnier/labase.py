@@ -43,12 +43,17 @@
   → was already done (`mutation_response`/`delete_response` in `apps/shared/http/responses.py`,
   unit-tested); migrated the last hand-rolled HX-Redirect (org creation) onto it
 - [ ] scaffold `make new-context NAME=x` (or skill) — the 23-file checklist is mechanical
+  (2026-07-05: out of scope for now)
 - [ ] `new-product` skill: delete demos (incl. todos FK/policy inside `000004_organizations.sql`), rename ~50 hardcoded "labase"
-- [ ] test helpers: `given_helpers` cross-imports between test suites (11 sites) — bless or move to a shared test contract
+- [x] test helpers: `given_helpers` cross-imports between test suites (11 sites) — bless or move to a shared test contract
+  → decided 2026-07-05: **blessed** — cross-imports between test suites are fine;
+  the import-linter contracts already exempt `apps.*.tests.**`
 
 ### simplification — closing windows first
 
-- [ ] decide `client/` fate: unused → remove/extract; used → document it
+- [x] decide `client/` fate: unused → remove/extract; used → document it
+  → decided 2026-07-05: **keep** (candidate substrate for the perf smoke tests);
+  still to do: document it in README
 - [x] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
   → aligned: `ReviewRepositoryProtocol` port + `review_card` domain use-case (daily
   cap + scheduling moved out of the router); the repo deliberately stays outside
@@ -109,6 +114,7 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   locale (cookie or `Accept-Language`), catalogs per context. Expensive to retrofit
   later — decide early: if target products are French-speaking this is urgent,
   otherwise defer consciously.
+  → decided 2026-07-05: **consciously deferred** — out of scope for now.
 - [ ] **perf smoke tests** — JHipster generates one Gatling simulation per entity.
   Equivalent: a Locust smoke per context, reusing the generated OpenAPI client in
   `client/` — which would finally give `client/` a reason to exist (see
@@ -258,15 +264,16 @@ above). New items:
   active subs). Keep the domain Stripe-agnostic behind a port (audit/Mailer
   doctrine) — Stripe adapter first, no vendor lock in domain code. Demo-app
   friendly: a fake "Pro plan" gating one demo feature shows the pattern.
-- [ ] **per-org feature flags** — app switches + declared settings cover the
+  (2026-07-05: out of scope for now)
+- [ ] **per-org feature flags** (approved 2026-07-05, next up) — app switches + declared settings cover the
   server-wide 80%; missing is the org-scoped flag ("beta for this customer").
   Small extension of the existing settings model (org_id column, org override
   screen); becomes plan-tier gating for free once billing exists.
-- [ ] **user impersonation** — Pegasus ships it, Supabase dashboard has it; precious
+- [ ] **user impersonation** (approved 2026-07-05, next up) — Pegasus ships it, Supabase dashboard has it; precious
   for support. Console action "view as user" with a visible banner + forced
   audit event on start/stop (the trail already exists). Time-boxed session,
   admin-gated.
-- [ ] **API keys** — the JSON face of content negotiation currently only serves
+- [ ] **API keys** (approved 2026-07-05, next up) — the JSON face of content negotiation currently only serves
   cookie sessions; machine integrations need `Authorization: Bearer <key>`.
   Per-org keys (owner-managed), hashed at rest, last-used tracking, revocation;
   a second auth dependency alongside `CurrentUser` resolving to the same
