@@ -1,15 +1,6 @@
 ## remediation (audit 2026-07-03)
 
-### 1. doc-sync — executable docs must not lie (agent-driven base ⇒ doc drift = prod bug)
-
-- [x] fix `.claude/skills/feature/references/build.md`: `mount(app, host)` → `mount(host)` (L127-142, L208)
-- [x] fix `build.md` L119 + `impact.md` L28: `ShellOrgQuery` / `apps/profile/contract/shell.py` → `OrgNavQuery` / `apps/organizations/contract/shell.py`
-- [x] fix `build.md` L155: Tailwind 3.4 → 4.x; document daisyui 5.x (absent from skill, README and CLAUDE.md)
-- [x] README: `mount(app, host)` → `mount(host)` (L50, L52, L114)
-- [x] README structure: add `calendar/`, `styleguide/`, `client/`, `docs/schema*`; add Biome to quality tools; state calendar's status (demo or core?)
-- [x] README: soften "no mocking the persistence layer" — true for E2E, unit suite does mock sessions/engine (organizations, auth, health)
-
-### 2. contract-readiness — what any client contract would re-pay
+### contract-readiness — what any client contract would re-pay
 
 - [ ] email — two routes, lightest possible:
   - auth lifecycle (forgot/reset password, confirmation, email change) → GoTrue calls + Supabase email templates, zero app code
@@ -21,54 +12,235 @@
 - [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
 - [ ] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
 - [ ] `SettingsChanged` live-reload is in-process only — with N instances, only the one handling the POST reloads; others serve stale settings silently. Reload via Postgres NOTIFY or TTL re-read
-- [x] honor `$PORT` in `docker/entrypoint.sh` (currently hardcoded 8000)
 
-### 3. async substrate — prerequisite to every Postgres-as-X brick
+### async substrate — prerequisite to every Postgres-as-X brick
 
 - [ ] durable event table (outbox / pgmq-style, `FOR UPDATE SKIP LOCKED`)
 - [ ] worker entrypoint (process or lifespan task) — nothing long-running exists today
 - [ ] background RLS convention: synthesized tenant claims via `set_config`, not blanket BYPASSRLS
 - [ ] then: email sending, FTS indexing, cache expiry become consumers of this brick
 
-### 4. DX gradation — prototype fast, harden later
+### DX gradation — prototype fast, harden later
 
-- [ ] `/feature` skill: add a prototype mode (merged scenarios+impact, optional mockup, API driver only; browser mixin at stabilization)
 - [ ] promote pages' `_mutation_response` + HX-Redirect patterns into `apps/shared/http/` (bifurcation helpers beyond `render_list`)
 - [ ] scaffold `make new-context NAME=x` (or skill) — the 23-file checklist is mechanical
 - [ ] `new-product` skill: delete demos (incl. todos FK/policy inside `000004_organizations.sql`), rename ~50 hardcoded "labase"
 - [ ] test helpers: `given_helpers` cross-imports between test suites (11 sites) — bless or move to a shared test contract
 
-### 5. simplification — closing windows first
+### simplification — closing windows first
 
 - [ ] decide `client/` fate: unused → remove/extract; used → document it
 - [ ] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
-
-#### doublons (by payoff)
-
-- [x] ORM mixins in `shared/persistence/base.py` (`UUIDPk`, `OrgScoped`, `Versioned`, `Timestamped`) — ~12 models recopy the same 6 lines (~60-70 lines, lowest risk)
-- [x] `integration.py` ritual: extract `overview_from_count()`, `pluralize()`, `seed_with_owner()` helpers (~120-160 lines across 5 contexts) — factor the bodies, NOT the wiring (mount stays explicit, cf. non-goal above)
-- [x] Jinja macro `overview_card()` — 5 carbon-copy `_overview.html` ("Open →" link coded 5 different ways); pills as `badge`; component class for the `card bg-base-100 border…` shell respelled ×25
-- [x] `audit(bg, event, user, org_id, **fields)` helper — 38 `record_audit_event` calls repeat the same first 5 args
 - [ ] `PositionedRepository` mixin — `move_above` algorithm duplicated todo/pages (fix the version bypass there too)
-- [x] `OrgScopedRepository.default_order` — kills 4 `all()` overrides, todo's redundant `count()`, duplicated `count_all()`
-- [x] a11y parity: `<section aria-label>` on recent pages (pages/settings/calendar views), `aria-live` on HTMX-swapped lists, use `input_field()` macro in `pages/form.html`
 
-## goals
+## jhipster gap analysis (2026-07-05)
 
-### technical
+Compared the base against JHipster v8/v9 and JHipster Lite (archived 2025-08-04,
+continued as Seed4J by the same authors). Kept only the gaps worth closing here —
+multi-CI generators, K8s/multi-cloud, SPA frontends, Sonar, and external
+Kafka/Elastic/Redis modules are deliberately NOT borrowed (they contradict the
+Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
 
-- [ ] logs
-- [ ] COW, soft deletion, soft update
-- [ ] async task queue
-- [ ] fulltext index - elastic
-- [ ] documents - mango
-- [ ] cache - redis
-- [ ] messaging - kafka
-- [ ] email
-- [ ] prod deployment doc (secrets, env)
-- [ ] https://12factor.net
-- [ ] https://w.pitula.me/fintech-engineering-handbook/
+### high value
 
+- [ ] **architecture tests** — README claims "domain never imports infra; apps never
+  import each other; principles are mechanically verifiable" but nothing verifies it
+  (JHipster ships ArchUnit by default; Lite makes it a pillar). Use `import-linter`
+  in `make lint` with contracts: `domain/` must not import `infra/`; no cross-context
+  imports except via `contract/`; only `apps/main.py` may know several contexts.
+  ~Half a day, best value/effort of this list. Critical for agent-written code.
+- [ ] **CSRF protection** — JWT in httpOnly cookie + HTMX forms is exactly the
+  CSRF-vulnerable profile, and there is no protection today (no token, no
+  `Origin`/`Sec-Fetch-Site` check). JHipster enables CSRF in every cookie-based mode.
+  Lightest fix compatible with HTMX (no token plumbing): middleware rejecting
+  mutations (POST/PUT/PATCH/DELETE) when `Sec-Fetch-Site` is present and not
+  `same-origin`/`none`, falling back to an `Origin` vs host check for older agents.
+- [ ] **`make upgrade-base`** — JHipster's `jhipster upgrade` solves the cloned-app
+  problem: regenerate on an orphan `jhipster_upgrade` branch with old then new
+  version, 3-way git merge into the product branch, customizations survive. Our
+  version: products clone labase, then pull base improvements via a `base` git remote
+  + dedicated merge branch (or rebase of base commits). Realistic here precisely
+  because demos are disposable and boundaries are hard — conflicts concentrate in
+  `apps/shared/` and `main.py`. Pairs with the `new-product` skill (DX gradation):
+  together they close the full lifecycle clone → develop → keep benefiting.
+  Document the merge protocol (what a product must never edit vs owns fully).
+
+### medium value
+
+- [ ] **console ops screens** — JHipster generates admin screens we lack:
+  - metrics: `/metrics` Prometheus endpoint + console page (joins the monitoring
+    TODO in contract-readiness)
+  - runtime log-level control: change structlog/stdlib levels from the console
+    without redeploy — cheap and very useful in prod
+  - server user management: list/disable/delete users from the console (joins the
+    advanced-auth "disable / delete user" TODO)
+- [ ] **i18n** — JHipster ships 45+ languages with a navbar switcher; all our UI
+  strings are hardcoded English. Jinja2 route: Babel/gettext extraction, per-request
+  locale (cookie or `Accept-Language`), catalogs per context. Expensive to retrofit
+  later — decide early: if target products are French-speaking this is urgent,
+  otherwise defer consciously.
+- [ ] **perf smoke tests** — JHipster generates one Gatling simulation per entity.
+  Equivalent: a Locust smoke per context, reusing the generated OpenAPI client in
+  `client/` — which would finally give `client/` a reason to exist (see
+  simplification: "decide client/ fate").
+
+### options (DO NOT IMPLEMENT)
+
+- [ ] **declarative entity scaffolding** — JHipster's killer feature: `jhipster entity`
+  + JDL generate entity/repo/service/DTO/CRUD screens/tests/migration, idempotently
+  (definition persisted in `.jhipster/*.json`, regenerable later). The planned
+  `make new-context` (see DX gradation above) should aim higher than a 23-file
+  checklist: a declarative entity definition (fields, validations, relationships,
+  pagination/filter options) driving a `/new-context` skill + deterministic templates
+  that emit the full bounded context — `domain/`, `infra/`, templates, SQL migration
+  **with RLS policies**, Gherkin feature, both driver mixins, `mount()` wiring.
+  Persist the definition inside the context (regeneration story). Bundle a standard
+  list-endpoint convention: pagination + per-field filter query params (JHipster's
+  `*Criteria`/`QueryService` equivalent) — today only the audit viewer has cursor
+  pagination, every other list is ad hoc.
+- [ ] **module landscape** — Lite's strong idea: incremental modules applied à la
+  carte, visualized as a dependency graph (`/landscape` UI). Our apps already ARE
+  modules (declarative mount, traceless deletion); borrow the formalization, not the
+  tool: document upcoming bricks (email, queue, FTS, cache) as optional modules with
+  explicit dependencies ("FTS requires the async worker"), not a flat TODO list.
+  Optionally a console "landscape" page: bricks installed/available.
+- [ ] **named permissions** — Lite's "Kipe" authorization module: permission model
+  beyond binary roles. Our owner/member is binary; keep in mind for the first
+  client contract needing custom roles. Not urgent.
+
+## error tracking — Sentry-as-Postgres brick (2026-07-05)
+
+Build self-hosted error tracking as a bounded context (`apps/issues/`), replacing the
+"error tracking (Sentry)" buy in contract-readiness with a build. Best candidate for
+the first *visible* Postgres-as-X brick: unlike cache/queue it has a product surface
+(a console screen) that demonstrates the thesis instead of staying plumbing. No Python
+boilerplate ships this.
+
+What Sentry's value actually is: not capture (trivial) but **grouping** — thousands of
+events deduped into few *issues* via stack-trace fingerprinting, with a lifecycle
+(new → unresolved → resolved → **regressed**). All replicable on Postgres.
+
+- [ ] **capture** — FastAPI exception handler + two already-identified points: event-bus
+  handler failures (`collect` already logs them) and `BackgroundTasks` failures.
+  Audit doctrine verbatim: best-effort, never blocks — persistence via background
+  task; if the DB is down, fall back to the structured log and nothing else. The
+  error handler must never itself fail.
+- [ ] **fingerprinting** — hash of (exception type, top-N in-app frames normalized to
+  file:function). Never the message (variable values). Allow a manual fingerprint
+  override for weird cases.
+- [ ] **storage** — two tables, no RLS (server-level admin data, AdminSession):
+  - `error_groups`: fingerprint, title, first_seen/last_seen, count, status
+    (new/unresolved/resolved/ignored/regressed), first/last version
+  - `error_events`: group FK, JSONB context (stack, request path, user_id, org,
+    **request_id** — pivots each event to its correlated structlog lines, a link
+    Sentry SaaS cannot offer)
+- [ ] **lifecycle & regressions** — resolve/ignore buttons in console;
+  `resolved_in_version` = git SHA already in the Docker env; event arriving on a
+  resolved group with a later version → `regressed`. Sentry's most useful feature,
+  one column + one if.
+- [ ] **console screen** — issues list sorted by volume/recency with status badges;
+  detail view: stack trace, context, recent occurrences (cursor pagination — reuse
+  the audit viewer pattern); "N unresolved" stat in console overview. Standard app
+  shape: `mount()`, declared settings (retention days, alerting on/off), feature
+  switch.
+- [ ] **alerting** — emit typed `IssueOpened` / `IssueRegressed` on the bus → the
+  planned `Mailer` (contract-readiness) subscribes. Emitter never knows subscribers.
+- [ ] **retention** — periodic purge as a consumer of the async substrate (like cache
+  expiry, FTS indexing).
+
+Assumed limits (don't over-promise): no JS sourcemaps, no perf tracing, no statistical
+spike detection, dumber grouping on edge cases. Positioning: the error tracking of a
+starting product — enough until real volume; the Sentry SDK can be added later without
+conflict (they coexist fine).
+
+Optional extensions, later: frontend JS error capture (`window.onerror` → POST
+endpoint; mind anonymous rate limiting) and basic spike detection (count per hourly
+window).
+
+## load metrics — Metrics-as-Postgres brick (2026-07-05)
+
+Two layers sharing ONE collector; don't conflate them. Together they close the
+"metrics" half of the monitoring TODO in contract-readiness (error tracking above
+closes the other half).
+
+- [ ] **layer 1: `/metrics` Prometheus endpoint** — standard exposition (requests per
+  route, latency histograms, status codes, in-flight, asyncpg pool stats), via
+  `prometheus-fastapi-instrumentator` or a hand-rolled middleware. Cheap, the interop
+  standard (Grafana/alertmanager/any host), commits to nothing. Alone it *shows*
+  nothing without a Prometheus server — hence layer 2.
+- [ ] **layer 2: console "Load" screen** — what a starting product actually wants: see
+  its load in the admin console, not run a Grafana stack.
+  - **in-memory accumulator** in the middleware (`RequestLogger` is already on the
+    path): per route template, counts requests/errors and fills fixed-boundary
+    latency histogram buckets. This single accumulator feeds BOTH the `/metrics`
+    text exposition (instant read) and the Postgres flush (history) — collection is
+    written once.
+  - **aggregated periodic flush** to Postgres: one row per (route, minute bucket) —
+    NEVER one row per request. This is what makes time-series-in-Postgres viable:
+    at 100 req/s that's a few rows/minute, not 6000. p50/p95 computed from the
+    histogram buckets, exactly like Prometheus does.
+  - **console screen**: traffic sparklines, top routes, p95, error rate (natural
+    link to the issues screen). daisyUI `stat` components already exist.
+  - **retention/downsampling**: minute → hour after ~7 days, purge — third consumer
+    of the async substrate (after email and error-events purge).
+  - **DB side: link out, don't rebuild** — hosted Supabase already covers it
+    (dashboard Reports, Query Performance on pg_stat_statements, advisors,
+    Prometheus endpoint). Just add links in the console to the relevant Supabase
+    pages: local → Studio (`localhost:54323`), hosted → dashboard pages (needs the
+    project ref in config to build URLs). App-side HTTP metrics remain the
+    differentiation.
+- multi-instance note: each process flushes its own rows, the screen aggregates in
+  SQL — unlike the `SettingsChanged` live-reload gap, multi-instance is trivially
+  correct here.
+
+Assumed limits: no distributed tracing, fixed label set (route/method/status — no
+arbitrary cardinality), minute granularity. Beyond that, layer 1 is already there to
+plug real tooling without rewriting anything.
+
+## python boilerplate gap analysis (2026-07-05)
+
+Compared against the Python field: fastapi/full-stack-fastapi-template (44k★, React
+SPA, no teams/billing), cookiecutter-django (13.5k★, infra only), SaaS Pegasus
+(Django, $449+, THE feature gold standard), FastroAI/FastSaaS/FastLaunchAPI (small
+commercial FastAPI kits), fastapi_supabase_template (350★, API-only, best
+Supabase+Python effort).
+
+Validated differentiators — nobody ships these, keep investing: (a) RLS-enforced
+multi-tenant isolation driven from Python (Supabase starters are overwhelmingly
+Next.js; Basejump, the closest RLS+teams starter, is SQL/Next.js); (b) Jinja2+HTMX
+SSR with content negotiation as a full kit (existing FastAPI+HTMX starters are
+sub-200★ demos); (c) audit trail (absent from every candidate incl. Pegasus);
+(d) BDD dual-driver tests (no candidate uses Gherkin at all). Pegasus shipping
+Claude/Cursor rules + MCP confirms agent-driven DX is now a selling point.
+
+Gaps revealed (most already tracked: email, jobs, i18n, 2FA, monitoring — see
+above). New items:
+
+- [ ] **billing — the one fully missing link** in the contract-readiness reasoning
+  ("what any client contract would re-pay"). The core of every commercial
+  boilerplate's offer; the minimal credible SaaS-kit grammar is auth + teams +
+  billing + email + jobs, and billing is the only piece entirely absent here.
+  Shape: a `billing/` bounded context, standard mount; **subscription per org**
+  (owner-managed); Stripe Checkout + customer portal (no card UI to build),
+  webhook endpoint feeding typed events (`SubscriptionChanged`) on the bus;
+  plan gates readable by other apps the same way declared settings are (e.g.
+  `max_items_per_org` becomes plan-dependent); console overview stat (MRR,
+  active subs). Keep the domain Stripe-agnostic behind a port (audit/Mailer
+  doctrine) — Stripe adapter first, no vendor lock in domain code. Demo-app
+  friendly: a fake "Pro plan" gating one demo feature shows the pattern.
+- [ ] **per-org feature flags** — app switches + declared settings cover the
+  server-wide 80%; missing is the org-scoped flag ("beta for this customer").
+  Small extension of the existing settings model (org_id column, org override
+  screen); becomes plan-tier gating for free once billing exists.
+- [ ] **user impersonation** — Pegasus ships it, Supabase dashboard has it; precious
+  for support. Console action "view as user" with a visible banner + forced
+  audit event on start/stop (the trail already exists). Time-boxed session,
+  admin-gated.
+- [ ] **API keys** — the JSON face of content negotiation currently only serves
+  cookie sessions; machine integrations need `Authorization: Bearer <key>`.
+  Per-org keys (owner-managed), hashed at rest, last-used tracking, revocation;
+  a second auth dependency alongside `CurrentUser` resolving to the same
+  org-scoped context so RLS still applies.
 
 ### advanced auth
 
@@ -84,6 +256,24 @@
 - [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
 - [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
 - [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
+
+## goals
+
+### technical
+
+- [ ] logs
+- [ ] ETag on 
+- [ ] COW, soft deletion, soft update
+- [ ] async task queue
+- [ ] fulltext index - elastic
+  - recherche dans les pages
+- [ ] documents - mango
+- [ ] cache - redis
+- [ ] messaging - kafka
+- [ ] email
+- [ ] prod deployment doc (secrets, env)
+- [ ] https://12factor.net
+- [ ] https://w.pitula.me/fintech-engineering-handbook/
 
 ### possible Supabase integrations
 
