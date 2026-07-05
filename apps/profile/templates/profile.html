@@ -91,6 +91,20 @@
     </div>
     <section class="card-panel">
       <div class="card-body">
+        <h2 class="card-title text-sm font-semibold mb-3">Password</h2>
+        {{ alert('error', password_error) }}
+        {{ alert('success', password_info) }}
+        <form method="post" action="/profile/password" class="space-y-4 max-w-sm">
+          {{ input_field("current_password", "current_password", type="password",
+                    label="Current password", required=true) }}
+          {{ input_field("new_password", "new_password", type="password",
+                    label="New password", required=true) }}
+          <button type="submit" class="btn btn-primary">Change password</button>
+        </form>
+      </div>
+    </section>
+    <section class="card-panel">
+      <div class="card-body">
         <h2 class="card-title text-sm font-semibold mb-3">Session</h2>
         <form method="post" action="/auth/logout">
           <button type="submit" class="btn">

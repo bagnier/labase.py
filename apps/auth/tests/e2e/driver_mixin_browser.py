@@ -1,6 +1,8 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
+from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -9,6 +11,8 @@ class AuthBrowserMixin(BrowserBase):
 
     def reset_session(self) -> None:
         self.last_registered_email = None
+        self._reset_email: str | None = None
+        self._reset_requested_at: datetime | None = None
         super().reset_session()
 
     def _delete_user_if_exists(self, email: str) -> None:
@@ -88,6 +92,36 @@ class AuthBrowserMixin(BrowserBase):
     def logout_action(self) -> None:
         self.page.evaluate("fetch('/auth/logout',{method:'POST'})")
         self.page.goto(f"{self.base_url}/auth/login", wait_until="load")
+
+    def request_password_reset(self, email: str) -> None:
+        self._reset_email = email
+        self._reset_requested_at = datetime.now(UTC)
+        self.page.goto(f"{self.base_url}/auth/login", wait_until="load")
+        self.page.get_by_role("link", name="Forgot password?").click()
+        self.page.wait_for_url(f"{self.base_url}/auth/forgot-password", timeout=5000)
+        self.page.get_by_label("Email").fill(email)
+        self.page.get_by_role("button", name="Send reset link").click()
+        self.page.wait_for_selector(".alert", timeout=5000)
+
+    def reset_password_via_email(self, new_password: str) -> None:
+        assert self._reset_email and self._reset_requested_at, "no reset requested"
+        # The recovery mail is really fetched from the catcher; the link targets the
+        # dev SITE_URL, so we carry its token to this driver's own server port.
+        token_hash = mailbox.recovery_token(self._reset_email, since=self._reset_requested_at)
+        self.page.goto(
+            f"{self.base_url}/auth/reset-password?token_hash={token_hash}&type=recovery",
+            wait_until="load",
+        )
+        self.page.get_by_label("New password").fill(new_password)
+        self.page.get_by_role("button", name="Set new password").click()
+        self.page.wait_for_url(f"{self.base_url}/auth/login*", timeout=5000)
+
+    def change_password(self, current_password: str, new_password: str) -> None:
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.page.get_by_label("Current password").fill(current_password)
+        self.page.get_by_label("New password").fill(new_password)
+        self.page.get_by_role("button", name="Change password").click()
+        self.page.wait_for_selector(".alert-success", timeout=5000)
 
     def assert_redirected_to_login(self) -> None:
         assert "/auth/login" in self.page.url, (

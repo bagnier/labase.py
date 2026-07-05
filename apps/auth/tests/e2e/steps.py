@@ -69,6 +69,21 @@ def step_sign_out(driver):
     driver.logout_action()
 
 
+@when(parsers.parse('they request a password reset for "{email}"'))
+def step_request_password_reset(driver, email):
+    driver.request_password_reset(email)
+
+
+@when(parsers.parse('they set a new password "{password}" using the emailed reset link'))
+def step_reset_password_via_email(driver, password):
+    driver.reset_password_via_email(password)
+
+
+@when(parsers.parse('they change their password from "{current}" to "{new}"'))
+def step_change_password(driver, current, new):
+    driver.change_password(current, new)
+
+
 @then("the sign-in form is available")
 def step_sign_in_form_available(driver):
     driver.assert_page_accessible("/auth/login", "Sign in")

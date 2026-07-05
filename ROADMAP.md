@@ -4,10 +4,11 @@
 
 - [ ] email — two routes, lightest possible:
   - [ ] auth lifecycle (forgot/reset password, confirmation, email change) → GoTrue calls + Supabase email templates, zero app code
+    (forgot/reset ✓ and confirmation ✓ shipped; email change still open)
   - [x] app transactional (org invitations — token exists but is never sent) → tiny `Mailer` port in `apps/shared/email.py` (`Email` dataclass + `Protocol` + `SmtpMailer` via aiosmtplib, env-configured); Jinja2 for text/html; sent via `BackgroundTasks` (audit-style best-effort), moves behind the async-substrate queue later without changing the port
   - [x] dev: SMTP → local Supabase mail catcher (Inbucket/Mailpit, SMTP 54325) — same inbox as GoTrue mail, nothing to install; prod: any SMTP provider, no vendor SDK (`SMTP_*` env vars)
   - [x] tests: unit → `FakeMailer` recording sent emails (single injection point, clock-style); E2E sincere → driver substrate reads the mail catcher HTTP API (mail really sent, really fetched, both drivers share one mailbox client — `tests/e2e/drivers/mailbox.py`)
-- [ ] forgot/reset password (see advanced auth below)
+- [x] forgot/reset password (see advanced auth below)
 - [ ] prod deployment: compose/manifest, secrets story beyond `.env` files, deploy doc
 - [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
 - [x] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
@@ -273,8 +274,13 @@ above). New items:
 - [ ] @handle
 - [ ] photo de profil
 - [ ] disable / delete user
-- [ ] Forgot password (/auth/forgot-password + /auth/reset-password)
-- [ ] Password change (authenticated) — POST /profile/password
+- [x] Forgot password (/auth/forgot-password + /auth/reset-password)
+  → GoTrue recovery mail (custom `supabase/templates/recovery.html` carrying
+  `token_hash` to our SSR route), `verify_otp` + stateless password update;
+  E2E on both drivers reads the real mail from the catcher
+- [x] Password change (authenticated) — POST /profile/password
+  → re-authenticates with the current password via `auth.contract.passwords`,
+  then GoTrue update; form on the profile page; audited
 - [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email
 - [ ] Account deletion — DELETE /profile + cascade + logout
 - [ ] Unconfirmed email verification — block login cleanly if email_confirmed_at is null

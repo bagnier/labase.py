@@ -73,6 +73,36 @@ async def register(email: str, password: str) -> RegisterResult:
     )
 
 
+async def request_password_reset(email: str) -> None:
+    """Ask GoTrue to send the recovery email (Supabase template, zero app mail code)."""
+    supabase = await get_user_supabase()
+    await supabase.auth.reset_password_for_email(email)
+
+
+class PasswordUpdateError(Exception):
+    """GoTrue refused the new password (typically weak_password); message is user-safe."""
+
+
+async def update_password(access_token: str, new_password: str) -> None:
+    """Set a new password for the session's user — stateless GoTrue call, like logout()."""
+    s = get_technical_settings()
+    async with httpx.AsyncClient() as client:
+        res = await client.put(
+            f"{s.supabase_api_url}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "apikey": s.supabase_publishable_key,
+            },
+            json={"password": new_password},
+        )
+    if res.status_code >= 400:
+        try:
+            message = res.json().get("msg", "Password update failed.")
+        except ValueError:
+            message = "Password update failed."
+        raise PasswordUpdateError(message)
+
+
 async def confirm_signup(token_hash: str, type: str = "signup") -> AuthTokens:
     """Exchange an email confirmation token for a session."""
     supabase = await get_user_supabase()

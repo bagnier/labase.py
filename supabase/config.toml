@@ -1,5 +1,19 @@
+# The app serves auth pages itself (SSR): recovery links point at our
+# /auth/reset-password route carrying GoTrue's token_hash.
+[auth]
+site_url = "http://localhost:8000"
+
 [auth.email]
 enable_confirmations = false
+
+# GoTrue's default is 2 emails/hour — unusable for the E2E password-reset
+# scenarios that really send recovery mail through the local catcher.
+[auth.rate_limit]
+email_sent = 1000
+
+[auth.email.template.recovery]
+subject = "Reset your password"
+content_path = "./supabase/templates/recovery.html"
 
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.

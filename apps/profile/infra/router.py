@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.auth.contract.passwords import PasswordUpdateError, WrongPassword, change_password
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.http import parse_body, wants_json
@@ -55,6 +56,43 @@ async def profile_page(
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(session, current_user, repo)
+    return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@router.post("/profile/password", response_model=None)
+async def password_change(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: ProfileRepo,
+) -> HTMLResponse | JSONResponse:
+    body = await parse_body(request)
+    current_password = str(body.get("current_password", ""))
+    new_password = str(body.get("new_password", ""))
+    error: str | None = None
+    if not current_password or not new_password:
+        error = "Current and new password are required."
+    else:
+        try:
+            await change_password(current_user.email, current_password, new_password)
+        except WrongPassword:
+            error = "Current password is incorrect."
+        except PasswordUpdateError as e:
+            error = str(e)
+
+    if error is not None:
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=400)
+        ctx = await _profile_context(session, current_user, repo)
+        ctx["password_error"] = error
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+
+    audit(bg, "profile.password_changed", user_id=current_user.id)
+    if wants_json(request):
+        return JSONResponse({"message": "Password changed."})
+    ctx = await _profile_context(session, current_user, repo)
+    ctx["password_info"] = "Password changed."
     return templates.TemplateResponse(request, "profile.html", ctx)
 
 

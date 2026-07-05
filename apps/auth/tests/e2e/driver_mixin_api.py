@@ -1,8 +1,10 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import httpx
 
 from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
+from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
 
 
@@ -12,6 +14,8 @@ class AuthApiMixin(ApiBase):
     def reset_session(self) -> None:
         self.response: httpx.Response | None = None
         self.last_registered_email = None
+        self._reset_email: str | None = None
+        self._reset_requested_at: datetime | None = None
         super().reset_session()
 
     # ── HTML page access (auth smoke flows) ────────────────────────────────────
@@ -67,6 +71,27 @@ class AuthApiMixin(ApiBase):
     def logout_action(self) -> None:
         self.response = self.client().post("/auth/logout")
         self.clear_acting_email()
+
+    def request_password_reset(self, email: str) -> None:
+        self._reset_email = email
+        self._reset_requested_at = datetime.now(UTC)
+        resp = self.client().post("/auth/forgot-password", json={"email": email})
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+    def reset_password_via_email(self, new_password: str) -> None:
+        assert self._reset_email and self._reset_requested_at, "no reset requested"
+        token_hash = mailbox.recovery_token(self._reset_email, since=self._reset_requested_at)
+        resp = self.client().post(
+            "/auth/reset-password", json={"token_hash": token_hash, "password": new_password}
+        )
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+    def change_password(self, current_password: str, new_password: str) -> None:
+        resp = self.client().post(
+            "/profile/password",
+            json={"current_password": current_password, "new_password": new_password},
+        )
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
     def assert_redirected_to_login(self) -> None:
         assert self.response is not None

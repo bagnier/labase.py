@@ -13,7 +13,14 @@ from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from apps.auth.application import confirm_user, register_user
 from apps.auth.contract.current import OptionalCurrentUser
-from apps.auth.domain.service import confirm_signup, login, logout
+from apps.auth.domain.service import (
+    PasswordUpdateError,
+    confirm_signup,
+    login,
+    logout,
+    request_password_reset,
+    update_password,
+)
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.limiter import rate_limit
@@ -62,6 +69,7 @@ def _friendly_auth_error(e: AuthApiError) -> str:
 _INFO_MESSAGES: dict[str, str] = {
     "registered_pending_email": "Account created. Please verify your email before signing in.",
     "registered_active": "Account created. You can now sign in.",
+    "password_reset": "Your password was changed. You can now sign in.",
 }
 
 
@@ -217,6 +225,76 @@ async def register_endpoint(
         "register.html",
         {"error": error, "email": email, "next": next},
         status_code=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "forgot_password.html", {})
+
+
+@router.post("/forgot-password")
+@rate_limit("5/minute")
+async def forgot_password_endpoint(request: Request) -> Response:
+    body = await parse_body(request)
+    email = str(body.get("email", "")).strip()
+    # Same response whether the account exists or not — no user enumeration.
+    sent_message = "If an account exists for this address, a reset email is on its way."
+    if email:
+        try:
+            await request_password_reset(email)
+        except Exception:
+            log.exception("auth.password_reset_request_failed")
+    if wants_json(request):
+        return JSONResponse({"message": sent_message})
+    return templates.TemplateResponse(request, "forgot_password.html", {"info": sent_message})
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(request: Request, token_hash: str = Query(default="")) -> Response:
+    if not token_hash:
+        return RedirectResponse("/auth/forgot-password", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(request, "reset_password.html", {"token_hash": token_hash})
+
+
+@router.post("/reset-password")
+@rate_limit("10/minute")
+async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+    body = await parse_body(request)
+    token_hash = str(body.get("token_hash", ""))
+    password = str(body.get("password", ""))
+    ip = request.client.host if request.client else None
+    try:
+        tokens = await confirm_signup(token_hash, type="recovery")
+        await update_password(tokens.access_token, password)
+    except PasswordUpdateError as e:
+        # The recovery token is single-use and already consumed: a new link is needed.
+        error = f"{e}. Please request a new reset link."
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
+        return templates.TemplateResponse(
+            request,
+            "forgot_password.html",
+            {"error": error},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception:
+        log.exception("auth.password_reset_failed", ip=ip)
+        error = "This reset link is invalid or has expired. Please request a new one."
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
+        return templates.TemplateResponse(
+            request,
+            "forgot_password.html",
+            {"error": error},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    # The recovery session is dropped on purpose: the user signs in with the new password.
+    audit(bg, "auth.password_reset", ip=ip)
+    if wants_json(request):
+        return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
+    return RedirectResponse(
+        "/auth/login?info=password_reset", status_code=status.HTTP_303_SEE_OTHER
     )
 
 
