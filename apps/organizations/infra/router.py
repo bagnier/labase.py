@@ -27,7 +27,7 @@ from apps.organizations.domain.models import (
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.host import host
-from apps.shared.http import delete_response, or_404, parse_body, wants_json
+from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
@@ -112,14 +112,14 @@ async def create_organization(
         org_id=org.id,
         name=name,
     )
-    if wants_json(request):
-        result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
-        return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_201_CREATED)
-    if request.headers.get("HX-Request"):
-        response = Response(status_code=status.HTTP_204_NO_CONTENT)
-        response.headers["HX-Redirect"] = f"/{org.handle}/dashboard"
-        return response
-    return RedirectResponse(url=f"/{org.handle}/dashboard", status_code=303)
+    result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
+    return mutation_response(
+        request,
+        obj=result,
+        redirect_url=f"/{org.handle}/dashboard",
+        htmx_redirect_url=f"/{org.handle}/dashboard",
+        status_code=status.HTTP_201_CREATED,
+    )
 
 
 @router.get("", response_model=list[OrganizationWithRoleRead])

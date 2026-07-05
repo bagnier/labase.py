@@ -22,7 +22,9 @@
 
 ### DX gradation — prototype fast, harden later
 
-- [ ] promote pages' `_mutation_response` + HX-Redirect patterns into `apps/shared/http/` (bifurcation helpers beyond `render_list`)
+- [x] promote pages' `_mutation_response` + HX-Redirect patterns into `apps/shared/http/` (bifurcation helpers beyond `render_list`)
+  → was already done (`mutation_response`/`delete_response` in `apps/shared/http/responses.py`,
+  unit-tested); migrated the last hand-rolled HX-Redirect (org creation) onto it
 - [ ] scaffold `make new-context NAME=x` (or skill) — the 23-file checklist is mechanical
 - [ ] `new-product` skill: delete demos (incl. todos FK/policy inside `000004_organizations.sql`), rename ~50 hardcoded "labase"
 - [ ] test helpers: `given_helpers` cross-imports between test suites (11 sites) — bless or move to a shared test contract
