@@ -1,3 +1,4 @@
+from apps.api_keys.tests.e2e import ApiKeysApiMixin
 from apps.auth.tests.e2e import AuthApiMixin
 from apps.calendar.tests.e2e import CalendarApiMixin
 from apps.files.tests.e2e import OrgFileApiMixin
@@ -12,6 +13,7 @@ from tests.e2e.drivers.api_base import ApiBase
 
 class ApiDriver(
     AuthApiMixin,
+    ApiKeysApiMixin,
     ConsoleApiMixin,
     ProfileApiMixin,
     TodoApiMixin,

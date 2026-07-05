@@ -1,3 +1,4 @@
+from apps.api_keys.contract import integration as api_keys
 from apps.auth.contract import integration as auth
 from apps.calendar.contract import integration as calendar
 from apps.files.contract import integration as files
@@ -25,6 +26,7 @@ _apps = (
     health,
     console,
     organizations,
+    api_keys,
     files,
     todo,
     learning,

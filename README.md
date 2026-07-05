@@ -237,6 +237,7 @@ labase.py/
 │   │                      #   contract/integration.py (middleware/CORS/static),
 │   │                      #   persistence, http, observability, templates/
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies
+│   ├── api_keys/          # Per-org machine credentials for the JSON API (Bearer)
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations
 │   ├── profile/           # User profile
 │   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav

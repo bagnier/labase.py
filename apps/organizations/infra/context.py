@@ -3,6 +3,7 @@ import uuid
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
 
 from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.auth.contract.user import AuthenticatedUser
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.observability.audit import audit
@@ -27,16 +28,31 @@ async def get_current_org(
         # Single join: org by slug that the current user is a member of
         org = await repo.get_by_handle_for_user(slug, user_uuid)
         if org is not None:
+            _ensure_api_key_scope(current_user, org.id)
             return org.id
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Organisation not found or access denied"
         )
+
+    # An API-key principal has exactly one organisation: its own.
+    if current_user.api_key_org_id is not None:
+        return current_user.api_key_org_id
 
     # Fallback for routes not under /{org_handle}: use first org
     org = await repo.get_first_for_user(user_uuid)
     if org is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization found")
     return org.id
+
+
+def _ensure_api_key_scope(current_user: AuthenticatedUser, org_id: uuid.UUID) -> None:
+    """An API key authenticates as its creator but only inside its own organisation."""
+    bound = current_user.api_key_org_id
+    if bound is not None and org_id != bound:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This API key is not valid for this organisation",
+        )
 
 
 async def get_current_org_model(

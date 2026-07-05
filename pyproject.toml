@@ -95,6 +95,7 @@ type = "forbidden"
 allow_indirect_imports = true
 source_modules = ["apps.shared"]
 forbidden_modules = [
+    "apps.api_keys",
     "apps.auth",
     "apps.calendar",
     "apps.files",
@@ -107,6 +108,12 @@ forbidden_modules = [
     "apps.settings",
     "apps.todo",
 ]
+
+[[tool.importlinter.contracts]]
+name = "api_keys internals are private"
+type = "protected"
+protected_modules = ["apps.api_keys.domain", "apps.api_keys.infra"]
+allowed_importers = ["apps.api_keys.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]
 name = "auth internals are private"

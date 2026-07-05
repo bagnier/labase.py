@@ -277,11 +277,16 @@ above). New items:
   for support. Console action "view as user" with a visible banner + forced
   audit event on start/stop (the trail already exists). Time-boxed session,
   admin-gated.
-- [ ] **API keys** (approved 2026-07-05, next up) — the JSON face of content negotiation currently only serves
+- [x] **API keys** (approved 2026-07-05) — the JSON face of content negotiation currently only serves
   cookie sessions; machine integrations need `Authorization: Bearer <key>`.
   Per-org keys (owner-managed), hashed at rest, last-used tracking, revocation;
   a second auth dependency alongside `CurrentUser` resolving to the same
   org-scoped context so RLS still applies.
+  → new `apps/api_keys/` context: owner-managed keys under /{org}/api-keys
+  (sha256 at rest, secret shown once, throttled last-used, revocation);
+  auth routes `Bearer lbk_...` through an `ApiKeyQuery` on the bus (no import),
+  the principal is the key's creator pinned to the key's org; bearer GoTrue
+  JWTs are accepted too as a side effect
 
 ### advanced auth
 

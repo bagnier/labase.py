@@ -1,3 +1,4 @@
+from apps.api_keys.tests.e2e import ApiKeysBrowserMixin
 from apps.auth.tests.e2e import AuthBrowserMixin
 from apps.calendar.tests.e2e import CalendarBrowserMixin
 from apps.files.tests.e2e import OrgFileBrowserMixin
@@ -12,6 +13,7 @@ from tests.e2e.drivers.browser_base import BrowserBase
 
 class BrowserDriver(
     AuthBrowserMixin,
+    ApiKeysBrowserMixin,
     ConsoleBrowserMixin,
     ProfileBrowserMixin,
     TodoBrowserMixin,

@@ -1,0 +1,60 @@
+{% if new_key %}
+  <div role="alert"
+       class="alert alert-success flex-col items-start gap-2 mb-4">
+    <p class="font-medium">Key "{{ new_key.name }}" created.</p>
+    <p class="text-xs">Copy it now — it will not be shown again:</p>
+    <code class="w-full text-xs bg-base-100 border border-base-300 rounded px-2 py-1.5 break-all"
+          data-api-key-secret>{{ new_key.secret }}</code>
+  </div>
+{% endif %}
+{% if keys %}
+  <div class="list-panel mb-4">
+    {% for k in keys %}
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_140px_170px_90px] gap-4 items-center p-4"
+           data-api-key="{{ k.name }}"
+           data-api-key-status="{{ 'revoked' if k.revoked_at else 'active' }}">
+        <div>
+          <span class="font-medium text-sm">{{ k.name }}</span>
+          <div class="font-mono text-xs text-base-content/70 mt-0.5">{{ k.prefix }}…</div>
+        </div>
+        <span class="text-xs text-base-content/70">
+          {% if k.last_used_at %}
+            used <time datetime="{{ k.last_used_at.isoformat() }}">{{ k.last_used_at.strftime("%Y-%m-%d %H:%M") }}</time>
+          {% else %}
+            never used
+          {% endif %}
+        </span>
+        <span class="text-xs">
+          {% if k.revoked_at %}
+            <span class="badge badge-ghost">revoked</span>
+          {% else %}
+            <span class="badge badge-success badge-outline">active</span>
+          {% endif %}
+        </span>
+        {% if not k.revoked_at %}
+          <button type="button"
+                  class="btn btn-ghost btn-sm text-error justify-self-end"
+                  aria-label="Revoke key {{ k.name }}"
+                  hx-delete="/{{ org_handle }}/api-keys/{{ k.id }}"
+                  hx-target="#api-keys"
+                  hx-swap="innerHTML">Revoke</button>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-sm text-base-content/70 mb-4">No API key yet.</p>
+{% endif %}
+<form hx-post="/{{ org_handle }}/api-keys"
+      hx-target="#api-keys"
+      hx-swap="innerHTML"
+      class="flex gap-2 max-w-md">
+  <input type="text"
+         name="name"
+         placeholder="Key name (e.g. CI robot)"
+         aria-label="Key name"
+         required
+         maxlength="120"
+         class="input w-full flex-1" />
+  <button type="submit" class="btn btn-primary flex-none">Create key</button>
+</form>

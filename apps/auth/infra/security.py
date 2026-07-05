@@ -2,15 +2,43 @@ from functools import lru_cache
 
 import jwt
 import structlog
-from fastapi import BackgroundTasks, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    BackgroundTasks,
+    Cookie,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.config import get_technical_settings
+from apps.shared.host import host
 from apps.shared.observability.audit import audit
+from apps.shared.persistence.database import get_admin_session
 
 log = structlog.get_logger("labase.auth.security")
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip() or None
+    return None
+
+
+async def _resolve_api_key(token: str, session: AsyncSession) -> AuthenticatedUser:
+    """Route an `lbk_...` bearer token to whoever answers ApiKeyQuery on the bus."""
+    results = await host.events.collect(ApiKeyQuery(token, session))
+    principals = [p for p in results if p is not None]
+    if not principals:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+    return principals[0]
 
 
 @lru_cache
@@ -33,7 +61,14 @@ async def get_current_user(
     response: Response,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> AuthenticatedUser:
+    bearer = _bearer_token(authorization)
+    if bearer is not None and bearer.startswith(API_KEY_PREFIX):
+        return await _resolve_api_key(bearer, admin_session)
+    # A bearer GoTrue JWT is the machine twin of the cookie session (no refresh flow).
+    access_token = access_token or bearer
     if not access_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -94,10 +129,14 @@ async def try_get_current_user(
     response: Response,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+    admin_session: AsyncSession = Depends(get_admin_session),
 ) -> AuthenticatedUser | None:
-    if not access_token:
+    if not access_token and _bearer_token(authorization) is None:
         return None
     try:
-        return await get_current_user(response, access_token, refresh_token)
+        return await get_current_user(
+            response, access_token, refresh_token, authorization, admin_session
+        )
     except HTTPException:
         return None
