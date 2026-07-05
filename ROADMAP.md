@@ -21,10 +21,20 @@
 
 ### async substrate — prerequisite to every Postgres-as-X brick
 
-- [ ] durable event table (outbox / pgmq-style, `FOR UPDATE SKIP LOCKED`)
-- [ ] worker entrypoint (process or lifespan task) — nothing long-running exists today
-- [ ] background RLS convention: synthesized tenant claims via `set_config`, not blanket BYPASSRLS
+- [x] durable event table (outbox / pgmq-style, `FOR UPDATE SKIP LOCKED`)
+  → `task_queue` migration + `apps/shared/queue.py`: `enqueue()` writes through the
+  caller's session (outbox: task exists iff the business tx commits); app roles
+  get INSERT-only, claiming is admin work; retry with backoff then park as failed;
+  recurring singletons re-enqueue on completion
+- [x] worker entrypoint (process or lifespan task) — nothing long-running exists today
+  → `TaskWorker` lifespan task per process (`task_worker_interval_seconds`, 0 disables);
+  a separate process entrypoint can reuse the same class later
+- [x] background RLS convention: synthesized tenant claims via `set_config`, not blanket BYPASSRLS
+  → tasks carrying `user_id` run their handler on a user-role session with
+  `{"sub": user_id, "role": "authenticated"}` claims; without `user_id` → admin session
 - [ ] then: email sending, FTS indexing, cache expiry become consumers of this brick
+  → first consumer shipped: `rate_limit.purge` (hourly recurring); email still goes
+  through BackgroundTasks (its port makes the move mechanical)
 
 ### DX gradation — prototype fast, harden later
 

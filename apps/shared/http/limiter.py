@@ -14,6 +14,7 @@ from typing import Any
 import structlog
 from fastapi import Request
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
@@ -30,11 +31,8 @@ _INCREMENT = text(
     "DO UPDATE SET count = rate_limit_counters.count + 1 "
     "RETURNING count"
 )
-# Opportunistic per-key cleanup — a real purge job becomes an async-substrate
-# consumer later (see ROADMAP).
-_CLEANUP = text(
-    "DELETE FROM rate_limit_counters WHERE key = :key AND window_start < to_timestamp(:cutoff)"
-)
+PURGE_TOPIC = "rate_limit.purge"
+PURGE_EVERY_SECONDS = 3600
 
 
 class RateLimitExceeded(Exception):
@@ -56,12 +54,24 @@ async def _increment(key: str, window_seconds: int) -> int | None:
     try:
         async with admin_session_factory()() as session:
             hits = await session.scalar(_INCREMENT, {"key": key, "window_start": window_start})
-            await session.execute(_CLEANUP, {"key": key, "cutoff": window_start - window_seconds})
             await session.commit()
             return int(hits or 0)
     except Exception:
         log.exception("rate_limit.store_failed", key=key)
         return None
+
+
+async def purge_counters(session: AsyncSession, _payload: dict[str, Any]) -> None:
+    """Recurring queue consumer: drop windows old enough to be outside any limit."""
+    deleted = await session.scalar(
+        text(
+            "WITH purged AS ("
+            "  DELETE FROM rate_limit_counters"
+            "  WHERE window_start < now() - interval '1 day' RETURNING 1"
+            ") SELECT count(*) FROM purged"
+        )
+    )
+    log.info("rate_limit.purged", deleted=int(deleted or 0))
 
 
 def rate_limit(limit_string: str) -> Callable[[Any], Any]:

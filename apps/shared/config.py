@@ -22,6 +22,8 @@ class TechnicalSettings(BaseSettings):
     cors_origins: list[str] = ["*"]
     # Cross-instance settings freshness: TTL of the per-process re-read loop; 0 disables.
     settings_refresh_seconds: float = 30
+    # Async substrate: poll interval of the per-process task worker; 0 disables.
+    task_worker_interval_seconds: float = 1.0
     # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets
     # SMTP_* to any provider. Sending is best-effort (see apps/shared/email.py).
     smtp_host: str = "localhost"
