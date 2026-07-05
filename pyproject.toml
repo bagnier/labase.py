@@ -97,6 +97,7 @@ source_modules = ["apps.shared"]
 forbidden_modules = [
     "apps.api_keys",
     "apps.auth",
+    "apps.issues",
     "apps.calendar",
     "apps.files",
     "apps.health",
@@ -138,6 +139,12 @@ name = "health internals are private"
 type = "protected"
 protected_modules = ["apps.health.router"]
 allowed_importers = ["apps.health.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "issues internals are private"
+type = "protected"
+protected_modules = ["apps.issues.domain", "apps.issues.infra"]
+allowed_importers = ["apps.issues.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]
 name = "learning internals are private"

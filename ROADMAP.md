@@ -11,6 +11,7 @@
 - [x] forgot/reset password (see advanced auth below)
 - [ ] prod deployment: compose/manifest, secrets story beyond `.env` files, deploy doc
 - [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
+  (error-tracking half shipped as the `apps/issues` brick — see its section below)
 - [x] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
   → slowapi removed; fixed-window counters in `rate_limit_counters` (atomic upsert,
   multi-instance correct, fail-open, opportunistic per-key cleanup — a real purge
@@ -156,33 +157,39 @@ What Sentry's value actually is: not capture (trivial) but **grouping** — thou
 events deduped into few *issues* via stack-trace fingerprinting, with a lifecycle
 (new → unresolved → resolved → **regressed**). All replicable on Postgres.
 
-- [ ] **capture** — FastAPI exception handler + two already-identified points: event-bus
+- [x] **capture** — FastAPI exception handler + two already-identified points: event-bus
   handler failures (`collect` already logs them) and `BackgroundTasks` failures.
+  → `ExceptionCaptured` seam in `apps/shared/observability/errors.py`: the 500
+  handler publishes via the response's background slot, `EventBus.collect`
+  self-captures failing handlers (never the capturers); BackgroundTasks partially
+  covered — audit/email helpers already swallow+log their own failures.
   Audit doctrine verbatim: best-effort, never blocks — persistence via background
   task; if the DB is down, fall back to the structured log and nothing else. The
   error handler must never itself fail.
-- [ ] **fingerprinting** — hash of (exception type, top-N in-app frames normalized to
+- [x] **fingerprinting** — hash of (exception type, top-N in-app frames normalized to
   file:function). Never the message (variable values). Allow a manual fingerprint
   override for weird cases.
-- [ ] **storage** — two tables, no RLS (server-level admin data, AdminSession):
+- [x] **storage** — two tables, no RLS (server-level admin data, AdminSession):
   - `error_groups`: fingerprint, title, first_seen/last_seen, count, status
     (new/unresolved/resolved/ignored/regressed), first/last version
   - `error_events`: group FK, JSONB context (stack, request path, user_id, org,
     **request_id** — pivots each event to its correlated structlog lines, a link
     Sentry SaaS cannot offer)
-- [ ] **lifecycle & regressions** — resolve/ignore buttons in console;
+- [x] **lifecycle & regressions** — resolve/ignore buttons in console;
   `resolved_in_version` = git SHA already in the Docker env; event arriving on a
   resolved group with a later version → `regressed`. Sentry's most useful feature,
   one column + one if.
-- [ ] **console screen** — issues list sorted by volume/recency with status badges;
+- [x] **console screen** — issues list sorted by volume/recency with status badges;
   detail view: stack trace, context, recent occurrences (cursor pagination — reuse
   the audit viewer pattern); "N unresolved" stat in console overview. Standard app
   shape: `mount()`, declared settings (retention days, alerting on/off), feature
   switch.
-- [ ] **alerting** — emit typed `IssueOpened` / `IssueRegressed` on the bus → the
+- [x] **alerting** — emit typed `IssueOpened` / `IssueRegressed` on the bus → the
   planned `Mailer` (contract-readiness) subscribes. Emitter never knows subscribers.
-- [ ] **retention** — periodic purge as a consumer of the async substrate (like cache
+  → declared settings `alerting_enabled` + `alert_email`; sent best-effort via the Mailer.
+- [x] **retention** — periodic purge as a consumer of the async substrate (like cache
   expiry, FTS indexing).
+  → daily `issues.purge` recurring task, `retention_days` declared setting (30).
 
 Assumed limits (don't over-promise): no JS sourcemaps, no perf tracing, no statistical
 spike detection, dumber grouping on edge cases. Positioning: the error tracking of a

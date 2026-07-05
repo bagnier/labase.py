@@ -3,6 +3,7 @@ from apps.auth.contract import integration as auth
 from apps.calendar.contract import integration as calendar
 from apps.files.contract import integration as files
 from apps.health.contract import integration as health
+from apps.issues.contract import integration as issues
 from apps.learning.contract import integration as learning
 from apps.organizations.contract import integration as organizations
 from apps.pages.contract import integration as pages
@@ -24,6 +25,7 @@ _apps = (
     auth,
     profile,
     health,
+    issues,  # before console: its /console/issues routes must precede /console/{app}
     console,
     organizations,
     api_keys,

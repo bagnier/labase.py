@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Issue #{{ group.id }} — Console{% endblock %}
+{% block breadcrumb %}
+  <li><a href="/console">Console</a></li>
+  <li><a href="/console/issues">Issues</a></li>
+  <li>#{{ group.id }}</li>
+{% endblock %}
+{% block content %}
+  <div class="max-w-4xl space-y-6">
+    <a href="/console/issues" class="text-sm text-primary hover:underline">← Issues</a>
+    <div>
+      <h1 class="text-lg font-semibold font-mono break-all">{{ group.title }}</h1>
+      <p class="text-sm text-base-content/70 mt-0.5">
+        ×{{ group.count }} · first seen {{ group.first_seen.strftime("%Y-%m-%d %H:%M") }}
+        ({{ group.first_version }}) · last seen {{ group.last_seen.strftime("%Y-%m-%d %H:%M") }}
+        ({{ group.last_version }})
+        {% if group.resolved_in_version %}· resolved in {{ group.resolved_in_version }}{% endif %}
+      </p>
+    </div>
+    <div id="triage" aria-live="polite">{% include "issues/_triage.html" %}</div>
+    <section aria-label="Occurrences">
+      <h2 class="text-sm font-semibold mb-3">Occurrences</h2>
+      <div id="issue-events" class="space-y-3">{% include "issues/_events.html" %}</div>
+    </section>
+  </div>
+{% endblock %}

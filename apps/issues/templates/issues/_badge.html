@@ -1,0 +1,11 @@
+{% macro status_badge(status) %}
+  {% set tone = {
+    "new": "badge-info",
+    "unresolved": "badge-warning",
+    "regressed": "badge-error",
+    "resolved": "badge-success",
+    "ignored": "badge-ghost"
+  } %}
+  <span class="badge badge-sm {{ tone.get(status, 'badge-ghost') }}"
+        data-status-badge>{{ status }}</span>
+{% endmacro %}

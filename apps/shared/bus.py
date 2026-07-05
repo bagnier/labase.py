@@ -15,6 +15,8 @@ from typing import Any, TypeVar
 
 import structlog
 
+from apps.shared.observability.errors import ExceptionCaptured, capture_context
+
 log = structlog.get_logger("labase.shared.bus")
 
 E = TypeVar("E")
@@ -61,6 +63,17 @@ class EventBus:
         for handler in self._subs[type(query)]:
             try:
                 results.append(await handler(query))
-            except Exception:
+            except Exception as exc:
                 log.exception("query.handler_failed", handler=repr(handler))
+                # Feed the error tracker — but never capture the capturers.
+                if not isinstance(query, ExceptionCaptured):
+                    await self.collect(
+                        ExceptionCaptured(
+                            exc,
+                            source="event_bus",
+                            context=capture_context(
+                                event=type(query).__name__, handler=repr(handler)
+                            ),
+                        )
+                    )
         return results

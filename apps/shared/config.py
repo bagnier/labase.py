@@ -24,6 +24,8 @@ class TechnicalSettings(BaseSettings):
     settings_refresh_seconds: float = 30
     # Async substrate: poll interval of the per-process task worker; 0 disables.
     task_worker_interval_seconds: float = 1.0
+    # Deployed version (git SHA in Docker); drives error-tracking regression detection.
+    app_version: str = "dev"
     # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets
     # SMTP_* to any provider. Sending is best-effort (see apps/shared/email.py).
     # 127.0.0.1 (not localhost): keeps DNS out of every local connection.

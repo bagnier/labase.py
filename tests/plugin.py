@@ -30,6 +30,7 @@ pytest_plugins = [
     "tests.e2e.plugin",
     "apps.auth.tests.e2e.steps",
     "apps.api_keys.tests.e2e.steps",
+    "apps.issues.tests.e2e.steps",
     "apps.settings.tests.e2e.steps",
     "apps.profile.tests.e2e.steps",
     "apps.todo.tests.e2e.steps",

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "issues/_badge.html" import status_badge %}
+{% block title %}Issues — Console{% endblock %}
+{% block breadcrumb %}
+  <li><a href="/console">Console</a></li>
+  <li>Issues</li>
+{% endblock %}
+{% block content %}
+  <div class="max-w-4xl space-y-6">
+    <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
+    <div>
+      <h1 class="text-lg font-semibold">Issues</h1>
+      <p class="text-sm text-base-content/70 mt-0.5">
+        Captured errors, grouped by stack fingerprint. The request id of each event
+        links it to the structured logs.
+      </p>
+    </div>
+    <form method="get" action="/console/issues" class="flex items-center gap-2">
+      <label for="status-filter" class="text-sm text-base-content/70">Status</label>
+      <select id="status-filter"
+              name="status_filter"
+              class="select select-sm"
+              onchange="this.form.submit()">
+        <option value="">all</option>
+        {% for s in statuses %}
+          <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% if groups %}
+      <div class="list-panel">
+        {% for g in groups %}
+          <a href="/console/issues/{{ g.id }}"
+             data-issue="{{ g.id }}"
+             data-issue-status="{{ g.status.value }}"
+             class="grid grid-cols-1 sm:grid-cols-[1fr_90px_110px_150px] gap-4 items-center p-4 hover:bg-base-200">
+            <span class="font-mono text-xs truncate">{{ g.title }}</span>
+            <span class="text-xs text-base-content/70">×{{ g.count }}</span>
+            <span>{{ status_badge(g.status.value) }}</span>
+            <time class="text-xs text-base-content/70"
+                  datetime="{{ g.last_seen.isoformat() }}">{{ g.last_seen.strftime("%Y-%m-%d %H:%M") }}</time>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-sm text-base-content/70">No captured error. Good.</p>
+    {% endif %}
+  </div>
+{% endblock %}
