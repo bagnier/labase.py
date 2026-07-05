@@ -43,12 +43,16 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
 
 ### high value
 
-- [ ] **architecture tests** — README claims "domain never imports infra; apps never
+- [x] **architecture tests** — README claims "domain never imports infra; apps never
   import each other; principles are mechanically verifiable" but nothing verifies it
   (JHipster ships ArchUnit by default; Lite makes it a pillar). Use `import-linter`
   in `make lint` with contracts: `domain/` must not import `infra/`; no cross-context
   imports except via `contract/`; only `apps/main.py` may know several contexts.
   ~Half a day, best value/effort of this list. Critical for agent-written code.
+  → `[tool.importlinter]` in `pyproject.toml`: 13 contracts (domain⇏infra,
+  shared⇏contexts, per-context internals protected — cross-context only via
+  `contract/`); `lint-imports` wired into `make lint` and `make fix`. Tests exempt
+  (given_helpers question tracked in DX gradation).
 - [ ] **CSRF protection** — JWT in httpOnly cookie + HTMX forms is exactly the
   CSRF-vulnerable profile, and there is no protection today (no token, no
   `Origin`/`Sec-Fetch-Site` check). JHipster enables CSRF in every cookie-based mode.

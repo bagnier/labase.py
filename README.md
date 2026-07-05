@@ -33,7 +33,9 @@ This base exists for three reasons, in order:
 contexts): each owns its domain logic, routes, templates, tests and migrations, and can
 be added, disabled, or deleted without touching the others. Boundaries are hard —
 domain code never imports infrastructure; apps never import each other. The only
-inter-app surfaces are each app's public contract and the event bus.
+inter-app surfaces are each app's public contract and the event bus. These boundaries
+are enforced by import-linter contracts (`[tool.importlinter]` in `pyproject.toml`),
+checked by `make lint`.
 
 **Every business endpoint has two faces.** The same handler serves the JSON API and the
 HTML UI — a full page, or an HTMX fragment for in-page updates — through content

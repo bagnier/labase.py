@@ -76,6 +76,7 @@ provision-test:
 # lint: read-only, fails on non-conforming code (used by `make ci`).
 lint:
 	uv run ruff check .
+	uv run lint-imports
 	uv run ty check apps/
 	npm run lint
 	uv run djlint apps --lint
@@ -89,6 +90,7 @@ deadcode:
 fix:
 	uv run ruff check --fix .
 	uv run ruff format .
+	uv run lint-imports
 	uv run ty check apps/
 	npm run format
 	uv run djlint apps --reformat

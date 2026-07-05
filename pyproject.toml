@@ -26,6 +26,7 @@ dependencies = [
 dev = [
     "coverage==7.14.1",
     "djlint==1.39.4",
+    "import-linter==2.5",
     "openapi-python-client==0.29.0",
     "pip-audit==2.10.1",
     "playwright==1.60.0",
@@ -70,6 +71,110 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "SIM", "DTZ", "UP"]
 ignore = ["B008"]                                 # FastAPI Depends() in function signatures is intentional
+
+# Architecture contracts (README "Principles", mechanically verified by `make lint`):
+# - domain/ never imports infra/ (hexagonal direction);
+# - apps/shared/ sits below every context and imports none of them;
+# - a context's internals (domain/, infra/, private modules) are importable only from
+#   inside that context — cross-context traffic goes through its contract/ package.
+#   Tests are exempt: the given_helpers cross-import question is tracked in ROADMAP.md.
+[tool.importlinter]
+root_packages = ["apps"]
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "domain never imports infra"
+type = "forbidden"
+source_modules = ["apps.*.domain"]
+forbidden_modules = ["apps.*.infra"]
+# direct imports only: contract/ packages legitimately wrap infra behind ports
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "shared imports no bounded context"
+type = "forbidden"
+# direct imports only: shared's own tests may exercise apps.main (composition root)
+allow_indirect_imports = true
+source_modules = ["apps.shared"]
+forbidden_modules = [
+    "apps.auth",
+    "apps.calendar",
+    "apps.files",
+    "apps.health",
+    "apps.learning",
+    "apps.organizations",
+    "apps.pages",
+    "apps.profile",
+    "apps.public",
+    "apps.settings",
+    "apps.todo",
+]
+
+[[tool.importlinter.contracts]]
+name = "auth internals are private"
+type = "protected"
+protected_modules = ["apps.auth.application", "apps.auth.domain", "apps.auth.infra"]
+allowed_importers = ["apps.auth.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "calendar internals are private"
+type = "protected"
+protected_modules = ["apps.calendar.domain", "apps.calendar.infra"]
+allowed_importers = ["apps.calendar.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "files internals are private"
+type = "protected"
+protected_modules = ["apps.files.domain", "apps.files.infra"]
+allowed_importers = ["apps.files.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "health internals are private"
+type = "protected"
+protected_modules = ["apps.health.router"]
+allowed_importers = ["apps.health.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "learning internals are private"
+type = "protected"
+protected_modules = ["apps.learning.domain", "apps.learning.infra"]
+allowed_importers = ["apps.learning.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "organizations internals are private"
+type = "protected"
+protected_modules = ["apps.organizations.domain", "apps.organizations.infra"]
+allowed_importers = ["apps.organizations.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "pages internals are private"
+type = "protected"
+protected_modules = ["apps.pages.domain", "apps.pages.infra"]
+allowed_importers = ["apps.pages.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "profile internals are private"
+type = "protected"
+protected_modules = ["apps.profile.domain", "apps.profile.infra"]
+allowed_importers = ["apps.profile.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "public internals are private"
+type = "protected"
+protected_modules = ["apps.public.infra"]
+allowed_importers = ["apps.public.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "settings internals are private"
+type = "protected"
+protected_modules = ["apps.settings.domain", "apps.settings.infra"]
+allowed_importers = ["apps.settings.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "todo internals are private"
+type = "protected"
+protected_modules = ["apps.todo.domain", "apps.todo.infra"]
+allowed_importers = ["apps.todo.**", "apps.*.tests.**"]
 
 [tool.djlint]
 profile = "jinja"
