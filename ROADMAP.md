@@ -55,12 +55,14 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   shared⇏contexts, per-context internals protected — cross-context only via
   `contract/`); `lint-imports` wired into `make lint` and `make fix`. Tests exempt
   (given_helpers question tracked in DX gradation).
-- [ ] **CSRF protection** — JWT in httpOnly cookie + HTMX forms is exactly the
+- [x] **CSRF protection** — JWT in httpOnly cookie + HTMX forms is exactly the
   CSRF-vulnerable profile, and there is no protection today (no token, no
   `Origin`/`Sec-Fetch-Site` check). JHipster enables CSRF in every cookie-based mode.
   Lightest fix compatible with HTMX (no token plumbing): middleware rejecting
   mutations (POST/PUT/PATCH/DELETE) when `Sec-Fetch-Site` is present and not
   `same-origin`/`none`, falling back to an `Origin` vs host check for older agents.
+  → `csrf_protect` middleware in `apps/shared/http/security.py`, mounted by the
+  shared `mount()`; rejections logged (`csrf.rejected`) and unit-tested.
 - [ ] **`make upgrade-base`** — JHipster's `jhipster upgrade` solves the cloned-app
   problem: regenerate on an orphan `jhipster_upgrade` branch with old then new
   version, 3-way git merge into the product branch, customizations survive. Our

@@ -17,7 +17,7 @@ from apps.shared.http.exceptions import (
     handle_unhandled_error,
 )
 from apps.shared.http.limiter import limiter
-from apps.shared.http.security import cors_config, security_headers
+from apps.shared.http.security import cors_config, csrf_protect, security_headers
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
 
@@ -38,6 +38,7 @@ def mount(host: Host) -> None:
     app.exception_handler(StarletteHTTPException)(handle_http_error)
 
     app.middleware("http")(security_headers)
+    app.middleware("http")(csrf_protect)
     app.add_middleware(RequestLogger)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
 
