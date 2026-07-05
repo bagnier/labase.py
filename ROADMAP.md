@@ -265,10 +265,14 @@ above). New items:
   doctrine) — Stripe adapter first, no vendor lock in domain code. Demo-app
   friendly: a fake "Pro plan" gating one demo feature shows the pattern.
   (2026-07-05: out of scope for now)
-- [ ] **per-org feature flags** (approved 2026-07-05, next up) — app switches + declared settings cover the
+- [x] **per-org feature flags** (approved 2026-07-05) — app switches + declared settings cover the
   server-wide 80%; missing is the org-scoped flag ("beta for this customer").
   Small extension of the existing settings model (org_id column, org override
   screen); becomes plan-tier gating for free once billing exists.
+  → `org_app_settings` table (console writes, org members read via RLS);
+  `AppSettings.for_org(session, org_id)` merges overrides over server values;
+  console app page gains a "Per-organisation overrides" section (audited);
+  demo: todo's `creation_enabled`/`max_items_per_org` are now org-aware
 - [ ] **user impersonation** (approved 2026-07-05, next up) — Pegasus ships it, Supabase dashboard has it; precious
   for support. Console action "view as user" with a visible banner + forced
   audit event on start/stop (the trail already exists). Time-boxed session,

@@ -92,3 +92,15 @@ def test_no_group_leaves_everything_as_text() -> None:
     settings = AppSettings("demo", raw={"limit": "42"}, group=None)
 
     assert settings.limit == "42"
+
+
+def test_merged_for_org_overlays_and_coerces():
+    settings = _settings()
+    values = settings.merged_for_org({"max_upload_mb": "5"})
+    assert values["max_upload_mb"] == 5  # int, org override wins
+    assert values["uploads_enabled"] is True  # untouched keys keep server defaults
+
+
+def test_merged_for_org_without_override_keeps_server_values():
+    settings = _settings()
+    assert settings.merged_for_org({}) == settings.values

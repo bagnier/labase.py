@@ -1,3 +1,6 @@
+from sqlalchemy import text
+
+from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.api_base import ApiBase
 
 
@@ -23,6 +26,26 @@ class TodoApiMixin(ApiBase):
 
     def add_todo(self, title: str) -> None:
         self.client().post(self._todos_url(), json={"title": title}).raise_for_status()
+
+    def try_add_todo(self, title: str) -> None:
+        self.response = self.client().post(self._todos_url(), json={"title": title})
+
+    def seed_org_setting_override(self, app: str, key: str, value: str) -> None:
+        resolve_org = getattr(self, "_active_org_id", None)  # provided by the learning mixin
+        assert resolve_org is not None
+        org_id = resolve_org()
+
+        async def _do(s):
+            await s.execute(
+                text(
+                    "INSERT INTO org_app_settings (app, key, org_id, value) "
+                    "VALUES (:a, :k, :o, :v) "
+                    "ON CONFLICT (app, key, org_id) DO UPDATE SET value = :v"
+                ),
+                {"a": app, "k": key, "o": org_id, "v": value},
+            )
+
+        self.run(db.seed_fixtures(_do))
 
     def mark_todo_done(self, title: str) -> None:
         todo_id = self._todo_id_by_title(title)

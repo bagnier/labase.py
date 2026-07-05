@@ -51,6 +51,25 @@ class ConsoleApiMixin(ApiBase):
         assert self.response is not None
         assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"
 
+    def set_org_override(self, app: str, key: str, value: str) -> None:
+        self._as_admin()
+        handle = getattr(self, "active_org_handle", "")
+        resp = self.client().post(
+            f"/console/{app}/org-settings",
+            json={"org_handle": handle, "key": key, "value": value},
+        )
+        assert resp.status_code == 200, f"override failed: {resp.status_code} {resp.text}"
+
+    def assert_org_override_listed(self, app: str, key: str, value: str) -> None:
+        self._as_admin()
+        resp = self.client().get(f"/console/{app}", headers={"accept": "application/json"})
+        assert resp.status_code == 200, f"GET /console/{app}: {resp.status_code}"
+        handle = getattr(self, "active_org_handle", "")
+        overrides = resp.json()["org_overrides"]
+        found = next((o for o in overrides if o["key"] == key and o["handle"] == handle), None)
+        assert found is not None, f"no override {key!r} for {handle!r}: {overrides}"
+        assert found["value"] == value, f"expected {value!r}, got {found['value']!r}"
+
     # ── overviews ──────────────────────────────────────────────────────────────
     def _console_overview(self, key: str) -> dict:
         assert self.response is not None

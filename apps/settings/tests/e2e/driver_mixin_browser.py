@@ -86,6 +86,26 @@ class ConsoleBrowserMixin(BrowserBase):
         # accessible name resolves unambiguously to the visible checkbox/switch.
         return row.get_by_label(key)
 
+    def set_org_override(self, app: str, key: str, value: str) -> None:
+        self.open_console_settings(app)
+        handle = getattr(self, "active_org_handle", "")
+        self.page.get_by_label("Organisation handle").fill(handle)
+        self.page.get_by_label("Setting key").select_option(key)
+        self.page.get_by_label("Override value").fill(value)
+
+        def posted(r):
+            return "/org-settings" in r.url and r.request.method == "POST"
+
+        with self.page.expect_response(posted):
+            self.page.get_by_role("button", name="Override").click()
+
+    def assert_org_override_listed(self, app: str, key: str, value: str) -> None:
+        handle = getattr(self, "active_org_handle", "")
+        selector = f"[data-org-override='{handle}:{key}']"
+        self.page.wait_for_selector(selector, timeout=5000)
+        row_text = self.page.locator(selector).inner_text()
+        assert value in row_text, f"expected {value!r} in override row: {row_text!r}"
+
     def set_console_setting(self, app: str, key: str, value: str) -> None:
         # Settings auto-save: changing a field fires hx-trigger="change" — no Save button.
         self.open_console_settings(app)

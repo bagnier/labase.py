@@ -77,3 +77,15 @@ def step_assert_todo_not_completed(driver, title):
 @then(parsers.parse('"{title}" no longer appears in their todo list'))
 def step_assert_todo_absent(driver, title):
     driver.assert_todo_absent(title)
+
+
+@given(
+    parsers.parse('the "{app}" setting "{key}" is overridden to "{value}" for their organisation')
+)
+def step_org_setting_override(driver, app, key, value):
+    driver.seed_org_setting_override(app, key, value)
+
+
+@when(parsers.parse('they try to add a todo item "{title}"'))
+def step_try_add_todo(driver, title):
+    driver.try_add_todo(title)

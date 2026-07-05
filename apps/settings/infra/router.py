@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
@@ -323,11 +325,20 @@ async def get_app(
 ) -> Response:
     group = _settings_group(app)
     overview = _overview_for(await _collect_overviews(session), app)
-    values = await AppSettingRepository(session).values(app)
+    repo = AppSettingRepository(session)
+    values = await repo.values(app)
     settings = service.settings_view(group, values)
+    org_overrides = await repo.org_overrides(app)
     supabase = await _supabase_link(group, session)
     if wants_json(request):
-        return JSONResponse({"app": app, "settings": settings, "supabase": supabase})
+        return JSONResponse(
+            {
+                "app": app,
+                "settings": settings,
+                "org_overrides": [{**o, "org_id": str(o["org_id"])} for o in org_overrides],
+                "supabase": supabase,
+            }
+        )
     return templates.TemplateResponse(
         request,
         "console/app.html",
@@ -336,10 +347,103 @@ async def get_app(
             "app": app,
             "overview": overview,
             "settings": settings,
+            "org_overrides": org_overrides,
             "supabase": supabase,
             **await fullpage_context(session, current_user),
         },
     )
+
+
+async def _render_org_overrides(
+    request: Request, session, app: str, group: SettingsGroup, error: str | None = None
+) -> Response:
+    repo = AppSettingRepository(session)
+    org_overrides = await repo.org_overrides(app)
+    if wants_json(request):
+        payload = {
+            "app": app,
+            "org_overrides": [{**o, "org_id": str(o["org_id"])} for o in org_overrides],
+        }
+        if error is not None:
+            return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse(payload)
+    return templates.TemplateResponse(
+        request,
+        "console/_org_settings.html",
+        {
+            "app": app,
+            "org_overrides": org_overrides,
+            "settings": service.settings_view(group, {}),
+            "org_error": error,
+        },
+        status_code=status.HTTP_400_BAD_REQUEST if error else status.HTTP_200_OK,
+    )
+
+
+@router.post("/{app}/org-settings", response_class=HTMLResponse)
+async def create_org_override(
+    request: Request,
+    bg: BackgroundTasks,
+    app: str,
+    current_user: CurrentAdmin,
+    session: AdminSession,
+) -> Response:
+    group = _settings_group(app)
+    body = await parse_body(request)
+    handle = str(body.get("org_handle", "")).strip().lower()
+    key = str(body.get("key", ""))
+    value = str(body.get("value", ""))
+    repo = AppSettingRepository(session)
+
+    org_id = await repo.org_id_by_handle(handle)
+    if org_id is None:
+        return await _render_org_overrides(
+            request, session, app, group, error=f"No organisation with handle '{handle}'."
+        )
+    try:
+        stored = service.validate(group, key, value)
+    except UnknownSetting:
+        raise _NOT_FOUND from None
+    except InvalidSettingValue as exc:
+        return await _render_org_overrides(request, session, app, group, error=str(exc))
+
+    await repo.set_org_override(app, key, org_id, stored)
+    await session.commit()
+    audit(
+        bg,
+        "settings.org_override_set",
+        user_id=current_user.id,
+        org_id=org_id,
+        app=app,
+        key=key,
+        value=stored,
+    )
+    return await _render_org_overrides(request, session, app, group)
+
+
+@router.delete("/{app}/org-settings/{key}/{org_id}", response_class=HTMLResponse)
+async def delete_org_override(
+    request: Request,
+    bg: BackgroundTasks,
+    app: str,
+    key: str,
+    org_id: uuid.UUID,
+    current_user: CurrentAdmin,
+    session: AdminSession,
+) -> Response:
+    group = _settings_group(app)
+    repo = AppSettingRepository(session)
+    await repo.delete_org_override(app, key, org_id)
+    await session.commit()
+    audit(
+        bg,
+        "settings.org_override_removed",
+        user_id=current_user.id,
+        org_id=org_id,
+        app=app,
+        key=key,
+    )
+    return await _render_org_overrides(request, session, app, group)
 
 
 @router.put("/{app}/settings/{key}", response_class=HTMLResponse)

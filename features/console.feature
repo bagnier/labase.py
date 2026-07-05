@@ -72,6 +72,12 @@ Feature: Console domain
     When the admin opens the settings for the "todo" app
     Then a Supabase link pointing at "editor/" is shown for the "todo" app
 
+  Scenario: An admin overrides a setting for a single organisation
+    Given a server admin is signed in as "root@example.com"
+    And a user is signed in as "alice@example.com" within org "Acme"
+    When the admin overrides the "todo" setting "max_items_per_org" to "9" for the active org
+    Then the "todo" override "max_items_per_org" for the active org is listed as "9"
+
   Scenario: An admin reads an app's current settings of every type
     Given a server admin is signed in as "root@example.com"
     When the admin opens the settings for the "files" app

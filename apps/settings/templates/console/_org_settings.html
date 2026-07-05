@@ -1,0 +1,52 @@
+<div class="space-y-3" id="org-settings">
+  {% if org_error %}
+    <div role="alert" data-org-error class="alert alert-error text-sm">{{ org_error }}</div>
+  {% endif %}
+  {% if org_overrides %}
+    <div class="list-panel">
+      {% for o in org_overrides %}
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_60px] gap-4 items-center p-4"
+             data-org-override="{{ o.handle }}:{{ o.key }}">
+          <span class="font-mono text-xs font-semibold">{{ o.handle }}</span>
+          <span class="font-mono text-xs">{{ o.key }}</span>
+          <span class="text-sm">{{ o.value }}</span>
+          <button type="button"
+                  class="btn btn-ghost btn-sm text-error justify-self-end"
+                  aria-label="Remove override {{ o.key }} for {{ o.handle }}"
+                  hx-delete="/console/{{ app }}/org-settings/{{ o.key }}/{{ o.org_id }}"
+                  hx-target="#org-settings"
+                  hx-swap="outerHTML">
+            <i class="ph ph-trash" aria-hidden="true"></i>
+          </button>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-sm text-base-content/70">No per-organisation override.</p>
+  {% endif %}
+  <form class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_90px] gap-2 items-center"
+        hx-post="/console/{{ app }}/org-settings"
+        hx-target="#org-settings"
+        hx-swap="outerHTML">
+    <input type="text"
+           name="org_handle"
+           placeholder="org-handle"
+           required
+           aria-label="Organisation handle"
+           class="input input-sm w-full font-mono" />
+    <select name="key"
+            aria-label="Setting key"
+            class="select select-sm w-full font-mono">
+      {% for s in settings %}
+        <option value="{{ s.key }}">{{ s.key }}</option>
+      {% endfor %}
+    </select>
+    <input type="text"
+           name="value"
+           placeholder="value"
+           required
+           aria-label="Override value"
+           class="input input-sm w-full" />
+    <button type="submit" class="btn btn-primary btn-sm">Override</button>
+  </form>
+</div>

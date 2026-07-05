@@ -13,10 +13,14 @@ The DB stores *the value* of a setting (CRUD), nothing layered on top. A
 only the value is persisted.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from apps.settings.domain.models import BOOL_TRUE, ENABLED_KEY
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from apps.settings.domain.models import BOOL_TRUE, ENABLED_KEY, OrgAppSetting
 from apps.settings.infra.store import read_values, seed_values
 
 SettingType = Literal["string", "number", "boolean"]
@@ -169,6 +173,30 @@ class AppSettings:
         """Console event handler: adopt the fresh values when they're for this app."""
         if event.app == self._app:
             self._raw = event.values
+
+    def merged_for_org(self, overrides: dict[str, str]) -> dict[str, SettingValue]:
+        """Server-wide values overlaid with per-org overrides, coerced to declared types."""
+        group = self.group
+        return _typed(group.defs if group is not None else [], {**(self._raw or {}), **overrides})
+
+    async def for_org(self, session: AsyncSession, org_id: uuid.UUID) -> dict[str, SettingValue]:
+        """This org's effective settings — the server value unless the console overrode it.
+
+        Read fresh per call through the caller's session: the RLS policy lets org
+        members read their own org's overrides, so the regular request session works
+        and no cache needs invalidating across instances.
+        """
+        return self.merged_for_org(await org_values(session, self._app, org_id))
+
+
+async def org_values(session: AsyncSession, app: str, org_id: uuid.UUID) -> dict[str, str]:
+    """Raw per-org overrides of `app` for `org_id` (RLS: members see their own org)."""
+    rows = await session.execute(
+        select(OrgAppSetting.key, OrgAppSetting.value).where(
+            OrgAppSetting.app == app, OrgAppSetting.org_id == org_id
+        )
+    )
+    return {key: value for key, value in rows.all()}
 
 
 def get_app_settings(app: str) -> AppSettings:

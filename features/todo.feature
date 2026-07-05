@@ -51,3 +51,9 @@ Feature: Todo list
     Given they have a todo item "Buy groceries"
     When they delete the todo item "Buy groceries"
     Then "Buy groceries" no longer appears in their todo list
+
+  Scenario: A per-organisation override caps that organisation's tasks
+    Given the "todo" setting "max_items_per_org" is overridden to "1" for their organisation
+    And they have a todo item "Only one"
+    When they try to add a todo item "One too many"
+    Then the action is forbidden

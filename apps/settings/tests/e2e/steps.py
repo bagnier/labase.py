@@ -61,6 +61,18 @@ def step_supabase_link_shown(driver, fragment, app):
     driver.assert_console_supabase_link(app, fragment)
 
 
+@when(
+    parsers.parse('the admin overrides the "{app}" setting "{key}" to "{value}" for the active org')
+)
+def step_admin_sets_org_override(driver, app, key, value):
+    driver.set_org_override(app, key, value)
+
+
+@then(parsers.parse('the "{app}" override "{key}" for the active org is listed as "{value}"'))
+def step_assert_org_override_listed(driver, app, key, value):
+    driver.assert_org_override_listed(app, key, value)
+
+
 # ── Server admins ──────────────────────────────────────────────────────────────
 # Reuses the org "the action is forbidden" step for the last-admin guard.
 

@@ -1,3 +1,5 @@
+from sqlalchemy import text
+
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -27,6 +29,30 @@ class TodoBrowserMixin(BrowserBase):
 
     def _goto_todos(self) -> None:
         self.page.goto(self._todos_url(), wait_until="load")
+
+    def try_add_todo(self, title: str) -> None:
+        # HTMX drops 4xx swaps; fire the request the form would send and keep the
+        # response so "the action is forbidden" asserts server-side enforcement.
+        slug = getattr(self, "active_org_handle", "")
+        probe = getattr(self, "_probe_blocked", None)  # provided by the organizations mixin
+        assert probe is not None
+        probe("POST", f"/{slug}/todos", form={"title": title})
+
+    def seed_org_setting_override(self, app: str, key: str, value: str) -> None:
+        resolve_org = getattr(self, "_active_org_id", None)  # learning mixin
+        seed = getattr(self, "_seed", None)  # learning mixin
+        assert resolve_org is not None and seed is not None
+        org_id = resolve_org()
+        seed(
+            lambda s: s.execute(
+                text(
+                    "INSERT INTO org_app_settings (app, key, org_id, value) "
+                    "VALUES (:a, :k, :o, :v) "
+                    "ON CONFLICT (app, key, org_id) DO UPDATE SET value = :v"
+                ),
+                {"a": app, "k": key, "o": str(org_id), "v": value},
+            )
+        )
 
     def add_todo(self, title: str) -> None:
         self._goto_todos()

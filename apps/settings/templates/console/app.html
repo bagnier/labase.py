@@ -19,6 +19,15 @@
       <h2 class="text-sm font-semibold mb-3">Settings</h2>
       {% include "console/_settings.html" %}
     </div>
+    {% if settings %}
+      <div>
+        <h2 class="text-sm font-semibold mb-3">Per-organisation overrides</h2>
+        <p class="text-xs text-base-content/70 mb-3">
+          Override a setting for one organisation only — unset keys keep the server-wide value.
+        </p>
+        {% include "console/_org_settings.html" %}
+      </div>
+    {% endif %}
     {% if supabase %}
       <div>
         <h2 class="text-sm font-semibold mb-3">Advanced</h2>

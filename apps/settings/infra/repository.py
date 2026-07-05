@@ -1,7 +1,9 @@
+import uuid
+
 from sqlalchemy import Select, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.settings.domain.models import BOOL_FALSE, ENABLED_KEY, AppSetting
+from apps.settings.domain.models import BOOL_FALSE, ENABLED_KEY, AppSetting, OrgAppSetting
 
 
 def disabled_apps_select() -> Select[tuple[str]]:
@@ -51,3 +53,34 @@ class AppSettingRepository:
             self.session.add(AppSetting(app=app, key=key, value=value))
         else:
             row.value = value
+
+    # ── per-org overrides (console-managed; apps read them via the RLS session) ──
+
+    async def org_overrides(self, app: str) -> list[dict]:
+        """Every override of `app` with its org handle, for the console screen."""
+        rows = await self.session.execute(
+            text(
+                "SELECT s.key, s.value, s.org_id, o.handle FROM org_app_settings s "
+                "JOIN organizations o ON o.id = s.org_id "
+                "WHERE s.app = :app ORDER BY o.handle, s.key"
+            ),
+            {"app": app},
+        )
+        return [dict(row) for row in rows.mappings()]
+
+    async def org_id_by_handle(self, handle: str) -> uuid.UUID | None:
+        return await self.session.scalar(
+            text("SELECT id FROM organizations WHERE handle = :handle"), {"handle": handle}
+        )
+
+    async def set_org_override(self, app: str, key: str, org_id: uuid.UUID, value: str) -> None:
+        row = await self.session.get(OrgAppSetting, (app, key, org_id))
+        if row is None:
+            self.session.add(OrgAppSetting(app=app, key=key, org_id=org_id, value=value))
+        else:
+            row.value = value
+
+    async def delete_org_override(self, app: str, key: str, org_id: uuid.UUID) -> None:
+        row = await self.session.get(OrgAppSetting, (app, key, org_id))
+        if row is not None:
+            await self.session.delete(row)

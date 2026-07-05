@@ -74,9 +74,12 @@ async def add_todo(
     org: CurrentOrgModel,
     org_id: CurrentOrg,
 ):
-    if not settings.creation_enabled:
+    # Effective settings for THIS org: server-wide values unless the console
+    # overrode them for this organisation (per-org feature flags).
+    org_settings = await settings.for_org(session, org_id)
+    if not org_settings["creation_enabled"]:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Task creation is disabled")
-    if await repo.count() >= settings.max_items_per_org:
+    if await repo.count() >= int(org_settings["max_items_per_org"]):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Task limit reached for this organisation")
 
     title = await parse_field(request, "title")
