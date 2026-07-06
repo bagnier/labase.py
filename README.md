@@ -15,9 +15,10 @@ This base exists for four reasons, in order:
 2. **Supabase as the platform, Postgres as everything.** Supabase provides the managed
    platform — database, auth, storage, migrations, and a growing feature catalog. On
    top of it, rather than bolting on Kafka, Elastic, Redis, or Mongo, the ambition is
-   to rebuild those capabilities *on Postgres itself*: durable queues and streams,
-   fulltext search, caching, document storage. The demo apps double as demonstrators
-   of these bricks as they land. Plan and status: [ROADMAP.md](ROADMAP.md).
+   to rebuild those capabilities *on Postgres itself*. The first bricks have landed:
+   a durable task queue, error tracking, load metrics and rate limiting — plain
+   Postgres tables, no new infrastructure. Fulltext search, caching and document
+   storage are next.
 
 3. **Agent-driven development.** The base is optimized to be developed by AI agents
    under human direction. The skills in `.claude/skills/` are executable specs (the
@@ -56,11 +57,13 @@ deleting an app removes every trace of it.
 **The admin console sees every app.** Each app reports server-wide stats to the SaaS
 console, declares its admin-tunable settings there, and can be switched on or off at
 runtime — a disabled app disappears everywhere but stays visible to admins for
-re-enabling.
+re-enabling. Beyond per-app stats, the console ships the operational screens:
+accounts (disable, delete, impersonate — bannered and audited), the audit viewer,
+error issues, load metrics, and runtime log level.
 
 **The database enforces isolation.** Row-level security, versioned as plain SQL
 migrations, is the single source of truth for who sees what. Python never re-implements
-isolation for authenticated access (deviations are tracked in [ROADMAP.md](ROADMAP.md)).
+isolation for authenticated access.
 
 **Observability is built in.** Structured, machine-readable logs correlated per
 request; every domain event on the bus is logged; sensitive business actions are
@@ -106,6 +109,8 @@ component system (Tailwind + daisyUI); markup is semantic and accessible.
 | **Biome**                   | JS + CSS linting/formatting (`biome.json`, targets `static/js/` and `input.css`) |
 | **djlint**                  | Jinja2 template linting (configured in `pyproject.toml`)                         |
 | **ty**                      | Type checking (Astral, Rust)                                                     |
+| **import-linter**           | Architecture boundaries between apps (contracts in `pyproject.toml`)             |
+| **pip-audit**               | Dependency vulnerability audit                                                   |
 | **pre-commit**              | Git hooks — `ruff --fix`, `ruff format`, talisman on staged files                |
 | **pytest + pytest-asyncio** | Unit and integration tests                                                       |
 | **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
@@ -143,7 +148,7 @@ At mount time, an app declares **every surface it contributes**:
 | Sidebar           | `host.register_nav(...)`        | a global nav entry (per-org entries answer the `OrgNavQuery` event)                                             |
 | Org dashboard     | handling `OverviewQuery`        | a card with counts and recent items on `/{org}/`                                                                |
 | **Admin console** | handling `ConsoleOverviewQuery` | server-wide stats in the SaaS console (across all orgs)                                                         |
-| **Settings**      | `declare_app_settings(...)`     | admin-tunable values, live-reloaded on `SettingsChanged`                                                        |
+| **Settings**      | `declare_app_settings(...)`     | admin-tunable values, overridable per org, live-reloaded on `SettingsChanged` (TTL re-read across instances)    |
 | Feature switch    | a declared on/off setting       | the app can be disabled at runtime; its `mount()` short-circuits but the console still lists it for re-enabling |
 | Seeding           | handling `OrgCreated`           | starter data for every new organization                                                                         |
 | URL safety        | `host.reserve(...)`             | its path segments can't be shadowed by an org handle                                                            |
@@ -182,11 +187,12 @@ GET /{org}/ → collect(OverviewQuery)
 
 ### Observability
 
-Three layers, all wired by default:
+Five layers, all wired by default:
 
 - **Structured logs** — `structlog.get_logger("labase.<context>.<subject>")`; events
   are dotted `snake_case` with kwargs, never f-strings or `print`. JSON output in
-  production, pretty console in dev.
+  production, pretty console in dev. The level (`observability.log_level`) is
+  admin-tunable from the console and applies live, no restart.
 - **Request correlation** — the `RequestLogger` middleware binds a `request_id`
   (contextvars), so every log line of a request correlates automatically. Every domain
   event emitted through the bus is logged too (with sensitive fields redacted).
@@ -194,6 +200,13 @@ Three layers, all wired by default:
   immediately, then persisted to the append-only `audit_logs` table as a background
   task. The admin console ships an **audit viewer** with cursor pagination. Auditing is
   best-effort by doctrine: a lost audit write never blocks or fails a mutation.
+- **Load metrics** — every request feeds a shared accumulator, exposed as a Prometheus
+  `/metrics` endpoint and persisted per minute by `apps/metrics`; the console **Load**
+  screen graphs it, and a daily rollup downsamples minute → hour and applies retention.
+- **Error tracking** — unhandled 500s and event-bus failures emit `ExceptionCaptured`;
+  `apps/issues` groups events by stack fingerprint into issues with a lifecycle
+  (open → resolved → regressed on a later version), browsable in the console.
+  Best-effort like auditing: a failing tracker never worsens the failure it tracks.
 
 ### Conventions
 
@@ -204,6 +217,23 @@ non-owners). Three DB session dependencies: `RlsSession` (default — RLS enforc
 `get_user_session` (raw), `AdminSession` (BYPASSRLS — reserved for event handlers,
 console queries, and anonymous public surfaces such as share-token downloads, where no
 JWT exists and checks are explicit).
+
+**Sign-in surface.** Email/password with mailed confirmation (resend on blocked
+unconfirmed sign-ins, forgot/reset flow), OAuth social sign-in (Google, GitHub — GoTrue
+PKCE), TOTP two-factor, and passkeys (WebAuthn). Email change with mailed confirmation
+and self-serve account deletion are settings-gated (`profile.*_enabled`).
+
+**Background work.** Deferred work rides the durable Postgres task queue
+(`apps/shared/queue.py`): `enqueue()` writes through the caller's session, so a task
+exists iff the business transaction commits (outbox semantics); a per-process
+`TaskWorker` claims with `FOR UPDATE SKIP LOCKED` (safe across instances), retries with
+backoff, then parks failures for inspection. Recurring jobs (purges, rollups) re-enqueue
+themselves on completion. Transactional email goes the same way: `enqueue_email()`
+behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in dev).
+
+**HTTP security.** Cross-site mutations are rejected by a `Sec-Fetch-Site` middleware
+(CSRF protection without tokens); rate limiting counts against a shared Postgres store
+(`apps/shared/http/limiter.py`), so limits hold across instances.
 
 **Content negotiation.** `wants_json(request)` / `wants_full_page(request)` and the
 `render_list(...)` helper in `apps/shared/http/` centralize the JSON / fragment / page
@@ -243,6 +273,7 @@ labase.py/
 ├── apps/
 │   ├── main.py            # FastAPI app, mounts every context in dependency order
 │   ├── shared/            # Cross-context infra: EventBus (bus.py), Host (host.py),
+│   │                      #   task queue (queue.py), Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),
 │   │                      #   persistence, http, observability, templates/
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies
@@ -251,6 +282,8 @@ labase.py/
 │   ├── profile/           # User profile
 │   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav
 │   ├── settings/          # App settings / SaaS admin console (stats, settings, audit viewer)
+│   ├── issues/            # Error tracking (Sentry-as-Postgres): fingerprint-grouped issues
+│   ├── metrics/           # Load metrics: /metrics Prometheus endpoint + console Load screen
 │   ├── public/            # Public landing pages + public org pages (/{org_handle}/{slug})
 │   ├── health/            # Liveness / readiness probes
 │   ├── todo/              # Demo — trivial CRUD, the full-pattern reference (see below)
