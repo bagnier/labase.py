@@ -275,7 +275,7 @@ description of the app — `make client-gen` regenerates a typed Python client
 from it (`openapi-python-client`, package `labase-client`). It is generated
 code: never edit it, re-run `make client-gen` after changing routes or DTOs.
 
-Today it has one consumer: the Locust perf smokes (`perf/`, `make perf-smoke`)
+Today it has one consumer: the Locust perf smokes (`scripts/smoke.py`, `make perf-smoke`)
 drive the API through it, which keeps the client honest — a route or DTO drift
 breaks the smoke run. It is also the natural starting point for any external
 Python integration against a product built on this base.

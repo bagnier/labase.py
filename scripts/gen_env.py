@@ -5,6 +5,10 @@ Maps the Supabase CLI variable names to the names expected by
 asyncpg driver, splitting the user (app_user, RLS) and service (postgres)
 connections. Host-side scripts and the Docker app both reach the stack through
 ``host.docker.internal`` (see comments in .env.example).
+
+Merges into any existing .env rather than overwriting it, so per-worktree
+overrides (SUPABASE_DATABASE_SCHEMA, SUPABASE_STORAGE_BUCKET, APP_PORT — see
+scripts/worktree.py) survive a key refresh.
 """
 
 from __future__ import annotations
@@ -12,6 +16,8 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+
+from envfile import merge_env
 
 ENV_PATH = Path(".env")
 DOCKER_HOST = "host.docker.internal"
@@ -42,25 +48,24 @@ def to_asyncpg(db_url: str, *, user: str, password: str) -> str:
     return f"postgresql+asyncpg://{user}:{password}@{host_part}"
 
 
-def build_env(status: dict[str, str]) -> str:
+def build_overrides(status: dict[str, str]) -> dict[str, str]:
     api_url = status["API_URL"]
     db_url = status["DB_URL"]
     user_url = to_asyncpg(db_url, user="app_user", password="app_user_password")
     service_url = to_asyncpg(db_url, user="postgres", password="postgres")
-    lines = [
-        f"SUPABASE_API_URL={api_url.replace('127.0.0.1', DOCKER_HOST)}",
-        f"SUPABASE_STORAGE_URL={api_url}",
-        f"SUPABASE_PUBLISHABLE_KEY={status['PUBLISHABLE_KEY']}",
-        f"SUPABASE_SECRET_KEY={status['SECRET_KEY']}",
-        f"SUPABASE_DATABASE_USER_URL={user_url}",
-        f"SUPABASE_DATABASE_ADMIN_URL={service_url}",
-        "LOG_DEBUG=true",
-        "COOKIES_SECURE=false",
-        "RATE_LIMIT_ENABLED=false",
-        f"SMTP_HOST={DOCKER_HOST}",
-        "SMTP_PORT=54325",
-    ]
-    return "\n".join(lines) + "\n"
+    return {
+        "SUPABASE_API_URL": api_url.replace("127.0.0.1", DOCKER_HOST),
+        "SUPABASE_STORAGE_URL": api_url,
+        "SUPABASE_PUBLISHABLE_KEY": status["PUBLISHABLE_KEY"],
+        "SUPABASE_SECRET_KEY": status["SECRET_KEY"],
+        "SUPABASE_DATABASE_USER_URL": user_url,
+        "SUPABASE_DATABASE_ADMIN_URL": service_url,
+        "LOG_DEBUG": "true",
+        "COOKIES_SECURE": "false",
+        "RATE_LIMIT_ENABLED": "false",
+        "SMTP_HOST": DOCKER_HOST,
+        "SMTP_PORT": "54325",
+    }
 
 
 def main() -> int:
@@ -70,7 +75,7 @@ def main() -> int:
         print(exc.stderr, file=sys.stderr)
         print("Is the local stack running? Try `make db-start`.", file=sys.stderr)
         return 1
-    ENV_PATH.write_text(build_env(status))
+    merge_env(ENV_PATH, ENV_PATH, build_overrides(status))
     print(f"Wrote {ENV_PATH}")
     return 0
 

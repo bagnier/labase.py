@@ -154,7 +154,7 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   simplification: "decide client/ fate").
   (2026-07-06 decision: implement, wired into `make ci` as a dedicated job with
   blocking thresholds)
-  → `perf/smoke.py` (user class per context: todo, organizations, pages; bodies
+  → `scripts/smoke.py` (user class per context: todo, organizations, pages; bodies
   and parsing go through `labase-client`, so DTO drift fails the run) +
   `scripts/perf_smoke.py` (boots the app on the test schema); `make perf-smoke`
   in `make ci`; thresholds: fail ratio ≤1%, p95 ≤800ms

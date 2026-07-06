@@ -18,6 +18,8 @@ import sys
 import zlib
 from pathlib import Path
 
+from envfile import merge_env
+
 ROOT = Path(__file__).resolve().parent.parent
 WORKTREES = ROOT / "worktrees"
 # Symlinked from the main checkout so a worktree skips `npm install` (static/ is built
@@ -32,24 +34,6 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 def _app_port(name: str) -> int:
     """Deterministic app port in 8001..8099 derived from the worktree name."""
     return 8001 + zlib.crc32(name.encode()) % 99
-
-
-def _write_env(src: Path, dst: Path, overrides: dict[str, str]) -> None:
-    lines = src.read_text().splitlines() if src.exists() else []
-    seen: set[str] = set()
-    out: list[str] = []
-    for line in lines:
-        m = re.match(r"\s*([A-Z_][A-Z0-9_]*)\s*=", line)
-        if m and m.group(1) in overrides:
-            key = m.group(1)
-            out.append(f"{key}={overrides[key]}")
-            seen.add(key)
-        else:
-            out.append(line)
-    for key, val in overrides.items():
-        if key not in seen:
-            out.append(f"{key}={val}")
-    dst.write_text("\n".join(out) + "\n")
 
 
 def create(name: str) -> None:
@@ -75,7 +59,7 @@ def create(name: str) -> None:
     _run(add, cwd=ROOT)
 
     # Per-worktree env files (cloned from the main checkout, with isolation overrides).
-    _write_env(
+    merge_env(
         ROOT / ".env",
         path / ".env",
         {
@@ -84,7 +68,7 @@ def create(name: str) -> None:
             "APP_PORT": str(port),
         },
     )
-    _write_env(
+    merge_env(
         ROOT / ".env.test",
         path / ".env.test",
         {

@@ -1,7 +1,7 @@
 """Boot the app on the test schema, run the Locust smoke headless, propagate its verdict.
 
 Invoked by ``make perf-smoke`` with ENV_FILE=.env.test. The Locust side
-(perf/smoke.py) enforces the blocking thresholds; this script only owns the
+(scripts/smoke.py) enforces the blocking thresholds; this script only owns the
 app lifecycle so the smoke needs no ``make dev``.
 """
 
@@ -51,7 +51,7 @@ def main() -> int:
                 "-m",
                 "locust",
                 "-f",
-                "perf/smoke.py",
+                "scripts/smoke.py",
                 "--headless",
                 "-u",
                 USERS,

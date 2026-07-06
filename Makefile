@@ -140,7 +140,7 @@ test-e2e: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
 
 # Perf smoke: boots the app on the test schema, drives it with Locust through
-# the generated OpenAPI client; blocking thresholds live in perf/smoke.py.
+# the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
 perf-smoke: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
 
