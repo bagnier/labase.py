@@ -10,8 +10,10 @@
   - [x] tests: unit → `FakeMailer` recording sent emails (single injection point, clock-style); E2E sincere → driver substrate reads the mail catcher HTTP API (mail really sent, really fetched, both drivers share one mailbox client — `tests/e2e/drivers/mailbox.py`)
 - [x] forgot/reset password (see advanced auth below)
 - [ ] prod deployment: compose/manifest, secrets story beyond `.env` files, deploy doc
+  (2026-07-06: dropped — out of scope for now)
 - [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
-  (error-tracking half shipped as the `apps/issues` brick — see its section below)
+  (error-tracking half shipped as the `apps/issues` brick, metrics half as the
+  `apps/metrics` brick — see their sections below; backup/PITR doc still open)
 - [x] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
   → slowapi removed; fixed-window counters in `rate_limit_counters` (atomic upsert,
   multi-instance correct, fail-open, opportunistic per-key cleanup — a real purge
@@ -105,7 +107,7 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
 
 - [ ] **console ops screens** — JHipster generates admin screens we lack:
   - metrics: `/metrics` Prometheus endpoint + console page (joins the monitoring
-    TODO in contract-readiness)
+    TODO in contract-readiness) — ✓ shipped (see load metrics section)
   - runtime log-level control: change structlog/stdlib levels from the console
     without redeploy — cheap and very useful in prod
   - server user management: list/disable/delete users from the console (joins the
@@ -206,12 +208,15 @@ Two layers sharing ONE collector; don't conflate them. Together they close the
 "metrics" half of the monitoring TODO in contract-readiness (error tracking above
 closes the other half).
 
-- [ ] **layer 1: `/metrics` Prometheus endpoint** — standard exposition (requests per
+- [x] **layer 1: `/metrics` Prometheus endpoint** — standard exposition (requests per
   route, latency histograms, status codes, in-flight, asyncpg pool stats), via
   `prometheus-fastapi-instrumentator` or a hand-rolled middleware. Cheap, the interop
   standard (Grafana/alertmanager/any host), commits to nothing. Alone it *shows*
   nothing without a Prometheus server — hence layer 2.
-- [ ] **layer 2: console "Load" screen** — what a starting product actually wants: see
+  → hand-rolled (no new dep): `MetricsAccumulator` in `apps/shared/observability/`
+  fed by `RequestLogger` (route template label, status class, fixed histogram
+  buckets); `/metrics` text exposition in `apps/metrics`, server-admin gated
+- [x] **layer 2: console "Load" screen** — what a starting product actually wants: see
   its load in the admin console, not run a Grafana stack.
   - **in-memory accumulator** in the middleware (`RequestLogger` is already on the
     path): per route template, counts requests/errors and fills fixed-boundary
@@ -235,10 +240,36 @@ closes the other half).
 - multi-instance note: each process flushes its own rows, the screen aggregates in
   SQL — unlike the `SettingsChanged` live-reload gap, multi-instance is trivially
   correct here.
+  → shipped as the `apps/metrics` context: per-process `MetricsFlusher` diffs
+  accumulator snapshots and merges per-minute delta rows into `request_metrics`;
+  `/console/load` aggregates 24h (requests, error rate, p95 from buckets) with
+  Studio/dashboard link-outs; daily `metrics.rollup` task downsamples minute → hour
+  (7 days) and purges past `retention_days` (declared setting, feature switch);
+  sparklines deliberately skipped for now (stat tiles + top-routes table)
 
 Assumed limits: no distributed tracing, fixed label set (route/method/status — no
 arbitrary cardinality), minute granularity. Beyond that, layer 1 is already there to
 plug real tooling without rewriting anything.
+
+### advanced auth
+
+- [ ] @handle
+- [ ] photo de profil
+- [ ] disable / delete user
+- [x] Forgot password (/auth/forgot-password + /auth/reset-password)
+  → GoTrue recovery mail (custom `supabase/templates/recovery.html` carrying
+  `token_hash` to our SSR route), `verify_otp` + stateless password update;
+  E2E on both drivers reads the real mail from the catcher
+- [x] Password change (authenticated) — POST /profile/password
+  → re-authenticates with the current password via `auth.contract.passwords`,
+  then GoTrue update; form on the profile page; audited
+- [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email
+- [ ] Account deletion — DELETE /profile + cascade + logout
+- [ ] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
+- [ ] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
+- [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
+- [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
+- [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
 
 ## python boilerplate gap analysis (2026-07-05)
 
@@ -298,26 +329,6 @@ above). New items:
   auth routes `Bearer lbk_...` through an `ApiKeyQuery` on the bus (no import),
   the principal is the key's creator pinned to the key's org; bearer GoTrue
   JWTs are accepted too as a side effect
-
-### advanced auth
-
-- [ ] @handle
-- [ ] photo de profil
-- [ ] disable / delete user
-- [x] Forgot password (/auth/forgot-password + /auth/reset-password)
-  → GoTrue recovery mail (custom `supabase/templates/recovery.html` carrying
-  `token_hash` to our SSR route), `verify_otp` + stateless password update;
-  E2E on both drivers reads the real mail from the catcher
-- [x] Password change (authenticated) — POST /profile/password
-  → re-authenticates with the current password via `auth.contract.passwords`,
-  then GoTrue update; form on the profile page; audited
-- [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email
-- [ ] Account deletion — DELETE /profile + cascade + logout
-- [ ] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
-- [ ] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
-- [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
-- [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
-- [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
 
 ## goals
 

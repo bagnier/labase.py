@@ -52,6 +52,7 @@ def truncate_app_tables() -> None:
         "audit_logs",
         "error_events",
         "error_groups",
+        "request_metrics",
         "org_file_share_tokens",
         "org_files",
         "todos",

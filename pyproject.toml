@@ -102,6 +102,7 @@ forbidden_modules = [
     "apps.files",
     "apps.health",
     "apps.learning",
+    "apps.metrics",
     "apps.organizations",
     "apps.pages",
     "apps.profile",
@@ -151,6 +152,12 @@ name = "learning internals are private"
 type = "protected"
 protected_modules = ["apps.learning.domain", "apps.learning.infra"]
 allowed_importers = ["apps.learning.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "metrics internals are private"
+type = "protected"
+protected_modules = ["apps.metrics.domain", "apps.metrics.infra"]
+allowed_importers = ["apps.metrics.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]
 name = "organizations internals are private"

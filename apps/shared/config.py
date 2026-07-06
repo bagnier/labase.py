@@ -24,6 +24,8 @@ class TechnicalSettings(BaseSettings):
     settings_refresh_seconds: float = 30
     # Async substrate: poll interval of the per-process task worker; 0 disables.
     task_worker_interval_seconds: float = 1.0
+    # Load metrics: per-process flush of the request accumulator; 0 disables.
+    metrics_flush_seconds: float = 60
     # Deployed version (git SHA in Docker); drives error-tracking regression detection.
     app_version: str = "dev"
     # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets

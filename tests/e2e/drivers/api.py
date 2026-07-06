@@ -4,6 +4,7 @@ from apps.calendar.tests.e2e import CalendarApiMixin
 from apps.files.tests.e2e import OrgFileApiMixin
 from apps.issues.tests.e2e import IssuesApiMixin
 from apps.learning.tests.e2e import LearningApiMixin
+from apps.metrics.tests.e2e import MetricsApiMixin
 from apps.organizations.tests.e2e import OrgApiMixin
 from apps.pages.tests.e2e import PagesApiMixin
 from apps.profile.tests.e2e import ProfileApiMixin
@@ -16,6 +17,7 @@ class ApiDriver(
     AuthApiMixin,
     ApiKeysApiMixin,
     IssuesApiMixin,
+    MetricsApiMixin,
     ConsoleApiMixin,
     ProfileApiMixin,
     TodoApiMixin,

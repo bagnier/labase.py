@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Load metrics — mockup</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f5f5f4; margin: 2rem; color: #1c1917; }
+  .screen { background: white; border: 1px solid #d6d3d1; border-radius: 12px; padding: 1.5rem; max-width: 60rem; margin-bottom: 3rem; }
+  h1 { font-size: 1.25rem; } h2 { font-size: 1rem; color: #78716c; }
+  .stats { display: flex; gap: 1rem; margin: 1rem 0; }
+  .stat { border: 1px solid #e7e5e4; border-radius: 8px; padding: 1rem 1.5rem; }
+  .stat .value { font-size: 1.5rem; font-weight: 700; }
+  .stat .label { font-size: .75rem; color: #78716c; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th { text-align: left; color: #78716c; font-size: .75rem; text-transform: uppercase; border-bottom: 1px solid #e7e5e4; padding: .5rem; }
+  td { padding: .5rem; border-bottom: 1px solid #f5f5f4; }
+  .mono { font-family: ui-monospace, monospace; }
+  .err { color: #dc2626; } .ok { color: #16a34a; }
+  .empty { text-align: center; color: #a8a29e; padding: 3rem; }
+  .links a { font-size: .8rem; margin-right: 1rem; }
+  pre { background: #1c1917; color: #e7e5e4; padding: 1rem; border-radius: 8px; font-size: .75rem; overflow-x: auto; }
+  .note { font-size: .8rem; color: #78716c; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- State 1: populated Load screen (/console/load) -->
+<div class="screen">
+  <h1>Console › Load</h1>
+  <p class="note">Server-admin only. Aggregated from request_metrics (last 24 h), all instances summed in SQL.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="value">40</div><div class="label">Requests (24 h)</div></div>
+    <div class="stat"><div class="value err">7.5%</div><div class="label">Error rate</div></div>
+    <div class="stat"><div class="value">100 ms</div><div class="label">p95 latency</div></div>
+  </div>
+
+  <h2>Top routes (24 h)</h2>
+  <table>
+    <tr><th>Route</th><th>Requests</th><th>Errors</th><th>p95</th></tr>
+    <tr data-load-route>
+      <td class="mono">GET /todo</td><td>30</td><td class="err">10%</td><td>100 ms</td>
+    </tr>
+    <tr data-load-route>
+      <td class="mono">POST /todo</td><td>10</td><td class="ok">0%</td><td>25 ms</td>
+    </tr>
+  </table>
+
+  <p class="links">
+    <a href="http://127.0.0.1:54323">Database stats → Supabase Studio</a>
+    <a href="/metrics">Raw Prometheus exposition →</a>
+  </p>
+</div>
+
+<!-- State 2: empty state (no traffic flushed yet) -->
+<div class="screen">
+  <h1>Console › Load</h1>
+  <div class="empty" data-load-empty>
+    No traffic recorded yet.<br>
+    <span class="note">Metrics are flushed every minute; check back shortly.</span>
+  </div>
+</div>
+
+<!-- State 3: /metrics Prometheus exposition (text/plain, admin only) -->
+<div class="screen">
+  <h1>GET /metrics</h1>
+  <pre>
+# TYPE http_requests_total counter
+http_requests_total{method="GET",route="/console",status="2xx"} 3
+http_requests_total{method="GET",route="/todo",status="5xx"} 1
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{method="GET",route="/console",le="0.1"} 2
+http_request_duration_seconds_bucket{method="GET",route="/console",le="+Inf"} 3
+http_request_duration_seconds_count{method="GET",route="/console"} 3
+http_request_duration_seconds_sum{method="GET",route="/console"} 0.214
+  </pre>
+  <p class="note">Live cumulative counters since process start — the interop layer for real Prometheus/Grafana later.</p>
+</div>
+
+</body>
+</html>
