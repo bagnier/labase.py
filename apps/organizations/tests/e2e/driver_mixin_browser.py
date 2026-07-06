@@ -277,6 +277,7 @@ class OrgBrowserMixin(BrowserBase):
                 self._last_invitation_token = link.rsplit("/", 1)[-1]
 
     def assert_invitation_email_delivered(self, email: str) -> None:
+        self.drain_task_queue()  # the mail is outboxed; deliver it before polling the catcher
         mailbox.assert_invitation_delivered(email, self._last_invitation_token)
 
     def _fetch_pending_invitations(self) -> list[dict]:

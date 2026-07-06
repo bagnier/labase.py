@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from apps.shared.config import get_technical_settings
+from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
 from apps.shared.host import Host
 from apps.shared.http.exceptions import (
     handle_http_error,
@@ -48,6 +49,7 @@ def mount(host: Host) -> None:
 
     # Async substrate: one task worker per process; recurring jobs planted at startup.
     register_task_handler(PURGE_TOPIC, purge_counters)
+    register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
     worker = TaskWorker(settings.task_worker_interval_seconds)
     app.router.add_event_handler("startup", _plant_recurring_tasks)
     app.router.add_event_handler("startup", worker.start)

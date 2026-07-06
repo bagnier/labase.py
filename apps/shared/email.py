@@ -1,23 +1,26 @@
-"""Transactional email: `Mailer` port + SMTP adapter.
+"""Transactional email: `Mailer` port + SMTP adapter + `email.send` queue topic.
 
-Doctrine mirrors auditing: sending is best-effort and never blocks a mutation.
-Callers enqueue `send_email` on `BackgroundTasks`; a failed send is logged and
-swallowed. The process-wide mailer is swappable clock-style — tests install a
-recording fake through `set_mailer`.
+Sending never blocks a mutation — but unlike auditing it is not fire-and-forget:
+callers outbox the mail with :func:`enqueue_email` through their own session, so
+the task exists iff the business transaction commits, and the ``TaskWorker``
+delivers it with the queue's retry-then-park semantics. The process-wide mailer
+is swappable clock-style — tests install a recording fake through `set_mailer`.
 
 Dev: the Supabase mail catcher (Mailpit) receives SMTP on localhost:54325 and
 serves the same inbox as GoTrue auth mail on http://localhost:54324.
 Prod: point the SMTP_* env vars at any provider — no vendor SDK.
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from email.message import EmailMessage
-from typing import Protocol
+from typing import Any, Protocol
 
 import aiosmtplib
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.config import get_technical_settings
+from apps.shared.queue import enqueue
 
 log = structlog.get_logger("labase.shared.email")
 
@@ -96,11 +99,16 @@ def set_mailer(mailer: Mailer | None) -> None:
     _mailer = mailer
 
 
-async def send_email(email: Email) -> None:
-    """Best-effort send, meant to run as a background task — never raises."""
-    try:
-        await get_mailer().send(email)
-    except Exception:
-        log.exception("email.send_failed", to=email.to, subject=email.subject)
-    else:
-        log.info("email.sent", to=email.to, subject=email.subject)
+EMAIL_SEND_TOPIC = "email.send"
+
+
+async def enqueue_email(session: AsyncSession, email: Email) -> None:
+    """Outbox `email` through the caller's session — it is sent iff the transaction commits."""
+    await enqueue(session, EMAIL_SEND_TOPIC, asdict(email))
+
+
+async def deliver_queued_email(_session: AsyncSession, payload: dict[str, Any]) -> None:
+    """``email.send`` task handler — raises on failure so the queue retries, then parks."""
+    email = Email(**payload)
+    await get_mailer().send(email)
+    log.info("email.sent", to=email.to, subject=email.subject)

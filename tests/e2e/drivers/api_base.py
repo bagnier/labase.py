@@ -6,6 +6,7 @@ from collections.abc import Coroutine
 from typing import Any, TypeVar
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.infra.session import get_rls_session
 from apps.auth.tests.given_helpers import delete_user_if_exists
@@ -15,6 +16,7 @@ from apps.shared.persistence.database import (
     get_admin_session,
     get_user_session,
 )
+from apps.shared.queue import TaskWorker
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.async_runner import AsyncRunner
 from tests.e2e.drivers.transport import ASGISyncTransport
@@ -85,6 +87,20 @@ class ApiBase:
 
     def _cleanup_committed_data(self) -> None:
         """Hook: feature mixins override to delete data committed outside the transaction."""
+
+    def drain_task_queue(self) -> None:
+        """Deliver queued tasks (e.g. outboxed email) now.
+
+        The polling worker is off under tests — and could not see the rolled-back
+        test transaction anyway, so the tick runs on the test connection itself.
+        """
+        assert db._test_connection is not None, "No active test transaction"
+        worker = TaskWorker(
+            0,
+            session_factory=lambda: AsyncSession(bind=db._test_connection, expire_on_commit=False),
+        )
+        while self.run(worker.tick()):
+            pass
 
     # ── auth user tracking ─────────────────────────────────────────────────────
     def _track_auth_email(self, email: str) -> None:

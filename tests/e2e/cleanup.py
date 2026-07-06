@@ -72,6 +72,11 @@ def truncate_app_tables() -> None:
         try:
             async with engine.begin() as conn:
                 await conn.execute(text(truncate))
+                # One-shot tasks (e.g. queued emails) must not leak across scenarios;
+                # recurring singletons stay — they are only replanted at app startup.
+                await conn.execute(
+                    text(f"DELETE FROM {s}.task_queue WHERE recurring_seconds IS NULL")
+                )
                 await conn.execute(
                     text("DELETE FROM auth.users WHERE split_part(email, '@', 2) = ANY(:domains)"),
                     {"domains": _TEST_EMAIL_DOMAINS},

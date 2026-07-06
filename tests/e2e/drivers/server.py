@@ -50,6 +50,15 @@ class InProcessServer:
         self._wait_for_server()
         return f"http://127.0.0.1:{self._port}"
 
+    def run(self, coro):
+        """Run a coroutine on the server's event loop and return its result.
+
+        The app's engines live on that loop; anything touching them (e.g. a
+        TaskWorker tick) must run there too.
+        """
+        assert self._bg is not None, "run() before start()"
+        return self._bg.submit(coro).result(timeout=30)
+
     def _wait_for_server(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:

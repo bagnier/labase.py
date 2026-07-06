@@ -1,8 +1,16 @@
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from apps.shared.email import Email, SmtpMailer, send_email, set_mailer
+from apps.shared.email import (
+    EMAIL_SEND_TOPIC,
+    Email,
+    SmtpMailer,
+    deliver_queued_email,
+    enqueue_email,
+    set_mailer,
+)
 
 
 class FakeMailer:
@@ -28,16 +36,36 @@ _EMAIL = Email(to="bob@example.com", subject="Hello", text="Hi", html="<p>Hi</p>
 
 
 @pytest.mark.asyncio
-async def test_send_email_delegates_to_mailer(fake_mailer):
-    await send_email(_EMAIL)
+async def test_enqueue_email_outboxes_through_the_callers_session():
+    session = AsyncMock()
+    await enqueue_email(session, _EMAIL)
+
+    params = session.execute.call_args.args[1]
+    assert params["topic"] == EMAIL_SEND_TOPIC
+    assert json.loads(params["payload"]) == {
+        "to": "bob@example.com",
+        "subject": "Hello",
+        "text": "Hi",
+        "html": "<p>Hi</p>",
+    }
+    assert params["user_id"] is None  # server-level work: admin session in the worker
+
+
+@pytest.mark.asyncio
+async def test_deliver_queued_email_sends_through_the_mailer(fake_mailer):
+    await deliver_queued_email(
+        AsyncMock(),
+        {"to": _EMAIL.to, "subject": _EMAIL.subject, "text": _EMAIL.text, "html": _EMAIL.html},
+    )
     assert fake_mailer.sent == [_EMAIL]
 
 
 @pytest.mark.asyncio
-async def test_send_email_swallows_mailer_failure():
+async def test_deliver_queued_email_raises_so_the_queue_retries():
     set_mailer(FakeMailer(fail=True))
     try:
-        await send_email(_EMAIL)  # must not raise: best-effort doctrine
+        with pytest.raises(RuntimeError):
+            await deliver_queued_email(AsyncMock(), {"to": "a@b.c", "subject": "s", "text": "t"})
     finally:
         set_mailer(None)
 

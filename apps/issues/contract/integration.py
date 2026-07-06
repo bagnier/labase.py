@@ -30,7 +30,7 @@ from apps.settings.contract.settings import (
     get_app_settings,
 )
 from apps.shared.config import get_technical_settings
-from apps.shared.email import Email, send_email
+from apps.shared.email import Email, enqueue_email
 from apps.shared.host import Host
 from apps.shared.observability.errors import ExceptionCaptured
 from apps.shared.persistence.database import admin_session_factory
@@ -123,7 +123,13 @@ async def _send_alert(subject: str, group_id: int) -> None:
     if not settings.alerting_enabled or not settings.alert_email:
         return
     text = f"{subject}\n\nSee /console/issues/{group_id} for the stack and context."
-    await send_email(Email(to=str(settings.alert_email), subject=subject, text=text))
+    email = Email(to=str(settings.alert_email), subject=subject, text=text)
+    try:  # alerting is best-effort: a failing enqueue never worsens the tracked failure
+        async with admin_session_factory()() as session:
+            await enqueue_email(session, email)
+            await session.commit()
+    except Exception:
+        log.exception("issues.alert_enqueue_failed", group_id=group_id)
 
 
 async def _purge(session, _payload: dict) -> None:

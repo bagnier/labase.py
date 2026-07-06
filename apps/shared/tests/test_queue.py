@@ -22,9 +22,17 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def queue_isolation():
-    """Fresh engines per test (loop binding) and a clean handler registry/table."""
+    """Fresh engines per test (loop binding) and a clean handler registry/table.
+
+    The whole table is emptied up front: a prior in-process E2E server may have
+    planted recurring singletons in the (disposable) test schema, and a tick
+    running with a reset registry would claim and park them mid-test.
+    """
     _clear_engine_caches()
     reset_task_handlers()
+    async with db.admin_session_factory()() as session:
+        await session.execute(text("DELETE FROM task_queue"))
+        await session.commit()
     yield
     async with db.admin_session_factory()() as session:
         await session.execute(text("DELETE FROM task_queue WHERE topic LIKE 'test.%'"))

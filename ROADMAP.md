@@ -55,9 +55,13 @@ Les deux échouent avec « AAL2 session is required to update email or password 
 - [x] background RLS convention: synthesized tenant claims via `set_config`, not blanket BYPASSRLS
   → tasks carrying `user_id` run their handler on a user-role session with
   `{"sub": user_id, "role": "authenticated"}` claims; without `user_id` → admin session
-- [ ] then: email sending, FTS indexing, cache expiry become consumers of this brick
-  → first consumer shipped: `rate_limit.purge` (hourly recurring); email still goes
-  through BackgroundTasks (its port makes the move mechanical)
+- [x] then: email sending, FTS indexing, cache expiry become consumers of this brick
+  → consumers shipped: `rate_limit.purge`, `issues.purge`, `metrics.rollup`, and
+  (2026-07-06) `email.send` — transactional mail is outboxed via `enqueue_email()`
+  through the caller's session (mail exists iff the business tx commits) and
+  delivered by the TaskWorker with retry-then-park; E2E drivers drain the queue
+  explicitly (the polling worker is off under tests). FTS/cache remain future
+  bricks (see ## goals)
 
 ### DX gradation — prototype fast, harden later
 

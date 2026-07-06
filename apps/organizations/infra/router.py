@@ -27,7 +27,7 @@ from apps.organizations.domain.models import (
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.email import send_email
+from apps.shared.email import enqueue_email
 from apps.shared.host import host
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -485,7 +485,8 @@ async def create_invitation(
         link = f"{base_url}/invitations/{invitation.token}"
         inviting_org = await repo.get(org_id)
         org_name = inviting_org.name if inviting_org else ""
-        bg.add_task(send_email, invitation_email(to=email, org_name=org_name, link=link))
+        # Outbox: the mail task commits (or rolls back) with the invitation itself.
+        await enqueue_email(repo.session, invitation_email(to=email, org_name=org_name, link=link))
 
     if wants_json(request):
         if error is not None:

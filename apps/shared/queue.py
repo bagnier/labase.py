@@ -110,10 +110,23 @@ _CLAIM = text(
 
 
 class TaskWorker:
-    def __init__(self, interval_seconds: float, batch_size: int = 10) -> None:
+    def __init__(
+        self,
+        interval_seconds: float,
+        batch_size: int = 10,
+        session_factory: Callable[[], AsyncSession] | None = None,
+    ) -> None:
+        # session_factory overrides the admin sessions (claim, bookkeeping, admin
+        # handlers) — the API test driver injects its rolled-back test connection
+        # so drained tasks see (and leave) no committed rows.
         self._interval = interval_seconds
         self._batch = batch_size
+        self._session_factory = session_factory
         self._task: asyncio.Task | None = None
+
+    def _admin_session(self) -> AsyncSession:
+        factory = self._session_factory or admin_session_factory()
+        return factory()
 
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:
@@ -137,7 +150,7 @@ class TaskWorker:
 
     async def tick(self) -> int:
         """Claim and run one batch; returns how many tasks were processed."""
-        async with admin_session_factory()() as session:
+        async with self._admin_session() as session:
             rows = (await session.execute(_CLAIM, {"batch": self._batch})).mappings().all()
             await session.commit()
         for row in rows:
@@ -166,7 +179,7 @@ class TaskWorker:
         self, handler: TaskHandler, payload: dict[str, Any], user_id: Any
     ) -> None:
         if user_id is None:
-            async with admin_session_factory()() as session:
+            async with self._admin_session() as session:
                 await handler(session, payload)
                 await session.commit()
             return
@@ -180,7 +193,7 @@ class TaskWorker:
                 await clear_rls_context(session)
 
     async def _complete(self, task: dict[str, Any]) -> None:
-        async with admin_session_factory()() as session:
+        async with self._admin_session() as session:
             await session.execute(
                 text("UPDATE task_queue SET done_at = now(), locked_at = NULL WHERE id = :id"),
                 {"id": task["id"]},
@@ -205,7 +218,7 @@ class TaskWorker:
             await session.commit()
 
     async def _retry(self, task: dict[str, Any], error: str) -> None:
-        async with admin_session_factory()() as session:
+        async with self._admin_session() as session:
             await session.execute(
                 text(
                     "UPDATE task_queue SET locked_at = NULL, last_error = :error, "
@@ -217,7 +230,7 @@ class TaskWorker:
 
     async def _fail(self, task: dict[str, Any], error: str) -> None:
         log.error("queue.task_parked", topic=task["topic"], task_id=task["id"], error=error)
-        async with admin_session_factory()() as session:
+        async with self._admin_session() as session:
             await session.execute(
                 text(
                     "UPDATE task_queue SET failed_at = now(), locked_at = NULL, "
