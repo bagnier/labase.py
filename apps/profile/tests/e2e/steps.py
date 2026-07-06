@@ -94,3 +94,18 @@ def step_assert_email_change_rejected(driver):
 @then("the email change option is not offered")
 def step_assert_email_change_not_offered(driver):
     driver.assert_email_change_not_offered()
+
+
+@when(parsers.parse('they delete their account confirming with password "{pw}"'))
+def step_delete_account(driver, pw):
+    driver.delete_account(pw)
+
+
+@then("the account deletion is rejected")
+def step_assert_deletion_rejected(driver):
+    driver.assert_account_deletion_rejected()
+
+
+@then("the account deletion option is not offered")
+def step_assert_deletion_not_offered(driver):
+    driver.assert_account_deletion_not_offered()

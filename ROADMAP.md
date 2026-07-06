@@ -269,7 +269,11 @@ plug real tooling without rewriting anything.
   verifies and re-issues the session; trigger keeps `profiles.email` in sync;
   admin-switchable via `profile.email_change_enabled` (every advanced-auth option
   gets its own declared setting — 2026-07-06 decision)
-- [ ] Account deletion — DELETE /profile + cascade + logout
+- [x] Account deletion — DELETE /profile + cascade + logout
+  → password-confirmed Danger zone; `UserDeleted` event on the bus (organizations
+  drops memberships + orgs left empty, all in the request's transaction); GoTrue
+  soft-deleted (hard delete would block on FK key-share locks and erase the
+  trail); admin-switchable via `profile.account_deletion_enabled`
 - [x] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
   → pivot: GoTrue already refuses unconfirmed sign-ins (`email_not_confirmed`,
   message mapped); the missing piece was the way out — a "Resend confirmation
@@ -343,8 +347,12 @@ above). New items:
 
 ### technical
 
+- [ ] awareness, @citation, notification
+- [ ] product tour
+- [ ] ApexCharts integration
+- [ ] MCP server
 - [ ] logs
-- [ ] ETag on 
+- [ ] ETag on public pages
 - [ ] COW, soft deletion, soft update
 - [ ] async task queue
 - [ ] fulltext index - elastic

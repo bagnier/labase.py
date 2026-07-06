@@ -10,7 +10,7 @@ import uuid
 
 from sqlalchemy import func, select
 
-from apps.auth.contract.events import UserCreated
+from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.organizations.contract import ORG_PREFIX, settings
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.fullpage import provide_org_nav
@@ -62,6 +62,7 @@ def mount(host: Host) -> None:
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
+    host.events.on(UserDeleted, _forget_user)
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(
@@ -97,3 +98,33 @@ async def _create_org(event: UserCreated) -> None:
         await session.commit()
     if event.access_token and get_technical_settings().supabase_database_schema != "test":
         await host.events.emit(OrgCreated(org_id=org.id, access_token=event.access_token))
+
+
+async def _forget_user(event: UserDeleted) -> None:
+    """Account deletion: drop the user's memberships, then orgs left with nobody.
+
+    Writes through the deleting request's session (see UserDeleted) so the whole
+    deletion commits or rolls back as one unit. Shared orgs survive without the
+    user; org-scoped rows of removed orgs go with their org (SQL cascades).
+    """
+    session = event.session
+    user_id = uuid.UUID(event.user_id)
+    memberships = list(
+        await session.scalars(select(Membership).where(Membership.auth_user_id == user_id))
+    )
+    org_ids = [m.org_id for m in memberships]
+    for membership in memberships:
+        await session.delete(membership)
+    await session.flush()
+    for org_id in org_ids:
+        remaining = (
+            await session.scalar(
+                select(func.count()).select_from(Membership).where(Membership.org_id == org_id)
+            )
+            or 0
+        )
+        if not remaining:
+            org = await session.get(Organization, org_id)
+            if org is not None:
+                await session.delete(org)
+    await session.flush()

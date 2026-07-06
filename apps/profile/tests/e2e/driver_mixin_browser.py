@@ -60,6 +60,24 @@ class ProfileBrowserMixin(BrowserBase):
             "email change form should be hidden when the option is off"
         )
 
+    # ── account deletion ──────────────────────────────────────────────────────
+    def delete_account(self, password: str) -> None:
+        self.page.goto(self._profile_url(), wait_until="load")
+        section = self.page.locator("[data-account-deletion]")
+        section.get_by_label("Your password").fill(password)
+        section.get_by_role("button", name="Delete my account").click()
+        self.page.wait_for_load_state("load")
+
+    def assert_account_deletion_rejected(self) -> None:
+        alert = self.page.locator("[data-account-deletion] .alert-error", has_text="incorrect")
+        alert.wait_for(timeout=5000)
+
+    def assert_account_deletion_not_offered(self) -> None:
+        self.page.goto(self._profile_url(), wait_until="load")
+        assert self.page.locator("[data-account-deletion]").count() == 0, (
+            "danger zone should be hidden when the option is off"
+        )
+
     def update_handle(self, name: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
         self.last_response = self.submit_labelled_form(

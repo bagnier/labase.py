@@ -1,7 +1,10 @@
 """How the profile context plugs into the running app: mounts its router, claims its slug."""
 
+import uuid
+
 from sqlalchemy import func, select
 
+from apps.auth.contract.events import UserDeleted
 from apps.profile.contract import settings
 from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
@@ -32,13 +35,30 @@ def mount(host: Host) -> None:
                 "true",
                 "Allow users to change their sign-in email",
             ),
+            SettingDef(
+                "account_deletion_enabled",
+                "boolean",
+                "true",
+                "Allow users to delete their own account",
+            ),
         ],
         supabase=SupabaseLink("Browse profiles in Supabase", table="profiles"),
     )
     settings.read()
     host.events.on(SettingsChanged, settings.reload)
+    host.events.on(UserDeleted, _forget_user)
     host.reserve("profile")
     register_open_list("profiles", profile_handle_taken)
+
+
+async def _forget_user(event: UserDeleted) -> None:
+    """Account deletion: drop the profile row, in the deleting request's transaction."""
+    profile = await event.session.scalar(
+        select(Profile).where(Profile.auth_user_id == uuid.UUID(event.user_id))
+    )
+    if profile is not None:
+        await event.session.delete(profile)
+        await event.session.flush()
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

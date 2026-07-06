@@ -64,6 +64,29 @@ class ProfileApiMixin(ApiBase):
         )
         assert resp.status_code == 404, f"expected 404, got {resp.status_code} {resp.text}"
 
+    # ── account deletion ──────────────────────────────────────────────────────
+    def delete_account(self, password: str) -> None:
+        # text/html accept: success is the 303 to the sign-in page, like a browser.
+        self.response = self.client().request(
+            "DELETE",
+            "/profile",
+            json={"current_password": password},
+            headers={"accept": "text/html"},
+        )
+
+    def assert_account_deletion_rejected(self) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
+
+    def assert_account_deletion_not_offered(self) -> None:
+        resp = self.client().request(
+            "DELETE",
+            "/profile",
+            json={"current_password": "x"},
+            headers={"accept": "application/json"},
+        )
+        assert resp.status_code == 404, f"expected 404, got {resp.status_code} {resp.text}"
+
     def view_profile(self) -> None:
         self.response = self.client().get("/profile")
 

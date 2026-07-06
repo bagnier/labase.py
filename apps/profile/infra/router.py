@@ -2,18 +2,27 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
-from apps.auth.contract.passwords import PasswordUpdateError, WrongPassword, change_password
+from apps.auth.contract.events import UserDeleted
+from apps.auth.contract.passwords import (
+    PasswordUpdateError,
+    WrongPassword,
+    change_password,
+    verify_password,
+)
 from apps.profile.contract import settings
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
+from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
+from apps.shared.persistence.database import AdminSession
 from apps.shared.slug_registry import validate_handle
 
 router = APIRouter()
@@ -40,6 +49,7 @@ async def _profile_context(
         "org_handle": orgs[0].handle if orgs else "",
         "org": orgs[0] if orgs else None,
         "email_change_enabled": bool(settings.email_change_enabled),
+        "account_deletion_enabled": bool(settings.account_deletion_enabled),
         **context,
     }
 
@@ -137,6 +147,54 @@ async def email_change(
     ctx = await _profile_context(session, current_user, repo)
     ctx["email_info"] = info
     return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@router.delete("/profile", response_model=None)
+@router.post("/profile/delete", response_model=None)
+async def account_delete(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+    admin_session: AdminSession,
+    session: RlsSession,
+    repo: ProfileRepo,
+) -> Response:
+    if not settings.account_deletion_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    body = await parse_body(request)
+    current_password = str(body.get("current_password", ""))
+    error: str | None = None
+    if not current_password:
+        error = "Your password is required."
+    else:
+        try:
+            await verify_password(current_user.email, current_password)
+        except WrongPassword:
+            error = "Current password is incorrect."
+
+    if error is not None:
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=400)
+        ctx = await _profile_context(session, current_user, repo)
+        ctx["deletion_error"] = error
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+
+    audit(bg, "profile.account_deleted", level="warning", user_id=current_user.id)
+    # Handlers (organizations, profile itself…) join the admin session: one
+    # transaction for the whole deletion.
+    await host.events.emit(UserDeleted(user_id=current_user.id, session=admin_session))
+    # GoTrue last, before commit: if closing access fails, nothing is deleted.
+    await disable_account(current_user.id)
+    await admin_session.commit()
+    if wants_json(request):
+        resp: Response = JSONResponse({"message": "Account deleted."})
+    else:
+        resp = RedirectResponse(
+            "/auth/login?info=account_deleted", status_code=status.HTTP_303_SEE_OTHER
+        )
+    resp.delete_cookie("access_token")
+    resp.delete_cookie("refresh_token")
+    return resp
 
 
 @router.post("/profile", response_model=None)

@@ -63,6 +63,7 @@ _AUTH_ERROR_MESSAGES: dict[str, str] = {
     "invalid_email": "Invalid email address.",
     "email_address_invalid": "Invalid email address.",
     "email_not_confirmed": "Please verify your email before signing in.",
+    "user_banned": "This account is disabled.",
 }
 
 
@@ -84,6 +85,7 @@ _INFO_MESSAGES: dict[str, str] = {
     "password_reset": "Your password was changed. You can now sign in.",
     "email_change_failed": "This confirmation link is invalid or has expired. "
     "Please request the change again from your profile.",
+    "account_deleted": "Your account has been deleted.",
 }
 
 

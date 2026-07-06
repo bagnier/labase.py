@@ -10,6 +10,14 @@ class WrongPassword(Exception):
     """The provided current password did not authenticate."""
 
 
+async def verify_password(email: str, current_password: str) -> None:
+    """Re-authenticate before a sensitive action (deletion…); raises `WrongPassword`."""
+    try:
+        await login(email, current_password)
+    except AuthApiError as exc:
+        raise WrongPassword from exc
+
+
 async def change_password(email: str, current_password: str, new_password: str) -> None:
     """Re-authenticate with the current password, then set the new one.
 

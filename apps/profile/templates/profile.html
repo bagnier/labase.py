@@ -131,15 +131,23 @@
         </form>
       </div>
     </section>
-    <section class="card bg-base-100 border border-error/30 shadow-sm">
-      <div class="card-body">
-        <h2 class="card-title text-sm font-semibold mb-3">Danger zone</h2>
-        <p class="text-sm text-base-content/70 mb-4">These actions are irreversible. Proceed with caution.</p>
-        <button type="button"
-                disabled
-                class="btn btn-error btn-ghost opacity-50 cursor-not-allowed">Delete my account</button>
-        <p class="text-xs text-base-content/50 mt-2">Account deletion is not available yet. Contact support if you need your account removed.</p>
-      </div>
-    </section>
+    {% if account_deletion_enabled %}
+      <section class="card bg-base-100 border border-error/30 shadow-sm"
+               data-account-deletion>
+        <div class="card-body">
+          <h2 class="card-title text-sm font-semibold mb-3">Danger zone</h2>
+          <p class="text-sm text-base-content/70 mb-4">
+            Deleting your account is irreversible: your personal organisation and its
+            data are removed. Organisations you share with others survive without you.
+          </p>
+          {{ alert('error', deletion_error) }}
+          <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
+            {{ input_field("deletion_password", "current_password", type="password",
+                        label="Your password", required=true) }}
+            <button type="submit" class="btn btn-error btn-outline">Delete my account</button>
+          </form>
+        </div>
+      </section>
+    {% endif %}
   </div>
 {% endblock %}
