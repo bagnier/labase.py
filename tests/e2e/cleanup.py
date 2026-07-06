@@ -4,6 +4,7 @@ import asyncio
 import threading
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -70,17 +71,30 @@ def truncate_app_tables() -> None:
     async def _truncate() -> None:
         engine = _service_engine()
         try:
-            async with engine.begin() as conn:
-                await conn.execute(text(truncate))
-                # One-shot tasks (e.g. queued emails) must not leak across scenarios;
-                # recurring singletons stay — they are only replanted at app startup.
-                await conn.execute(
-                    text(f"DELETE FROM {s}.task_queue WHERE recurring_seconds IS NULL")
-                )
-                await conn.execute(
-                    text("DELETE FROM auth.users WHERE split_part(email, '@', 2) = ANY(:domains)"),
-                    {"domains": _TEST_EMAIL_DOMAINS},
-                )
+            # In-flight background writes (audit, metrics flush) can turn the
+            # multi-table TRUNCATE into a deadlock victim — transient, retry.
+            for attempt in range(3):
+                try:
+                    async with engine.begin() as conn:
+                        await conn.execute(text(truncate))
+                        # One-shot tasks (e.g. queued emails) must not leak across
+                        # scenarios; recurring singletons stay — they are only
+                        # replanted at app startup.
+                        await conn.execute(
+                            text(f"DELETE FROM {s}.task_queue WHERE recurring_seconds IS NULL")
+                        )
+                        await conn.execute(
+                            text(
+                                "DELETE FROM auth.users "
+                                "WHERE split_part(email, '@', 2) = ANY(:domains)"
+                            ),
+                            {"domains": _TEST_EMAIL_DOMAINS},
+                        )
+                    return
+                except DBAPIError:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0.5)
         finally:
             await engine.dispose()
 

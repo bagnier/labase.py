@@ -351,8 +351,8 @@ plug real tooling without rewriting anything.
   (add/list/remove via server proxy + `static/js/passkeys.js`), discoverable
   sign-in on the login page, switch `users.passkeys_enabled` (default off —
   upstream is experimental), `[auth.passkey]` in config.toml; both drivers run
-  the real GoTrue ceremony via `soft-webauthn` (rp-origin pinning forbids the
-  browser prompt in E2E — see docs/passkeys.md)
+  the real GoTrue ceremony via a vendored software authenticator (rp-origin
+  pinning forbids the browser prompt in E2E — see docs/passkeys.md)
 
 ## python boilerplate gap analysis (2026-07-05)
 

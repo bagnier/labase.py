@@ -26,7 +26,8 @@ Passwordless, phishing-resistant sign-in on GoTrue's **beta** passkeys API
 A real browser WebAuthn prompt cannot run in E2E: GoTrue pins `rp_origins` and
 the in-process browser test server runs on a random port. Both drivers instead
 run the **real server-side ceremony** (app → GoTrue → auth schema) through a
-software authenticator (`soft-webauthn`, `tests/e2e/drivers/webauthn.py`) that
+software authenticator (vendored in `tests/e2e/drivers/webauthn.py` on
+`cryptography` alone — the off-the-shelf ones pin a vulnerable range) that
 signs the configured rp origin; the browser driver additionally asserts the
 visible affordances. The one thing never exercised automatically is
 `navigator.credentials` itself — verify it manually once per browser family:
