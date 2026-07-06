@@ -11,13 +11,7 @@ from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSessio
 from apps.files.contract import settings
 from apps.files.domain.models import OrgFileRead
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
-from apps.files.infra.storage import (
-    admin_storage,
-    bucket,
-    rewrite_signed_url,
-    storage_path,
-    user_storage_client,
-)
+from apps.files.infra.storage import rewrite_signed_url, storage_path
 from apps.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
@@ -38,6 +32,7 @@ from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
+from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])

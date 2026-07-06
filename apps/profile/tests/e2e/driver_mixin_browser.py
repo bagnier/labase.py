@@ -60,6 +60,36 @@ class ProfileBrowserMixin(BrowserBase):
             "email change form should be hidden when the option is off"
         )
 
+    # ── avatar & handle switches ──────────────────────────────────────────────
+    def upload_avatar(self, filename: str, content: bytes, mime: str) -> None:
+        self.page.goto(self._profile_url(), wait_until="load")
+        self.page.set_input_files(
+            "[data-avatar-upload] input[type=file]",
+            files=[{"name": filename, "mimeType": mime, "buffer": content}],
+        )
+        self.page.locator("[data-avatar-upload] button").click()
+        self.page.wait_for_load_state("load")
+
+    def assert_avatar_shown(self) -> None:
+        self.page.goto(self._profile_url(), wait_until="load")
+        self.page.wait_for_selector("[data-avatar]", timeout=5000)
+
+    def assert_avatar_rejected(self) -> None:
+        alert = self.page.locator("[data-avatar-upload] .alert-error")
+        alert.wait_for(timeout=5000)
+
+    def assert_avatar_not_offered(self) -> None:
+        self.page.goto(self._profile_url(), wait_until="load")
+        assert self.page.locator("[data-avatar-upload]").count() == 0, (
+            "avatar upload should be hidden when the option is off"
+        )
+
+    def assert_handle_not_offered(self) -> None:
+        self.page.goto(self._profile_url(), wait_until="load")
+        assert self.page.locator("[data-handle-form]").count() == 0, (
+            "handle form should be hidden when the option is off"
+        )
+
     # ── account deletion ──────────────────────────────────────────────────────
     def delete_account(self, password: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")

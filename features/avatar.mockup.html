@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Avatar — mockup</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f5f5f4; margin: 2rem; color: #1c1917; }
+  .screen { background: white; border: 1px solid #d6d3d1; border-radius: 12px; padding: 1.5rem; max-width: 30rem; margin-bottom: 2rem; }
+  .row { display: flex; align-items: center; gap: 1rem; }
+  .initial { width: 64px; height: 64px; border-radius: 16px; background: #eef2ff; color: #4f46e5;
+             display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700; }
+  img.avatar { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; }
+  button { padding: .4rem .8rem; border-radius: 8px; border: 1px solid #d6d3d1; background: white; font-size: .8rem; }
+  .error { background: #fef2f2; border: 1px solid #ef4444; padding: .6rem; border-radius: 8px; font-size: .85rem; }
+  .note { font-size: .78rem; color: #78716c; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- State 1: no avatar yet — initial letter + upload control next to it -->
+<div class="screen">
+  <div class="row">
+    <div class="initial">F</div>
+    <div>
+      <p><strong>face@labase.dev</strong></p>
+      <form> <!-- POST /profile/avatar, multipart -->
+        <input type="file" accept="image/*">
+        <button type="submit">Upload photo</button>
+      </form>
+    </div>
+  </div>
+  <p class="note">Control hidden when profile.avatar_enabled = false (initial letter stays).</p>
+</div>
+
+<!-- State 2: avatar uploaded -->
+<div class="screen">
+  <div class="row">
+    <img class="avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3C/svg%3E" alt="Your avatar">
+    <div>
+      <p><strong>face@labase.dev</strong></p>
+      <form><input type="file" accept="image/*"><button type="submit">Replace photo</button></form>
+    </div>
+  </div>
+</div>
+
+<!-- State 3: wrong file type -->
+<div class="screen">
+  <div class="error">Avatars must be a PNG, JPEG or WebP image (max 2 MB).</div>
+</div>
+
+</body>
+</html>

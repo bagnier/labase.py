@@ -87,6 +87,36 @@ class ProfileApiMixin(ApiBase):
         )
         assert resp.status_code == 404, f"expected 404, got {resp.status_code} {resp.text}"
 
+    # ── avatar & handle switches ──────────────────────────────────────────────
+    def upload_avatar(self, filename: str, content: bytes, mime: str) -> None:
+        self.response = self.client().post(
+            "/profile/avatar",
+            files={"file": (filename, content, mime)},
+            headers={"accept": "application/json"},
+        )
+
+    def assert_avatar_shown(self) -> None:
+        me = self.client().get("/profile", headers={"accept": "application/json"}).json()
+        assert me.get("avatar_path"), f"no avatar_path in profile: {me}"
+        image = self.client().get(f"/profile/avatar/{me['auth_user_id']}")
+        assert image.status_code == 200, f"avatar not served: {image.status_code}"
+        assert image.headers["content-type"].startswith("image/")
+
+    def assert_avatar_rejected(self) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
+
+    def assert_avatar_not_offered(self) -> None:
+        self.upload_avatar("probe.png", b"\x89PNG", "image/png")
+        assert self.response is not None
+        assert self.response.status_code == 404, f"expected 404, got {self.response.status_code}"
+
+    def assert_handle_not_offered(self) -> None:
+        resp = self.client().post(
+            "/profile", json={"handle": "probe"}, headers={"accept": "application/json"}
+        )
+        assert resp.status_code == 404, f"expected 404, got {resp.status_code} {resp.text}"
+
     def view_profile(self) -> None:
         self.response = self.client().get("/profile")
 

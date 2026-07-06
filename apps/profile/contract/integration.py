@@ -41,6 +41,18 @@ def mount(host: Host) -> None:
                 "true",
                 "Allow users to delete their own account",
             ),
+            SettingDef(
+                "avatar_enabled",
+                "boolean",
+                "true",
+                "Allow users to upload a profile photo",
+            ),
+            SettingDef(
+                "handle_enabled",
+                "boolean",
+                "true",
+                "Public @handles on profiles",
+            ),
         ],
         supabase=SupabaseLink("Browse profiles in Supabase", table="profiles"),
     )

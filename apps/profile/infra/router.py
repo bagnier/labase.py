@@ -1,7 +1,15 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from apps.auth.contract.current import CurrentUser, RlsSession
@@ -23,9 +31,14 @@ from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
+from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.slug_registry import validate_handle
 
 router = APIRouter()
+
+_AVATAR_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+_AVATAR_MEDIA = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
+_AVATAR_MAX_BYTES = 2 * 1024 * 1024
 
 
 async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
@@ -39,7 +52,7 @@ async def _profile_context(
     session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
 ) -> dict:
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
-    if profile is not None and profile.handle is None:
+    if profile is not None and profile.handle is None and settings.handle_enabled:
         profile = await repo.auto_handle(profile, current_user.email)
     context = await fullpage_context(session, current_user)
     orgs = context["org_nav"]
@@ -50,6 +63,8 @@ async def _profile_context(
         "org": orgs[0] if orgs else None,
         "email_change_enabled": bool(settings.email_change_enabled),
         "account_deletion_enabled": bool(settings.account_deletion_enabled),
+        "avatar_enabled": bool(settings.avatar_enabled),
+        "handle_enabled": bool(settings.handle_enabled),
         **context,
     }
 
@@ -63,7 +78,7 @@ async def profile_page(
 ) -> HTMLResponse | JSONResponse:
     if wants_json(request):
         profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
-        if profile is not None and profile.handle is None:
+        if profile is not None and profile.handle is None and settings.handle_enabled:
             profile = await repo.auto_handle(profile, current_user.email)
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
@@ -197,6 +212,68 @@ async def account_delete(
     return resp
 
 
+@router.post("/profile/avatar", response_model=None)
+async def avatar_upload(
+    request: Request,
+    bg: BackgroundTasks,
+    file: UploadFile,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: ProfileRepo,
+) -> HTMLResponse | JSONResponse:
+    if not settings.avatar_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    ext = _AVATAR_EXT.get(file.content_type or "")
+    content = await file.read()
+    error: str | None = None
+    if ext is None or not content or len(content) > _AVATAR_MAX_BYTES:
+        error = "Avatars must be a PNG, JPEG or WebP image (max 2 MB)."
+
+    if error is not None:
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=400)
+        ctx = await _profile_context(session, current_user, repo)
+        ctx["avatar_error"] = error
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+
+    path = f"avatars/{current_user.id}.{ext}"
+    await (
+        admin_storage()
+        .from_(bucket())
+        .upload(path, content, {"content-type": file.content_type or "", "x-upsert": "true"})
+    )
+    profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
+    if profile is None:
+        profile = await repo.create(
+            ProfileCreate(auth_user_id=uuid.UUID(current_user.id), email=current_user.email)
+        )
+    profile.avatar_path = path
+    await session.flush()
+    audit(bg, "profile.avatar_updated", user_id=current_user.id)
+    if wants_json(request):
+        return JSONResponse({"message": "Avatar updated."})
+    ctx = await _profile_context(session, current_user, repo)
+    ctx["avatar_info"] = "Avatar updated."
+    return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@router.get("/profile/avatar/{auth_user_id}", response_model=None)
+async def avatar_image(
+    auth_user_id: uuid.UUID, current_user: CurrentUser, admin_session: AdminSession
+) -> Response:
+    """Streams the avatar to any signed-in user (they appear next to members)."""
+    if not settings.avatar_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    profile = await ProfileRepository(admin_session).get_by_auth_user_id(auth_user_id)
+    if profile is None or not profile.avatar_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    content = await admin_storage().from_(bucket()).download(profile.avatar_path)
+    media_type = _AVATAR_MEDIA.get(profile.avatar_path.rsplit(".", 1)[-1], "image/png")
+    return Response(
+        content, media_type=media_type, headers={"Cache-Control": "private, max-age=300"}
+    )
+
+
 @router.post("/profile", response_model=None)
 async def profile_update(
     request: Request,
@@ -205,6 +282,8 @@ async def profile_update(
     session: RlsSession,
     repo: ProfileRepo,
 ) -> HTMLResponse | JSONResponse:
+    if not settings.handle_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
     handle = str(body.get("handle", ""))
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))

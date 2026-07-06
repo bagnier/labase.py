@@ -109,3 +109,33 @@ def step_assert_deletion_rejected(driver):
 @then("the account deletion option is not offered")
 def step_assert_deletion_not_offered(driver):
     driver.assert_account_deletion_not_offered()
+
+
+@when("they upload a PNG image as their avatar")
+def step_upload_avatar_png(driver):
+    driver.upload_avatar("avatar.png", b"\x89PNG\r\n\x1a\nfake-image-bytes", "image/png")
+
+
+@when("they upload a text file as their avatar")
+def step_upload_avatar_text(driver):
+    driver.upload_avatar("note.txt", b"not an image", "text/plain")
+
+
+@then("their avatar is shown on their profile")
+def step_assert_avatar_shown(driver):
+    driver.assert_avatar_shown()
+
+
+@then("the avatar upload is rejected")
+def step_assert_avatar_rejected(driver):
+    driver.assert_avatar_rejected()
+
+
+@then("the avatar option is not offered")
+def step_assert_avatar_not_offered(driver):
+    driver.assert_avatar_not_offered()
+
+
+@then("the handle option is not offered")
+def step_assert_handle_not_offered(driver):
+    driver.assert_handle_not_offered()

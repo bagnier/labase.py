@@ -17,6 +17,7 @@ class Profile(Base, UUIDPk, Versioned, Timestamped):
     auth_user_id: Mapped[uuid.UUID]
     email: Mapped[str] = mapped_column(String)
     handle: Mapped[str | None]
+    avatar_path: Mapped[str | None]
 
 
 class ProfileCreate(BaseModel):
@@ -36,3 +37,4 @@ class ProfileRead(BaseModel):
     auth_user_id: uuid.UUID
     email: str
     handle: str | None
+    avatar_path: str | None = None

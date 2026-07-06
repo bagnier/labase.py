@@ -253,8 +253,14 @@ plug real tooling without rewriting anything.
 
 ### advanced auth
 
-- [ ] @handle
-- [ ] photo de profil
+- [x] @handle
+  → behaviour was already live (profile.feature); gained its admin switch
+  (`profile.handle_enabled`): form hidden, updates 404, auto-handle skipped
+- [x] photo de profil
+  → `avatars/{user_id}.{ext}` in the existing Storage bucket via the shared
+  admin client (`apps/shared/persistence/storage.py`, promoted from files);
+  served to signed-in users by `/profile/avatar/{id}`; `profiles.avatar_path`
+  drives the img-vs-initial fallback; switch `profile.avatar_enabled`
 - [x] disable / delete user
   → `/console/accounts` screen (auth context, GoTrue-backed — no app table):
   list, disable (ban ~forever) / enable, delete via the same `UserDeleted` +
@@ -283,7 +289,8 @@ plug real tooling without rewriting anything.
   message mapped); the missing piece was the way out — a "Resend confirmation
   email" affordance on the blocked login (custom `confirmation` template landing
   on our SSR `/auth/confirm`), switchable via `users.resend_confirmation_enabled`
-- [ ] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
+- [x] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
+  (see "photo de profil" above — same item)
 - [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
 - [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
 - [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema

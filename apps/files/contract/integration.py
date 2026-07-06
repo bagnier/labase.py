@@ -10,7 +10,7 @@ import uuid
 from apps.files.contract import settings
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
-from apps.files.infra.storage import bucket, storage_path, user_storage_client
+from apps.files.infra.storage import storage_path
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
@@ -26,6 +26,7 @@ from apps.settings.contract.settings import (
 )
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.persistence.storage import bucket, user_storage_client
 from apps.shared.text import pluralize
 
 _RECENT = 3

@@ -14,9 +14,16 @@
     <div class="card-panel">
       <div class="card-body">
         <div class="flex items-center gap-5 mb-6">
-          <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center flex-none">
-            <span class="text-2xl font-bold text-primary">{{ (profile_handle or user.email) | first | upper }}</span>
-          </div>
+          {% if avatar_enabled and profile and profile.avatar_path %}
+            <img data-avatar
+                 src="/profile/avatar/{{ profile.auth_user_id }}"
+                 alt="Your avatar"
+                 class="w-16 h-16 rounded-2xl object-cover flex-none" />
+          {% else %}
+            <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center flex-none">
+              <span class="text-2xl font-bold text-primary">{{ (profile_handle or user.email) | first | upper }}</span>
+            </div>
+          {% endif %}
           <div>
             <p class="font-semibold">{{ profile_handle or user.email }}</p>
             <p class="text-sm text-base-content/70 mt-0.5">
@@ -29,32 +36,57 @@
             </p>
           </div>
         </div>
+        {% if avatar_enabled %}
+          <div class="mb-6 space-y-3" data-avatar-upload>
+            {{ alert('error', avatar_error) }}
+            {{ alert('success', avatar_info) }}
+            <form method="post"
+                  action="/profile/avatar"
+                  enctype="multipart/form-data"
+                  class="flex items-center gap-2">
+              <input type="file"
+                     name="file"
+                     accept="image/png,image/jpeg,image/webp"
+                     required
+                     aria-label="Avatar image"
+                     class="file-input file-input-sm" />
+              <button type="submit" class="btn btn-sm">
+                {{ "Replace photo" if (profile and profile.avatar_path) else "Upload photo" }}
+              </button>
+            </form>
+          </div>
+        {% endif %}
         {{ alert('success', success) }}
-        <form method="post"
-              action="/profile"
-              hx-post="/profile"
-              hx-target="body"
-              class="space-y-4">
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend" id="handle-label">Handle</legend>
-            <input id="handle"
-                   name="handle"
-                   type="text"
-                   placeholder="your-handle"
-                   aria-labelledby="handle-label"
-                   value="{{ profile.handle if (profile and profile.handle) else '' }}"
-                   class="input w-full font-mono {% if error %}input-error{% endif %}" />
-            {% if error %}
-              <p class="label text-xs text-error">{{ error }}</p>
-            {% endif %}
-          </fieldset>
+        {% if handle_enabled %}
+          <form method="post"
+                action="/profile"
+                hx-post="/profile"
+                hx-target="body"
+                class="space-y-4"
+                data-handle-form>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend" id="handle-label">Handle</legend>
+              <input id="handle"
+                     name="handle"
+                     type="text"
+                     placeholder="your-handle"
+                     aria-labelledby="handle-label"
+                     value="{{ profile.handle if (profile and profile.handle) else '' }}"
+                     class="input w-full font-mono {% if error %}input-error{% endif %}" />
+              {% if error %}<p class="label text-xs text-error">{{ error }}</p>{% endif %}
+            </fieldset>
+            {{ input_field("email", "email", label="Email",
+                        value=user.email, disabled=true,
+                        hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
+            <div class="pt-1">
+              <button type="submit" class="btn btn-primary">Save changes</button>
+            </div>
+          </form>
+        {% else %}
           {{ input_field("email", "email", label="Email",
                     value=user.email, disabled=true,
                     hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
-          <div class="pt-1">
-            <button type="submit" class="btn btn-primary">Save changes</button>
-          </div>
-        </form>
+        {% endif %}
       </div>
     </div>
     <div class="card-panel">
