@@ -253,6 +253,18 @@ class AuthBrowserMixin(BrowserBase):
         self.open_accounts_screen()
         assert self._account_row(email).count() == 0, f"{email!r} still listed"
 
+    def filter_accounts(self, query: str) -> None:
+        search = self.page.get_by_label("Filter accounts by email")
+        search.click()
+        # press_sequentially fires the keyup events the HTMX debounce listens for.
+        search.press_sequentially(query)
+
+    def assert_account_in_filtered_list(self, email: str) -> None:
+        self._account_row(email).wait_for(timeout=5000)
+
+    def assert_account_not_in_filtered_list(self, email: str) -> None:
+        self._account_row(email).wait_for(state="detached", timeout=5000)
+
     def set_account_state(self, email: str, action: str) -> None:
         self.open_accounts_screen()
         button = {"disable": "Disable", "enable": "Enable", "delete": "Delete"}[action]

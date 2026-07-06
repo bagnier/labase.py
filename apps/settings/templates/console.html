@@ -10,7 +10,10 @@
         <h1 class="text-lg font-semibold">Admin console</h1>
         <p class="text-sm text-base-content/70 mt-0.5">Server-wide — every organisation. Click an app to configure it.</p>
       </div>
-      <a href="/console/admins" class="btn btn-sm">Manage admins</a>
+      <div class="flex gap-2">
+        {% for link in links %}<a href="{{ link.href }}" class="btn btn-sm">{{ link.label }}</a>{% endfor %}
+        <a href="/console/admins" class="btn btn-sm">Manage admins</a>
+      </div>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {% for o in overviews %}

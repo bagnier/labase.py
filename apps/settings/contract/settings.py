@@ -56,12 +56,25 @@ class SupabaseLink:
 
 
 @dataclass(frozen=True)
+class ConsoleLink:
+    """A console screen an app contributes beyond its settings page (e.g. ``/console/accounts``).
+
+    Declared at mount like everything else, so the console overview and the app's
+    settings page link to it — and deleting the app removes the link.
+    """
+
+    label: str
+    href: str
+
+
+@dataclass(frozen=True)
 class SettingsGroup:
     """An app's declared settings: the in-memory metadata the console renders and validates."""
 
     app: str  # context id, e.g. "files"
     defs: list[SettingDef] = field(default_factory=list)
     supabase: SupabaseLink | None = None
+    links: tuple[ConsoleLink, ...] = ()
 
 
 SettingValue = str | int | bool
@@ -98,11 +111,14 @@ _declarations: dict[str, SettingsGroup] = {}
 
 
 def declare_app_settings(
-    app: str, defs: list[SettingDef], supabase: SupabaseLink | None = None
+    app: str,
+    defs: list[SettingDef],
+    supabase: SupabaseLink | None = None,
+    links: tuple[ConsoleLink, ...] = (),
 ) -> SettingsGroup:
     """Declare ``app``'s settings: register their metadata, seed missing values, return the
     group so a live :class:`AppSettings` can hold on to it."""
-    group = SettingsGroup(app=app, defs=defs, supabase=supabase)
+    group = SettingsGroup(app=app, defs=defs, supabase=supabase, links=links)
     _declarations[app] = group
     seed_values(app, {d.key: d.default for d in defs})
     return group
@@ -207,6 +223,11 @@ def get_app_settings(app: str) -> AppSettings:
 def declared_settings(app: str) -> SettingsGroup | None:
     """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
     return _declarations.get(app)
+
+
+def declared_console_links() -> list[ConsoleLink]:
+    """Every console screen declared by mounted apps — the console overview renders them."""
+    return [link for group in _declarations.values() for link in group.links]
 
 
 def reset_declarations() -> None:

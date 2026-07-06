@@ -1,9 +1,19 @@
 ## to fix (2026-07-06)
 
-- [ ] API keys should be part of profile settings nav ?
-- [ ] nav in admin console page is folded
-- [ ] search filter http://localhost:8000/console/accounts
-- [ ] l'écran /console/accounts (list/disable/delete) n'est lié nulle part dans l'UI — ni sur /console, ni sur /console/admins, ni sur la page settings de l'app auth.
+- [x] API keys should be part of profile settings nav ?
+  (2026-07-06 decision: no — keys stay an org resource; surface them in the org
+  settings nav instead → org settings page now lists every owner-only declared
+  NavItem as an "owner tools" link)
+- [x] nav in admin console page is folded
+  → outside any org context (console, profile) the sidebar opens every org's
+  `<details>` instead of collapsing them all
+- [x] search filter http://localhost:8000/console/accounts
+  → `q` query param (email substring) + HTMX debounced search box, audit-viewer
+  pattern; covered by a user-management scenario on both drivers
+- [x] l'écran /console/accounts (list/disable/delete) n'est lié nulle part dans l'UI — ni sur /console, ni sur /console/admins, ni sur la page settings de l'app auth.
+  → new declarative `ConsoleLink` (declared with the app's settings, like
+  `SupabaseLink`): auth declares "Accounts" → rendered on /console and
+  /console/users; /console/admins links it too
 - [x] changement d'email et de mot de passe cassés dès que la 2FA est activée :
 Les deux échouent avec « AAL2 session is required to update email or password when MFA is enabled » (erreur GoTrue insufficient_aal). Cause : apps/auth/contract/email_change.py:23 et apps/auth/contract/passwords.py:16,28 ré-authentifient via un nouveau login(email, password) (password-grant, toujours AAL1) puis utilisent ce nouveau token — au lieu de la session AAL2 déjà en cookie — pour l'appel PUT /auth/v1/user qui exige AAL2. Résultat : tout compte avec 2FA activée ne peut plus jamais changer d'email ni de mot de passe.
 
@@ -11,7 +21,7 @@ Les deux échouent avec « AAL2 session is required to update email or password 
 
 ### contract-readiness — what any client contract would re-pay
 
-- [ ] email — two routes, lightest possible:
+- [x] email — two routes, lightest possible:
   - [x] auth lifecycle (forgot/reset password, confirmation, email change) → GoTrue calls + Supabase email templates, zero app code
     (forgot/reset ✓, confirmation ✓, email change ✓ — see advanced auth)
   - [x] app transactional (org invitations — token exists but is never sent) → tiny `Mailer` port in `apps/shared/email.py` (`Email` dataclass + `Protocol` + `SmtpMailer` via aiosmtplib, env-configured); Jinja2 for text/html; sent via `BackgroundTasks` (audit-style best-effort), moves behind the async-substrate queue later without changing the port
@@ -57,6 +67,7 @@ Les deux échouent avec « AAL2 session is required to update email or password 
 - [ ] scaffold `make new-context NAME=x` (or skill) — the 23-file checklist is mechanical
   (2026-07-05: out of scope for now)
 - [ ] `new-product` skill: delete demos (incl. todos FK/policy inside `000004_organizations.sql`), rename ~50 hardcoded "labase"
+  (2026-07-06: out of scope for now)
 - [x] test helpers: `given_helpers` cross-imports between test suites (11 sites) — bless or move to a shared test contract
   → decided 2026-07-05: **blessed** — cross-imports between test suites are fine;
   the import-linter contracts already exempt `apps.*.tests.**`
@@ -131,6 +142,8 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   Equivalent: a Locust smoke per context, reusing the generated OpenAPI client in
   `client/` — which would finally give `client/` a reason to exist (see
   simplification: "decide client/ fate").
+  (2026-07-06 decision: implement, wired into `make ci` as a dedicated job with
+  blocking thresholds)
 
 ### options (DO NOT IMPLEMENT)
 
@@ -306,7 +319,11 @@ plug real tooling without rewriting anything.
   stateless GoTrue /factors calls; `pyotp` drives real codes in both drivers;
   switch `users.two_factor_enabled` doubles as the lost-authenticator bypass
 - [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
+  (2026-07-06 decision: implement; unit-test our callback/merge code, E2E up to the
+  provider redirect, manual-verification doc — no sincere E2E against real providers)
 - [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
+  (2026-07-06 decision: feasibility spike first — implement only if local GoTrue
+  exposes a usable API, otherwise document findings and defer)
 
 ## python boilerplate gap analysis (2026-07-05)
 

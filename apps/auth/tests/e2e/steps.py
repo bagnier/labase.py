@@ -235,6 +235,21 @@ def step_delete_account_console(driver, email):
     driver.set_account_state(email, "delete")
 
 
+@when(parsers.parse('the admin filters the accounts by "{query}"'))
+def step_filter_accounts(driver, query):
+    driver.filter_accounts(query)
+
+
+@then(parsers.parse('the account "{email}" stays listed after filtering'))
+def step_assert_account_in_filtered(driver, email):
+    driver.assert_account_in_filtered_list(email)
+
+
+@then(parsers.parse('the account "{email}" is filtered out'))
+def step_assert_account_filtered_out(driver, email):
+    driver.assert_account_not_in_filtered_list(email)
+
+
 @when("they try to open the accounts screen")
 def step_try_open_accounts(driver):
     driver.try_open_accounts_screen()

@@ -259,6 +259,27 @@ class AuthApiMixin(ApiBase):
         emails = [a["email"] for a in self._accounts()]
         assert email not in emails, f"{email!r} still listed"
 
+    def filter_accounts(self, query: str) -> None:
+        self._accounts_as_admin()
+        self.response = self.client().get(
+            "/console/accounts", params={"q": query}, headers={"accept": "application/json"}
+        )
+        assert self.response.status_code == 200, (
+            f"GET /console/accounts?q=: {self.response.status_code} {self.response.text}"
+        )
+
+    def _filtered_emails(self) -> list[str]:
+        assert self.response is not None
+        return [a["email"] for a in self.response.json()["accounts"]]
+
+    def assert_account_in_filtered_list(self, email: str) -> None:
+        emails = self._filtered_emails()
+        assert email in emails, f"{email!r} not in filtered list {emails}"
+
+    def assert_account_not_in_filtered_list(self, email: str) -> None:
+        emails = self._filtered_emails()
+        assert email not in emails, f"{email!r} unexpectedly in filtered list {emails}"
+
     def set_account_state(self, email: str, action: str) -> None:
         account = next((a for a in self._accounts() if a["email"] == email), None)
         assert account is not None, f"no account {email!r}"

@@ -6,7 +6,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from apps.auth.contract.current import CurrentAdmin
 from apps.settings.contract import appearance
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import SettingsChanged, SettingsGroup, declared_settings
+from apps.settings.contract.settings import (
+    SettingsChanged,
+    SettingsGroup,
+    declared_console_links,
+    declared_settings,
+)
 from apps.settings.domain import admins, service, technical
 from apps.settings.domain.admins import AdminNotFound, LastAdminViolation
 from apps.settings.domain.service import InvalidSettingValue, UnknownSetting
@@ -96,13 +101,15 @@ async def get_console(
 ) -> Response:
     overviews = await _collect_overviews(session)
     disabled = await AppSettingRepository(session).disabled_apps()
+    links = declared_console_links()
     if wants_json(request):
         return JSONResponse(
             {
                 "overviews": [
                     {"key": o.key, "title": o.title, "disabled": o.key in disabled, **o.data}
                     for o in overviews
-                ]
+                ],
+                "links": [{"label": link.label, "href": link.href} for link in links],
             }
         )
     return templates.TemplateResponse(
@@ -112,6 +119,7 @@ async def get_console(
             "user": current_user,
             "overviews": overviews,
             "disabled": disabled,
+            "links": links,
             **await fullpage_context(session, current_user),
         },
     )
@@ -337,6 +345,7 @@ async def get_app(
                 "settings": settings,
                 "org_overrides": [{**o, "org_id": str(o["org_id"])} for o in org_overrides],
                 "supabase": supabase,
+                "links": [{"label": link.label, "href": link.href} for link in group.links],
             }
         )
     return templates.TemplateResponse(
@@ -349,6 +358,7 @@ async def get_app(
             "settings": settings,
             "org_overrides": org_overrides,
             "supabase": supabase,
+            "links": group.links,
             **await fullpage_context(session, current_user),
         },
     )

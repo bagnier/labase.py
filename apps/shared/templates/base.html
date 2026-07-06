@@ -78,7 +78,8 @@
                 {% set path = request.url.path %}
                 <ul class="menu w-full">
                   <li>
-                    <details {% if is_current %}open{% endif %}>
+                    {# Outside any org (console, profile…) every org stays reachable: open all. #}
+                    <details {% if is_current or not org_handle %}open{% endif %}>
                       <summary class="text-xs font-semibold uppercase tracking-wider opacity-70">
                         <a href="/{{ nav_org.handle }}/dashboard" class="truncate">{{ nav_org.name }}</a>
                       </summary>

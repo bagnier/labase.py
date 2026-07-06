@@ -14,6 +14,13 @@ Feature: User management
     When the admin opens the accounts screen
     Then the account "member@labase.dev" is listed
 
+  Scenario: Filtering accounts by email
+    Given a server admin is signed in as "root@example.com"
+    When the admin opens the accounts screen
+    And the admin filters the accounts by "member@labase"
+    Then the account "member@labase.dev" stays listed after filtering
+    And the account "root@example.com" is filtered out
+
   Scenario: A non-admin cannot see the accounts screen
     Given a user is signed in as "bob@example.com"
     When they try to open the accounts screen

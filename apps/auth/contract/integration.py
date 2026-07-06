@@ -10,6 +10,7 @@ from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
+    ConsoleLink,
     SettingDef,
     SettingsChanged,
     SupabaseLink,
@@ -49,6 +50,7 @@ def mount(host: Host) -> None:
             ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
+        links=(ConsoleLink("Accounts", "/console/accounts"),),
     )
     settings.read()
     host.events.on(SettingsChanged, settings.reload)

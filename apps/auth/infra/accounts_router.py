@@ -18,7 +18,7 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.events import UserDeleted
 from apps.shared.host import host
-from apps.shared.http import wants_json
+from apps.shared.http import wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
@@ -72,19 +72,24 @@ def _is_banned(user: Any) -> bool:
 
 @accounts_router.get("", response_model=None)
 async def list_accounts(
-    request: Request, current_user: CurrentAdmin, session: AdminSession
+    request: Request, current_user: CurrentAdmin, session: AdminSession, q: str = ""
 ) -> Response:
     _ensure_enabled()
     accounts = await asyncio.to_thread(_list_accounts)
+    needle = q.strip().lower()
+    if needle:
+        accounts = [a for a in accounts if needle in a["email"].lower()]
     if wants_json(request):
         return JSONResponse({"accounts": accounts})
+    context = {"accounts": accounts, "self_id": current_user.id, "q": q}
+    if not wants_full_page(request):
+        return templates.TemplateResponse(request, "_accounts.html", context)
     return templates.TemplateResponse(
         request,
         "accounts.html",
         {
             "user": current_user,
-            "accounts": accounts,
-            "self_id": current_user.id,
+            **context,
             **await fullpage_context(session, current_user),
         },
     )
