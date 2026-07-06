@@ -10,6 +10,7 @@ from typing import cast
 
 from apps.auth.contract.admin import count_server_admins, set_server_admin
 from apps.auth.contract.events import UserCreated
+from apps.settings.contract import observability
 from apps.settings.contract.appearance import (
     DEFAULT_THEME,
     THEME_APP,
@@ -52,6 +53,10 @@ def mount(host: Host) -> None:
     appearance.read()
     host.events.on(SettingsChanged, appearance.reload)
     host.events.on(ConsoleOverviewQuery, appearance_overview)
+
+    observability.declare()
+    host.events.on(SettingsChanged, observability.reload)
+    host.events.on(ConsoleOverviewQuery, observability.overview)
 
     host.events.on(ConsoleOverviewQuery, technical_overview)
 

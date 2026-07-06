@@ -129,11 +129,13 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
 
 ### medium value
 
-- [ ] **console ops screens** — JHipster generates admin screens we lack:
+- [x] **console ops screens** — JHipster generates admin screens we lack:
   - metrics: `/metrics` Prometheus endpoint + console page (joins the monitoring
     TODO in contract-readiness) — ✓ shipped (see load metrics section)
   - runtime log-level control: change structlog/stdlib levels from the console
-    without redeploy — cheap and very useful in prod
+    without redeploy — ✓ shipped 2026-07-06: `observability.log_level` declared
+    setting (Logging tab on /console/settings), applied live via `apply_log_level`
+    on `SettingsChanged`; converges across instances through the TTL refresher
   - server user management: list/disable/delete users from the console (joins the
     advanced-auth "disable / delete user" TODO) — ✓ shipped (/console/accounts)
 - [ ] **i18n** — JHipster ships 45+ languages with a navbar switcher; all our UI

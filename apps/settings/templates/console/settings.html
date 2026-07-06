@@ -6,7 +6,7 @@
 {% endblock %}
 {% block content %}
   <div class="space-y-6"
-       x-data="{ tab: 'appearance', live: true, syncTabFromHash() { const h = window.location.hash.slice(1); this.tab = ['appearance', 'logs', 'technical'].includes(h) ? h : 'appearance' } }"
+       x-data="{ tab: 'appearance', live: true, syncTabFromHash() { const h = window.location.hash.slice(1); this.tab = ['appearance', 'logs', 'observability', 'technical'].includes(h) ? h : 'appearance' } }"
        x-init=" syncTabFromHash(); window.addEventListener('hashchange', () => syncTabFromHash()); setInterval(() => { if (live && tab === 'logs') htmx.trigger($refs.entries, 'poll') }, 5000) ">
     <div>
       <h1 class="text-lg font-semibold">Settings</h1>
@@ -33,6 +33,19 @@
              class="space-y-4">
       <h2 class="text-sm font-semibold">Live preview</h2>
       {% include "console/_styleguide.html" %}
+    </section>
+    <section x-show="tab === 'observability'"
+             x-cloak
+             aria-label="Logging settings"
+             class="max-w-2xl">
+      <h2 class="text-sm font-semibold mb-3">Logging</h2>
+      <p class="text-xs text-base-content/70 mb-3">
+        Applies live to structlog and the stdlib root logger, on every instance
+        within one settings-refresh interval.
+      </p>
+      {% with app = "observability", settings = observability_settings, saved_key = none %}
+        {% include "console/_settings.html" %}
+      {% endwith %}
     </section>
     <section x-show="tab === 'logs'"
              x-cloak

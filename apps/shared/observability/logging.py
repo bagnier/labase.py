@@ -5,10 +5,34 @@ import structlog
 
 from apps.shared.config import get_technical_settings
 
+_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+}
+
+
+def default_log_level() -> str:
+    """The env-driven starting level — also the seed of the console's `log_level` setting."""
+    return "DEBUG" if get_technical_settings().log_debug else "INFO"
+
+
+def apply_log_level(name: str) -> None:
+    """Re-point structlog's filter and the stdlib root logger — runtime console control.
+
+    Unknown names are ignored (the current level survives a bad value).
+    """
+    level = _LEVELS.get(str(name).upper())
+    if level is None:
+        return
+    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(level))
+    logging.getLogger().setLevel(level)
+
 
 def setup_logging() -> None:
     settings = get_technical_settings()
-    level = logging.DEBUG if settings.log_debug else logging.INFO
+    level = _LEVELS[default_log_level()]
 
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
@@ -32,7 +56,9 @@ def setup_logging() -> None:
         wrapper_class=structlog.make_filtering_bound_logger(level),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(sys.stdout),
-        cache_logger_on_first_use=True,
+        # Cached loggers would keep the wrapper class they were born with —
+        # runtime level changes (apply_log_level) need every call to re-read it.
+        cache_logger_on_first_use=False,
     )
 
     logging.basicConfig(

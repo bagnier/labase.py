@@ -1,10 +1,10 @@
-<div class="settings list-panel" id="settings">
+<div class="settings list-panel" id="settings-{{ app }}">
   {% for s in settings %}
     <form class="grid grid-cols-1 sm:grid-cols-[1fr_220px_90px] gap-4 items-center p-4"
           data-setting-key="{{ s.key }}"
           data-setting-type="{{ s.type }}"
           hx-put="/console/{{ app }}/settings/{{ s.key }}"
-          hx-target="#settings"
+          hx-target="#settings-{{ app }}"
           hx-swap="outerHTML"
           hx-trigger="change">
       <div>
@@ -23,6 +23,12 @@
                  {% if s.value == "true" %}checked{% endif %} />
           <span class="text-sm text-base-content/70">Enabled</span>
         </label>
+      {% elif app == "observability" and s.key == "log_level" %}
+        <select name="value" class="select w-full" aria-label="{{ s.key }}">
+          {% for lvl in ["DEBUG", "INFO", "WARNING", "ERROR"] %}
+            <option value="{{ lvl }}" {% if s.value == lvl %}selected{% endif %}>{{ lvl }}</option>
+          {% endfor %}
+        </select>
       {% elif app == "appearance" and s.key == "theme" %}
         <select name="value"
                 class="select w-full"

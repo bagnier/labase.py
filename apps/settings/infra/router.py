@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
-from apps.settings.contract import appearance
+from apps.settings.contract import appearance, observability
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
     SettingsChanged,
@@ -255,6 +255,9 @@ async def get_settings_page(
     theme_group = _settings_group(appearance.THEME_APP)
     theme_values = await AppSettingRepository(session).values(appearance.THEME_APP)
     theme_settings = service.settings_view(theme_group, theme_values)
+    obs_group = _settings_group(observability.OBSERVABILITY_APP)
+    obs_values = await AppSettingRepository(session).values(observability.OBSERVABILITY_APP)
+    obs_settings = service.settings_view(obs_group, obs_values)
     entries, next_before_id = await _search_logs(
         session, level="", event="", from_dt="", to_dt="", before_id=None
     )
@@ -265,6 +268,7 @@ async def get_settings_page(
         return JSONResponse(
             {
                 "theme": theme_settings,
+                "observability": obs_settings,
                 "entries": entries,
                 "next_before_id": next_before_id,
                 "env_vars": env_vars,
@@ -281,6 +285,7 @@ async def get_settings_page(
             "app": appearance.THEME_APP,
             "group_overviews": group_overviews,
             "settings": theme_settings,
+            "observability_settings": obs_settings,
             "entries": entries,
             "next_before_id": next_before_id,
             "level": "",
