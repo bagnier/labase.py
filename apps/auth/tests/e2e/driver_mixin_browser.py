@@ -188,6 +188,46 @@ class AuthBrowserMixin(BrowserBase):
             "resend affordance should be hidden when the option is off"
         )
 
+    # ── user management (console accounts screen) ─────────────────────────────
+    def _accounts_as_admin(self) -> None:
+        as_admin = getattr(self, "_as_admin", None)  # console mixin
+        assert as_admin is not None
+        as_admin()
+
+    def open_accounts_screen(self) -> None:
+        self._accounts_as_admin()
+        self.page.goto(f"{self.base_url}/console/accounts", wait_until="load")
+
+    def _account_row(self, email: str):
+        return self.page.locator(f"[data-account='{email}']")
+
+    def assert_account_listed(self, email: str) -> None:
+        self.open_accounts_screen()
+        self._account_row(email).wait_for(timeout=5000)
+
+    def assert_account_not_listed(self, email: str) -> None:
+        self.open_accounts_screen()
+        assert self._account_row(email).count() == 0, f"{email!r} still listed"
+
+    def set_account_state(self, email: str, action: str) -> None:
+        self.open_accounts_screen()
+        button = {"disable": "Disable", "enable": "Enable", "delete": "Delete"}[action]
+        self._account_row(email).get_by_role("button", name=button).click()
+        self.page.wait_for_load_state("load")
+
+    def try_open_accounts_screen(self) -> None:
+        probe = getattr(self, "_probe_blocked", None)  # organizations mixin
+        assert probe is not None
+        probe("GET", "/console/accounts")
+
+    def try_open_accounts_screen_as_admin(self) -> None:
+        self._accounts_as_admin()
+        self.try_open_accounts_screen()
+
+    def assert_accounts_screen_not_found(self) -> None:
+        assert self.last_response is not None
+        assert self.last_response.status == 404, f"Expected 404, got {self.last_response.status}"
+
     def assert_redirected_to_dashboard(self) -> None:
         self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
         assert "/profile" in self.page.url, f"Expected /profile, got {self.page.url}"

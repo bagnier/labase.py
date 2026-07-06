@@ -6,6 +6,7 @@ orchestrator (:mod:`app.registration`), not here.
 
 from apps.auth.contract import settings
 from apps.auth.contract.admin import list_server_admins
+from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.settings.contract.settings import (
@@ -19,6 +20,8 @@ from apps.shared.host import Host
 
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/auth", tags=["auth"])
+    # Before the settings context mounts: /console/accounts must precede /console/{app}.
+    host.app.include_router(accounts_router, prefix="/console/accounts")
     host.events.on(ConsoleOverviewQuery, _console_overview)
     settings.group = declare_app_settings(
         "users",
@@ -31,6 +34,12 @@ def mount(host: Host) -> None:
                 "boolean",
                 "true",
                 "Offer to resend the confirmation email on blocked sign-ins",
+            ),
+            SettingDef(
+                "user_management_enabled",
+                "boolean",
+                "true",
+                "Console screen to disable or delete server accounts",
             ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),

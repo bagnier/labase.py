@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Console{% endblock %}
+{% block breadcrumb %}
+  <li><a href="/console">Console</a></li>
+  <li>Accounts</li>
+{% endblock %}
+{% block content %}
+  <div class="max-w-4xl space-y-6">
+    <a href="/console" class="text-sm text-primary hover:underline">← Console</a>
+    <div>
+      <h1 class="text-lg font-semibold">Accounts</h1>
+      <p class="text-sm text-base-content/70 mt-0.5">
+        Every server account, straight from Supabase Auth. Disabling bans sign-in;
+        deleting follows the same path as self-serve account deletion.
+      </p>
+    </div>
+    <div class="card-panel overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th scope="col">Email</th>
+            <th scope="col">Created</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in accounts %}
+            <tr data-account="{{ a.email }}"
+                data-account-state="{{ 'disabled' if a.disabled else 'active' }}">
+              <td class="font-mono text-xs">
+                {{ a.email }}
+                {% if a.is_admin %}<span class="badge badge-sm badge-info">admin</span>{% endif %}
+              </td>
+              <td class="text-xs text-base-content/70">{{ a.created_at }}</td>
+              <td>
+                {% if a.disabled %}
+                  <span class="badge badge-sm badge-warning">disabled</span>
+                {% else %}
+                  <span class="badge badge-sm badge-success">active</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if a.id == self_id %}
+                  <span class="text-xs text-base-content/50">that's you</span>
+                {% else %}
+                  <div class="flex gap-2">
+                    {% if a.disabled %}
+                      <form method="post" action="/console/accounts/{{ a.id }}/enable">
+                        <button type="submit" class="btn btn-xs">Enable</button>
+                      </form>
+                    {% else %}
+                      <form method="post" action="/console/accounts/{{ a.id }}/disable">
+                        <button type="submit" class="btn btn-xs">Disable</button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="/console/accounts/{{ a.id }}/delete">
+                      <button type="submit" class="btn btn-xs btn-error btn-outline">Delete</button>
+                    </form>
+                  </div>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

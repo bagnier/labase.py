@@ -203,3 +203,48 @@ def step_resend_offered(driver):
 @then("they are not offered to resend the confirmation email")
 def step_resend_not_offered(driver):
     driver.assert_resend_not_offered()
+
+
+@when("the admin opens the accounts screen")
+def step_open_accounts_screen(driver):
+    driver.open_accounts_screen()
+
+
+@then(parsers.parse('the account "{email}" is listed'))
+def step_assert_account_listed(driver, email):
+    driver.assert_account_listed(email)
+
+
+@then(parsers.parse('the account "{email}" is no longer listed'))
+def step_assert_account_not_listed(driver, email):
+    driver.assert_account_not_listed(email)
+
+
+@when(parsers.parse('the admin disables the account "{email}"'))
+def step_disable_account(driver, email):
+    driver.set_account_state(email, "disable")
+
+
+@when(parsers.parse('the admin enables the account "{email}"'))
+def step_enable_account(driver, email):
+    driver.set_account_state(email, "enable")
+
+
+@when(parsers.parse('the admin deletes the account "{email}"'))
+def step_delete_account_console(driver, email):
+    driver.set_account_state(email, "delete")
+
+
+@when("they try to open the accounts screen")
+def step_try_open_accounts(driver):
+    driver.try_open_accounts_screen()
+
+
+@when("the admin tries to open the accounts screen")
+def step_admin_tries_open_accounts(driver):
+    driver.try_open_accounts_screen_as_admin()
+
+
+@then("the accounts screen is not found")
+def step_assert_accounts_not_found(driver):
+    driver.assert_accounts_screen_not_found()

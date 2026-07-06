@@ -167,6 +167,56 @@ class AuthApiMixin(ApiBase):
         )
         assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
 
+    # ── user management (console accounts screen) ─────────────────────────────
+    def _accounts_as_admin(self) -> None:
+        as_admin = getattr(self, "_as_admin", None)  # console mixin
+        assert as_admin is not None
+        as_admin()
+
+    def open_accounts_screen(self) -> None:
+        self._accounts_as_admin()
+        self.response = self.client().get(
+            "/console/accounts", headers={"accept": "application/json"}
+        )
+        assert self.response.status_code == 200, (
+            f"GET /console/accounts: {self.response.status_code} {self.response.text}"
+        )
+
+    def _accounts(self) -> list[dict]:
+        self.open_accounts_screen()
+        assert self.response is not None
+        return self.response.json()["accounts"]
+
+    def assert_account_listed(self, email: str) -> None:
+        emails = [a["email"] for a in self._accounts()]
+        assert email in emails, f"{email!r} not in {emails}"
+
+    def assert_account_not_listed(self, email: str) -> None:
+        emails = [a["email"] for a in self._accounts()]
+        assert email not in emails, f"{email!r} still listed"
+
+    def set_account_state(self, email: str, action: str) -> None:
+        account = next((a for a in self._accounts() if a["email"] == email), None)
+        assert account is not None, f"no account {email!r}"
+        resp = self.client().post(
+            f"/console/accounts/{account['id']}/{action}",
+            headers={"accept": "application/json"},
+        )
+        assert resp.status_code == 200, f"{action}: {resp.status_code} {resp.text}"
+
+    def try_open_accounts_screen(self) -> None:
+        self.response = self.client().get(
+            "/console/accounts", headers={"accept": "application/json"}
+        )
+
+    def try_open_accounts_screen_as_admin(self) -> None:
+        self._accounts_as_admin()
+        self.try_open_accounts_screen()
+
+    def assert_accounts_screen_not_found(self) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"
+
     def assert_redirected_to_dashboard(self) -> None:
         assert self.response is not None
         is_303 = self.response.status_code == 303 and "/profile" in self.response.headers.get(

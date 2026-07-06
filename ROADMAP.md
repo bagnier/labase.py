@@ -111,7 +111,7 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   - runtime log-level control: change structlog/stdlib levels from the console
     without redeploy — cheap and very useful in prod
   - server user management: list/disable/delete users from the console (joins the
-    advanced-auth "disable / delete user" TODO)
+    advanced-auth "disable / delete user" TODO) — ✓ shipped (/console/accounts)
 - [ ] **i18n** — JHipster ships 45+ languages with a navbar switcher; all our UI
   strings are hardcoded English. Jinja2 route: Babel/gettext extraction, per-request
   locale (cookie or `Accept-Language`), catalogs per context. Expensive to retrofit
@@ -255,7 +255,11 @@ plug real tooling without rewriting anything.
 
 - [ ] @handle
 - [ ] photo de profil
-- [ ] disable / delete user
+- [x] disable / delete user
+  → `/console/accounts` screen (auth context, GoTrue-backed — no app table):
+  list, disable (ban ~forever) / enable, delete via the same `UserDeleted` +
+  soft-delete path as self-serve deletion; self-guard; audited at warning;
+  admin-switchable via `users.user_management_enabled`
 - [x] Forgot password (/auth/forgot-password + /auth/reset-password)
   → GoTrue recovery mail (custom `supabase/templates/recovery.html` carrying
   `token_hash` to our SSR route), `verify_otp` + stateless password update;
