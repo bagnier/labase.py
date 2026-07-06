@@ -3,7 +3,11 @@ from uuid import uuid4
 
 import httpx
 
-from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
+from apps.auth.tests.given_helpers import (
+    create_unconfirmed_user,
+    delete_user_if_exists,
+    find_users,
+)
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
 
@@ -16,6 +20,7 @@ class AuthApiMixin(ApiBase):
         self.last_registered_email = None
         self._reset_email: str | None = None
         self._reset_requested_at: datetime | None = None
+        self._confirmation_requested_at: datetime | None = None
         super().reset_session()
 
     # ── HTML page access (auth smoke flows) ────────────────────────────────────
@@ -107,6 +112,60 @@ class AuthApiMixin(ApiBase):
     def assert_login_rejected(self) -> None:
         assert self.response is not None
         assert self.response.status_code == 401, f"Expected 401, got {self.response.status_code}"
+
+    # ── unconfirmed email ──────────────────────────────────────────────────────
+    def register_unconfirmed(self, email: str, password: str) -> None:
+        delete_user_if_exists(email)
+        create_unconfirmed_user(email, password)
+        self._track_auth_email(email)
+
+    def assert_login_rejected_with(self, message: str) -> None:
+        self.assert_login_rejected()
+        assert self.response is not None
+        detail = self.response.json().get("detail", "")
+        assert message in detail, f"{message!r} not in {detail!r}"
+
+    def resend_confirmation_to(self, email: str) -> None:
+        self._confirmation_requested_at = datetime.now(UTC)
+        self.response = self.client().post(
+            "/auth/resend-confirmation",
+            json={"email": email},
+            headers={"accept": "application/json"},
+        )
+        assert self.response.status_code == 200, (
+            f"resend: {self.response.status_code} {self.response.text}"
+        )
+
+    def assert_confirmation_delivered(self, email: str) -> None:
+        assert self._confirmation_requested_at is not None, "no resend requested"
+        mailbox.wait_for_message(
+            to=email, containing="token_hash=", since=self._confirmation_requested_at
+        )
+
+    def confirm_address_via_link(self, email: str) -> None:
+        assert self._confirmation_requested_at is not None, "no resend requested"
+        token_hash = mailbox.token_hash_from_mail(email, since=self._confirmation_requested_at)
+        resp = self.client().get(
+            f"/auth/confirm?token_hash={token_hash}&type=signup", follow_redirects=False
+        )
+        assert resp.status_code == 303, f"confirm failed: {resp.status_code} {resp.text}"
+
+    def assert_resend_offered(self) -> None:
+        # REST face of the affordance: the endpoint answers (neutral 200).
+        resp = self.client().post(
+            "/auth/resend-confirmation",
+            json={"email": ""},
+            headers={"accept": "application/json"},
+        )
+        assert resp.status_code == 200, f"expected 200, got {resp.status_code}"
+
+    def assert_resend_not_offered(self) -> None:
+        resp = self.client().post(
+            "/auth/resend-confirmation",
+            json={"email": ""},
+            headers={"accept": "application/json"},
+        )
+        assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
 
     def assert_redirected_to_dashboard(self) -> None:
         assert self.response is not None

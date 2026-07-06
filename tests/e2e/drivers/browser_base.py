@@ -158,6 +158,29 @@ class BrowserBase:
                 self._pages[email] = self._pages.pop(old)
         self._acting_email = email
 
+    def adopt_current_context(self, email: str) -> None:
+        """The acting context just authenticated as `email`: key it under that identity.
+
+        Generalizes visitor promotion: whoever's browser submitted the login form
+        holds `email`'s session now, whatever that context was keyed before. A stale
+        context already keyed `email` is closed — its cookies are dead anyway.
+        """
+        old = self._acting_email
+        if old == email:
+            return
+        ctx = self._contexts.pop(old, None)
+        if ctx is None:
+            self._acting_email = email
+            return
+        stale = self._contexts.pop(email, None)
+        if stale is not None:
+            stale.close()
+        self._pages.pop(email, None)
+        self._contexts[email] = ctx
+        if old in self._pages:
+            self._pages[email] = self._pages.pop(old)
+        self._acting_email = email
+
     def clear_acting_email(self) -> None:
         self._acting_email = _VISITOR
 

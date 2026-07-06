@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
+from apps.auth.tests.given_helpers import (
+    create_unconfirmed_user,
+    delete_user_if_exists,
+    find_users,
+)
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import BrowserBase
 
@@ -13,6 +17,7 @@ class AuthBrowserMixin(BrowserBase):
         self.last_registered_email = None
         self._reset_email: str | None = None
         self._reset_requested_at: datetime | None = None
+        self._confirmation_requested_at: datetime | None = None
         super().reset_session()
 
     def _delete_user_if_exists(self, email: str) -> None:
@@ -32,6 +37,11 @@ class AuthBrowserMixin(BrowserBase):
 
     def sign_in(self, email: str, password: str) -> None:
         self.page.goto(f"{self.base_url}/auth/login")
+        if "/auth/login" not in self.page.url:
+            # The acting context is already signed in (login redirects away):
+            # "a visitor signs in" happens on a fresh visitor context instead.
+            self.clear_acting_email()
+            self.page.goto(f"{self.base_url}/auth/login")
         resp = self.submit_labelled_form(
             self.page,
             {"Email": email, "Password": password},
@@ -40,9 +50,10 @@ class AuthBrowserMixin(BrowserBase):
             path_token="/auth/login",
         )
         assert resp is not None
+        self.last_response = resp
         if resp.status == 303 or resp.headers.get("hx-redirect"):
             self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
-            self.set_acting_email(email)
+            self.adopt_current_context(email)
         else:
             self.page.wait_for_load_state("domcontentloaded")
 
@@ -133,6 +144,48 @@ class AuthBrowserMixin(BrowserBase):
         # we were not redirected to the dashboard (i.e., sign-in was refused)
         assert "/profile" not in self.page.url, (
             f"Expected sign-in to fail but ended up at {self.page.url}"
+        )
+
+    # ── unconfirmed email ──────────────────────────────────────────────────────
+    def register_unconfirmed(self, email: str, password: str) -> None:
+        delete_user_if_exists(email)
+        create_unconfirmed_user(email, password)
+
+    def assert_login_rejected_with(self, message: str) -> None:
+        self.assert_login_rejected()
+        alert = self.page.locator(".alert", has_text=message)
+        alert.wait_for(timeout=5000)
+
+    def resend_confirmation_to(self, email: str) -> None:
+        # The button sits in the failed sign-in's error state, email carried along.
+        self._confirmation_requested_at = datetime.now(UTC)
+        form = self.page.locator("[data-resend-confirmation]")
+        assert form.locator("input[name=email]").get_attribute("value") == email
+        form.get_by_role("button", name="Resend confirmation email").click()
+        self.page.wait_for_load_state("load")
+
+    def assert_confirmation_delivered(self, email: str) -> None:
+        assert self._confirmation_requested_at is not None, "no resend requested"
+        mailbox.wait_for_message(
+            to=email, containing="token_hash=", since=self._confirmation_requested_at
+        )
+
+    def confirm_address_via_link(self, email: str) -> None:
+        # The mail is really fetched from the catcher; following its link is the
+        # one legitimate goto (a user clicks it from their mailbox).
+        assert self._confirmation_requested_at is not None, "no resend requested"
+        token_hash = mailbox.token_hash_from_mail(email, since=self._confirmation_requested_at)
+        self.page.goto(
+            f"{self.base_url}/auth/confirm?token_hash={token_hash}&type=signup",
+            wait_until="load",
+        )
+
+    def assert_resend_offered(self) -> None:
+        self.page.wait_for_selector("[data-resend-confirmation]", timeout=5000)
+
+    def assert_resend_not_offered(self) -> None:
+        assert self.page.locator("[data-resend-confirmation]").count() == 0, (
+            "resend affordance should be hidden when the option is off"
         )
 
     def assert_redirected_to_dashboard(self) -> None:

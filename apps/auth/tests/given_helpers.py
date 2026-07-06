@@ -73,3 +73,13 @@ def user_id_for_email(email: str) -> str:
     users = find_users(email)
     assert users, f"User {email!r} not found in Supabase"
     return users[0].id
+
+
+def create_unconfirmed_user(email: str, password: str) -> str:
+    """An account whose mailbox was never verified — only creatable via the admin
+    API locally, where signup autoconfirm is on."""
+    resp = get_admin_supabase().auth.admin.create_user(
+        {"email": email, "password": password, "email_confirm": False}
+    )
+    assert resp.user, f"create_unconfirmed_user({email!r}) returned no user"
+    return resp.user.id

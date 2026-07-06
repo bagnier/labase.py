@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from apps.auth.application import confirm_user, register_user
+from apps.auth.contract import settings
 from apps.auth.contract.current import CurrentAdmin, CurrentUser, OptionalCurrentUser
 from apps.auth.contract.impersonation import (
     IMPERSONATION_MAX_SECONDS,
@@ -27,6 +28,7 @@ from apps.auth.domain.service import (
     login,
     logout,
     request_password_reset,
+    resend_confirmation,
     update_password,
 )
 from apps.auth.infra.cookies import set_auth_cookies
@@ -139,12 +141,14 @@ async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
         audit(bg, "auth.login_failed", level="warning", ip=ip, email=email)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
+        # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
+        offer_resend = code == "email_not_confirmed" and bool(settings.resend_confirmation_enabled)
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": error, "email": email, "next": next},
+            {"error": error, "email": email, "next": next, "resend_email": offer_resend and email},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
     except Exception:
@@ -345,6 +349,29 @@ async def forgot_password_endpoint(request: Request) -> Response:
     if wants_json(request):
         return JSONResponse({"message": sent_message})
     return templates.TemplateResponse(request, "forgot_password.html", {"info": sent_message})
+
+
+@router.post("/resend-confirmation")
+@rate_limit("10/minute")
+async def resend_confirmation_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+    """Send the signup confirmation again — the way out for an unconfirmed account.
+
+    Neutral answer whatever happens (no account enumeration), like forgot-password.
+    """
+    if not settings.resend_confirmation_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    body = await parse_body(request)
+    email = str(body.get("email", "")).strip().lower()
+    sent_message = "If an account exists for this address, a confirmation email is on its way."
+    if email:
+        try:
+            await resend_confirmation(email)
+            audit(bg, "auth.confirmation_resent", email=email)
+        except Exception:
+            log.exception("auth.confirmation_resend_failed")
+    if wants_json(request):
+        return JSONResponse({"message": sent_message})
+    return templates.TemplateResponse(request, "login.html", {"info": sent_message, "email": email})
 
 
 @router.get("/reset-password", response_class=HTMLResponse)

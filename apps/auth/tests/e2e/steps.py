@@ -168,3 +168,38 @@ def step_try_impersonate(driver, email):
 @then("the impersonation is refused")
 def step_assert_impersonation_refused(driver):
     driver.assert_impersonation_refused()
+
+
+@given(parsers.parse('an unconfirmed user is registered with email "{email}" and password "{pw}"'))
+def step_unconfirmed_user_registered(driver, email, pw):
+    driver.register_unconfirmed(email, pw)
+
+
+@when(parsers.parse('they ask for the confirmation email to be resent to "{email}"'))
+def step_resend_confirmation(driver, email):
+    driver.resend_confirmation_to(email)
+
+
+@then(parsers.parse('a confirmation link is delivered to "{email}"'))
+def step_confirmation_delivered(driver, email):
+    driver.assert_confirmation_delivered(email)
+
+
+@when(parsers.parse('they confirm their address using the link emailed to "{email}"'))
+def step_confirm_via_link(driver, email):
+    driver.confirm_address_via_link(email)
+
+
+@then(parsers.parse('their sign-in is rejected with message "{message}"'))
+def step_sign_in_rejected_with(driver, message):
+    driver.assert_login_rejected_with(message)
+
+
+@then("they are offered to resend the confirmation email")
+def step_resend_offered(driver):
+    driver.assert_resend_offered()
+
+
+@then("they are not offered to resend the confirmation email")
+def step_resend_not_offered(driver):
+    driver.assert_resend_not_offered()

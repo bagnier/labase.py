@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Unconfirmed email — mockup</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f5f5f4; margin: 2rem; color: #1c1917; }
+  .screen { background: white; border: 1px solid #d6d3d1; border-radius: 12px; padding: 1.5rem; max-width: 26rem; margin-bottom: 2rem; }
+  input { width: 100%; padding: .5rem; border: 1px solid #d6d3d1; border-radius: 8px; box-sizing: border-box; margin-bottom: .5rem; }
+  button { padding: .5rem 1rem; border-radius: 8px; border: none; background: #4f46e5; color: white; }
+  button.ghost { background: transparent; color: #4f46e5; border: 1px solid #4f46e5; }
+  .error { background: #fef2f2; border: 1px solid #ef4444; padding: .6rem; border-radius: 8px; font-size: .85rem; margin-bottom: 1rem; }
+  .info { background: #ecfdf5; border: 1px solid #10b981; padding: .6rem; border-radius: 8px; font-size: .85rem; margin-bottom: 1rem; }
+  .note { font-size: .78rem; color: #78716c; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- State 1: blocked sign-in, resend offered (users.resend_confirmation_enabled = true) -->
+<div class="screen">
+  <h1>Sign in</h1>
+  <div class="error">
+    Please verify your email before signing in.
+    <form style="margin-top:.5rem"> <!-- POST /auth/resend-confirmation, hidden email -->
+      <button class="ghost" type="submit">Resend confirmation email</button>
+    </form>
+  </div>
+  <input type="email" value="pending@labase.dev">
+  <input type="password" value="••••••••">
+  <button>Sign in</button>
+  <p class="note">GoTrue itself refuses unconfirmed sign-ins; the app adds the way out.</p>
+</div>
+
+<!-- State 2: after clicking resend (neutral, no account enumeration) -->
+<div class="screen">
+  <h1>Sign in</h1>
+  <div class="info">If an account exists for this address, a confirmation email is on its way.</div>
+  <input type="email" value="pending@labase.dev">
+  <input type="password" placeholder="Password">
+  <button>Sign in</button>
+</div>
+
+<!-- State 3: switch off — same clear error, no resend affordance -->
+<div class="screen">
+  <h1>Sign in</h1>
+  <div class="error">Please verify your email before signing in.</div>
+  <input type="email" value="pending@labase.dev">
+  <input type="password" value="••••••••">
+  <button>Sign in</button>
+  <p class="note">users.resend_confirmation_enabled = false → POST /auth/resend-confirmation answers 404.</p>
+</div>
+
+</body>
+</html>

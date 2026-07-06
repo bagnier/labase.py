@@ -270,7 +270,11 @@ plug real tooling without rewriting anything.
   admin-switchable via `profile.email_change_enabled` (every advanced-auth option
   gets its own declared setting — 2026-07-06 decision)
 - [ ] Account deletion — DELETE /profile + cascade + logout
-- [ ] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
+- [x] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
+  → pivot: GoTrue already refuses unconfirmed sign-ins (`email_not_confirmed`,
+  message mapped); the missing piece was the way out — a "Resend confirmation
+  email" affordance on the blocked login (custom `confirmation` template landing
+  on our SSR `/auth/confirm`), switchable via `users.resend_confirmation_enabled`
 - [ ] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
 - [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
 - [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities

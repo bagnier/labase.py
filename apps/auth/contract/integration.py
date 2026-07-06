@@ -26,6 +26,12 @@ def mount(host: Host) -> None:
             SettingDef(
                 "session_ttl_seconds", "number", "604800", "Session cookie lifetime, in seconds"
             ),
+            SettingDef(
+                "resend_confirmation_enabled",
+                "boolean",
+                "true",
+                "Offer to resend the confirmation email on blocked sign-ins",
+            ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
     )

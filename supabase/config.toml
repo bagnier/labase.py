@@ -22,6 +22,10 @@ content_path = "./supabase/templates/recovery.html"
 subject = "Confirm your new email"
 content_path = "./supabase/templates/email_change.html"
 
+[auth.email.template.confirmation]
+subject = "Confirm your email address"
+content_path = "./supabase/templates/confirmation.html"
+
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.
 [inbucket]

@@ -25,7 +25,7 @@ class ProfileBrowserMixin(BrowserBase):
         self.page.goto(self._profile_url(), wait_until="load")
         section = self.page.locator("[data-email-change]")
         section.get_by_label("New email").fill(new_email)
-        section.get_by_label("Current password").fill(password)
+        section.get_by_label("Confirm with your password").fill(password)
         section.get_by_role("button", name="Send confirmation link").click()
         self.page.wait_for_load_state("load")
 

@@ -79,6 +79,12 @@ async def request_password_reset(email: str) -> None:
     await supabase.auth.reset_password_for_email(email)
 
 
+async def resend_confirmation(email: str) -> None:
+    """Ask GoTrue to send the signup confirmation email again."""
+    supabase = await get_user_supabase()
+    await supabase.auth.resend({"type": "signup", "email": email})
+
+
 class PasswordUpdateError(Exception):
     """GoTrue refused the new password (typically weak_password); message is user-safe."""
 
