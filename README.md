@@ -5,7 +5,7 @@ and file storage — and a personal foundation for launching products fast.
 
 ## Objectives
 
-This base exists for three reasons, in order:
+This base exists for four reasons, in order:
 
 1. **A personal SaaS boilerplate.** Clone it to turn a simple idea into a working app,
    prototype quickly, or answer a client contract with authentication, multi-tenancy,
@@ -26,6 +26,11 @@ This base exists for three reasons, in order:
    verification substrate that makes agent-written features trustworthy. The ceremony
    you'll notice throughout is priced against that model: humans write scenarios and
    review diffs; agents write the plumbing; `make ci` arbitrates.
+
+4. **Easy and confident new app creation.** The whole codebase should tend to ease the
+   creation of any new app, CRUDished or HexArchished. Developers should be able to
+   understand each line; conventions should be explicit, well named and documented.
+   Integration with other apps should be intuitive and should not require modifying them.
 
 ## Principles
 
