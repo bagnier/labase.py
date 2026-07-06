@@ -33,6 +33,18 @@ Feature: Two-factor authentication (TOTP)
     And they enter the authenticator code "000000"
     Then the authenticator code is rejected
 
+  # Interaction with other profile changes
+
+  Scenario: A user with two-factor enabled can still change their password and email
+    Given a visitor signs in with email "vault@labase.dev" and password "Test1234!"
+    And they enrol an authenticator app
+    When they sign out
+    And a visitor signs in with email "vault@labase.dev" and password "Test1234!"
+    And they enter a valid authenticator code
+    And they change their password from "Test1234!" to "Changed1234!"
+    And they request to change their email to "vaulted@labase.dev" using password "Changed1234!"
+    Then they are told a confirmation email is on its way
+
   # Admin switch
 
   Scenario: An admin can turn two-factor off

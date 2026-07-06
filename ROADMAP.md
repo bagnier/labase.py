@@ -1,3 +1,12 @@
+## to fix (2026-07-06)
+
+- [ ] API keys should be part of profile settings nav ?
+- [ ] nav in admin console page is folded
+- [ ] search filter http://localhost:8000/console/accounts
+- [ ] l'écran /console/accounts (list/disable/delete) n'est lié nulle part dans l'UI — ni sur /console, ni sur /console/admins, ni sur la page settings de l'app auth.
+- [x] changement d'email et de mot de passe cassés dès que la 2FA est activée :
+Les deux échouent avec « AAL2 session is required to update email or password when MFA is enabled » (erreur GoTrue insufficient_aal). Cause : apps/auth/contract/email_change.py:23 et apps/auth/contract/passwords.py:16,28 ré-authentifient via un nouveau login(email, password) (password-grant, toujours AAL1) puis utilisent ce nouveau token — au lieu de la session AAL2 déjà en cookie — pour l'appel PUT /auth/v1/user qui exige AAL2. Résultat : tout compte avec 2FA activée ne peut plus jamais changer d'email ni de mot de passe.
+
 ## remediation (audit 2026-07-03)
 
 ### contract-readiness — what any client contract would re-pay

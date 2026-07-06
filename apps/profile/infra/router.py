@@ -119,7 +119,8 @@ async def password_change(
         error = "Current and new password are required."
     else:
         try:
-            await change_password(current_user.email, current_password, new_password)
+            access_token = request.cookies.get("access_token", "")
+            await change_password(current_user.email, current_password, new_password, access_token)
         except WrongPassword:
             error = "Current password is incorrect."
         except PasswordUpdateError as e:
@@ -158,7 +159,8 @@ async def email_change(
         error = "New email and current password are required."
     else:
         try:
-            await change_email(current_user.email, current_password, new_email)
+            access_token = request.cookies.get("access_token", "")
+            await change_email(current_user.email, current_password, new_email, access_token)
         except WrongPassword:
             error = "Current password is incorrect."
         except EmailChangeError as e:
