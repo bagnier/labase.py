@@ -30,6 +30,20 @@
                 required=true) }}
         <button type="submit" class="btn btn-primary w-full mt-1">Sign in</button>
       </form>
+      {% if oauth_providers %}
+        <div class="divider text-xs">or</div>
+        <div class="space-y-2">
+          {% for provider in oauth_providers %}
+            <a href="/auth/oauth/{{ provider }}{%- if next -%}?next={{ next | urlencode }}{%- endif -%}"
+               class="btn btn-outline w-full"
+               data-oauth-provider="{{ provider }}">
+              <i class="ph ph-{{ 'google-logo' if provider == 'google' else 'github-logo' }}"
+                 aria-hidden="true"></i>
+              Continue with {{ provider | capitalize }}
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
       <p class="text-sm text-base-content/70 mt-2 text-center">
         <a href="/auth/forgot-password" class="link">Forgot password?</a>
       </p>

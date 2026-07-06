@@ -23,12 +23,17 @@ from apps.auth.contract.impersonation import (
     impersonation_tokens,
 )
 from apps.auth.domain.service import (
+    OAUTH_PROVIDERS,
     AuthTokens,
+    OAuthError,
     PasswordUpdateError,
     TotpError,
     confirm_signup,
+    exchange_oauth_code,
     login,
     logout,
+    oauth_authorize_url,
+    pkce_pair,
     request_password_reset,
     resend_confirmation,
     totp_challenge,
@@ -101,6 +106,10 @@ def _safe_next(next_url: str | None) -> str:
     return "/profile"
 
 
+def _enabled_oauth_providers() -> list[str]:
+    return [p for p in OAUTH_PROVIDERS if bool(getattr(settings, f"oauth_{p}_enabled", False))]
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
     request: Request,
@@ -111,7 +120,13 @@ async def login_page(
     if current_user is not None:
         return RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(
-        request, "login.html", {"info": _INFO_MESSAGES.get(info or ""), "next": next}
+        request,
+        "login.html",
+        {
+            "info": _INFO_MESSAGES.get(info or ""),
+            "next": next,
+            "oauth_providers": _enabled_oauth_providers(),
+        },
     )
 
 
@@ -267,9 +282,101 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
     return resp
 
 
+# ── OAuth social sign-in ────────────────────────────────────────────────────────
+# GoTrue drives the provider; the app only holds the PKCE verifier between the
+# redirect and the callback, parked in a short-lived cookie (the MFA pattern —
+# the process keeps no session state).
+
+_OAUTH_VERIFIER_COOKIE = "oauth_code_verifier"
+_OAUTH_NEXT_COOKIE = "oauth_next"
+_OAUTH_MAX_SECONDS = 300
+
+
+@router.get("/oauth/{provider}")
+@rate_limit("10/minute")
+async def oauth_start(request: Request, provider: str, next: str = Query(default="")) -> Response:
+    if provider not in _enabled_oauth_providers():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    verifier, challenge = pkce_pair()
+    redirect_to = str(request.base_url).rstrip("/") + "/auth/callback"
+    resp = RedirectResponse(
+        oauth_authorize_url(provider, redirect_to, challenge),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    for name, value in ((_OAUTH_VERIFIER_COOKIE, verifier), (_OAUTH_NEXT_COOKIE, next)):
+        resp.set_cookie(
+            name,
+            value,
+            max_age=_OAUTH_MAX_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=get_technical_settings().cookies_secure,
+        )
+    return resp
+
+
+def _oauth_failure(request: Request, message: str) -> Response:
+    resp = templates.TemplateResponse(
+        request,
+        "login.html",
+        {"error": message, "oauth_providers": _enabled_oauth_providers()},
+        status_code=status.HTTP_401_UNAUTHORIZED,
+    )
+    resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
+    resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+    return resp
+
+
+@router.get("/callback")
+@rate_limit("10/minute")
+async def oauth_callback(
+    request: Request,
+    bg: BackgroundTasks,
+    code: str = Query(default=""),
+    error_description: str = Query(default=""),
+    oauth_code_verifier: str | None = Cookie(default=None),
+    oauth_next: str | None = Cookie(default=None),
+) -> Response:
+    """Land the browser back from GoTrue: exchange the PKCE code for a session.
+
+    Account merge is GoTrue's: a provider identity whose verified email matches an
+    existing account is linked into it (auth.identities), never duplicated.
+    """
+    if not code or not oauth_code_verifier:
+        log.warning("auth.oauth_callback_rejected", has_code=bool(code))
+        return _oauth_failure(
+            request, error_description or "Sign-in with the provider failed. Please try again."
+        )
+    try:
+        tokens = await exchange_oauth_code(code, oauth_code_verifier)
+    except OAuthError as e:
+        audit(bg, "auth.oauth_failed", level="warning")
+        return _oauth_failure(request, str(e))
+    await confirm_user(tokens.access_token)  # first visit bootstraps the personal org
+    claims = decode_jwt(tokens.access_token)
+    audit(bg, "auth.oauth_signed_in", user_id=str(claims.get("sub", "")))
+    next = oauth_next or ""
+    if settings.two_factor_enabled:
+        factor_id = await verified_totp_factor(tokens.access_token)
+        if factor_id:
+            resp = await _mfa_challenge_response(request, tokens, factor_id, next)
+            resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
+            resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+            return resp
+    resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
+    set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
+    resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
+    resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+    return resp
+
+
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request, next: str | None = None) -> HTMLResponse:
-    return templates.TemplateResponse(request, "register.html", {"next": next})
+    return templates.TemplateResponse(
+        request,
+        "register.html",
+        {"next": next, "oauth_providers": _enabled_oauth_providers()},
+    )
 
 
 @router.post("/register")

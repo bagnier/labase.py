@@ -22,6 +22,7 @@ from tests.e2e.drivers.server import InProcessServer
 
 _PASSWORD = "Secret1!"
 _VISITOR = "visitor"  # sentinel — unauthenticated context, no associated user
+VISITOR = _VISITOR  # public alias, mirroring api_base.VISITOR
 
 
 class BrowserBase:

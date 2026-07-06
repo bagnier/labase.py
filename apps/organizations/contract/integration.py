@@ -90,10 +90,16 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 async def _create_org(event: UserCreated) -> None:
     if not settings.auto_create_personal_org:
         return
+    user_id = uuid.UUID(event.user_id)
     async with admin_session_factory()() as session:
+        already_member = await session.scalar(
+            select(func.count()).select_from(Membership).where(Membership.auth_user_id == user_id)
+        )
+        if already_member:
+            return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,
-            auth_user_id=uuid.UUID(event.user_id),
+            auth_user_id=user_id,
         )
         await session.commit()
     if event.access_token and get_technical_settings().supabase_database_schema != "test":

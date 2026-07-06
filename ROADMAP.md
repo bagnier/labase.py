@@ -324,9 +324,16 @@ plug real tooling without rewriting anything.
   tokens parked in 5-min cookies until the code verifies, AAL2 session issued);
   stateless GoTrue /factors calls; `pyotp` drives real codes in both drivers;
   switch `users.two_factor_enabled` doubles as the lost-authenticator bypass
-- [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
+- [x] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
   (2026-07-06 decision: implement; unit-test our callback/merge code, E2E up to the
   provider redirect, manual-verification doc — no sincere E2E against real providers)
+  → shipped: server-side PKCE (verifier parked in a 5-min cookie, MFA pattern),
+  `/auth/oauth/{provider}` + `/auth/callback` (code exchange, session cookies,
+  2FA step-up parity, idempotent org bootstrap via `UserCreated`); switches
+  `users.oauth_google_enabled`/`oauth_github_enabled` drive the login/register
+  buttons; merge is GoTrue's verified-email auto-linking; `docs/oauth.md` carries
+  the local provider setup + manual checklist; `features/oauth.feature` on both
+  drivers up to the authorize hand-off
 - [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
   (2026-07-06 decision: feasibility spike first — implement only if local GoTrue
   exposes a usable API, otherwise document findings and defer)

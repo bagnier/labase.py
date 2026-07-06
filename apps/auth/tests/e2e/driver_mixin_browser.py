@@ -7,7 +7,7 @@ from apps.auth.tests.given_helpers import (
     find_users,
 )
 from tests.e2e.drivers import mailbox
-from tests.e2e.drivers.browser_base import BrowserBase
+from tests.e2e.drivers.browser_base import VISITOR, BrowserBase
 
 
 class AuthBrowserMixin(BrowserBase):
@@ -231,6 +231,42 @@ class AuthBrowserMixin(BrowserBase):
         assert self.page.locator("[data-twofa]").count() == 0, (
             "two-factor section should be hidden when the option is off"
         )
+
+    # ── OAuth social sign-in ───────────────────────────────────────────────────
+    # The sign-in page is a visitor's view — the acting context may be a
+    # signed-in admin (who just flipped the switch), whom /auth/login redirects.
+    def _oauth_button(self, provider: str):
+        return self.page_for(VISITOR).locator(f"[data-oauth-provider='{provider}']")
+
+    def assert_oauth_offered(self, provider: str) -> None:
+        self.page_for(VISITOR).goto(f"{self.base_url}/auth/login", wait_until="load")
+        self._oauth_button(provider).wait_for(timeout=5000)
+
+    def assert_oauth_not_offered(self, provider: str) -> None:
+        self.page_for(VISITOR).goto(f"{self.base_url}/auth/login", wait_until="load")
+        assert self._oauth_button(provider).count() == 0, f"unexpected {provider} button"
+
+    def start_oauth(self, provider: str) -> None:
+        """Click the provider button; the app answers 303 to GoTrue's authorize URL.
+
+        The navigation then leaves the app (GoTrue errors without real provider
+        credentials locally) — the scenario only asserts the captured hand-off.
+        """
+        page = self.page_for(VISITOR)
+        page.goto(f"{self.base_url}/auth/login", wait_until="load")
+        with page.expect_response(
+            lambda r: f"/auth/oauth/{provider}" in r.url and r.request.method == "GET"
+        ) as info:
+            self._oauth_button(provider).click()
+        self._oauth_response = info.value
+
+    def assert_oauth_authorize_redirect(self, provider: str) -> None:
+        resp = getattr(self, "_oauth_response", None)
+        assert resp is not None, "start_oauth was not called"
+        assert resp.status == 303, f"expected 303, got {resp.status}"
+        location = resp.headers.get("location", "")
+        assert "/auth/v1/authorize" in location, f"unexpected redirect: {location}"
+        assert f"provider={provider}" in location, f"unexpected provider in: {location}"
 
     # ── user management (console accounts screen) ─────────────────────────────
     def _accounts_as_admin(self) -> None:

@@ -48,6 +48,18 @@ def mount(host: Host) -> None:
                 "true",
                 "Authenticator-app (TOTP) two-factor sign-in",
             ),
+            SettingDef(
+                "oauth_google_enabled",
+                "boolean",
+                "false",
+                "Sign in with Google (needs provider credentials in Supabase — see docs/oauth.md)",
+            ),
+            SettingDef(
+                "oauth_github_enabled",
+                "boolean",
+                "false",
+                "Sign in with GitHub (needs provider credentials in Supabase — see docs/oauth.md)",
+            ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
         links=(ConsoleLink("Accounts", "/console/accounts"),),

@@ -2,6 +2,21 @@
 # /auth/reset-password route carrying GoTrue's token_hash.
 [auth]
 site_url = "http://localhost:8000"
+# OAuth callbacks land on the app's SSR route (PKCE code exchange happens there).
+additional_redirect_urls = ["http://localhost:8000/auth/callback"]
+
+# OAuth providers — see docs/oauth.md. Blocks stay commented so `supabase start`
+# never requires the env vars; uncomment (and restart Supabase) to test locally.
+# The callback to register at the provider is http://localhost:54321/auth/v1/callback
+# [auth.external.github]
+# enabled = true
+# client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
+# secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
+# [auth.external.google]
+# enabled = true
+# client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# skip_nonce_check = true  # local-only: relaxes OIDC nonce validation
 
 [auth.email]
 enable_confirmations = false

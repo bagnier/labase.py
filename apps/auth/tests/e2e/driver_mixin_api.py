@@ -231,6 +231,38 @@ class AuthApiMixin(ApiBase):
         resp = self.client().post("/profile/2fa/enroll", headers={"accept": "application/json"})
         assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
 
+    # ── OAuth social sign-in ───────────────────────────────────────────────────
+    def _login_page_html(self) -> str:
+        resp = self.client_for(VISITOR).get("/auth/login", headers={"accept": "text/html"})
+        assert resp.status_code == 200, f"GET /auth/login: {resp.status_code}"
+        return resp.text
+
+    def assert_oauth_offered(self, provider: str) -> None:
+        assert f'data-oauth-provider="{provider}"' in self._login_page_html(), (
+            f"no {provider} button on the sign-in page"
+        )
+
+    def assert_oauth_not_offered(self, provider: str) -> None:
+        assert f'data-oauth-provider="{provider}"' not in self._login_page_html(), (
+            f"unexpected {provider} button on the sign-in page"
+        )
+
+    def start_oauth(self, provider: str) -> None:
+        self.response = self.client_for(VISITOR).get(
+            f"/auth/oauth/{provider}", headers={"accept": "text/html"}
+        )
+
+    def assert_oauth_authorize_redirect(self, provider: str) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 303, f"expected 303, got {self.response.status_code}"
+        location = self.response.headers.get("location", "")
+        assert "/auth/v1/authorize" in location, f"unexpected redirect: {location}"
+        assert f"provider={provider}" in location, f"unexpected provider in: {location}"
+        cookies = self.response.headers.get_list("set-cookie")
+        assert any(c.startswith("oauth_code_verifier=") for c in cookies), (
+            "PKCE verifier cookie not parked"
+        )
+
     # ── user management (console accounts screen) ─────────────────────────────
     def _accounts_as_admin(self) -> None:
         as_admin = getattr(self, "_as_admin", None)  # console mixin

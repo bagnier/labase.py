@@ -250,6 +250,26 @@ def step_assert_account_filtered_out(driver, email):
     driver.assert_account_not_in_filtered_list(email)
 
 
+@then(parsers.parse('the sign-in page offers "{provider}" sign-in'))
+def step_oauth_offered(driver, provider):
+    driver.assert_oauth_offered(provider)
+
+
+@then(parsers.parse('the sign-in page does not offer "{provider}" sign-in'))
+def step_oauth_not_offered(driver, provider):
+    driver.assert_oauth_not_offered(provider)
+
+
+@when(parsers.parse('a visitor starts the "{provider}" sign-in'))
+def step_start_oauth(driver, provider):
+    driver.start_oauth(provider)
+
+
+@then(parsers.parse('they are redirected to the OAuth authorization for "{provider}"'))
+def step_oauth_authorize_redirect(driver, provider):
+    driver.assert_oauth_authorize_redirect(provider)
+
+
 @when("they try to open the accounts screen")
 def step_try_open_accounts(driver):
     driver.try_open_accounts_screen()

@@ -1,5 +1,9 @@
+import base64
+import hashlib
+import secrets
 from dataclasses import dataclass
 from typing import cast
+from urllib.parse import urlencode
 
 import httpx
 import structlog
@@ -83,6 +87,59 @@ async def resend_confirmation(email: str) -> None:
     """Ask GoTrue to send the signup confirmation email again."""
     supabase = await get_user_supabase()
     await supabase.auth.resend({"type": "signup", "email": email})
+
+
+OAUTH_PROVIDERS = ("google", "github")
+
+
+class OAuthError(Exception):
+    """GoTrue refused the OAuth operation; message is user-safe."""
+
+
+def pkce_pair() -> tuple[str, str]:
+    """A fresh PKCE (verifier, S256 challenge) pair.
+
+    The app keeps no session between the redirect and the callback, so the
+    verifier travels in a short-lived httpOnly cookie — the MFA parking pattern.
+    """
+    verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return verifier, challenge
+
+
+def oauth_authorize_url(provider: str, redirect_to: str, code_challenge: str) -> str:
+    """The GoTrue authorize URL the browser is sent to — GoTrue drives the provider."""
+    s = get_technical_settings()
+    query = urlencode(
+        {
+            "provider": provider,
+            "redirect_to": redirect_to,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "s256",
+        }
+    )
+    return f"{s.supabase_api_url}/auth/v1/authorize?{query}"
+
+
+async def exchange_oauth_code(code: str, code_verifier: str) -> AuthTokens:
+    """PKCE code-for-session exchange — stateless, like every GoTrue call here."""
+    s = get_technical_settings()
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"{s.supabase_api_url}/auth/v1/token?grant_type=pkce",
+            headers={"apikey": s.supabase_publishable_key},
+            json={"auth_code": code, "code_verifier": code_verifier},
+        )
+    if res.status_code >= 400:
+        try:
+            body = res.json()
+            message = body.get("error_description") or body.get("msg") or ""
+        except ValueError:
+            message = ""
+        raise OAuthError(message or "Sign-in with the provider failed.")
+    data = res.json()
+    return AuthTokens(access_token=data["access_token"], refresh_token=data["refresh_token"])
 
 
 class TotpError(Exception):
