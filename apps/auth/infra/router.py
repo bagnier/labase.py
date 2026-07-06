@@ -26,6 +26,7 @@ from apps.auth.domain.service import (
     OAUTH_PROVIDERS,
     AuthTokens,
     OAuthError,
+    PasskeyError,
     PasswordUpdateError,
     TotpError,
     confirm_signup,
@@ -33,12 +34,14 @@ from apps.auth.domain.service import (
     login,
     logout,
     oauth_authorize_url,
+    passkey_authentication_options,
     pkce_pair,
     request_password_reset,
     resend_confirmation,
     totp_challenge,
     update_password,
     verified_totp_factor,
+    verify_passkey_authentication,
     verify_totp,
 )
 from apps.auth.infra.cookies import set_auth_cookies
@@ -126,6 +129,7 @@ async def login_page(
             "info": _INFO_MESSAGES.get(info or ""),
             "next": next,
             "oauth_providers": _enabled_oauth_providers(),
+            "passkeys_enabled": bool(settings.passkeys_enabled),
         },
     )
 
@@ -279,6 +283,56 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
+    return resp
+
+
+# ── Passkey sign-in (WebAuthn, discoverable credentials) ───────────────────────
+# The login page's JS drives navigator.credentials.get(); these two endpoints
+# proxy GoTrue's anonymous authentication ceremony and land the session cookies.
+
+
+def _ensure_passkeys_enabled() -> None:
+    if not settings.passkeys_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+@router.post("/passkeys/options")
+@rate_limit("10/minute")
+async def passkey_options_endpoint(request: Request) -> Response:
+    _ensure_passkeys_enabled()
+    try:
+        return JSONResponse(await passkey_authentication_options())
+    except PasskeyError as e:
+        return JSONResponse({"detail": str(e)}, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/passkeys/verify")
+@rate_limit("10/minute")
+async def passkey_verify_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+    _ensure_passkeys_enabled()
+    body = await parse_body(request)
+    challenge_id = str(body.get("challenge_id", ""))
+    credential = body.get("credential")
+    if not challenge_id or not isinstance(credential, dict):
+        return JSONResponse(
+            {"detail": "challenge_id and credential are required."},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        tokens = await verify_passkey_authentication(challenge_id, credential)
+    except PasskeyError as e:
+        audit(bg, "auth.passkey_failed", level="warning")
+        return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
+    claims = decode_jwt(tokens.access_token)
+    audit(bg, "auth.passkey_signed_in", user_id=str(claims.get("sub", "")))
+    resp = JSONResponse(
+        {
+            "access_token": tokens.access_token,
+            "token_type": "bearer",
+            "redirect": _safe_next(str(body.get("next", "") or "")),
+        }
+    )
+    set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     return resp
 
 

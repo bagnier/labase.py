@@ -49,6 +49,12 @@ def mount(host: Host) -> None:
                 "Authenticator-app (TOTP) two-factor sign-in",
             ),
             SettingDef(
+                "passkeys_enabled",
+                "boolean",
+                "false",
+                "Passkey (WebAuthn) sign-in — also needs [auth.passkey] in supabase/config.toml",
+            ),
+            SettingDef(
                 "oauth_google_enabled",
                 "boolean",
                 "false",

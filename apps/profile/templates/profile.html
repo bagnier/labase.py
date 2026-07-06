@@ -186,6 +186,41 @@
         </div>
       </section>
     {% endif %}
+    {% if passkeys_enabled %}
+      <section class="card-panel" data-passkeys>
+        <div class="card-body">
+          <h2 class="card-title text-sm font-semibold mb-3">Passkeys</h2>
+          {{ alert('error', passkey_error) }}
+          <p class="text-sm text-base-content/70 mb-3">
+            Sign in with your device's screen lock or security key — no password typed.
+          </p>
+          {% if passkeys %}
+            <ul class="list-panel mb-3">
+              {% for pk in passkeys %}
+                <li class="flex items-center justify-between gap-3 p-3"
+                    data-passkey-name="{{ pk.friendly_name }}">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium truncate">{{ pk.friendly_name }}</p>
+                    <p class="text-xs text-base-content/60">Added {{ pk.created_at[:10] }}</p>
+                  </div>
+                  <form method="post" action="/profile/passkeys/{{ pk.id }}/delete">
+                    <button type="submit" class="btn btn-xs btn-error btn-outline">Remove</button>
+                  </form>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          <button type="button" class="btn" data-passkey-register>
+            <i class="ph ph-fingerprint" aria-hidden="true"></i>
+            Add a passkey
+          </button>
+          <p class="text-xs text-error mt-2 hidden"
+             data-passkey-error
+             aria-live="polite"></p>
+          <script src="/static/js/passkeys.js" defer></script>
+        </div>
+      </section>
+    {% endif %}
     <section class="card-panel">
       <div class="card-body">
         <h2 class="card-title text-sm font-semibold mb-3">Session</h2>

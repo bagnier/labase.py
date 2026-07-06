@@ -18,6 +18,13 @@ from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
 from apps.auth.contract.events import UserDeleted
+from apps.auth.contract.passkeys import (
+    PasskeyError,
+    delete_passkey,
+    list_passkeys,
+    passkey_registration_options,
+    verify_passkey_registration,
+)
 from apps.auth.contract.passwords import (
     PasswordUpdateError,
     WrongPassword,
@@ -68,6 +75,13 @@ async def _profile_context(
     twofa_active = bool(
         two_factor_enabled and access_token and await verified_totp_factor(access_token)
     )
+    passkeys_enabled = bool(users_settings.passkeys_enabled)
+    passkeys: list[dict] = []
+    if passkeys_enabled and access_token:
+        try:
+            passkeys = await list_passkeys(access_token)
+        except PasskeyError:
+            passkeys_enabled = False  # server-side feature off: hide the section
     context = await fullpage_context(session, current_user)
     orgs = context["org_nav"]
     return {
@@ -81,6 +95,8 @@ async def _profile_context(
         "handle_enabled": bool(settings.handle_enabled),
         "two_factor_enabled": two_factor_enabled,
         "twofa_active": twofa_active,
+        "passkeys_enabled": passkeys_enabled,
+        "passkeys": passkeys,
         **context,
     }
 
@@ -180,6 +196,79 @@ async def email_change(
     ctx = await _profile_context(request, session, current_user, repo)
     ctx["email_info"] = info
     return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+# ── Passkeys (WebAuthn) ─────────────────────────────────────────────────────────
+# JSON-only: the profile page's JS drives navigator.credentials.create() between
+# the two calls; deletion is a plain form for the no-JS path.
+
+
+def _ensure_passkeys(access_token: str | None) -> None:
+    if not users_settings.passkeys_enabled or not access_token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+@router.post("/profile/passkeys/options", response_model=None)
+async def passkey_options(
+    current_user: CurrentUser,
+    access_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    _ensure_passkeys(access_token)
+    assert access_token is not None
+    try:
+        return JSONResponse(await passkey_registration_options(access_token))
+    except PasskeyError as e:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+
+
+@router.post("/profile/passkeys/verify", response_model=None)
+async def passkey_verify(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+    access_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    _ensure_passkeys(access_token)
+    assert access_token is not None
+    body = await parse_body(request)
+    challenge_id = str(body.get("challenge_id", ""))
+    credential = body.get("credential")
+    if not challenge_id or not isinstance(credential, dict):
+        return JSONResponse(
+            {"detail": "challenge_id and credential are required."}, status_code=400
+        )
+    try:
+        created = await verify_passkey_registration(access_token, challenge_id, credential)
+    except PasskeyError as e:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+    audit(bg, "profile.passkey_added", user_id=current_user.id)
+    return JSONResponse({"message": "Passkey added.", "passkey": created})
+
+
+@router.post("/profile/passkeys/{passkey_id}/delete", response_model=None)
+async def passkey_delete(
+    request: Request,
+    bg: BackgroundTasks,
+    passkey_id: str,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: ProfileRepo,
+    access_token: str | None = Cookie(default=None),
+) -> HTMLResponse | JSONResponse | Response:
+    _ensure_passkeys(access_token)
+    assert access_token is not None
+    try:
+        await delete_passkey(access_token, passkey_id)
+    except PasskeyError as e:
+        if wants_json(request):
+            return JSONResponse({"detail": str(e)}, status_code=400)
+        ctx = await _profile_context(request, session, current_user, repo)
+        ctx["passkey_error"] = str(e)
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+    audit(bg, "profile.passkey_removed", user_id=current_user.id, passkey_id=passkey_id)
+    if wants_json(request):
+        return JSONResponse({"message": "Passkey removed."})
+    return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/profile/2fa/enroll", response_model=None)

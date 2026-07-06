@@ -334,9 +334,17 @@ plug real tooling without rewriting anything.
   buttons; merge is GoTrue's verified-email auto-linking; `docs/oauth.md` carries
   the local provider setup + manual checklist; `features/oauth.feature` on both
   drivers up to the authorize hand-off
-- [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
+- [x] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
   (2026-07-06 decision: feasibility spike first — implement only if local GoTrue
   exposes a usable API, otherwise document findings and defer)
+  → spike: local GoTrue v2.192 ships the beta passkeys API (`/passkeys/...`,
+  feature-flagged; supabase-py has no support — raw HTTP); full round-trip
+  verified with a software authenticator → implemented: profile management
+  (add/list/remove via server proxy + `static/js/passkeys.js`), discoverable
+  sign-in on the login page, switch `users.passkeys_enabled` (default off —
+  upstream is experimental), `[auth.passkey]` in config.toml; both drivers run
+  the real GoTrue ceremony via `soft-webauthn` (rp-origin pinning forbids the
+  browser prompt in E2E — see docs/passkeys.md)
 
 ## python boilerplate gap analysis (2026-07-05)
 

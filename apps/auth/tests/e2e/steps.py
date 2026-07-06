@@ -270,6 +270,32 @@ def step_oauth_authorize_redirect(driver, provider):
     driver.assert_oauth_authorize_redirect(provider)
 
 
+@then("the sign-in page offers passkey sign-in")
+def step_passkey_offered(driver):
+    driver.assert_passkey_signin_offered()
+
+
+@then("the sign-in page does not offer passkey sign-in")
+def step_passkey_not_offered(driver):
+    driver.assert_passkey_signin_not_offered()
+
+
+@given("they add a passkey")
+@when("they add a passkey")
+def step_add_passkey(driver):
+    driver.add_passkey()
+
+
+@then("their passkey is listed on their profile")
+def step_passkey_listed(driver):
+    driver.assert_passkey_listed()
+
+
+@when("a visitor signs in with their passkey")
+def step_sign_in_with_passkey(driver):
+    driver.sign_in_with_passkey()
+
+
 @when("they try to open the accounts screen")
 def step_try_open_accounts(driver):
     driver.try_open_accounts_screen()

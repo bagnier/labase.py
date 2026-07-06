@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from apps.auth.tests.given_helpers import (
 )
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import VISITOR, BrowserBase
+from tests.e2e.drivers.webauthn import PasskeyDevice
 
 
 class AuthBrowserMixin(BrowserBase):
@@ -267,6 +269,59 @@ class AuthBrowserMixin(BrowserBase):
         location = resp.headers.get("location", "")
         assert "/auth/v1/authorize" in location, f"unexpected redirect: {location}"
         assert f"provider={provider}" in location, f"unexpected provider in: {location}"
+
+    # ── Passkeys ───────────────────────────────────────────────────────────────
+    # The WebAuthn ceremony runs through page.request (real HTTP, the context's
+    # cookies) + the software authenticator — see tests/e2e/drivers/webauthn.py
+    # for why the browser prompt itself cannot run here.
+    def _passkey_post(self, page, path: str, payload: dict) -> dict:
+        resp = page.request.post(
+            f"{self.base_url}{path}",
+            data=json.dumps(payload),
+            headers={"content-type": "application/json", "accept": "application/json"},
+        )
+        assert resp.ok, f"POST {path}: {resp.status} {resp.text()}"
+        return resp.json()
+
+    def assert_passkey_signin_offered(self) -> None:
+        page = self.page_for(VISITOR)
+        page.goto(f"{self.base_url}/auth/login", wait_until="load")
+        page.locator("[data-passkey-signin]").wait_for(timeout=5000)
+
+    def assert_passkey_signin_not_offered(self) -> None:
+        page = self.page_for(VISITOR)
+        page.goto(f"{self.base_url}/auth/login", wait_until="load")
+        assert page.locator("[data-passkey-signin]").count() == 0, "unexpected passkey button"
+
+    def add_passkey(self) -> None:
+        self._passkey_device = PasskeyDevice()
+        page = self.page
+        registration = self._passkey_post(page, "/profile/passkeys/options", {})
+        credential = self._passkey_device.create_credential(registration)
+        self._passkey_post(
+            page,
+            "/profile/passkeys/verify",
+            {"challenge_id": registration["challenge_id"], "credential": credential},
+        )
+
+    def assert_passkey_listed(self) -> None:
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.page.locator("[data-passkey-name]").first.wait_for(timeout=5000)
+
+    def sign_in_with_passkey(self) -> None:
+        device = getattr(self, "_passkey_device", None)
+        assert device is not None, "add_passkey was not called"
+        self.clear_acting_email()  # the visitor doing the ceremony becomes the acting context
+        page = self.page_for(VISITOR)
+        authentication = self._passkey_post(page, "/auth/passkeys/options", {})
+        assertion = device.get_assertion(authentication)
+        self._passkey_post(
+            page,
+            "/auth/passkeys/verify",
+            {"challenge_id": authentication["challenge_id"], "credential": assertion},
+        )
+        # Session cookies landed in the visitor context: enter the app.
+        page.goto(f"{self.base_url}/profile", wait_until="load")
 
     # ── user management (console accounts screen) ─────────────────────────────
     def _accounts_as_admin(self) -> None:

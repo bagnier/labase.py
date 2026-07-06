@@ -10,6 +10,7 @@ from apps.auth.tests.given_helpers import (
 )
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import VISITOR, ApiBase
+from tests.e2e.drivers.webauthn import PasskeyDevice
 
 
 class AuthApiMixin(ApiBase):
@@ -47,12 +48,9 @@ class AuthApiMixin(ApiBase):
         resp = self.client().post("/auth/login", json={"email": email, "password": password})
         self.response = resp
         if self.response.status_code == 200:
-            if self._acting_email == VISITOR:
-                # The visitor client that authenticated becomes this identity's
-                # client, replacing a stale one from an earlier session.
-                self.adopt_current_client(email)
-            else:
-                self.set_acting_email(email)
+            # Whoever's client just authenticated holds `email`'s cookies now —
+            # re-key it under that identity (visitor or a previous user alike).
+            self.adopt_current_client(email)
         self._store_active_slug()
 
     def ensure_registered(self, email: str, password: str) -> None:
@@ -262,6 +260,46 @@ class AuthApiMixin(ApiBase):
         assert any(c.startswith("oauth_code_verifier=") for c in cookies), (
             "PKCE verifier cookie not parked"
         )
+
+    # ── Passkeys ───────────────────────────────────────────────────────────────
+    def assert_passkey_signin_offered(self) -> None:
+        assert "data-passkey-signin" in self._login_page_html(), "no passkey button"
+
+    def assert_passkey_signin_not_offered(self) -> None:
+        assert "data-passkey-signin" not in self._login_page_html(), "unexpected passkey button"
+
+    def add_passkey(self) -> None:
+        self._passkey_device = PasskeyDevice()
+        self._passkey_email = self._acting_email
+        resp = self.client().post("/profile/passkeys/options")
+        assert resp.status_code == 200, f"passkey options: {resp.status_code} {resp.text}"
+        registration = resp.json()
+        credential = self._passkey_device.create_credential(registration)
+        resp = self.client().post(
+            "/profile/passkeys/verify",
+            json={"challenge_id": registration["challenge_id"], "credential": credential},
+        )
+        assert resp.status_code == 200, f"passkey verify: {resp.status_code} {resp.text}"
+
+    def assert_passkey_listed(self) -> None:
+        resp = self.client().get("/profile", headers={"accept": "text/html"})
+        assert resp.status_code == 200
+        assert "data-passkey-name" in resp.text, "no passkey listed on the profile"
+
+    def sign_in_with_passkey(self) -> None:
+        device = getattr(self, "_passkey_device", None)
+        assert device is not None, "add_passkey was not called"
+        client = self.client_for(VISITOR)
+        resp = client.post("/auth/passkeys/options")
+        assert resp.status_code == 200, f"auth options: {resp.status_code} {resp.text}"
+        authentication = resp.json()
+        assertion = device.get_assertion(authentication)
+        self.response = client.post(
+            "/auth/passkeys/verify",
+            json={"challenge_id": authentication["challenge_id"], "credential": assertion},
+        )
+        if self.response.status_code == 200:
+            self.adopt_current_client(self._passkey_email)
 
     # ── user management (console accounts screen) ─────────────────────────────
     def _accounts_as_admin(self) -> None:

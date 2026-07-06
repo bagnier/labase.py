@@ -2,7 +2,7 @@ import base64
 import hashlib
 import secrets
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -139,6 +139,71 @@ async def exchange_oauth_code(code: str, code_verifier: str) -> AuthTokens:
             message = ""
         raise OAuthError(message or "Sign-in with the provider failed.")
     data = res.json()
+    return AuthTokens(access_token=data["access_token"], refresh_token=data["refresh_token"])
+
+
+class PasskeyError(Exception):
+    """GoTrue refused the passkey operation; message is user-safe."""
+
+
+async def _passkey_request(
+    method: str, path: str, json: dict | None = None, access_token: str | None = None
+) -> Any:
+    """Stateless GoTrue passkeys call (beta API, no supabase-py support yet)."""
+    s = get_technical_settings()
+    headers = {"apikey": s.supabase_publishable_key}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    async with httpx.AsyncClient() as client:
+        res = await client.request(
+            method, f"{s.supabase_api_url}/auth/v1/passkeys{path}", headers=headers, json=json
+        )
+    if res.status_code >= 400:
+        try:
+            message = res.json().get("msg", "Passkey operation failed.")
+        except ValueError:
+            message = "Passkey operation failed."
+        raise PasskeyError(message)
+    return res.json() if res.content else None
+
+
+async def passkey_registration_options(access_token: str) -> dict[str, Any]:
+    """WebAuthn creation options for the signed-in user — {challenge_id, options, …}."""
+    return await _passkey_request("POST", "/registration/options", {}, access_token)
+
+
+async def verify_passkey_registration(
+    access_token: str, challenge_id: str, credential: dict[str, Any]
+) -> dict[str, Any]:
+    return await _passkey_request(
+        "POST",
+        "/registration/verify",
+        {"challenge_id": challenge_id, "credential": credential},
+        access_token,
+    )
+
+
+async def list_passkeys(access_token: str) -> list[dict[str, Any]]:
+    return await _passkey_request("GET", "/", access_token=access_token) or []
+
+
+async def delete_passkey(access_token: str, passkey_id: str) -> None:
+    await _passkey_request("DELETE", f"/{passkey_id}", access_token=access_token)
+
+
+async def passkey_authentication_options() -> dict[str, Any]:
+    """Anonymous discoverable-credential request options — {challenge_id, options, …}."""
+    return await _passkey_request("POST", "/authentication/options", {})
+
+
+async def verify_passkey_authentication(
+    challenge_id: str, credential: dict[str, Any]
+) -> AuthTokens:
+    data = await _passkey_request(
+        "POST",
+        "/authentication/verify",
+        {"challenge_id": challenge_id, "credential": credential},
+    )
     return AuthTokens(access_token=data["access_token"], refresh_token=data["refresh_token"])
 
 
