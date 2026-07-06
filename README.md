@@ -372,6 +372,7 @@ make db-reset     # Wipe and reset local DB
 make migrate      # Apply migrations (supabase db push)
 
 make env          # Write .env from `supabase status -o env`
+make upgrade-base # Product clones: merge the latest base (see docs/upgrade-base.md)
 make worktree NAME=x     # New git worktree with its own schema/bucket/port
 make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)
 

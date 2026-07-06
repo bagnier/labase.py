@@ -117,7 +117,7 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   `same-origin`/`none`, falling back to an `Origin` vs host check for older agents.
   → `csrf_protect` middleware in `apps/shared/http/security.py`, mounted by the
   shared `mount()`; rejections logged (`csrf.rejected`) and unit-tested.
-- [ ] **`make upgrade-base`** — JHipster's `jhipster upgrade` solves the cloned-app
+- [x] **`make upgrade-base`** — JHipster's `jhipster upgrade` solves the cloned-app
   problem: regenerate on an orphan `jhipster_upgrade` branch with old then new
   version, 3-way git merge into the product branch, customizations survive. Our
   version: products clone labase, then pull base improvements via a `base` git remote
@@ -126,6 +126,10 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   `apps/shared/` and `main.py`. Pairs with the `new-product` skill (DX gradation):
   together they close the full lifecycle clone → develop → keep benefiting.
   Document the merge protocol (what a product must never edit vs owns fully).
+  → shipped 2026-07-06: `make upgrade-base` (git remote `base` + dated merge
+  branch, `make ci` arbitrates) + `docs/upgrade-base.md` (ownership map:
+  base-owned vs product-owned vs shared files, demo modify/delete rule,
+  append-only migrations); the paired `new-product` skill stays out of scope
 
 ### medium value
 

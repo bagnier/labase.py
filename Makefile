@@ -103,6 +103,22 @@ upgrade:
 	uv lock --upgrade
 	python3 scripts/upgrade.py repin
 
+# --- Base upgrades (for products cloned from labase) ---
+BASE_REMOTE ?= base
+BASE_BRANCH ?= main
+
+# Merge the latest base into a dedicated branch; resolve, `make ci`, then merge
+# into the product branch. Ownership map and protocol: docs/upgrade-base.md.
+upgrade-base:
+	@git remote get-url $(BASE_REMOTE) >/dev/null 2>&1 || { \
+	  echo "no '$(BASE_REMOTE)' remote — one-time setup:"; \
+	  echo "  git remote add $(BASE_REMOTE) <url-of-labase.py>"; \
+	  exit 1; }
+	git fetch $(BASE_REMOTE) $(BASE_BRANCH)
+	git switch -c upgrade-base-$(shell date +%Y%m%d) 2>/dev/null || git switch upgrade-base-$(shell date +%Y%m%d)
+	git merge --no-ff $(BASE_REMOTE)/$(BASE_BRANCH) \
+	  || echo "conflicts to resolve — see docs/upgrade-base.md, then run: make ci"
+
 # doctor: reachability AND latency of the local stack (a wedged Docker proxy
 # accepts TCP but multiplies every round-trip — see scripts/doctor.py).
 doctor:
