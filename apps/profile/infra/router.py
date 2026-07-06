@@ -1,11 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.auth.contract.email_change import EmailChangeError, change_email
 from apps.auth.contract.passwords import PasswordUpdateError, WrongPassword, change_password
+from apps.profile.contract import settings
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.http import parse_body, wants_json
@@ -37,6 +39,7 @@ async def _profile_context(
         "profile": profile,
         "org_handle": orgs[0].handle if orgs else "",
         "org": orgs[0] if orgs else None,
+        "email_change_enabled": bool(settings.email_change_enabled),
         **context,
     }
 
@@ -93,6 +96,46 @@ async def password_change(
         return JSONResponse({"message": "Password changed."})
     ctx = await _profile_context(session, current_user, repo)
     ctx["password_info"] = "Password changed."
+    return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@router.post("/profile/email", response_model=None)
+async def email_change(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: ProfileRepo,
+) -> HTMLResponse | JSONResponse:
+    if not settings.email_change_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    body = await parse_body(request)
+    new_email = str(body.get("new_email", "")).strip().lower()
+    current_password = str(body.get("current_password", ""))
+    error: str | None = None
+    if not new_email or not current_password:
+        error = "New email and current password are required."
+    else:
+        try:
+            await change_email(current_user.email, current_password, new_email)
+        except WrongPassword:
+            error = "Current password is incorrect."
+        except EmailChangeError as e:
+            error = str(e)
+
+    if error is not None:
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=400)
+        ctx = await _profile_context(session, current_user, repo)
+        ctx["email_error"] = error
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+
+    audit(bg, "profile.email_change_requested", user_id=current_user.id, new_email=new_email)
+    info = f"A confirmation email is on its way to {new_email}."
+    if wants_json(request):
+        return JSONResponse({"message": info})
+    ctx = await _profile_context(session, current_user, repo)
+    ctx["email_info"] = info
     return templates.TemplateResponse(request, "profile.html", ctx)
 
 

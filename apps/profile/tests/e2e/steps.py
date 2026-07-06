@@ -64,3 +64,33 @@ def step_assert_update_rejected(driver):
 @then("their email is shown as read-only")
 def step_assert_email_read_only(driver):
     driver.assert_email_read_only()
+
+
+@when(parsers.parse('they request to change their email to "{new_email}" using password "{pw}"'))
+def step_request_email_change(driver, new_email, pw):
+    driver.request_email_change(new_email, pw)
+
+
+@then("they are told a confirmation email is on its way")
+def step_assert_email_change_pending(driver):
+    driver.assert_email_change_pending()
+
+
+@then(parsers.parse('an email change link is delivered to "{email}"'))
+def step_assert_email_change_delivered(driver, email):
+    driver.assert_email_change_delivered(email)
+
+
+@when(parsers.parse('they confirm the change using the link emailed to "{email}"'))
+def step_confirm_email_change(driver, email):
+    driver.confirm_email_change(email)
+
+
+@then("the email change is rejected")
+def step_assert_email_change_rejected(driver):
+    driver.assert_email_change_rejected()
+
+
+@then("the email change option is not offered")
+def step_assert_email_change_not_offered(driver):
+    driver.assert_email_change_not_offered()

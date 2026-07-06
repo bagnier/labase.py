@@ -48,12 +48,17 @@ def wait_for_message(
             time.sleep(0.3)
 
 
-def recovery_token(email: str, since: datetime) -> str:
-    """token_hash from the freshest GoTrue recovery mail sent to `email` this scenario."""
+def token_hash_from_mail(email: str, since: datetime) -> str:
+    """token_hash from the freshest GoTrue mail (recovery, email change…) to `email`."""
     message = wait_for_message(to=email, containing="token_hash=", since=since)
     match = _TOKEN_HASH.search(message.get("Text") or "")
-    assert match, f"no token_hash in recovery mail: {message.get('Text')!r}"
+    assert match, f"no token_hash in mail: {message.get('Text')!r}"
     return match.group(1)
+
+
+def recovery_token(email: str, since: datetime) -> str:
+    """token_hash from the freshest GoTrue recovery mail sent to `email` this scenario."""
+    return token_hash_from_mail(email, since)
 
 
 def assert_invitation_delivered(email: str, token: str | None) -> None:

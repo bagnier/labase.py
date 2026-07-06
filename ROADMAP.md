@@ -3,8 +3,8 @@
 ### contract-readiness — what any client contract would re-pay
 
 - [ ] email — two routes, lightest possible:
-  - [ ] auth lifecycle (forgot/reset password, confirmation, email change) → GoTrue calls + Supabase email templates, zero app code
-    (forgot/reset ✓ and confirmation ✓ shipped; email change still open)
+  - [x] auth lifecycle (forgot/reset password, confirmation, email change) → GoTrue calls + Supabase email templates, zero app code
+    (forgot/reset ✓, confirmation ✓, email change ✓ — see advanced auth)
   - [x] app transactional (org invitations — token exists but is never sent) → tiny `Mailer` port in `apps/shared/email.py` (`Email` dataclass + `Protocol` + `SmtpMailer` via aiosmtplib, env-configured); Jinja2 for text/html; sent via `BackgroundTasks` (audit-style best-effort), moves behind the async-substrate queue later without changing the port
   - [x] dev: SMTP → local Supabase mail catcher (Inbucket/Mailpit, SMTP 54325) — same inbox as GoTrue mail, nothing to install; prod: any SMTP provider, no vendor SDK (`SMTP_*` env vars)
   - [x] tests: unit → `FakeMailer` recording sent emails (single injection point, clock-style); E2E sincere → driver substrate reads the mail catcher HTTP API (mail really sent, really fetched, both drivers share one mailbox client — `tests/e2e/drivers/mailbox.py`)
@@ -263,7 +263,12 @@ plug real tooling without rewriting anything.
 - [x] Password change (authenticated) — POST /profile/password
   → re-authenticates with the current password via `auth.contract.passwords`,
   then GoTrue update; form on the profile page; audited
-- [ ] Email change — POST /profile/email + SQL trigger to sync profiles.email
+- [x] Email change — POST /profile/email + SQL trigger to sync profiles.email
+  → re-auth with current password, then GoTrue mails the confirmation to the new
+  address (custom `email_change` template, single confirm); `/auth/confirm-email`
+  verifies and re-issues the session; trigger keeps `profiles.email` in sync;
+  admin-switchable via `profile.email_change_enabled` (every advanced-auth option
+  gets its own declared setting — 2026-07-06 decision)
 - [ ] Account deletion — DELETE /profile + cascade + logout
 - [ ] Unconfirmed email verification — block login cleanly if email_confirmed_at is null
 - [ ] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable

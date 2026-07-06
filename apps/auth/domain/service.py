@@ -103,6 +103,30 @@ async def update_password(access_token: str, new_password: str) -> None:
         raise PasswordUpdateError(message)
 
 
+class EmailChangeError(Exception):
+    """GoTrue refused the email change (invalid or taken address); message is user-safe."""
+
+
+async def request_email_change(access_token: str, new_email: str) -> None:
+    """Ask GoTrue to mail a confirmation to the new address — stateless, like update_password."""
+    s = get_technical_settings()
+    async with httpx.AsyncClient() as client:
+        res = await client.put(
+            f"{s.supabase_api_url}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "apikey": s.supabase_publishable_key,
+            },
+            json={"email": new_email},
+        )
+    if res.status_code >= 400:
+        try:
+            message = res.json().get("msg", "Email change failed.")
+        except ValueError:
+            message = "Email change failed."
+        raise EmailChangeError(message)
+
+
 async def confirm_signup(token_hash: str, type: str = "signup") -> AuthTokens:
     """Exchange an email confirmation token for a session."""
     supabase = await get_user_supabase()

@@ -80,6 +80,8 @@ _INFO_MESSAGES: dict[str, str] = {
     "registered_pending_email": "Account created. Please verify your email before signing in.",
     "registered_active": "Account created. You can now sign in.",
     "password_reset": "Your password was changed. You can now sign in.",
+    "email_change_failed": "This confirmation link is invalid or has expired. "
+    "Please request the change again from your profile.",
 }
 
 
@@ -391,6 +393,30 @@ async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Resp
     return RedirectResponse(
         "/auth/login?info=password_reset", status_code=status.HTTP_303_SEE_OTHER
     )
+
+
+@router.get("/confirm-email")
+@rate_limit("10/minute")
+async def confirm_email_endpoint(
+    request: Request, bg: BackgroundTasks, token_hash: str = Query(default="")
+) -> Response:
+    """Finalize an email change from the link mailed to the new address.
+
+    Anonymous on purpose — the single-use token IS the credential (the reader of
+    the new mailbox proves ownership), and the requesting session may be gone.
+    """
+    try:
+        tokens = await confirm_signup(token_hash, type="email_change")
+    except Exception:
+        log.exception("auth.email_change_failed", token_hash=token_hash[:8])
+        return RedirectResponse(
+            "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
+        )
+    claims = decode_jwt(tokens.access_token)
+    audit(bg, "auth.email_changed", user_id=str(claims.get("sub", "")))
+    resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
+    set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
+    return resp
 
 
 @router.get("/confirm")

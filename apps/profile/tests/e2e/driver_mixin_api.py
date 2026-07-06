@@ -1,12 +1,68 @@
+from datetime import UTC, datetime
+
 import httpx
 
+from apps.auth.tests.given_helpers import delete_user_if_exists
+from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
 
 
 class ProfileApiMixin(ApiBase):
     def reset_session(self) -> None:
         self.response: httpx.Response | None = None
+        self._email_change_requested_at: datetime | None = None
         super().reset_session()
+
+    # ── email change ──────────────────────────────────────────────────────────
+    def request_email_change(self, new_email: str, password: str) -> None:
+        # Self-healing (register_disposable pattern): a previous run's confirmed
+        # change leaves the new address registered; GoTrue refuses reusing it.
+        delete_user_if_exists(new_email)
+        self._track_auth_email(new_email)  # the confirmed user carries this email at teardown
+        self._email_change_requested_at = datetime.now(UTC)
+        self.response = self.client().post(
+            "/profile/email",
+            json={"new_email": new_email, "current_password": password},
+            headers={"accept": "application/json"},
+        )
+
+    def assert_email_change_pending(self) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 200, (
+            f"expected 200, got {self.response.status_code} {self.response.text}"
+        )
+        assert "confirmation email" in self.response.json().get("message", "")
+
+    def assert_email_change_delivered(self, new_email: str) -> None:
+        assert self._email_change_requested_at is not None, "no email change requested"
+        mailbox.wait_for_message(
+            to=new_email, containing="token_hash=", since=self._email_change_requested_at
+        )
+
+    def confirm_email_change(self, new_email: str) -> None:
+        assert self._email_change_requested_at is not None, "no email change requested"
+        token_hash = mailbox.token_hash_from_mail(new_email, since=self._email_change_requested_at)
+        resp = self.client().get(
+            f"/auth/confirm-email?token_hash={token_hash}", follow_redirects=False
+        )
+        assert resp.status_code == 303, f"confirm failed: {resp.status_code} {resp.text}"
+        assert resp.headers.get("location") == "/profile", resp.headers.get("location")
+        self.rekey_acting_identity(new_email)
+
+    def assert_email_change_rejected(self) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 400, (
+            f"expected 400, got {self.response.status_code} {self.response.text}"
+        )
+
+    def assert_email_change_not_offered(self) -> None:
+        # REST face of "the option is gone": the endpoint itself answers 404.
+        resp = self.client().post(
+            "/profile/email",
+            json={"new_email": "probe@labase.dev", "current_password": "x"},
+            headers={"accept": "application/json"},
+        )
+        assert resp.status_code == 404, f"expected 404, got {resp.status_code} {resp.text}"
 
     def view_profile(self) -> None:
         self.response = self.client().get("/profile")

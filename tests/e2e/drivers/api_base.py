@@ -114,5 +114,13 @@ class ApiBase:
             self._clients[email] = self._clients.pop(VISITOR)
         self._acting_email = email
 
+    def rekey_acting_identity(self, email: str) -> None:
+        """The acting user changed identity in place (e.g. confirmed an email change):
+        their live session keeps its cookies but now answers to the new email."""
+        old = self._acting_email
+        if old != email and old in self._clients and email not in self._clients:
+            self._clients[email] = self._clients.pop(old)
+        self._acting_email = email
+
     def clear_acting_email(self) -> None:
         self._acting_email = VISITOR

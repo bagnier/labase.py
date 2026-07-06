@@ -5,6 +5,9 @@ site_url = "http://localhost:8000"
 
 [auth.email]
 enable_confirmations = false
+# Email change: single confirmation from the NEW address (light path for a
+# starting product); the template carries token_hash to our SSR route.
+double_confirm_changes = false
 
 # GoTrue's default is 2 emails/hour — unusable for the E2E password-reset
 # scenarios that really send recovery mail through the local catcher.
@@ -14,6 +17,10 @@ email_sent = 1000
 [auth.email.template.recovery]
 subject = "Reset your password"
 content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new email"
+content_path = "./supabase/templates/email_change.html"
 
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.

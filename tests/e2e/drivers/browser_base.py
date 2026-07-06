@@ -147,6 +147,17 @@ class BrowserBase:
                 self._pages[email] = self._pages.pop(_VISITOR)
         self._acting_email = email
 
+    def rekey_acting_identity(self, email: str) -> None:
+        """The acting user changed identity in place (e.g. confirmed an email change):
+        their live context keeps its cookies but now answers to the new email."""
+        old = self._acting_email
+        if old != email:
+            if old in self._contexts and email not in self._contexts:
+                self._contexts[email] = self._contexts.pop(old)
+            if old in self._pages and email not in self._pages:
+                self._pages[email] = self._pages.pop(old)
+        self._acting_email = email
+
     def clear_acting_email(self) -> None:
         self._acting_email = _VISITOR
 

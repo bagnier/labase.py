@@ -2,12 +2,18 @@
 
 from sqlalchemy import func, select
 
+from apps.profile.contract import settings
 from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
 from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import SupabaseLink, declare_app_settings
+from apps.settings.contract.settings import (
+    SettingDef,
+    SettingsChanged,
+    SupabaseLink,
+    declare_app_settings,
+)
 from apps.shared.host import Host
 from apps.shared.slug_registry import register_open_list
 
@@ -16,11 +22,21 @@ def mount(host: Host) -> None:
     host.app.include_router(router, tags=["profile"])
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("profile", provide_profile_handle)
-    declare_app_settings(
+    # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
+    settings.group = declare_app_settings(
         "profile",
-        defs=[],
+        defs=[
+            SettingDef(
+                "email_change_enabled",
+                "boolean",
+                "true",
+                "Allow users to change their sign-in email",
+            ),
+        ],
         supabase=SupabaseLink("Browse profiles in Supabase", table="profiles"),
     )
+    settings.read()
+    host.events.on(SettingsChanged, settings.reload)
     host.reserve("profile")
     register_open_list("profiles", profile_handle_taken)
 
