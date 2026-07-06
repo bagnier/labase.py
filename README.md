@@ -261,12 +261,29 @@ labase.py/
 ├── tests/                 # pytest plugin entry (plugin.py) + config tests; e2e drivers in e2e/
 ├── static/                # Compiled CSS, HTMX, fonts (gitignored)
 ├── supabase/migrations/   # Versioned SQL (Supabase CLI)
-├── client/                # Generated Python API client (labase-client package)
+├── client/                # Generated Python API client (labase-client, see below)
 ├── docs/                  # Generated schema documentation (one .md per table)
 ├── docker/                # Dockerfile(s), docker-compose.yml, entrypoint.sh
 ├── package.json           # Tailwind + daisyUI build, Biome
 └── Makefile               # Common commands
 ```
+
+### The generated API client — `client/`
+
+Because every business endpoint also speaks JSON, the OpenAPI schema is a full
+description of the app — `make client-gen` regenerates a typed Python client
+from it (`openapi-python-client`, package `labase-client`). It is generated
+code: never edit it, re-run `make client-gen` after changing routes or DTOs.
+
+Today it has one consumer: the Locust perf smokes (`perf/`, `make perf-smoke`)
+drive the API through it, which keeps the client honest — a route or DTO drift
+breaks the smoke run. It is also the natural starting point for any external
+Python integration against a product built on this base.
+
+### Backups
+
+Postgres is backed up by the platform; Storage bytes are not in any SQL dump.
+What is covered by what, PITR, and the restore drill: [docs/backups.md](docs/backups.md).
 
 ### Local setup
 

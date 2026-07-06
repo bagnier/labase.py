@@ -30,9 +30,9 @@ Les deux échouent avec « AAL2 session is required to update email or password 
 - [x] forgot/reset password (see advanced auth below)
 - [ ] prod deployment: compose/manifest, secrets story beyond `.env` files, deploy doc
   (2026-07-06: dropped — out of scope for now)
-- [ ] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
+- [x] monitoring: metrics + error tracking (Sentry) on top of health probes; backup/PITR doc
   (error-tracking half shipped as the `apps/issues` brick, metrics half as the
-  `apps/metrics` brick — see their sections below; backup/PITR doc still open)
+  `apps/metrics` brick — see their sections below; backup/PITR doc → `docs/backups.md`)
 - [x] rate limiter: in-memory slowapi → shared store (first client of Postgres-as-Redis)
   → slowapi removed; fixed-window counters in `rate_limit_counters` (atomic upsert,
   multi-instance correct, fail-open, opportunistic per-key cleanup — a real purge
@@ -76,7 +76,7 @@ Les deux échouent avec « AAL2 session is required to update email or password 
 
 - [x] decide `client/` fate: unused → remove/extract; used → document it
   → decided 2026-07-05: **keep** (candidate substrate for the perf smoke tests);
-  still to do: document it in README
+  documented in README ("The generated API client") 2026-07-06
 - [x] `learning` contradicts its own hexagonal lesson: no port Protocol (organizations has one), only repo not extending `OrgScopedRepository` — align or re-label the demo
   → aligned: `ReviewRepositoryProtocol` port + `review_card` domain use-case (daily
   cap + scheduling moved out of the router); the repo deliberately stays outside
