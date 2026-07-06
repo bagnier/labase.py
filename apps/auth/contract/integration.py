@@ -41,6 +41,12 @@ def mount(host: Host) -> None:
                 "true",
                 "Console screen to disable or delete server accounts",
             ),
+            SettingDef(
+                "two_factor_enabled",
+                "boolean",
+                "true",
+                "Authenticator-app (TOTP) two-factor sign-in",
+            ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
     )

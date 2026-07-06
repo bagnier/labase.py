@@ -291,7 +291,11 @@ plug real tooling without rewriting anything.
   on our SSR `/auth/confirm`), switchable via `users.resend_confirmation_enabled`
 - [x] Avatar — upload to Supabase Storage, the org_files pattern is directly reusable
   (see "photo de profil" above — same item)
-- [ ] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
+- [x] 2FA TOTP — Supabase Auth handles it natively, just wire up the UI flow
+  → enrolment on the profile (secret + code confirm), step-up at sign-in (AAL1
+  tokens parked in 5-min cookies until the code verifies, AAL2 session issued);
+  stateless GoTrue /factors calls; `pyotp` drives real codes in both drivers;
+  switch `users.two_factor_enabled` doubles as the lost-authenticator bypass
 - [ ] OAuth social login (Google, GitHub) — callback page + merge with existing email account via auth.identities
 - [ ] Passkeys / WebAuthn — auth.webauthn_credentials is already in the Supabase schema
 

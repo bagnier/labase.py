@@ -248,3 +248,39 @@ def step_admin_tries_open_accounts(driver):
 @then("the accounts screen is not found")
 def step_assert_accounts_not_found(driver):
     driver.assert_accounts_screen_not_found()
+
+
+@given("they enrol an authenticator app")
+@when("they enrol an authenticator app")
+def step_enroll_totp(driver):
+    driver.enroll_totp()
+
+
+@then("their profile shows two-factor as enabled")
+def step_assert_twofa_enabled(driver):
+    driver.assert_twofa_enabled()
+
+
+@then("they are asked for their authenticator code")
+def step_assert_mfa_challenge(driver):
+    driver.assert_mfa_challenge()
+
+
+@when("they enter a valid authenticator code")
+def step_enter_valid_code(driver):
+    driver.enter_totp_code(None)
+
+
+@when(parsers.parse('they enter the authenticator code "{code}"'))
+def step_enter_code(driver, code):
+    driver.enter_totp_code(code)
+
+
+@then("the authenticator code is rejected")
+def step_assert_code_rejected(driver):
+    driver.assert_totp_rejected()
+
+
+@then("the two-factor option is not offered")
+def step_assert_twofa_not_offered(driver):
+    driver.assert_twofa_not_offered()

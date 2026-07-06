@@ -85,6 +85,83 @@ async def resend_confirmation(email: str) -> None:
     await supabase.auth.resend({"type": "signup", "email": email})
 
 
+class TotpError(Exception):
+    """GoTrue refused the TOTP operation; message is user-safe."""
+
+
+@dataclass(frozen=True)
+class TotpEnrollment:
+    factor_id: str
+    secret: str
+    uri: str
+
+
+async def _factors_request(method: str, path: str, access_token: str, json: dict) -> dict:
+    """Stateless GoTrue MFA call (like update_password) — the supabase-py MFA
+    client wants a stateful session we deliberately don't keep."""
+    s = get_technical_settings()
+    async with httpx.AsyncClient() as client:
+        res = await client.request(
+            method,
+            f"{s.supabase_api_url}/auth/v1/factors{path}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "apikey": s.supabase_publishable_key,
+            },
+            json=json,
+        )
+    if res.status_code >= 400:
+        try:
+            message = res.json().get("msg", "Two-factor operation failed.")
+        except ValueError:
+            message = "Two-factor operation failed."
+        raise TotpError(message)
+    return res.json()
+
+
+async def enroll_totp(access_token: str) -> TotpEnrollment:
+    data = await _factors_request(
+        "POST", "", access_token, {"factor_type": "totp", "friendly_name": "authenticator"}
+    )
+    return TotpEnrollment(
+        factor_id=data["id"], secret=data["totp"]["secret"], uri=data["totp"]["uri"]
+    )
+
+
+async def totp_challenge(access_token: str, factor_id: str) -> str:
+    data = await _factors_request("POST", f"/{factor_id}/challenge", access_token, {})
+    return data["id"]
+
+
+async def verify_totp(
+    access_token: str, factor_id: str, challenge_id: str, code: str
+) -> AuthTokens:
+    """A correct code upgrades the session (AAL2) — GoTrue returns fresh tokens."""
+    data = await _factors_request(
+        "POST", f"/{factor_id}/verify", access_token, {"challenge_id": challenge_id, "code": code}
+    )
+    return AuthTokens(access_token=data["access_token"], refresh_token=data["refresh_token"])
+
+
+async def verified_totp_factor(access_token: str) -> str | None:
+    """The id of the account's verified TOTP factor, if any (drives the login step-up)."""
+    s = get_technical_settings()
+    async with httpx.AsyncClient() as client:
+        res = await client.get(
+            f"{s.supabase_api_url}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "apikey": s.supabase_publishable_key,
+            },
+        )
+    if res.status_code >= 400:
+        return None
+    for factor in res.json().get("factors") or []:
+        if factor.get("factor_type") == "totp" and factor.get("status") == "verified":
+            return str(factor.get("id"))
+    return None
+
+
 class PasswordUpdateError(Exception):
     """GoTrue refused the new password (typically weak_password); message is user-safe."""
 

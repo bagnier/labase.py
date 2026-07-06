@@ -23,13 +23,18 @@ from apps.auth.contract.impersonation import (
     impersonation_tokens,
 )
 from apps.auth.domain.service import (
+    AuthTokens,
     PasswordUpdateError,
+    TotpError,
     confirm_signup,
     login,
     logout,
     request_password_reset,
     resend_confirmation,
+    totp_challenge,
     update_password,
+    verified_totp_factor,
+    verify_totp,
 )
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
@@ -132,6 +137,10 @@ async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
         )
     try:
         tokens = await login(email, password)
+        if settings.two_factor_enabled:
+            factor_id = await verified_totp_factor(tokens.access_token)
+            if factor_id:
+                return await _mfa_challenge_response(request, tokens, factor_id, next)
         if wants_json(request):
             resp = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
             set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -170,6 +179,82 @@ async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
             },
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+
+
+_MFA_COOKIE = "mfa_access_token"
+_MFA_REFRESH_COOKIE = "mfa_refresh_token"
+_MFA_MAX_SECONDS = 300
+
+
+async def _mfa_challenge_response(
+    request: Request, tokens: AuthTokens, factor_id: str, next: str
+) -> Response:
+    """Correct password, TOTP enrolled: hold the AAL1 tokens in short-lived
+    cookies and ask for the authenticator code before issuing the session."""
+    challenge_id = await totp_challenge(tokens.access_token, factor_id)
+    if wants_json(request):
+        resp: Response = JSONResponse(
+            {"mfa_required": True, "factor_id": factor_id, "challenge_id": challenge_id}
+        )
+    else:
+        resp = templates.TemplateResponse(
+            request,
+            "mfa.html",
+            {"factor_id": factor_id, "challenge_id": challenge_id, "next": next},
+        )
+    for name, value in (
+        (_MFA_COOKIE, tokens.access_token),
+        (_MFA_REFRESH_COOKIE, tokens.refresh_token),
+    ):
+        resp.set_cookie(
+            name,
+            value,
+            max_age=_MFA_MAX_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=get_technical_settings().cookies_secure,
+        )
+    return resp
+
+
+@router.post("/mfa")
+@rate_limit("10/minute")
+async def mfa_verify_endpoint(
+    request: Request,
+    bg: BackgroundTasks,
+    mfa_access_token: str | None = Cookie(default=None),
+) -> Response:
+    body = await parse_body(request)
+    code = str(body.get("code", "")).strip()
+    factor_id = str(body.get("factor_id", ""))
+    if not mfa_access_token or not factor_id:
+        return RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
+    challenge_id = str(body.get("challenge_id", ""))
+    next = str(body.get("next", ""))
+    try:
+        tokens = await verify_totp(mfa_access_token, factor_id, challenge_id, code)
+    except TotpError:
+        audit(bg, "auth.mfa_failed", level="warning", factor_id=factor_id)
+        error = "That code did not work. Try the next one from your app."
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
+        # The challenge may be consumed: mint a fresh one for the retry.
+        challenge_id = await totp_challenge(mfa_access_token, factor_id)
+        return templates.TemplateResponse(
+            request,
+            "mfa.html",
+            {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    audit(bg, "auth.mfa_verified", factor_id=factor_id)
+    if wants_json(request):
+        resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
+    else:
+        resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
+    set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
+    resp.delete_cookie(_MFA_COOKIE)
+    resp.delete_cookie(_MFA_REFRESH_COOKIE)
+    return resp
 
 
 @router.post("/logout")

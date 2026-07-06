@@ -9,7 +9,7 @@ from apps.auth.tests.given_helpers import (
     find_users,
 )
 from tests.e2e.drivers import mailbox
-from tests.e2e.drivers.api_base import ApiBase
+from tests.e2e.drivers.api_base import VISITOR, ApiBase
 
 
 class AuthApiMixin(ApiBase):
@@ -21,6 +21,8 @@ class AuthApiMixin(ApiBase):
         self._reset_email: str | None = None
         self._reset_requested_at: datetime | None = None
         self._confirmation_requested_at: datetime | None = None
+        self._totp_secret: str | None = None
+        self._mfa_challenge: dict | None = None
         super().reset_session()
 
     # ── HTML page access (auth smoke flows) ────────────────────────────────────
@@ -45,7 +47,12 @@ class AuthApiMixin(ApiBase):
         resp = self.client().post("/auth/login", json={"email": email, "password": password})
         self.response = resp
         if self.response.status_code == 200:
-            self.set_acting_email(email)
+            if self._acting_email == VISITOR:
+                # The visitor client that authenticated becomes this identity's
+                # client, replacing a stale one from an earlier session.
+                self.adopt_current_client(email)
+            else:
+                self.set_acting_email(email)
         self._store_active_slug()
 
     def ensure_registered(self, email: str, password: str) -> None:
@@ -165,6 +172,63 @@ class AuthApiMixin(ApiBase):
             json={"email": ""},
             headers={"accept": "application/json"},
         )
+        assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
+
+    # ── two-factor (TOTP) ─────────────────────────────────────────────────────
+    def enroll_totp(self) -> None:
+        import pyotp
+
+        resp = self.client().post("/profile/2fa/enroll", headers={"accept": "application/json"})
+        assert resp.status_code == 200, f"enroll: {resp.status_code} {resp.text}"
+        data = resp.json()
+        self._totp_secret = data["secret"]
+        code = pyotp.TOTP(self._totp_secret).now()
+        self.response = self.client().post(
+            "/profile/2fa/verify",
+            json={"factor_id": data["factor_id"], "code": code},
+            headers={"accept": "application/json"},
+        )
+        assert self.response.status_code == 200, (
+            f"verify enrolment: {self.response.status_code} {self.response.text}"
+        )
+
+    def assert_twofa_enabled(self) -> None:
+        assert self.response is not None
+        assert "Two-factor enabled" in self.response.json().get("message", "")
+
+    def assert_mfa_challenge(self) -> None:
+        assert self.response is not None
+        body = self.response.json()
+        assert body.get("mfa_required") is True, f"no mfa challenge: {body}"
+        self._mfa_challenge = body
+
+    def enter_totp_code(self, code: str | None) -> None:
+        import pyotp
+
+        if self._mfa_challenge is None and self.response is not None:
+            body = self.response.json()
+            if body.get("mfa_required"):
+                self._mfa_challenge = body
+        assert self._mfa_challenge is not None, "no pending mfa challenge"
+        if code is None:
+            assert self._totp_secret is not None, "no enrolled secret"
+            code = pyotp.TOTP(self._totp_secret).now()
+        self.response = self.client().post(
+            "/auth/mfa",
+            json={
+                "code": code,
+                "factor_id": self._mfa_challenge["factor_id"],
+                "challenge_id": self._mfa_challenge["challenge_id"],
+            },
+            headers={"accept": "application/json"},
+        )
+
+    def assert_totp_rejected(self) -> None:
+        assert self.response is not None
+        assert self.response.status_code == 401, f"expected 401, got {self.response.status_code}"
+
+    def assert_twofa_not_offered(self) -> None:
+        resp = self.client().post("/profile/2fa/enroll", headers={"accept": "application/json"})
         assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
 
     # ── user management (console accounts screen) ─────────────────────────────

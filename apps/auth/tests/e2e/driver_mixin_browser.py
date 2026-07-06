@@ -18,6 +18,7 @@ class AuthBrowserMixin(BrowserBase):
         self._reset_email: str | None = None
         self._reset_requested_at: datetime | None = None
         self._confirmation_requested_at: datetime | None = None
+        self._totp_secret: str | None = None
         super().reset_session()
 
     def _delete_user_if_exists(self, email: str) -> None:
@@ -186,6 +187,49 @@ class AuthBrowserMixin(BrowserBase):
     def assert_resend_not_offered(self) -> None:
         assert self.page.locator("[data-resend-confirmation]").count() == 0, (
             "resend affordance should be hidden when the option is off"
+        )
+
+    # ── two-factor (TOTP) ─────────────────────────────────────────────────────
+    def enroll_totp(self) -> None:
+        import pyotp
+
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.page.locator("[data-twofa]").get_by_role("button", name="Enable two-factor").click()
+        self.page.wait_for_selector("[data-totp-secret]", timeout=5000)
+        self._totp_secret = self.page.locator("[data-totp-secret]").get_attribute(
+            "data-totp-secret"
+        )
+        assert self._totp_secret, "no TOTP secret rendered"
+        section = self.page.locator("[data-twofa]")
+        section.get_by_label("Authenticator code").fill(pyotp.TOTP(self._totp_secret).now())
+        section.get_by_role("button", name="Confirm", exact=True).click()
+        self.page.wait_for_selector("[data-twofa-active]", timeout=5000)
+
+    def assert_twofa_enabled(self) -> None:
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.page.wait_for_selector("[data-twofa-active]", timeout=5000)
+
+    def assert_mfa_challenge(self) -> None:
+        self.page.wait_for_selector("[data-mfa-form]", timeout=5000)
+
+    def enter_totp_code(self, code: str | None) -> None:
+        import pyotp
+
+        if code is None:
+            assert self._totp_secret, "no enrolled secret"
+            code = pyotp.TOTP(self._totp_secret).now()
+        self.page.get_by_label("Authenticator code").fill(code)
+        self.page.get_by_role("button", name="Verify").click()
+        self.page.wait_for_load_state("load")
+
+    def assert_totp_rejected(self) -> None:
+        alert = self.page.locator("[data-mfa-form] .alert", has_text="did not work")
+        alert.wait_for(timeout=5000)
+
+    def assert_twofa_not_offered(self) -> None:
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        assert self.page.locator("[data-twofa]").count() == 0, (
+            "two-factor section should be hidden when the option is off"
         )
 
     # ── user management (console accounts screen) ─────────────────────────────

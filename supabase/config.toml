@@ -26,6 +26,11 @@ content_path = "./supabase/templates/email_change.html"
 subject = "Confirm your email address"
 content_path = "./supabase/templates/confirmation.html"
 
+# Two-factor: the app wires GoTrue's native TOTP factors (enroll/challenge/verify).
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.
 [inbucket]

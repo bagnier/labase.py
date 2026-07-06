@@ -114,6 +114,19 @@ class ApiBase:
             self._clients[email] = self._clients.pop(VISITOR)
         self._acting_email = email
 
+    def adopt_current_client(self, email: str) -> None:
+        """The acting (visitor) client just authenticated as `email`: key it under
+        that identity, replacing any stale client left from an earlier session."""
+        old = self._acting_email
+        if old == email or old not in self._clients:
+            self._acting_email = email
+            return
+        stale = self._clients.pop(email, None)
+        if stale is not None:
+            stale.close()
+        self._clients[email] = self._clients.pop(old)
+        self._acting_email = email
+
     def rekey_acting_identity(self, email: str) -> None:
         """The acting user changed identity in place (e.g. confirmed an email change):
         their live session keeps its cookies but now answers to the new email."""

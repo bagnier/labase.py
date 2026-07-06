@@ -1,0 +1,23 @@
+{% extends "base_public.html" %}
+{% from "macros/alert.html" import alert %}
+{% from "macros/input_field.html" import input_field %}
+{% block title %}Two-factor — labase{% endblock %}
+{% block content %}
+  <div class="card-panel" data-mfa-form>
+    <div class="card-body">
+      <div class="mb-2">
+        <h1 class="card-title text-xl">Almost there</h1>
+        <p class="text-sm text-base-content/70 mt-1">Enter the code from your authenticator app.</p>
+      </div>
+      {{ alert('error', error) }}
+      <form method="post" action="/auth/mfa" class="space-y-4">
+        <input type="hidden" name="factor_id" value="{{ factor_id }}">
+        <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        {{ input_field("code", "code", label="Authenticator code",
+                placeholder="123456", required=true) }}
+        <button type="submit" class="btn btn-primary w-full mt-1">Verify</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

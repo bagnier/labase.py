@@ -152,6 +152,40 @@
         </form>
       </div>
     </section>
+    {% if two_factor_enabled %}
+      <section class="card-panel" data-twofa>
+        <div class="card-body">
+          <h2 class="card-title text-sm font-semibold mb-3">
+            Two-factor authentication
+            {% if twofa_active %}<span class="badge badge-sm badge-success" data-twofa-active>enabled</span>{% endif %}
+          </h2>
+          {{ alert('error', twofa_error) }}
+          {{ alert('success', twofa_info) }}
+          {% if twofa_enrollment %}
+            <p class="text-sm text-base-content/70 mb-2">
+              Add this secret to your authenticator app, then enter the 6-digit code:
+            </p>
+            <code class="block text-xs bg-base-200 rounded-box p-3 break-all mb-3"
+                  data-totp-secret="{{ twofa_enrollment.secret }}">{{ twofa_enrollment.uri }}</code>
+            <form method="post" action="/profile/2fa/verify" class="space-y-4 max-w-sm">
+              <input type="hidden"
+                     name="factor_id"
+                     value="{{ twofa_enrollment.factor_id }}">
+              {{ input_field("twofa_code", "code", label="Authenticator code",
+                            placeholder="123456", required=true) }}
+              <button type="submit" class="btn btn-primary">Confirm</button>
+            </form>
+          {% elif twofa_active %}
+            <p class="text-sm text-base-content/70">Sign-in now asks for a code after the password.</p>
+          {% else %}
+            <p class="text-sm text-base-content/70 mb-3">Require a code from your authenticator app at sign-in.</p>
+            <form method="post" action="/profile/2fa/enroll">
+              <button type="submit" class="btn">Enable two-factor</button>
+            </form>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
     <section class="card-panel">
       <div class="card-body">
         <h2 class="card-title text-sm font-semibold mb-3">Session</h2>

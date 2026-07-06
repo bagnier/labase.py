@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Two-factor — mockup</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f5f5f4; margin: 2rem; color: #1c1917; }
+  .screen { background: white; border: 1px solid #d6d3d1; border-radius: 12px; padding: 1.5rem; max-width: 28rem; margin-bottom: 2rem; }
+  input { width: 100%; padding: .5rem; border: 1px solid #d6d3d1; border-radius: 8px; box-sizing: border-box; margin-bottom: .5rem; }
+  button { padding: .5rem 1rem; border-radius: 8px; border: none; background: #4f46e5; color: white; }
+  code { background: #f5f5f4; padding: .3rem .5rem; border-radius: 6px; display: block; font-size: .8rem; word-break: break-all; margin: .5rem 0; }
+  .badge { font-size: .7rem; padding: .15rem .5rem; border-radius: 999px; border: 1px solid #16a34a; color: #16a34a; }
+  .error { background: #fef2f2; border: 1px solid #ef4444; padding: .6rem; border-radius: 8px; font-size: .85rem; }
+  .note { font-size: .78rem; color: #78716c; font-style: italic; }
+</style>
+</head>
+<body>
+
+<!-- State 1: profile section, not enrolled -->
+<div class="screen">
+  <h2>Two-factor authentication</h2>
+  <p class="note">Section on /profile, hidden when users.two_factor_enabled = false.</p>
+  <button>Enable two-factor</button> <!-- POST /profile/2fa/enroll -->
+</div>
+
+<!-- State 2: enrolment in progress — secret shown, code asked -->
+<div class="screen">
+  <h2>Two-factor authentication</h2>
+  <p>Add this secret to your authenticator app, then enter the 6-digit code:</p>
+  <code>otpauth://totp/labase:vault@labase.dev?secret=JBSWY3DPEHPK3PXP&issuer=labase</code>
+  <form> <!-- POST /profile/2fa/verify -->
+    <input placeholder="123456" inputmode="numeric" maxlength="6">
+    <button type="submit">Confirm</button>
+  </form>
+</div>
+
+<!-- State 3: enrolled -->
+<div class="screen">
+  <h2>Two-factor authentication <span class="badge">enabled</span></h2>
+  <p class="note">Sign-in now asks for a code after the password.</p>
+</div>
+
+<!-- State 4: sign-in challenge (after correct password) -->
+<div class="screen">
+  <h1>Almost there</h1>
+  <p>Enter the code from your authenticator app.</p>
+  <form> <!-- POST /auth/mfa -->
+    <input placeholder="123456" inputmode="numeric" maxlength="6">
+    <button type="submit">Verify</button>
+  </form>
+  <p class="note">AAL1 tokens held in 5-minute httpOnly cookies until the code verifies.</p>
+</div>
+
+<!-- State 5: wrong code -->
+<div class="screen">
+  <div class="error">That code did not work. Try the next one from your app.</div>
+</div>
+
+</body>
+</html>

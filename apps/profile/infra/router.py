@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Cookie,
     Depends,
     HTTPException,
     Request,
@@ -12,6 +13,7 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
+from apps.auth.contract import settings as users_settings
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
@@ -21,6 +23,13 @@ from apps.auth.contract.passwords import (
     WrongPassword,
     change_password,
     verify_password,
+)
+from apps.auth.contract.two_factor import (
+    TotpError,
+    enroll_totp,
+    totp_challenge,
+    verified_totp_factor,
+    verify_totp,
 )
 from apps.profile.contract import settings
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
@@ -49,11 +58,16 @@ ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 
 
 async def _profile_context(
-    session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
+    request: Request, session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
 ) -> dict:
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
     if profile is not None and profile.handle is None and settings.handle_enabled:
         profile = await repo.auto_handle(profile, current_user.email)
+    two_factor_enabled = bool(users_settings.two_factor_enabled)
+    access_token = request.cookies.get("access_token", "")
+    twofa_active = bool(
+        two_factor_enabled and access_token and await verified_totp_factor(access_token)
+    )
     context = await fullpage_context(session, current_user)
     orgs = context["org_nav"]
     return {
@@ -65,6 +79,8 @@ async def _profile_context(
         "account_deletion_enabled": bool(settings.account_deletion_enabled),
         "avatar_enabled": bool(settings.avatar_enabled),
         "handle_enabled": bool(settings.handle_enabled),
+        "two_factor_enabled": two_factor_enabled,
+        "twofa_active": twofa_active,
         **context,
     }
 
@@ -83,7 +99,7 @@ async def profile_page(
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(session, current_user, repo)
+    ctx = await _profile_context(request, session, current_user, repo)
     return templates.TemplateResponse(request, "profile.html", ctx)
 
 
@@ -112,14 +128,14 @@ async def password_change(
     if error is not None:
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=400)
-        ctx = await _profile_context(session, current_user, repo)
+        ctx = await _profile_context(request, session, current_user, repo)
         ctx["password_error"] = error
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
 
     audit(bg, "profile.password_changed", user_id=current_user.id)
     if wants_json(request):
         return JSONResponse({"message": "Password changed."})
-    ctx = await _profile_context(session, current_user, repo)
+    ctx = await _profile_context(request, session, current_user, repo)
     ctx["password_info"] = "Password changed."
     return templates.TemplateResponse(request, "profile.html", ctx)
 
@@ -151,7 +167,7 @@ async def email_change(
     if error is not None:
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=400)
-        ctx = await _profile_context(session, current_user, repo)
+        ctx = await _profile_context(request, session, current_user, repo)
         ctx["email_error"] = error
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
 
@@ -159,8 +175,72 @@ async def email_change(
     info = f"A confirmation email is on its way to {new_email}."
     if wants_json(request):
         return JSONResponse({"message": info})
-    ctx = await _profile_context(session, current_user, repo)
+    ctx = await _profile_context(request, session, current_user, repo)
     ctx["email_info"] = info
+    return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@router.post("/profile/2fa/enroll", response_model=None)
+async def twofa_enroll(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: ProfileRepo,
+    access_token: str | None = Cookie(default=None),
+) -> HTMLResponse | JSONResponse:
+    if not users_settings.two_factor_enabled or not access_token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    try:
+        enrollment = await enroll_totp(access_token)
+    except TotpError as e:
+        if wants_json(request):
+            return JSONResponse({"detail": str(e)}, status_code=400)
+        ctx = await _profile_context(request, session, current_user, repo)
+        ctx["twofa_error"] = str(e)
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+    if wants_json(request):
+        return JSONResponse(
+            {
+                "factor_id": enrollment.factor_id,
+                "secret": enrollment.secret,
+                "uri": enrollment.uri,
+            }
+        )
+    ctx = await _profile_context(request, session, current_user, repo)
+    ctx["twofa_enrollment"] = enrollment
+    return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@router.post("/profile/2fa/verify", response_model=None)
+async def twofa_verify(
+    request: Request,
+    bg: BackgroundTasks,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: ProfileRepo,
+    access_token: str | None = Cookie(default=None),
+) -> HTMLResponse | JSONResponse:
+    if not users_settings.two_factor_enabled or not access_token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    body = await parse_body(request)
+    factor_id = str(body.get("factor_id", ""))
+    code = str(body.get("code", "")).strip()
+    try:
+        challenge_id = await totp_challenge(access_token, factor_id)
+        await verify_totp(access_token, factor_id, challenge_id, code)
+    except TotpError:
+        error = "That code did not work. Try the next one from your app."
+        if wants_json(request):
+            return JSONResponse({"detail": error}, status_code=400)
+        ctx = await _profile_context(request, session, current_user, repo)
+        ctx["twofa_error"] = error
+        return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
+    audit(bg, "profile.twofa_enabled", user_id=current_user.id)
+    if wants_json(request):
+        return JSONResponse({"message": "Two-factor enabled."})
+    ctx = await _profile_context(request, session, current_user, repo)
+    ctx["twofa_active"] = True
+    ctx["twofa_info"] = "Two-factor enabled."
     return templates.TemplateResponse(request, "profile.html", ctx)
 
 
@@ -190,7 +270,7 @@ async def account_delete(
     if error is not None:
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=400)
-        ctx = await _profile_context(session, current_user, repo)
+        ctx = await _profile_context(request, session, current_user, repo)
         ctx["deletion_error"] = error
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
 
@@ -232,7 +312,7 @@ async def avatar_upload(
     if error is not None:
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=400)
-        ctx = await _profile_context(session, current_user, repo)
+        ctx = await _profile_context(request, session, current_user, repo)
         ctx["avatar_error"] = error
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
 
@@ -252,7 +332,7 @@ async def avatar_upload(
     audit(bg, "profile.avatar_updated", user_id=current_user.id)
     if wants_json(request):
         return JSONResponse({"message": "Avatar updated."})
-    ctx = await _profile_context(session, current_user, repo)
+    ctx = await _profile_context(request, session, current_user, repo)
     ctx["avatar_info"] = "Avatar updated."
     return templates.TemplateResponse(request, "profile.html", ctx)
 
@@ -301,7 +381,7 @@ async def profile_update(
         status_code, message = error
         if wants_json(request):
             return JSONResponse({"detail": message}, status_code=status_code)
-        ctx = await _profile_context(session, current_user, repo)
+        ctx = await _profile_context(request, session, current_user, repo)
         ctx["error"] = message
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
 
@@ -316,6 +396,6 @@ async def profile_update(
         )
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(session, current_user, repo)
+    ctx = await _profile_context(request, session, current_user, repo)
     ctx["success"] = "Profile updated."
     return templates.TemplateResponse(request, "profile.html", ctx)
