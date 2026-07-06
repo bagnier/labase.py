@@ -64,10 +64,14 @@ best-effort by doctrine — it never blocks a mutation.
 
 **Tests are sincere.** The same plain-language scenarios run twice — over real HTTP and
 through a real browser — against a real database. Nothing business-critical is mocked;
-unit tests may stub external edges to reach error paths.
+unit tests may stub external edges to reach error paths. For browser testing, goto() or
+fetch() should be treated as possible code smells since we want to follow links and to
+submit forms.
 
 **Multi-tenancy by default.** Every account gets a personal organization at sign-up;
 org data lives under `/{org_handle}/…`. Members read, owners write.
+
+**First signed-up user is admin** and can then promote any other user as admin.
 
 **One source of truth for the rest.** Time comes from a single clock; styling from one
 component system (Tailwind + daisyUI); markup is semantic and accessible.

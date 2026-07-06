@@ -1,4 +1,5 @@
 - read @README.md.
 - import at top, refactor to make it possible.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).
+- please delegate to Haiku suagent each simple task like greping, making, searching.
 - when you think it's done, run `make finalize` as background task before you claim it.
