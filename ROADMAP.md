@@ -144,12 +144,16 @@ Supabase/Postgres-as-everything bet or duplicate ruff/ty/coverage/vulture).
   later — decide early: if target products are French-speaking this is urgent,
   otherwise defer consciously.
   → decided 2026-07-05: **consciously deferred** — out of scope for now.
-- [ ] **perf smoke tests** — JHipster generates one Gatling simulation per entity.
+- [x] **perf smoke tests** — JHipster generates one Gatling simulation per entity.
   Equivalent: a Locust smoke per context, reusing the generated OpenAPI client in
   `client/` — which would finally give `client/` a reason to exist (see
   simplification: "decide client/ fate").
   (2026-07-06 decision: implement, wired into `make ci` as a dedicated job with
   blocking thresholds)
+  → `perf/smoke.py` (user class per context: todo, organizations, pages; bodies
+  and parsing go through `labase-client`, so DTO drift fails the run) +
+  `scripts/perf_smoke.py` (boots the app on the test schema); `make perf-smoke`
+  in `make ci`; thresholds: fail ratio ≤1%, p95 ≤800ms
 
 ### options (DO NOT IMPLEMENT)
 

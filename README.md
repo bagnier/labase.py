@@ -383,9 +383,10 @@ make doctor       # local stack reachability AND latency (catches a wedged Docke
 
 make test         # pytest unit/integration (generates coverage)
 make test-e2e     # pytest-bdd browser driver + Playwright E2E
+make perf-smoke   # Locust smoke over the generated API client (blocking thresholds)
 
 make finalize     # js-build + fix + test (run before committing)
-make ci           # js-build + lint + test + test-e2e + coverage, all steps run even if one fails
+make ci           # js-build + lint + test + test-e2e + perf-smoke + coverage, all steps run even if one fails
 ```
 
 ## Demo apps — and how to build your own

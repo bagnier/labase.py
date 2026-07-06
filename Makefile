@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e perf-smoke ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -123,6 +123,11 @@ test: provision-test
 test-e2e: provision-test
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
 
+# Perf smoke: boots the app on the test schema, drives it with Locust through
+# the generated OpenAPI client; blocking thresholds live in perf/smoke.py.
+perf-smoke: provision-test
+	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
+
 coverage-erase:
 	uv run coverage erase
 
@@ -142,7 +147,7 @@ letsencrypt:
 # -k (keep-going): run every step even if one fails, so no failure is hidden
 # behind an earlier one; the sub-make exits non-zero if any step failed.
 ci:
-	$(MAKE) -k js-build lint coverage-erase test test-e2e coverage-xml
+	$(MAKE) -k js-build lint coverage-erase test test-e2e perf-smoke coverage-xml
 
 # finalize: js-build + fix (also typechecks + audits) + local tests. Run before committing.
 finalize: js-build fix test
