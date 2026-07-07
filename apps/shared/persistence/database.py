@@ -7,6 +7,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from apps.shared.config import get_technical_settings
+from apps.shared.observability.sql import instrument_engine
 
 
 @lru_cache
@@ -15,12 +16,14 @@ def _user_engine():
     connect_args = {
         "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
     }
-    return create_async_engine(
+    engine = create_async_engine(
         settings.supabase_database_user_url,
         echo=False,
         pool_pre_ping=True,
         connect_args=connect_args,
     )
+    instrument_engine(engine)
+    return engine
 
 
 @lru_cache
@@ -30,7 +33,9 @@ def _admin_engine():
     connect_args = {
         "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
     }
-    return create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)
+    engine = create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)
+    instrument_engine(engine)
+    return engine
 
 
 def _make_session_factory(engine_fn):

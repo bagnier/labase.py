@@ -7,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from apps.shared.observability.metrics import UNMATCHED_ROUTE, accumulator
+from apps.shared.observability.sql import read_request_stats, start_request_stats
 
 log = structlog.get_logger("labase.http")
 
@@ -21,6 +22,7 @@ class RequestLogger(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())[:8]
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
+        start_request_stats()
 
         start = time.perf_counter()
         log.info(
@@ -37,12 +39,15 @@ class RequestLogger(BaseHTTPMiddleware):
         # (low-cardinality label) is only readable after call_next.
         route_template = getattr(request.scope.get("route"), "path", UNMATCHED_ROUTE)
         accumulator.observe(request.method, route_template, response.status_code, duration_ms)
+        db = read_request_stats()
         log.info(
             "request.finished",
             method=request.method,
             path=request.url.path,
             status=response.status_code,
             duration_ms=duration_ms,
+            db_queries=db.count if db else 0,
+            db_ms=round(db.total_ms, 1) if db else 0.0,
         )
         response.headers["X-Request-ID"] = request_id
         return response
