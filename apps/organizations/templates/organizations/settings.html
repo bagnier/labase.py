@@ -65,16 +65,13 @@
         {% endif %}
       </div>
     </section>
+    {# Settings sections other apps contribute (OrgSettingsSectionQuery) — e.g. API keys. #}
+    {% for section in settings_sections %}
+      {% include section.template %}
+    {% endfor %}
     <div class="flex gap-4 text-sm">
       <a href="/{{ org_handle }}/members"
          class="text-primary font-medium link link-hover">Manage members →</a>
-      {# Owner tools other apps contribute (declared NavItems) — e.g. API keys. #}
-      {% for item in nav_items %}
-        {% if item.owner_only %}
-          <a href="/{{ org_handle }}/{{ item.segment }}"
-             class="text-primary font-medium link link-hover">{{ item.label }} →</a>
-        {% endif %}
-      {% endfor %}
     </div>
   </div>
 {% endblock %}

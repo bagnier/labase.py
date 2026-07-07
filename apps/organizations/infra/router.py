@@ -13,6 +13,7 @@ from apps.organizations.contract.current import (
     OrganizationsSettings,
 )
 from apps.organizations.contract.overviews import OverviewQuery
+from apps.organizations.contract.settings_sections import OrgSettingsSectionQuery
 from apps.organizations.domain.exceptions import (
     LastOwnerViolation,
     OrgLimitReached,
@@ -168,6 +169,18 @@ async def org_dashboard_overviews(
     return JSONResponse([{"key": o.key, "title": o.title, "data": o.data} for o in overviews])
 
 
+async def _settings_context(session, current_user, org, org_handle, role: str) -> dict:
+    """Full template context for the settings page: fullpage chrome + the settings sections
+    apps contribute (:class:`OrgSettingsSectionQuery`). Shared by every route that renders
+    ``settings.html`` so the ``settings_sections`` loop is always defined."""
+    ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle, role=role)
+    ctx["settings_sections"] = sorted(
+        await bus.collect(OrgSettingsSectionQuery(session, org.id, role == "owner")),
+        key=lambda s: s.order,
+    )
+    return ctx
+
+
 @org_router.get("/settings", response_class=HTMLResponse)
 async def org_settings(
     request: Request,
@@ -179,9 +192,7 @@ async def org_settings(
 ):
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
-    ctx = await fullpage_context(
-        session, current_user, org=org, org_handle=org_handle, role=membership.role.value
-    )
+    ctx = await _settings_context(session, current_user, org, org_handle, membership.role.value)
     return templates.TemplateResponse(request, "organizations/settings.html", ctx)
 
 
@@ -240,9 +251,7 @@ async def rename_organization(
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
-        ctx = await fullpage_context(
-            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
-        )
+        ctx = await _settings_context(session, current_user, org, org_handle, membership.role.value)
         ctx["name_error"] = error
         return templates.TemplateResponse(
             request, "organizations/settings.html", ctx, status_code=422
@@ -279,9 +288,7 @@ async def update_org_handle(
         if wants_json(request):
             raise HTTPException(status_code=code, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
-        ctx = await fullpage_context(
-            session, current_user, org=org, org_handle=org_handle, role=membership.role.value
-        )
+        ctx = await _settings_context(session, current_user, org, org_handle, membership.role.value)
         ctx["handle_error"] = error
         response = templates.TemplateResponse(
             request, "organizations/settings.html", ctx, status_code=code

@@ -1,24 +1,29 @@
 """How the api_keys context plugs into the running app.
 
-Single composition entry (:func:`mount`): mounts the owner-only management
-router under /{org_handle}/api-keys and answers auth's ``ApiKeyQuery`` — the
-seam that turns an ``Authorization: Bearer lbk_...`` header into an
-authenticated, org-pinned principal. Deleting this context removes the feature
-without touching auth.
+Single composition entry (:func:`mount`): mounts the owner-only management router under
+/{org_handle}/api-keys (create/revoke + JSON list), contributes the keys panel as a section
+of the org settings page (answering ``OrgSettingsSectionQuery``), and answers auth's
+``ApiKeyQuery`` — the seam that turns an ``Authorization: Bearer lbk_...`` header into an
+authenticated, org-pinned principal. Deleting this context removes the feature without
+touching auth.
 """
 
 from sqlalchemy import func, select
 
-from apps.api_keys.domain.models import ApiKey
+from apps.api_keys.domain.models import ApiKey, ApiKeyRead
 from apps.api_keys.domain.service import hash_token
-from apps.api_keys.infra.repository import resolve_active_key, touch_last_used
+from apps.api_keys.infra.repository import ApiKeyRepository, resolve_active_key, touch_last_used
 from apps.api_keys.infra.router import router
 from apps.auth.contract.admin import resolve_user_emails
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
-from apps.shared.host import Host, NavItem
+from apps.organizations.contract.settings_sections import (
+    OrgSettingsSection,
+    OrgSettingsSectionQuery,
+)
+from apps.shared.host import Host
 from apps.shared.settings import SettingsDeclaration, feature_switch
 
 
@@ -29,10 +34,20 @@ def mount(host: Host) -> None:
     if not settings.enabled:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)
-    host.register_nav(
-        NavItem("API keys", "key", "api-keys", "/api-keys", order=100, owner_only=True)
-    )
+    host.events.on(OrgSettingsSectionQuery, _settings_section)
     host.events.on(ApiKeyQuery, _resolve)
+
+
+async def _settings_section(query: OrgSettingsSectionQuery) -> OrgSettingsSection:
+    """Answer the org settings page: the org's API keys, as an embedded management section."""
+    repo = ApiKeyRepository(query.session, query.org_id)
+    keys = [ApiKeyRead.model_validate(k) for k in await repo.all()]
+    return OrgSettingsSection(
+        key="api_keys",
+        title="API keys",
+        template="api_keys/_settings_section.html",
+        data={"keys": keys},
+    )
 
 
 def _declare_settings() -> SettingsDeclaration:

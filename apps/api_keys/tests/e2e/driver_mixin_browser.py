@@ -13,8 +13,9 @@ class ApiKeysBrowserMixin(BrowserBase):
         super().reset_session()
 
     def _keys_page_url(self) -> str:
+        # The keys panel lives on the org settings page (owner-only).
         slug = getattr(self, "active_org_handle", "")
-        return f"{self.base_url}/{slug}/api-keys"
+        return f"{self.base_url}/{slug}/settings"
 
     def create_api_key(self, name: str) -> None:
         self.page.goto(self._keys_page_url(), wait_until="load")
@@ -65,7 +66,7 @@ class ApiKeysBrowserMixin(BrowserBase):
         assert resp.status_code == 403, f"expected 403, got {resp.status_code}: {resp.text}"
 
     def try_open_api_keys_page(self) -> None:
-        # The nav entry is owner-only; probe the URL directly so the server answers.
+        # The keys route is owner-gated; a member hitting it is blocked before any redirect.
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None
         slug = getattr(self, "active_org_handle", "")

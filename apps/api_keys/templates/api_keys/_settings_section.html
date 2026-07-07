@@ -1,0 +1,16 @@
+<section class="card-panel">
+  <div class="card-body space-y-4">
+    <div>
+      <h2 class="card-title text-sm font-semibold">{{ section.title }}</h2>
+      <p class="text-sm text-base-content/70">
+        Machine access to this organisation's JSON API — send
+        <code class="font-mono text-xs">Authorization: Bearer &lt;key&gt;</code>.
+      </p>
+    </div>
+    <div id="api-keys" aria-live="polite">
+      {% with keys=section.data.keys, new_key=None %}
+        {% include "api_keys/_keys.html" %}
+      {% endwith %}
+    </div>
+  </div>
+</section>
