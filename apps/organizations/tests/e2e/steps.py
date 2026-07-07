@@ -1,6 +1,6 @@
 from pytest_bdd import given, parsers, then, when
 
-from apps.organizations.contract import settings as org_settings
+from apps.shared.settings import get_settings
 
 
 @then("they have exactly one organisation")
@@ -50,6 +50,7 @@ def step_rename_org(driver, new_name):
 
 @given(parsers.parse("the maximum owned organisations per user is {n:d}"))
 def step_set_max_owned_orgs(n):
+    org_settings = get_settings("organizations")
     org_settings._raw = {**(org_settings._raw or {}), "max_owned_orgs_per_user": str(n)}
 
 

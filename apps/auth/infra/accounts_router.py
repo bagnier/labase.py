@@ -13,7 +13,6 @@ import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from apps.auth.contract import settings
 from apps.auth.contract.current import CurrentAdmin
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.events import UserDeleted
@@ -24,6 +23,7 @@ from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import get_admin_supabase
+from apps.shared.settings import get_settings
 
 log = structlog.get_logger("labase.auth.accounts")
 
@@ -34,7 +34,7 @@ _PAGE_SIZE = 1000
 
 
 def _ensure_enabled() -> None:
-    if not settings.user_management_enabled:
+    if not get_settings("users").user_management_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 

@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
-from apps.learning.contract import settings
+from apps.learning.contract.current import LearningSettings
 from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import (
     CardResource,
@@ -29,6 +29,7 @@ from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
+from apps.shared.settings import SettingsView
 
 router = APIRouter(prefix="/learning", tags=["learning"])
 
@@ -73,6 +74,7 @@ async def _render_session(
     rows: list[CatalogRow],
     org: object,
     repo: LearningRepository,
+    settings: SettingsView,
 ) -> Response:
     cards = [
         ReviewCardRead(
@@ -111,6 +113,7 @@ async def subscribe(
     session: RlsSession,
     repo: LearningRepo,
     org: CurrentOrgModel,
+    settings: LearningSettings,
 ):
     if not settings.sharing_enabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Deck sharing is disabled")
@@ -119,7 +122,7 @@ async def subscribe(
     found = or_404(await repo.get_deck_by_name(deck))
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return await _render_session(request, session, current_user, rows, org, repo)
+    return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
 @router.get("/sessions", response_model=None)
@@ -129,9 +132,10 @@ async def today(
     session: RlsSession,
     repo: LearningRepo,
     org: CurrentOrgModel,
+    settings: LearningSettings,
 ):
     rows = _due_rows(await repo.catalog(), clock.now().date())
-    return await _render_session(request, session, current_user, rows, org, repo)
+    return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
 @router.get("/cards/{external_id}", response_class=HTMLResponse)
@@ -176,6 +180,7 @@ async def mark_card(
     org_id: CurrentOrg,
     repo: LearningRepo,
     org: CurrentOrgModel,
+    settings: LearningSettings,
 ):
     body = await parse_body(request)
     outcome = Outcome(str(body.get("outcome", "")))
@@ -196,7 +201,7 @@ async def mark_card(
         outcome=outcome.value,
     )
     rows = _due_rows(await repo.catalog(), today_date)
-    return await _render_session(request, session, current_user, rows, org, repo)
+    return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
 @router.get("/resources", response_class=HTMLResponse)

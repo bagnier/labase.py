@@ -7,7 +7,6 @@ answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrgCreate
 from sqlalchemy import func, select
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.learning.contract import settings
 from apps.learning.domain.models import Card, Deck
 from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
@@ -39,7 +38,7 @@ _WELCOME_CARDS = [
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     if not settings.enabled:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)

@@ -15,7 +15,7 @@ This base exists for four reasons, in order:
 2. **Supabase as the platform, Postgres as everything.** Supabase provides the managed
    platform — database, auth, storage, migrations, and a growing feature catalog. On
    top of it, rather than bolting on Kafka, Elastic, Redis, or Mongo, the ambition is
-   to rebuild those capabilities *on Postgres itself*. The first bricks have landed:
+   to rebuild those capabilities _on Postgres itself_. The first bricks have landed:
    a durable task queue, error tracking, load metrics and rate limiting — plain
    Postgres tables, no new infrastructure. Fulltext search, caching and document
    storage are next.
@@ -45,7 +45,7 @@ checked by `make lint`.
 
 **Every business endpoint has two faces.** The same handler serves the JSON API and the
 HTML UI — a full page, or an HTMX fragment for in-page updates — through content
-negotiation. One implementation buys a documented REST API *and* a server-rendered,
+negotiation. One implementation buys a documented REST API _and_ a server-rendered,
 dynamic front end, with no separate frontend project and no JS build step.
 
 **Integration is declarative.** An app states everything it contributes in a single
@@ -148,7 +148,7 @@ At mount time, an app declares **every surface it contributes**:
 | Sidebar           | `host.register_nav(...)`        | a global nav entry (per-org entries answer the `OrgNavQuery` event)                                             |
 | Org dashboard     | handling `OverviewQuery`        | a card with counts and recent items on `/{org}/`                                                                |
 | **Admin console** | handling `ConsoleOverviewQuery` | server-wide stats in the SaaS console (across all orgs)                                                         |
-| **Settings**      | `declare_app_settings(...)`     | admin-tunable values, overridable per org, live-reloaded on `SettingsChanged` (TTL re-read across instances)    |
+| **Settings**      | `host.register_settings(...)`   | admin-tunable values, overridable per org, live-reloaded on `SettingsChanged` (TTL re-read across instances)    |
 | Feature switch    | a declared on/off setting       | the app can be disabled at runtime; its `mount()` short-circuits but the console still lists it for re-enabling |
 | Seeding           | handling `OrgCreated`           | starter data for every new organization                                                                         |
 | URL safety        | `host.reserve(...)`             | its path segments can't be shadowed by an org handle                                                            |
@@ -156,6 +156,11 @@ At mount time, an app declares **every surface it contributes**:
 Because every surface is registered rather than hardcoded, **deleting an app removes its
 nav entry, dashboard card, console stat and seeds automatically** — this is what makes
 the demo apps disposable.
+
+**A contract never exports a settings handle.** Handlers declare the app's `TodoSettings`
+dependency (`contract/current.py`) and get the request's effective values — org overrides
+applied under `/{org_handle}`, server values elsewhere. Non-request code uses
+`get_settings("todo")`, plus `.for_org(session, org_id)` when an org is in hand.
 
 **`EventBus`** (on `host.events`) exposes two primitives — handlers are keyed by the
 Python type of the event, so there are no magic strings and no shared imports:
@@ -239,7 +244,7 @@ behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in 
 `render_list(...)` helper in `apps/shared/http/` centralize the JSON / fragment / page
 branching. Fragments are standalone valid markup (they're swapped into the live DOM).
 
-**Page composition.** A full page's context is assembled from *slices*, each owned by
+**Page composition.** A full page's context is assembled from _slices_, each owned by
 the app that knows it. Apps register a provider at mount time with declared, prefixed
 keys (collisions rejected at startup); the ownerless collector in `apps/shared/page.py`
 merges them — called explicitly, never injected silently.
@@ -352,6 +357,7 @@ App: http://localhost:8000 · Swagger: http://localhost:8000/docs
 `.env.test` is committed and uses `localhost`.
 
 Notes:
+
 - **Front-end assets** — `static/` is gitignored; re-run `make install` after adding a
   Tailwind class (unused ones are purged) or bumping a `package.json` dependency.
 - **`COOKIES_SECURE=false`** is required over plain HTTP. Otherwise session cookies get

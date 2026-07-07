@@ -6,7 +6,6 @@ from sqlalchemy import func, select
 
 from apps.auth.contract.events import UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.profile.contract import settings
 from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
@@ -21,7 +20,7 @@ def mount(host: Host) -> None:
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("profile", provide_profile_handle)
     # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
-    host.register_settings(settings, _declare_settings())
+    host.register_settings(_declare_settings())
     host.events.on(UserDeleted, _forget_user)
     host.reserve("profile")
     register_open_list("profiles", profile_handle_taken)

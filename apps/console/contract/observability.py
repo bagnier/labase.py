@@ -9,19 +9,16 @@ redeploy, no env edit.
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.host import Host
 from apps.shared.observability.logging import apply_log_level, default_log_level
-from apps.shared.settings import AppSettings, SettingDef, SettingsChanged, SettingsDeclaration
+from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration, get_settings
 
 OBSERVABILITY_APP = "observability"
 LOG_LEVEL_KEY = "log_level"
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
-observability = AppSettings()
-
 
 def declare(host: Host) -> None:
     """Declare the group, then align the process with the persisted level (mount-time)."""
-    host.register_settings(
-        observability,
+    settings = host.register_settings(
         SettingsDeclaration(
             app_name=OBSERVABILITY_APP,
             defs=[
@@ -32,19 +29,21 @@ def declare(host: Host) -> None:
                     "Log level for structlog and stdlib — applies live, no restart",
                 )
             ],
-        ),
+        )
     )
-    apply_log_level(str(observability.log_level))
-    # register_settings already keeps `observability` current; this second subscription reacts
-    # to the change with the one extra step logging needs: re-pointing the live loggers.
+    apply_log_level(str(settings.log_level))
+    # register_settings already keeps the registry handle current; this second subscription
+    # reacts to the change with the one extra step logging needs: re-pointing the live loggers.
     host.events.on(SettingsChanged, reload)
 
 
 async def reload(event: SettingsChanged) -> None:
-    """Console event handler: adopt fresh values and re-point the loggers."""
-    await observability.reload(event)
+    """Console event handler: re-point the loggers at the freshly edited level.
+
+    Reads the event's own values — self-contained, no dependence on the registry
+    handle having been reloaded first (handler order on the bus)."""
     if event.app_name == OBSERVABILITY_APP:
-        apply_log_level(str(observability.log_level))
+        apply_log_level(str(event.values.get(LOG_LEVEL_KEY) or default_log_level()))
 
 
 async def overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
@@ -53,5 +52,5 @@ async def overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         title="Logging",
         icon="terminal-window",
         group="settings",
-        data={"lines": [f"level {observability.log_level}"]},
+        data={"lines": [f"level {get_settings(OBSERVABILITY_APP).log_level}"]},
     )

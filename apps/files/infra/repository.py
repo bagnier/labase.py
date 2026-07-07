@@ -4,10 +4,10 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.files.contract import settings
 from apps.files.domain.models import OrgFile, OrgFileShareToken
 from apps.shared import clock
 from apps.shared.persistence.repository import BaseRepository, OrgScopedRepository
+from apps.shared.settings import get_settings
 
 
 class OrgFileRepository(OrgScopedRepository[OrgFile]):
@@ -53,9 +53,10 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
         org_file.storage_path = new_storage_path
 
     async def add_share_token(self, file_id: uuid.UUID) -> OrgFileShareToken:
+        effective = await get_settings("files").for_org(self.session, self.org_id)
         token = OrgFileShareToken(
             file_id=file_id,
-            expires_at=clock.now() + timedelta(days=settings.share_link_ttl_days),
+            expires_at=clock.now() + timedelta(days=effective.share_link_ttl_days),
         )
         self.session.add(token)
         await self.session.flush()

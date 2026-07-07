@@ -16,7 +16,6 @@ from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_with_owner
 from apps.shared.host import Host, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
-from apps.todo.contract import settings
 from apps.todo.domain.models import TodoItem
 from apps.todo.infra.repository import TodoRepository
 from apps.todo.infra.router import router
@@ -36,7 +35,7 @@ _WELCOME_TODOS = [
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     if not settings.enabled:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)

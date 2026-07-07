@@ -3,7 +3,7 @@ import uuid
 from playwright.sync_api import Page
 
 from apps.auth.tests.given_helpers import find_users
-from apps.organizations.contract import settings as org_settings
+from apps.shared.settings import get_settings
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
@@ -23,7 +23,7 @@ class OrgBrowserMixin(BrowserBase):
         self._last_accept_response = None
         self._last_error_text = None
         self._invitation_action_failed = False
-        org_settings._raw = None  # restore declared defaults between scenarios
+        get_settings("organizations")._raw = None  # restore declared defaults between scenarios
         super().reset_session()
 
     def _read_org_cards_from_profile(self, page: Page) -> list[dict]:

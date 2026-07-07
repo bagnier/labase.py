@@ -77,16 +77,16 @@ class Host:
         """Register a fullpage-context slice, contributed by an app from its :func:`mount`."""
         self.fullpage_providers.append(FullpageProvider(name, fn))
 
-    def register_settings(
-        self, settings: AppSettings, declaration: SettingsDeclaration
-    ) -> AppSettings:
-        """Bring ``settings`` live in one call: register ``declaration`` (the console admin page
-        reads it back through :meth:`declared_settings`/:meth:`declared_console_links`), then
-        :func:`apps.shared.settings.bind_settings` seeds missing values and reads current ones,
-        and this subscribes ``settings`` to :class:`SettingsChanged`. Returns ``settings``,
-        mutated in place, so ``if not settings.enabled`` works right after this call."""
+    def register_settings(self, declaration: SettingsDeclaration) -> AppSettings:
+        """Bring an app's settings live in one call: register ``declaration`` (the console admin
+        page reads it back through :meth:`declared_settings`/:meth:`declared_console_links`),
+        then :func:`apps.shared.settings.bind_settings` seeds missing values, reads current ones
+        and registers the handle in the process registry
+        (:func:`~apps.shared.settings.get_settings`), and this subscribes it to
+        :class:`SettingsChanged`. Returns the live handle, so ``if not settings.enabled`` works
+        right after this call."""
         self.declarations[declaration.app_name] = declaration
-        bind_settings(settings, declaration)
+        settings = bind_settings(declaration)
         self.events.on(SettingsChanged, settings.reload)
         return settings
 

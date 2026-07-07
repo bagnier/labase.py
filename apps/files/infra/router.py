@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from storage3.exceptions import StorageApiError
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
-from apps.files.contract import settings
+from apps.files.contract.current import FilesSettings
 from apps.files.domain.models import OrgFileRead
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.storage import rewrite_signed_url, storage_path
@@ -33,6 +33,7 @@ from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
+from apps.shared.settings import SettingsView, get_settings
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])
@@ -68,6 +69,7 @@ async def _render(
     current_user: AuthenticatedUser,
     files: list,
     org,
+    settings: SettingsView,
 ) -> Response:
     context = await fullpage_context(session, current_user) if wants_full_page(request) else None
     return render_list(
@@ -96,9 +98,10 @@ async def file_list(
     session: RlsSession,
     org: CurrentOrgModel,
     repo: FileRepo,
+    settings: FilesSettings,
 ):
     files = await repo.all()
-    return await _render(request, session, current_user, files, org)
+    return await _render(request, session, current_user, files, org, settings)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -111,6 +114,7 @@ async def upload_file(
     org_id: CurrentOrg,
     org: CurrentOrgModel,
     repo: FileRepo,
+    settings: FilesSettings,
 ):
     if not settings.uploads_enabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Uploads are disabled")
@@ -162,7 +166,7 @@ async def upload_file(
     )
 
     files = await repo.all()
-    return await _render(request, session, current_user, files, org)
+    return await _render(request, session, current_user, files, org, settings)
 
 
 @router.get("/{file_id}/download")
@@ -170,6 +174,7 @@ async def download_file(
     file_id: uuid.UUID,
     current_user: CurrentUser,
     repo: FileRepo,
+    settings: FilesSettings,
 ):
     org_file = or_404(await repo.get(file_id))
     storage = user_storage_client(current_user.access_token)
@@ -191,6 +196,7 @@ async def delete_file(
     org: CurrentOrgModel,
     membership: CurrentMembership,
     repo: FileRepo,
+    settings: FilesSettings,
 ):
     org_file = or_404(await repo.get(file_id))
     if not _can_modify(org_file.user_id, membership):
@@ -210,7 +216,7 @@ async def delete_file(
     if wants_json(request):
         return delete_response(request)
     files = await repo.all()
-    return await _render(request, session, current_user, files, org)
+    return await _render(request, session, current_user, files, org, settings)
 
 
 @router.patch("/{file_id}", response_class=HTMLResponse)
@@ -224,6 +230,7 @@ async def rename_file(
     org: CurrentOrgModel,
     membership: CurrentMembership,
     repo: FileRepo,
+    settings: FilesSettings,
 ):
     filename = await parse_field(request, "filename")
 
@@ -256,7 +263,7 @@ async def rename_file(
     )
 
     files = await repo.all()
-    return await _render(request, session, current_user, files, org)
+    return await _render(request, session, current_user, files, org, settings)
 
 
 @router.post("/{file_id}/share")
@@ -339,9 +346,12 @@ async def public_share_download(
         token=str(token),
         ip=ip,
     )
+    # Effective TTL for the file's org — the admin session reads its overrides (no RLS caller
+    # here: share downloads are anonymous, the org comes from the file row).
+    effective = await get_settings("files").for_org(admin_session, org_file.org_id)
     storage = admin_storage()
     result = await storage.from_(bucket()).create_signed_url(
-        org_file.storage_path, settings.signed_url_ttl
+        org_file.storage_path, effective.signed_url_ttl
     )
     signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
     return RedirectResponse(url=signed_url, status_code=302)

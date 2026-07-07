@@ -13,7 +13,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from apps.auth.application import confirm_user, register_user
-from apps.auth.contract import settings
 from apps.auth.contract.current import CurrentAdmin, CurrentUser, OptionalCurrentUser
 from apps.auth.contract.impersonation import (
     IMPERSONATION_MAX_SECONDS,
@@ -22,6 +21,7 @@ from apps.auth.contract.impersonation import (
     ImpersonationTargetNotFound,
     impersonation_tokens,
 )
+from apps.auth.contract.settings import UsersSettings
 from apps.auth.domain.service import (
     OAUTH_PROVIDERS,
     AuthTokens,
@@ -51,6 +51,7 @@ from apps.shared.http import parse_body, wants_json
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
+from apps.shared.settings import SettingsView
 
 log = structlog.get_logger("labase.auth.router")
 
@@ -109,14 +110,17 @@ def _safe_next(next_url: str | None) -> str:
     return "/profile"
 
 
-def _enabled_oauth_providers() -> list[str]:
-    return [p for p in OAUTH_PROVIDERS if bool(getattr(settings, f"oauth_{p}_enabled", False))]
+def _enabled_oauth_providers(users_settings: SettingsView) -> list[str]:
+    return [
+        p for p in OAUTH_PROVIDERS if bool(getattr(users_settings, f"oauth_{p}_enabled", False))
+    ]
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
     request: Request,
     current_user: OptionalCurrentUser,
+    users_settings: UsersSettings,
     info: str | None = None,
     next: str | None = None,
 ) -> Response:
@@ -128,15 +132,17 @@ async def login_page(
         {
             "info": _INFO_MESSAGES.get(info or ""),
             "next": next,
-            "oauth_providers": _enabled_oauth_providers(),
-            "passkeys_enabled": bool(settings.passkeys_enabled),
+            "oauth_providers": _enabled_oauth_providers(users_settings),
+            "passkeys_enabled": bool(users_settings.passkeys_enabled),
         },
     )
 
 
 @router.post("/login")
 @rate_limit("10/minute")
-async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+async def login_endpoint(
+    request: Request, bg: BackgroundTasks, users_settings: UsersSettings
+) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
     password = body.get("password", "")
@@ -156,7 +162,7 @@ async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
         )
     try:
         tokens = await login(email, password)
-        if settings.two_factor_enabled:
+        if users_settings.two_factor_enabled:
             factor_id = await verified_totp_factor(tokens.access_token)
             if factor_id:
                 return await _mfa_challenge_response(request, tokens, factor_id, next)
@@ -172,7 +178,9 @@ async def login_endpoint(request: Request, bg: BackgroundTasks) -> Response:
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
-        offer_resend = code == "email_not_confirmed" and bool(settings.resend_confirmation_enabled)
+        offer_resend = code == "email_not_confirmed" and bool(
+            users_settings.resend_confirmation_enabled
+        )
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
         return templates.TemplateResponse(
@@ -291,15 +299,15 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
 # proxy GoTrue's anonymous authentication ceremony and land the session cookies.
 
 
-def _ensure_passkeys_enabled() -> None:
-    if not settings.passkeys_enabled:
+def _ensure_passkeys_enabled(users_settings: SettingsView) -> None:
+    if not users_settings.passkeys_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
 @router.post("/passkeys/options")
 @rate_limit("10/minute")
-async def passkey_options_endpoint(request: Request) -> Response:
-    _ensure_passkeys_enabled()
+async def passkey_options_endpoint(request: Request, users_settings: UsersSettings) -> Response:
+    _ensure_passkeys_enabled(users_settings)
     try:
         return JSONResponse(await passkey_authentication_options())
     except PasskeyError as e:
@@ -308,8 +316,10 @@ async def passkey_options_endpoint(request: Request) -> Response:
 
 @router.post("/passkeys/verify")
 @rate_limit("10/minute")
-async def passkey_verify_endpoint(request: Request, bg: BackgroundTasks) -> Response:
-    _ensure_passkeys_enabled()
+async def passkey_verify_endpoint(
+    request: Request, bg: BackgroundTasks, users_settings: UsersSettings
+) -> Response:
+    _ensure_passkeys_enabled(users_settings)
     body = await parse_body(request)
     challenge_id = str(body.get("challenge_id", ""))
     credential = body.get("credential")
@@ -348,8 +358,10 @@ _OAUTH_MAX_SECONDS = 300
 
 @router.get("/oauth/{provider}")
 @rate_limit("10/minute")
-async def oauth_start(request: Request, provider: str, next: str = Query(default="")) -> Response:
-    if provider not in _enabled_oauth_providers():
+async def oauth_start(
+    request: Request, provider: str, users_settings: UsersSettings, next: str = Query(default="")
+) -> Response:
+    if provider not in _enabled_oauth_providers(users_settings):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     verifier, challenge = pkce_pair()
     redirect_to = str(request.base_url).rstrip("/") + "/auth/callback"
@@ -369,11 +381,11 @@ async def oauth_start(request: Request, provider: str, next: str = Query(default
     return resp
 
 
-def _oauth_failure(request: Request, message: str) -> Response:
+def _oauth_failure(request: Request, message: str, users_settings: SettingsView) -> Response:
     resp = templates.TemplateResponse(
         request,
         "login.html",
-        {"error": message, "oauth_providers": _enabled_oauth_providers()},
+        {"error": message, "oauth_providers": _enabled_oauth_providers(users_settings)},
         status_code=status.HTTP_401_UNAUTHORIZED,
     )
     resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
@@ -386,6 +398,7 @@ def _oauth_failure(request: Request, message: str) -> Response:
 async def oauth_callback(
     request: Request,
     bg: BackgroundTasks,
+    users_settings: UsersSettings,
     code: str = Query(default=""),
     error_description: str = Query(default=""),
     oauth_code_verifier: str | None = Cookie(default=None),
@@ -399,18 +412,20 @@ async def oauth_callback(
     if not code or not oauth_code_verifier:
         log.warning("auth.oauth_callback_rejected", has_code=bool(code))
         return _oauth_failure(
-            request, error_description or "Sign-in with the provider failed. Please try again."
+            request,
+            error_description or "Sign-in with the provider failed. Please try again.",
+            users_settings,
         )
     try:
         tokens = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
         audit(bg, "auth.oauth_failed", level="warning")
-        return _oauth_failure(request, str(e))
+        return _oauth_failure(request, str(e), users_settings)
     await confirm_user(tokens.access_token)  # first visit bootstraps the personal org
     claims = decode_jwt(tokens.access_token)
     audit(bg, "auth.oauth_signed_in", user_id=str(claims.get("sub", "")))
     next = oauth_next or ""
-    if settings.two_factor_enabled:
+    if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
         if factor_id:
             resp = await _mfa_challenge_response(request, tokens, factor_id, next)
@@ -425,11 +440,13 @@ async def oauth_callback(
 
 
 @router.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request, next: str | None = None) -> HTMLResponse:
+async def register_page(
+    request: Request, users_settings: UsersSettings, next: str | None = None
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "register.html",
-        {"next": next, "oauth_providers": _enabled_oauth_providers()},
+        {"next": next, "oauth_providers": _enabled_oauth_providers(users_settings)},
     )
 
 
@@ -601,12 +618,14 @@ async def forgot_password_endpoint(request: Request) -> Response:
 
 @router.post("/resend-confirmation")
 @rate_limit("10/minute")
-async def resend_confirmation_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+async def resend_confirmation_endpoint(
+    request: Request, bg: BackgroundTasks, users_settings: UsersSettings
+) -> Response:
     """Send the signup confirmation again — the way out for an unconfirmed account.
 
     Neutral answer whatever happens (no account enumeration), like forgot-password.
     """
-    if not settings.resend_confirmation_enabled:
+    if not users_settings.resend_confirmation_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
     email = str(body.get("email", "")).strip().lower()

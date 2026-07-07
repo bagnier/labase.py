@@ -1,6 +1,6 @@
 from pytest_bdd import given, parsers, then, when
 
-from apps.files.contract import settings as files_settings
+from apps.shared.settings import get_settings
 
 
 @given(parsers.parse('the current date is "{date}"'))
@@ -58,6 +58,7 @@ def step_file_size_limit():
 
 @given(parsers.parse("the organisation storage quota is {mb:d} MB"))
 def step_set_storage_quota(mb):
+    files_settings = get_settings("files")
     files_settings._raw = {**(files_settings._raw or {}), "org_storage_quota_mb": str(mb)}
 
 

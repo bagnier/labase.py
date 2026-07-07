@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.organizations.contract import ORG_PREFIX, settings
+from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.fullpage import provide_org_nav
 from apps.organizations.contract.queries import org_handle_taken
@@ -23,7 +23,7 @@ from apps.organizations.infra.router import org_router, router
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, NavItem, host
 from apps.shared.persistence.database import admin_session_factory
-from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.slug_registry import register_open_list
 from apps.shared.text import pluralize
 
@@ -33,7 +33,7 @@ from apps.shared.text import pluralize
 
 def mount(host: Host) -> None:
     # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch.
-    host.register_settings(settings, _declare_settings())
+    host.register_settings(_declare_settings())
     host.app.include_router(invitation_router)
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
@@ -85,7 +85,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _create_org(event: UserCreated) -> None:
-    if not settings.auto_create_personal_org:
+    if not get_settings("organizations").auto_create_personal_org:
         return
     user_id = uuid.UUID(event.user_id)
     async with admin_session_factory()() as session:

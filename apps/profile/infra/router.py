@@ -13,7 +13,6 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
-from apps.auth.contract import settings as users_settings
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
@@ -31,6 +30,7 @@ from apps.auth.contract.passwords import (
     change_password,
     verify_password,
 )
+from apps.auth.contract.settings import UsersSettings
 from apps.auth.contract.two_factor import (
     TotpError,
     enroll_totp,
@@ -38,7 +38,7 @@ from apps.auth.contract.two_factor import (
     verified_totp_factor,
     verify_totp,
 )
-from apps.profile.contract import settings
+from apps.profile.contract.current import ProfileSettings
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.host import host
@@ -48,6 +48,7 @@ from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
+from apps.shared.settings import SettingsView, get_settings
 from apps.shared.slug_registry import validate_handle
 
 router = APIRouter()
@@ -67,8 +68,11 @@ ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 async def _profile_context(
     request: Request, session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
 ) -> dict:
+    # Helper outside DI: profile routes carry no org, so the server view is the effective one.
+    profile_settings = get_settings("profile").view()
+    users_settings = get_settings("users").view()
     profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
-    if profile is not None and profile.handle is None and settings.handle_enabled:
+    if profile is not None and profile.handle is None and profile_settings.handle_enabled:
         profile = await repo.auto_handle(profile, current_user.email)
     two_factor_enabled = bool(users_settings.two_factor_enabled)
     access_token = request.cookies.get("access_token", "")
@@ -89,10 +93,10 @@ async def _profile_context(
         "profile": profile,
         "org_handle": orgs[0].handle if orgs else "",
         "org": orgs[0] if orgs else None,
-        "email_change_enabled": bool(settings.email_change_enabled),
-        "account_deletion_enabled": bool(settings.account_deletion_enabled),
-        "avatar_enabled": bool(settings.avatar_enabled),
-        "handle_enabled": bool(settings.handle_enabled),
+        "email_change_enabled": bool(profile_settings.email_change_enabled),
+        "account_deletion_enabled": bool(profile_settings.account_deletion_enabled),
+        "avatar_enabled": bool(profile_settings.avatar_enabled),
+        "handle_enabled": bool(profile_settings.handle_enabled),
         "two_factor_enabled": two_factor_enabled,
         "twofa_active": twofa_active,
         "passkeys_enabled": passkeys_enabled,
@@ -107,10 +111,11 @@ async def profile_page(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
 ) -> HTMLResponse | JSONResponse:
     if wants_json(request):
         profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
-        if profile is not None and profile.handle is None and settings.handle_enabled:
+        if profile is not None and profile.handle is None and profile_settings.handle_enabled:
             profile = await repo.auto_handle(profile, current_user.email)
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
@@ -164,8 +169,9 @@ async def email_change(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
 ) -> HTMLResponse | JSONResponse:
-    if not settings.email_change_enabled:
+    if not profile_settings.email_change_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
     new_email = str(body.get("new_email", "")).strip().lower()
@@ -203,7 +209,7 @@ async def email_change(
 # the two calls; deletion is a plain form for the no-JS path.
 
 
-def _ensure_passkeys(access_token: str | None) -> None:
+def _ensure_passkeys(users_settings: SettingsView, access_token: str | None) -> None:
     if not users_settings.passkeys_enabled or not access_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
@@ -211,9 +217,10 @@ def _ensure_passkeys(access_token: str | None) -> None:
 @router.post("/profile/passkeys/options", response_model=None)
 async def passkey_options(
     current_user: CurrentUser,
+    users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
 ) -> JSONResponse:
-    _ensure_passkeys(access_token)
+    _ensure_passkeys(users_settings, access_token)
     assert access_token is not None
     try:
         return JSONResponse(await passkey_registration_options(access_token))
@@ -226,9 +233,10 @@ async def passkey_verify(
     request: Request,
     bg: BackgroundTasks,
     current_user: CurrentUser,
+    users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
 ) -> JSONResponse:
-    _ensure_passkeys(access_token)
+    _ensure_passkeys(users_settings, access_token)
     assert access_token is not None
     body = await parse_body(request)
     challenge_id = str(body.get("challenge_id", ""))
@@ -253,9 +261,10 @@ async def passkey_delete(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
 ) -> HTMLResponse | JSONResponse | Response:
-    _ensure_passkeys(access_token)
+    _ensure_passkeys(users_settings, access_token)
     assert access_token is not None
     try:
         await delete_passkey(access_token, passkey_id)
@@ -277,6 +286,7 @@ async def twofa_enroll(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
 ) -> HTMLResponse | JSONResponse:
     if not users_settings.two_factor_enabled or not access_token:
@@ -309,6 +319,7 @@ async def twofa_verify(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
 ) -> HTMLResponse | JSONResponse:
     if not users_settings.two_factor_enabled or not access_token:
@@ -344,8 +355,9 @@ async def account_delete(
     admin_session: AdminSession,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
 ) -> Response:
-    if not settings.account_deletion_enabled:
+    if not profile_settings.account_deletion_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
     current_password = str(body.get("current_password", ""))
@@ -391,8 +403,9 @@ async def avatar_upload(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
 ) -> HTMLResponse | JSONResponse:
-    if not settings.avatar_enabled:
+    if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     ext = _AVATAR_EXT.get(file.content_type or "")
     content = await file.read()
@@ -430,10 +443,13 @@ async def avatar_upload(
 
 @router.get("/profile/avatar/{auth_user_id}", response_model=None)
 async def avatar_image(
-    auth_user_id: uuid.UUID, current_user: CurrentUser, admin_session: AdminSession
+    auth_user_id: uuid.UUID,
+    current_user: CurrentUser,
+    admin_session: AdminSession,
+    profile_settings: ProfileSettings,
 ) -> Response:
     """Streams the avatar to any signed-in user (they appear next to members)."""
-    if not settings.avatar_enabled:
+    if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     profile = await ProfileRepository(admin_session).get_by_auth_user_id(auth_user_id)
     if profile is None or not profile.avatar_path:
@@ -452,8 +468,9 @@ async def profile_update(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
 ) -> HTMLResponse | JSONResponse:
-    if not settings.handle_enabled:
+    if not profile_settings.handle_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
     handle = str(body.get("handle", ""))

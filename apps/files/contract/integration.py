@@ -8,7 +8,6 @@ share router and the org-scoped router, claims the ``files`` slug, answers the d
 import uuid
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.files.contract import settings
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
 from apps.files.infra.storage import storage_path
@@ -38,7 +37,7 @@ _WELCOME_BODY = (
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     host.reserve("files")  # reserved even when disabled, to keep the slug from being squatted
     if not settings.enabled:
         return

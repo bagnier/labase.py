@@ -16,7 +16,6 @@ from apps.console.contract.appearance import (
     THEME_APP,
     THEME_KEY,
     THEMES,
-    appearance,
     current_theme,
 )
 from apps.console.contract.appearance import (
@@ -39,7 +38,7 @@ def mount(host: Host) -> None:
     host.events.on(UserCreated, _bootstrap_first_admin)
     host.events.on(ConsoleOverviewQuery, _logs_overview)
 
-    host.register_settings(appearance, _declare_appearance_settings())
+    host.register_settings(_declare_appearance_settings())
     host.events.on(ConsoleOverviewQuery, appearance_overview)
 
     observability.declare(host)

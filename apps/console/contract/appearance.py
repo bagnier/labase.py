@@ -8,7 +8,7 @@ mount, next to ``css_v``), kept fresh by the ``SettingsChanged`` event like any 
 """
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.shared.settings import AppSettings
+from apps.shared.settings import get_settings
 
 THEME_APP = "appearance"
 THEME_KEY = "theme"
@@ -28,15 +28,12 @@ THEMES = [
     "business",
 ]
 
-# Live handle: bound to its declared group at mount, refreshed by SettingsChanged.
-appearance = AppSettings()
-
 
 def current_theme() -> str:
     """The active app-wide theme, falling back to the default for an unset/unknown value."""
     try:
-        value = appearance.theme
-    except AttributeError:
+        value = get_settings(THEME_APP).theme
+    except KeyError, AttributeError:
         return DEFAULT_THEME
     return value if value in THEMES else DEFAULT_THEME
 

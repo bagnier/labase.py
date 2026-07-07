@@ -1,12 +1,12 @@
 from fastapi import Response
 
-from apps.auth.contract import settings
 from apps.shared.config import get_technical_settings
+from apps.shared.settings import get_settings
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     secure = get_technical_settings().cookies_secure
-    max_age = settings.session_ttl_seconds
+    max_age = get_settings("users").session_ttl_seconds
     response.set_cookie(
         "access_token",
         access_token,

@@ -4,7 +4,6 @@ Event wiring for sign-up (``UserCreated`` emission, compensation) lives in the r
 orchestrator (:mod:`app.registration`), not here.
 """
 
-from apps.auth.contract import settings
 from apps.auth.contract.admin import list_server_admins
 from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
@@ -18,7 +17,7 @@ def mount(host: Host) -> None:
     # Before the console context mounts: /console/accounts must precede /console/{app}.
     host.app.include_router(accounts_router, prefix="/console/accounts")
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    host.register_settings(_declare_settings())
     host.reserve("auth", "login", "logout", "signup")
 
 

@@ -15,7 +15,6 @@ from datetime import timedelta
 import structlog
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.metrics.contract import settings
 from apps.metrics.infra.flusher import MetricsFlusher
 from apps.metrics.infra.repository import purge, rollup, total_requests
 from apps.metrics.infra.router import WINDOW_HOURS, exposition_router, router
@@ -23,7 +22,13 @@ from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host
 from apps.shared.queue import ensure_scheduled, register_task_handler
-from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
+from apps.shared.settings import (
+    SettingDef,
+    SettingsDeclaration,
+    SupabaseLink,
+    feature_switch,
+    get_settings,
+)
 
 log = structlog.get_logger("labase.metrics")
 
@@ -35,7 +40,7 @@ MINUTE_RETENTION_DAYS = 7
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     host.reserve("metrics")
     if not settings.enabled:
         return
@@ -61,7 +66,7 @@ def _declare_settings() -> SettingsDeclaration:
 
 async def _rollup(session, _payload: dict) -> None:
     removed, merged = await rollup(session, minute_retention_days=MINUTE_RETENTION_DAYS)
-    purged = await purge(session, int(settings.retention_days))
+    purged = await purge(session, int(get_settings("metrics").retention_days))
     log.info("metrics.rolled_up", minute_rows=removed, hour_rows=merged, purged=purged)
 
 

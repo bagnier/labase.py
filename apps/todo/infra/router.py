@@ -17,7 +17,8 @@ from apps.shared.http import (
 )
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
-from apps.todo.contract import settings
+from apps.shared.settings import SettingsView
+from apps.todo.contract.current import TodoSettings
 from apps.todo.domain.models import TodoRead
 from apps.todo.infra.repository import TodoRepository
 
@@ -37,6 +38,7 @@ async def _render(
     current_user: AuthenticatedUser,
     repo: TodoRepo,
     org,
+    settings: SettingsView,
 ) -> Response:
     context = await fullpage_context(session, current_user) if wants_full_page(request) else None
     return render_list(
@@ -60,8 +62,9 @@ async def todo_list(
     session: RlsSession,
     repo: TodoRepo,
     org: CurrentOrgModel,
+    settings: TodoSettings,
 ):
-    return await _render(request, session, current_user, repo, org)
+    return await _render(request, session, current_user, repo, org, settings)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -73,13 +76,11 @@ async def add_todo(
     repo: TodoRepo,
     org: CurrentOrgModel,
     org_id: CurrentOrg,
+    settings: TodoSettings,
 ):
-    # Effective settings for THIS org: server-wide values unless the console
-    # overrode them for this organisation (per-org feature flags).
-    org_settings = await settings.for_org(session, org_id)
-    if not org_settings["creation_enabled"]:
+    if not settings.creation_enabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Task creation is disabled")
-    if await repo.count() >= int(org_settings["max_items_per_org"]):
+    if await repo.count() >= settings.max_items_per_org:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Task limit reached for this organisation")
 
     title = await parse_field(request, "title")
@@ -91,7 +92,7 @@ async def add_todo(
         org_id=org_id,
         todo_id=str(todo.id),
     )
-    return await _render(request, session, current_user, repo, org)
+    return await _render(request, session, current_user, repo, org, settings)
 
 
 @router.patch("/{todo_id}", response_class=HTMLResponse)
@@ -104,6 +105,7 @@ async def patch_todo(
     repo: TodoRepo,
     org: CurrentOrgModel,
     org_id: CurrentOrg,
+    settings: TodoSettings,
 ):
     body = await parse_body(request)
     done_raw = body.get("done")
@@ -124,7 +126,7 @@ async def patch_todo(
             org_id=org_id,
             todo_id=str(todo_id),
         )
-    return await _render(request, session, current_user, repo, org)
+    return await _render(request, session, current_user, repo, org, settings)
 
 
 @router.delete("/{todo_id}", response_class=HTMLResponse)
@@ -137,6 +139,7 @@ async def delete_todo(
     repo: TodoRepo,
     org: CurrentOrgModel,
     org_id: CurrentOrg,
+    settings: TodoSettings,
 ):
     todo = await repo.get(todo_id)
     if todo:
@@ -150,7 +153,7 @@ async def delete_todo(
         )
     if wants_json(request):
         return delete_response(request)
-    return await _render(request, session, current_user, repo, org)
+    return await _render(request, session, current_user, repo, org, settings)
 
 
 @router.put("/{todo_id}/position", response_class=HTMLResponse)
@@ -161,8 +164,9 @@ async def move_todo(
     session: RlsSession,
     repo: TodoRepo,
     org: CurrentOrgModel,
+    settings: TodoSettings,
 ):
     body = await request.json()
     above_id = uuid.UUID(body["above_id"]) if body.get("above_id") else None
     await repo.move_above(todo_id, above_id)
-    return await _render(request, session, current_user, repo, org)
+    return await _render(request, session, current_user, repo, org, settings)

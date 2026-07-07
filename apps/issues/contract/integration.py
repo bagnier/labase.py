@@ -12,7 +12,6 @@ ahead of the console's /console/{app} catch-all.
 import structlog
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.issues.contract import settings
 from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.issues.domain import service
 from apps.issues.infra.repository import (
@@ -27,7 +26,13 @@ from apps.shared.host import Host
 from apps.shared.observability.errors import ExceptionCaptured
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.queue import ensure_scheduled, register_task_handler
-from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
+from apps.shared.settings import (
+    SettingDef,
+    SettingsDeclaration,
+    SupabaseLink,
+    feature_switch,
+    get_settings,
+)
 
 log = structlog.get_logger("labase.issues")
 
@@ -41,7 +46,7 @@ def mount(host: Host) -> None:
     global _host
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     if not settings.enabled:
         return
     _host = host
@@ -111,6 +116,7 @@ async def _alert_regressed(event: IssueRegressed) -> None:
 
 
 async def _send_alert(subject: str, group_id: int) -> None:
+    settings = get_settings("issues")
     if not settings.alerting_enabled or not settings.alert_email:
         return
     text = f"{subject}\n\nSee /console/issues/{group_id} for the stack and context."
@@ -124,7 +130,7 @@ async def _send_alert(subject: str, group_id: int) -> None:
 
 
 async def _purge(session, _payload: dict) -> None:
-    deleted = await purge_old_events(session, int(settings.retention_days))
+    deleted = await purge_old_events(session, int(get_settings("issues").retention_days))
     log.info("issues.purged", deleted=deleted)
 
 

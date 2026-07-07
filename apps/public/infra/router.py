@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from apps.auth.contract.current import OptionalCurrentUser
 from apps.organizations.contract.queries import org_by_handle
 from apps.pages.contract.public import get_public_nav, get_public_page, get_public_pages
-from apps.public.contract import settings
+from apps.public.contract.current import PublicSettings
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 
@@ -13,9 +13,12 @@ router = APIRouter(tags=["public"])
 
 @router.get("/", response_class=HTMLResponse, response_model=None)
 async def index(
-    request: Request, admin: AdminSession, current_user: OptionalCurrentUser
+    request: Request,
+    admin: AdminSession,
+    current_user: OptionalCurrentUser,
+    public_settings: PublicSettings,
 ) -> HTMLResponse | RedirectResponse:
-    handle: str = settings.featured_org_handle  # type: ignore[assignment]
+    handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         return templates.TemplateResponse(request, "home.html")
     org = await org_by_handle(admin, handle)
@@ -40,9 +43,13 @@ async def index(
 
 @router.get("/{slug}", response_class=HTMLResponse)
 async def public_page(
-    slug: str, request: Request, admin: AdminSession, current_user: OptionalCurrentUser
+    slug: str,
+    request: Request,
+    admin: AdminSession,
+    current_user: OptionalCurrentUser,
+    public_settings: PublicSettings,
 ) -> HTMLResponse:
-    handle: str = settings.featured_org_handle  # type: ignore[assignment]
+    handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     org = await org_by_handle(admin, handle)

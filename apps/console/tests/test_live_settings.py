@@ -1,7 +1,14 @@
 import pytest
 
+import apps.shared.settings as shared_settings
 from apps.shared.bus import EventBus
-from apps.shared.settings import AppSettings, SettingDef, SettingsChanged, SettingsDeclaration
+from apps.shared.settings import (
+    AppSettings,
+    SettingDef,
+    SettingsChanged,
+    SettingsDeclaration,
+    get_settings,
+)
 
 _DECLARATION = SettingsDeclaration(
     "files",
@@ -91,10 +98,35 @@ def test_no_declaration_leaves_everything_as_text() -> None:
 def test_merged_for_org_overlays_and_coerces():
     settings = _settings()
     values = settings.merged_for_org({"max_upload_mb": "5"})
-    assert values["max_upload_mb"] == 5  # int, org override wins
-    assert values["uploads_enabled"] is True  # untouched keys keep server defaults
+    assert values.max_upload_mb == 5  # int, org override wins
+    assert values.uploads_enabled is True  # untouched keys keep server defaults
 
 
 def test_merged_for_org_without_override_keeps_server_values():
     settings = _settings()
-    assert settings.merged_for_org({}) == settings.values
+    assert settings.merged_for_org({}).values == settings.values
+
+
+def test_coercion_is_cached_and_dropped_on_write():
+    settings = _settings()
+    first = settings.values
+    assert settings.values is first  # same dict: not re-coerced on every attribute access
+    settings._raw = {"max_upload_mb": "7"}  # any write path drops the cache
+    assert settings.max_upload_mb == 7
+
+
+def test_view_exposes_server_values_read_only():
+    view = _settings().view()
+    assert view.max_upload_mb == 25
+    assert view.uploads_enabled is True
+
+
+def test_get_settings_returns_the_registered_handle(monkeypatch):
+    handle = _settings()
+    monkeypatch.setitem(shared_settings._registry, "demo-app", handle)
+    assert get_settings("demo-app") is handle
+
+
+def test_get_settings_unknown_app_raises_key_error():
+    with pytest.raises(KeyError):
+        get_settings("never-mounted")

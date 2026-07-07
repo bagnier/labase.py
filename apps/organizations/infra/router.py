@@ -6,11 +6,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from apps.auth.contract.admin import find_user_id_by_email, resolve_user_emails
 from apps.auth.contract.current import CurrentUser, RlsSession
-from apps.organizations.contract import settings
 from apps.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
     CurrentOwnerMembership,
+    OrganizationsSettings,
 )
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.organizations.domain.exceptions import (
@@ -91,12 +91,13 @@ async def create_organization(
     bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
+    org_settings: OrganizationsSettings,
 ) -> Response:
     body = await parse_body(request)
     name = str(body.get("name", "")).strip()
     user_id = uuid.UUID(current_user.id)
 
-    max_orgs = settings.max_owned_orgs_per_user
+    max_orgs = org_settings.max_owned_orgs_per_user
     if max_orgs >= 0 and await repo.count_owned_by(user_id) >= max_orgs:
         msg = OrgLimitReached.message(max_orgs)
         if wants_json(request):

@@ -9,7 +9,6 @@ from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuer
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.fullpage import OrgNavItem, OrgNavQuery
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.pages.contract import settings
 from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
@@ -24,7 +23,7 @@ _RECENT = 3
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     host.reserve("pages")  # reserved even when disabled, to keep the slug from being squatted
     if not settings.enabled:
         return

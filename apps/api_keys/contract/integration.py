@@ -9,7 +9,6 @@ without touching auth.
 
 from sqlalchemy import func, select
 
-from apps.api_keys.contract import settings
 from apps.api_keys.domain.models import ApiKey
 from apps.api_keys.domain.service import hash_token
 from apps.api_keys.infra.repository import resolve_active_key, touch_last_used
@@ -26,7 +25,7 @@ from apps.shared.settings import SettingsDeclaration, feature_switch
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     if not settings.enabled:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)

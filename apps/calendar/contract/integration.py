@@ -10,7 +10,6 @@ from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.calendar.contract import settings
 from apps.calendar.domain.models import CalendarEvent
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.calendar.infra.router import router
@@ -32,7 +31,7 @@ _WELCOME_TITLE = "Welcome to your team calendar"
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_settings(settings, _declare_settings())
+    settings = host.register_settings(_declare_settings())
     host.reserve("calendar")  # reserved even when disabled, to keep the slug from being squatted
     if not settings.enabled:
         return
