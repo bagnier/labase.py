@@ -1,14 +1,9 @@
 import pytest
 
-from apps.settings.contract.settings import (
-    AppSettings,
-    SettingDef,
-    SettingsChanged,
-    SettingsGroup,
-)
 from apps.shared.bus import EventBus
+from apps.shared.settings import AppSettings, SettingDef, SettingsChanged, SettingsDeclaration
 
-_GROUP = SettingsGroup(
+_DECLARATION = SettingsDeclaration(
     "files",
     [
         SettingDef("max_upload_mb", "number", "25", "Max upload size"),
@@ -18,7 +13,7 @@ _GROUP = SettingsGroup(
 
 
 def _settings() -> AppSettings:
-    return AppSettings("files", raw={}, group=_GROUP)
+    return AppSettings(raw={}, declaration=_DECLARATION)
 
 
 @pytest.mark.asyncio
@@ -49,7 +44,7 @@ def test_unknown_setting_raises_attribute_error() -> None:
         _ = _settings().nonexistent
 
 
-_TYPED_GROUP = SettingsGroup(
+_TYPED_DECLARATION = SettingsDeclaration(
     "demo",
     [
         SettingDef("title", "string", "Untitled", "A string"),
@@ -61,35 +56,34 @@ _TYPED_GROUP = SettingsGroup(
 
 def test_values_coerced_to_each_declared_type() -> None:
     settings = AppSettings(
-        "demo",
         raw={"title": "Hello", "limit": "42", "active": "false"},
-        group=_TYPED_GROUP,
+        declaration=_TYPED_DECLARATION,
     )
 
     assert settings.values == {"title": "Hello", "limit": 42, "active": False}
 
 
 def test_missing_values_fall_back_to_declared_default_typed() -> None:
-    settings = AppSettings("demo", raw={}, group=_TYPED_GROUP)
+    settings = AppSettings(raw={}, declaration=_TYPED_DECLARATION)
 
     # Defaults coerced too: "10" -> 10, "true" -> True, "Untitled" stays text.
     assert settings.values == {"title": "Untitled", "limit": 10, "active": True}
 
 
 def test_non_numeric_number_passes_through_unchanged() -> None:
-    settings = AppSettings("demo", raw={"limit": "lots"}, group=_TYPED_GROUP)
+    settings = AppSettings(raw={"limit": "lots"}, declaration=_TYPED_DECLARATION)
 
     assert settings.limit == "lots"
 
 
 def test_undeclared_persisted_key_passes_through_as_text() -> None:
-    settings = AppSettings("demo", raw={"stray": "5"}, group=_TYPED_GROUP)
+    settings = AppSettings(raw={"stray": "5"}, declaration=_TYPED_DECLARATION)
 
     assert settings.stray == "5"  # no SettingDef -> left as the raw string
 
 
-def test_no_group_leaves_everything_as_text() -> None:
-    settings = AppSettings("demo", raw={"limit": "42"}, group=None)
+def test_no_declaration_leaves_everything_as_text() -> None:
+    settings = AppSettings(raw={"limit": "42"}, declaration=None)
 
     assert settings.limit == "42"
 

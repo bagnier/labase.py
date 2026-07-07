@@ -10,8 +10,8 @@ from typing import cast
 
 from apps.auth.contract.admin import count_server_admins, set_server_admin
 from apps.auth.contract.events import UserCreated
-from apps.settings.contract import observability
-from apps.settings.contract.appearance import (
+from apps.console.contract import observability
+from apps.console.contract.appearance import (
     DEFAULT_THEME,
     THEME_APP,
     THEME_KEY,
@@ -19,18 +19,18 @@ from apps.settings.contract.appearance import (
     appearance,
     current_theme,
 )
-from apps.settings.contract.appearance import (
+from apps.console.contract.appearance import (
     overview as appearance_overview,
 )
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import SettingDef, SettingsChanged, declare_app_settings
-from apps.settings.contract.technical import overview as technical_overview
-from apps.settings.infra.audit_log_repository import AuditLogRepository
-from apps.settings.infra.refresh import SettingsRefresher
-from apps.settings.infra.router import router
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.console.contract.technical import overview as technical_overview
+from apps.console.infra.audit_log_repository import AuditLogRepository
+from apps.console.infra.refresh import SettingsRefresher
+from apps.console.infra.router import router
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host
 from apps.shared.http.templates import templates
+from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
 
 
 def mount(host: Host) -> None:
@@ -39,23 +39,10 @@ def mount(host: Host) -> None:
     host.events.on(UserCreated, _bootstrap_first_admin)
     host.events.on(ConsoleOverviewQuery, _logs_overview)
 
-    appearance.group = declare_app_settings(
-        THEME_APP,
-        defs=[
-            SettingDef(
-                THEME_KEY,
-                "string",
-                DEFAULT_THEME,
-                "Application theme — applies to everyone (one of the enabled DaisyUI themes)",
-            )
-        ],
-    )
-    appearance.read()
-    host.events.on(SettingsChanged, appearance.reload)
+    host.register_settings(appearance, _declare_appearance_settings())
     host.events.on(ConsoleOverviewQuery, appearance_overview)
 
-    observability.declare()
-    host.events.on(SettingsChanged, observability.reload)
+    observability.declare(host)
     host.events.on(ConsoleOverviewQuery, observability.overview)
 
     host.events.on(ConsoleOverviewQuery, technical_overview)
@@ -71,6 +58,20 @@ def mount(host: Host) -> None:
     jinja_globals = cast("dict[str, object]", templates.env.globals)
     jinja_globals["app_theme"] = current_theme
     jinja_globals["app_themes"] = lambda: THEMES
+
+
+def _declare_appearance_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name=THEME_APP,
+        defs=[
+            SettingDef(
+                THEME_KEY,
+                "string",
+                DEFAULT_THEME,
+                "Application theme — applies to everyone (one of the enabled DaisyUI themes)",
+            )
+        ],
+    )
 
 
 async def _bootstrap_first_admin(event: UserCreated) -> None:

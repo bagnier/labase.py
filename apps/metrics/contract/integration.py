@@ -6,7 +6,7 @@ and the console "Load" screen aggregates them; a daily rollup downsamples
 minute → hour and applies retention (async-substrate consumer, like
 ``issues.purge``).
 
-NOTE: mounted BEFORE the settings context so its /console/load routes register
+NOTE: mounted BEFORE the console context so its /console/load routes register
 ahead of the console's /console/{app} catch-all.
 """
 
@@ -14,23 +14,16 @@ from datetime import timedelta
 
 import structlog
 
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.metrics.contract import settings
 from apps.metrics.infra.flusher import MetricsFlusher
 from apps.metrics.infra.repository import purge, rollup, total_requests
 from apps.metrics.infra.router import WINDOW_HOURS, exposition_router, router
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host
 from apps.shared.queue import ensure_scheduled, register_task_handler
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 log = structlog.get_logger("labase.metrics")
 
@@ -42,12 +35,10 @@ MINUTE_RETENTION_DAYS = 7
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    _declare_settings()
+    host.register_settings(settings, _declare_settings())
     host.reserve("metrics")
-    if not get_app_settings("metrics").enabled:
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(exposition_router)
     host.app.include_router(router, prefix="/console/load")
     register_task_handler(ROLLUP_TOPIC, _rollup)
@@ -57,9 +48,9 @@ def mount(host: Host) -> None:
     host.app.router.add_event_handler("shutdown", flusher.stop)
 
 
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "metrics",
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="metrics",
         defs=[
             feature_switch(),
             SettingDef("retention_days", "number", "30", "Days of hourly metrics to keep"),

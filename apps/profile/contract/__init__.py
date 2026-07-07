@@ -1,5 +1,5 @@
 """Live settings handle for the profile context, read as attributes."""
 
-from apps.settings.contract.settings import AppSettings
+from apps.shared.settings import AppSettings
 
-settings = AppSettings("profile")
+settings = AppSettings()

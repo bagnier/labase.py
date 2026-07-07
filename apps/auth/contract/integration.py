@@ -8,27 +8,29 @@ from apps.auth.contract import settings
 from apps.auth.contract.admin import list_server_admins
 from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    ConsoleLink,
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-)
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.host import Host
+from apps.shared.settings import ConsoleLink, SettingDef, SettingsDeclaration, SupabaseLink
 
 
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/auth", tags=["auth"])
-    # Before the settings context mounts: /console/accounts must precede /console/{app}.
+    # Before the console context mounts: /console/accounts must precede /console/{app}.
     host.app.include_router(accounts_router, prefix="/console/accounts")
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    settings.group = declare_app_settings(
-        "users",
+    host.register_settings(settings, _declare_settings())
+    host.reserve("auth", "login", "logout", "signup")
+
+
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="users",
         defs=[
             SettingDef(
-                "session_ttl_seconds", "number", "604800", "Session cookie lifetime, in seconds"
+                "session_ttl_seconds",
+                "number",
+                "604800",
+                "Session cookie lifetime, in seconds",
             ),
             SettingDef(
                 "resend_confirmation_enabled",
@@ -70,9 +72,6 @@ def mount(host: Host) -> None:
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
         links=(ConsoleLink("Accounts", "/console/accounts"),),
     )
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
-    host.reserve("auth", "login", "logout", "signup")
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

@@ -1,25 +1,76 @@
 """Mount-time CRUD for per-app settings — the console's settings repository at startup.
 
 Apps **declare** their settings and **read** their values inside ``mount()`` (sync, before the
-serving loop), via :mod:`apps.settings.contract.settings`. This module owns the concrete DB
-plumbing for that moment: a throwaway engine driven by :func:`asyncio.run`.
+serving loop), via :mod:`apps.shared.settings`. This module owns the persisted tables and the
+concrete DB plumbing for that moment: a throwaway engine driven by :func:`asyncio.run`.
 
 The lru_cached admin engine must not be touched here, or its asyncpg pool would bind to this
 short-lived loop and break the serving loop — hence the disposable engine.
 """
 
 import asyncio
+import uuid
 from collections.abc import Awaitable, Callable
 
 import structlog
+from sqlalchemy import ForeignKey, Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.settings.domain.models import AppSetting
-from apps.settings.infra.repository import app_settings_select
 from apps.shared.config import get_technical_settings
+from apps.shared.persistence.base import Base, Timestamped, Versioned
 
 log = structlog.get_logger("labase.settings.store")
+
+# Stored form of a boolean setting value.
+BOOL_TRUE = "true"
+BOOL_FALSE = "false"
+
+# Reserved key for an app's on/off switch, stored like any other setting value.
+ENABLED_KEY = "enabled"
+
+
+class AppSetting(Base, Versioned, Timestamped):
+    """The persisted value of one app setting — seeded on declaration, edited from the console."""
+
+    __tablename__ = "app_settings"
+
+    app: Mapped[str] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(primary_key=True)
+    value: Mapped[str]  # stored as text; coerced by the app's declared SettingDef.type
+
+
+class OrgAppSetting(Base, Versioned, Timestamped):
+    """A per-organisation override of one app setting — managed from the console.
+
+    Unset (app, key, org) triples fall back to the server-wide `AppSetting` value.
+    """
+
+    __tablename__ = "org_app_settings"
+
+    app_name: Mapped[str] = mapped_column("app", primary_key=True)  # DB column is still "app"
+    key: Mapped[str] = mapped_column(primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    value: Mapped[str]
+
+
+def disabled_apps_select() -> Select[tuple[str]]:
+    """Select the slugs of apps whose persisted ``enabled`` value is ``false``.
+
+    Used by the admin-session repository to render the console's toggle state.
+    """
+    return select(AppSetting.app).where(
+        AppSetting.key == ENABLED_KEY, AppSetting.value == BOOL_FALSE
+    )
+
+
+def app_settings_select(app: str) -> Select[tuple[str, str]]:
+    """Select every persisted ``(key, value)`` for ``app``.
+
+    Used by the mount-time store so each app can read its whole settings on a throwaway engine.
+    """
+    return select(AppSetting.key, AppSetting.value).where(AppSetting.app == app)
 
 
 async def _on_throwaway_engine[T](work: Callable[[AsyncConnection], Awaitable[T]]) -> T:

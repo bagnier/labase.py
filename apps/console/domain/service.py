@@ -3,8 +3,8 @@ validates a written value against its declared type."""
 
 from typing import TypedDict
 
-from apps.settings.contract.settings import SettingDef, SettingsGroup, SettingType
-from apps.settings.domain.models import BOOL_FALSE, BOOL_TRUE
+from apps.shared.persistence.settings_store import BOOL_FALSE, BOOL_TRUE
+from apps.shared.settings import SettingDef, SettingsDeclaration, SettingType
 
 
 class UnknownSetting(Exception):
@@ -29,7 +29,7 @@ def coerce_bool(raw: object) -> bool:
     return raw is True or str(raw).lower() == BOOL_TRUE
 
 
-def settings_view(group: SettingsGroup, values: dict[str, str]) -> list[SettingView]:
+def settings_view(group: SettingsDeclaration, values: dict[str, str]) -> list[SettingView]:
     """Each declared setting paired with its stored value (declared default if not yet seeded)."""
     return [
         SettingView(
@@ -42,13 +42,13 @@ def settings_view(group: SettingsGroup, values: dict[str, str]) -> list[SettingV
     ]
 
 
-def validate(group: SettingsGroup, key: str, value: str) -> str:
+def validate(group: SettingsDeclaration, key: str, value: str) -> str:
     """Validate ``value`` against the declared :class:`SettingDef`; return its stored form."""
     definition = _find(group, key)
     return _normalise(definition, value)
 
 
-def _find(group: SettingsGroup, key: str) -> SettingDef:
+def _find(group: SettingsDeclaration, key: str) -> SettingDef:
     for d in group.defs:
         if d.key == key:
             return d

@@ -104,6 +104,7 @@ forbidden_modules = [
     "apps.auth",
     "apps.issues",
     "apps.calendar",
+    "apps.console",
     "apps.files",
     "apps.health",
     "apps.learning",
@@ -112,7 +113,6 @@ forbidden_modules = [
     "apps.pages",
     "apps.profile",
     "apps.public",
-    "apps.settings",
     "apps.todo",
 ]
 
@@ -133,6 +133,12 @@ name = "calendar internals are private"
 type = "protected"
 protected_modules = ["apps.calendar.domain", "apps.calendar.infra"]
 allowed_importers = ["apps.calendar.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
+name = "console internals are private"
+type = "protected"
+protected_modules = ["apps.console.domain", "apps.console.infra"]
+allowed_importers = ["apps.console.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]
 name = "files internals are private"
@@ -187,12 +193,6 @@ name = "public internals are private"
 type = "protected"
 protected_modules = ["apps.public.infra"]
 allowed_importers = ["apps.public.**", "apps.*.tests.**"]
-
-[[tool.importlinter.contracts]]
-name = "settings internals are private"
-type = "protected"
-protected_modules = ["apps.settings.domain", "apps.settings.infra"]
-allowed_importers = ["apps.settings.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]
 name = "todo internals are private"

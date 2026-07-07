@@ -11,6 +11,7 @@ import uuid
 from sqlalchemy import func, select
 
 from apps.auth.contract.events import UserCreated, UserDeleted
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX, settings
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.fullpage import provide_org_nav
@@ -19,16 +20,10 @@ from apps.organizations.domain.models import Membership, Organization
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-)
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, NavItem, host
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
 from apps.shared.slug_registry import register_open_list
 from apps.shared.text import pluralize
 
@@ -38,8 +33,24 @@ from apps.shared.text import pluralize
 
 def mount(host: Host) -> None:
     # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch.
-    settings.group = declare_app_settings(
-        "organizations",
+    host.register_settings(settings, _declare_settings())
+    host.app.include_router(invitation_router)
+    host.app.include_router(router)  # /organizations collection
+    host.app.include_router(org_router, prefix=ORG_PREFIX)
+    host.events.on(UserCreated, _create_org)
+    host.events.on(UserDeleted, _forget_user)
+    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.register_fullpage_provider("org", provide_org_nav)
+    host.register_nav(
+        NavItem("Settings", "gear", "settings", "/settings", order=100, owner_only=True)
+    )
+    host.reserve("invitations")
+    register_open_list("organizations", org_handle_taken)
+
+
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="organizations",
         defs=[
             SettingDef(
                 "max_owned_orgs_per_user",
@@ -56,20 +67,6 @@ def mount(host: Host) -> None:
         ],
         supabase=SupabaseLink("Browse organisations in Supabase", table="organizations"),
     )
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
-    host.app.include_router(invitation_router)
-    host.app.include_router(router)  # /organizations collection
-    host.app.include_router(org_router, prefix=ORG_PREFIX)
-    host.events.on(UserCreated, _create_org)
-    host.events.on(UserDeleted, _forget_user)
-    host.events.on(ConsoleOverviewQuery, _console_overview)
-    host.register_fullpage_provider("org", provide_org_nav)
-    host.register_nav(
-        NavItem("Settings", "gear", "settings", "/settings", order=100, owner_only=True)
-    )
-    host.reserve("invitations")
-    register_open_list("organizations", org_handle_taken)
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

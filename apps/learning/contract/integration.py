@@ -6,23 +6,16 @@ answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrgCreate
 
 from sqlalchemy import func, select
 
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.learning.contract import settings
 from apps.learning.domain.models import Card, Deck
 from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
 
 _WELCOME_DECK = "Welcome"
@@ -46,20 +39,18 @@ _WELCOME_CARDS = [
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    _declare_settings()
-    if not get_app_settings("learning").enabled:
+    host.register_settings(settings, _declare_settings())
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 
 
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "learning",
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="learning",
         defs=[
             feature_switch(),
             SettingDef("sharing_enabled", "boolean", "true", "Allow members to share decks"),

@@ -1,27 +1,21 @@
 """How the public context plugs into the running app: mounts the landing-page router."""
 
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.public.contract import settings
 from apps.public.infra.router import router
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    declare_app_settings,
-)
 from apps.shared.host import Host
+from apps.shared.settings import SettingDef, SettingsDeclaration
 
 
 def mount(host: Host) -> None:
-    _declare_settings()
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
+    host.register_settings(settings, _declare_settings())
     host.app.include_router(router)
     host.events.on(ConsoleOverviewQuery, _console_overview)
 
 
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "public",
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="public",
         defs=[
             SettingDef(
                 "featured_org_handle",

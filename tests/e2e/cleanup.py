@@ -104,9 +104,10 @@ def truncate_app_tables() -> None:
 def reset_app_switches() -> None:
     """Clears persisted ``enabled`` overrides so feature switches don't leak across runs.
 
-    The app reads the disabled set at import time (see apps.settings.contract.features), so a
-    leftover ``enabled = false`` in the shared dev/test DB would unmount an app for the whole
-    suite. Called from ``pytest_configure``, before any test module imports ``apps.main``.
+    Each app's ``mount()`` reads its ``enabled`` switch once, at process start (see
+    apps.shared.settings) — there's no live unmount. So a leftover ``enabled = false`` in the
+    shared dev/test DB would keep an app unmounted for the whole suite, until the next process
+    start. Called from ``pytest_configure``, before any test module imports ``apps.main``.
     """
 
     async def _reset() -> None:

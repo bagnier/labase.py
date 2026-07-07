@@ -14,10 +14,10 @@ import contextlib
 import structlog
 from sqlalchemy import select
 
-from apps.settings.contract.settings import SettingsChanged
-from apps.settings.domain.models import AppSetting
 from apps.shared.host import Host
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.persistence.settings_store import AppSetting
+from apps.shared.settings import SettingsChanged
 
 log = structlog.get_logger("labase.settings.refresh")
 
@@ -43,7 +43,7 @@ class SettingsRefresher:
     async def absorb(self, event: SettingsChanged) -> None:
         """Bus handler: a local edit is already fresh here — don't re-emit it next tick."""
         if self._snapshot is not None:
-            self._snapshot[event.app] = dict(event.values)
+            self._snapshot[event.app_name] = dict(event.values)
 
     async def _read_all(self) -> dict[str, dict[str, str]]:
         async with admin_session_factory()() as session:

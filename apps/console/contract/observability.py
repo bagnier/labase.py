@@ -6,43 +6,44 @@ converges like any setting: instantly on the emitting instance
 redeploy, no env edit.
 """
 
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    AppSettings,
-    SettingDef,
-    SettingsChanged,
-    declare_app_settings,
-)
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.shared.host import Host
 from apps.shared.observability.logging import apply_log_level, default_log_level
+from apps.shared.settings import AppSettings, SettingDef, SettingsChanged, SettingsDeclaration
 
 OBSERVABILITY_APP = "observability"
 LOG_LEVEL_KEY = "log_level"
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
-observability = AppSettings(OBSERVABILITY_APP)
+observability = AppSettings()
 
 
-def declare() -> None:
+def declare(host: Host) -> None:
     """Declare the group, then align the process with the persisted level (mount-time)."""
-    observability.group = declare_app_settings(
-        OBSERVABILITY_APP,
-        defs=[
-            SettingDef(
-                LOG_LEVEL_KEY,
-                "string",
-                default_log_level(),
-                "Log level for structlog and stdlib — applies live, no restart",
-            )
-        ],
+    host.register_settings(
+        observability,
+        SettingsDeclaration(
+            app_name=OBSERVABILITY_APP,
+            defs=[
+                SettingDef(
+                    LOG_LEVEL_KEY,
+                    "string",
+                    default_log_level(),
+                    "Log level for structlog and stdlib — applies live, no restart",
+                )
+            ],
+        ),
     )
-    observability.read()
     apply_log_level(str(observability.log_level))
+    # register_settings already keeps `observability` current; this second subscription reacts
+    # to the change with the one extra step logging needs: re-pointing the live loggers.
+    host.events.on(SettingsChanged, reload)
 
 
 async def reload(event: SettingsChanged) -> None:
     """Console event handler: adopt fresh values and re-point the loggers."""
     await observability.reload(event)
-    if event.app == OBSERVABILITY_APP:
+    if event.app_name == OBSERVABILITY_APP:
         apply_log_level(str(observability.log_level))
 
 

@@ -13,6 +13,13 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 
 from apps.shared.bus import EventBus
+from apps.shared.settings import (
+    AppSettings,
+    ConsoleLink,
+    SettingsChanged,
+    SettingsDeclaration,
+    bind_settings,
+)
 from apps.shared.slug_registry import reserve as _reserve_slugs
 
 if TYPE_CHECKING:
@@ -54,6 +61,7 @@ class Host:
     events: EventBus = field(default_factory=EventBus)
     nav_items: list[NavItem] = field(default_factory=list)
     fullpage_providers: list[FullpageProvider] = field(default_factory=list)
+    declarations: dict[str, SettingsDeclaration] = field(default_factory=dict)
 
     def reserve(self, *slugs: str) -> None:
         """Claim URL slugs so no org handle can shadow them (see :mod:`apps.shared.names`)."""
@@ -68,6 +76,27 @@ class Host:
     ) -> None:
         """Register a fullpage-context slice, contributed by an app from its :func:`mount`."""
         self.fullpage_providers.append(FullpageProvider(name, fn))
+
+    def register_settings(
+        self, settings: AppSettings, declaration: SettingsDeclaration
+    ) -> AppSettings:
+        """Bring ``settings`` live in one call: register ``declaration`` (the console admin page
+        reads it back through :meth:`declared_settings`/:meth:`declared_console_links`), then
+        :func:`apps.shared.settings.bind_settings` seeds missing values and reads current ones,
+        and this subscribes ``settings`` to :class:`SettingsChanged`. Returns ``settings``,
+        mutated in place, so ``if not settings.enabled`` works right after this call."""
+        self.declarations[declaration.app_name] = declaration
+        bind_settings(settings, declaration)
+        self.events.on(SettingsChanged, settings.reload)
+        return settings
+
+    def declared_settings(self, app: str) -> SettingsDeclaration | None:
+        """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
+        return self.declarations.get(app)
+
+    def declared_console_links(self) -> list[ConsoleLink]:
+        """Every console screen declared by mounted apps — the console overview renders them."""
+        return [link for d in self.declarations.values() for link in d.links]
 
 
 host = Host()

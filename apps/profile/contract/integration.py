@@ -5,19 +5,14 @@ import uuid
 from sqlalchemy import func, select
 
 from apps.auth.contract.events import UserDeleted
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.profile.contract import settings
 from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-)
 from apps.shared.host import Host
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
 from apps.shared.slug_registry import register_open_list
 
 
@@ -26,8 +21,15 @@ def mount(host: Host) -> None:
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("profile", provide_profile_handle)
     # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
-    settings.group = declare_app_settings(
-        "profile",
+    host.register_settings(settings, _declare_settings())
+    host.events.on(UserDeleted, _forget_user)
+    host.reserve("profile")
+    register_open_list("profiles", profile_handle_taken)
+
+
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="profile",
         defs=[
             SettingDef(
                 "email_change_enabled",
@@ -56,11 +58,6 @@ def mount(host: Host) -> None:
         ],
         supabase=SupabaseLink("Browse profiles in Supabase", table="profiles"),
     )
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
-    host.events.on(UserDeleted, _forget_user)
-    host.reserve("profile")
-    register_open_list("profiles", profile_handle_taken)
 
 
 async def _forget_user(event: UserDeleted) -> None:

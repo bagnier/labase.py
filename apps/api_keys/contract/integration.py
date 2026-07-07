@@ -17,30 +17,27 @@ from apps.api_keys.infra.router import router
 from apps.auth.contract.admin import resolve_user_emails
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingsChanged,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared.host import Host, NavItem
+from apps.shared.settings import SettingsDeclaration, feature_switch
 
 
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    settings.group = declare_app_settings("api_keys", defs=[feature_switch()])
-    if not get_app_settings("api_keys").enabled:
+    host.register_settings(settings, _declare_settings())
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(
         NavItem("API keys", "key", "api-keys", "/api-keys", order=80, owner_only=True)
     )
     host.events.on(ApiKeyQuery, _resolve)
+
+
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(app_name="api_keys", defs=[feature_switch()])
 
 
 async def _resolve(query: ApiKeyQuery) -> AuthenticatedUser | None:

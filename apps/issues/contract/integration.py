@@ -5,12 +5,13 @@ groups events by stack fingerprint, and serves the console screen. Audit
 doctrine verbatim: persistence is best-effort through collect()'s log-and-skip
 semantics — a failing tracker never worsens the failure it is tracking.
 
-NOTE: mounted BEFORE the settings context so its /console/issues routes register
+NOTE: mounted BEFORE the console context so its /console/issues routes register
 ahead of the console's /console/{app} catch-all.
 """
 
 import structlog
 
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.issues.contract import settings
 from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.issues.domain import service
@@ -20,21 +21,13 @@ from apps.issues.infra.repository import (
     record_event,
 )
 from apps.issues.infra.router import router
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.host import Host
 from apps.shared.observability.errors import ExceptionCaptured
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.queue import ensure_scheduled, register_task_handler
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 log = structlog.get_logger("labase.issues")
 
@@ -48,12 +41,10 @@ def mount(host: Host) -> None:
     global _host
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    _declare_settings()
-    if not get_app_settings("issues").enabled:
+    host.register_settings(settings, _declare_settings())
+    if not settings.enabled:
         return
     _host = host
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(router, prefix="/console/issues")
     host.events.on(ExceptionCaptured, _record)
     host.events.on(IssueOpened, _alert_opened)
@@ -62,9 +53,9 @@ def mount(host: Host) -> None:
     host.app.router.add_event_handler("startup", _plant_purge)
 
 
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "issues",
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="issues",
         defs=[
             feature_switch(),
             SettingDef("retention_days", "number", "30", "Days of error events to keep"),

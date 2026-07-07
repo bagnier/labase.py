@@ -13,6 +13,6 @@ templates = Jinja2Templates(
 )
 _globals = cast("dict[str, object]", templates.env.globals)
 _globals["css_v"] = int(_CSS.stat().st_mtime) if _CSS.exists() else 0
-# Safe defaults; the console mount (apps.settings) overrides these with the live app-wide theme.
+# Safe defaults; the console mount (apps.console) overrides these with the live app-wide theme.
 _globals["app_theme"] = lambda: "light"
 _globals["app_themes"] = list

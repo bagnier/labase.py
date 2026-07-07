@@ -9,20 +9,13 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_with_owner
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared.host import Host, NavItem
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.contract import settings
 from apps.todo.domain.models import TodoItem
 from apps.todo.infra.repository import TodoRepository
@@ -43,20 +36,18 @@ _WELCOME_TODOS = [
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    _declare_settings()
-    if not get_app_settings("todo").enabled:
+    host.register_settings(settings, _declare_settings())
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos", order=10))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 
 
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "todo",
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="todo",
         defs=[
             feature_switch(),
             SettingDef("creation_enabled", "boolean", "true", "Allow members to create tasks"),

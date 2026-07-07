@@ -4,19 +4,13 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
-from apps.settings.contract import appearance, observability
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingsChanged,
-    SettingsGroup,
-    declared_console_links,
-    declared_settings,
-)
-from apps.settings.domain import admins, service, technical
-from apps.settings.domain.admins import AdminNotFound, LastAdminViolation
-from apps.settings.domain.service import InvalidSettingValue, UnknownSetting
-from apps.settings.infra.audit_log_repository import AuditLogRepository, parse_range_bound
-from apps.settings.infra.repository import AppSettingRepository
+from apps.console.contract import appearance, observability
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.console.domain import admins, service, technical
+from apps.console.domain.admins import AdminNotFound, LastAdminViolation
+from apps.console.domain.service import InvalidSettingValue, UnknownSetting
+from apps.console.infra.audit_log_repository import AuditLogRepository, parse_range_bound
+from apps.console.infra.repository import AppSettingRepository
 from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
@@ -24,6 +18,7 @@ from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
+from apps.shared.settings import SettingsChanged, SettingsDeclaration
 from apps.shared.supabase_studio import studio_link
 
 router = APIRouter(tags=["console"])
@@ -66,8 +61,8 @@ def _group_members(overviews: list[ConsoleOverview], group: str) -> list[Console
     return [o for o in overviews if o.group == group]
 
 
-def _settings_group(app: str) -> SettingsGroup:
-    group = declared_settings(app)
+def _settings_group(app: str) -> SettingsDeclaration:
+    group = host.declared_settings(app)
     if group is None:
         raise _NOT_FOUND
     return group
@@ -77,7 +72,9 @@ def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview
     return next((o for o in overviews if o.key == app), None)
 
 
-async def _supabase_link(group: SettingsGroup, session: AdminSession) -> dict[str, str] | None:
+async def _supabase_link(
+    group: SettingsDeclaration, session: AdminSession
+) -> dict[str, str] | None:
     link = group.supabase
     if link is None:
         return None
@@ -101,7 +98,7 @@ async def get_console(
 ) -> Response:
     overviews = await _collect_overviews(session)
     disabled = await AppSettingRepository(session).disabled_apps()
-    links = declared_console_links()
+    links = host.declared_console_links()
     if wants_json(request):
         return JSONResponse(
             {
@@ -370,7 +367,7 @@ async def get_app(
 
 
 async def _render_org_overrides(
-    request: Request, session, app: str, group: SettingsGroup, error: str | None = None
+    request: Request, session, app: str, group: SettingsDeclaration, error: str | None = None
 ) -> Response:
     repo = AppSettingRepository(session)
     org_overrides = await repo.org_overrides(app)

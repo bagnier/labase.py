@@ -2,9 +2,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from apps.settings.contract.settings import SettingsChanged
-from apps.settings.infra.refresh import SettingsRefresher
+from apps.console.infra.refresh import SettingsRefresher
 from apps.shared.host import Host
+from apps.shared.settings import SettingsChanged
 
 
 def _refresher(host: Host) -> SettingsRefresher:

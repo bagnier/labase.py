@@ -14,21 +14,15 @@ from apps.calendar.contract import settings
 from apps.calendar.domain.models import CalendarEvent
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.calendar.infra.router import router
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_with_owner
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared import clock
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.repository import count_all
+from apps.shared.settings import SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
 
 _RECENT = 3
@@ -38,21 +32,19 @@ _WELCOME_TITLE = "Welcome to your team calendar"
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    _declare_settings()
+    host.register_settings(settings, _declare_settings())
     host.reserve("calendar")  # reserved even when disabled, to keep the slug from being squatted
-    if not get_app_settings("calendar").enabled:
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=20))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 
 
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "calendar",
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="calendar",
         defs=[feature_switch()],
         supabase=SupabaseLink("Browse events in Supabase", table="calendar_events"),
     )

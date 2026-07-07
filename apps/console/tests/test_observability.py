@@ -5,9 +5,9 @@ import logging
 import pytest
 import structlog
 
-from apps.settings.contract.observability import OBSERVABILITY_APP, reload
-from apps.settings.contract.settings import SettingsChanged
+from apps.console.contract.observability import OBSERVABILITY_APP, reload
 from apps.shared.observability.logging import apply_log_level, setup_logging
+from apps.shared.settings import SettingsChanged
 
 
 @pytest.fixture(autouse=True)

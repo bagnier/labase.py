@@ -7,8 +7,8 @@ The live value is exposed to every template via the ``app_theme()`` Jinja global
 mount, next to ``css_v``), kept fresh by the ``SettingsChanged`` event like any other setting.
 """
 
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import AppSettings
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.shared.settings import AppSettings
 
 THEME_APP = "appearance"
 THEME_KEY = "theme"
@@ -29,7 +29,7 @@ THEMES = [
 ]
 
 # Live handle: bound to its declared group at mount, refreshed by SettingsChanged.
-appearance = AppSettings(THEME_APP)
+appearance = AppSettings()
 
 
 def current_theme() -> str:

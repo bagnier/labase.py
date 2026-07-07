@@ -7,6 +7,7 @@ share router and the org-scoped router, claims the ``files`` slug, answers the d
 
 import uuid
 
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.files.contract import settings
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
@@ -15,18 +16,10 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import get_org_owner_id
-from apps.settings.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.settings.contract.settings import (
-    SettingDef,
-    SettingsChanged,
-    SupabaseLink,
-    declare_app_settings,
-    feature_switch,
-    get_app_settings,
-)
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.persistence.storage import bucket, user_storage_client
+from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import pluralize
 
 _RECENT = 3
@@ -45,17 +38,38 @@ _WELCOME_BODY = (
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
-    _declare_settings()
+    host.register_settings(settings, _declare_settings())
     host.reserve("files")  # reserved even when disabled, to keep the slug from being squatted
-    if not get_app_settings("files").enabled:
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
     host.app.include_router(public_router)
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(NavItem("Files", "folder", "files", "/files", order=30))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
+
+
+def _declare_settings() -> SettingsDeclaration:
+    return SettingsDeclaration(
+        app_name="files",
+        defs=[
+            feature_switch(),
+            SettingDef("max_upload_mb", "number", "25", "Maximum upload size, in megabytes"),
+            SettingDef("uploads_enabled", "boolean", "true", "Allow members to upload files"),
+            SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),
+            SettingDef("signed_url_ttl", "number", "60", "Download link lifetime, in seconds"),
+            SettingDef("share_link_ttl_days", "number", "7", "Share link lifetime, in days"),
+            SettingDef(
+                "org_storage_quota_mb",
+                "number",
+                "-1",
+                "Storage quota per organisation, in megabytes (-1 = unlimited)",
+            ),
+        ],
+        supabase=SupabaseLink(
+            "Open the files bucket in Supabase Storage", f"storage/buckets/{bucket()}"
+        ),
+    )
 
 
 def _human_size(num: int) -> str:
@@ -82,29 +96,6 @@ async def _overview(query: OverviewQuery) -> Overview:
         href="files",
         template="files/_overview.html",
         data={"lines": lines, "recent": [f.filename for f in files[:_RECENT]]},
-    )
-
-
-def _declare_settings() -> None:
-    settings.group = declare_app_settings(
-        "files",
-        defs=[
-            feature_switch(),
-            SettingDef("max_upload_mb", "number", "25", "Maximum upload size, in megabytes"),
-            SettingDef("uploads_enabled", "boolean", "true", "Allow members to upload files"),
-            SettingDef("welcome_message", "string", "Welcome aboard", "Shown on the files page"),
-            SettingDef("signed_url_ttl", "number", "60", "Download link lifetime, in seconds"),
-            SettingDef("share_link_ttl_days", "number", "7", "Share link lifetime, in days"),
-            SettingDef(
-                "org_storage_quota_mb",
-                "number",
-                "-1",
-                "Storage quota per organisation, in megabytes (-1 = unlimited)",
-            ),
-        ],
-        supabase=SupabaseLink(
-            "Open the files bucket in Supabase Storage", f"storage/buckets/{bucket()}"
-        ),
     )
 
 

@@ -1,5 +1,5 @@
-- [ ] vider les contract/__init__.py (AppSettings instanciation)
-- [ ] clarifier la cérémonie autour de declare_app_settings
+- [x] vider les contract/__init__.py (AppSettings instanciation)
+- [x] clarifier la cérémonie autour de declare_app_settings
 - [ ] WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
 - [ ] app-1  | Using selector: EpollSelector repétition au lancement
 - [ ] API key out of the nav

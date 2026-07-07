@@ -1,27 +1,9 @@
 import uuid
 
-from sqlalchemy import Select, select, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.settings.domain.models import BOOL_FALSE, ENABLED_KEY, AppSetting, OrgAppSetting
-
-
-def disabled_apps_select() -> Select[tuple[str]]:
-    """Select the slugs of apps whose persisted ``enabled`` value is ``false``.
-
-    Used by the admin-session repository to render the console's toggle state.
-    """
-    return select(AppSetting.app).where(
-        AppSetting.key == ENABLED_KEY, AppSetting.value == BOOL_FALSE
-    )
-
-
-def app_settings_select(app: str) -> Select[tuple[str, str]]:
-    """Select every persisted ``(key, value)`` for ``app``.
-
-    Used by the mount-time store so each app can read its whole settings on a throwaway engine.
-    """
-    return select(AppSetting.key, AppSetting.value).where(AppSetting.app == app)
+from apps.shared.persistence.settings_store import AppSetting, OrgAppSetting, disabled_apps_select
 
 
 class AppSettingRepository:
@@ -76,7 +58,7 @@ class AppSettingRepository:
     async def set_org_override(self, app: str, key: str, org_id: uuid.UUID, value: str) -> None:
         row = await self.session.get(OrgAppSetting, (app, key, org_id))
         if row is None:
-            self.session.add(OrgAppSetting(app=app, key=key, org_id=org_id, value=value))
+            self.session.add(OrgAppSetting(app_name=app, key=key, org_id=org_id, value=value))
         else:
             row.value = value
 

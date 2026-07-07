@@ -1,16 +1,16 @@
-"""Per-app settings — the console's settings service, used by every app from its ``mount()``.
+"""Per-app settings — cross-cutting, like :mod:`apps.shared.bus`/``email``/``queue``: every app
+declares its settings from its own ``mount()``, so the mechanism lives here rather than in a
+bounded context ``Host`` couldn't reach.
 
-The console is the repository and interface for settings. Each app, in ``mount()``:
+Each app, in ``mount()``, declares the settings it needs via ``host.register_settings(...)`` —
+the single call that makes them editable in the console admin page (:mod:`apps.console`), seeds
+their defaults, and brings the app's live :class:`AppSettings` handle current. The ``enabled``
+gate a toggleable app checks right after is just a declared setting (via :func:`feature_switch`),
+read straight off that same handle.
 
-1. **declares** the settings it needs (:func:`declare_app_settings`) — the single source that
-   makes them editable in the console admin page *and* readable by the app;
-2. **reads** their values (:func:`get_app_settings`) and wires itself — notably the ``enabled``
-   gate, which is just a declared setting (via :func:`feature_switch`).
-
-The DB stores *the value* of a setting (CRUD), nothing layered on top. A
-:class:`SettingDef`'s ``default`` is merely the value seeded on first declaration. Setting
-*metadata* (type, label, Supabase link) lives in memory — re-declared on every ``mount()``;
-only the value is persisted.
+The DB stores *the value* of a setting (CRUD), nothing layered on top. A :class:`SettingDef`'s
+``default`` is merely the value seeded on first declaration. Setting *metadata* (type, label,
+Supabase link) lives in memory — re-declared on every ``mount()``; only the value is persisted.
 """
 
 import uuid
@@ -20,8 +20,13 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.settings.domain.models import BOOL_TRUE, ENABLED_KEY, OrgAppSetting
-from apps.settings.infra.store import read_values, seed_values
+from apps.shared.persistence.settings_store import (
+    BOOL_TRUE,
+    ENABLED_KEY,
+    OrgAppSetting,
+    read_values,
+    seed_values,
+)
 
 SettingType = Literal["string", "number", "boolean"]
 
@@ -68,10 +73,11 @@ class ConsoleLink:
 
 
 @dataclass(frozen=True)
-class SettingsGroup:
-    """An app's declared settings: the in-memory metadata the console renders and validates."""
+class SettingsDeclaration:
+    """What an app declares at mount: the in-memory metadata the console renders and validates,
+    bundled so :meth:`Host.register_settings` takes one payload instead of a growing kwarg list."""
 
-    app: str  # context id, e.g. "files"
+    app_name: str  # context id, e.g. "files"
     defs: list[SettingDef] = field(default_factory=list)
     supabase: SupabaseLink | None = None
     links: tuple[ConsoleLink, ...] = ()
@@ -106,24 +112,6 @@ def _typed(defs: list[SettingDef], values: dict[str, str]) -> dict[str, SettingV
     return typed
 
 
-# Console-owned registry of declared metadata, filled at mount; the admin page reads it.
-_declarations: dict[str, SettingsGroup] = {}
-
-
-def declare_app_settings(
-    app: str,
-    defs: list[SettingDef],
-    supabase: SupabaseLink | None = None,
-    links: tuple[ConsoleLink, ...] = (),
-) -> SettingsGroup:
-    """Declare ``app``'s settings: register their metadata, seed missing values, return the
-    group so a live :class:`AppSettings` can hold on to it."""
-    group = SettingsGroup(app=app, defs=defs, supabase=supabase, links=links)
-    _declarations[app] = group
-    seed_values(app, {d.key: d.default for d in defs})
-    return group
-
-
 @dataclass(frozen=True)
 class SettingsChanged:
     """A setting of ``app`` was edited in the console; carries the full fresh value set.
@@ -132,7 +120,7 @@ class SettingsChanged:
     subscribes, filters on its own id, and reinterprets its own values.
     """
 
-    app: str
+    app_name: str
     values: dict[str, str]
 
 
@@ -141,39 +129,32 @@ class AppSettings:
     its declared-typed value (``str``/``int``/``bool``); coercion is the console's job, so apps
     never do it.
 
-    Holds a ref to its :class:`SettingsGroup` for the declared types. Construct cheaply (no I/O)
-    as a module-level handle, bind the group at ``mount`` (``settings.group = declare_app_settings
-    (...)``) and keep it live with ``host.events.on(SettingsChanged, settings.reload)``. Values
-    are read from the DB lazily on first access, then refreshed by each event.
+    Holds a ref to its :class:`SettingsDeclaration` for the declared types. Construct cheaply
+    (no I/O) as a module-level handle; ``host.register_settings(settings, ...)`` binds
+    ``declaration``, seeds values, does the initial read, and subscribes it to
+    ``SettingsChanged`` — all in one call from ``mount()``. Values are read from the DB lazily
+    on first access, then refreshed by each event.
     """
 
     def __init__(
-        self, app: str, raw: dict[str, str] | None = None, group: SettingsGroup | None = None
+        self,
+        raw: dict[str, str] | None = None,
+        declaration: SettingsDeclaration | None = None,
     ) -> None:
-        self._app = app
         self._raw = raw  # None until first read; a dict once loaded or after a change
-        self._group = group
-
-    @property
-    def group(self) -> SettingsGroup | None:
-        # Bound explicitly at mount; falls back to the registry (and caches) for snapshots.
-        if self._group is None:
-            self._group = _declarations.get(self._app)
-        return self._group
-
-    @group.setter
-    def group(self, group: SettingsGroup) -> None:
-        self._group = group
+        self.declaration = declaration  # bound explicitly by Host.register_settings
 
     def read(self) -> None:
-        """Read current values from the DB — call once at ``mount`` (sync, before the serving
-        loop; :func:`read_values` drives :func:`asyncio.run`, which can't run inside it)."""
-        self._raw = read_values(self._app)
+        """Read current values from the DB — call once at ``mount``, after ``declaration`` is
+        bound (sync, before the serving loop; :func:`read_values` drives :func:`asyncio.run`,
+        which can't run inside it)."""
+        assert self.declaration is not None, "read() requires declaration to be bound first"
+        self._raw = read_values(self.declaration.app_name)
 
     @property
     def values(self) -> dict[str, SettingValue]:
-        group = self.group
-        return _typed(group.defs if group is not None else [], self._raw or {})
+        declaration = self.declaration
+        return _typed(declaration.defs if declaration is not None else [], self._raw or {})
 
     def __getattr__(self, name: str) -> Any:
         # A setting's static type depends on its key, so it's ``Any`` here; the value is coerced
@@ -187,13 +168,14 @@ class AppSettings:
 
     async def reload(self, event: SettingsChanged) -> None:
         """Console event handler: adopt the fresh values when they're for this app."""
-        if event.app == self._app:
+        if self.declaration is not None and event.app_name == self.declaration.app_name:
             self._raw = event.values
 
     def merged_for_org(self, overrides: dict[str, str]) -> dict[str, SettingValue]:
         """Server-wide values overlaid with per-org overrides, coerced to declared types."""
-        group = self.group
-        return _typed(group.defs if group is not None else [], {**(self._raw or {}), **overrides})
+        declaration = self.declaration
+        defs = declaration.defs if declaration is not None else []
+        return _typed(defs, {**(self._raw or {}), **overrides})
 
     async def for_org(self, session: AsyncSession, org_id: uuid.UUID) -> dict[str, SettingValue]:
         """This org's effective settings — the server value unless the console overrode it.
@@ -202,34 +184,24 @@ class AppSettings:
         members read their own org's overrides, so the regular request session works
         and no cache needs invalidating across instances.
         """
-        return self.merged_for_org(await org_values(session, self._app, org_id))
+        assert self.declaration is not None, "for_org() requires declaration to be bound first"
+        return self.merged_for_org(await org_values(session, self.declaration.app_name, org_id))
 
 
-async def org_values(session: AsyncSession, app: str, org_id: uuid.UUID) -> dict[str, str]:
+async def org_values(session: AsyncSession, app_name: str, org_id: uuid.UUID) -> dict[str, str]:
     """Raw per-org overrides of `app` for `org_id` (RLS: members see their own org)."""
     rows = await session.execute(
         select(OrgAppSetting.key, OrgAppSetting.value).where(
-            OrgAppSetting.app == app, OrgAppSetting.org_id == org_id
+            OrgAppSetting.app_name == app_name, OrgAppSetting.org_id == org_id
         )
     )
     return {key: value for key, value in rows.all()}
 
 
-def get_app_settings(app: str) -> AppSettings:
-    """A one-shot snapshot of ``app``'s persisted values (CRUD read), coerced to declared type."""
-    return AppSettings(app, read_values(app))
-
-
-def declared_settings(app: str) -> SettingsGroup | None:
-    """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
-    return _declarations.get(app)
-
-
-def declared_console_links() -> list[ConsoleLink]:
-    """Every console screen declared by mounted apps — the console overview renders them."""
-    return [link for group in _declarations.values() for link in group.links]
-
-
-def reset_declarations() -> None:
-    """Clear the registry — for test isolation."""
-    _declarations.clear()
+def bind_settings(settings: AppSettings, declaration: SettingsDeclaration) -> None:
+    """Seed missing values, bind ``settings.declaration``, and read its current persisted
+    values — everything :meth:`Host.register_settings` does that doesn't touch ``host`` itself
+    (registering into ``host.declarations``, subscribing to ``host.events``)."""
+    seed_values(declaration.app_name, {d.key: d.default for d in declaration.defs})
+    settings.declaration = declaration
+    settings.read()

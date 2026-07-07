@@ -1,6 +1,7 @@
 from apps.api_keys.contract import integration as api_keys
 from apps.auth.contract import integration as auth
 from apps.calendar.contract import integration as calendar
+from apps.console.contract import integration as console
 from apps.files.contract import integration as files
 from apps.health.contract import integration as health
 from apps.issues.contract import integration as issues
@@ -10,7 +11,6 @@ from apps.organizations.contract import integration as organizations
 from apps.pages.contract import integration as pages
 from apps.profile.contract import integration as profile
 from apps.public.contract import integration as public
-from apps.settings.contract import integration as console
 from apps.shared.contract import integration as shared
 from apps.shared.host import host
 from apps.todo.contract import integration as todo
