@@ -69,8 +69,9 @@ def reset_clock(monkeypatch):
 async def db_session():
     """RLS-enforcing session (user role) for direct integration tests (no HTTP).
 
-    Uses a throwaway engine: set_rls_context does a session-level ``SET role``,
-    so the connection must be disposed rather than returned to a shared pool.
+    Uses a throwaway engine wrapped in a single transaction rolled back at teardown:
+    set_rls_context sets a transaction-local role + claims, so the rollback discards
+    them and nothing needs disposing back to a shared pool.
     """
     settings = get_technical_settings()
     connect_args = {

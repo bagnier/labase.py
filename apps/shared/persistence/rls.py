@@ -17,23 +17,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> None:
-    """Set session-level role + JWT claims so Postgres RLS policies see auth.uid().
+    """Set the role + JWT claims so Postgres RLS policies see auth.uid().
 
     ``claims`` is the verified JWT payload, passed through verbatim so policies can
     read any claim (auth.jwt(), auth.email(), app_metadata...). The Postgres role is
     pinned server-side to ``authenticated`` and never driven by the token's role claim.
+
+    Both are set **transaction-local** (``set_config(..., is_local=true)``), in a single
+    round-trip: ``session.connection()`` has opened the request's transaction, and the
+    request commits/rolls back exactly once (see ``_commit_on_success``), at which point
+    Postgres discards these settings automatically — so no reset round-trips are needed
+    and nothing can leak onto the next borrower of the pooled connection.
     """
     conn = await session.connection()
-    await conn.execute(text("SET role authenticated"))
     await conn.execute(
-        text("SELECT set_config('request.jwt.claims', :claims, false)").bindparams(
-            claims=json.dumps(claims)
-        )
+        text(
+            "SELECT set_config('role', 'authenticated', true), "
+            "set_config('request.jwt.claims', :claims, true)"
+        ).bindparams(claims=json.dumps(claims))
     )
 
 
 async def clear_rls_context(session: AsyncSession) -> None:
-    """Reset role and claims before the connection is returned to the pool."""
+    """Reset role and claims mid-transaction, for callers that reuse one session.
+
+    The HTTP request path does **not** need this — its single commit/rollback discards the
+    transaction-local context set above. It stays for the two consumers that toggle identity
+    on a still-open transaction: the queue worker (belt-and-suspenders around a task that owns
+    its own commit) and the direct RLS tests (``tests/rls.py`` switches between users on one
+    rolled-back session, so it must undo the previous identity explicitly)."""
     conn = await session.connection()
     await conn.execute(text("RESET role"))
     await conn.execute(text("RESET request.jwt.claims"))

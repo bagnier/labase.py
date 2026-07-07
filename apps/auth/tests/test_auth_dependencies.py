@@ -165,53 +165,42 @@ def test_register_unexpected_exception_returns_400(driver):
 
 
 @pytest.mark.asyncio
-async def test_get_rls_session_sets_and_clears_rls_context():
+async def test_get_rls_session_sets_context_and_relies_on_commit_to_clear():
     from apps.auth.infra.session import get_rls_session
 
     fake_user = AuthenticatedUser(id="00000000-0000-0000-0000-000000000001", email="t@test.local")
     fake_session = MagicMock()
 
     set_calls = []
-    clear_calls = []
 
     async def mock_set(session, uid):
         set_calls.append(uid)
 
-    async def mock_clear(session):
-        clear_calls.append(True)
-
-    with (
-        patch("apps.auth.infra.session.set_rls_context", side_effect=mock_set),
-        patch("apps.auth.infra.session.clear_rls_context", side_effect=mock_clear),
-    ):
+    # No clear on teardown: the context is transaction-local, discarded by the request's
+    # single commit/rollback — so get_rls_session never issues reset round-trips.
+    with patch("apps.auth.infra.session.set_rls_context", side_effect=mock_set):
         gen = get_rls_session(current_user=fake_user, session=fake_session)
         session = await gen.__anext__()
         assert session is fake_session
         assert set_calls, "set_rls_context should have been called"
         with pytest.raises(StopAsyncIteration):
             await gen.__anext__()
-        assert clear_calls, "clear_rls_context should have been called in finally block"
 
 
 @pytest.mark.asyncio
-async def test_get_rls_session_clears_rls_even_when_clear_raises():
+async def test_get_rls_session_skips_context_for_anonymous_caller():
     from apps.auth.infra.session import get_rls_session
 
-    fake_user = AuthenticatedUser(id="00000000-0000-0000-0000-000000000001", email="t@test.local")
     fake_session = MagicMock()
+    set_calls = []
 
     async def mock_set(session, uid):
-        pass
+        set_calls.append(uid)
 
-    async def mock_clear_raises(session):
-        raise RuntimeError("db gone")
-
-    with (
-        patch("apps.auth.infra.session.set_rls_context", side_effect=mock_set),
-        patch("apps.auth.infra.session.clear_rls_context", side_effect=mock_clear_raises),
-    ):
-        gen = get_rls_session(current_user=fake_user, session=fake_session)
-        await gen.__anext__()
-        # clear_rls_context raises but the warning is swallowed — no exception should propagate
+    with patch("apps.auth.infra.session.set_rls_context", side_effect=mock_set):
+        gen = get_rls_session(current_user=None, session=fake_session)
+        session = await gen.__anext__()
+        assert session is fake_session
+        assert not set_calls, "anonymous caller must not set an RLS context"
         with pytest.raises(StopAsyncIteration):
             await gen.__anext__()

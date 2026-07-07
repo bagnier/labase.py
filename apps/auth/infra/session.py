@@ -1,15 +1,12 @@
 from collections.abc import AsyncGenerator
 
-import structlog
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.infra.security import try_get_current_user
 from apps.shared.persistence.database import get_user_session
-from apps.shared.persistence.rls import clear_rls_context, set_rls_context
-
-log = structlog.get_logger("labase.auth.session")
+from apps.shared.persistence.rls import set_rls_context
 
 
 async def get_rls_session(
@@ -20,17 +17,11 @@ async def get_rls_session(
 
     The RLS context (role + JWT claims) is set **once** here; FastAPI caches the
     dependency, so every consumer in the request (fullpage provider, route, sub-deps)
-    shares this same session and the single ``SET role`` round-trip. Tolerant to
-    anonymous callers — authentication (401) is enforced separately by
+    shares this same session and its single set-config round-trip. The context is
+    transaction-local, so the request's commit/rollback clears it — no reset needed.
+    Tolerant to anonymous callers — authentication (401) is enforced separately by
     ``CurrentUser`` where a route requires it.
     """
     if current_user is not None:
         await set_rls_context(session, current_user.claims)
-    try:
-        yield session
-    finally:
-        if current_user is not None:
-            try:
-                await clear_rls_context(session)
-            except Exception:
-                log.exception("rls.reset_failed", user_id=current_user.id)
+    yield session
