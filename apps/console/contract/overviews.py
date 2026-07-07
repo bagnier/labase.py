@@ -2,8 +2,9 @@
 
 Mirrors :mod:`apps.organizations.contract.overviews` but **server-wide**: there is no ``org_id``,
 the session is the BYPASSRLS admin session, and each app aggregates across *every* organisation.
-Apps answer :class:`ConsoleOverviewQuery` via ``host.events.on(ConsoleOverviewQuery, provider)``;
-the console gathers them with ``host.events.collect`` (a failing provider is isolated, not fatal).
+Apps answer :class:`ConsoleOverviewQuery` via ``host.events.on(ConsoleOverviewQuery, provider)``
+at mount; the console gathers them at runtime with ``bus.collect`` (a failing provider is
+isolated, not fatal).
 """
 
 from dataclasses import dataclass, field

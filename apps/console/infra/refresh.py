@@ -14,7 +14,7 @@ import contextlib
 import structlog
 from sqlalchemy import select
 
-from apps.shared.host import Host
+from apps.shared.bus import EventBus
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.persistence.settings_store import AppSetting
 from apps.shared.settings import SettingsChanged
@@ -23,8 +23,8 @@ log = structlog.get_logger("labase.settings.refresh")
 
 
 class SettingsRefresher:
-    def __init__(self, host: Host, interval_seconds: float) -> None:
-        self._host = host
+    def __init__(self, bus: EventBus, interval_seconds: float) -> None:
+        self._bus = bus
         self._interval = interval_seconds
         self._task: asyncio.Task | None = None
         self._snapshot: dict[str, dict[str, str]] | None = None
@@ -61,7 +61,7 @@ class SettingsRefresher:
             for app, values in fresh.items():
                 if self._snapshot.get(app) != values:
                     log.info("settings.refreshed", app=app)
-                    await self._host.events.emit(SettingsChanged(app, values))
+                    await self._bus.emit(SettingsChanged(app, values))
         self._snapshot = fresh
 
     async def _run(self) -> None:

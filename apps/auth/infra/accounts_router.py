@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from apps.auth.contract.current import CurrentAdmin
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.events import UserDeleted
-from apps.shared.host import host
+from apps.shared.bus import bus
 from apps.shared.http import wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
@@ -142,7 +142,7 @@ async def delete_user(
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
     audit(bg, "accounts.deleted", level="warning", user_id=current_user.id, target=user_id)
-    await host.events.emit(UserDeleted(user_id=user_id, session=admin_session))
+    await bus.emit(UserDeleted(user_id=user_id, session=admin_session))
     await disable_account(user_id)
     await admin_session.commit()
     return _done(request, "Account deleted.")

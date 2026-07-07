@@ -18,8 +18,8 @@ from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
+from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
-from apps.shared.host import host
 from apps.shared.observability.audit import audit
 from apps.shared.persistence.database import get_admin_session
 
@@ -34,7 +34,7 @@ def _bearer_token(authorization: str | None) -> str | None:
 
 async def _resolve_api_key(token: str, session: AsyncSession) -> AuthenticatedUser:
     """Route an `lbk_...` bearer token to whoever answers ApiKeyQuery on the bus."""
-    results = await host.events.collect(ApiKeyQuery(token, session))
+    results = await bus.collect(ApiKeyQuery(token, session))
     principals = [p for p in results if p is not None]
     if not principals:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")

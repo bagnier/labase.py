@@ -20,8 +20,9 @@ from apps.organizations.domain.models import Membership, Organization
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
+from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
-from apps.shared.host import Host, NavItem, host
+from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.slug_registry import register_open_list
@@ -100,7 +101,7 @@ async def _create_org(event: UserCreated) -> None:
         )
         await session.commit()
     if event.access_token and get_technical_settings().supabase_database_schema != "test":
-        await host.events.emit(OrgCreated(org_id=org.id, access_token=event.access_token))
+        await bus.emit(OrgCreated(org_id=org.id, access_token=event.access_token))
 
 
 async def _forget_user(event: UserDeleted) -> None:

@@ -18,7 +18,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.contract.queries import get_user_orgs
-from apps.shared.host import host
+from apps.shared.bus import bus
 from apps.shared.page import FullpageQuery
 
 log = structlog.get_logger("labase.organizations.fullpage")
@@ -72,7 +72,7 @@ async def provide_org_nav(query: FullpageQuery) -> dict:
         return {"nav": []}
     nav_orgs = []
     for o in orgs:
-        results = await host.events.collect(OrgNavQuery(query.session, o.id, o.is_owner))
+        results = await bus.collect(OrgNavQuery(query.session, o.id, o.is_owner))
         extra_nav = [item for chunk in results for item in chunk]
         nav_orgs.append(
             NavOrg(id=o.id, name=o.name, handle=o.handle, is_owner=o.is_owner, extra_nav=extra_nav)

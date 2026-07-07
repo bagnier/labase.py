@@ -12,7 +12,7 @@ import structlog
 from apps.auth.contract.events import UserCreated
 from apps.auth.domain.service import RegisterResult, register
 from apps.auth.infra.security import decode_jwt
-from apps.shared.host import host
+from apps.shared.bus import bus
 from apps.shared.persistence.supabase import get_admin_supabase
 
 log = structlog.get_logger("labase.auth.application")
@@ -24,7 +24,7 @@ async def register_user(email: str, password: str) -> RegisterResult:
     if result.access_token is None:
         return result
     try:
-        await host.events.emit(
+        await bus.emit(
             UserCreated(user_id=result.user_id, email=email, access_token=result.access_token)
         )
     except Exception:
@@ -38,6 +38,6 @@ async def register_user(email: str, password: str) -> RegisterResult:
 async def confirm_user(access_token: str) -> None:
     """Bootstrap the org for a user whose email was just confirmed."""
     claims = decode_jwt(access_token)
-    await host.events.emit(
+    await bus.emit(
         UserCreated(user_id=claims["sub"], email=claims.get("email", ""), access_token=access_token)
     )

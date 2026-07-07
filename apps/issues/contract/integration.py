@@ -20,6 +20,7 @@ from apps.issues.infra.repository import (
     record_event,
 )
 from apps.issues.infra.router import router
+from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.host import Host
@@ -39,17 +40,13 @@ log = structlog.get_logger("labase.issues")
 PURGE_TOPIC = "issues.purge"
 PURGE_EVERY_SECONDS = 86400
 
-_host: Host | None = None
-
 
 def mount(host: Host) -> None:
-    global _host
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     settings = host.register_settings(_declare_settings())
     if not settings.enabled:
         return
-    _host = host
     host.app.include_router(router, prefix="/console/issues")
     host.events.on(ExceptionCaptured, _record)
     host.events.on(IssueOpened, _alert_opened)
@@ -94,10 +91,12 @@ async def _record(event: ExceptionCaptured) -> None:
         )
         await session.commit()
     log.info("issue.recorded", group_id=group_id, opened=recorded.opened)
-    if _host is not None and recorded.opened:
-        await _host.events.emit(IssueOpened(group_id=group_id, title=title))
-    if _host is not None and recorded.regressed:
-        await _host.events.emit(
+    # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
+    # bus here is unconditional — no mount-state guard needed.
+    if recorded.opened:
+        await bus.emit(IssueOpened(group_id=group_id, title=title))
+    if recorded.regressed:
+        await bus.emit(
             IssueRegressed(
                 group_id=group_id,
                 title=title,

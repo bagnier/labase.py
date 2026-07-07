@@ -1,9 +1,9 @@
 """Dashboard compositions — org's *pull* collaboration surface, carried by the event bus.
 
 Org-scoped apps contribute one :class:`Overview` each to the org dashboard by answering the
-:class:`OverviewQuery` query event (``host.events.on(OverviewQuery, provider)``). The org
-dashboard gathers them with ``host.events.collect(OverviewQuery(...))`` — a failing provider
-is isolated, not fatal. Providers stay ignorant of one another and of the dashboard.
+:class:`OverviewQuery` query event (``host.events.on(OverviewQuery, provider)`` at mount). The
+org dashboard gathers them at runtime with ``bus.collect(OverviewQuery(...))`` — a failing
+provider is isolated, not fatal. Providers stay ignorant of one another and of the dashboard.
 
 Each overview carries both a *web view* (the app's own Jinja partial, rendered on the
 dashboard) and *structured data* (a JSON-serializable dict, exposed via the REST endpoint).

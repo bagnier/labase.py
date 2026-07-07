@@ -27,8 +27,8 @@ from apps.organizations.domain.models import (
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
+from apps.shared.bus import bus
 from apps.shared.email import enqueue_email
-from apps.shared.host import host
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
@@ -153,7 +153,7 @@ async def org_dashboard(
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle)
     ctx["overviews"] = sorted(
-        await host.events.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
+        await bus.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
     )
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
@@ -164,9 +164,7 @@ async def org_dashboard_overviews(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> JSONResponse:
-    overviews = sorted(
-        await host.events.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
-    )
+    overviews = sorted(await bus.collect(OverviewQuery(session, org_id)), key=lambda o: o.key)
     return JSONResponse([{"key": o.key, "title": o.title, "data": o.data} for o in overviews])
 
 

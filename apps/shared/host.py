@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
-from apps.shared.bus import EventBus
+from apps.shared.bus import EventBus, bus
 from apps.shared.settings import (
     AppSettings,
     ConsoleLink,
@@ -99,4 +99,7 @@ class Host:
         return [link for d in self.declarations.values() for link in d.links]
 
 
-host = Host()
+# Production singleton: share the process-wide event bus so runtime ``bus.emit/collect`` and
+# these mount-time ``host.events.on(...)`` registrations hit one registry. A bare ``Host()``
+# (e.g. in a test) still gets its own isolated bus via the field default.
+host = Host(events=bus)

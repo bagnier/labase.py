@@ -6,6 +6,11 @@ Two primitives:
   can compensate), return their results.
 - ``collect(query)`` — pull/query: run all handlers, isolate failures (log + skip), return
   successful results.
+
+Runtime publishers/collectors import the process-wide :data:`bus` singleton directly — a
+focused collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires handlers
+onto ``host.events``, which *is* this same ``bus`` in production (``host = Host(events=bus)``),
+so registration and dispatch share one registry.
 """
 
 import dataclasses
@@ -77,3 +82,8 @@ class EventBus:
                         )
                     )
         return results
+
+
+# Process-wide singleton. Runtime code emits/collects on this directly; the production Host
+# is built with ``events=bus`` so its mount-time ``.on(...)`` registrations land here too.
+bus = EventBus()

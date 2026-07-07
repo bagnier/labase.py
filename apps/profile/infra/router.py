@@ -41,7 +41,7 @@ from apps.auth.contract.two_factor import (
 from apps.profile.contract.current import ProfileSettings
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
-from apps.shared.host import host
+from apps.shared.bus import bus
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
@@ -380,7 +380,7 @@ async def account_delete(
     audit(bg, "profile.account_deleted", level="warning", user_id=current_user.id)
     # Handlers (organizations, profile itself…) join the admin session: one
     # transaction for the whole deletion.
-    await host.events.emit(UserDeleted(user_id=current_user.id, session=admin_session))
+    await bus.emit(UserDeleted(user_id=current_user.id, session=admin_session))
     # GoTrue last, before commit: if closing access fails, nothing is deleted.
     await disable_account(current_user.id)
     await admin_session.commit()

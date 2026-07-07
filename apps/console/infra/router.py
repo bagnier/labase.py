@@ -11,6 +11,7 @@ from apps.console.domain.admins import AdminNotFound, LastAdminViolation
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.infra.audit_log_repository import AuditLogRepository, parse_range_bound
 from apps.console.infra.repository import AppSettingRepository
+from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
@@ -50,7 +51,7 @@ def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
 
 
 async def _raw_overviews(session: AdminSession) -> list[ConsoleOverview]:
-    return sorted(await host.events.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key)
+    return sorted(await bus.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key)
 
 
 async def _collect_overviews(session: AdminSession) -> list[ConsoleOverview]:
@@ -477,7 +478,7 @@ async def update_setting(
     await session.commit()
 
     values = await repo.values(app)
-    await host.events.emit(SettingsChanged(app, values))
+    await bus.emit(SettingsChanged(app, values))
     settings = service.settings_view(group, values)
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})

@@ -8,7 +8,7 @@ from apps.shared.settings import SettingsChanged
 
 
 def _refresher(host: Host) -> SettingsRefresher:
-    return SettingsRefresher(host, interval_seconds=30)
+    return SettingsRefresher(host.events, interval_seconds=30)
 
 
 def _recording(host: Host) -> list[SettingsChanged]:
@@ -79,7 +79,7 @@ async def test_absorbed_local_edit_is_not_reemitted():
 
 @pytest.mark.asyncio
 async def test_zero_interval_never_starts():
-    refresher = SettingsRefresher(Host(), interval_seconds=0)
+    refresher = SettingsRefresher(Host().events, interval_seconds=0)
     await refresher.start()
     assert refresher._task is None
     await refresher.stop()

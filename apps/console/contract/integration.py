@@ -48,7 +48,7 @@ def mount(host: Host) -> None:
 
     # With N instances only the one handling the console POST reloads in-process;
     # the others converge within one TTL through this per-process re-read loop.
-    refresher = SettingsRefresher(host, get_technical_settings().settings_refresh_seconds)
+    refresher = SettingsRefresher(host.events, get_technical_settings().settings_refresh_seconds)
     host.events.on(SettingsChanged, refresher.absorb)
     host.app.router.add_event_handler("startup", refresher.start)
     host.app.router.add_event_handler("shutdown", refresher.stop)

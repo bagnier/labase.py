@@ -3,7 +3,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.background import BackgroundTask
 
-from apps.shared.host import host
+from apps.shared.bus import bus
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.errors import ExceptionCaptured, capture_context
@@ -55,7 +55,7 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
     captured = ExceptionCaptured(
         exc, source="http", context=capture_context(method=request.method, path=request.url.path)
     )
-    response.background = BackgroundTask(host.events.collect, captured)
+    response.background = BackgroundTask(bus.collect, captured)
     return response
 
 
