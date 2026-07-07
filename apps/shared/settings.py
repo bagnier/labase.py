@@ -8,11 +8,16 @@ their defaults, and registers the app's live :class:`AppSettings` handle in the 
 registry (:func:`get_settings`). The ``enabled`` gate a toggleable app checks right after is
 just a declared setting (via :func:`feature_switch`), read off the returned handle.
 
-A contract never exports a handle: request handlers read settings through the one sanctioned
-dependency, ``app_settings(name)`` (:mod:`apps.organizations.contract.current`), which resolves
-*the request's effective settings* — server values overlaid with the current org's overrides
-under ``/{org_handle}``, plain server values everywhere else. Non-request code (mount, queue
-tasks, event handlers, helpers) reads :func:`get_settings` directly.
+A contract never exports a handle. There are three sanctioned reads, chosen by *how the org
+is known*:
+
+- **Request under** ``/{org_handle}`` — the ``app_settings(name)`` dependency
+  (:mod:`apps.organizations.contract.current`): server values overlaid with the URL org's
+  overrides (plain server values on any other route).
+- **Org known from data, not the URL** — ``get_settings(name).for_org(session, org_id)``
+  directly, e.g. a share-link download whose org comes from the file row, not a path param.
+- **No org dimension** — ``get_settings(name)`` (direct attribute or ``.view()``) for
+  server-wide values and all non-request code (mount, queue tasks, event handlers, helpers).
 
 The DB stores *the value* of a setting (CRUD), nothing layered on top. A :class:`SettingDef`'s
 ``default`` is merely the value seeded on first declaration. Setting *metadata* (type, label,
@@ -260,14 +265,17 @@ _registry: dict[str, AppSettings] = {}
 
 
 def get_settings(app_name: str) -> AppSettings:
-    """The live server-wide handle of a mounted app — for non-request code (mount, queue
-    tasks, event handlers, helpers). Request handlers use the ``app_settings`` dependency
-    (:mod:`apps.organizations.contract.current`) instead, which also applies org overrides.
+    """The live server-wide handle of a mounted app. Its direct-attribute read
+    (``get_settings("x").flag``) stays sync and I/O-free but is **server-wide only** — use it
+    for non-request code (mount, queue tasks, event handlers, helpers) and settings with no org
+    dimension (``enabled`` at mount, background flags).
 
-    No ``org_id`` here on purpose: org overrides live in the DB behind RLS, so reading them
-    is async and needs a session — that's the handle's ``for_org(session, org_id)``. This
-    lookup stays sync and I/O-free for the reads that have no org (``enabled`` at mount,
-    background tasks, server-wide flags)."""
+    For a request's *effective* values use the ``app_settings`` dependency
+    (:mod:`apps.organizations.contract.current`), which overlays the URL org's overrides — or,
+    when the org is known from data rather than ``/{org_handle}``, call ``for_org(session,
+    org_id)`` on this handle directly. Org overrides live in the DB behind RLS, so that overlay
+    is async and needs a session; only the org-free read stays sync, which is why no ``org_id``
+    is taken here."""
     try:
         return _registry[app_name]
     except KeyError:

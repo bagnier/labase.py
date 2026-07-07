@@ -117,6 +117,16 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "auth is a foundation: it never imports the organizations context"
+type = "forbidden"
+# organizations builds on auth (org scoping needs identity), so the edge is one-way.
+# Importing organizations back into auth would close an identity↔org cycle — user settings
+# are server-wide (no org overlay), so auth reads them via get_settings, not app_settings.
+source_modules = ["apps.auth"]
+forbidden_modules = ["apps.organizations"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
 name = "api_keys internals are private"
 type = "protected"
 protected_modules = ["apps.api_keys.domain", "apps.api_keys.infra"]

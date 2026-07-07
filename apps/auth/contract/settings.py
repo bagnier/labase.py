@@ -1,16 +1,22 @@
-"""Auth's settings dependency — the request's effective ``users`` settings.
+"""Auth's settings dependency — the server-wide ``users`` settings for a request.
 
-Lives in its own module rather than ``current.py``: the :func:`app_settings` factory
-(organizations' contract) itself depends on ``current.py``'s ``OptionalCurrentUser`` /
-``RlsSession``, so hosting this alias there would make the two modules import each other.
-``current.py`` stays a leaf; routers (auth's own, profile's) import ``UsersSettings`` here.
+``users`` settings are server-wide auth policy (session TTL, 2FA, passkeys, OAuth switches):
+they carry no org dimension, and their consumers (auth's own routes, profile's) never run
+under ``/{org_handle}``. So this resolves the plain server view via :func:`get_settings` — no
+org overlay is ever applicable, and, crucially, **no dependency on the organizations context**.
+Routing it through organizations' ``app_settings`` would invert the layering (auth is a
+foundation organizations builds on) and close an identity↔org import cycle.
 """
 
 from typing import Annotated
 
 from fastapi import Depends
 
-from apps.organizations.contract.current import app_settings
-from apps.shared.settings import SettingsView
+from apps.shared.settings import SettingsView, get_settings
 
-UsersSettings = Annotated[SettingsView, Depends(app_settings("users"))]
+
+def _users_settings() -> SettingsView:
+    return get_settings("users").view()
+
+
+UsersSettings = Annotated[SettingsView, Depends(_users_settings)]

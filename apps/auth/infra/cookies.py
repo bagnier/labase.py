@@ -6,6 +6,8 @@ from apps.shared.settings import get_settings
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     secure = get_technical_settings().cookies_secure
+    # Server-wide auth policy: the cookie is user-global (one session across every org, set at
+    # login outside any /{org_handle}), so the TTL is deliberately not org-overridable.
     max_age = get_settings("users").session_ttl_seconds
     response.set_cookie(
         "access_token",

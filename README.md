@@ -190,6 +190,24 @@ GET /{org}/ → collect(OverviewQuery)
      one context failing does not break the dashboard
 ```
 
+**Import downward, event upward.** When one context reaches another, the dependency direction
+picks the mechanism:
+
+- **Direct contract import** when the call points *down* to a foundation every feature may
+  depend on — `auth.contract` (identity: `CurrentUser`, `RlsSession`, `AuthenticatedUser`),
+  `organizations.contract` (org scoping: `CurrentOrg`, `app_settings`, `ORG_PREFIX`), and
+  `console.contract.overviews` (the `ConsoleOverviewQuery` type). These are typed, statically
+  checked and navigable — you *want* the coupling explicit.
+- **Event** when the call would point *up*, from a foundation into features it must not name:
+  `organizations` emits `OrgCreated` instead of importing calendar/todo/files to seed them;
+  `auth` resolves a bearer token with `collect(ApiKeyQuery)` instead of importing `api_keys`.
+  The bus inverts the dependency so the foundation stays ignorant of its consumers.
+
+Rule of thumb: a feature importing a foundation is healthy; a foundation importing a feature is
+a smell — reach for an event (an import-linter contract enforces the one-way edges, e.g. auth
+never imports organizations). Runtime publishers/collectors reach the process-wide `bus`
+singleton (`apps.shared.bus`) directly; `host.events` is that same bus, wired at mount.
+
 ### Observability
 
 Five layers, all wired by default:
