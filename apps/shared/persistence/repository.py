@@ -34,6 +34,9 @@ class BaseRepository[T: Base]:
 
 
 class OrgScopedRepository[T: Base](BaseRepository[T]):
+    """Every query filtered by ``org_id`` — ergonomic scoping, not the isolation boundary.
+    RLS remains the single source of truth for who sees what (README)."""
+
     default_order: ClassVar[Any | None] = None
 
     def __init__(self, session: AsyncSession, org_id: uuid.UUID) -> None:

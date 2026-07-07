@@ -20,7 +20,7 @@ def is_valid_handle(handle: str) -> bool:
 
 
 def validate_handle(handle: str) -> tuple[int, str] | None:
-    """Return (status_code, error_message) if invalid, None if valid."""
+    """A handle's rejection as ``(status, message)``, or ``None`` if usable."""
     if not handle:
         return 422, "Handle cannot be empty."
     if not is_valid_handle(handle):

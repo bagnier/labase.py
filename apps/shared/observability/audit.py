@@ -1,3 +1,10 @@
+"""Append-only audit trail for sensitive business actions.
+
+Best-effort by doctrine (README): logged immediately, then persisted to ``audit_logs``
+as a background task — a lost audit write never blocks or fails the mutation. Browsable
+in the admin console's audit viewer.
+"""
+
 import json
 import uuid
 from typing import Any
@@ -62,6 +69,8 @@ def audit(
     ip: str | None = None,
     **fields: Any,
 ) -> None:
+    """Record a sensitive action: logged now, persisted after the response via ``bg`` (the
+    request's ``BackgroundTasks``), so the audit write never delays the mutation."""
     if org_id is not None:
         fields = {"org_id": str(org_id), **fields}
     _record_audit_event(

@@ -266,16 +266,13 @@ _registry: dict[str, AppSettings] = {}
 
 def get_settings(app_name: str) -> AppSettings:
     """The live server-wide handle of a mounted app. Its direct-attribute read
-    (``get_settings("x").flag``) stays sync and I/O-free but is **server-wide only** — use it
-    for non-request code (mount, queue tasks, event handlers, helpers) and settings with no org
-    dimension (``enabled`` at mount, background flags).
+    (``get_settings("x").flag``) is sync and I/O-free but **server-wide only** — for non-request
+    code (mount, queue tasks, event handlers) and settings with no org dimension.
 
     For a request's *effective* values use the ``app_settings`` dependency
-    (:mod:`apps.organizations.contract.current`), which overlays the URL org's overrides — or,
-    when the org is known from data rather than ``/{org_handle}``, call ``for_org(session,
-    org_id)`` on this handle directly. Org overrides live in the DB behind RLS, so that overlay
-    is async and needs a session; only the org-free read stays sync, which is why no ``org_id``
-    is taken here."""
+    (:mod:`apps.organizations.contract.current`); when the org is known from data rather than
+    ``/{org_handle}``, call ``for_org(session, org_id)`` on this handle. Those overlays read org
+    overrides from the DB (behind RLS) and so are async — which is why no ``org_id`` fits here."""
     try:
         return _registry[app_name]
     except KeyError:

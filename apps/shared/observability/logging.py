@@ -1,3 +1,10 @@
+"""structlog configuration — JSON in production, pretty console in dev.
+
+The level starts from the environment but is admin-tunable from the console and applies
+live, with no restart (README: observability). Loggers are not cached so every call re-reads
+the current level.
+"""
+
 import logging
 import sys
 

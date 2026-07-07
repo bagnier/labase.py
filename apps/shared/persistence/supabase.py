@@ -1,3 +1,8 @@
+"""Supabase SDK clients — user client on the publishable key, admin client on the secret key.
+
+The admin client bypasses RLS: keep it inside the app boundary, never expose it to a browser.
+"""
+
 from functools import lru_cache
 
 from sqlalchemy import text

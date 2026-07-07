@@ -1,3 +1,5 @@
+"""Declarative base and reusable ORM column mixins, composed by each context's models."""
+
 import uuid
 from datetime import datetime
 
@@ -26,6 +28,9 @@ class Positioned:
 
 
 class Versioned:
+    """Optimistic-lock version column: a stale concurrent write raises ``StaleDataError``,
+    which the shared handler turns into a clean 409."""
+
     version: Mapped[int] = mapped_column(default=1)
 
     @declared_attr

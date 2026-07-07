@@ -1,3 +1,9 @@
+"""Response helpers that absorb the JSON / HTMX-fragment / full-page branching.
+
+One handler serves all three audiences (README: every business endpoint has two faces);
+these centralize the negotiation so routers stay free of it.
+"""
+
 from typing import Any
 
 from fastapi import HTTPException, Request, status

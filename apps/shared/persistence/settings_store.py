@@ -65,11 +65,8 @@ def disabled_apps_select() -> Select[tuple[str]]:
     )
 
 
-def app_settings_select(app: str) -> Select[tuple[str, str]]:
-    """Select every persisted ``(key, value)`` for ``app``.
-
-    Used by the mount-time store so each app can read its whole settings on a throwaway engine.
-    """
+def _app_settings_select(app: str) -> Select[tuple[str, str]]:
+    """Every persisted ``(key, value)`` for ``app`` — read at mount on a throwaway engine."""
     return select(AppSetting.key, AppSetting.value).where(AppSetting.app == app)
 
 
@@ -96,7 +93,7 @@ def read_values(app: str) -> dict[str, str]:
     """
 
     async def _work(conn: AsyncConnection) -> dict[str, str]:
-        rows = (await conn.execute(app_settings_select(app))).all()
+        rows = (await conn.execute(_app_settings_select(app))).all()
         return {key: value for key, value in rows}
 
     try:

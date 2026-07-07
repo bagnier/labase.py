@@ -1,3 +1,10 @@
+"""Process-wide technical settings, read once from the environment (``.env``).
+
+Infrastructure knobs — DB URLs, SMTP, cache TTLs — cached for the process lifetime.
+Distinct from :mod:`apps.shared.settings`, which holds the admin-tunable, per-app values
+editable from the console at runtime.
+"""
+
 import os
 from functools import lru_cache
 

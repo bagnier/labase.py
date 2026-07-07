@@ -15,6 +15,13 @@ _SKIP_PATHS = {"/health/live", "/health/ready"}
 
 
 class RequestLogger(BaseHTTPMiddleware):
+    """Per-request correlation and telemetry (README: observability is built in).
+
+    Binds a short ``request_id`` in a contextvar so every log line of the request correlates,
+    times the request, and folds load metrics plus the SQL-query tally into ``request.finished``.
+    Liveness/readiness probes are skipped to keep the logs clean.
+    """
+
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
         if request.url.path in _SKIP_PATHS:
             return await call_next(request)

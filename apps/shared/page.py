@@ -56,9 +56,8 @@ async def fullpage_context(
 ) -> dict:
     """Full template context for a page: nav + provider slices + user + page extras.
 
-    Each provider's keys are namespaced as ``f"{name}_{key}"``; a collision with an
-    already-present key is logged and overwritten. A provider that raises is isolated
-    and logged; the rest of the page still renders.
+    Called explicitly by routes, on full pages only (never HTMX fragments) — see the module
+    docstring for the namespacing, collision and provider-isolation rules.
     """
     ctx: dict = {"user": user, "nav_items": sorted(host.nav_items, key=lambda i: i.order)}
     query = FullpageQuery(session, user)

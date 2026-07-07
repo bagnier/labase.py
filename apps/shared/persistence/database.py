@@ -1,3 +1,11 @@
+"""Async engines and session factories — the DB I/O substrate.
+
+Two engines: user-role (RLS enforced) and BYPASSRLS admin, each pinned to the worktree's
+schema via ``search_path`` and instrumented for the per-query SQL tally. Request sessions
+commit before the response is sent; ``AdminSession`` is the BYPASSRLS session reserved for
+event handlers, console queries and anonymous public surfaces (README: three DB sessions).
+"""
+
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import lru_cache

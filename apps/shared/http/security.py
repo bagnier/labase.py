@@ -1,3 +1,9 @@
+"""HTTP security middleware: response hardening headers + tokenless CSRF.
+
+Cross-site cookie-authenticated mutations are rejected from the ``Sec-Fetch-Site``
+header, so there are no CSRF tokens to plumb through forms (README: HTTP security).
+"""
+
 from typing import Any
 from urllib.parse import urlparse
 
@@ -17,7 +23,7 @@ def cors_config(origins: list[str]) -> dict[str, Any]:
     }
 
 
-CSP = (
+_CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
     "style-src 'self' 'unsafe-inline'; "
@@ -32,7 +38,7 @@ async def security_headers(request: Request, call_next) -> Response:  # type: ig
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Content-Security-Policy"] = CSP
+    response.headers["Content-Security-Policy"] = _CSP
     return response
 
 
@@ -59,6 +65,7 @@ def _is_cross_site(request: Request) -> bool:
 
 
 async def csrf_protect(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
+    """Reject unsafe cross-site requests (see :func:`_is_cross_site`)."""
     if request.method not in _SAFE_METHODS and _is_cross_site(request):
         logger.warning(
             "csrf.rejected",
