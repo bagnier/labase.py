@@ -18,8 +18,12 @@ js-build:
 	mkdir -p static/css static/fonts static/js
 	npm run build
 
+# Exports under ENV_FILE=.env.test: TechnicalSettings has required fields with
+# no defaults, so importing the app needs a complete env — .env.test is the one
+# committed config (CI has no .env). Routes are env-independent, so the schema is
+# identical either way.
 client-gen:
-	PYTHONPATH=. uv run python scripts/export_openapi.py > /tmp/openapi.json
+	ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/export_openapi.py /tmp/openapi.json
 	uv run openapi-python-client generate --path /tmp/openapi.json --output-path client/ --overwrite
 
 # --- Local Supabase ---
@@ -141,7 +145,9 @@ test-e2e: provision-test
 
 # Perf smoke: boots the app on the test schema, drives it with Locust through
 # the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
-perf-smoke: provision-test
+# Depends on client-gen because client/ is generated (gitignored), so CI — which
+# checks out a fresh tree — must build it before the smoke can import it.
+perf-smoke: provision-test client-gen
 	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
 
 coverage-erase:

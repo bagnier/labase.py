@@ -1,9 +1,9 @@
 """Locust perf smoke — one user class per context, all sharing one signed-in account.
 
-Transport goes through Locust's client (that is what gets measured); request
-bodies and response parsing go through the generated OpenAPI client
-(``client/``, package ``labase-client``) — which keeps that client honest:
-a route or DTO drift breaks the smoke run.
+Transport goes through Locust's client (that is what gets measured); response
+parsing goes through the generated OpenAPI client (``client/``, package
+``labase-client``) — which keeps that client honest: a route or DTO drift
+breaks the smoke run.
 
 Run via ``make perf-smoke`` (scripts/perf_smoke.py boots the app on the test
 schema and enforces the thresholds below as a blocking CI step).
@@ -12,10 +12,7 @@ schema and enforces the thresholds below as a blocking CI step).
 import uuid
 
 import httpx
-from labase_client.models import (
-    BodyAddTodoOrgHandleTodosPost,
-    OrganizationWithRoleRead,
-)
+from labase_client.models import OrganizationWithRoleRead
 from locust import HttpUser, between, events, task
 
 _PASSWORD = "Perf1234!"
@@ -76,10 +73,10 @@ class TodoUser(_SignedInUser):
 
     @task(1)
     def create_then_delete(self):
-        body = BodyAddTodoOrgHandleTodosPost(title=f"perf {uuid.uuid4().hex[:6]}")
+        title = f"perf {uuid.uuid4().hex[:6]}"
         with self.client.post(
             f"/{self.org}/todos",
-            json=body.to_dict(),
+            json={"title": title},
             name="POST /{org}/todos",
             catch_response=True,
         ) as response:
@@ -89,8 +86,19 @@ class TodoUser(_SignedInUser):
                 response.success()
                 return
         if response.ok:  # keep the org under max_items_per_org across runs
-            todo_id = response.json()["id"]
-            self.client.delete(f"/{self.org}/todos/{todo_id}", name="DELETE /{org}/todos/{id}")
+            # POST returns the whole todo list (JSON); find the one we just
+            # created by title and delete it to balance the create.
+            created = next((t for t in response.json() if t["title"] == title), None)
+            if created:
+                with self.client.delete(
+                    f"/{self.org}/todos/{created['id']}",
+                    name="DELETE /{org}/todos/{id}",
+                    catch_response=True,
+                ) as delete_response:
+                    if delete_response.status_code == 409:
+                        # Same position-column optimistic-concurrency conflict as
+                        # the create path — expected when the swarm writes one org.
+                        delete_response.success()
 
 
 class OrganizationsUser(_SignedInUser):
