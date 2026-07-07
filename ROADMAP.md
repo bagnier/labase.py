@@ -1,3 +1,43 @@
+- [ ] vider les contract/__init__.py (AppSettings instanciation)
+- [ ] clarifier la cérémonie autour de declare_app_settings
+- [ ] WARN: config section [inbucket] is deprecated. Please use [local_smtp] instead.
+- [ ] app-1  | Using selector: EpollSelector repétition au lancement
+- [ ] API key out of the nav
+- [ ] pas de lien "Settings →" dans http://127.0.0.1:8000/az-az/settings
+- [ ] Manage members → API keys → devrait avoir un overview dans http://127.0.0.1:8000/az-az/settings
+- [ ] create API key <code> illisible
+- [ ] supprimer les liens "← Console" http://127.0.0.1:8000/console/api_keys
+- [ ] ajouter lien supabase http://127.0.0.1:8000/console/api_keys
+- [ ] clarifier Per-organisation overrides enable + value
+- [ ] card hover animation http://127.0.0.1:8000/az-az/dashboard
+- [ ] user avatar propagation to profile un menu
+- [ ] wrong redirection after actions on profile : http://127.0.0.1:8000/profile/2fa/enroll
+
+
+
+- [ ] **i18n** — JHipster ships 45+ languages with a navbar switcher; all our UI
+  strings are hardcoded English. Jinja2 route: Babel/gettext extraction, per-request
+  locale (cookie or `Accept-Language`), catalogs per context. Expensive to retrofit
+  later — decide early: if target products are French-speaking this is urgent,
+  otherwise defer consciously.
+  → decided 2026-07-05: **consciously deferred** — out of scope for now.
+- [ ] **named permissions** — Lite's "Kipe" authorization module: permission model
+  beyond binary roles. Our owner/member is binary; keep in mind for the first
+  client contract needing custom roles. Not urgent.
+- [ ] **billing — the one fully missing link** in the contract-readiness reasoning
+  ("what any client contract would re-pay"). The core of every commercial
+  boilerplate's offer; the minimal credible SaaS-kit grammar is auth + teams +
+  billing + email + jobs, and billing is the only piece entirely absent here.
+  Shape: a `billing/` bounded context, standard mount; **subscription per org**
+  (owner-managed); Stripe Checkout + customer portal (no card UI to build),
+  webhook endpoint feeding typed events (`SubscriptionChanged`) on the bus;
+  plan gates readable by other apps the same way declared settings are (e.g.
+  `max_items_per_org` becomes plan-dependent); console overview stat (MRR,
+  active subs). Keep the domain Stripe-agnostic behind a port (audit/Mailer
+  doctrine) — Stripe adapter first, no vendor lock in domain code. Demo-app
+  friendly: a fake "Pro plan" gating one demo feature shows the pattern.
+  (2026-07-05: out of scope for now) https://github.com/t3dotgg/stripe-recommendations
+
 ## to fix (2026-07-06)
 
 - [x] API keys should be part of profile settings nav ?
