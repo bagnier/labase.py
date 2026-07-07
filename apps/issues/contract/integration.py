@@ -52,7 +52,7 @@ def mount(host: Host) -> None:
     host.events.on(IssueOpened, _alert_opened)
     host.events.on(IssueRegressed, _alert_regressed)
     register_task_handler(PURGE_TOPIC, _purge)
-    host.app.router.add_event_handler("startup", _plant_purge)
+    host.on_startup(_plant_purge)
 
 
 def _declare_settings() -> SettingsDeclaration:

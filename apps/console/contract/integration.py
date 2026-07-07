@@ -50,8 +50,8 @@ def mount(host: Host) -> None:
     # the others converge within one TTL through this per-process re-read loop.
     refresher = SettingsRefresher(host.events, get_technical_settings().settings_refresh_seconds)
     host.events.on(SettingsChanged, refresher.absorb)
-    host.app.router.add_event_handler("startup", refresher.start)
-    host.app.router.add_event_handler("shutdown", refresher.stop)
+    host.on_startup(refresher.start)
+    host.on_shutdown(refresher.stop)
 
     # Live appearance globals, alongside ``css_v`` — every page reads the app-wide theme.
     jinja_globals = cast("dict[str, object]", templates.env.globals)

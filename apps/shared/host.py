@@ -77,6 +77,18 @@ class Host:
         """Register a fullpage-context slice, contributed by an app from its :func:`mount`."""
         self.fullpage_providers.append(FullpageProvider(name, fn))
 
+    def on_startup(self, handler: Callable[[], Awaitable[None]]) -> None:
+        """Register an async startup hook, contributed by an app from its :func:`mount`.
+
+        Lifecycle hooks go through the host so apps never reach into ``host.app.router``
+        (or FastAPI's lifespan) directly — see the recurring-task planters and the
+        background workers/flushers that start here."""
+        self.app.router.add_event_handler("startup", handler)
+
+    def on_shutdown(self, handler: Callable[[], Awaitable[None]]) -> None:
+        """Register an async shutdown hook, contributed by an app from its :func:`mount`."""
+        self.app.router.add_event_handler("shutdown", handler)
+
     def register_settings(self, declaration: SettingsDeclaration) -> AppSettings:
         """Bring an app's settings live in one call: register ``declaration`` (the console admin
         page reads it back through :meth:`declared_settings`/:meth:`declared_console_links`),

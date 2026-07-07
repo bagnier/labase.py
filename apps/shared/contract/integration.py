@@ -51,9 +51,9 @@ def mount(host: Host) -> None:
     register_task_handler(PURGE_TOPIC, purge_counters)
     register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
     worker = TaskWorker(settings.task_worker_interval_seconds)
-    app.router.add_event_handler("startup", _plant_recurring_tasks)
-    app.router.add_event_handler("startup", worker.start)
-    app.router.add_event_handler("shutdown", worker.stop)
+    host.on_startup(_plant_recurring_tasks)
+    host.on_startup(worker.start)
+    host.on_shutdown(worker.stop)
 
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 

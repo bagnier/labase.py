@@ -47,10 +47,10 @@ def mount(host: Host) -> None:
     host.app.include_router(exposition_router)
     host.app.include_router(router, prefix="/console/load")
     register_task_handler(ROLLUP_TOPIC, _rollup)
-    host.app.router.add_event_handler("startup", _plant_rollup)
+    host.on_startup(_plant_rollup)
     flusher = MetricsFlusher(get_technical_settings().metrics_flush_seconds)
-    host.app.router.add_event_handler("startup", flusher.start)
-    host.app.router.add_event_handler("shutdown", flusher.stop)
+    host.on_startup(flusher.start)
+    host.on_shutdown(flusher.stop)
 
 
 def _declare_settings() -> SettingsDeclaration:
