@@ -36,7 +36,7 @@ def mount(host: Host) -> None:
     if not settings.enabled:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)
-    host.register_nav(NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=20))
+    host.register_nav(NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=30))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 

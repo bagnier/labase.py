@@ -29,7 +29,7 @@ def mount(host: Host) -> None:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.app.include_router(public_router)
-    host.register_nav(NavItem("Pages", "note-pencil", "pages", "/pages", order=25))
+    host.register_nav(NavItem("Pages", "note-pencil", "pages", "/pages", order=40))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgNavQuery, _org_nav)
 

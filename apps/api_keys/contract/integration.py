@@ -30,7 +30,7 @@ def mount(host: Host) -> None:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)
     host.register_nav(
-        NavItem("API keys", "key", "api-keys", "/api-keys", order=80, owner_only=True)
+        NavItem("API keys", "key", "api-keys", "/api-keys", order=100, owner_only=True)
     )
     host.events.on(ApiKeyQuery, _resolve)
 

@@ -43,7 +43,7 @@ def mount(host: Host) -> None:
     host.events.on(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(
-        NavItem("Settings", "gear", "settings", "/settings", order=100, owner_only=True)
+        NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
     )
     host.reserve("invitations")
     register_open_list("organizations", org_handle_taken)

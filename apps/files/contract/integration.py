@@ -43,7 +43,7 @@ def mount(host: Host) -> None:
         return
     host.app.include_router(public_router)
     host.app.include_router(router, prefix=ORG_PREFIX)
-    host.register_nav(NavItem("Files", "folder", "files", "/files", order=30))
+    host.register_nav(NavItem("Files", "folder", "files", "/files", order=50))
     host.events.on(OverviewQuery, _overview)
     host.events.on(OrgCreated, _seed)
 
