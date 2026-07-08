@@ -1,3 +1,5 @@
+import base64
+import json
 import uuid
 from typing import Annotated
 
@@ -32,6 +34,7 @@ from apps.auth.contract.passwords import (
 )
 from apps.auth.contract.settings import UsersSettings
 from apps.auth.contract.two_factor import (
+    TotpEnrollment,
     TotpError,
     enroll_totp,
     totp_challenge,
@@ -42,6 +45,7 @@ from apps.profile.contract.current import ProfileSettings
 from apps.profile.domain.models import ProfileCreate, ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.bus import bus
+from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
@@ -56,6 +60,45 @@ router = APIRouter()
 _AVATAR_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 _AVATAR_MEDIA = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
 _AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+# The 2FA enrolment secret is generated once per POST and must survive the
+# post/redirect/get to /profile — parked in a short-lived cookie (the MFA
+# step-up / OAuth PKCE idiom) rather than re-rendered at the POST URL.
+_ENROLLMENT_COOKIE = "twofa_enrollment"
+_ENROLLMENT_MAX_SECONDS = 300
+
+# Flash codes carried on the redirect back to GET /profile: a browser form POST
+# lands on a real GET, so a reload never re-submits (JSON callers keep their
+# inline message).
+_PROFILE_FLASHES = {
+    "password_changed": ("password_info", "Password changed."),
+    "email_requested": ("email_info", "A confirmation email is on its way to your new address."),
+    "avatar_updated": ("avatar_info", "Avatar updated."),
+    "twofa_enabled": ("twofa_info", "Two-factor enabled."),
+}
+
+
+def _profile_redirect(flash: str | None = None) -> RedirectResponse:
+    target = f"/profile?flash={flash}" if flash else "/profile"
+    return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _encode_enrollment(enrollment: TotpEnrollment) -> str:
+    payload = json.dumps(
+        {
+            "factor_id": enrollment.factor_id,
+            "secret": enrollment.secret,
+            "uri": enrollment.uri,
+        }
+    )
+    return base64.urlsafe_b64encode(payload.encode()).decode()
+
+
+def _decode_enrollment(raw: str) -> dict | None:
+    try:
+        return json.loads(base64.urlsafe_b64decode(raw.encode()).decode())
+    except Exception:
+        return None
 
 
 async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
@@ -112,7 +155,7 @@ async def profile_page(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     if wants_json(request):
         profile = await repo.get_by_auth_user_id(uuid.UUID(current_user.id))
         if profile is not None and profile.handle is None and profile_settings.handle_enabled:
@@ -121,7 +164,19 @@ async def profile_page(
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(request, session, current_user, repo)
-    return templates.TemplateResponse(request, "profile.html", ctx)
+    flash = request.query_params.get("flash")
+    if flash in _PROFILE_FLASHES:
+        key, message = _PROFILE_FLASHES[flash]
+        ctx[key] = message
+    enrollment_raw = request.cookies.get(_ENROLLMENT_COOKIE)
+    enrollment = _decode_enrollment(enrollment_raw) if enrollment_raw else None
+    if enrollment:
+        ctx["twofa_enrollment"] = enrollment
+    response = templates.TemplateResponse(request, "profile.html", ctx)
+    if enrollment_raw:
+        # One-shot: the enrolment secret is shown once, then cleared.
+        response.delete_cookie(_ENROLLMENT_COOKIE, path="/profile")
+    return response
 
 
 @router.post("/profile/password", response_model=None)
@@ -131,7 +186,7 @@ async def password_change(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     body = await parse_body(request)
     current_password = str(body.get("current_password", ""))
     new_password = str(body.get("new_password", ""))
@@ -157,9 +212,7 @@ async def password_change(
     audit(bg, "profile.password_changed", user_id=current_user.id)
     if wants_json(request):
         return JSONResponse({"message": "Password changed."})
-    ctx = await _profile_context(request, session, current_user, repo)
-    ctx["password_info"] = "Password changed."
-    return templates.TemplateResponse(request, "profile.html", ctx)
+    return _profile_redirect("password_changed")
 
 
 @router.post("/profile/email", response_model=None)
@@ -170,7 +223,7 @@ async def email_change(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     if not profile_settings.email_change_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
@@ -196,12 +249,9 @@ async def email_change(
         return templates.TemplateResponse(request, "profile.html", ctx, status_code=400)
 
     audit(bg, "profile.email_change_requested", user_id=current_user.id, new_email=new_email)
-    info = f"A confirmation email is on its way to {new_email}."
     if wants_json(request):
-        return JSONResponse({"message": info})
-    ctx = await _profile_context(request, session, current_user, repo)
-    ctx["email_info"] = info
-    return templates.TemplateResponse(request, "profile.html", ctx)
+        return JSONResponse({"message": f"A confirmation email is on its way to {new_email}."})
+    return _profile_redirect("email_requested")
 
 
 # ── Passkeys (WebAuthn) ─────────────────────────────────────────────────────────
@@ -288,7 +338,7 @@ async def twofa_enroll(
     repo: ProfileRepo,
     users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     if not users_settings.two_factor_enabled or not access_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     try:
@@ -307,9 +357,17 @@ async def twofa_enroll(
                 "uri": enrollment.uri,
             }
         )
-    ctx = await _profile_context(request, session, current_user, repo)
-    ctx["twofa_enrollment"] = enrollment
-    return templates.TemplateResponse(request, "profile.html", ctx)
+    response = _profile_redirect()
+    response.set_cookie(
+        _ENROLLMENT_COOKIE,
+        _encode_enrollment(enrollment),
+        max_age=_ENROLLMENT_MAX_SECONDS,
+        httponly=True,
+        secure=get_technical_settings().cookies_secure,
+        samesite="lax",
+        path="/profile",
+    )
+    return response
 
 
 @router.post("/profile/2fa/verify", response_model=None)
@@ -321,7 +379,7 @@ async def twofa_verify(
     repo: ProfileRepo,
     users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     if not users_settings.two_factor_enabled or not access_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
@@ -340,10 +398,7 @@ async def twofa_verify(
     audit(bg, "profile.twofa_enabled", user_id=current_user.id)
     if wants_json(request):
         return JSONResponse({"message": "Two-factor enabled."})
-    ctx = await _profile_context(request, session, current_user, repo)
-    ctx["twofa_active"] = True
-    ctx["twofa_info"] = "Two-factor enabled."
-    return templates.TemplateResponse(request, "profile.html", ctx)
+    return _profile_redirect("twofa_enabled")
 
 
 @router.delete("/profile", response_model=None)
@@ -404,7 +459,7 @@ async def avatar_upload(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     ext = _AVATAR_EXT.get(file.content_type or "")
@@ -436,9 +491,7 @@ async def avatar_upload(
     audit(bg, "profile.avatar_updated", user_id=current_user.id)
     if wants_json(request):
         return JSONResponse({"message": "Avatar updated."})
-    ctx = await _profile_context(request, session, current_user, repo)
-    ctx["avatar_info"] = "Avatar updated."
-    return templates.TemplateResponse(request, "profile.html", ctx)
+    return _profile_redirect("avatar_updated")
 
 
 @router.get("/profile/avatar/{auth_user_id}", response_model=None)
@@ -469,7 +522,7 @@ async def profile_update(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     if not profile_settings.handle_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
