@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Logs — Console{% endblock %}
+{% block breadcrumb %}
+  <li><a href="/console">Console</a></li>
+  <li>Logs</li>
+{% endblock %}
+{% block content %}
+  <div class="max-w-5xl space-y-6">
+    <div>
+      <h1 class="text-lg font-semibold">Logs</h1>
+      <p class="text-sm text-base-content/70 mt-0.5">
+        One timeline across the firehose, the audit trail and tracked issues.
+      </p>
+    </div>
+    {% if entries %}
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Source</th>
+              <th>Level</th>
+              <th>Org</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>Request</th>
+            </tr>
+          </thead>
+          <tbody id="log-entries">
+            {% include "logs/_entries.html" %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-base-content/70" data-logs-empty>No log entries yet in the current window.</p>
+    {% endif %}
+  </div>
+{% endblock %}

@@ -101,6 +101,23 @@ def truncate_app_tables() -> None:
     _run_blocking(_truncate)
 
 
+def truncate_tables(names: list[str]) -> None:
+    """Committed TRUNCATE of specific tables — for data written outside the API driver's
+    rolled-back transaction (e.g. audit/issue rows persisted via a background admin session)."""
+    s = get_technical_settings().supabase_database_schema
+    stmt = "TRUNCATE TABLE " + ", ".join(f"{s}.{t}" for t in names) + " CASCADE"
+
+    async def _do() -> None:
+        engine = _service_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(stmt))
+        finally:
+            await engine.dispose()
+
+    _run_blocking(_do)
+
+
 def reset_app_switches() -> None:
     """Clears persisted ``enabled`` overrides so feature switches don't leak across runs.
 

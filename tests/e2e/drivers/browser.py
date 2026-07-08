@@ -5,6 +5,7 @@ from apps.console.tests.e2e import ConsoleBrowserMixin
 from apps.files.tests.e2e import OrgFileBrowserMixin
 from apps.issues.tests.e2e import IssuesBrowserMixin
 from apps.learning.tests.e2e import LearningBrowserMixin
+from apps.logs.tests.e2e import LogsBrowserMixin
 from apps.metrics.tests.e2e import MetricsBrowserMixin
 from apps.organizations.tests.e2e import OrgBrowserMixin
 from apps.pages.tests.e2e import PagesBrowserMixin
@@ -18,6 +19,7 @@ class BrowserDriver(
     ApiKeysBrowserMixin,
     IssuesBrowserMixin,
     MetricsBrowserMixin,
+    LogsBrowserMixin,
     ConsoleBrowserMixin,
     ProfileBrowserMixin,
     TodoBrowserMixin,

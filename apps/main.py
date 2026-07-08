@@ -6,6 +6,7 @@ from apps.files.contract import integration as files
 from apps.health.contract import integration as health
 from apps.issues.contract import integration as issues
 from apps.learning.contract import integration as learning
+from apps.logs.contract import integration as logs
 from apps.metrics.contract import integration as metrics
 from apps.organizations.contract import integration as organizations
 from apps.pages.contract import integration as pages
@@ -28,6 +29,7 @@ _apps = (
     health,
     issues,  # before console: its /console/issues routes must precede /console/{app}
     metrics,  # before console: its /console/load routes must precede /console/{app}
+    logs,  # before console: its /console/logs routes must precede /console/{app}
     console,
     organizations,
     api_keys,

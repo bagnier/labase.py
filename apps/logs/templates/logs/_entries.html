@@ -1,0 +1,16 @@
+{% for e in entries %}
+  <tr data-log-event="{{ e.event }}" data-log-source="{{ e.source }}">
+    <td class="font-mono text-xs text-base-content/70 whitespace-nowrap"
+        data-log-time>{{ e.ts.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+    <td><span class="badge badge-sm">{{ e.source }}</span></td>
+    <td>
+      <span class="badge badge-sm {{ 'badge-error' if e.level == 'error' else 'badge-warning' if e.level == 'warning' else 'badge-info' }}">
+        {{ e.level }}
+      </span>
+    </td>
+    <td class="font-mono text-xs text-base-content/60">{{ e.org_id | string | truncate(8, True, '') if e.org_id else "—" }}</td>
+    <td class="font-mono text-xs">{{ e.event }}</td>
+    <td class="font-mono text-xs text-base-content/60">{{ e.user_id | string | truncate(8, True, '') if e.user_id else "—" }}</td>
+    <td class="font-mono text-xs text-base-content/60">{{ e.request_id or "—" }}</td>
+  </tr>
+{% endfor %}
