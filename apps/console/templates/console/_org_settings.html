@@ -36,17 +36,49 @@
            class="input input-sm w-full font-mono" />
     <select name="key"
             aria-label="Setting key"
-            class="select select-sm w-full font-mono">
+            class="select select-sm w-full font-mono"
+            onchange="for (const w of this.form.querySelectorAll('[data-value-for]')) { const on = w.dataset.valueFor === this.value; w.hidden = !on; for (const i of w.querySelectorAll('[data-override-value]')) i.disabled = !on; }">
       {% for s in settings %}
         <option value="{{ s.key }}">{{ s.key }}</option>
       {% endfor %}
     </select>
-    <input type="text"
-           name="value"
-           placeholder="value"
-           required
-           aria-label="Override value"
-           class="input input-sm w-full" />
+    {# Per-key value widget, typed like the server form; only the selected key's
+       inputs stay enabled so a single `value` is submitted. #}
+    <div class="w-full">
+      {% for s in settings %}
+        <div data-value-for="{{ s.key }}" {% if not loop.first %}hidden{% endif %}>
+          {% if s.type == "boolean" %}
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input type="hidden"
+                     name="value"
+                     value="false"
+                     data-override-value
+                     {% if not loop.first %}disabled{% endif %} />
+              <input type="checkbox"
+                     name="value"
+                     value="true"
+                     class="toggle toggle-sm"
+                     role="switch"
+                     aria-label="Override value for {{ s.key }}"
+                     data-override-value
+                     {% if s.value == "true" %}checked{% endif %}
+                     {% if not loop.first %}disabled{% endif %} />
+              <span class="text-sm text-base-content/70">Enabled</span>
+            </label>
+          {% else %}
+            <input type="{{ 'number' if s.type == 'number' else 'text' }}"
+                   name="value"
+                   value="{{ s.value }}"
+                   placeholder="value"
+                   required
+                   aria-label="Override value for {{ s.key }}"
+                   class="input input-sm w-full"
+                   data-override-value
+                   {% if not loop.first %}disabled{% endif %} />
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
     <button type="submit" class="btn btn-primary btn-sm">Override</button>
   </form>
 </div>
