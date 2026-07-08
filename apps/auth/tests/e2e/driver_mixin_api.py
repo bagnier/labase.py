@@ -426,6 +426,14 @@ class AuthApiMixin(ApiBase):
             f"impersonate: {self.response.status_code} {self.response.text}"
         )
 
+    def impersonate_from_accounts(self, email: str) -> None:
+        # The accounts row renders a "View as user" form posting the target email;
+        # assert the button is on the HTML page, then drive the endpoint behind it.
+        listing = self.client().get("/console/accounts", headers={"accept": "text/html"})
+        assert listing.status_code == 200, f"GET /console/accounts: {listing.status_code}"
+        assert "View as user" in listing.text, "accounts list is missing the impersonate button"
+        self.impersonate(email)
+
     def assert_viewing_as(self, email: str) -> None:
         assert self._profile_email() == email, f"not viewing as {email!r}"
 

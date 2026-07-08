@@ -406,6 +406,11 @@ class AuthBrowserMixin(BrowserBase):
         self.page.get_by_role("button", name="View as user").click()
         self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
 
+    def impersonate_from_accounts(self, email: str) -> None:
+        self.open_accounts_screen()
+        self._account_row(email).get_by_role("button", name="View as user").click()
+        self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
+
     def assert_viewing_as(self, email: str) -> None:
         assert email in self.page.content(), f"{email!r} not on the impersonated page"
 

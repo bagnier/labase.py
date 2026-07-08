@@ -29,6 +29,10 @@
               <span class="text-xs text-base-content/50">that's you</span>
             {% else %}
               <div class="flex gap-2">
+                <form method="post" action="/auth/impersonate">
+                  <input type="hidden" name="email" value="{{ a.email }}" />
+                  <button type="submit" class="btn btn-xs btn-warning btn-outline">View as user</button>
+                </form>
                 {% if a.disabled %}
                   <form method="post" action="/console/accounts/{{ a.id }}/enable">
                     <button type="submit" class="btn btn-xs">Enable</button>

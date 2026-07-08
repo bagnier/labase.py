@@ -140,6 +140,11 @@ def step_admin_impersonates(driver, email):
     driver.impersonate(email)
 
 
+@when(parsers.parse('the admin impersonates "{email}" from the accounts list'))
+def step_admin_impersonates_from_accounts(driver, email):
+    driver.impersonate_from_accounts(email)
+
+
 @then(parsers.parse('they are viewing the app as "{email}"'))
 def step_assert_viewing_as(driver, email):
     driver.assert_viewing_as(email)

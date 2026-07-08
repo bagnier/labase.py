@@ -9,7 +9,7 @@
 - [ ] MCP server ?
 - [ ] CLI
 - [ ] logs
-- [ ] ETag on public pages
+- [x] ETag on public pages
 - [ ] COW, soft deletion, soft update
 - [ ] async task queue
 - [ ] fulltext index - elastic
