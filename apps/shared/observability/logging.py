@@ -73,3 +73,8 @@ def setup_logging() -> None:
         stream=sys.stdout,
         level=level,
     )
+
+    # asyncio emits "Using selector: EpollSelector" at DEBUG on every event-loop
+    # creation — repeated at each hot-reload under `hypercorn --reload`. Mute it
+    # without dropping our own DEBUG lines.
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
