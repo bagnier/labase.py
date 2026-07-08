@@ -24,7 +24,7 @@ from apps.organizations.contract.settings_sections import (
     OrgSettingsSectionQuery,
 )
 from apps.shared.host import Host
-from apps.shared.settings import SettingsDeclaration, feature_switch
+from apps.shared.settings import SettingsDeclaration, SupabaseLink, feature_switch
 
 
 def mount(host: Host) -> None:
@@ -51,7 +51,11 @@ async def _settings_section(query: OrgSettingsSectionQuery) -> OrgSettingsSectio
 
 
 def _declare_settings() -> SettingsDeclaration:
-    return SettingsDeclaration(app_name="api_keys", defs=[feature_switch()])
+    return SettingsDeclaration(
+        app_name="api_keys",
+        defs=[feature_switch()],
+        supabase=SupabaseLink("Browse API keys in Supabase", table="api_keys"),
+    )
 
 
 async def _resolve(query: ApiKeyQuery) -> AuthenticatedUser | None:
