@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from apps.auth.contract.current import OptionalCurrentUser
 from apps.organizations.contract.queries import org_by_handle
 from apps.pages.contract.public import get_public_nav, get_public_page, get_public_pages
 from apps.public.contract.current import PublicSettings
+from apps.shared.http import with_etag
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 
@@ -17,27 +18,30 @@ async def index(
     admin: AdminSession,
     current_user: OptionalCurrentUser,
     public_settings: PublicSettings,
-) -> HTMLResponse | RedirectResponse:
+) -> Response:
     handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
-        return templates.TemplateResponse(request, "home.html")
+        return with_etag(request, templates.TemplateResponse(request, "home.html"))
     org = await org_by_handle(admin, handle)
     if org is None:
-        return templates.TemplateResponse(request, "home.html")
+        return with_etag(request, templates.TemplateResponse(request, "home.html"))
     nav_items = await get_public_nav(admin, org.id)
     if nav_items:
         return RedirectResponse(url=f"/{nav_items[0].slug}", status_code=302)
     pages = await get_public_pages(admin, org.id)
-    return templates.TemplateResponse(
+    return with_etag(
         request,
-        "home_featured.html",
-        {
-            "org": org,
-            "org_handle": handle,
-            "pages": pages,
-            "page_nav": nav_items,
-            "current_user": current_user,
-        },
+        templates.TemplateResponse(
+            request,
+            "home_featured.html",
+            {
+                "org": org,
+                "org_handle": handle,
+                "pages": pages,
+                "page_nav": nav_items,
+                "current_user": current_user,
+            },
+        ),
     )
 
 
@@ -48,7 +52,7 @@ async def public_page(
     admin: AdminSession,
     current_user: OptionalCurrentUser,
     public_settings: PublicSettings,
-) -> HTMLResponse:
+) -> Response:
     handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
@@ -59,14 +63,17 @@ async def public_page(
     if view is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     nav_items = await get_public_nav(admin, org.id)
-    return templates.TemplateResponse(
+    return with_etag(
         request,
-        "public_page.html",
-        {
-            "page": view.page,
-            "body": view.body,
-            "org": org,
-            "page_nav": nav_items,
-            "current_user": current_user,
-        },
+        templates.TemplateResponse(
+            request,
+            "public_page.html",
+            {
+                "page": view.page,
+                "body": view.body,
+                "org": org,
+                "page_nav": nav_items,
+                "current_user": current_user,
+            },
+        ),
     )

@@ -20,7 +20,14 @@ from apps.pages.infra.repository import (
     PageRepository,
     visible_pages,
 )
-from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
+from apps.shared.http import (
+    delete_response,
+    mutation_response,
+    or_404,
+    parse_body,
+    wants_json,
+    with_etag,
+)
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
@@ -383,10 +390,13 @@ async def list_pages(
     if wants_json(request):
         return JSONResponse([PageRead.model_validate(p).model_dump(mode="json") for p in pages])
     if current_user is None:
-        return templates.TemplateResponse(
+        return with_etag(
             request,
-            "pages/public_list.html",
-            {"pages": pages, "org": org, "org_handle": org_handle},
+            templates.TemplateResponse(
+                request,
+                "pages/public_list.html",
+                {"pages": pages, "org": org, "org_handle": org_handle},
+            ),
         )
     pages_data = [
         {
@@ -409,7 +419,7 @@ async def list_pages(
         can_create=role is not None,
         is_owner=role == OrgRole.owner,
     )
-    return templates.TemplateResponse(request, "pages/pages.html", ctx)
+    return with_etag(request, templates.TemplateResponse(request, "pages/pages.html", ctx))
 
 
 @public_router.get("/{org_handle}/pages/{slug}", response_class=HTMLResponse)
@@ -441,15 +451,18 @@ async def view_page(
             org=org,
             org_handle=org_handle,
         )
-        return templates.TemplateResponse(request, "pages/view.html", ctx)
-    return templates.TemplateResponse(
+        return with_etag(request, templates.TemplateResponse(request, "pages/view.html", ctx))
+    return with_etag(
         request,
-        "pages/view_public.html",
-        {
-            "page": page,
-            "body": body,
-            "can_edit": can_edit,
-            "org_handle": org_handle,
-            "org": org,
-        },
+        templates.TemplateResponse(
+            request,
+            "pages/view_public.html",
+            {
+                "page": page,
+                "body": body,
+                "can_edit": can_edit,
+                "org_handle": org_handle,
+                "org": org,
+            },
+        ),
     )
