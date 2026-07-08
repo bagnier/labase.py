@@ -3,7 +3,7 @@
        class="alert alert-success flex-col items-start gap-2 mb-4">
     <p class="font-medium">Key "{{ new_key.name }}" created.</p>
     <p class="text-xs">Copy it now — it will not be shown again:</p>
-    <code class="w-full text-xs bg-base-100 border border-base-300 rounded px-2 py-1.5 break-all"
+    <code class="select-all w-full text-sm font-mono text-base-content bg-base-100 border border-base-300 rounded px-2 py-1.5 break-all"
           data-api-key-secret>{{ new_key.secret }}</code>
   </div>
 {% endif %}
