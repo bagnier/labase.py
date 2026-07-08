@@ -24,6 +24,10 @@ class TechnicalSettings(BaseSettings):
     supabase_database_admin_url: str = ""
     supabase_database_schema: str = "public"
     log_debug: bool = False
+    # Firehose: structlog events are rendered to stdout AND appended to per-day JSON files
+    # under this directory, giving the unified logs viewer a recent window to read back.
+    # Local default is a gitignored dot-dir; production points this at a real log volume.
+    firehose_dir: str = ".firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
     cors_origins: list[str] = ["*"]

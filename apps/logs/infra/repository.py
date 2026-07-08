@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared.observability.audit import AuditRow, search_audit_logs
+from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "request"}
 
@@ -48,6 +49,10 @@ class LogReader:
 
     async def search(self, flt: LogFilter, *, limit: int = 100) -> list[LogEntry]:
         entries: list[LogEntry] = []
+        # The firehose is a synchronous read of local files — the 'request'/'app' diagnostics
+        # stream, level-gated at write time; the durable sources below carry full history.
+        if flt.wants(LogSource.request):
+            entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         if flt.wants(LogSource.audit):
             rows = await search_audit_logs(self.session, **_audit_kwargs(flt, limit))
             entries += [_from_audit(r) for r in rows]
@@ -84,6 +89,24 @@ def _issue_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     kwargs = _audit_kwargs(flt, limit)
     del kwargs["level"]  # issues carry no level column — always "error"
     return kwargs
+
+
+def _firehose_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+    # The firehose keeps its own retention window; it takes the same filters as the DB sources.
+    return _audit_kwargs(flt, limit)
+
+
+def _from_firehose(row: FirehoseRow) -> LogEntry:
+    return LogEntry(
+        ts=row.ts,
+        source=LogSource.request,
+        level=row.level,
+        event=row.event,
+        org_id=row.org_id,
+        user_id=row.user_id,
+        request_id=row.request_id,
+        payload=row.payload,
+    )
 
 
 def _from_audit(row: AuditRow) -> LogEntry:

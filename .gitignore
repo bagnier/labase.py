@@ -13,6 +13,7 @@ worktrees/
 
 # Tools
 .cov/
+.firehose/
 .DS_Store
 .playwright-mcp/
 .pytest_cache/

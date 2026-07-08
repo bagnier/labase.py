@@ -23,6 +23,58 @@ def step_seed_audit_user(driver, event, email):
     driver.seed_audit_by_user(event, email)
 
 
+# Anchored regex (not parse): the "at level" variants below share this prefix, and parse's
+# fields greedily swallow the inner quotes — the `[^"]+` + `$` keeps each sentence unambiguous.
+@given(parsers.re(r'a request log entry "(?P<event>[^"]+)" from org "(?P<org>[^"]+)"$'))
+def step_seed_request_org(driver, event, org):
+    driver.seed_request_from_org(event, org)
+
+
+@given(parsers.parse('a request log entry "{event}" from org "{org}" recorded on "{date}"'))
+def step_seed_request_org_dated(driver, event, org, date):
+    driver.seed_request_from_org(event, org, when=_date(date))
+
+
+@given(parsers.parse('a request log entry "{event}" at level "{level}" from org "{org}"'))
+def step_seed_request_leveled(driver, event, level, org):
+    driver.seed_request_from_org(event, org, level=level)
+
+
+@given(parsers.re(r'an error log entry "(?P<event>[^"]+)" from org "(?P<org>[^"]+)"$'))
+def step_seed_error_org(driver, event, org):
+    driver.seed_error_from_org(event, org)
+
+
+@given(parsers.parse('an error log entry "{event}" from org "{org}" recorded on "{date}"'))
+def step_seed_error_org_dated(driver, event, org, date):
+    driver.seed_error_from_org(event, org, when=_date(date))
+
+
+@given(parsers.parse('an error log entry "{event}" at level "{level}" from org "{org}"'))
+def step_seed_error_leveled(driver, event, level, org):
+    driver.seed_error_from_org(event, org)
+
+
+@given(
+    parsers.parse(
+        'request "{rid}" in org "{org}" recorded a request log, '
+        'an audit event "{audit}", and a captured error "{error}"'
+    )
+)
+def step_seed_correlated(driver, rid, org, audit, error):
+    driver.seed_correlated_request(rid, org, audit, error)
+
+
+@given(parsers.parse('the log level is "{level}"'))
+def step_log_level_is(driver, level):
+    driver.set_process_log_level(level)
+
+
+@given(parsers.parse('an audit event "{event}" is recorded in org "{org}"'))
+def step_audit_event_recorded(driver, event, org):
+    driver.seed_audit_from_org(event, org)
+
+
 # ── Filtering / sorting ──────────────────────────────────────────────────────
 @when(parsers.parse('the admin filters the logs by org "{org}"'))
 def step_filter_org(driver, org):
@@ -32,6 +84,36 @@ def step_filter_org(driver, org):
 @when(parsers.parse('the admin filters the logs by user "{email}"'))
 def step_filter_user(driver, email):
     driver.filter_logs_by_user(email)
+
+
+@when(parsers.parse('the admin filters the logs by source "{source}"'))
+def step_filter_source(driver, source):
+    driver.filter_logs_by_source(source)
+
+
+@when(parsers.parse('the admin filters the logs by level "{level}"'))
+def step_filter_level(driver, level):
+    driver.filter_logs_by_level(level)
+
+
+@when(parsers.parse('the admin filters the logs by request "{rid}"'))
+def step_filter_request(driver, rid):
+    driver.filter_logs_by_request(rid)
+
+
+@when(parsers.parse('the admin searches the logs for "{text}"'))
+def step_search_text(driver, text):
+    driver.search_logs(text)
+
+
+@when("the admin exports the filtered logs as NDJSON")
+def step_export_ndjson(driver):
+    driver.export_logs_ndjson()
+
+
+@when("the admin exports the filtered logs as CSV")
+def step_export_csv(driver):
+    driver.export_logs_csv()
 
 
 @when(parsers.parse('the admin filters the logs to dates from "{a}" to "{b}"'))
@@ -63,6 +145,33 @@ def step_entry_source(driver, event, source):
 @then(parsers.parse('"{a}" is listed above "{b}"'))
 def step_entry_above(driver, a, b):
     driver.assert_entry_above(a, b)
+
+
+@then(
+    parsers.parse('the request entry, the audit "{audit}", and the error "{error}" are all listed')
+)
+def step_correlated_all_listed(driver, audit, error):
+    driver.assert_all_listed("request.finished", audit, error)
+
+
+@then(parsers.parse("{n:d} request entry is listed"))
+def step_request_count(driver, n):
+    driver.assert_source_count("request", n)
+
+
+@then(parsers.parse('the export contains "{needle}"'))
+def step_export_contains(driver, needle):
+    driver.assert_export_contains(needle)
+
+
+@then(parsers.parse('the export does not contain "{needle}"'))
+def step_export_excludes(driver, needle):
+    driver.assert_export_excludes(needle)
+
+
+@then(parsers.parse('the CSV export has a header row and lists "{needle}"'))
+def step_csv_export(driver, needle):
+    driver.assert_csv_export(needle)
 
 
 @then(

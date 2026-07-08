@@ -10,7 +10,6 @@ from typing import cast
 
 from apps.auth.contract.admin import count_server_admins, set_server_admin
 from apps.auth.contract.events import UserCreated
-from apps.console.contract import observability
 from apps.console.contract.appearance import (
     DEFAULT_THEME,
     THEME_APP,
@@ -21,9 +20,8 @@ from apps.console.contract.appearance import (
 from apps.console.contract.appearance import (
     overview as appearance_overview,
 )
-from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.console.contract.overviews import ConsoleOverviewQuery
 from apps.console.contract.technical import overview as technical_overview
-from apps.console.infra.audit_log_repository import AuditLogRepository
 from apps.console.infra.refresh import SettingsRefresher
 from apps.console.infra.router import router
 from apps.shared.config import get_technical_settings
@@ -36,13 +34,9 @@ def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console")
     host.reserve("console", "admin", "logs", "settings")
     host.events.on(UserCreated, _bootstrap_first_admin)
-    host.events.on(ConsoleOverviewQuery, _logs_overview)
 
     host.register_settings(_declare_appearance_settings())
     host.events.on(ConsoleOverviewQuery, appearance_overview)
-
-    observability.declare(host)
-    host.events.on(ConsoleOverviewQuery, observability.overview)
 
     host.events.on(ConsoleOverviewQuery, technical_overview)
 
@@ -76,14 +70,3 @@ def _declare_appearance_settings() -> SettingsDeclaration:
 async def _bootstrap_first_admin(event: UserCreated) -> None:
     if await count_server_admins() == 0:
         await set_server_admin(uuid.UUID(event.user_id), True)
-
-
-async def _logs_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    count = await AuditLogRepository(query.session).count()
-    return ConsoleOverview(
-        key="logs",
-        title="Audit logs",
-        icon="scroll",
-        group="settings",
-        data={"lines": [f"{count} events recorded"]},
-    )

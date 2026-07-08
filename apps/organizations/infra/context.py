@@ -1,5 +1,6 @@
 import uuid
 
+import structlog
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
 
 from apps.auth.contract.current import CurrentUser, RlsSession
@@ -11,6 +12,18 @@ from apps.shared.slug_registry import is_reserved
 
 
 async def get_current_org(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+) -> uuid.UUID:
+    """Resolve the request's org, then correlate this request's logs with it — the unified logs
+    viewer filters the firehose by org_id (bound once here, at the single resolution point)."""
+    org_id = await _resolve_current_org(request, current_user, session)
+    structlog.contextvars.bind_contextvars(org_id=str(org_id))
+    return org_id
+
+
+async def _resolve_current_org(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,

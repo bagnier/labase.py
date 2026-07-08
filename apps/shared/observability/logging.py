@@ -11,6 +11,7 @@ import sys
 import structlog
 
 from apps.shared.config import get_technical_settings
+from apps.shared.observability.firehose import firehose_processor
 
 _LEVELS = {
     "DEBUG": logging.DEBUG,
@@ -58,6 +59,7 @@ def setup_logging() -> None:
             structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
+            firehose_processor,
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(level),

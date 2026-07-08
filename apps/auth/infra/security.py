@@ -66,7 +66,9 @@ async def get_current_user(
 ) -> AuthenticatedUser:
     bearer = _bearer_token(authorization)
     if bearer is not None and bearer.startswith(API_KEY_PREFIX):
-        return await _resolve_api_key(bearer, admin_session)
+        principal = await _resolve_api_key(bearer, admin_session)
+        structlog.contextvars.bind_contextvars(user_id=principal.id)
+        return principal
     # A bearer GoTrue JWT is the machine twin of the cookie session (no refresh flow).
     access_token = access_token or bearer
     if not access_token:
@@ -93,6 +95,9 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
     is_admin = payload.get("app_metadata", {}).get("role") == "admin"
+    # Correlate every log line of this request with who made it — the unified logs viewer
+    # filters the firehose by user_id (request_id is already bound by RequestLogger).
+    structlog.contextvars.bind_contextvars(user_id=payload["sub"])
     return AuthenticatedUser(
         id=payload["sub"],
         email=payload.get("email", ""),

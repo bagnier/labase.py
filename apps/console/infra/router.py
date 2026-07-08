@@ -4,12 +4,11 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
-from apps.console.contract import appearance, observability
+from apps.console.contract import appearance
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import admins, service, technical
 from apps.console.domain.admins import AdminNotFound, LastAdminViolation
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
-from apps.console.infra.audit_log_repository import AuditLogRepository, parse_range_bound
 from apps.console.infra.repository import AppSettingRepository
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
@@ -216,36 +215,6 @@ async def update_admin(
     return _admins_partial(request, rows)
 
 
-_LOG_PAGE_SIZE = 50
-
-
-def _paginate(rows: list[dict], limit: int) -> tuple[list[dict], int | None]:
-    """Split a ``limit + 1``-fetched page: the visible rows and the next cursor, if any."""
-    if len(rows) > limit:
-        return rows[:limit], rows[limit - 1]["id"]
-    return rows, None
-
-
-async def _search_logs(
-    session: AdminSession,
-    *,
-    level: str,
-    event: str,
-    from_dt: str,
-    to_dt: str,
-    before_id: int | None,
-) -> tuple[list[dict], int | None]:
-    rows = await AuditLogRepository(session).search(
-        level=level or None,
-        event=event or None,
-        from_dt=parse_range_bound(from_dt),
-        to_dt=parse_range_bound(to_dt),
-        before_id=before_id,
-        limit=_LOG_PAGE_SIZE,
-    )
-    return _paginate(rows, _LOG_PAGE_SIZE)
-
-
 @router.get("/settings", response_class=HTMLResponse)
 async def get_settings_page(
     request: Request, current_user: CurrentAdmin, session: AdminSession
@@ -253,12 +222,6 @@ async def get_settings_page(
     theme_group = _settings_group(appearance.THEME_APP)
     theme_values = await AppSettingRepository(session).values(appearance.THEME_APP)
     theme_settings = service.settings_view(theme_group, theme_values)
-    obs_group = _settings_group(observability.OBSERVABILITY_APP)
-    obs_values = await AppSettingRepository(session).values(observability.OBSERVABILITY_APP)
-    obs_settings = service.settings_view(obs_group, obs_values)
-    entries, next_before_id = await _search_logs(
-        session, level="", event="", from_dt="", to_dt="", before_id=None
-    )
     env_vars = technical.env_snapshot()
     process = technical.process_snapshot()
     technical_config = technical.technical_settings_snapshot()
@@ -266,9 +229,6 @@ async def get_settings_page(
         return JSONResponse(
             {
                 "theme": theme_settings,
-                "observability": obs_settings,
-                "entries": entries,
-                "next_before_id": next_before_id,
                 "env_vars": env_vars,
                 "process": process,
                 "technical_config": technical_config,
@@ -283,49 +243,10 @@ async def get_settings_page(
             "app": appearance.THEME_APP,
             "group_overviews": group_overviews,
             "settings": theme_settings,
-            "observability_settings": obs_settings,
-            "entries": entries,
-            "next_before_id": next_before_id,
-            "level": "",
-            "event": "",
-            "from_dt": "",
-            "to_dt": "",
             "env_vars": env_vars,
             "process": process,
             "technical_config": technical_config,
             **await fullpage_context(session, current_user),
-        },
-    )
-
-
-# Registered before "/{app}" so "logs" is not captured as an app slug.
-@router.get("/logs/entries", response_class=HTMLResponse)
-async def get_log_entries(
-    request: Request,
-    current_user: CurrentAdmin,
-    session: AdminSession,
-    level: str = "",
-    event: str = "",
-    from_dt: str = "",
-    to_dt: str = "",
-    before_id: int | None = None,
-) -> Response:
-    entries, next_before_id = await _search_logs(
-        session, level=level, event=event, from_dt=from_dt, to_dt=to_dt, before_id=before_id
-    )
-    if wants_json(request):
-        return JSONResponse({"entries": entries, "next_before_id": next_before_id})
-    return templates.TemplateResponse(
-        request,
-        "console/_log_entries.html",
-        {
-            "entries": entries,
-            "next_before_id": next_before_id,
-            "level": level,
-            "event": event,
-            "from_dt": from_dt,
-            "to_dt": to_dt,
-            "appending": before_id is not None,
         },
     )
 
