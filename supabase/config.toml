@@ -58,7 +58,7 @@ rp_origins = ["http://localhost:8000"]
 
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 smtp_port = 54325
