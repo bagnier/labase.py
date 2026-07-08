@@ -52,3 +52,11 @@ class LoadTotals(BaseModel):
     requests: int
     error_rate_pct: float
     p95_ms: float | None
+
+
+class LoadPoint(BaseModel):
+    """Traffic of one time bucket, summed across routes and instances."""
+
+    bucket: datetime
+    requests: int
+    errors: int

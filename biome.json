@@ -6,6 +6,7 @@
       "static/js/src/**/*.js",
       "static/js/todo.js",
       "static/js/learning.js",
+      "static/js/charts.js",
       "static/css/input.css"
     ]
   },
@@ -32,7 +33,7 @@
   },
   "javascript": {
     "formatter": { "quoteStyle": "single" },
-    "globals": ["htmx", "Alpine", "Sortable"]
+    "globals": ["htmx", "Alpine", "Sortable", "ApexCharts"]
   },
   "css": {
     "parser": { "tailwindDirectives": true },

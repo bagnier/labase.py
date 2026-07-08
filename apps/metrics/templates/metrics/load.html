@@ -14,6 +14,13 @@
       </p>
     </div>
     {% if routes %}
+      <div class="card-panel">
+        <div class="p-4">
+          <h2 class="text-sm font-semibold mb-2">Requests over time</h2>
+          <script type="application/json" data-chart-config>{{ series_json | safe }}</script>
+          <div data-chart></div>
+        </div>
+      </div>
       <div class="stats shadow" role="group" aria-label="Traffic totals">
         <div class="stat">
           <div class="stat-title">Requests ({{ window_hours }} h)</div>
@@ -75,4 +82,8 @@
       <a class="link" href="/metrics">Raw Prometheus exposition →</a>
     </p>
   </div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/apexcharts.min.js"></script>
+  <script src="/static/js/charts.js" defer></script>
 {% endblock %}

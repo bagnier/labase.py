@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from apps.metrics.domain.models import MetricResolution, RequestMetric
-from apps.metrics.domain.service import aggregate, percentile_ms
+from apps.metrics.domain.service import aggregate, percentile_ms, timeseries
 from apps.shared.observability.metrics import BUCKET_BOUNDS_MS
 
 
@@ -66,3 +66,25 @@ def test_aggregate_empty_window():
     assert totals.requests == 0
     assert totals.error_rate_pct == 0.0
     assert totals.p95_ms is None
+
+
+def _row_at(minute: int, requests: int, errors: int) -> RequestMetric:
+    row = _row("GET", "/todo", requests, errors, _buckets(ms_100=requests))
+    row.bucket = datetime(2026, 7, 6, 12, minute, tzinfo=UTC)
+    return row
+
+
+def test_timeseries_sums_per_bucket_across_routes_and_sorts_chronologically():
+    rows = [
+        _row_at(2, 10, 1),
+        _row_at(0, 20, 0),  # earliest bucket, defined last
+        _row_at(2, 5, 2),  # same bucket as the first row → summed
+    ]
+    points = timeseries(rows)
+
+    assert [p.bucket.minute for p in points] == [0, 2]
+    assert [(p.requests, p.errors) for p in points] == [(20, 0), (15, 3)]
+
+
+def test_timeseries_empty_window():
+    assert timeseries([]) == []

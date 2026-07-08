@@ -6,8 +6,9 @@ that is what makes sums across rows/instances legitimate.
 """
 
 import math
+from datetime import datetime
 
-from apps.metrics.domain.models import LoadTotals, RequestMetric, RouteLoad
+from apps.metrics.domain.models import LoadPoint, LoadTotals, RequestMetric, RouteLoad
 from apps.shared.observability.metrics import BUCKET_BOUNDS_MS
 
 
@@ -30,6 +31,21 @@ def _merged_buckets(rows: list[RequestMetric]) -> list[int]:
         for i, count in enumerate(row.duration_buckets):
             merged[i] += count
     return merged
+
+
+def timeseries(rows: list[RequestMetric]) -> list[LoadPoint]:
+    """Collapse rows to one point per time bucket, chronological — for the load chart."""
+    by_bucket: dict[datetime, LoadPoint] = {}
+    for row in rows:
+        point = by_bucket.get(row.bucket)
+        if point is None:
+            by_bucket[row.bucket] = LoadPoint(
+                bucket=row.bucket, requests=row.requests, errors=row.errors
+            )
+        else:
+            point.requests += row.requests
+            point.errors += row.errors
+    return [by_bucket[bucket] for bucket in sorted(by_bucket)]
 
 
 def aggregate(rows: list[RequestMetric]) -> tuple[list[RouteLoad], LoadTotals]:
