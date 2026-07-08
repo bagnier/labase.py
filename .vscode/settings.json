@@ -26,7 +26,7 @@
   // Pytest
   "python.testing.pytestArgs": [
     "tests",
-    "app"
+    "apps"
   ],
   // Load .env.test for tests/runs. Without this, the Python extension injects
   // .env (host.docker.internal) and pydantic-settings, which prioritizes
