@@ -116,11 +116,22 @@
             <div class="border-t border-base-300 p-2">
               <a href="/profile"
                  class="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-base-200 transition-colors">
-                <div class="avatar avatar-placeholder">
-                  <div class="w-8 rounded-full bg-primary/20 text-primary">
-                    <span class="text-xs font-semibold">{{ (profile_handle or user.email) | first | upper }}</span>
+                {% if profile_avatar_path %}
+                  <div class="avatar">
+                    <div class="w-8 rounded-full">
+                      <img data-nav-avatar
+                           src="/profile/avatar/{{ user.id }}"
+                           alt="Your avatar"
+                           class="object-cover" />
+                    </div>
                   </div>
-                </div>
+                {% else %}
+                  <div class="avatar avatar-placeholder">
+                    <div class="w-8 rounded-full bg-primary/20 text-primary">
+                      <span class="text-xs font-semibold">{{ (profile_handle or user.email) | first | upper }}</span>
+                    </div>
+                  </div>
+                {% endif %}
                 <div class="min-w-0">
                   <p class="truncate text-xs font-medium">{{ profile_handle }}</p>
                   <p class="text-xs opacity-60">Active account</p>

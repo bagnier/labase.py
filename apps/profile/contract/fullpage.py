@@ -13,19 +13,30 @@ from sqlalchemy import select
 
 from apps.profile.domain.models import Profile
 from apps.shared.page import FullpageQuery
+from apps.shared.settings import get_settings
 
 log = structlog.get_logger("labase.profile.fullpage")
 
 
 async def provide_profile_handle(query: FullpageQuery) -> dict:
-    """Fullpage slice ``profile_handle``: the user's handle (RLS ``profiles: own read``)."""
+    """Fullpage slice ``profile_handle`` / ``profile_avatar_path``: the user's handle and
+    avatar (RLS ``profiles: own read``). ``avatar_path`` stays ``None`` when the feature is
+    off, so the nav footer falls back to the initial without re-reading the switch."""
     if query.user is None:
-        return {"handle": None}
+        return {"handle": None, "avatar_path": None}
     try:
-        handle = await query.session.scalar(
-            select(Profile.handle).where(Profile.auth_user_id == uuid.UUID(query.user.id))
-        )
+        row = (
+            await query.session.execute(
+                select(Profile.handle, Profile.avatar_path).where(
+                    Profile.auth_user_id == uuid.UUID(query.user.id)
+                )
+            )
+        ).first()
     except Exception:
         log.exception("profile.fullpage_load_failed")
-        return {"handle": None}
-    return {"handle": handle}
+        return {"handle": None, "avatar_path": None}
+    handle = row.handle if row else None
+    avatar_path = row.avatar_path if row else None
+    if not get_settings("profile").view().avatar_enabled:
+        avatar_path = None
+    return {"handle": handle, "avatar_path": avatar_path}
