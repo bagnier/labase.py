@@ -5,34 +5,79 @@
   <li>Logs</li>
 {% endblock %}
 {% block content %}
+  {% set paused = filters.from_dt or filters.to_dt %}
   <div class="max-w-6xl space-y-6">
-    <div>
-      <h1 class="text-lg font-semibold">Logs</h1>
-      <p class="text-sm text-base-content/70 mt-0.5">
-        One timeline across the firehose, the audit trail and tracked issues.
-      </p>
-    </div>
-    <!-- Per-day, per-source activity — the same filtered window the table shows. Embedded as
-         JSON so the chart and any reader can pick it up without a second request. -->
-    <div class="rounded-box border border-base-300 p-4"
-         data-activity='{{ activity | tojson }}'
-         data-chart-config='{"type":"activity","source":"data-activity"}'>
-      <h2 class="text-sm font-semibold mb-2">Activity</h2>
-      <div class="text-xs text-base-content/60" data-activity-summary>
-        {% for day, counts in activity.items() %}
-          <span class="mr-3 whitespace-nowrap">{{ day }}: {{ counts.audit or 0 }}a / {{ counts.request or 0 }}r / {{ counts.issue or 0 }}i</span>
-        {% else %}
-          <span>No activity in the current window.</span>
-        {% endfor %}
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="text-lg font-semibold">Logs</h1>
+        <p class="text-sm text-base-content/70 mt-0.5 max-w-2xl">
+          One timeline across every source — the structlog firehose, the audit trail and tracked
+          issues — server-wide. Correlate by request id.
+        </p>
+      </div>
+      {# Export is a page-level action on the current filtered view — kept away from the filters. #}
+      <div class="flex gap-2">
+        <a class="btn btn-sm btn-ghost"
+           href="/console/logs/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">
+          <i class="ph ph-download-simple" aria-hidden="true"></i>NDJSON
+        </a>
+        <a class="btn btn-sm btn-ghost"
+           href="/console/logs/export?format=csv{{ '&' ~ export_qs if export_qs }}">
+          <i class="ph ph-download-simple" aria-hidden="true"></i>CSV
+        </a>
       </div>
     </div>
-    <form method="get"
-          action="/console/logs"
-          class="flex flex-wrap items-end gap-2"
-          aria-label="Filter logs">
-      <label class="form-control">
-        <span class="label-text text-xs">Source</span>
-        <select name="source" class="select select-sm" aria-label="source">
+    <div class="card-panel overflow-hidden">
+      {# ── Activity: stacked bars per bucket, themed like the console ──────────── #}
+      {% set ns = namespace(max=1) %}
+      {% for day, c in activity.items() %}
+        {% set t = (c.audit or 0) + (c.request or 0) + (c.issue or 0) %}
+        {% if t > ns.max %}
+          {% set ns.max = t %}
+        {% endif %}
+      {% endfor %}
+      <div class="p-4 border-b border-base-300"
+           data-activity='{{ activity | tojson }}'>
+        <div class="flex items-center gap-4 mb-3">
+          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60">Activity</span>
+          <span class="flex gap-3 text-xs text-base-content/60">
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span>request</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>audit</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span>issue</span>
+          </span>
+        </div>
+        {% if activity %}
+          <div class="flex items-end gap-1 h-24"
+               data-activity-bars
+               aria-hidden="true">
+            {% for day, c in activity.items() %}
+              <div class="flex-1 flex flex-col-reverse min-w-0"
+                   title="{{ day }}: {{ c.request or 0 }}r / {{ c.audit or 0 }}a / {{ c.issue or 0 }}i">
+                <div class="bg-info"
+                     style="height: {{ ((c.request or 0) / ns.max * 84) | round(1) }}px"></div>
+                <div class="bg-secondary"
+                     style="height: {{ ((c.audit or 0) / ns.max * 84) | round(1) }}px"></div>
+                <div class="bg-error"
+                     style="height: {{ ((c.issue or 0) / ns.max * 84) | round(1) }}px"></div>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="flex justify-between text-[10px] text-base-content/50 mt-1.5"
+               data-activity-summary>
+            {% for day in activity.keys() %}<span>{{ day[5:] }}</span>{% endfor %}
+          </div>
+        {% else %}
+          <p class="text-xs text-base-content/60" data-activity-summary>No activity in the current window.</p>
+        {% endif %}
+      </div>
+      {# ── Filter toolbar (GET form; combines every control) ───────────────────── #}
+      <form method="get"
+            action="/console/logs"
+            class="flex flex-wrap items-center gap-2 p-3 border-b border-base-300"
+            aria-label="Filter logs">
+        <select name="source"
+                class="select select-sm select-ghost"
+                aria-label="source">
           <option value="" {{ "selected" if not filters.source }}>all sources
           </option>
           {% for s in ["request", "audit", "issue"] %}
@@ -40,10 +85,7 @@
             </option>
           {% endfor %}
         </select>
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">Level</span>
-        <select name="level" class="select select-sm" aria-label="level">
+        <select name="level" class="select select-sm select-ghost" aria-label="level">
           <option value="" {{ "selected" if not filters.level }}>all levels
           </option>
           {% for lvl in ["info", "warning", "error"] %}
@@ -51,89 +93,95 @@
             </option>
           {% endfor %}
         </select>
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">Text</span>
         <input name="q"
                value="{{ filters.q }}"
-               class="input input-sm w-48"
+               class="input input-sm w-40"
                placeholder="free text…"
                aria-label="text" />
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">From</span>
-        <input type="datetime-local"
-               name="from_dt"
-               value="{{ filters.from_dt }}"
-               class="input input-sm"
-               aria-label="from" />
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">To</span>
-        <input type="datetime-local"
-               name="to_dt"
-               value="{{ filters.to_dt }}"
-               class="input input-sm"
-               aria-label="to" />
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">Org</span>
         <input name="org_id"
                value="{{ filters.org_id }}"
-               class="input input-sm w-40 font-mono text-xs"
+               class="input input-sm w-36 font-mono text-xs"
+               placeholder="org id"
                aria-label="org" />
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">User</span>
         <input name="user_id"
                value="{{ filters.user_id }}"
-               class="input input-sm w-40 font-mono text-xs"
+               class="input input-sm w-36 font-mono text-xs"
+               placeholder="user id"
                aria-label="user" />
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">Request</span>
         <input name="request_id"
                value="{{ filters.request_id }}"
                class="input input-sm w-32 font-mono text-xs"
+               placeholder="request id"
                aria-label="request" />
-      </label>
-      <input type="hidden" name="sort" value="{{ sort }}" />
-      <input type="hidden" name="dir" value="{{ dir }}" />
-      <button type="submit" class="btn btn-sm btn-primary">Filter</button>
-      <div class="ml-auto flex items-end gap-2">
-        <a class="btn btn-sm btn-ghost"
-           href="/console/logs/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">Export NDJSON</a>
-        <a class="btn btn-sm btn-ghost"
-           href="/console/logs/export?format=csv{{ '&' ~ export_qs if export_qs }}">Export CSV</a>
-      </div>
-    </form>
-    {% if entries %}
-      <div class="overflow-x-auto">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("event", "Event"), ("user", "User"), ("request", "Request")] %}
-                <th>
-                  <a class="inline-flex items-center gap-1 hover:text-base-content"
-                     data-sort="{{ col }}"
-                     href="/console/logs?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}{{ '&' ~ export_qs if export_qs }}">
-                    {{ label }}
-                    {% if sort == col %}<span aria-hidden="true">{{ "▼" if dir == "desc" else "▲" }}</span>{% endif %}
-                  </a>
-                </th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody id="log-entries">
-            {% include "logs/_entries.html" %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="text-sm text-base-content/70" data-logs-empty>No log entries yet in the current window.</p>
-    {% endif %}
-    <section aria-label="Logs settings"
-             class="max-w-2xl border-t border-base-300 pt-4">
+        <span class="flex items-center gap-1">
+          <input type="datetime-local"
+                 name="from_dt"
+                 value="{{ filters.from_dt }}"
+                 class="input input-sm text-xs"
+                 aria-label="from" />
+          <span class="text-base-content/50">→</span>
+          <input type="datetime-local"
+                 name="to_dt"
+                 value="{{ filters.to_dt }}"
+                 class="input input-sm text-xs"
+                 aria-label="to" />
+        </span>
+        <input type="hidden" name="sort" value="{{ sort }}" />
+        <input type="hidden" name="dir" value="{{ dir }}" />
+        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+        <span class="ml-auto inline-flex items-center gap-2 text-xs text-base-content/60"
+              data-live-state="{{ 'paused' if paused else 'live' }}">
+          {% if paused %}
+            <span class="w-2 h-2 rounded-full bg-warning"></span>
+            Paused — browsing a period
+            <a class="link link-primary" href="/console/logs">↑ Back to live</a>
+          {% else %}
+            <span class="w-2 h-2 rounded-full bg-success"></span>
+            Live
+          {% endif %}
+        </span>
+      </form>
+      {% if entries %}
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("event", "Event"), ("user", "User"), ("request", "Request")] %}
+                  <th>
+                    <a class="inline-flex items-center gap-1 hover:text-base-content"
+                       data-sort="{{ col }}"
+                       href="/console/logs?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}{{ '&' ~ export_qs if export_qs }}">
+                      {{ label }}
+                      {% if sort == col %}
+                        <span aria-hidden="true">{{ "▼" if dir == "desc" else "▲" }}</span>
+                      {% else %}
+                        <span class="opacity-30" aria-hidden="true">▲▼</span>
+                      {% endif %}
+                    </a>
+                  </th>
+                {% endfor %}
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="log-entries">
+              {% include "logs/_entries.html" %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-12 px-3" data-logs-empty>
+          <div class="text-3xl opacity-40" aria-hidden="true">
+            <i class="ph ph-magnifying-glass"></i>
+          </div>
+          <p class="font-semibold mt-2">No log entries yet</p>
+          <p class="text-sm text-base-content/70 mt-1">
+            Nothing has been logged in the current window. Lower the firehose level to capture
+            request traffic.
+          </p>
+        </div>
+      {% endif %}
+    </div>
+    <section aria-label="Logs settings" class="max-w-2xl">
       <h2 class="text-sm font-semibold mb-1">Firehose level</h2>
       <p class="text-xs text-base-content/70 mb-3">
         Gates the request/app firehose. Audit and issue events are recorded regardless. Applies

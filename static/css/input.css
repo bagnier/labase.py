@@ -253,6 +253,9 @@
 .ph.ph-fingerprint:before {
   content: "\e23e";
 }
+.ph.ph-download-simple:before {
+  content: "\e20c";
+}
 
 @layer components {
   /* Bordered, divided container for a vertical list of rows (the one recurring non-DaisyUI shape). */

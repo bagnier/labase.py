@@ -12,5 +12,9 @@
     <td class="font-mono text-xs">{{ e.event }}</td>
     <td class="font-mono text-xs text-base-content/60">{{ e.user_id | string | truncate(8, True, '') if e.user_id else "—" }}</td>
     <td class="font-mono text-xs text-base-content/60">{{ e.request_id or "—" }}</td>
+    {% set details = e.payload.items() | map("join", "=") | join(" ") %}
+    <td class="font-mono text-xs text-base-content/60 max-w-xs truncate"
+        data-log-payload
+        title="{{ details }}">{{ details }}</td>
   </tr>
 {% endfor %}

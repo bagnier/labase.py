@@ -22,7 +22,7 @@
 - [x] http://127.0.0.1:8000/console/users "Accounts →" make it more visible
 - [x] calendar new-event validation error re-renders the form as "Edit event" (title + breadcrumb) — `/{org}/calendar/new` — [preuve](reports/explore-2026-07-09/calendar-new-mislabel-edit.png)
 - [x] console + metrics cards for API keys / Issues / Load show a blank icon (missing glyph) while other apps render one — [preuve](reports/explore-2026-07-09/v-console.png)
-- [ ] logs display, rework the GUI to match @unified-logs.mockup.html
+- [x] logs display, rework the GUI to match @features/unified-logs.mockup.html
 
 ## goals
 
