@@ -162,7 +162,13 @@ async def new_event_form(
     org: CurrentOrgModel,
 ) -> Response:
     ctx = await fullpage_context(
-        session, current_user, org=org, org_handle=org.handle, event=None, action="calendar"
+        session,
+        current_user,
+        org=org,
+        org_handle=org.handle,
+        event=None,
+        action="calendar",
+        is_edit=False,
     )
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
 
@@ -185,6 +191,10 @@ async def _form_error_response(
         org_handle=org.handle,
         event=event,
         action=action,
+        # The edit form posts to "calendar/{id}"; the create form to "calendar".
+        # Drive the heading off the target, not off ``event`` (set to the rejected
+        # body on create so fields repopulate) — else a create error reads "Edit".
+        is_edit="/" in action,
         start_date=str(body.get("start_date", "")),
         start_time=str(body.get("start_time", "")),
         end_date=str(body.get("end_date", "")),
@@ -312,6 +322,7 @@ async def edit_event_form(
         org_handle=org.handle,
         event=event,
         action=f"calendar/{event.id}",
+        is_edit=True,
         start_date=f"{event.starts_at:%Y-%m-%d}",
         start_time=f"{event.starts_at:%H:%M}",
         end_date=f"{event.ends_at:%Y-%m-%d}",

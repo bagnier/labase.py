@@ -20,7 +20,7 @@
 - [ ] images for apps/pages
 - [ ] Per-organisation overrides not meaningful for featured_org_handle
 - [x] http://127.0.0.1:8000/console/users "Accounts →" make it more visible
-- [ ] calendar new-event validation error re-renders the form as "Edit event" (title + breadcrumb) — `/{org}/calendar/new` — [preuve](reports/explore-2026-07-09/calendar-new-mislabel-edit.png)
+- [x] calendar new-event validation error re-renders the form as "Edit event" (title + breadcrumb) — `/{org}/calendar/new` — [preuve](reports/explore-2026-07-09/calendar-new-mislabel-edit.png)
 - [x] console + metrics cards for API keys / Issues / Load show a blank icon (missing glyph) while other apps render one — [preuve](reports/explore-2026-07-09/v-console.png)
 - [ ] logs display, rework the GUI to match @unified-logs.mockup.html
 
