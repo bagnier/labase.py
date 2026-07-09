@@ -145,6 +145,9 @@
 .ph.ph-arrow-up:before {
   content: "\e08e";
 }
+.ph.ph-arrow-right:before {
+  content: "\e06c";
+}
 .ph.ph-arrow-down:before {
   content: "\e03e";
 }
@@ -201,6 +204,51 @@
 }
 .ph.ph-quotes:before {
   content: "\e660";
+}
+.ph.ph-key:before {
+  content: "\e2d6";
+}
+.ph.ph-bug-beetle:before {
+  content: "\e5f6";
+}
+.ph.ph-gauge:before {
+  content: "\e628";
+}
+.ph.ph-clock:before {
+  content: "\e19a";
+}
+.ph.ph-warning:before {
+  content: "\e4e0";
+}
+.ph.ph-warning-circle:before {
+  content: "\e4e2";
+}
+.ph.ph-funnel:before {
+  content: "\e266";
+}
+.ph.ph-caret-left:before {
+  content: "\e138";
+}
+.ph.ph-caret-right:before {
+  content: "\e13a";
+}
+.ph.ph-plus:before {
+  content: "\e3d4";
+}
+.ph.ph-check-circle:before {
+  content: "\e184";
+}
+.ph.ph-info:before {
+  content: "\e2ce";
+}
+.ph.ph-calendar-blank:before {
+  content: "\e10a";
+}
+.ph.ph-chart-line:before {
+  content: "\e154";
+}
+.ph.ph-upload:before {
+  content: "\e4be";
 }
 
 @layer components {

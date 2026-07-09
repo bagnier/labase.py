@@ -82,5 +82,9 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     else:
         lines = ["No profiles yet"]
     return ConsoleOverview(
-        key="profile", title="Profiles", icon="user-circle", data={"lines": lines}
+        key="profile",
+        title="Profiles",
+        icon="user-circle",
+        section="configuration",
+        data={"lines": lines},
     )

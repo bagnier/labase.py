@@ -1,9 +1,35 @@
+## issues
+
+- [ ] better graphical language
+- [x] réorganiser toute la console pour mettre les features en valeurs en les distingant des settings. issues, logs, metrics ne sont pas visibles
+- [ ] http://127.0.0.1:8000/az-az/learning/sessions cards should be displayed one by one
+- [ ] timezone in org, calendar accorded
+- [ ] apps/calendar should display multi-day events
+- [ ] apps/pages fulltext search
+- [ ] blue/black color of open links on http://127.0.0.1:8000/az-az/dashboard
+- [ ] org-settings divided into tabs : members, naming, api keys
+- [ ] org-settings save > confirm
+- [ ] org-settings save alignement
+- [ ] console setting for organizations to limit the number of invitation
+- [ ] profile divided into tabs : profile, organizations, email, authentication
+- [ ] console Per-organisation overrides, org finding uses current log  filter widgets
+- [x] issues dont use the same graphic language that other
+- [x] console load, where are the results ?
+- [x] console load rename > metrics
+- [ ] organisations settings, limit the number of invitations
+- [ ] images for apps/pages
+- [ ] Per-organisation overrides not meaningful for featured_org_handle
+- [x] http://127.0.0.1:8000/console/users "Accounts →" make it more visible
+- [ ] calendar new-event validation error re-renders the form as "Edit event" (title + breadcrumb) — `/{org}/calendar/new` — [preuve](reports/explore-2026-07-09/calendar-new-mislabel-edit.png)
+- [x] console + metrics cards for API keys / Issues / Load show a blank icon (missing glyph) while other apps render one — [preuve](reports/explore-2026-07-09/v-console.png)
+- [ ] logs display, rework the GUI to match @unified-logs.mockup.html
 
 ## goals
 
 ### technical
 
 - [ ] awareness, @citation, notification
+- [ ] export RGPD
 - [ ] product tour
 - [x] ApexCharts integration
 - [ ] MCP server ?

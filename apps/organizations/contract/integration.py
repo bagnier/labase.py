@@ -81,7 +81,11 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     else:
         lines = ["No organisations yet"]
     return ConsoleOverview(
-        key="organizations", title="Organisations", icon="buildings", data={"lines": lines}
+        key="organizations",
+        title="Organisations",
+        icon="buildings",
+        section="configuration",
+        data={"lines": lines},
     )
 
 

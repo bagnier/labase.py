@@ -81,4 +81,11 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     since = clock.now() - timedelta(hours=WINDOW_HOURS)
     total = await total_requests(query.session, since)
     lines = [f"{total} requests ({WINDOW_HOURS}h)"] if total else ["No traffic yet"]
-    return ConsoleOverview(key="metrics", title="Load", icon="gauge", data={"lines": lines})
+    return ConsoleOverview(
+        key="metrics",
+        title="Metrics",
+        icon="gauge",
+        section="operations",
+        href="/console/load",
+        data={"lines": lines},
+    )

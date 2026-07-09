@@ -15,13 +15,19 @@
         <a href="/console/admins" class="btn btn-sm">Manage admins</a>
       </div>
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {% for o in overviews %}
-        <a href="/console/{{ o.key }}"
-           class="block hover:-translate-y-0.5 transition-transform {% if o.key in disabled %}opacity-60{% endif %}">
-          {% include "console/_overview.html" %}
-        </a>
-      {% endfor %}
-    </div>
+    {% for section in sections %}
+      <section class="space-y-3" aria-labelledby="console-section-{{ section.key }}">
+        <h2 id="console-section-{{ section.key }}"
+            class="text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ section.label }}</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {% for o in section.overviews %}
+            <a href="{{ o.href or '/console/' ~ o.key }}"
+               class="block hover:-translate-y-0.5 transition-transform {% if o.key in disabled %}opacity-60{% endif %}">
+              {% include "console/_overview.html" %}
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
   </div>
 {% endblock %}

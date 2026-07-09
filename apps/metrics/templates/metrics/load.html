@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Load — Console{% endblock %}
+{% block title %}Metrics — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
-  <li>Load</li>
+  <li>Metrics</li>
 {% endblock %}
 {% block content %}
   <div class="max-w-4xl space-y-6">
     <div>
-      <h1 class="text-lg font-semibold">Load</h1>
+      <h1 class="text-lg font-semibold">Metrics</h1>
       <p class="text-sm text-base-content/70 mt-0.5">
         HTTP traffic over the last {{ window_hours }} hours, aggregated per route
         across all instances. Percentiles come from histogram buckets, Prometheus-style.
@@ -78,6 +78,7 @@
       </p>
     {% endif %}
     <p class="text-sm space-x-4">
+      <a class="link" href="/console/metrics">Settings →</a>
       <a class="link" href="{{ studio_url }}" rel="noopener">Database stats → Supabase</a>
       <a class="link" href="/metrics">Raw Prometheus exposition →</a>
     </p>

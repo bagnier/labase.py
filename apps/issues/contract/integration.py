@@ -150,4 +150,6 @@ async def _plant_purge() -> None:
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     unresolved = await ErrorGroupRepository(query.session).unresolved_count()
     lines = [f"{unresolved} unresolved"] if unresolved else ["No open issues"]
-    return ConsoleOverview(key="issues", title="Issues", icon="bug-beetle", data={"lines": lines})
+    return ConsoleOverview(
+        key="issues", title="Issues", icon="bug-beetle", section="operations", data={"lines": lines}
+    )

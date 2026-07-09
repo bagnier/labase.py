@@ -8,10 +8,12 @@
   <div class="max-w-2xl space-y-6">
     <h1 class="text-lg font-semibold">{{ app }}</h1>
     {% if links %}
-      <div class="flex gap-4 text-sm">
+      <div class="flex flex-wrap gap-2">
         {% for link in links %}
-          <a href="{{ link.href }}"
-             class="text-primary font-medium link link-hover">{{ link.label }} →</a>
+          <a href="{{ link.href }}" class="btn btn-primary btn-sm">
+            {{ link.label }}
+            <i class="ph ph-arrow-right" aria-hidden="true"></i>
+          </a>
         {% endfor %}
       </div>
     {% endif %}

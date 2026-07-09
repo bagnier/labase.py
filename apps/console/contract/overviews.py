@@ -11,6 +11,11 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+#: Console landing sections, in display order. ``operations`` groups the monitoring
+#: screens (accounts, issues, metrics, logs) so they are visible at a glance; ``features``
+#: are the product apps; ``configuration`` are the platform/foundation settings.
+SECTIONS: tuple[str, ...] = ("operations", "features", "configuration")
+
 
 @dataclass(frozen=True)
 class ConsoleOverview:
@@ -19,6 +24,8 @@ class ConsoleOverview:
     icon: str  # phosphor icon name
     data: dict = field(default_factory=dict)  # JSON-serializable; "lines"
     group: str | None = None  # fold into one console tile with others sharing this group
+    section: str = "features"  # console landing section — one of SECTIONS
+    href: str | None = None  # card link; defaults to /console/{key} when None
 
 
 @dataclass(frozen=True)

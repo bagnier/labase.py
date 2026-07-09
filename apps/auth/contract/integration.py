@@ -77,4 +77,6 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     # Accounts live in Supabase GoTrue, not a table — count via the admin API.
     count = len(await list_server_admins())
     lines = [f"{count} user" + ("s" if count > 1 else "")] if count else ["No users yet"]
-    return ConsoleOverview(key="users", title="Users", icon="users", data={"lines": lines})
+    return ConsoleOverview(
+        key="users", title="Users", icon="users", section="operations", data={"lines": lines}
+    )

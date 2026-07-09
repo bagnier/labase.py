@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract import appearance
-from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.console.contract.overviews import SECTIONS, ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import admins, service, technical
 from apps.console.domain.admins import AdminNotFound, LastAdminViolation
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
@@ -25,8 +25,17 @@ router = APIRouter(tags=["console"])
 
 _NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-# Display metadata for folded groups — see _fold_groups.
-_GROUP_DISPLAY: dict[str, tuple[str, str]] = {"settings": ("Settings", "gear-six")}
+# Display metadata for folded groups — (title, icon, section); see _fold_groups.
+_GROUP_DISPLAY: dict[str, tuple[str, str, str]] = {
+    "settings": ("Settings", "gear-six", "configuration")
+}
+
+# Human labels for the console landing sections (order comes from SECTIONS).
+_SECTION_LABELS: dict[str, str] = {
+    "operations": "Operations",
+    "features": "Features",
+    "configuration": "Configuration",
+}
 
 
 def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
@@ -43,10 +52,28 @@ def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
         else:
             grouped.setdefault(o.group, []).append(o)
     for group, items in grouped.items():
-        title, icon = _GROUP_DISPLAY.get(group, (group, "folder"))
+        title, icon, section = _GROUP_DISPLAY.get(group, (group, "folder", "configuration"))
         lines = [line for o in items for line in o.data.get("lines", [])]
-        folded.append(ConsoleOverview(key=group, title=title, icon=icon, data={"lines": lines}))
+        folded.append(
+            ConsoleOverview(
+                key=group, title=title, icon=icon, section=section, data={"lines": lines}
+            )
+        )
     return folded
+
+
+def _sectioned(overviews: list[ConsoleOverview]) -> list[dict]:
+    """Group overviews into the console landing sections, in ``SECTIONS`` order.
+
+    Empty sections are dropped; an unknown section label falls back to its raw key.
+    """
+    sections: list[dict] = []
+    for section in SECTIONS:
+        members = [o for o in overviews if o.section == section]
+        if members:
+            label = _SECTION_LABELS.get(section, section)
+            sections.append({"key": section, "label": label, "overviews": members})
+    return sections
 
 
 async def _raw_overviews(session: AdminSession) -> list[ConsoleOverview]:
@@ -114,7 +141,7 @@ async def get_console(
         "console.html",
         {
             "user": current_user,
-            "overviews": overviews,
+            "sections": _sectioned(overviews),
             "disabled": disabled,
             "links": links,
             **await fullpage_context(session, current_user),

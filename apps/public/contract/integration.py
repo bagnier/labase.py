@@ -29,4 +29,10 @@ def _declare_settings() -> SettingsDeclaration:
 async def _console_overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
     handle: str = get_settings("public").featured_org_handle  # type: ignore[assignment]
     lines = [f"Promoted: {handle}"] if handle else ["Nothing to report yet"]
-    return ConsoleOverview(key="public", title="Public site", icon="globe", data={"lines": lines})
+    return ConsoleOverview(
+        key="public",
+        title="Public site",
+        icon="globe",
+        section="configuration",
+        data={"lines": lines},
+    )

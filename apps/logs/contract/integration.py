@@ -61,7 +61,7 @@ async def _overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
         key=LOGS_APP,
         title="Logs",
         icon="scroll",
-        group="settings",
+        section="operations",
         data={"lines": [f"firehose level {get_settings(LOGS_APP).log_level}"]},
     )
 
