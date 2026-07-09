@@ -1,3 +1,11 @@
+import json
+from datetime import datetime
+
+from apps.logs.tests.e2e import seed_data
+from apps.logs.tests.e2e.seed_data import logs_org_id, logs_user_id
+from apps.shared.observability.audit import AuditLog
+from apps.shared.observability.firehose import append_firehose
+from apps.shared.observability.logging import apply_log_level
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -7,13 +15,195 @@ class LogsBrowserMixin(BrowserBase):
         assert as_admin is not None
         as_admin()
 
+    def _run_seed(self, fn) -> None:
+        # ``_seed`` (learning mixin) commits fixtures on a fresh session — the browser driver has
+        # no shared rolled-back transaction, so audit rows must be committed and are scrubbed by
+        # the per-scenario isolation fixture + browser teardown.
+        seed = getattr(self, "_seed", None)
+        assert seed is not None
+        seed(fn)
+
+    # ── seeding (through the real write paths) ────────────────────────────────
+    def _add_audit(self, model: AuditLog) -> None:
+        async def _do(s):
+            s.add(model)
+
+        self._run_seed(_do)
+
+    def _insert_error(
+        self, title: str, *, org: str | None = None, request_id: str | None = None, when=None
+    ) -> None:
+        context = seed_data.error_context(org=org, request_id=request_id)
+        gp = seed_data.group_params(title, when)
+
+        async def _do(s):
+            gid = (await s.execute(seed_data.INSERT_ERROR_GROUP, gp)).scalar_one()
+            await s.execute(
+                seed_data.INSERT_ERROR_EVENT,
+                {"gid": gid, "ts": gp["ts"], "context": json.dumps(context)},
+            )
+
+        self._run_seed(_do)
+
+    def seed_audit_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
+        self._add_audit(seed_data.audit_model(event, org=logs_org_id(org), when=when))
+
+    def seed_audit_by_user(self, event: str, email: str) -> None:
+        self._add_audit(seed_data.audit_model(event, user=logs_user_id(email)))
+
+    def seed_request_from_org(
+        self, event: str, org: str, *, level: str = "info", when: datetime | None = None
+    ) -> None:
+        append_firehose(
+            seed_data.firehose_record(event, org=logs_org_id(org), level=level, when=when)
+        )
+
+    def seed_error_from_org(self, title: str, org: str, *, when: datetime | None = None) -> None:
+        self._insert_error(title, org=logs_org_id(org), when=when)
+
+    def set_process_log_level(self, level: str) -> None:
+        # The browser app runs in-process, so this is the live firehose level.
+        apply_log_level(level)
+
+    def seed_correlated_request(self, request_id: str, org: str, audit: str, error: str) -> None:
+        oid = logs_org_id(org)
+        append_firehose(
+            seed_data.firehose_record("request.finished", org=oid, request_id=request_id)
+        )
+        self._add_audit(seed_data.audit_model(audit, org=oid, request_id=request_id))
+        self._insert_error(error, org=oid, request_id=request_id)
+
+    # ── navigation / filters (follow links, submit the real form) ─────────────
     def open_logs_screen(self) -> None:
         self._logs_as_admin()
-        self.page.goto(f"{self.base_url}/console/logs", wait_until="load")
+        self.last_response = self.page.goto(f"{self.base_url}/console/logs", wait_until="load")
+
+    def _on_logs_screen(self) -> None:
+        if "/console/logs" not in (self.page.url or ""):
+            self.open_logs_screen()
+
+    def _submit_filter(self, **fields: str) -> None:
+        """Fill the on-screen filter controls and submit the form — no URL crafting."""
+        self.open_logs_screen()
+        for name, value in fields.items():
+            control = self.page.locator(f"[name='{name}']").first
+            if control.evaluate("el => el.tagName") == "SELECT":
+                control.select_option(value)
+            else:
+                control.fill(value)
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.get_by_role("button", name="Filter").click()
+
+    def filter_logs_by_org(self, org: str) -> None:
+        self._submit_filter(org_id=logs_org_id(org))
+
+    def filter_logs_by_user(self, email: str) -> None:
+        self._submit_filter(user_id=logs_user_id(email))
+
+    def filter_logs_by_source(self, source: str) -> None:
+        self._submit_filter(source=source)
+
+    def filter_logs_by_level(self, level: str) -> None:
+        self._submit_filter(level=level)
+
+    def filter_logs_by_request(self, request_id: str) -> None:
+        self._submit_filter(request_id=request_id)
+
+    def search_logs(self, text: str) -> None:
+        self._submit_filter(q=text)
+
+    def filter_logs_by_dates(self, a: str, b: str) -> None:
+        # The controls are <input type=datetime-local>; a bare date needs a midnight time.
+        self._submit_filter(from_dt=f"{a}T00:00", to_dt=f"{b}T00:00")
+
+    def _sort_state(self) -> tuple[str, str]:
+        return (
+            self.page.locator("[name='sort']").input_value(),
+            self.page.locator("[name='dir']").input_value(),
+        )
+
+    def sort_logs(self, column: str, direction: str) -> None:
+        # Follow the sortable column header link; one click toggles, so click until it lands on
+        # the requested (column, direction).
+        self.open_logs_screen()
+        for _ in range(3):
+            if self._sort_state() == (column, direction):
+                return
+            with self.page.expect_navigation(wait_until="load"):
+                self.page.locator(f"[data-sort='{column}']").click()
+        assert self._sort_state() == (column, direction), f"sort stuck at {self._sort_state()}"
+
+    # ── export (follow the export link, read the download) ────────────────────
+    def _download(self, link_name: str) -> None:
+        # Export carries whatever filter the *current* page holds, so act on it in place.
+        self._on_logs_screen()
+        with self.page.expect_download() as dl:
+            self.page.get_by_role("link", name=link_name).click()
+        self._export_text = dl.value.path().read_text()
+
+    def export_logs_ndjson(self) -> None:
+        self._download("Export NDJSON")
+
+    def export_logs_csv(self) -> None:
+        self._download("Export CSV")
+
+    # ── assertions (rendered DOM) ─────────────────────────────────────────────
+    def _events(self) -> list[str]:
+        # The selector guarantees the attribute is present, so `or ""` only satisfies the type.
+        return [
+            r.get_attribute("data-log-event") or ""
+            for r in self.page.locator("tr[data-log-event]").all()
+        ]
 
     def assert_logs_empty(self) -> None:
         self.page.wait_for_selector("[data-logs-empty]", timeout=5000)
 
+    def assert_entry_listed(self, event: str) -> None:
+        assert event in self._events(), f"{event!r} not listed in {self._events()}"
+
+    def assert_entry_not_listed(self, event: str) -> None:
+        assert event not in self._events(), f"{event!r} unexpectedly listed in {self._events()}"
+
+    def assert_entry_source(self, event: str, source: str) -> None:
+        row = self.page.locator(f"tr[data-log-event='{event}']").first
+        assert row.count() > 0, f"{event!r} not listed: {self._events()}"
+        actual = row.get_attribute("data-log-source")
+        assert actual == source, f"{event!r} source: expected {source!r}, got {actual!r}"
+
+    def assert_entry_above(self, a: str, b: str) -> None:
+        events = self._events()
+        assert a in events and b in events, f"{a!r}/{b!r} not both listed: {events}"
+        assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
+
+    def assert_source_count(self, source: str, expected: int) -> None:
+        n = self.page.locator(f"tr[data-log-source='{source}']").count()
+        assert n == expected, f"expected {expected} {source!r} entries, got {n}"
+
+    def assert_all_listed(self, *events: str) -> None:
+        listed = self._events()
+        missing = [e for e in events if e not in listed]
+        assert not missing, f"{missing!r} not all listed in {listed}"
+
+    def assert_activity(self, date: str, audit: int, request: int, issue: int) -> None:
+        raw = self.page.locator("[data-activity]").first.get_attribute("data-activity")
+        act = json.loads(raw or "{}").get(date, {})
+        assert act.get("audit", 0) == audit, f"activity {date} audit: {act}"
+        assert act.get("request", 0) == request, f"activity {date} request: {act}"
+        assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
+
+    def assert_export_contains(self, needle: str) -> None:
+        assert needle in self._export_text, f"{needle!r} not in export:\n{self._export_text}"
+
+    def assert_export_excludes(self, needle: str) -> None:
+        assert needle not in self._export_text, f"{needle!r} unexpectedly in export"
+
+    def assert_csv_export(self, needle: str) -> None:
+        lines = self._export_text.splitlines()
+        assert lines, "empty CSV export"
+        assert lines[0].split(",")[0] == "ts", f"expected header row, got {lines[0]!r}"
+        assert any(needle in line for line in lines[1:]), f"{needle!r} not listed in CSV rows"
+
+    # ── access ────────────────────────────────────────────────────────────────
     def try_open_logs_screen(self) -> None:
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None

@@ -91,7 +91,9 @@ class ConsoleBrowserMixin(BrowserBase):
         handle = getattr(self, "active_org_handle", "")
         self.page.get_by_label("Organisation handle").fill(handle)
         self.page.get_by_label("Setting key").select_option(key)
-        self.page.get_by_label("Override value").fill(value)
+        # One value widget per setting shares the "Override value for …" label; target the
+        # selected key's (the only enabled one) so the locator isn't ambiguous.
+        self.page.get_by_label(f"Override value for {key}").fill(value)
 
         def posted(r):
             return "/org-settings" in r.url and r.request.method == "POST"
@@ -124,6 +126,10 @@ class ConsoleBrowserMixin(BrowserBase):
                     field.click(force=True)
                 else:
                     field.dispatch_event("change")
+            elif field.evaluate("el => el.tagName") == "SELECT":
+                # A constrained string setting (e.g. the log level) is a <select>: pick the
+                # option, which emits change directly — no blur needed.
+                field.select_option(value)
             else:
                 # Text/number save on blur — fill then move focus to emit change.
                 field.fill(value)

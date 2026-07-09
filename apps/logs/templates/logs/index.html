@@ -5,25 +5,123 @@
   <li>Logs</li>
 {% endblock %}
 {% block content %}
-  <div class="max-w-5xl space-y-6">
+  <div class="max-w-6xl space-y-6">
     <div>
       <h1 class="text-lg font-semibold">Logs</h1>
       <p class="text-sm text-base-content/70 mt-0.5">
         One timeline across the firehose, the audit trail and tracked issues.
       </p>
     </div>
+    <!-- Per-day, per-source activity — the same filtered window the table shows. Embedded as
+         JSON so the chart and any reader can pick it up without a second request. -->
+    <div class="rounded-box border border-base-300 p-4"
+         data-activity='{{ activity | tojson }}'
+         data-chart-config='{"type":"activity","source":"data-activity"}'>
+      <h2 class="text-sm font-semibold mb-2">Activity</h2>
+      <div class="text-xs text-base-content/60" data-activity-summary>
+        {% for day, counts in activity.items() %}
+          <span class="mr-3 whitespace-nowrap">{{ day }}: {{ counts.audit or 0 }}a / {{ counts.request or 0 }}r / {{ counts.issue or 0 }}i</span>
+        {% else %}
+          <span>No activity in the current window.</span>
+        {% endfor %}
+      </div>
+    </div>
+    <form method="get"
+          action="/console/logs"
+          class="flex flex-wrap items-end gap-2"
+          aria-label="Filter logs">
+      <label class="form-control">
+        <span class="label-text text-xs">Source</span>
+        <select name="source" class="select select-sm" aria-label="source">
+          <option value="" {{ "selected" if not filters.source }}>all sources
+          </option>
+          {% for s in ["request", "audit", "issue"] %}
+            <option value="{{ s }}" {{ "selected" if filters.source == s }}>{{ s }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">Level</span>
+        <select name="level" class="select select-sm" aria-label="level">
+          <option value="" {{ "selected" if not filters.level }}>all levels
+          </option>
+          {% for lvl in ["info", "warning", "error"] %}
+            <option value="{{ lvl }}" {{ "selected" if filters.level == lvl }}>{{ lvl }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">Text</span>
+        <input name="q"
+               value="{{ filters.q }}"
+               class="input input-sm w-48"
+               placeholder="free text…"
+               aria-label="text" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">From</span>
+        <input type="datetime-local"
+               name="from_dt"
+               value="{{ filters.from_dt }}"
+               class="input input-sm"
+               aria-label="from" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">To</span>
+        <input type="datetime-local"
+               name="to_dt"
+               value="{{ filters.to_dt }}"
+               class="input input-sm"
+               aria-label="to" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">Org</span>
+        <input name="org_id"
+               value="{{ filters.org_id }}"
+               class="input input-sm w-40 font-mono text-xs"
+               aria-label="org" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">User</span>
+        <input name="user_id"
+               value="{{ filters.user_id }}"
+               class="input input-sm w-40 font-mono text-xs"
+               aria-label="user" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs">Request</span>
+        <input name="request_id"
+               value="{{ filters.request_id }}"
+               class="input input-sm w-32 font-mono text-xs"
+               aria-label="request" />
+      </label>
+      <input type="hidden" name="sort" value="{{ sort }}" />
+      <input type="hidden" name="dir" value="{{ dir }}" />
+      <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+      <div class="ml-auto flex items-end gap-2">
+        <a class="btn btn-sm btn-ghost"
+           href="/console/logs/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">Export NDJSON</a>
+        <a class="btn btn-sm btn-ghost"
+           href="/console/logs/export?format=csv{{ '&' ~ export_qs if export_qs }}">Export CSV</a>
+      </div>
+    </form>
     {% if entries %}
       <div class="overflow-x-auto">
         <table class="table table-sm">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Source</th>
-              <th>Level</th>
-              <th>Org</th>
-              <th>Event</th>
-              <th>User</th>
-              <th>Request</th>
+              {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("event", "Event"), ("user", "User"), ("request", "Request")] %}
+                <th>
+                  <a class="inline-flex items-center gap-1 hover:text-base-content"
+                     data-sort="{{ col }}"
+                     href="/console/logs?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}{{ '&' ~ export_qs if export_qs }}">
+                    {{ label }}
+                    {% if sort == col %}<span aria-hidden="true">{{ "▼" if dir == "desc" else "▲" }}</span>{% endif %}
+                  </a>
+                </th>
+              {% endfor %}
             </tr>
           </thead>
           <tbody id="log-entries">
@@ -34,5 +132,16 @@
     {% else %}
       <p class="text-sm text-base-content/70" data-logs-empty>No log entries yet in the current window.</p>
     {% endif %}
+    <section aria-label="Logs settings"
+             class="max-w-2xl border-t border-base-300 pt-4">
+      <h2 class="text-sm font-semibold mb-1">Firehose level</h2>
+      <p class="text-xs text-base-content/70 mb-3">
+        Gates the request/app firehose. Audit and issue events are recorded regardless. Applies
+        live — no restart.
+      </p>
+      {% with app = "logs", saved_key = none %}
+        {% include "console/_settings.html" %}
+      {% endwith %}
+    </section>
   </div>
 {% endblock %}

@@ -3,37 +3,29 @@ import io
 import json
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.logs.infra.repository import LogFilter, LogReader
-from apps.shared.host import host
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
-from apps.shared.settings import get_settings
+from apps.shared.settings import SettingRow, get_settings
 
 router = APIRouter(tags=["logs"])
 
 _LOGS_APP = "logs"
+_LOG_LEVEL_KEY = "log_level"
 
 
-def _settings_block() -> list[dict[str, Any]]:
-    """The logs app's own settings (the firehose level), rendered for the consolidated screen.
-
-    The logs screen owns both its timeline and its settings surface, so ``GET /console/logs``
-    carries them together — no separate settings page to reach the level control."""
-    group = host.declared_settings(_LOGS_APP)
-    values = get_settings(_LOGS_APP).values
-    if group is None:
-        return []
-    return [
-        {"key": d.key, "type": d.type, "label": d.label, "value": values.get(d.key, d.default)}
-        for d in group.defs
-    ]
+def _settings_rows() -> list[SettingRow]:
+    """The logs app's own settings, straight from the settings model. The logs screen owns both
+    its timeline and its settings surface, so ``GET /console/logs`` carries them together."""
+    return get_settings(_LOGS_APP).rows()
 
 
 def _bound(value: str | None) -> datetime | None:
@@ -89,21 +81,40 @@ async def logs_screen(
     reader = LogReader(session)
     entries = await reader.search(flt)
     activity = await reader.activity(flt)
+    settings = _settings_rows()
     if wants_json(request):
         return JSONResponse(
             {
                 "app": _LOGS_APP,
                 "entries": [e.model_dump(mode="json") for e in entries],
                 "activity": activity,
-                "settings": _settings_block(),
+                "settings": settings,
             }
         )
+    filters = {
+        "source": source or "",
+        "level": level or "",
+        "org_id": org_id or "",
+        "user_id": user_id or "",
+        "request_id": request_id or "",
+        "q": q or "",
+        "from_dt": from_dt or "",
+        "to_dt": to_dt or "",
+    }
     return templates.TemplateResponse(
         request,
         "logs/index.html",
         {
             "user": current_user,
             "entries": entries,
+            "activity": activity,
+            # Only the firehose level is tuned from the screen; the enabled switch stays on the
+            # console's app page like every other app.
+            "settings": [r for r in settings if r["key"] == _LOG_LEVEL_KEY],
+            "filters": filters,
+            "sort": flt.sort,
+            "dir": "desc" if flt.descending else "asc",
+            "export_qs": urlencode({k: v for k, v in filters.items() if v}),
             **await fullpage_context(session, current_user),
         },
     )

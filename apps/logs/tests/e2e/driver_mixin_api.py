@@ -1,41 +1,13 @@
 import json
-import uuid
 from datetime import datetime
 
-from sqlalchemy import text
-
-from apps.shared import clock
+from apps.logs.tests.e2e import seed_data
+from apps.logs.tests.e2e.seed_data import logs_org_id, logs_user_id
+from apps.shared.observability.audit import AuditLog
 from apps.shared.observability.firehose import append_firehose
 from apps.shared.observability.logging import apply_log_level
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.api_base import ApiBase
-
-# Deterministic ids so a seed step and a filter step agree on "Acme" / "alice@…" without
-# needing a real org/user row (the timeline filters by the raw id it stored).
-_NS = uuid.UUID("00000000-0000-0000-0000-00000000da7a")
-
-
-def logs_org_id(name: str) -> str:
-    return str(uuid.uuid5(_NS, f"org:{name}"))
-
-
-def logs_user_id(email: str) -> str:
-    return str(uuid.uuid5(_NS, f"user:{email}"))
-
-
-_INSERT_AUDIT = text(
-    "INSERT INTO audit_logs (created_at, level, event, user_id, org_id, request_id, payload) "
-    "VALUES (:ts, :level, :event, CAST(:user AS uuid), CAST(:org AS uuid), :rid, NULL)"
-)
-
-_INSERT_ERROR_GROUP = text(
-    "INSERT INTO error_groups (fingerprint, title, first_seen, last_seen) "
-    "VALUES (:fp, :title, :ts, :ts) RETURNING id"
-)
-_INSERT_ERROR_EVENT = text(
-    "INSERT INTO error_events (group_id, created_at, context) "
-    "VALUES (:gid, :ts, CAST(:context AS jsonb))"
-)
 
 
 class LogsApiMixin(ApiBase):
@@ -44,59 +16,32 @@ class LogsApiMixin(ApiBase):
         assert as_admin is not None
         as_admin()
 
-    # ── seeding ──────────────────────────────────────────────────────────────
-    def _insert_audit(
-        self,
-        event: str,
-        *,
-        org: str | None = None,
-        user: str | None = None,
-        level: str = "info",
-        when: datetime | None = None,
-        request_id: str | None = None,
-    ) -> None:
+    # ── seeding (through the real write paths) ────────────────────────────────
+    def _add_audit(self, model: AuditLog) -> None:
         async def _do(s):
-            await s.execute(
-                _INSERT_AUDIT,
-                {
-                    "ts": when or clock.now(),
-                    "level": level,
-                    "event": event,
-                    "user": user,
-                    "org": org,
-                    "rid": request_id,
-                },
-            )
+            s.add(model)
 
         self.run(db.seed_fixtures(_do))
 
     def seed_audit_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
-        self._insert_audit(event, org=logs_org_id(org), when=when)
+        self._add_audit(seed_data.audit_model(event, org=logs_org_id(org), when=when))
 
     def seed_audit_by_user(self, event: str, email: str) -> None:
-        self._insert_audit(event, user=logs_user_id(email))
+        self._add_audit(seed_data.audit_model(event, user=logs_user_id(email)))
 
     def _append_request(
         self,
         event: str,
         *,
         org: str | None = None,
-        user: str | None = None,
         level: str = "info",
         when: datetime | None = None,
         request_id: str | None = None,
     ) -> None:
-        # The firehose is a plain file — seed it directly, bypassing the live level gate the
-        # writer path is subject to (a seeded 'info' line must survive a WARNING process level).
+        # The firehose's own writer, bypassing the live level gate the runtime path is subject
+        # to (a seeded 'info' line must survive a WARNING process level).
         append_firehose(
-            {
-                "timestamp": (when or clock.now()).isoformat(),
-                "level": level,
-                "event": event,
-                "org_id": org,
-                "user_id": user,
-                "request_id": request_id,
-            }
+            seed_data.firehose_record(event, org=org, level=level, when=when, request_id=request_id)
         )
 
     def seed_request_from_org(
@@ -105,37 +50,21 @@ class LogsApiMixin(ApiBase):
         self._append_request(event, org=logs_org_id(org), level=level, when=when)
 
     def _insert_error(
-        self,
-        title: str,
-        *,
-        org: str | None = None,
-        user: str | None = None,
-        when: datetime | None = None,
-        request_id: str | None = None,
+        self, title: str, *, org: str | None = None, request_id: str | None = None, when=None
     ) -> None:
-        context = {
-            k: v
-            for k, v in {"org_id": org, "user_id": user, "request_id": request_id}.items()
-            if v is not None
-        }
+        context = seed_data.error_context(org=org, request_id=request_id)
+        gp = seed_data.group_params(title, when)
 
         async def _do(s):
-            ts = when or clock.now()
-            gid = (
-                await s.execute(
-                    _INSERT_ERROR_GROUP,
-                    {"fp": f"{title}:{uuid.uuid4()}", "title": title, "ts": ts},
-                )
-            ).scalar_one()
+            gid = (await s.execute(seed_data.INSERT_ERROR_GROUP, gp)).scalar_one()
             await s.execute(
-                _INSERT_ERROR_EVENT, {"gid": gid, "ts": ts, "context": json.dumps(context)}
+                seed_data.INSERT_ERROR_EVENT,
+                {"gid": gid, "ts": gp["ts"], "context": json.dumps(context)},
             )
 
         self.run(db.seed_fixtures(_do))
 
     def seed_error_from_org(self, title: str, org: str, *, when: datetime | None = None) -> None:
-        # Issue occurrences are always level "error" — the step grammar accepts a level but the
-        # source has no level column of its own.
         self._insert_error(title, org=logs_org_id(org), when=when)
 
     def set_process_log_level(self, level: str) -> None:
@@ -145,7 +74,7 @@ class LogsApiMixin(ApiBase):
     def seed_correlated_request(self, request_id: str, org: str, audit: str, error: str) -> None:
         oid = logs_org_id(org)
         self._append_request("request.finished", org=oid, request_id=request_id)
-        self._insert_audit(audit, org=oid, request_id=request_id)
+        self._add_audit(seed_data.audit_model(audit, org=oid, request_id=request_id))
         self._insert_error(error, org=oid, request_id=request_id)
 
     # ── reads ────────────────────────────────────────────────────────────────

@@ -26,7 +26,7 @@ Supabase link) lives in memory — re-declared on every ``mount()``; only the va
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,16 @@ from apps.shared.persistence.settings_store import (
 )
 
 SettingType = Literal["string", "number", "boolean"]
+
+
+class SettingRow(TypedDict):
+    """A declared setting paired with its current stored value, as display strings — the shape
+    the console settings templates iterate (and the logs screen serves alongside its timeline)."""
+
+    key: str
+    type: SettingType
+    label: str
+    value: str
 
 
 @dataclass(frozen=True)
@@ -220,6 +230,20 @@ class AppSettings:
     def view(self) -> SettingsView:
         """The server-wide values as a read-only view — what a request outside any org gets."""
         return SettingsView(self.values)
+
+    def rows(self) -> list[SettingRow]:
+        """Every declared setting with its current value as a render-ready display string.
+
+        Stored values are already normalised text (``validate`` normalises on write; defaults are
+        declared as text), so no coercion is needed — this is the same shape the console settings
+        page iterates, exposed on the settings model so callers never hand-roll it."""
+        declaration = self._declaration
+        defs = declaration.defs if declaration is not None else []
+        raw = self._raw or {}
+        return [
+            SettingRow(key=d.key, type=d.type, label=d.label, value=str(raw.get(d.key, d.default)))
+            for d in defs
+        ]
 
     def __getattr__(self, name: str) -> Any:
         # A setting's static type depends on its key, so it's ``Any`` here; the value is coerced
