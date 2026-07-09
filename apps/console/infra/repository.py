@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.organizations.contract.queries import org_by_handle, org_handles
 from apps.shared.persistence.settings_store import AppSetting, OrgAppSetting, disabled_apps_select
 
 
@@ -39,21 +40,27 @@ class AppSettingRepository:
     # ── per-org overrides (console-managed; apps read them via the RLS session) ──
 
     async def org_overrides(self, app: str) -> list[dict]:
-        """Every override of `app` with its org handle, for the console screen."""
-        rows = await self.session.execute(
-            text(
-                "SELECT s.key, s.value, s.org_id, o.handle FROM org_app_settings s "
-                "JOIN organizations o ON o.id = s.org_id "
-                "WHERE s.app = :app ORDER BY o.handle, s.key"
-            ),
-            {"app": app},
+        """Every override of `app` with its org handle, for the console screen.
+
+        Reads its own ``org_app_settings`` rows, then resolves handles through the
+        organizations contract — the console never JOINs that app's table itself.
+        """
+        rows = await self.session.scalars(
+            select(OrgAppSetting).where(OrgAppSetting.app_name == app)
         )
-        return [dict(row) for row in rows.mappings()]
+        overrides = list(rows)
+        handles = await org_handles(self.session, {o.org_id for o in overrides})
+        result = [
+            {"key": o.key, "value": o.value, "org_id": o.org_id, "handle": handles[o.org_id]}
+            for o in overrides
+            if o.org_id in handles
+        ]
+        result.sort(key=lambda r: (r["handle"], r["key"]))
+        return result
 
     async def org_id_by_handle(self, handle: str) -> uuid.UUID | None:
-        return await self.session.scalar(
-            text("SELECT id FROM organizations WHERE handle = :handle"), {"handle": handle}
-        )
+        org = await org_by_handle(self.session, handle)
+        return org.id if org is not None else None
 
     async def set_org_override(self, app: str, key: str, org_id: uuid.UUID, value: str) -> None:
         row = await self.session.get(OrgAppSetting, (app, key, org_id))

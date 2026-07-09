@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -52,6 +52,19 @@ async def org_by_handle(session: AsyncSession, handle: str) -> OrganizationRead 
     """Resolve an org by its URL handle, ignoring RLS — used by public-facing routes."""
     org = await session.scalar(select(Organization).where(Organization.handle == handle))
     return OrganizationRead.model_validate(org) if org is not None else None
+
+
+async def org_handles(
+    session: AsyncSession, org_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Map each org id to its URL handle — bulk resolver so callers holding foreign org ids
+    (e.g. the console's per-org overrides) never JOIN the organizations table themselves."""
+    if not org_ids:
+        return {}
+    rows = await session.execute(
+        select(Organization.id, Organization.handle).where(Organization.id.in_(org_ids))
+    )
+    return {row.id: row.handle for row in rows}
 
 
 async def role_in_org(
