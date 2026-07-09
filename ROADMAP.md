@@ -6,7 +6,7 @@
 - [ ] timezone in org, calendar accorded
 - [ ] apps/calendar should display multi-day events
 - [ ] apps/pages fulltext search
-- [ ] blue/black color of open links on http://127.0.0.1:8000/az-az/dashboard
+- [x] blue/black color of open links on http://127.0.0.1:8000/az-az/dashboard
 - [ ] org-settings divided into tabs : members, naming, api keys
 - [ ] org-settings save > confirm
 - [ ] org-settings save alignement
