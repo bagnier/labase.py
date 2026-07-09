@@ -3,7 +3,8 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Computed, ForeignKey, String
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.shared.persistence.base import (
@@ -33,6 +34,15 @@ class Page(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
     slug: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(String, default="")
     visibility: Mapped[PageVisibility] = mapped_column(String, default=PageVisibility.draft)
+    # Generated in the DB (see the pages_fulltext migration); read-only for the ORM.
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))",
+            persisted=True,
+        ),
+        nullable=True,
+    )
 
 
 class PageRead(BaseModel):

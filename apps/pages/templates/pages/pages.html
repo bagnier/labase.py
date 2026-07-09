@@ -24,13 +24,25 @@
              data-handle="{{ org_handle }}"
              x-data="pagesApp()"
              x-init="$nextTick(() => $el.dataset.ready = '1')">
-      <!-- Toolbar: search + filters, grouped on one line -->
+      <!-- Toolbar: fulltext search (server, Postgres tsvector) + client filters -->
       <div class="flex flex-wrap items-center gap-2 mb-3">
-        <input type="search"
-               x-model="search"
-               placeholder="Search pages…"
-               class="input flex-1 min-w-0"
-               aria-label="Search pages" />
+        <form method="get"
+              action="/{{ org_handle }}/pages"
+              role="search"
+              class="flex flex-1 min-w-0 items-center gap-2">
+          <input type="search"
+                 name="q"
+                 value="{{ search_query }}"
+                 placeholder="Search titles and content…"
+                 class="input flex-1 min-w-0"
+                 aria-label="Search pages" />
+          <button type="submit" class="btn btn-primary flex-none" aria-label="Search">
+            <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+          </button>
+          {% if search_query %}
+            <a href="/{{ org_handle }}/pages" class="btn btn-ghost flex-none">Clear</a>
+          {% endif %}
+        </form>
         <select x-model="filter"
                 class="select w-auto flex-none"
                 aria-label="Filter by visibility">
@@ -102,7 +114,6 @@
       pages: JSON.parse(document.getElementById("pages-data").textContent),
       isOwner: root.dataset.owner === "true",
       handle: root.dataset.handle,
-      search: "",
       filter: "all",
       sort: "created_desc",
 
@@ -132,11 +143,10 @@
       },
 
       visible() {
-        const q = this.search.trim().toLowerCase();
+        // Fulltext search runs server-side (Postgres tsvector); here we only apply the
+        // visibility filter and sort over the returned set.
         let rows = this.pages.filter((p) => {
-          const matchesSearch = !q || p.title.toLowerCase().includes(q) || p.slug.includes(q);
-          const matchesFilter = this.filter === "all" || p.visibility === this.filter;
-          return matchesSearch && matchesFilter;
+          return this.filter === "all" || p.visibility === this.filter;
         });
         const cmp = {
           created_desc: (a, b) => b.created.localeCompare(a.created),

@@ -18,6 +18,7 @@ from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
     PageNavRepository,
     PageRepository,
+    search_visible_pages,
     visible_pages,
 )
 from apps.shared.http import (
@@ -386,7 +387,11 @@ async def list_pages(
     org = or_404(await org_by_handle(admin, org_handle))
     role = await role_in_org(rls, org.id, uuid.UUID(current_user.id)) if current_user else None
     session = rls if role is not None else admin
-    pages = await visible_pages(session, org.id, role=role)
+    query = request.query_params.get("q", "").strip()
+    if query:
+        pages = await search_visible_pages(session, org.id, query, role=role)
+    else:
+        pages = await visible_pages(session, org.id, role=role)
     if wants_json(request):
         return JSONResponse([PageRead.model_validate(p).model_dump(mode="json") for p in pages])
     if current_user is None:
@@ -418,6 +423,7 @@ async def list_pages(
         org_handle=org_handle,
         can_create=role is not None,
         is_owner=role == OrgRole.owner,
+        search_query=query,
     )
     return with_etag(request, templates.TemplateResponse(request, "pages/pages.html", ctx))
 

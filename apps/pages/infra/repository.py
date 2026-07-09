@@ -50,6 +50,25 @@ async def visible_pages(
     return list(await session.scalars(q))
 
 
+async def search_visible_pages(
+    session: AsyncSession, org_id: uuid.UUID, query: str, *, role: OrgRole | None
+) -> list[Page]:
+    """Fulltext search over the visible pages (title + body), ranked by relevance.
+
+    Uses the generated ``search_vector`` (GIN-indexed) with ``websearch_to_tsquery`` so
+    natural queries (quoted phrases, ``or``) work; falls back to recency for ties. Same
+    visibility rules as :func:`visible_pages`."""
+    tsq = func.websearch_to_tsquery("english", query)
+    q = (
+        select(Page)
+        .where(Page.org_id == org_id, Page.search_vector.op("@@")(tsq))
+        .order_by(func.ts_rank(Page.search_vector, tsq).desc(), Page.created_at.desc())
+    )
+    if role is None:
+        q = q.where(Page.visibility == PageVisibility.public)
+    return list(await session.scalars(q))
+
+
 class PageNavRepository(PositionedRepository[PageNavItem]):
     model = PageNavItem
     default_order = PageNavItem.position.asc()
