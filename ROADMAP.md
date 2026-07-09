@@ -7,9 +7,9 @@
 - [ ] apps/calendar should display multi-day events
 - [ ] apps/pages fulltext search
 - [x] blue/black color of open links on http://127.0.0.1:8000/az-az/dashboard
-- [ ] org-settings divided into tabs : members, naming, api keys
-- [ ] org-settings save > confirm
-- [ ] org-settings save alignement
+- [x] org-settings divided into tabs : members, naming, api keys
+- [x] org-settings save > confirm
+- [x] org-settings save alignement
 - [ ] console setting for organizations to limit the number of invitation
 - [ ] profile divided into tabs : profile, organizations, email, authentication
 - [ ] console Per-organisation overrides, org finding uses current log  filter widgets

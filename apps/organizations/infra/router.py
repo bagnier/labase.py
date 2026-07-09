@@ -169,15 +169,26 @@ async def org_dashboard_overviews(
     return JSONResponse([{"key": o.key, "title": o.title, "data": o.data} for o in overviews])
 
 
-async def _settings_context(session, current_user, org, org_handle, role: str) -> dict:
-    """Full template context for the settings page: fullpage chrome + the settings sections
-    apps contribute (:class:`OrgSettingsSectionQuery`). Shared by every route that renders
-    ``settings.html`` so the ``settings_sections`` loop is always defined."""
+async def _settings_context(
+    session, current_user, org, org_handle, role: str, *, repo: OrganizationRepository
+) -> dict:
+    """Full template context for the settings page: fullpage chrome, the members panel
+    (Members tab) and the settings sections apps contribute (:class:`OrgSettingsSectionQuery`,
+    API keys tab). Shared by every route that renders ``settings.html`` so all tab loops
+    are always defined."""
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle, role=role)
     ctx["settings_sections"] = sorted(
         await bus.collect(OrgSettingsSectionQuery(session, org.id, role == "owner")),
         key=lambda s: s.order,
     )
+    ctx["members"] = await _build_members(repo, org.id)
+    ctx["caller_role"] = role
+    ctx["current_user"] = current_user
+    invitations: list[InvitationRead] = []
+    if role == "owner":
+        raw_invs = await repo.list_invitations(org.id)
+        invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
+    ctx["invitations"] = invitations
     return ctx
 
 
@@ -192,7 +203,10 @@ async def org_settings(
 ):
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
-    ctx = await _settings_context(session, current_user, org, org_handle, membership.role.value)
+    ctx = await _settings_context(
+        session, current_user, org, org_handle, membership.role.value, repo=repo
+    )
+    ctx["saved"] = "saved" in request.query_params
     return templates.TemplateResponse(request, "organizations/settings.html", ctx)
 
 
@@ -251,7 +265,9 @@ async def rename_organization(
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
-        ctx = await _settings_context(session, current_user, org, org_handle, membership.role.value)
+        ctx = await _settings_context(
+            session, current_user, org, org_handle, membership.role.value, repo=repo
+        )
         ctx["name_error"] = error
         return templates.TemplateResponse(
             request, "organizations/settings.html", ctx, status_code=422
@@ -263,7 +279,7 @@ async def rename_organization(
                 {**org.__dict__, "role": membership.role}
             ).model_dump(mode="json")
         )
-    return RedirectResponse(url=f"/{org.handle}/settings", status_code=303)
+    return RedirectResponse(url=f"/{org.handle}/settings?saved=1", status_code=303)
 
 
 @org_router.patch("/handle", response_class=HTMLResponse)
@@ -288,8 +304,11 @@ async def update_org_handle(
         if wants_json(request):
             raise HTTPException(status_code=code, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
-        ctx = await _settings_context(session, current_user, org, org_handle, membership.role.value)
+        ctx = await _settings_context(
+            session, current_user, org, org_handle, membership.role.value, repo=repo
+        )
         ctx["handle_error"] = error
+        ctx["handle_value"] = handle
         response = templates.TemplateResponse(
             request, "organizations/settings.html", ctx, status_code=code
         )
@@ -302,7 +321,7 @@ async def update_org_handle(
                 {**org.__dict__, "role": membership.role}
             ).model_dump(mode="json")
         )
-    return RedirectResponse(url=f"/{handle}/settings", status_code=303)
+    return RedirectResponse(url=f"/{handle}/settings?saved=1", status_code=303)
 
 
 # ── Members ─────────────────────────────────────────────────────────────────────

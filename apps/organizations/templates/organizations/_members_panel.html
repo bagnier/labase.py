@@ -1,0 +1,52 @@
+{# Members management UI — shared by the standalone /members page and the
+   settings "Members" tab. Expects: org, org_handle, members, caller_role,
+   invitations, leave_error (optional). #}
+<div class="space-y-6">
+  <div id="leave-error" aria-live="polite">
+    {% if leave_error %}
+      <div role="alert" class="alert alert-error">{{ leave_error }}</div>
+    {% endif %}
+  </div>
+  <div x-data="{ inviting: false }">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        {% set member_count = members | length %}
+        <p id="member-count"
+           aria-live="polite"
+           class="text-sm text-base-content/70">{{ member_count }} member{{ 's' if member_count != 1 }}</p>
+      </div>
+      {% if caller_role == "owner" %}
+        <button data-invite-toggle
+                @click="inviting = !inviting"
+                class="btn btn-primary btn-sm">Invite a member</button>
+      {% endif %}
+    </div>
+    <ul id="member-list" class="list-panel">
+      {% for m in members %}
+        {% include "organizations/_member_row.html" %}
+      {% endfor %}
+    </ul>
+    {% if caller_role == "owner" %}
+      <div id="invite-form" x-show="inviting" x-cloak class="card-panel mt-6">
+        <div class="card-body space-y-4">
+          <h2 class="card-title text-sm font-semibold">Invite a new member</h2>
+          <form hx-post="/{{ org_handle }}/invitations"
+                hx-target="#invite-result"
+                hx-swap="innerHTML"
+                class="flex gap-3 items-start"
+                hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
+            <input type="email"
+                   name="email"
+                   placeholder="email@example.com"
+                   required
+                   aria-label="Invite email"
+                   class="input w-full flex-1" />
+            <button type="submit" class="btn btn-primary flex-none">Invite</button>
+          </form>
+          <div id="invite-result" aria-live="polite"></div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+  {% include "organizations/_pending_invitations.html" %}
+</div>
