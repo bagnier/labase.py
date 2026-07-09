@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "logs/_combobox.html" import combobox %}
 {% block title %}Logs — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -27,7 +28,8 @@
         </a>
       </div>
     </div>
-    <div class="card-panel overflow-hidden">
+    {# overflow-visible so the combobox popovers can escape the card (matches the mockup). #}
+    <div class="card-panel overflow-visible">
       {# ── Activity: stacked bars per bucket, themed like the console ──────────── #}
       {% set ns = namespace(max=1) %}
       {% for day, c in activity.items() %}
@@ -70,49 +72,24 @@
           <p class="text-xs text-base-content/60" data-activity-summary>No activity in the current window.</p>
         {% endif %}
       </div>
-      {# ── Filter toolbar (GET form; combines every control) ───────────────────── #}
+      {# ── Filter toolbar (GET form; combines every control) ─────────────────────
+         The five categorical filters are smart combobox pills (see _combobox.html): they
+         auto-submit on selection. Free text and the date range keep the explicit Filter
+         button; their hidden pill values ride along on that submit. #}
       <form method="get"
             action="/console/logs"
             class="flex flex-wrap items-center gap-2 p-3 border-b border-base-300"
             aria-label="Filter logs">
-        <select name="source"
-                class="select select-sm select-ghost"
-                aria-label="source">
-          <option value="" {{ "selected" if not filters.source }}>all sources
-          </option>
-          {% for s in ["request", "audit", "issue"] %}
-            <option value="{{ s }}" {{ "selected" if filters.source == s }}>{{ s }}
-            </option>
-          {% endfor %}
-        </select>
-        <select name="level" class="select select-sm select-ghost" aria-label="level">
-          <option value="" {{ "selected" if not filters.level }}>all levels
-          </option>
-          {% for lvl in ["info", "warning", "error"] %}
-            <option value="{{ lvl }}" {{ "selected" if filters.level == lvl }}>{{ lvl }}
-            </option>
-          {% endfor %}
-        </select>
+        {{ combobox("source", "source", filters.source, filters.source, facets.source) }}
+        {{ combobox("level", "level", filters.level, filters.level, facets.level) }}
+        {{ combobox("org_id", "org", filters.org_id, org_label, facets.org) }}
+        {{ combobox("user_id", "user", filters.user_id, filters.user_id[:8], facets.user, truncate=true) }}
+        {{ combobox("request_id", "request", filters.request_id, filters.request_id[:8], facets.request, truncate=true) }}
         <input name="q"
                value="{{ filters.q }}"
                class="input input-sm w-40"
                placeholder="free text…"
                aria-label="text" />
-        <input name="org_id"
-               value="{{ filters.org_id }}"
-               class="input input-sm w-36 font-mono text-xs"
-               placeholder="org id"
-               aria-label="org" />
-        <input name="user_id"
-               value="{{ filters.user_id }}"
-               class="input input-sm w-36 font-mono text-xs"
-               placeholder="user id"
-               aria-label="user" />
-        <input name="request_id"
-               value="{{ filters.request_id }}"
-               class="input input-sm w-32 font-mono text-xs"
-               placeholder="request id"
-               aria-label="request" />
         <span class="flex items-center gap-1">
           <input type="datetime-local"
                  name="from_dt"

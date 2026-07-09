@@ -1,0 +1,75 @@
+{# Smart combobox filter pill (see features/unified-logs.mockup.html).
+
+   A pill button shows `label + value` — muted italic "all" when inactive, bold with a ✕ to
+   clear when a value is set. Clicking it opens a popover with a search field that narrows the
+   options (with their occurrence counts) as you type. Picking an option — or clearing — writes
+   the hidden field and submits the enclosing GET form, so the filter applies immediately and the
+   server re-renders the pill's active state (no reactive selection state needed here).
+
+   Args:
+     name        query-param / hidden-field name (source, level, org_id, user_id, request_id)
+     label       the dimension caption shown on the pill (source, level, org, user, request)
+     value       the currently selected raw value ("" = inactive)
+     value_label the display for that selected value (org handle, or short id)
+     options     [{value, count, label?}] from LogReader.facets
+     truncate    when an option has no explicit label, show the first 8 chars of its value
+#}
+{% macro combobox(name, label, value, value_label, options, truncate=false) %}
+  {% set opts = [] %}
+  {% for o in options %}
+    {% set _ = opts.append({
+          "value": o.value,
+          "count": o.count,
+          "label": o.label if o.label is defined else (o.value[:8] if truncate else o.value),
+        }) %}
+  {% endfor %}
+  <span class="relative"
+        x-data='{ open: false, q: "", options: {{ opts | tojson }}, toggle() { this.open = !this.open; if (this.open) { this.q = ""; this.$nextTick(() => this.$refs.search && this.$refs.search.focus()); } }, filtered() { const t = this.q.trim().toLowerCase(); return this.options.filter(o => !t || o.label.toLowerCase().includes(t) || String(o.value).toLowerCase().includes(t)); }, apply(v) { this.$refs.hidden.value = v; this.$refs.hidden.form.requestSubmit(); }, clear() { this.apply(""); } }'
+        @keydown.escape="open = false"
+        @click.outside="open = false">
+    <input type="hidden"
+           name="{{ name }}"
+           value="{{ value }}"
+           x-ref="hidden"
+           data-filter="{{ name }}" />
+    <button type="button"
+            data-filter-toggle="{{ name }}"
+            @click="toggle()"
+            class="btn btn-sm gap-1.5 normal-case font-normal {{ 'border-2 border-primary bg-primary/10 text-primary hover:bg-primary/20' if value else 'border border-base-300 bg-base-100 text-base-content hover:border-base-content/40 hover:bg-base-200' }}">
+      <span class="text-[10px] font-semibold uppercase tracking-wide {{ 'text-primary/70' if value else 'opacity-50' }}">{{ label }}</span>
+      {% if value %}
+        <span class="font-mono text-xs font-semibold">{{ value_label }}</span>
+        <span class="opacity-70 hover:opacity-100"
+              role="button"
+              aria-label="clear {{ label }} filter"
+              @click.stop="clear()">✕</span>
+      {% else %}
+        <span class="italic opacity-60">all</span>
+      {% endif %}
+    </button>
+    <div x-show="open"
+         x-cloak
+         x-transition
+         data-filter-pop="{{ name }}"
+         class="absolute left-0 top-[calc(100%+4px)] z-20 w-60 rounded-box border border-base-300 bg-base-100 p-1.5 shadow-lg">
+      <input type="text"
+             x-ref="search"
+             x-model="q"
+             placeholder="Type to filter…"
+             class="input input-sm input-bordered mb-1.5 w-full"
+             aria-label="filter {{ label }} options" />
+      <div class="max-h-64 overflow-y-auto">
+        <template x-for="opt in filtered()" :key="opt.value">
+          <div class="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-base-200"
+               :data-value="opt.value"
+               @click="apply(opt.value)">
+            <span class="truncate font-mono text-xs" x-text="opt.label"></span>
+            <span class="text-xs opacity-50" x-text="opt.count"></span>
+          </div>
+        </template>
+        <div x-show="filtered().length === 0"
+             class="px-2 py-1.5 text-sm italic opacity-60">no match</div>
+      </div>
+    </div>
+  </span>
+{% endmacro %}

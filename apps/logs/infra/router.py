@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
@@ -10,6 +11,7 @@ from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.logs.infra.repository import LogFilter, LogReader
+from apps.organizations.contract.queries import org_handles
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
@@ -61,6 +63,36 @@ def _filter(
     )
 
 
+def _short(value: str) -> str:
+    """The compact display for an opaque id — mirrors the timeline's 8-char truncation."""
+    return value[:8]
+
+
+def _as_uuid(value: str) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        return None
+
+
+async def _label_orgs(session: AdminSession, org_facet: list[dict[str, Any]], selected: str) -> str:
+    """Resolve every org id in the org facet (and the currently selected one) to its handle,
+    annotating each option in place with a ``label`` and returning the selected value's label.
+    Handles are looked up in bulk; ids with no org row (background/app logs, test fixtures) fall
+    back to the short id."""
+    ids = {_as_uuid(o["value"]) for o in org_facet}
+    ids.add(_as_uuid(selected))
+    handles = await org_handles(session, {i for i in ids if i is not None})
+
+    def label(value: str) -> str:
+        oid = _as_uuid(value)
+        return handles.get(oid, _short(value)) if oid else _short(value)
+
+    for option in org_facet:
+        option["label"] = label(option["value"])
+    return label(selected) if selected else ""
+
+
 @router.get("", response_model=None)
 async def logs_screen(
     request: Request,
@@ -81,6 +113,8 @@ async def logs_screen(
     reader = LogReader(session)
     entries = await reader.search(flt)
     activity = await reader.activity(flt)
+    facets = await reader.facets(flt)
+    org_label = await _label_orgs(session, facets["org"], org_id or "")
     settings = _settings_rows()
     if wants_json(request):
         return JSONResponse(
@@ -88,6 +122,7 @@ async def logs_screen(
                 "app": _LOGS_APP,
                 "entries": [e.model_dump(mode="json") for e in entries],
                 "activity": activity,
+                "facets": facets,
                 "settings": settings,
             }
         )
@@ -108,6 +143,8 @@ async def logs_screen(
             "user": current_user,
             "entries": entries,
             "activity": activity,
+            "facets": facets,
+            "org_label": org_label,
             # Only the firehose level is tuned from the screen; the enabled switch stays on the
             # console's app page like every other app.
             "settings": [r for r in settings if r["key"] == _LOG_LEVEL_KEY],

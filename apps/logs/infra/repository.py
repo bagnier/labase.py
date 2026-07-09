@@ -8,7 +8,8 @@ It never touches another context's tables: audit is read through
 merged window — the only way to order a file stream and two tables as one timeline.
 """
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -70,6 +71,31 @@ class LogReader:
             day = buckets.setdefault(e.ts.date().isoformat(), {})
             day[e.source.value] = day.get(e.source.value, 0) + 1
         return buckets
+
+    async def facets(self, flt: LogFilter, *, cap: int = 2000) -> dict[str, list[dict[str, Any]]]:
+        """Distinct values with occurrence counts for the five categorical filters — the option
+        lists behind the combobox pills. Honours only the date + text window (the categorical
+        selections are cleared) so every pill offers all its pickable values and counts stay
+        stable as an admin stacks filters — a discovery aid, not a live recount."""
+        base = replace(flt, source=None, level=None, org_id=None, user_id=None, request_id=None)
+        entries = await self.search(base, limit=cap)
+        return {
+            "source": _tally(entries, lambda e: e.source.value),
+            "level": _tally(entries, lambda e: e.level),
+            "org": _tally(entries, lambda e: e.org_id),
+            "user": _tally(entries, lambda e: e.user_id),
+            "request": _tally(entries, lambda e: e.request_id),
+        }
+
+
+def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for e in entries:
+        value = pick(e)
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{"value": value, "count": count} for value, count in ranked]
 
 
 def _audit_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:

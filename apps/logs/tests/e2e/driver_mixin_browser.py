@@ -94,20 +94,30 @@ class LogsBrowserMixin(BrowserBase):
         with self.page.expect_navigation(wait_until="load"):
             self.page.get_by_role("button", name="Filter").click()
 
+    def _pick_combobox(self, name: str, value: str) -> None:
+        """Drive a smart combobox pill: open it, click the option carrying the exact value.
+        Selecting by ``data-value`` (not the visible label) keeps this decoupled from label
+        resolution — a seeded org id has no real handle, so its label is a truncated uuid."""
+        self.open_logs_screen()
+        self.page.locator(f"[data-filter-toggle='{name}']").click()
+        option = self.page.locator(f"[data-filter-pop='{name}'] [data-value='{value}']").first
+        with self.page.expect_navigation(wait_until="load"):
+            option.click()
+
     def filter_logs_by_org(self, org: str) -> None:
-        self._submit_filter(org_id=logs_org_id(org))
+        self._pick_combobox("org_id", logs_org_id(org))
 
     def filter_logs_by_user(self, email: str) -> None:
-        self._submit_filter(user_id=logs_user_id(email))
+        self._pick_combobox("user_id", logs_user_id(email))
 
     def filter_logs_by_source(self, source: str) -> None:
-        self._submit_filter(source=source)
+        self._pick_combobox("source", source)
 
     def filter_logs_by_level(self, level: str) -> None:
-        self._submit_filter(level=level)
+        self._pick_combobox("level", level)
 
     def filter_logs_by_request(self, request_id: str) -> None:
-        self._submit_filter(request_id=request_id)
+        self._pick_combobox("request_id", request_id)
 
     def search_logs(self, text: str) -> None:
         self._submit_filter(q=text)
