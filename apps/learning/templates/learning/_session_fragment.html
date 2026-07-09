@@ -1,10 +1,40 @@
-<div id="learning-session" data-due-count="{{ cards|length }}">
+<div id="learning-session"
+     data-due-count="{{ cards|length }}"
+     x-data="{ i: 0, n: {{ cards|length }} }">
+  {% if cards|length > 1 %}
+    <div class="mx-auto max-w-sm mb-4 flex items-center justify-between"
+         data-stepper>
+      <button type="button"
+              data-stepper-prev
+              class="btn btn-ghost btn-sm"
+              @click="i = Math.max(0, i - 1)"
+              :disabled="i === 0">
+        <i class="ph ph-caret-left" aria-hidden="true"></i>
+        Prev
+      </button>
+      <span class="text-sm text-base-content/70"
+            data-stepper-progress
+            aria-live="polite">
+        <span x-text="i + 1">1</span> / <span x-text="n">{{ cards|length }}</span>
+      </span>
+      <button type="button"
+              data-stepper-next
+              class="btn btn-ghost btn-sm"
+              @click="i = Math.min(n - 1, i + 1)"
+              :disabled="i === n - 1">
+        Next
+        <i class="ph ph-caret-right" aria-hidden="true"></i>
+      </button>
+    </div>
+  {% endif %}
   <div class="scene mx-auto max-w-sm space-y-4">
     {% for card in cards %}
       <div class="lcard relative select-none"
            data-card-id="{{ card.external_id }}"
            data-card-level="{{ card.level }}"
-           data-deck="{{ card.deck }}">
+           data-deck="{{ card.deck }}"
+           x-show="i === {{ loop.index0 }}"
+           x-cloak>
         <div class="flip rounded-2xl">
           <div class="paper rounded-2xl p-6">
             <div class="flex items-center justify-between">

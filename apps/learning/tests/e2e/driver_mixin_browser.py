@@ -100,6 +100,18 @@ class LearningBrowserMixin(BrowserBase):
         page.goto(self._url(key, "/sessions"), wait_until="load")
         return page
 
+    def _focus_card(self, page, ext: str) -> None:
+        """The review session is a one-card-at-a-time stepper; step Next until the
+        target card's panel is the visible one before clicking inside it."""
+        target = page.locator(f".lcard[data-card-id='{ext}']")
+        nxt = page.locator("[data-stepper-next]")
+        for _ in range(50):
+            if target.is_visible():
+                return
+            if nxt.count() == 0 or not nxt.is_enabled():
+                return
+            nxt.click()
+
     def _card_state(self, key: str, ext: str) -> dict:
         org_id, uid = self._learn_org[key], self._learn_uid[key]
         return self._seed(lambda s: setup.get_state(s, org_id, uid, ext))
@@ -187,6 +199,7 @@ class LearningBrowserMixin(BrowserBase):
     def mark(self, name: str, ext: str, outcome: str) -> None:
         key = self._user(name)
         page = self._goto_today(key)
+        self._focus_card(page, ext)
         card = page.locator(f".lcard[data-card-id='{ext}']")
         self.wait_htmx(
             page,
@@ -205,6 +218,7 @@ class LearningBrowserMixin(BrowserBase):
     def reveal_answer(self, name: str, ext: str, answer: str) -> None:
         key = self._user(name)
         page = self._goto_today(key)
+        self._focus_card(page, ext)
         card = page.locator(f".lcard[data-card-id='{ext}']")
         with page.expect_response(lambda r: f"/learning/cards/{ext}" in r.url):
             card.locator("[data-reveal]").click()

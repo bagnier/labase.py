@@ -2,7 +2,7 @@
 
 - [ ] better graphical language
 - [x] réorganiser toute la console pour mettre les features en valeurs en les distingant des settings. issues, logs, metrics ne sont pas visibles
-- [ ] http://127.0.0.1:8000/az-az/learning/sessions cards should be displayed one by one
+- [x] http://127.0.0.1:8000/az-az/learning/sessions cards should be displayed one by one
 - [ ] timezone in org, calendar accorded
 - [ ] apps/calendar should display multi-day events
 - [ ] apps/pages fulltext search
