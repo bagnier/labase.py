@@ -10,6 +10,7 @@ from apps.console.domain import admins, service, technical
 from apps.console.domain.admins import AdminNotFound, LastAdminViolation
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.infra.repository import AppSettingRepository
+from apps.organizations.contract.queries import list_org_handles
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.host import host
@@ -308,6 +309,7 @@ async def get_app(
             "overview": overview,
             "settings": settings,
             "org_overrides": org_overrides,
+            "org_handles": await list_org_handles(session),
             "supabase": supabase,
             "links": group.links,
             **await fullpage_context(session, current_user),
@@ -335,6 +337,7 @@ async def _render_org_overrides(
             "app": app,
             "org_overrides": org_overrides,
             "settings": service.settings_view(group, {}),
+            "org_handles": await list_org_handles(session),
             "org_error": error,
         },
         status_code=status.HTTP_400_BAD_REQUEST if error else status.HTTP_200_OK,
@@ -355,6 +358,11 @@ async def create_org_override(
     key = str(body.get("key", ""))
     value = str(body.get("value", ""))
     repo = AppSettingRepository(session)
+
+    if not any(d.key == key and d.org_overridable for d in group.defs):
+        return await _render_org_overrides(
+            request, session, app, group, error=f"'{key}' cannot be overridden per organisation."
+        )
 
     org_id = await repo.org_id_by_handle(handle)
     if org_id is None:

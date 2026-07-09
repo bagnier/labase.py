@@ -21,6 +21,7 @@ def _declare_settings() -> SettingsDeclaration:
                 "string",
                 "",
                 "Promoted org handle — serves its pages at /",
+                org_overridable=False,
             ),
         ],
     )

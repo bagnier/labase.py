@@ -12,13 +12,13 @@
 - [x] org-settings save alignement
 - [x] console setting for organizations to limit the number of invitation
 - [x] profile divided into tabs : profile, organizations, email, authentication
-- [ ] console Per-organisation overrides, org finding uses current log  filter widgets
+- [x] console Per-organisation overrides, org finding uses current log  filter widgets
 - [x] issues dont use the same graphic language that other
 - [x] console load, where are the results ?
 - [x] console load rename > metrics
 - [x] organisations settings, limit the number of invitations
 - [ ] images for apps/pages
-- [ ] Per-organisation overrides not meaningful for featured_org_handle
+- [x] Per-organisation overrides not meaningful for featured_org_handle
 - [x] http://127.0.0.1:8000/console/users "Accounts →" make it more visible
 - [x] calendar new-event validation error re-renders the form as "Edit event" (title + breadcrumb) — `/{org}/calendar/new` — [preuve](reports/explore-2026-07-09/calendar-new-mislabel-edit.png)
 - [x] console + metrics cards for API keys / Issues / Load show a blank icon (missing glyph) while other apps render one — [preuve](reports/explore-2026-07-09/v-console.png)

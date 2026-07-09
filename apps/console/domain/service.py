@@ -22,6 +22,7 @@ class SettingView(TypedDict):
     type: SettingType
     label: str
     value: str
+    org_overridable: bool
 
 
 def coerce_bool(raw: object) -> bool:
@@ -37,6 +38,7 @@ def settings_view(group: SettingsDeclaration, values: dict[str, str]) -> list[Se
             type=d.type,
             label=d.label,
             value=_normalise(d, values.get(d.key, d.default)),
+            org_overridable=d.org_overridable,
         )
         for d in group.defs
     ]

@@ -67,6 +67,15 @@ async def org_handles(
     return {row.id: row.handle for row in rows}
 
 
+async def list_org_handles(session: AsyncSession, limit: int = 500) -> list[str]:
+    """All org handles, alphabetical — powers the console's org-finder autocomplete
+    (a bounded datalist; callers that need every org paginate elsewhere)."""
+    rows = await session.execute(
+        select(Organization.handle).order_by(Organization.handle).limit(limit)
+    )
+    return [row.handle for row in rows]
+
+
 async def role_in_org(
     session: AsyncSession, org_id: uuid.UUID, auth_user_id: uuid.UUID
 ) -> OrgRole | None:

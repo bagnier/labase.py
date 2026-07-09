@@ -58,11 +58,18 @@ class SettingDef:
     type: SettingType
     default: str  # the value seeded on first declaration; stored as text, coerced by ``type``
     label: str
+    # Some settings are meaningful only server-wide (e.g. the promoted org handle):
+    # a per-organisation override makes no sense. Such settings opt out of the console's
+    # per-org override UI (and the override endpoint rejects them).
+    org_overridable: bool = True
 
 
 def feature_switch(label: str = "Enabled (applies on restart)") -> SettingDef:
-    """The reserved on/off switch a toggleable app declares — an ordinary boolean setting."""
-    return SettingDef(ENABLED_KEY, "boolean", "true", label)
+    """The reserved on/off switch a toggleable app declares — an ordinary boolean setting.
+
+    Global by nature (it applies on restart, across all orgs), so not org-overridable.
+    """
+    return SettingDef(ENABLED_KEY, "boolean", "true", label, org_overridable=False)
 
 
 @dataclass(frozen=True)

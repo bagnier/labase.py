@@ -32,20 +32,27 @@
            name="org_handle"
            placeholder="org-handle"
            required
+           list="org-handle-options"
+           autocomplete="off"
            aria-label="Organisation handle"
            class="input input-sm w-full font-mono" />
+    <datalist id="org-handle-options">
+      {% for handle in org_handles %}
+        <option value="{{ handle }}"></option>
+      {% endfor %}
+    </datalist>
     <select name="key"
             aria-label="Setting key"
             class="select select-sm w-full font-mono"
             onchange="for (const w of this.form.querySelectorAll('[data-value-for]')) { const on = w.dataset.valueFor === this.value; w.hidden = !on; for (const i of w.querySelectorAll('[data-override-value]')) i.disabled = !on; }">
-      {% for s in settings %}
+      {% for s in settings if s.org_overridable %}
         <option value="{{ s.key }}">{{ s.key }}</option>
       {% endfor %}
     </select>
     {# Per-key value widget, typed like the server form; only the selected key's
        inputs stay enabled so a single `value` is submitted. #}
     <div class="w-full">
-      {% for s in settings %}
+      {% for s in settings if s.org_overridable %}
         <div data-value-for="{{ s.key }}" {% if not loop.first %}hidden{% endif %}>
           {% if s.type == "boolean" %}
             <label class="inline-flex items-center gap-2 cursor-pointer">
