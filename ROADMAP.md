@@ -10,13 +10,13 @@
 - [x] org-settings divided into tabs : members, naming, api keys
 - [x] org-settings save > confirm
 - [x] org-settings save alignement
-- [ ] console setting for organizations to limit the number of invitation
+- [x] console setting for organizations to limit the number of invitation
 - [ ] profile divided into tabs : profile, organizations, email, authentication
 - [ ] console Per-organisation overrides, org finding uses current log  filter widgets
 - [x] issues dont use the same graphic language that other
 - [x] console load, where are the results ?
 - [x] console load rename > metrics
-- [ ] organisations settings, limit the number of invitations
+- [x] organisations settings, limit the number of invitations
 - [ ] images for apps/pages
 - [ ] Per-organisation overrides not meaningful for featured_org_handle
 - [x] http://127.0.0.1:8000/console/users "Accounts →" make it more visible

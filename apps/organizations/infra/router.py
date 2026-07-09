@@ -474,6 +474,7 @@ async def create_invitation(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
+    org_settings: OrganizationsSettings,
 ) -> Response:
     body = await parse_body(request)
     email = str(body.get("email", ""))
@@ -483,6 +484,12 @@ async def create_invitation(
     existing_user_id = await find_user_id_by_email(email)
     if existing_user_id is not None and await repo.get_membership(org_id, existing_user_id):
         error = "already a member"
+
+    max_invites = org_settings.max_invitations_per_org
+    if error is None and max_invites >= 0:
+        pending = len(await repo.list_invitations(org_id))
+        if pending >= max_invites:
+            error = f"invitation limit reached ({max_invites} pending)"
 
     if error is None:
         try:

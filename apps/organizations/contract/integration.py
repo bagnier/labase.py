@@ -65,6 +65,12 @@ def _declare_settings() -> SettingsDeclaration:
                 "true",
                 "Create a personal organisation on sign-up",
             ),
+            SettingDef(
+                "max_invitations_per_org",
+                "number",
+                "-1",
+                "Max pending invitations per organisation (-1 = unlimited)",
+            ),
         ],
         supabase=SupabaseLink("Browse organisations in Supabase", table="organizations"),
     )
