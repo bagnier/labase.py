@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
+from apps.auth.contract.admin import resolve_user_emails
 from apps.auth.contract.current import CurrentAdmin
 from apps.logs.infra.repository import LogFilter, LogReader
 from apps.organizations.contract.queries import org_handles
@@ -93,6 +94,35 @@ async def _label_orgs(session: AdminSession, org_facet: list[dict[str, Any]], se
     return label(selected) if selected else ""
 
 
+async def _label_users(user_facet: list[dict[str, Any]], selected: str) -> str:
+    """Resolve every user id in the user facet (and the selected one) to its email, annotating each
+    option in place and returning the selected value's label. Emails come in bulk from the auth
+    admin API; ids the directory can't resolve (deleted users, test fixtures) fall back to the
+    short id."""
+    ids = {_as_uuid(o["value"]) for o in user_facet}
+    ids.add(_as_uuid(selected))
+    emails = await resolve_user_emails([i for i in ids if i is not None])
+
+    def label(value: str) -> str:
+        uid = _as_uuid(value)
+        return (emails.get(uid) or _short(value)) if uid else _short(value)
+
+    for option in user_facet:
+        option["label"] = label(option["value"])
+    return label(selected) if selected else ""
+
+
+def _selected_label(facet: list[dict[str, Any]], selected: str) -> str:
+    """The label a facet already carries for the selected value (e.g. the request's route), falling
+    back to the short id when the current window doesn't include that value."""
+    if not selected:
+        return ""
+    for option in facet:
+        if option["value"] == selected:
+            return option.get("label") or _short(selected)
+    return _short(selected)
+
+
 @router.get("", response_model=None)
 async def logs_screen(
     request: Request,
@@ -115,6 +145,8 @@ async def logs_screen(
     activity = await reader.activity(flt)
     facets = await reader.facets(flt)
     org_label = await _label_orgs(session, facets["org"], org_id or "")
+    user_label = await _label_users(facets["user"], user_id or "")
+    request_label = _selected_label(facets["request"], request_id or "")
     settings = _settings_rows()
     if wants_json(request):
         return JSONResponse(
@@ -145,6 +177,8 @@ async def logs_screen(
             "activity": activity,
             "facets": facets,
             "org_label": org_label,
+            "user_label": user_label,
+            "request_label": request_label,
             # Only the firehose level is tuned from the screen; the enabled switch stays on the
             # console's app page like every other app.
             "settings": [r for r in settings if r["key"] == _LOG_LEVEL_KEY],

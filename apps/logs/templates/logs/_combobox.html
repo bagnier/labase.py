@@ -11,16 +11,16 @@
      label       the dimension caption shown on the pill (source, level, org, user, request)
      value       the currently selected raw value ("" = inactive)
      value_label the display for that selected value (org handle, or short id)
-     options     [{value, count, label?}] from LogReader.facets
-     truncate    when an option has no explicit label, show the first 8 chars of its value
+     options     [{value, count, label?}] from LogReader.facets — label falls back to the raw value
+                 (source/level are already words; org/user/request are labelled by the router)
 #}
-{% macro combobox(name, label, value, value_label, options, truncate=false) %}
+{% macro combobox(name, label, value, value_label, options) %}
   {% set opts = [] %}
   {% for o in options %}
     {% set _ = opts.append({
           "value": o.value,
           "count": o.count,
-          "label": o.label if o.label is defined else (o.value[:8] if truncate else o.value),
+          "label": o.label if o.label is defined else o.value,
         }) %}
   {% endfor %}
   <span class="relative"

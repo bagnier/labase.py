@@ -83,16 +83,17 @@ class LogsBrowserMixin(BrowserBase):
             self.open_logs_screen()
 
     def _submit_filter(self, **fields: str) -> None:
-        """Fill the on-screen filter controls and submit the form — no URL crafting."""
+        """Fill the on-screen filter controls and let them apply — no URL crafting. The toolbar
+        has no Filter button; free text and the date range submit on change, so we fill each
+        control then fire the form's ``requestSubmit()`` (the same path their onchange uses)."""
         self.open_logs_screen()
+        control = None
         for name, value in fields.items():
             control = self.page.locator(f"[name='{name}']").first
-            if control.evaluate("el => el.tagName") == "SELECT":
-                control.select_option(value)
-            else:
-                control.fill(value)
+            control.fill(value)
+        assert control is not None, "no filter fields to submit"
         with self.page.expect_navigation(wait_until="load"):
-            self.page.get_by_role("button", name="Filter").click()
+            control.evaluate("el => el.form.requestSubmit()")
 
     def _pick_combobox(self, name: str, value: str) -> None:
         """Drive a smart combobox pill: open it, click the option carrying the exact value.

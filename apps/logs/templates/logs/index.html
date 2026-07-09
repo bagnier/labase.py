@@ -73,9 +73,9 @@
         {% endif %}
       </div>
       {# ── Filter toolbar (GET form; combines every control) ─────────────────────
-         The five categorical filters are smart combobox pills (see _combobox.html): they
-         auto-submit on selection. Free text and the date range keep the explicit Filter
-         button; their hidden pill values ride along on that submit. #}
+         Every control applies instantly — the categorical pills (see _combobox.html)
+         auto-submit on selection, and free text / the date range submit on change. No
+         Filter button: the whole toolbar is live. #}
       <form method="get"
             action="/console/logs"
             class="flex flex-wrap items-center gap-2 p-3 border-b border-base-300"
@@ -83,10 +83,11 @@
         {{ combobox("source", "source", filters.source, filters.source, facets.source) }}
         {{ combobox("level", "level", filters.level, filters.level, facets.level) }}
         {{ combobox("org_id", "org", filters.org_id, org_label, facets.org) }}
-        {{ combobox("user_id", "user", filters.user_id, filters.user_id[:8], facets.user, truncate=true) }}
-        {{ combobox("request_id", "request", filters.request_id, filters.request_id[:8], facets.request, truncate=true) }}
+        {{ combobox("user_id", "user", filters.user_id, user_label, facets.user) }}
+        {{ combobox("request_id", "request", filters.request_id, request_label, facets.request) }}
         <input name="q"
                value="{{ filters.q }}"
+               onchange="this.form.requestSubmit()"
                class="input input-sm w-40"
                placeholder="free text…"
                aria-label="text" />
@@ -94,18 +95,19 @@
           <input type="datetime-local"
                  name="from_dt"
                  value="{{ filters.from_dt }}"
+                 onchange="this.form.requestSubmit()"
                  class="input input-sm text-xs"
                  aria-label="from" />
           <span class="text-base-content/50">→</span>
           <input type="datetime-local"
                  name="to_dt"
                  value="{{ filters.to_dt }}"
+                 onchange="this.form.requestSubmit()"
                  class="input input-sm text-xs"
                  aria-label="to" />
         </span>
         <input type="hidden" name="sort" value="{{ sort }}" />
         <input type="hidden" name="dir" value="{{ dir }}" />
-        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
         <span class="ml-auto inline-flex items-center gap-2 text-xs text-base-content/60"
               data-live-state="{{ 'paused' if paused else 'live' }}">
           {% if paused %}

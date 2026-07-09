@@ -84,7 +84,7 @@ class LogReader:
             "level": _tally(entries, lambda e: e.level),
             "org": _tally(entries, lambda e: e.org_id),
             "user": _tally(entries, lambda e: e.user_id),
-            "request": _tally(entries, lambda e: e.request_id),
+            "request": _request_facet(entries),
         }
 
 
@@ -96,6 +96,31 @@ def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> l
             counts[value] = counts.get(value, 0) + 1
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return [{"value": value, "count": count} for value, count in ranked]
+
+
+def _request_desc(entry: LogEntry) -> str | None:
+    """The human label for a request: its ``METHOD /path`` — the request source binds both onto
+    every ``request.started/finished`` line's payload. Correlated audit/issue rows carry neither,
+    so a request only gets a label once one of its firehose lines is in the window."""
+    method, path = entry.payload.get("method"), entry.payload.get("path")
+    return f"{method} {path}" if method and path else None
+
+
+def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
+    """Like ``_tally`` over ``request_id``, but each option also carries the request's route as its
+    label so the pill reads ``GET /console/logs`` instead of an opaque id (falling back to the id
+    when no line in the window describes the route)."""
+    counts: dict[str, int] = {}
+    labels: dict[str, str] = {}
+    for e in entries:
+        rid = e.request_id
+        if not rid:
+            continue
+        counts[rid] = counts.get(rid, 0) + 1
+        if rid not in labels and (desc := _request_desc(e)):
+            labels[rid] = desc
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{"value": rid, "count": count, "label": labels.get(rid, rid)} for rid, count in ranked]
 
 
 def _audit_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:

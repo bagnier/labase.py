@@ -2,6 +2,8 @@ import asyncio
 import uuid
 from dataclasses import dataclass
 
+from supabase_auth.errors import AuthApiError
+
 from apps.shared.persistence.supabase import get_admin_supabase
 
 _ADMIN_ROLE = "admin"
@@ -68,7 +70,12 @@ async def resolve_user_emails(user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]
     admin = get_admin_supabase().auth.admin
 
     async def _get(uid: uuid.UUID) -> tuple[uuid.UUID, str]:
-        resp = await asyncio.to_thread(admin.get_user_by_id, str(uid))
+        # Best-effort: an id the directory no longer knows (deleted user, a stale id captured in
+        # an old log line) resolves to "" rather than failing the whole batch.
+        try:
+            resp = await asyncio.to_thread(admin.get_user_by_id, str(uid))
+        except AuthApiError:
+            return uid, ""
         email = resp.user.email if resp.user else ""
         return uid, email or ""
 
