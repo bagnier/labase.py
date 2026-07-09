@@ -20,8 +20,6 @@ from typing import Any, TypeVar
 
 import structlog
 
-from apps.shared.observability.errors import ExceptionCaptured, capture_context
-
 log = structlog.get_logger("labase.shared.bus")
 
 E = TypeVar("E")
@@ -63,24 +61,23 @@ class EventBus:
         return [await handler(event) for handler in self._subs[type(event)]]
 
     async def collect(self, query: object) -> list[Any]:
-        """Run every handler for this query type; log and skip failing handlers."""
+        """Run every handler for this query type; log and skip failing handlers.
+
+        A handler failure is a bug: ``log.exception`` feeds it to the error tracker through the
+        capture processor (``event_type`` names the failing query so it survives into the issue
+        context). The capture drain runs recording under a reentrancy guard, so a tracker
+        handler that itself fails here cannot recurse.
+        """
         results: list[Any] = []
         for handler in self._subs[type(query)]:
             try:
                 results.append(await handler(query))
-            except Exception as exc:
-                log.exception("query.handler_failed", handler=repr(handler))
-                # Feed the error tracker — but never capture the capturers.
-                if not isinstance(query, ExceptionCaptured):
-                    await self.collect(
-                        ExceptionCaptured(
-                            exc,
-                            source="event_bus",
-                            context=capture_context(
-                                event=type(query).__name__, handler=repr(handler)
-                            ),
-                        )
-                    )
+            except Exception:
+                log.exception(
+                    "query.handler_failed",
+                    handler=repr(handler),
+                    event_type=type(query).__name__,
+                )
         return results
 
 

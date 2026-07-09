@@ -8,7 +8,7 @@
 - [x] ApexCharts integration
 - [ ] MCP server ?
 - [ ] CLI
-- [ ] logs
+- [x] logs
 - [x] ETag on public pages
 - [ ] COW, soft deletion, soft update
 - [ ] async task queue

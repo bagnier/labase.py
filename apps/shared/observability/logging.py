@@ -11,6 +11,7 @@ import sys
 import structlog
 
 from apps.shared.config import get_technical_settings
+from apps.shared.observability.capture import capture_processor
 from apps.shared.observability.firehose import firehose_processor
 
 _LEVELS = {
@@ -58,6 +59,7 @@ def setup_logging() -> None:
             *shared_processors,
             structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.StackInfoRenderer(),
+            capture_processor,
             structlog.processors.format_exc_info,
             firehose_processor,
             renderer,

@@ -70,5 +70,5 @@ class SettingsRefresher:
             try:
                 await self.tick()
             except Exception:
-                log.exception("settings.refresh_failed")
+                log.warning("settings.refresh_failed")
             await asyncio.sleep(self._interval)

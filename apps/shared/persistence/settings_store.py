@@ -99,7 +99,10 @@ def read_values(app: str) -> dict[str, str]:
     try:
         return asyncio.run(_on_throwaway_engine(_work))
     except Exception:
-        log.exception("console.read_values_failed", app=app)
+        # A DB unreachable at mount is a serious infra failure (the app runs on defaults and the
+        # next request fails anyway), but not our code bug — log.error is high-severity yet, with
+        # no exc_info, is not captured as an issue. Tests/probes boot DB-less and simply see it.
+        log.error("console.read_values_failed", app=app)
         return {}
 
 
@@ -120,4 +123,6 @@ def seed_values(app: str, initial: dict[str, str]) -> None:
     try:
         asyncio.run(_on_throwaway_engine(_work))
     except Exception:
-        log.exception("console.seed_values_failed", app=app)
+        # Serious infra failure (DB unreachable at mount), not our code bug: log.error is
+        # high-severity yet, with no exc_info, is not captured as an issue. See read_values.
+        log.error("console.seed_values_failed", app=app)

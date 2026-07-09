@@ -60,4 +60,4 @@ class MetricsFlusher:
             try:
                 await self.tick()
             except Exception:
-                log.exception("metrics.flush_failed")
+                log.warning("metrics.flush_failed")

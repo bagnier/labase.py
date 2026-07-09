@@ -74,7 +74,7 @@ async def _plant_rollup() -> None:
     try:
         await ensure_scheduled(ROLLUP_TOPIC, ROLLUP_EVERY_SECONDS)
     except Exception:
-        log.exception("metrics.plant_rollup_failed")
+        log.warning("metrics.plant_rollup_failed")
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

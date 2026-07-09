@@ -130,6 +130,64 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
     assert response.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_expired_token_stale_refresh_logs_info_not_exception(client):
+    # A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the end of a
+    # session, not a bug. It logs at info; log.exception (the capture seam) must not fire.
+    stale = AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, None)
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", "stale.refresh.token")
+
+    with (
+        patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
+        patch("apps.auth.infra.security.refresh_session", side_effect=stale),
+        patch("apps.auth.infra.security.log") as log,
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+    log.info.assert_called_once()
+    log.exception.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_expired_token_unexpected_refresh_failure_logs_exception(client):
+    # GoTrue unreachable / 5xx / a bug is not a routine "no" — log.exception is the capture seam.
+    boom = RuntimeError("gotrue unreachable")
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", "some.refresh.token")
+
+    with (
+        patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
+        patch("apps.auth.infra.security.refresh_session", side_effect=boom),
+        patch("apps.auth.infra.security.log") as log,
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+    log.exception.assert_called_once_with("auth.token_refresh_failed")
+    log.info.assert_not_called()
+
+
+def test_log_gotrue_failure_picks_level_by_nature():
+    from apps.auth.infra.router import _log_gotrue_failure
+
+    with patch("apps.auth.infra.router.log") as log:  # 4xx AuthApiError = normal user outcome
+        _log_gotrue_failure("auth.x", AuthApiError("bad link", 400, None))
+        log.info.assert_called_once()
+        log.exception.assert_not_called()
+
+    with patch("apps.auth.infra.router.log") as log:  # 5xx AuthApiError = a bug → captured
+        _log_gotrue_failure("auth.x", AuthApiError("gotrue down", 500, None))
+        log.exception.assert_called_once()
+        log.info.assert_not_called()
+
+    with patch("apps.auth.infra.router.log") as log:  # any other error = a bug → captured
+        _log_gotrue_failure("auth.x", RuntimeError("boom"))
+        log.exception.assert_called_once()
+        log.info.assert_not_called()
+
+
 def test_login_unexpected_exception_returns_503(driver):
     creds = {"email": "x@test.local", "password": "pw"}
     with patch("apps.auth.infra.router.login", side_effect=RuntimeError("unexpected")):

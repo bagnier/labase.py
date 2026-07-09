@@ -57,7 +57,7 @@ async def _increment(key: str, window_seconds: int) -> int | None:
             await session.commit()
             return int(hits or 0)
     except Exception:
-        log.exception("rate_limit.store_failed", key=key)
+        log.warning("rate_limit.store_failed", key=key)
         return None
 
 

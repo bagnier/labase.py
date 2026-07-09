@@ -93,6 +93,20 @@ def _friendly_auth_error(e: AuthApiError) -> str:
     return msg.strip('"')
 
 
+def _log_gotrue_failure(event: str, exc: Exception, **kw: object) -> None:
+    """Log an auth-flow failure at the level its nature warrants.
+
+    A 4xx GoTrue ``AuthApiError`` (expired/single-use link, wrong password, already-confirmed,
+    rate-limited) is a normal user outcome → ``log.info``. Anything else (GoTrue unreachable, a
+    5xx, an unexpected error) is a bug → ``log.exception``, which the capture seam tracks as an
+    issue. Call from inside the ``except`` block so ``log.exception`` sees the live exception.
+    """
+    if isinstance(exc, AuthApiError) and 400 <= exc.status < 500:
+        log.info(event, **kw)
+    else:
+        log.exception(event, **kw)
+
+
 _INFO_MESSAGES: dict[str, str] = {
     "registered_pending_email": "Account created. Please verify your email before signing in.",
     "registered_active": "Account created. You can now sign in.",
@@ -609,8 +623,8 @@ async def forgot_password_endpoint(request: Request) -> Response:
     if email:
         try:
             await request_password_reset(email)
-        except Exception:
-            log.exception("auth.password_reset_request_failed")
+        except Exception as e:
+            _log_gotrue_failure("auth.password_reset_request_failed", e)
     if wants_json(request):
         return JSONResponse({"message": sent_message})
     return templates.TemplateResponse(request, "forgot_password.html", {"info": sent_message})
@@ -634,8 +648,8 @@ async def resend_confirmation_endpoint(
         try:
             await resend_confirmation(email)
             audit(bg, "auth.confirmation_resent", email=email)
-        except Exception:
-            log.exception("auth.confirmation_resend_failed")
+        except Exception as e:
+            _log_gotrue_failure("auth.confirmation_resend_failed", e)
     if wants_json(request):
         return JSONResponse({"message": sent_message})
     return templates.TemplateResponse(request, "login.html", {"info": sent_message, "email": email})
@@ -669,8 +683,8 @@ async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Resp
             {"error": error},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    except Exception:
-        log.exception("auth.password_reset_failed", ip=ip)
+    except Exception as e:
+        _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
         error = "This reset link is invalid or has expired. Please request a new one."
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
@@ -701,8 +715,8 @@ async def confirm_email_endpoint(
     """
     try:
         tokens = await confirm_signup(token_hash, type="email_change")
-    except Exception:
-        log.exception("auth.email_change_failed", token_hash=token_hash[:8])
+    except Exception as e:
+        _log_gotrue_failure("auth.email_change_failed", e, token_hash=token_hash[:8])
         return RedirectResponse(
             "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
         )
@@ -728,8 +742,8 @@ async def confirm_endpoint(
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
-    except Exception:
-        log.exception("auth.confirm_error", token_hash=token_hash[:8])
+    except Exception as e:
+        _log_gotrue_failure("auth.confirm_error", e, token_hash=token_hash[:8])
         return RedirectResponse(
             "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
         )

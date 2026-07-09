@@ -145,7 +145,7 @@ class TaskWorker:
                 while await self.tick():
                     pass  # drain ready tasks before sleeping
             except Exception:
-                log.exception("queue.worker_failed")
+                log.warning("queue.worker_failed")
             await asyncio.sleep(self._interval)
 
     async def tick(self) -> int:

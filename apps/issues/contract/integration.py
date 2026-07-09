@@ -24,6 +24,7 @@ from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.host import Host
+from apps.shared.observability.capture import CaptureDrain
 from apps.shared.observability.errors import ExceptionCaptured
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.queue import ensure_scheduled, register_task_handler
@@ -39,6 +40,8 @@ log = structlog.get_logger("labase.issues")
 
 PURGE_TOPIC = "issues.purge"
 PURGE_EVERY_SECONDS = 86400
+# How often the capture queue is drained into error groups — near-real-time, cheap.
+CAPTURE_DRAIN_SECONDS = 1.0
 
 
 def mount(host: Host) -> None:
@@ -53,6 +56,10 @@ def mount(host: Host) -> None:
     host.events.on(IssueRegressed, _alert_regressed)
     register_task_handler(PURGE_TOPIC, _purge)
     host.on_startup(_plant_purge)
+    # Every ``log.exception`` is queued by the capture processor; this drains it into groups.
+    drain = CaptureDrain(CAPTURE_DRAIN_SECONDS)
+    host.on_startup(drain.start)
+    host.on_shutdown(drain.stop)
 
 
 def _declare_settings() -> SettingsDeclaration:
@@ -125,7 +132,7 @@ async def _send_alert(subject: str, group_id: int) -> None:
             await enqueue_email(session, email)
             await session.commit()
     except Exception:
-        log.exception("issues.alert_enqueue_failed", group_id=group_id)
+        log.warning("issues.alert_enqueue_failed", group_id=group_id)
 
 
 async def _purge(session, _payload: dict) -> None:
@@ -137,7 +144,7 @@ async def _plant_purge() -> None:
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
     except Exception:
-        log.exception("issues.plant_purge_failed")
+        log.warning("issues.plant_purge_failed")
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

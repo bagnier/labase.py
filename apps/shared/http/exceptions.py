@@ -1,12 +1,9 @@
 import structlog
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
-from starlette.background import BackgroundTask
 
-from apps.shared.bus import bus
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.errors import ExceptionCaptured, capture_context
 
 log = structlog.get_logger("labase.app")
 
@@ -40,23 +37,17 @@ async def handle_stale_data(request: Request, _exc: Exception) -> Response:
     return _html_error(request, 409, detail)
 
 
-async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
+async def handle_unhandled_error(request: Request, _exc: Exception) -> Response:
+    # ``log.exception`` (via sys.exc_info under the active except) is now the capture seam —
+    # the capture processor queues this into an error group. No explicit emit needed here.
     log.exception(
         "request.unhandled_error",
         method=request.method,
         path=request.url.path,
     )
     if wants_json(request):
-        response: Response = JSONResponse({"detail": "Internal server error"}, status_code=500)
-    else:
-        response = _html_error(request, 500, "An unexpected error occurred.")
-    # Error tracking rides the response's background slot: after the 500 is sent,
-    # collect() (log-and-skip semantics) hands the exception to whoever tracks it.
-    captured = ExceptionCaptured(
-        exc, source="http", context=capture_context(method=request.method, path=request.url.path)
-    )
-    response.background = BackgroundTask(bus.collect, captured)
-    return response
+        return JSONResponse({"detail": "Internal server error"}, status_code=500)
+    return _html_error(request, 500, "An unexpected error occurred.")
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:

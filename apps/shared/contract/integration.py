@@ -69,4 +69,4 @@ async def _plant_recurring_tasks() -> None:
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
     except Exception:
-        structlog.get_logger("labase.shared.queue").exception("queue.plant_recurring_failed")
+        structlog.get_logger("labase.shared.queue").warning("queue.plant_recurring_failed")

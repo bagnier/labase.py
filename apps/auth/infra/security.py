@@ -13,6 +13,7 @@ from fastapi import (
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
@@ -83,7 +84,7 @@ async def get_current_user(
         try:
             tokens: AuthTokens = await refresh_session(refresh_token)
         except Exception as exc:
-            log.exception("auth.token_refresh_failed")
+            _report_refresh_failure(exc)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
             ) from exc
@@ -105,6 +106,22 @@ async def get_current_user(
         is_admin=is_admin,
         claims=payload,
     )
+
+
+def _is_expected_refresh_failure(exc: Exception) -> bool:
+    """A stale, rotated, or absent refresh token is GoTrue answering a routine 'no' (a 4xx
+    ``AuthApiError``) — the everyday end of a session, not a bug. Everything else (GoTrue
+    unreachable, a 5xx, a network error, our own ``ValueError``) is a genuine failure."""
+    return isinstance(exc, AuthApiError) and 400 <= exc.status < 500
+
+
+def _report_refresh_failure(exc: Exception) -> None:
+    """Log the lapse at the right level; ``log.exception`` is the capture seam for the rest."""
+    if _is_expected_refresh_failure(exc):
+        # A normal end-of-session — expected/operational, not degraded.
+        log.info("auth.token_refresh_rejected", detail=str(exc))
+        return
+    log.exception("auth.token_refresh_failed")
 
 
 async def get_current_admin(

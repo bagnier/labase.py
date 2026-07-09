@@ -45,7 +45,7 @@ async def logout(access_token: str) -> None:
                 },
             )
     except Exception:
-        log.exception("auth.signout_failed")
+        log.warning("auth.signout_failed")
 
 
 async def refresh_session(refresh_token: str) -> AuthTokens:
