@@ -3,8 +3,8 @@
 - [ ] better graphical language
 - [x] réorganiser toute la console pour mettre les features en valeurs en les distingant des settings. issues, logs, metrics ne sont pas visibles
 - [x] http://127.0.0.1:8000/az-az/learning/sessions cards should be displayed one by one
-- [ ] timezone in org, calendar accorded
-- [ ] apps/calendar should display multi-day events
+- [x] timezone in org, calendar accorded
+- [x] apps/calendar should display multi-day events
 - [ ] apps/pages fulltext search
 - [x] blue/black color of open links on http://127.0.0.1:8000/az-az/dashboard
 - [x] org-settings divided into tabs : members, naming, api keys

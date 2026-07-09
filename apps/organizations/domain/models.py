@@ -20,6 +20,8 @@ class Organization(Base, UUIDPk, Versioned, Timestamped):
 
     name: Mapped[str]
     handle: Mapped[str] = mapped_column(default="")
+    # IANA timezone the org's dates are entered and shown in (calendar, etc.).
+    timezone: Mapped[str] = mapped_column(default="UTC")
 
 
 class Membership(Base, Versioned, Timestamped):

@@ -1,5 +1,6 @@
 import uuid
 from typing import Annotated
+from zoneinfo import available_timezones
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -35,6 +36,29 @@ from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
+
+# A curated shortlist for the org timezone picker — any IANA zone is accepted by the
+# endpoint (validated against zoneinfo), but the dropdown stays scannable.
+COMMON_TIMEZONES: tuple[str, ...] = (
+    "UTC",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Europe/Madrid",
+    "Europe/Moscow",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Sao_Paulo",
+    "Africa/Cairo",
+    "Asia/Dubai",
+    "Asia/Kolkata",
+    "Asia/Shanghai",
+    "Asia/Tokyo",
+    "Australia/Sydney",
+    "Pacific/Auckland",
+)
 
 # Collection router — multi-org, not scoped by a handle. Mounted at the root.
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -189,6 +213,9 @@ async def _settings_context(
         raw_invs = await repo.list_invitations(org.id)
         invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
     ctx["invitations"] = invitations
+    # The org's current zone always appears in the picker even if it is not in the shortlist.
+    ctx["timezones"] = sorted({*COMMON_TIMEZONES, org.timezone})
+    ctx["current_timezone"] = org.timezone
     return ctx
 
 
@@ -322,6 +349,40 @@ async def update_org_handle(
             ).model_dump(mode="json")
         )
     return RedirectResponse(url=f"/{handle}/settings?saved=1", status_code=303)
+
+
+@org_router.patch("/timezone", response_class=HTMLResponse)
+async def update_org_timezone(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    repo: OrgRepo,
+    org_id: CurrentOrg,
+    membership: CurrentOwnerMembership,
+):
+    body = await parse_body(request)
+    timezone = str(body.get("timezone", "")).strip()
+    org = or_404(await repo.get(org_id))
+    if timezone not in available_timezones():
+        error = f"'{timezone}' is not a valid timezone."
+        if wants_json(request):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error)
+        org_handle = request.path_params.get("org_handle", org.handle)
+        ctx = await _settings_context(
+            session, current_user, org, org_handle, membership.role.value, repo=repo
+        )
+        ctx["timezone_error"] = error
+        return templates.TemplateResponse(
+            request, "organizations/settings.html", ctx, status_code=422
+        )
+    await repo.set_timezone(org, timezone)
+    if wants_json(request):
+        return JSONResponse(
+            OrganizationWithRoleRead.model_validate(
+                {**org.__dict__, "role": membership.role}
+            ).model_dump(mode="json")
+        )
+    return RedirectResponse(url=f"/{org.handle}/settings?saved=1", status_code=303)
 
 
 # ── Members ─────────────────────────────────────────────────────────────────────

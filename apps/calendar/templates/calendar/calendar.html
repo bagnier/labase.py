@@ -40,8 +40,19 @@
               <div class="min-h-16 rounded-lg border p-1 {% if cell.in_month %}border-base-300 bg-base-100{% else %}border-transparent bg-base-200{% endif %} {% if cell.is_today %}ring-1 ring-primary{% endif %}">
                 <div class="text-xs font-medium {% if cell.in_month %}text-base-content/70{% else %}text-base-content/50{% endif %}">{{ cell.day }}</div>
                 {% for ev in cell.events %}
-                  <a href="/{{ org_handle }}/calendar/{{ ev.id }}"
-                     class="block truncate text-xs mt-0.5 rounded bg-primary/10 text-primary px-1 py-0.5">{{ ev.time }} {{ ev.title }}</a>
+                  {% if ev.multi_day %}
+                    <a href="/{{ org_handle }}/calendar/{{ ev.id }}"
+                       class="block truncate text-xs mt-0.5 bg-primary/20 text-primary px-1 py-0.5 border-l-2 border-primary {{ 'rounded-l' if ev.is_start }} {{ 'rounded-r' if ev.is_end }}">
+                      {% if ev.is_start %}
+                        {{ ev.title }}
+                      {% else %}
+                        <span aria-hidden="true">‹</span> {{ ev.title }}
+                      {% endif %}
+                    </a>
+                  {% else %}
+                    <a href="/{{ org_handle }}/calendar/{{ ev.id }}"
+                       class="block truncate text-xs mt-0.5 rounded bg-primary/10 text-primary px-1 py-0.5">{{ ev.time }} {{ ev.title }}</a>
+                  {% endif %}
                 {% endfor %}
               </div>
             {% endfor %}

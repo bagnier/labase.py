@@ -1,7 +1,8 @@
 import calendar as _calendar
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -40,19 +41,25 @@ def _combine(body: dict, prefix: str) -> str:
     return f"{d} {t}".strip()
 
 
-def _parse_dt(raw: str) -> datetime | None:
+def _org_tz(org: CalendarEvent | object) -> ZoneInfo:
+    """The org's zone, falling back to UTC for a missing/blank value."""
+    return ZoneInfo(getattr(org, "timezone", None) or "UTC")
+
+
+def _parse_dt(raw: str, tz: tzinfo = UTC) -> datetime | None:
+    """Parse a wall-clock string entered in ``tz`` and return the UTC instant."""
     s = raw.strip().replace("T", " ")
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
-            return datetime.strptime(s, fmt).replace(tzinfo=UTC)
+            return datetime.strptime(s, fmt).replace(tzinfo=tz).astimezone(UTC)
         except ValueError:
             continue
     return None
 
 
-def _require_times(start_raw: str, end_raw: str) -> tuple[datetime, datetime]:
-    start = _parse_dt(start_raw)
-    end = _parse_dt(end_raw)
+def _require_times(start_raw: str, end_raw: str, tz: tzinfo = UTC) -> tuple[datetime, datetime]:
+    start = _parse_dt(start_raw, tz)
+    end = _parse_dt(end_raw, tz)
     if start is None or end is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, "A valid start and end are required"
@@ -67,29 +74,59 @@ def _require_times(start_raw: str, end_raw: str) -> tuple[datetime, datetime]:
 # ── view models ─────────────────────────────────────────────────────────────---
 
 
-def _agenda(events: list[CalendarEvent]) -> list[dict]:
-    """Events grouped by day, in chronological order — the list the page renders and tests read."""
+def _agenda(events: list[CalendarEvent], tz: tzinfo = UTC) -> list[dict]:
+    """Events grouped by day, in chronological order — the list the page renders and tests read.
+
+    Stored UTC instants are rendered in the org's ``tz`` (UTC by default)."""
     groups: list[dict] = []
     for e in events:
-        label = f"{e.starts_at:%A}, {e.starts_at.day} {e.starts_at:%B} {e.starts_at.year}"
+        start = e.starts_at.astimezone(tz)
+        end = e.ends_at.astimezone(tz)
+        label = f"{start:%A}, {start.day} {start:%B} {start.year}"
         if not groups or groups[-1]["label"] != label:
             groups.append({"label": label, "events": []})
         groups[-1]["events"].append(
             {
                 "id": str(e.id),
                 "title": e.title,
-                "time": f"{e.starts_at:%H:%M} – {e.ends_at:%H:%M}",
+                "time": f"{start:%H:%M} – {end:%H:%M}",
                 "location": e.location,
             }
         )
     return groups
 
 
-def _month_grid(events: list[CalendarEvent], ref: date, today: date) -> list[list[dict]]:
+def _month_grid(
+    events: list[CalendarEvent], ref: date, today: date, tz: tzinfo = UTC
+) -> list[list[dict]]:
+    # A multi-day event is placed on every day it spans, not just its start day. Each day
+    # marks whether it is the event's start/end so the grid can show the time only on the
+    # first day and a continuation bar on the rest. Spans use the org-local date, so an
+    # event is placed on the days it occupies in the org's timezone.
+    local: dict[uuid.UUID, tuple[date, date, str]] = {}
     by_day: dict[date, list[CalendarEvent]] = {}
     for e in events:
-        by_day.setdefault(e.starts_at.date(), []).append(e)
+        start_local = e.starts_at.astimezone(tz)
+        end_local = e.ends_at.astimezone(tz)
+        local[e.id] = (start_local.date(), end_local.date(), f"{start_local:%H:%M}")
+        span = (end_local.date() - start_local.date()).days
+        for offset in range(span + 1):
+            by_day.setdefault(start_local.date() + timedelta(days=offset), []).append(e)
     cal = _calendar.Calendar(firstweekday=0)  # Monday-first, matching the mockup
+
+    def _cell_event(ev: CalendarEvent, d: date) -> dict:
+        start_date, end_date, start_time = local[ev.id]
+        is_start = start_date == d
+        is_end = end_date == d
+        return {
+            "id": str(ev.id),
+            "title": ev.title,
+            "time": start_time if is_start else "",
+            "is_start": is_start,
+            "is_end": is_end,
+            "multi_day": end_date > start_date,
+        }
+
     weeks = []
     for week in cal.monthdatescalendar(ref.year, ref.month):
         weeks.append(
@@ -99,7 +136,7 @@ def _month_grid(events: list[CalendarEvent], ref: date, today: date) -> list[lis
                     "in_month": d.month == ref.month,
                     "is_today": d == today,
                     "events": [
-                        {"id": str(ev.id), "title": ev.title, "time": f"{ev.starts_at:%H:%M}"}
+                        _cell_event(ev, d)
                         for ev in sorted(by_day.get(d, []), key=lambda x: x.starts_at)
                     ],
                 }
@@ -136,16 +173,17 @@ async def list_events(
         return JSONResponse(
             [CalendarEventRead.model_validate(e).model_dump(mode="json") for e in events]
         )
+    tz = _org_tz(org)
     ref = _ref_month(request)
-    today = clock.now().date()
+    today = clock.now().astimezone(tz).date()
     ctx = await fullpage_context(
         session,
         current_user,
         org=org,
         org_handle=org.handle,
-        agenda=_agenda(events),
+        agenda=_agenda(events, tz),
         has_events=bool(events),
-        weeks=_month_grid(events, ref, today),
+        weeks=_month_grid(events, ref, today, tz),
         month_label=f"{ref:%B} {ref.year}",
         prev_month=_shift_month(ref, -1),
         next_month=_shift_month(ref, 1),
@@ -248,7 +286,7 @@ async def create_event(
             error="A title is required",
         )
     try:
-        start, end = _require_times(_combine(body, "start"), _combine(body, "end"))
+        start, end = _require_times(_combine(body, "start"), _combine(body, "end"), _org_tz(org))
     except HTTPException as exc:
         return await _reject(
             request,
@@ -300,7 +338,9 @@ async def view_event(
         org=org,
         org_handle=org.handle,
         event=event,
-        when=format_event_time(event.starts_at, event.ends_at),
+        when=format_event_time(
+            event.starts_at.astimezone(_org_tz(org)), event.ends_at.astimezone(_org_tz(org))
+        ),
     )
     return templates.TemplateResponse(request, "calendar/view.html", ctx)
 
@@ -323,10 +363,10 @@ async def edit_event_form(
         event=event,
         action=f"calendar/{event.id}",
         is_edit=True,
-        start_date=f"{event.starts_at:%Y-%m-%d}",
-        start_time=f"{event.starts_at:%H:%M}",
-        end_date=f"{event.ends_at:%Y-%m-%d}",
-        end_time=f"{event.ends_at:%H:%M}",
+        start_date=f"{event.starts_at.astimezone(_org_tz(org)):%Y-%m-%d}",
+        start_time=f"{event.starts_at.astimezone(_org_tz(org)):%H:%M}",
+        end_date=f"{event.ends_at.astimezone(_org_tz(org)):%Y-%m-%d}",
+        end_time=f"{event.ends_at.astimezone(_org_tz(org)):%H:%M}",
     )
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
 
@@ -351,7 +391,7 @@ async def update_event(
     start_raw, end_raw = _combine(body, "start"), _combine(body, "end")
     if start_raw or end_raw:
         try:
-            event.starts_at, event.ends_at = _require_times(start_raw, end_raw)
+            event.starts_at, event.ends_at = _require_times(start_raw, end_raw, _org_tz(org))
         except HTTPException as exc:
             return await _reject(
                 request,

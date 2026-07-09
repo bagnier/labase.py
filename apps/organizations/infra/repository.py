@@ -134,6 +134,9 @@ class OrganizationRepository(BaseRepository[Organization]):
     async def update_handle(self, org: Organization, handle: str) -> None:
         org.handle = handle
 
+    async def set_timezone(self, org: Organization, timezone: str) -> None:
+        org.timezone = timezone
+
     async def create_invitation(
         self, org_id: uuid.UUID, email: str, role: OrgRole, invited_by: uuid.UUID
     ) -> OrgInvitation:

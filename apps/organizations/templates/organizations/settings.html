@@ -78,6 +78,38 @@
               {% endif %}
             </div>
           </section>
+          <section class="card-panel">
+            <div class="card-body space-y-4">
+              <h2 class="card-title text-sm font-semibold">Timezone</h2>
+              {% if role == "owner" %}
+                <form hx-patch="/{{ org_handle }}/timezone"
+                      hx-target="body"
+                      hx-push-url="true"
+                      class="space-y-3">
+                  <fieldset class="fieldset">
+                    <legend class="fieldset-legend" id="org-tz-label">Timezone</legend>
+                    <select name="timezone" aria-labelledby="org-tz-label" class="select w-full">
+                      {% for tz in timezones %}
+                        <option value="{{ tz }}" {% if tz == current_timezone %}selected{% endif %}>{{ tz }}</option>
+                      {% endfor %}
+                    </select>
+                    <p class="label text-xs">Dates in the calendar are entered and shown in this zone.</p>
+                  </fieldset>
+                  {% if timezone_error %}
+                    <p class="text-xs text-error">{{ timezone_error }}</p>
+                  {% endif %}
+                  <div>
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                  </div>
+                </form>
+              {% else %}
+                <p class="text-sm">
+                  <span class="font-mono">{{ current_timezone }}</span>
+                  <span class="text-base-content/60">— only an owner can change the timezone.</span>
+                </p>
+              {% endif %}
+            </div>
+          </section>
         </div>
       </div>
       {# ── Members ────────────────────────────────────────────────────────── #}
