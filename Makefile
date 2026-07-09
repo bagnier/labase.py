@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed migrate schema schema-supabase test test-e2e perf-smoke ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -41,6 +41,11 @@ db-reset:
 
 db-seed:
 	PYTHONPATH=. uv run python scripts/seed.py
+
+# Create the user if missing, then promote to server admin: make promote-admin EMAIL=you@example.com [PASSWORD=…]
+# Runs from the host, so targets localhost (.env.test). Override with ENV_FILE=.env to hit a linked remote.
+promote-admin:
+	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env.test) PYTHONPATH=. uv run python scripts/promote_admin.py $(EMAIL) $(PASSWORD)
 
 migrate:
 	supabase db push
