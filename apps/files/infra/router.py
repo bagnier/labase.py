@@ -165,6 +165,18 @@ async def upload_file(
         filename=org_file.filename,
     )
 
+    if wants_json(request):
+        # Lets other surfaces (e.g. the pages editor's image upload) get a usable
+        # reference back instead of the files-list HTML fragment.
+        return JSONResponse(
+            {
+                "id": str(org_file.id),
+                "filename": org_file.filename,
+                "content_type": org_file.content_type,
+                "url": f"/{org.handle}/files/{org_file.id}/download",
+            },
+            status_code=status.HTTP_201_CREATED,
+        )
     files = await repo.all()
     return await _render(request, session, current_user, files, org, settings)
 

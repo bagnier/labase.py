@@ -57,6 +57,44 @@ function applyImage(view) {
   view.focus();
 }
 
+function replaceText(view, needle, replacement) {
+  const idx = view.state.doc.toString().indexOf(needle);
+  if (idx >= 0)
+    view.dispatch({ changes: { from: idx, to: idx + needle.length, insert: replacement } });
+}
+
+// Upload an image to the org's file storage (the files app) and embed it as Markdown.
+function uploadImage(view, uploadUrl) {
+  if (!uploadUrl) return applyImage(view);
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const placeholder = `![uploading ${file.name}…]()`;
+    const { from, to } = view.state.selection.main;
+    view.dispatch({ changes: { from, to, insert: placeholder } });
+    view.focus();
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        body,
+      });
+      if (!res.ok) throw new Error(`upload failed: ${res.status}`);
+      const data = await res.json();
+      replaceText(view, placeholder, `![${file.name}](${data.url})`);
+    } catch {
+      replaceText(view, placeholder, '');
+      alert('Image upload failed.');
+    }
+  });
+  input.click();
+}
+
 function applyTable(view) {
   const { from } = view.state.selection.main;
   const insert = `| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |`;
@@ -97,7 +135,7 @@ const BUTTONS = [
     action: (v) => applyInline(v, '~~', 'strikethrough'),
   },
   { sep: true },
-  { icon: 'image', title: 'Image', action: (v) => applyImage(v) },
+  { icon: 'image', title: 'Upload image', action: (v, ctx) => uploadImage(v, ctx.uploadUrl) },
   { icon: 'table', title: 'Table', action: (v) => applyTable(v) },
   {
     icon: 'minus',
@@ -111,7 +149,7 @@ const BUTTONS = [
   { icon: 'quotes', title: 'Blockquote', action: (v) => applyLinePrefix(v, '> ') },
 ];
 
-function buildToolbar(view) {
+function buildToolbar(view, ctx) {
   const bar = document.createElement('div');
   bar.className = 'cm-toolbar';
   for (const btn of BUTTONS) {
@@ -135,7 +173,7 @@ function buildToolbar(view) {
     }
     el.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      btn.action(view);
+      btn.action(view, ctx);
     });
     bar.appendChild(el);
   }
@@ -154,7 +192,8 @@ window.initMarkdownEditor = (textarea) => {
     parent: wrapper,
   });
 
-  wrapper.insertBefore(buildToolbar(view), wrapper.firstChild);
+  const ctx = { uploadUrl: textarea.dataset.uploadUrl || '' };
+  wrapper.insertBefore(buildToolbar(view, ctx), wrapper.firstChild);
 
   textarea.closest('form').addEventListener('htmx:configRequest', (e) => {
     e.detail.parameters.content = view.state.doc.toString();
