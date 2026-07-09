@@ -11,7 +11,7 @@
 - [x] org-settings save > confirm
 - [x] org-settings save alignement
 - [x] console setting for organizations to limit the number of invitation
-- [ ] profile divided into tabs : profile, organizations, email, authentication
+- [x] profile divided into tabs : profile, organizations, email, authentication
 - [ ] console Per-organisation overrides, org finding uses current log  filter widgets
 - [x] issues dont use the same graphic language that other
 - [x] console load, where are the results ?

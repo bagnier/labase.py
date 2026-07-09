@@ -13,6 +13,11 @@ class ProfileBrowserMixin(BrowserBase):
     def _profile_url(self) -> str:
         return f"{self.base_url}/profile"
 
+    def _open_profile_tab(self, label: str) -> None:
+        """Profile sections live in client-side daisyUI tabs; check the tab radio so
+        its panel is visible before interacting with the controls inside it."""
+        self.page.get_by_role("tab", name=label, exact=True).check()
+
     def view_profile(self) -> None:
         self.last_response = self.page.goto(self._profile_url(), wait_until="load")
 
@@ -23,6 +28,7 @@ class ProfileBrowserMixin(BrowserBase):
         delete_user_if_exists(new_email)
         self._email_change_requested_at = datetime.now(UTC)
         self.page.goto(self._profile_url(), wait_until="load")
+        self._open_profile_tab("Email")
         section = self.page.locator("[data-email-change]")
         section.get_by_label("New email").fill(new_email)
         section.get_by_label("Confirm with your password").fill(password)

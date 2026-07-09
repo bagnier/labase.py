@@ -11,244 +11,305 @@
       <h1 class="text-lg font-semibold">Profile</h1>
       <p class="text-sm text-base-content/70 mt-0.5">Manage your personal information.</p>
     </div>
-    <div class="card-panel">
-      <div class="card-body">
-        <div class="flex items-center gap-5 mb-6">
-          {% if avatar_enabled and profile and profile.avatar_path %}
-            <img data-avatar
-                 src="/profile/avatar/{{ profile.auth_user_id }}"
-                 alt="Your avatar"
-                 class="w-16 h-16 rounded-2xl object-cover flex-none" />
-          {% else %}
-            <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center flex-none">
-              <span class="text-2xl font-bold text-primary">{{ (profile_handle or user.email) | first | upper }}</span>
-            </div>
-          {% endif %}
-          <div>
-            <p class="font-semibold">{{ profile_handle or user.email }}</p>
-            <p class="text-sm text-base-content/70 mt-0.5">
-              Member since
-              {% if profile and profile.created_at %}
-                <time datetime="{{ profile.created_at.strftime('%Y-%m-%d') }}">{{ profile.created_at.strftime("%Y-%m-%d") }}</time>
-              {% else %}
-                —
-              {% endif %}
-            </p>
-          </div>
-        </div>
-        {% if avatar_enabled %}
-          <div class="mb-6 space-y-3" data-avatar-upload>
-            {{ alert('error', avatar_error) }}
-            {{ alert('success', avatar_info) }}
-            <form method="post"
-                  action="/profile/avatar"
-                  enctype="multipart/form-data"
-                  class="flex items-center gap-2">
-              <input type="file"
-                     name="file"
-                     accept="image/png,image/jpeg,image/webp"
-                     required
-                     aria-label="Avatar image"
-                     class="file-input file-input-sm" />
-              <button type="submit" class="btn btn-sm">
-                {{ "Replace photo" if (profile and profile.avatar_path) else "Upload photo" }}
-              </button>
-            </form>
-          </div>
-        {% endif %}
-        {{ alert('success', success) }}
-        {% if handle_enabled %}
-          <form method="post"
-                action="/profile"
-                hx-post="/profile"
-                hx-target="body"
-                class="space-y-4"
-                data-handle-form>
-            <fieldset class="fieldset">
-              <legend class="fieldset-legend" id="handle-label">Handle</legend>
-              <input id="handle"
-                     name="handle"
-                     type="text"
-                     placeholder="your-handle"
-                     aria-labelledby="handle-label"
-                     value="{{ profile.handle if (profile and profile.handle) else '' }}"
-                     class="input w-full font-mono {% if error %}input-error{% endif %}" />
-              {% if error %}<p class="label text-xs text-error">{{ error }}</p>{% endif %}
-            </fieldset>
-            {{ input_field("email", "email", label="Email",
-                        value=user.email, disabled=true,
-                        hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
-            <div class="pt-1">
-              <button type="submit" class="btn btn-primary">Save changes</button>
-            </div>
-          </form>
-        {% else %}
-          {{ input_field("email", "email", label="Email",
-                    value=user.email, disabled=true,
-                    hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
-        {% endif %}
-      </div>
-    </div>
-    <div class="card-panel">
-      <div class="card-body space-y-4">
-        <h2 class="card-title text-sm font-semibold">My organisations</h2>
-        {% if org_nav %}
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {% for org in org_nav %}
-              <div data-organisation-card="{{ org.name }}"
-                   class="border border-base-300 rounded-box p-4 flex items-center justify-between">
-                <h3 class="text-sm font-semibold">{{ org.name }}</h3>
-                <a href="/{{ org.handle }}/dashboard"
-                   class="text-sm font-medium text-primary hover:underline">Open →</a>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-        <form hx-post="/organizations"
-              hx-target="#org-create-result"
-              hx-swap="innerHTML"
-              class="flex gap-2">
-          <input type="text"
-                 name="name"
-                 placeholder="Name of the new organisation"
-                 aria-label="Organisation name"
-                 required
-                 minlength="1"
-                 maxlength="255"
-                 class="input w-full flex-1" />
-          <button type="submit" class="btn btn-primary flex-none">Create</button>
-        </form>
-        <div id="org-create-result" aria-live="polite"></div>
-      </div>
-    </div>
-    {% if email_change_enabled %}
-      <section class="card-panel" data-email-change>
-        <div class="card-body">
-          <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
-          <p class="text-sm text-base-content/70 mb-3">Your address changes once you follow the link sent to the new mailbox.</p>
-          {{ alert('error', email_error) }}
-          {{ alert('success', email_info) }}
-          <form method="post" action="/profile/email" class="space-y-4 max-w-sm">
-            {{ input_field("new_email", "new_email", type="email",
-                        label="New email", required=true) }}
-            {{ input_field("email_current_password", "current_password", type="password",
-                        label="Confirm with your password", required=true) }}
-            <button type="submit" class="btn btn-primary">Send confirmation link</button>
-          </form>
-        </div>
-      </section>
+    {# Keep the tab that owns a just-rendered alert/enrolment open across the
+       full-page reload a form POST triggers, so its message stays visible. #}
+    {% set active_tab = "profile" %}
+    {% if password_error or password_info or twofa_error or twofa_info or twofa_enrollment or passkey_error %}
+      {% set active_tab = "authentication" %}
+    {% elif email_error or email_info %}
+      {% set active_tab = "email" %}
     {% endif %}
-    <section class="card-panel">
-      <div class="card-body">
-        <h2 class="card-title text-sm font-semibold mb-3">Password</h2>
-        {{ alert('error', password_error) }}
-        {{ alert('success', password_info) }}
-        <form method="post" action="/profile/password" class="space-y-4 max-w-sm">
-          {{ input_field("current_password", "current_password", type="password",
-                    label="Current password", required=true) }}
-          {{ input_field("new_password", "new_password", type="password",
-                    label="New password", required=true) }}
-          <button type="submit" class="btn btn-primary">Change password</button>
-        </form>
-      </div>
-    </section>
-    {% if two_factor_enabled %}
-      <section class="card-panel" data-twofa>
-        <div class="card-body">
-          <h2 class="card-title text-sm font-semibold mb-3">
-            Two-factor authentication
-            {% if twofa_active %}<span class="badge badge-sm badge-success" data-twofa-active>enabled</span>{% endif %}
-          </h2>
-          {{ alert('error', twofa_error) }}
-          {{ alert('success', twofa_info) }}
-          {% if twofa_enrollment %}
-            <p class="text-sm text-base-content/70 mb-2">
-              Add this secret to your authenticator app, then enter the 6-digit code:
-            </p>
-            <code class="block text-xs bg-base-200 rounded-box p-3 break-all mb-3"
-                  data-totp-secret="{{ twofa_enrollment.secret }}">{{ twofa_enrollment.uri }}</code>
-            <form method="post" action="/profile/2fa/verify" class="space-y-4 max-w-sm">
-              <input type="hidden"
-                     name="factor_id"
-                     value="{{ twofa_enrollment.factor_id }}">
-              {{ input_field("twofa_code", "code", label="Authenticator code",
-                            placeholder="123456", required=true) }}
-              <button type="submit" class="btn btn-primary">Confirm</button>
-            </form>
-          {% elif twofa_active %}
-            <p class="text-sm text-base-content/70">Sign-in now asks for a code after the password.</p>
-          {% else %}
-            <p class="text-sm text-base-content/70 mb-3">Require a code from your authenticator app at sign-in.</p>
-            <form method="post" action="/profile/2fa/enroll">
-              <button type="submit" class="btn">Enable two-factor</button>
-            </form>
-          {% endif %}
-        </div>
-      </section>
-    {% endif %}
-    {% if passkeys_enabled %}
-      <section class="card-panel" data-passkeys>
-        <div class="card-body">
-          <h2 class="card-title text-sm font-semibold mb-3">Passkeys</h2>
-          {{ alert('error', passkey_error) }}
-          <p class="text-sm text-base-content/70 mb-3">
-            Sign in with your device's screen lock or security key — no password typed.
-          </p>
-          {% if passkeys %}
-            <ul class="list-panel mb-3">
-              {% for pk in passkeys %}
-                <li class="flex items-center justify-between gap-3 p-3"
-                    data-passkey-name="{{ pk.friendly_name }}">
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium truncate">{{ pk.friendly_name }}</p>
-                    <p class="text-xs text-base-content/60">Added {{ pk.created_at[:10] }}</p>
+    <div role="tablist" class="tabs tabs-lift">
+      {# ── Profile ────────────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="profile-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Profile"
+             {% if active_tab == "profile" %}checked{% endif %} />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <div class="card-panel">
+            <div class="card-body">
+              <div class="flex items-center gap-5 mb-6">
+                {% if avatar_enabled and profile and profile.avatar_path %}
+                  <img data-avatar
+                       src="/profile/avatar/{{ profile.auth_user_id }}"
+                       alt="Your avatar"
+                       class="w-16 h-16 rounded-2xl object-cover flex-none" />
+                {% else %}
+                  <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center flex-none">
+                    <span class="text-2xl font-bold text-primary">{{ (profile_handle or user.email) | first | upper }}</span>
                   </div>
-                  <form method="post" action="/profile/passkeys/{{ pk.id }}/delete">
-                    <button type="submit" class="btn btn-xs btn-error btn-outline">Remove</button>
+                {% endif %}
+                <div>
+                  <p class="font-semibold">{{ profile_handle or user.email }}</p>
+                  <p class="text-sm text-base-content/70 mt-0.5">
+                    Member since
+                    {% if profile and profile.created_at %}
+                      <time datetime="{{ profile.created_at.strftime('%Y-%m-%d') }}">{{ profile.created_at.strftime("%Y-%m-%d") }}</time>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </p>
+                </div>
+              </div>
+              {% if avatar_enabled %}
+                <div class="mb-6 space-y-3" data-avatar-upload>
+                  {{ alert('error', avatar_error) }}
+                  {{ alert('success', avatar_info) }}
+                  <form method="post"
+                        action="/profile/avatar"
+                        enctype="multipart/form-data"
+                        class="flex items-center gap-2">
+                    <input type="file"
+                           name="file"
+                           accept="image/png,image/jpeg,image/webp"
+                           required
+                           aria-label="Avatar image"
+                           class="file-input file-input-sm" />
+                    <button type="submit" class="btn btn-sm">
+                      {{ "Replace photo" if (profile and profile.avatar_path) else "Upload photo" }}
+                    </button>
                   </form>
-                </li>
-              {% endfor %}
-            </ul>
+                </div>
+              {% endif %}
+              {{ alert('success', success) }}
+              {% if handle_enabled %}
+                <form method="post"
+                      action="/profile"
+                      hx-post="/profile"
+                      hx-target="body"
+                      class="space-y-4"
+                      data-handle-form>
+                  <fieldset class="fieldset">
+                    <legend class="fieldset-legend" id="handle-label">Handle</legend>
+                    <input id="handle"
+                           name="handle"
+                           type="text"
+                           placeholder="your-handle"
+                           aria-labelledby="handle-label"
+                           value="{{ profile.handle if (profile and profile.handle) else '' }}"
+                           class="input w-full font-mono {% if error %}input-error{% endif %}" />
+                    {% if error %}<p class="label text-xs text-error">{{ error }}</p>{% endif %}
+                  </fieldset>
+                  {{ input_field("email", "email", label="Email",
+                                    value=user.email, disabled=true,
+                                    hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
+                  <div class="pt-1">
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                  </div>
+                </form>
+              {% else %}
+                {{ input_field("email", "email", label="Email",
+                                value=user.email, disabled=true,
+                                hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
+              {% endif %}
+            </div>
+          </div>
+          <section class="card-panel">
+            <div class="card-body">
+              <h2 class="card-title text-sm font-semibold mb-3">Session</h2>
+              <form method="post" action="/auth/logout">
+                <button type="submit" class="btn">
+                  <i class="ph ph-sign-out ph-4" aria-hidden="true"></i>
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </section>
+          {% if account_deletion_enabled %}
+            <section class="card bg-base-100 border border-error/30 shadow-sm"
+                     data-account-deletion>
+              <div class="card-body">
+                <h2 class="card-title text-sm font-semibold mb-3">Danger zone</h2>
+                <p class="text-sm text-base-content/70 mb-4">
+                  Deleting your account is irreversible: your personal organisation and its
+                  data are removed. Organisations you share with others survive without you.
+                </p>
+                {{ alert('error', deletion_error) }}
+                <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
+                  {{ input_field("deletion_password", "current_password", type="password",
+                                    label="Your password", required=true) }}
+                  <button type="submit" class="btn btn-error btn-outline">Delete my account</button>
+                </form>
+              </div>
+            </section>
           {% endif %}
-          <button type="button" class="btn" data-passkey-register>
-            <i class="ph ph-fingerprint" aria-hidden="true"></i>
-            Add a passkey
-          </button>
-          <p class="text-xs text-error mt-2 hidden"
-             data-passkey-error
-             aria-live="polite"></p>
-          <script src="/static/js/passkeys.js" defer></script>
         </div>
-      </section>
-    {% endif %}
-    <section class="card-panel">
-      <div class="card-body">
-        <h2 class="card-title text-sm font-semibold mb-3">Session</h2>
-        <form method="post" action="/auth/logout">
-          <button type="submit" class="btn">
-            <i class="ph ph-sign-out ph-4" aria-hidden="true"></i>
-            Sign out
-          </button>
-        </form>
       </div>
-    </section>
-    {% if account_deletion_enabled %}
-      <section class="card bg-base-100 border border-error/30 shadow-sm"
-               data-account-deletion>
-        <div class="card-body">
-          <h2 class="card-title text-sm font-semibold mb-3">Danger zone</h2>
-          <p class="text-sm text-base-content/70 mb-4">
-            Deleting your account is irreversible: your personal organisation and its
-            data are removed. Organisations you share with others survive without you.
-          </p>
-          {{ alert('error', deletion_error) }}
-          <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
-            {{ input_field("deletion_password", "current_password", type="password",
-                        label="Your password", required=true) }}
-            <button type="submit" class="btn btn-error btn-outline">Delete my account</button>
-          </form>
+      {# ── Organizations ──────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="profile-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Organisations" />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="card-panel">
+          <div class="card-body space-y-4">
+            <h2 class="card-title text-sm font-semibold">My organisations</h2>
+            {% if org_nav %}
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {% for org in org_nav %}
+                  <div data-organisation-card="{{ org.name }}"
+                       class="border border-base-300 rounded-box p-4 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold">{{ org.name }}</h3>
+                    <a href="/{{ org.handle }}/dashboard"
+                       class="text-sm font-medium text-primary hover:underline">Open →</a>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+            <form hx-post="/organizations"
+                  hx-target="#org-create-result"
+                  hx-swap="innerHTML"
+                  class="flex gap-2">
+              <input type="text"
+                     name="name"
+                     placeholder="Name of the new organisation"
+                     aria-label="Organisation name"
+                     required
+                     minlength="1"
+                     maxlength="255"
+                     class="input w-full flex-1" />
+              <button type="submit" class="btn btn-primary flex-none">Create</button>
+            </form>
+            <div id="org-create-result" aria-live="polite"></div>
+          </div>
         </div>
-      </section>
-    {% endif %}
+      </div>
+      {# ── Email ──────────────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="profile-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Email"
+             {% if active_tab == "email" %}checked{% endif %} />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        {% if email_change_enabled %}
+          <section class="card-panel" data-email-change>
+            <div class="card-body">
+              <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
+              <p class="text-sm text-base-content/70 mb-3">Your address changes once you follow the link sent to the new mailbox.</p>
+              {{ alert('error', email_error) }}
+              {{ alert('success', email_info) }}
+              <form method="post" action="/profile/email" class="space-y-4 max-w-sm">
+                {{ input_field("new_email", "new_email", type="email",
+                                label="New email", required=true) }}
+                {{ input_field("email_current_password", "current_password", type="password",
+                                label="Confirm with your password", required=true) }}
+                <button type="submit" class="btn btn-primary">Send confirmation link</button>
+              </form>
+            </div>
+          </section>
+        {% else %}
+          <section class="card-panel">
+            <div class="card-body">
+              <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
+              {{ input_field("email_ro", "email", label="Email",
+                            value=user.email, disabled=true, hint="Email cannot be changed.") }}
+            </div>
+          </section>
+        {% endif %}
+      </div>
+      {# ── Authentication ─────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="profile-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Authentication"
+             {% if active_tab == "authentication" %}checked{% endif %} />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <section class="card-panel">
+            <div class="card-body">
+              <h2 class="card-title text-sm font-semibold mb-3">Password</h2>
+              {{ alert('error', password_error) }}
+              {{ alert('success', password_info) }}
+              <form method="post" action="/profile/password" class="space-y-4 max-w-sm">
+                {{ input_field("current_password", "current_password", type="password",
+                                label="Current password", required=true) }}
+                {{ input_field("new_password", "new_password", type="password",
+                                label="New password", required=true) }}
+                <button type="submit" class="btn btn-primary">Change password</button>
+              </form>
+            </div>
+          </section>
+          {% if two_factor_enabled %}
+            <section class="card-panel" data-twofa>
+              <div class="card-body">
+                <h2 class="card-title text-sm font-semibold mb-3">
+                  Two-factor authentication
+                  {% if twofa_active %}<span class="badge badge-sm badge-success" data-twofa-active>enabled</span>{% endif %}
+                </h2>
+                {{ alert('error', twofa_error) }}
+                {{ alert('success', twofa_info) }}
+                {% if twofa_enrollment %}
+                  <p class="text-sm text-base-content/70 mb-2">
+                    Add this secret to your authenticator app, then enter the 6-digit code:
+                  </p>
+                  <code class="block text-xs bg-base-200 rounded-box p-3 break-all mb-3"
+                        data-totp-secret="{{ twofa_enrollment.secret }}">{{ twofa_enrollment.uri }}</code>
+                  <form method="post" action="/profile/2fa/verify" class="space-y-4 max-w-sm">
+                    <input type="hidden"
+                           name="factor_id"
+                           value="{{ twofa_enrollment.factor_id }}">
+                    {{ input_field("twofa_code", "code", label="Authenticator code",
+                                        placeholder="123456", required=true) }}
+                    <button type="submit" class="btn btn-primary">Confirm</button>
+                  </form>
+                {% elif twofa_active %}
+                  <p class="text-sm text-base-content/70">Sign-in now asks for a code after the password.</p>
+                {% else %}
+                  <p class="text-sm text-base-content/70 mb-3">Require a code from your authenticator app at sign-in.</p>
+                  <form method="post" action="/profile/2fa/enroll">
+                    <button type="submit" class="btn">Enable two-factor</button>
+                  </form>
+                {% endif %}
+              </div>
+            </section>
+          {% endif %}
+          {% if passkeys_enabled %}
+            <section class="card-panel" data-passkeys>
+              <div class="card-body">
+                <h2 class="card-title text-sm font-semibold mb-3">Passkeys</h2>
+                {{ alert('error', passkey_error) }}
+                <p class="text-sm text-base-content/70 mb-3">
+                  Sign in with your device's screen lock or security key — no password typed.
+                </p>
+                {% if passkeys %}
+                  <ul class="list-panel mb-3">
+                    {% for pk in passkeys %}
+                      <li class="flex items-center justify-between gap-3 p-3"
+                          data-passkey-name="{{ pk.friendly_name }}">
+                        <div class="min-w-0">
+                          <p class="text-sm font-medium truncate">{{ pk.friendly_name }}</p>
+                          <p class="text-xs text-base-content/60">Added {{ pk.created_at[:10] }}</p>
+                        </div>
+                        <form method="post" action="/profile/passkeys/{{ pk.id }}/delete">
+                          <button type="submit" class="btn btn-xs btn-error btn-outline">Remove</button>
+                        </form>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+                <button type="button" class="btn" data-passkey-register>
+                  <i class="ph ph-fingerprint" aria-hidden="true"></i>
+                  Add a passkey
+                </button>
+                <p class="text-xs text-error mt-2 hidden"
+                   data-passkey-error
+                   aria-live="polite"></p>
+                <script src="/static/js/passkeys.js" defer></script>
+              </div>
+            </section>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 {% endblock %}

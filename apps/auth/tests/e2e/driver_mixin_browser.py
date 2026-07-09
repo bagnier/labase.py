@@ -130,8 +130,14 @@ class AuthBrowserMixin(BrowserBase):
         self.page.get_by_role("button", name="Set new password").click()
         self.page.wait_for_url(f"{self.base_url}/auth/login*", timeout=5000)
 
+    def _open_profile_auth_tab(self) -> None:
+        """Password/2FA/passkeys live in the profile page's "Authentication" tab
+        (client-side daisyUI tabs); check its radio so the panel is visible."""
+        self.page.get_by_role("tab", name="Authentication", exact=True).check()
+
     def change_password(self, current_password: str, new_password: str) -> None:
         self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self._open_profile_auth_tab()
         self.page.get_by_label("Current password").fill(current_password)
         self.page.get_by_label("New password").fill(new_password)
         self.page.get_by_role("button", name="Change password").click()
@@ -196,6 +202,7 @@ class AuthBrowserMixin(BrowserBase):
         import pyotp
 
         self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self._open_profile_auth_tab()
         self.page.locator("[data-twofa]").get_by_role("button", name="Enable two-factor").click()
         self.page.wait_for_selector("[data-totp-secret]", timeout=5000)
         self._totp_secret = self.page.locator("[data-totp-secret]").get_attribute(
@@ -209,6 +216,7 @@ class AuthBrowserMixin(BrowserBase):
 
     def assert_twofa_enabled(self) -> None:
         self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self._open_profile_auth_tab()
         self.page.wait_for_selector("[data-twofa-active]", timeout=5000)
 
     def assert_mfa_challenge(self) -> None:
