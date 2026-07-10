@@ -12,10 +12,16 @@ from apps.shared.settings import get_settings
 
 THEME_APP = "appearance"
 THEME_KEY = "theme"
-DEFAULT_THEME = "light"
+DEFAULT_THEME = "labase-light"
 
-# The themes enabled in static/css/input.css (@plugin "daisyui" { themes: ... }).
+# The themes available in static/css/input.css. The two `labase-*` names are custom
+# themes declared with `@plugin "daisyui/theme"` (they carry the product identity and
+# are the light/dark defaults); the rest are the built-in daisyUI themes kept enabled
+# in the `@plugin "daisyui" { themes: ... }` block as an admin-selectable roster.
+# `scripts/check_design_tokens.py` asserts this list stays in sync with input.css.
 THEMES = [
+    "labase-light",
+    "labase-dark",
     "light",
     "dark",
     "cupcake",
