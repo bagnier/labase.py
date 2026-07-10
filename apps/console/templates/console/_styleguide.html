@@ -16,7 +16,7 @@
   <!-- Charts -->
   <div x-show="sub === 'charts'" x-cloak class="space-y-12">
     <section id="sg-charts" aria-labelledby="sg-charts-h" class="space-y-4">
-      <h2 id="sg-charts-h" class="text-lg font-semibold">Charts</h2>
+      <h2 id="sg-charts-h" class="section-title">Charts</h2>
       <p class="text-sm text-base-content/70">
         ApexCharts, themed from the daisyUI variables — switch the theme above and they recolor live.
       </p>
@@ -158,16 +158,21 @@
     <section id="sg-typography"
              aria-labelledby="sg-typography-h"
              class="space-y-3">
-      <h2 id="sg-typography-h" class="text-lg font-semibold">Typography</h2>
-      <h1 class="text-3xl font-bold">Heading 1</h1>
-      <h2 class="text-2xl font-semibold">Heading 2</h2>
-      <h3 class="text-xl font-semibold">Heading 3</h3>
-      <p class="text-base">
+      <h2 id="sg-typography-h" class="section-title">Typography</h2>
+      <p class="text-sm text-base-content/70">
+        The shared type ramp — templates use these classes instead of hand-spelling sizes.
+      </p>
+      <div class="space-y-2">
+        <p class="page-title">Page title <span class="meta-text font-normal normal-case tracking-normal">.page-title</span></p>
+        <p class="section-title">Section title <span class="meta-text font-normal">.section-title</span></p>
+        <p class="subsection-title">Subsection title <span class="meta-text font-normal">.subsection-title</span></p>
+        <p class="eyebrow">Eyebrow label <span class="meta-text font-normal normal-case tracking-normal">.eyebrow</span></p>
+        <p class="meta-text">Meta text — .meta-text</p>
+      </div>
+      <p class="text-base pt-2">
         Body text with a <a class="link link-primary" href="#">primary link</a> and some
         <code class="text-sm">inline code</code>.
       </p>
-      <p class="text-sm text-base-content/70">Muted secondary text.</p>
-      <p class="text-xs text-base-content/50">Small meta text.</p>
       <div class="flex flex-wrap items-center gap-2">
         <kbd class="kbd">⌘</kbd><kbd class="kbd">K</kbd>
         <span class="text-sm text-base-content/60">keyboard keys</span>
@@ -177,7 +182,7 @@
   <!-- Actions -->
   <div x-show="sub === 'actions'" x-cloak class="space-y-12">
     <section id="sg-buttons" aria-labelledby="sg-buttons-h" class="space-y-4">
-      <h2 id="sg-buttons-h" class="text-lg font-semibold">Buttons</h2>
+      <h2 id="sg-buttons-h" class="section-title">Buttons</h2>
       <div class="flex flex-wrap gap-3">
         <button class="btn">Default</button>
         <button class="btn btn-primary">Primary</button>
@@ -206,7 +211,7 @@
       </div>
     </section>
     <section id="sg-badges" aria-labelledby="sg-badges-h" class="space-y-4">
-      <h2 id="sg-badges-h" class="text-lg font-semibold">Badges</h2>
+      <h2 id="sg-badges-h" class="section-title">Badges</h2>
       <div class="flex flex-wrap items-center gap-3">
         <span class="badge">neutral</span>
         <span class="badge badge-primary">primary</span>
@@ -223,7 +228,7 @@
       </div>
     </section>
     <section id="sg-steps" aria-labelledby="sg-steps-h" class="space-y-4">
-      <h2 id="sg-steps-h" class="text-lg font-semibold">Steps</h2>
+      <h2 id="sg-steps-h" class="section-title">Steps</h2>
       <ul class="steps">
         <li class="step step-primary">Register</li>
         <li class="step step-primary">Verify</li>
@@ -235,7 +240,7 @@
   <!-- Forms -->
   <div x-show="sub === 'forms'" x-cloak class="space-y-12">
     <section id="sg-forms" aria-labelledby="sg-forms-h" class="space-y-4">
-      <h2 id="sg-forms-h" class="text-lg font-semibold">Forms</h2>
+      <h2 id="sg-forms-h" class="section-title">Forms</h2>
       <div class="grid gap-4 md:grid-cols-2">
         <div class="card-panel">
           <div class="card-body gap-4">
@@ -280,7 +285,7 @@
       </div>
     </section>
     <section id="sg-toggles" aria-labelledby="sg-toggles-h" class="space-y-4">
-      <h2 id="sg-toggles-h" class="text-lg font-semibold">Toggles &amp; checks</h2>
+      <h2 id="sg-toggles-h" class="section-title">Toggles &amp; checks</h2>
       <div class="flex flex-wrap items-center gap-6">
         <label class="label cursor-pointer gap-3">
           <input type="checkbox" class="toggle toggle-primary" checked />
@@ -301,7 +306,7 @@
       </div>
     </section>
     <section id="sg-rating" aria-labelledby="sg-rating-h" class="space-y-4">
-      <h2 id="sg-rating-h" class="text-lg font-semibold">Rating</h2>
+      <h2 id="sg-rating-h" class="section-title">Rating</h2>
       <div class="rating" aria-label="Rating">
         <input type="radio"
                name="sg-rating"
@@ -330,7 +335,7 @@
   <!-- Data -->
   <div x-show="sub === 'data'" x-cloak class="space-y-12">
     <section id="sg-stats" aria-labelledby="sg-stats-h" class="space-y-4">
-      <h2 id="sg-stats-h" class="text-lg font-semibold">Stats</h2>
+      <h2 id="sg-stats-h" class="section-title">Stats</h2>
       <div class="stats stats-vertical sm:stats-horizontal bg-base-100 border border-base-300 w-full">
         <div class="stat">
           <div class="stat-title">Members</div>
@@ -349,13 +354,13 @@
         </div>
       </div>
       <div class="grid gap-4 sm:grid-cols-3">
-        {{ metric_card('Members', 'indigo', 'users') }}
-        {{ metric_card('Storage', 'emerald', 'folder') }}
-        {{ metric_card('Pending', 'amber', 'clipboard-text') }}
+        {{ metric_card('Members', 'users') }}
+        {{ metric_card('Storage', 'folder') }}
+        {{ metric_card('Pending', 'clipboard-text') }}
       </div>
     </section>
     <section id="sg-cards" aria-labelledby="sg-cards-h" class="space-y-4">
-      <h2 id="sg-cards-h" class="text-lg font-semibold">Cards</h2>
+      <h2 id="sg-cards-h" class="section-title">Cards</h2>
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="card-panel">
           <div class="card-body">
@@ -375,7 +380,7 @@
       </div>
     </section>
     <section id="sg-table" aria-labelledby="sg-table-h" class="space-y-4">
-      <h2 id="sg-table-h" class="text-lg font-semibold">Table</h2>
+      <h2 id="sg-table-h" class="section-title">Table</h2>
       <div class="overflow-x-auto rounded-box border border-base-300">
         <table class="table table-zebra">
           <thead>
@@ -406,7 +411,7 @@
       </div>
     </section>
     <section id="sg-avatar" aria-labelledby="sg-avatar-h" class="space-y-4">
-      <h2 id="sg-avatar-h" class="text-lg font-semibold">Avatars</h2>
+      <h2 id="sg-avatar-h" class="section-title">Avatars</h2>
       <div class="flex items-center gap-4">
         <div class="avatar avatar-placeholder">
           <div class="w-12 rounded-full bg-primary/20 text-primary">
@@ -432,7 +437,7 @@
       </div>
     </section>
     <section id="sg-timeline" aria-labelledby="sg-timeline-h" class="space-y-4">
-      <h2 id="sg-timeline-h" class="text-lg font-semibold">Timeline</h2>
+      <h2 id="sg-timeline-h" class="section-title">Timeline</h2>
       <ul class="timeline timeline-vertical">
         <li>
           <div class="timeline-start">2024</div>
@@ -465,14 +470,14 @@
   <!-- Feedback -->
   <div x-show="sub === 'feedback'" x-cloak class="space-y-12">
     <section id="sg-alerts" aria-labelledby="sg-alerts-h" class="space-y-4">
-      <h2 id="sg-alerts-h" class="text-lg font-semibold">Alerts</h2>
+      <h2 id="sg-alerts-h" class="section-title">Alerts</h2>
       {{ alert('info', 'Informational message.') }}
       {{ alert('success', 'Saved successfully.') }}
       {{ alert('error', 'Something went wrong.') }}
       <div class="alert alert-warning" role="alert">A warning with no macro.</div>
     </section>
     <section id="sg-progress" aria-labelledby="sg-progress-h" class="space-y-4">
-      <h2 id="sg-progress-h" class="text-lg font-semibold">Progress &amp; Loading</h2>
+      <h2 id="sg-progress-h" class="section-title">Progress &amp; Loading</h2>
       <progress class="progress progress-primary w-full max-w-md"
                 value="40"
                 max="100"></progress>
@@ -490,7 +495,7 @@
       </div>
     </section>
     <section id="sg-feedback" aria-labelledby="sg-feedback-h" class="space-y-4">
-      <h2 id="sg-feedback-h" class="text-lg font-semibold">Tooltip &amp; Indicator</h2>
+      <h2 id="sg-feedback-h" class="section-title">Tooltip &amp; Indicator</h2>
       <div class="flex flex-wrap items-center gap-8 pt-2">
         <div class="tooltip" data-tip="Hello there">
           <button class="btn">Hover me</button>
@@ -505,7 +510,7 @@
       </div>
     </section>
     <section id="sg-skeleton" aria-labelledby="sg-skeleton-h" class="space-y-4">
-      <h2 id="sg-skeleton-h" class="text-lg font-semibold">Skeleton</h2>
+      <h2 id="sg-skeleton-h" class="section-title">Skeleton</h2>
       <div class="flex items-center gap-4 max-w-md">
         <div class="skeleton h-12 w-12 shrink-0 rounded-full"></div>
         <div class="flex flex-col gap-2 w-full">
@@ -515,7 +520,7 @@
       </div>
     </section>
     <section id="sg-chat" aria-labelledby="sg-chat-h" class="space-y-4">
-      <h2 id="sg-chat-h" class="text-lg font-semibold">Chat</h2>
+      <h2 id="sg-chat-h" class="section-title">Chat</h2>
       <div class="chat chat-start">
         <div class="chat-bubble">Hi! How does the new theme look?</div>
       </div>
@@ -527,7 +532,7 @@
   <!-- Navigation -->
   <div x-show="sub === 'navigation'" x-cloak class="space-y-12">
     <section id="sg-tabs" aria-labelledby="sg-tabs-h" class="space-y-4">
-      <h2 id="sg-tabs-h" class="text-lg font-semibold">Tabs</h2>
+      <h2 id="sg-tabs-h" class="section-title">Tabs</h2>
       <div role="tablist" class="tabs tabs-box">
         <a role="tab" class="tab tab-active">Overview</a>
         <a role="tab" class="tab">Members</a>
@@ -540,7 +545,7 @@
       </div>
     </section>
     <section id="sg-menu" aria-labelledby="sg-menu-h" class="space-y-4">
-      <h2 id="sg-menu-h" class="text-lg font-semibold">Menu</h2>
+      <h2 id="sg-menu-h" class="section-title">Menu</h2>
       <ul class="menu bg-base-100 rounded-box border border-base-300 w-56">
         <li><a class="menu-active"><i class="ph ph-gear ph-sm" aria-hidden="true"></i>Active</a></li>
         <li><a><i class="ph ph-users ph-sm" aria-hidden="true"></i>Members</a></li>
@@ -550,7 +555,7 @@
     <section id="sg-navigation"
              aria-labelledby="sg-navigation-h"
              class="space-y-4">
-      <h2 id="sg-navigation-h" class="text-lg font-semibold">Breadcrumbs &amp; Pagination</h2>
+      <h2 id="sg-navigation-h" class="section-title">Breadcrumbs &amp; Pagination</h2>
       <nav class="breadcrumbs text-sm" aria-label="Breadcrumb">
         <ul>
           <li><a>Home</a></li>
@@ -567,7 +572,7 @@
       </div>
     </section>
     <section id="sg-overlays" aria-labelledby="sg-overlays-h" class="space-y-4">
-      <h2 id="sg-overlays-h" class="text-lg font-semibold">Dropdown &amp; Modal</h2>
+      <h2 id="sg-overlays-h" class="section-title">Dropdown &amp; Modal</h2>
       <div class="flex flex-wrap gap-3">
         <div class="dropdown">
           <div tabindex="0" role="button" class="btn">Dropdown</div>
@@ -580,7 +585,7 @@
         <button class="btn" onclick="sg_modal.showModal()">Open modal</button>
         <dialog id="sg_modal" class="modal">
           <div class="modal-box">
-            <h3 class="text-lg font-semibold">Hello</h3>
+            <h3 class="section-title">Hello</h3>
             <p class="py-4 text-sm text-base-content/70">A native &lt;dialog&gt; styled by DaisyUI.</p>
             <div class="modal-action">
               <form method="dialog">
@@ -595,7 +600,7 @@
       </div>
     </section>
     <section id="sg-accordion" aria-labelledby="sg-accordion-h" class="space-y-4">
-      <h2 id="sg-accordion-h" class="text-lg font-semibold">Accordion</h2>
+      <h2 id="sg-accordion-h" class="section-title">Accordion</h2>
       <div class="join join-vertical w-full">
         <div class="collapse collapse-arrow join-item border border-base-300 bg-base-100">
           <input type="radio" name="sg-accordion" checked />

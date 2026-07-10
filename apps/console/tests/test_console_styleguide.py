@@ -12,4 +12,4 @@ def test_appearance_tab_renders_component_gallery(driver):
 def test_appearance_tab_applies_app_theme(driver):
     driver.sign_in_as_admin("styleguide-admin2@example.com")
     body = driver.client().get("/console/settings", headers={"accept": "text/html"}).text
-    assert 'data-theme="light"' in body
+    assert 'data-theme="labase-light"' in body

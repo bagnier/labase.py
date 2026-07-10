@@ -90,6 +90,7 @@ lint:
 	npm run lint
 	uv run djlint apps --lint
 	uv run djlint apps --check
+	uv run python scripts/check_design_tokens.py
 	uv run pip-audit
 
 deadcode:

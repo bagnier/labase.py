@@ -6,7 +6,7 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    <h1 class="text-lg font-semibold">Todos</h1>
+    <h1 class="section-title">Todos</h1>
     {% if creation_enabled %}
       <form hx-post="/{{ org_handle }}/todos"
             hx-target="#todo-list"
