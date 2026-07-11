@@ -12,6 +12,10 @@
     <script src="/static/js/alpine.min.js" defer></script>
   </head>
   <body class="h-full bg-base-200 text-base-content antialiased">
+    <a href="#main-content"
+       class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 btn btn-primary btn-sm">
+      Skip to content
+    </a>
     {% if request.cookies.get('impersonator_access_token') %}
       <div role="alert"
            data-impersonation-banner
@@ -51,7 +55,7 @@
             {% endif %}
           </header>
           <!-- Page content -->
-          <main class="flex-1 p-6 overflow-auto">
+          <main id="main-content" tabindex="-1" class="flex-1 p-6 overflow-auto">
             {% block content %}{% endblock %}
           </main>
         </div>

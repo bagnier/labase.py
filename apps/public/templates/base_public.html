@@ -11,6 +11,10 @@
     <script src="/static/js/alpine.min.js" defer></script>
   </head>
   <body class="h-full bg-base-200 text-base-content antialiased flex flex-col min-h-screen">
+    <a href="#main-content"
+       class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 btn btn-primary btn-sm">
+      Skip to content
+    </a>
     <header class="navbar min-h-14 px-4">
       <div class="flex-1">
         <a href="/" class="flex items-center gap-2.5">
@@ -21,7 +25,9 @@
         </a>
       </div>
     </header>
-    <main class="flex-1 flex items-center justify-center px-4 py-8">
+    <main id="main-content"
+          tabindex="-1"
+          class="flex-1 flex items-center justify-center px-4 py-8">
       <div class="w-full max-w-sm">
         {% block content %}{% endblock %}
       </div>

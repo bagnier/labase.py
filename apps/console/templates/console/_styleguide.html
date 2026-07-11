@@ -3,18 +3,30 @@
 {% from "macros/metric_card.html" import metric_card %}
 {% from "macros/role_badge.html" import role_badge %}
 <div x-data="{ sub: 'charts' }" class="space-y-6">
-  <div role="tablist" class="tabs tabs-box w-fit">
+  <div role="tablist"
+       aria-label="Styleguide sections"
+       class="tabs tabs-box w-fit">
     {% set sg_tabs = [('charts', 'Charts'), ('typography', 'Typography'), ('actions', 'Actions'), ('forms', 'Forms'), ('data', 'Data'), ('feedback', 'Feedback'), ('navigation', 'Navigation')] %}
     {% for key, label in sg_tabs %}
       <button type="button"
               role="tab"
+              id="sg-tab-{{ key }}"
               class="tab"
+              aria-controls="sg-panel-{{ key }}"
+              :aria-selected="sub === '{{ key }}' ? 'true' : 'false'"
+              :tabindex="sub === '{{ key }}' ? 0 : -1"
               :class="{ 'tab-active': sub === '{{ key }}' }"
               @click="sub = '{{ key }}'">{{ label }}</button>
     {% endfor %}
   </div>
   <!-- Charts -->
-  <div x-show="sub === 'charts'" x-cloak class="space-y-12">
+  <div x-show="sub === 'charts'"
+       x-cloak
+       id="sg-panel-charts"
+       role="tabpanel"
+       aria-labelledby="sg-tab-charts"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-charts" aria-labelledby="sg-charts-h" class="space-y-4">
       <h2 id="sg-charts-h" class="section-title">Charts</h2>
       <p class="text-sm text-base-content/70">
@@ -154,7 +166,13 @@
     </section>
   </div>
   <!-- Typography -->
-  <div x-show="sub === 'typography'" x-cloak class="space-y-12">
+  <div x-show="sub === 'typography'"
+       x-cloak
+       id="sg-panel-typography"
+       role="tabpanel"
+       aria-labelledby="sg-tab-typography"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-typography"
              aria-labelledby="sg-typography-h"
              class="space-y-3">
@@ -180,7 +198,13 @@
     </section>
   </div>
   <!-- Actions -->
-  <div x-show="sub === 'actions'" x-cloak class="space-y-12">
+  <div x-show="sub === 'actions'"
+       x-cloak
+       id="sg-panel-actions"
+       role="tabpanel"
+       aria-labelledby="sg-tab-actions"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-buttons" aria-labelledby="sg-buttons-h" class="space-y-4">
       <h2 id="sg-buttons-h" class="section-title">Buttons</h2>
       <div class="flex flex-wrap gap-3">
@@ -238,7 +262,13 @@
     </section>
   </div>
   <!-- Forms -->
-  <div x-show="sub === 'forms'" x-cloak class="space-y-12">
+  <div x-show="sub === 'forms'"
+       x-cloak
+       id="sg-panel-forms"
+       role="tabpanel"
+       aria-labelledby="sg-tab-forms"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-forms" aria-labelledby="sg-forms-h" class="space-y-4">
       <h2 id="sg-forms-h" class="section-title">Forms</h2>
       <div class="grid gap-4 md:grid-cols-2">
@@ -333,7 +363,13 @@
     </section>
   </div>
   <!-- Data -->
-  <div x-show="sub === 'data'" x-cloak class="space-y-12">
+  <div x-show="sub === 'data'"
+       x-cloak
+       id="sg-panel-data"
+       role="tabpanel"
+       aria-labelledby="sg-tab-data"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-stats" aria-labelledby="sg-stats-h" class="space-y-4">
       <h2 id="sg-stats-h" class="section-title">Stats</h2>
       <div class="stats stats-vertical sm:stats-horizontal bg-base-100 border border-base-300 w-full">
@@ -468,7 +504,13 @@
     </section>
   </div>
   <!-- Feedback -->
-  <div x-show="sub === 'feedback'" x-cloak class="space-y-12">
+  <div x-show="sub === 'feedback'"
+       x-cloak
+       id="sg-panel-feedback"
+       role="tabpanel"
+       aria-labelledby="sg-tab-feedback"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-alerts" aria-labelledby="sg-alerts-h" class="space-y-4">
       <h2 id="sg-alerts-h" class="section-title">Alerts</h2>
       {{ alert('info', 'Informational message.') }}
@@ -530,7 +572,13 @@
     </section>
   </div>
   <!-- Navigation -->
-  <div x-show="sub === 'navigation'" x-cloak class="space-y-12">
+  <div x-show="sub === 'navigation'"
+       x-cloak
+       id="sg-panel-navigation"
+       role="tabpanel"
+       aria-labelledby="sg-tab-navigation"
+       tabindex="0"
+       class="space-y-12">
     <section id="sg-tabs" aria-labelledby="sg-tabs-h" class="space-y-4">
       <h2 id="sg-tabs-h" class="section-title">Tabs</h2>
       <div role="tablist" class="tabs tabs-box">
