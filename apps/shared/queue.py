@@ -128,6 +128,14 @@ class TaskWorker:
         factory = self._session_factory or admin_session_factory()
         return factory()
 
+    async def _admin_exec(self, *statements: tuple[Any, dict[str, Any]]) -> None:
+        """Run one or more (sql, params) statements in a single admin transaction — the
+        bookkeeping shape shared by ``_complete``/``_retry``/``_fail``."""
+        async with self._admin_session() as session:
+            for sql, params in statements:
+                await session.execute(sql, params)
+            await session.commit()
+
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:
             self._task = asyncio.create_task(self._run())
@@ -193,13 +201,15 @@ class TaskWorker:
                 await clear_rls_context(session)
 
     async def _complete(self, task: dict[str, Any]) -> None:
-        async with self._admin_session() as session:
-            await session.execute(
+        statements = [
+            (
                 text("UPDATE task_queue SET done_at = now(), locked_at = NULL WHERE id = :id"),
                 {"id": task["id"]},
             )
-            if task["recurring_seconds"]:
-                await session.execute(
+        ]
+        if task["recurring_seconds"]:
+            statements.append(
+                (
                     text(
                         "INSERT INTO task_queue (topic, payload, user_id, recurring_seconds, "
                         "  max_attempts, run_at) "
@@ -215,27 +225,28 @@ class TaskWorker:
                         "max_attempts": task["max_attempts"],
                     },
                 )
-            await session.commit()
+            )
+        await self._admin_exec(*statements)
 
     async def _retry(self, task: dict[str, Any], error: str) -> None:
-        async with self._admin_session() as session:
-            await session.execute(
+        await self._admin_exec(
+            (
                 text(
                     "UPDATE task_queue SET locked_at = NULL, last_error = :error, "
                     "run_at = now() + make_interval(secs => :backoff) WHERE id = :id"
                 ),
                 {"id": task["id"], "error": error, "backoff": _RETRY_BACKOFF_SECONDS},
             )
-            await session.commit()
+        )
 
     async def _fail(self, task: dict[str, Any], error: str) -> None:
         log.error("queue.task_parked", topic=task["topic"], task_id=task["id"], error=error)
-        async with self._admin_session() as session:
-            await session.execute(
+        await self._admin_exec(
+            (
                 text(
                     "UPDATE task_queue SET failed_at = now(), locked_at = NULL, "
                     "last_error = :error WHERE id = :id"
                 ),
                 {"id": task["id"], "error": error},
             )
-            await session.commit()
+        )

@@ -33,28 +33,26 @@ function applyLinePrefix(view, prefix) {
   view.focus();
 }
 
-function applyLink(view) {
+// Insert a Markdown link (`lead` = "[") or image (`lead` = "![") wrapping the selection
+// (or `placeholder`), leaving the "url" part selected for the user to type over.
+function applyLinkLike(view, lead, placeholder) {
   const { from, to } = view.state.selection.main;
   const selected = view.state.sliceDoc(from, to);
-  const text = selected || 'texte';
-  const insert = `[${text}](url)`;
+  const text = selected || placeholder;
+  const insert = `${lead}${text}](url)`;
   view.dispatch({
     changes: { from, to, insert },
-    selection: { anchor: from + text.length + 3, head: from + insert.length - 1 },
+    selection: { anchor: from + lead.length + text.length + 2, head: from + insert.length - 1 },
   });
   view.focus();
 }
 
+function applyLink(view) {
+  applyLinkLike(view, '[', 'texte');
+}
+
 function applyImage(view) {
-  const { from, to } = view.state.selection.main;
-  const selected = view.state.sliceDoc(from, to);
-  const alt = selected || 'alt text';
-  const insert = `![${alt}](url)`;
-  view.dispatch({
-    changes: { from, to, insert },
-    selection: { anchor: from + alt.length + 4, head: from + insert.length - 1 },
-  });
-  view.focus();
+  applyLinkLike(view, '![', 'alt text');
 }
 
 function replaceText(view, needle, replacement) {

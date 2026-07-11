@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.shared.config import get_technical_settings
 from apps.shared.persistence.base import Base, Timestamped, Versioned
+from apps.shared.persistence.database import admin_url, search_path_connect_args
 
 log = structlog.get_logger("labase.settings.store")
 
@@ -73,11 +74,9 @@ def _app_settings_select(app: str) -> Select[tuple[str, str]]:
 async def _on_throwaway_engine[T](work: Callable[[AsyncConnection], Awaitable[T]]) -> T:
     """Run ``work`` on a fresh connection from a disposable engine, then dispose it."""
     settings = get_technical_settings()
-    url = settings.supabase_database_admin_url or settings.supabase_database_user_url
-    connect_args = {
-        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
-    }
-    engine = create_async_engine(url, connect_args=connect_args)
+    engine = create_async_engine(
+        admin_url(settings), connect_args=search_path_connect_args(settings)
+    )
     try:
         async with engine.begin() as conn:
             return await work(conn)

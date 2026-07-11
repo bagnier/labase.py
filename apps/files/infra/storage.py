@@ -4,6 +4,8 @@ apps/shared/persistence/storage (promoted when avatars became the second consume
 import uuid
 from urllib.parse import urlparse, urlunparse
 
+from storage3.types import SignedUrlResponse
+
 from apps.shared.config import get_technical_settings
 
 
@@ -13,6 +15,12 @@ def rewrite_signed_url(signed_url: str) -> str:
     parsed = urlparse(signed_url)
     target = urlparse(s.supabase_storage_url)
     return urlunparse(parsed._replace(scheme=target.scheme, netloc=target.netloc))
+
+
+def signed_redirect_url(result: SignedUrlResponse) -> str:
+    """The origin-rewritten signed URL from a Storage ``create_signed_url`` response,
+    tolerating both the ``signedURL`` and ``signedUrl`` spellings the SDK has used."""
+    return rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
 
 
 def storage_path(org_id: uuid.UUID, file_id: uuid.UUID, filename: str) -> str:

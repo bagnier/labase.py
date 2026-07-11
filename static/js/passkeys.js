@@ -26,6 +26,16 @@
 		return data;
 	};
 
+	// The fields common to a WebAuthn create()/get() result; `response` carries the
+	// ceremony-specific parts (attestation vs assertion), already base64url-encoded.
+	const encodeCredential = (c, response) => ({
+		id: c.id,
+		rawId: bufToB64url(c.rawId),
+		type: c.type,
+		clientExtensionResults: c.getClientExtensionResults(),
+		response,
+	});
+
 	const showError = (scope, message) => {
 		const el = scope.querySelector("[data-passkey-error]") || document.querySelector("[data-passkey-error]");
 		if (el) {
@@ -43,16 +53,10 @@
 		const created = await navigator.credentials.create({ publicKey: pk });
 		await post("/profile/passkeys/verify", {
 			challenge_id,
-			credential: {
-				id: created.id,
-				rawId: bufToB64url(created.rawId),
-				type: created.type,
-				clientExtensionResults: created.getClientExtensionResults(),
-				response: {
-					clientDataJSON: bufToB64url(created.response.clientDataJSON),
-					attestationObject: bufToB64url(created.response.attestationObject),
-				},
-			},
+			credential: encodeCredential(created, {
+				clientDataJSON: bufToB64url(created.response.clientDataJSON),
+				attestationObject: bufToB64url(created.response.attestationObject),
+			}),
 		});
 		window.location.reload();
 	};
@@ -66,18 +70,12 @@
 		const data = await post("/auth/passkeys/verify", {
 			challenge_id,
 			next: next || "",
-			credential: {
-				id: got.id,
-				rawId: bufToB64url(got.rawId),
-				type: got.type,
-				clientExtensionResults: got.getClientExtensionResults(),
-				response: {
-					clientDataJSON: bufToB64url(got.response.clientDataJSON),
-					authenticatorData: bufToB64url(got.response.authenticatorData),
-					signature: bufToB64url(got.response.signature),
-					userHandle: got.response.userHandle ? bufToB64url(got.response.userHandle) : "",
-				},
-			},
+			credential: encodeCredential(got, {
+				clientDataJSON: bufToB64url(got.response.clientDataJSON),
+				authenticatorData: bufToB64url(got.response.authenticatorData),
+				signature: bufToB64url(got.response.signature),
+				userHandle: got.response.userHandle ? bufToB64url(got.response.userHandle) : "",
+			}),
 		});
 		window.location.assign(data.redirect || "/profile");
 	};

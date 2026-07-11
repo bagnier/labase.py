@@ -6,11 +6,9 @@ confirmation to the NEW address, ``/auth/confirm-email`` finalizes it with
 in sync whatever the change path.
 """
 
-from supabase_auth.errors import AuthApiError
-
-from apps.auth.contract.passwords import WrongPassword
+from apps.auth.contract.passwords import verify_password
 from apps.auth.domain.service import EmailChangeError as EmailChangeError
-from apps.auth.domain.service import login, request_email_change
+from apps.auth.domain.service import request_email_change
 
 
 async def change_email(
@@ -25,8 +23,5 @@ async def change_email(
     Raises `WrongPassword` when the current password is wrong and
     `EmailChangeError` (user-safe message) when GoTrue refuses the address.
     """
-    try:
-        await login(email, current_password)
-    except AuthApiError as exc:
-        raise WrongPassword from exc
+    await verify_password(email, current_password)
     await request_email_change(session_access_token, new_email)

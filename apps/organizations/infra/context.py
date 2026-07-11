@@ -117,16 +117,20 @@ def _audit_ownership_violation(
     )
 
 
+def _gate_owner(request: Request, bg: BackgroundTasks, membership: Membership) -> Membership:
+    if membership.role != OrgRole.owner:
+        _audit_ownership_violation(bg, request, membership)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return membership
+
+
 async def require_owner(
     request: Request,
     bg: BackgroundTasks,
     membership: Membership = Depends(get_membership_by_org_id),
 ) -> Membership:
     """Owner gate for routes with an ``{org_id}`` path parameter (JSON API)."""
-    if membership.role != OrgRole.owner:
-        _audit_ownership_violation(bg, request, membership)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    return membership
+    return _gate_owner(request, bg, membership)
 
 
 async def require_current_owner(
@@ -135,7 +139,4 @@ async def require_current_owner(
     membership: Membership = Depends(get_current_membership),
 ) -> Membership:
     """Owner gate for ``/{org_handle}/...`` routes (resolves the org from the slug)."""
-    if membership.role != OrgRole.owner:
-        _audit_ownership_violation(bg, request, membership)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    return membership
+    return _gate_owner(request, bg, membership)

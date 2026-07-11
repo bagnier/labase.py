@@ -27,6 +27,11 @@ def wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
 
 
+def is_htmx(request: Request) -> bool:
+    """True when the request comes from HTMX — the single source of truth for the header."""
+    return request.headers.get("HX-Request") == "true"
+
+
 def wants_full_page(request: Request) -> bool:
     """True when the response is a standalone HTML page (not JSON, not an HTMX swap).
 
@@ -34,4 +39,4 @@ def wants_full_page(request: Request) -> bool:
     """
     if wants_json(request):
         return False
-    return request.headers.get("HX-Request") != "true"
+    return not is_htmx(request)

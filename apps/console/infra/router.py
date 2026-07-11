@@ -176,6 +176,10 @@ async def get_console(
     )
 
 
+def _overrides_json(rows: list[dict]) -> list[dict]:
+    return [{**o, "org_id": str(o["org_id"])} for o in rows]
+
+
 def _admins_json(rows: list) -> JSONResponse:
     return JSONResponse({"admins": [{"email": u.email, "is_admin": u.is_admin} for u in rows]})
 
@@ -321,7 +325,7 @@ async def get_app(
             {
                 "app": app,
                 "settings": settings,
-                "org_overrides": [{**o, "org_id": str(o["org_id"])} for o in org_overrides],
+                "org_overrides": _overrides_json(org_overrides),
                 "supabase": supabase,
                 "links": [{"label": link.label, "href": link.href} for link in group.links],
             }
@@ -349,13 +353,9 @@ async def _render_org_overrides(
     repo = AppSettingRepository(session)
     org_overrides = await repo.org_overrides(app)
     if wants_json(request):
-        payload = {
-            "app": app,
-            "org_overrides": [{**o, "org_id": str(o["org_id"])} for o in org_overrides],
-        }
         if error is not None:
             return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
-        return JSONResponse(payload)
+        return JSONResponse({"app": app, "org_overrides": _overrides_json(org_overrides)})
     return templates.TemplateResponse(
         request,
         "console/_org_settings.html",

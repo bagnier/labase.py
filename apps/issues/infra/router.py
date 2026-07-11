@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
-from apps.issues.domain.models import ErrorEventRead, ErrorGroupRead, IssueStatus
+from apps.issues.domain.models import ErrorEventRead, ErrorGroup, ErrorGroupRead, IssueStatus
 from apps.issues.infra.repository import ErrorGroupRepository
 from apps.shared import clock
 from apps.shared.charts import last_days, sparkline
@@ -19,6 +19,13 @@ router = APIRouter(tags=["issues"])
 
 _TRIAGE_STATUSES = {IssueStatus.resolved, IssueStatus.ignored, IssueStatus.unresolved}
 _SPARK_DAYS = 14
+
+
+async def _group_or_404(repo: ErrorGroupRepository, group_id: int) -> ErrorGroup:
+    group = await repo.get(group_id)
+    if group is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return group
 
 
 @router.get("", response_model=None)
@@ -56,9 +63,7 @@ async def issue_detail(
     before_id: int | None = None,
 ) -> Response:
     repo = ErrorGroupRepository(session)
-    group = await repo.get(group_id)
-    if group is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    group = await _group_or_404(repo, group_id)
     events, next_before_id = await repo.events(group_id, before_id=before_id)
     group_read = ErrorGroupRead.model_validate(group)
     event_reads = [ErrorEventRead.model_validate(e) for e in events]
@@ -96,18 +101,12 @@ async def set_issue_status(
     session: AdminSession,
 ) -> Response:
     body = await parse_body(request)
-    try:
-        new_status = IssueStatus(str(body.get("status", "")))
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status"
-        ) from None
-    if new_status not in _TRIAGE_STATUSES:
+    raw = str(body.get("status", ""))
+    if raw not in {s.value for s in _TRIAGE_STATUSES}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status")
+    new_status = IssueStatus(raw)
     repo = ErrorGroupRepository(session)
-    group = await repo.get(group_id)
-    if group is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    group = await _group_or_404(repo, group_id)
     await repo.set_status(group, new_status, get_technical_settings().app_version)
     await session.commit()
     audit(

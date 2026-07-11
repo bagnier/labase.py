@@ -19,6 +19,8 @@ log = structlog.get_logger("labase.organizations.invitations")
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
+_NOT_FOUND_DETAIL = "invitation not found or already used"
+
 
 async def _get_admin_org_repo(admin_session: AdminSession) -> OrganizationRepository:
     return OrganizationRepository(admin_session)
@@ -30,6 +32,16 @@ async def _get_rls_org_repo(rls_session: RlsSession) -> OrganizationRepository:
 
 AdminOrgRepo = Annotated[OrganizationRepository, Depends(_get_admin_org_repo)]
 RlsOrgRepo = Annotated[OrganizationRepository, Depends(_get_rls_org_repo)]
+
+
+async def _dashboard_redirect(request, rls_repo, org_id):
+    org = await rls_repo.get(org_id)
+    url = f"/{org.handle if org else ''}/dashboard"
+    return (
+        JSONResponse({"redirect": url})
+        if wants_json(request)
+        else RedirectResponse(url, status_code=303)
+    )
 
 
 @router.get("/{token}", response_model=None)
@@ -46,12 +58,12 @@ async def get_invitation(
         if invitation is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="invitation not found or already used",
+                detail=_NOT_FOUND_DETAIL,
             )
         if invitation["status"] == "revoked":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="invitation not found or already used",
+                detail=_NOT_FOUND_DETAIL,
             )
         return InvitationRead(
             id=invitation["id"],
@@ -109,23 +121,14 @@ async def accept_invitation(
     # Resolve current invitation state (no membership required)
     invitation = await admin_repo.get_invitation_by_token(token)
     if invitation is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
     if invitation["status"] == "accepted":
         # Idempotent: already accepted — resolve org slug and redirect
-        org = await rls_repo.get(invitation["org_id"])
-        slug = org.handle if org else ""
-        redirect_url = f"/{slug}/dashboard"
-        if wants_json(request):
-            return JSONResponse({"redirect": redirect_url})
-        return RedirectResponse(url=redirect_url, status_code=303)
+        return await _dashboard_redirect(request, rls_repo, invitation["org_id"])
 
     if invitation["status"] != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="invitation not found or already used"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
     # Check that the logged-in user's email matches the invitation
     if current_user.email.lower() != invitation["email"].lower():
@@ -165,7 +168,7 @@ async def accept_invitation(
             if wants_json(request):
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="invitation not found or already used",
+                    detail=_NOT_FOUND_DETAIL,
                 ) from exc
             return templates.TemplateResponse(
                 request,
@@ -176,15 +179,10 @@ async def accept_invitation(
         log.exception("invitation.accept_error")
         raise
 
-    org = await rls_repo.get(invitation["org_id"])
-    slug = org.handle if org else ""
     audit(
         bg,
         "organizations.member_joined",
         user_id=current_user.id,
         org_id=invitation["org_id"],
     )
-    redirect_url = f"/{slug}/dashboard"
-    if wants_json(request):
-        return JSONResponse({"redirect": redirect_url})
-    return RedirectResponse(url=redirect_url, status_code=303)
+    return await _dashboard_redirect(request, rls_repo, invitation["org_id"])

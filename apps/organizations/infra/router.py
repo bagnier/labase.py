@@ -75,6 +75,31 @@ async def _get_org_repo(session: RlsSession) -> OrganizationRepository:
 OrgRepo = Annotated[OrganizationRepository, Depends(_get_org_repo)]
 
 
+def _org_with_role_json(org, role) -> JSONResponse:
+    return JSONResponse(
+        OrganizationWithRoleRead.model_validate({**org.__dict__, "role": role}).model_dump(
+            mode="json"
+        )
+    )
+
+
+async def _pending_invitations_html(request, repo, org_id, caller_role: str) -> str:
+    org = await repo.get(org_id)
+    org_handle = request.path_params.get("org_handle", org.handle if org else "")
+    invitations = [InvitationRead.model_validate(i) for i in await repo.list_invitations(org_id)]
+    return bytes(
+        templates.TemplateResponse(
+            request,
+            "organizations/_pending_invitations.html",
+            {
+                "caller_role": caller_role,
+                "invitations": invitations,
+                "org_handle": org_handle,
+            },
+        ).body
+    ).decode()
+
+
 def _audit_last_owner_violation(
     bg: BackgroundTasks,
     request: Request,
@@ -304,11 +329,7 @@ async def rename_organization(
         )
     await repo.rename(org, name)
     if wants_json(request):
-        return JSONResponse(
-            OrganizationWithRoleRead.model_validate(
-                {**org.__dict__, "role": membership.role}
-            ).model_dump(mode="json")
-        )
+        return _org_with_role_json(org, membership.role)
     return RedirectResponse(url=f"/{org.handle}/settings?saved=1", status_code=303)
 
 
@@ -346,11 +367,7 @@ async def update_org_handle(
         return response
     await repo.update_handle(org, handle)
     if wants_json(request):
-        return JSONResponse(
-            OrganizationWithRoleRead.model_validate(
-                {**org.__dict__, "role": membership.role}
-            ).model_dump(mode="json")
-        )
+        return _org_with_role_json(org, membership.role)
     return RedirectResponse(url=f"/{handle}/settings?saved=1", status_code=303)
 
 
@@ -380,11 +397,7 @@ async def update_org_timezone(
         )
     await repo.set_timezone(org, timezone)
     if wants_json(request):
-        return JSONResponse(
-            OrganizationWithRoleRead.model_validate(
-                {**org.__dict__, "role": membership.role}
-            ).model_dump(mode="json")
-        )
+        return _org_with_role_json(org, membership.role)
     return RedirectResponse(url=f"/{org.handle}/settings?saved=1", status_code=303)
 
 
@@ -601,10 +614,6 @@ async def create_invitation(
         )
 
     # Success: return invite result + OOB swap to refresh the pending invitations list.
-    org = await repo.get(org_id)
-    org_handle = request.path_params.get("org_handle", org.handle if org else "")
-    raw_invs = await repo.list_invitations(org_id)
-    invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
     result_html = bytes(
         templates.TemplateResponse(
             request,
@@ -612,17 +621,7 @@ async def create_invitation(
             {"email": email, "link": link, "error": None},
         ).body
     ).decode()
-    oob_html = bytes(
-        templates.TemplateResponse(
-            request,
-            "organizations/_pending_invitations.html",
-            {
-                "caller_role": membership.role.value,
-                "invitations": invitations,
-                "org_handle": org_handle,
-            },
-        ).body
-    ).decode()
+    oob_html = await _pending_invitations_html(request, repo, org_id, membership.role.value)
     return HTMLResponse(result_html + oob_html)
 
 
@@ -660,19 +659,7 @@ async def revoke_invitation(
     # so this only ever uses delete_response's JSON branch.
     if wants_json(request):
         return delete_response(request)
-    org = await repo.get(org_id)
-    org_handle = request.path_params.get("org_handle", org.handle if org else "")
-    raw_invs = await repo.list_invitations(org_id)
-    invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
-    pending_invitations_html = bytes(
-        templates.TemplateResponse(
-            request,
-            "organizations/_pending_invitations.html",
-            {
-                "caller_role": membership.role.value,
-                "invitations": invitations,
-                "org_handle": org_handle,
-            },
-        ).body
-    ).decode()
+    pending_invitations_html = await _pending_invitations_html(
+        request, repo, org_id, membership.role.value
+    )
     return HTMLResponse(pending_invitations_html, status_code=status.HTTP_200_OK)

@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
-from apps.shared.http.content_type import wants_json
+from apps.shared.http.content_type import is_htmx, wants_json
 from apps.shared.http.templates import templates
 
 
@@ -33,7 +33,7 @@ def mutation_response(
     fragment update should not use this helper at all."""
     if wants_json(request):
         return JSONResponse(obj.model_dump(mode="json"), status_code=status_code)
-    if htmx_redirect_url and request.headers.get("HX-Request") == "true":
+    if htmx_redirect_url and is_htmx(request):
         r = Response(status_code=status.HTTP_204_NO_CONTENT)
         r.headers["HX-Redirect"] = htmx_redirect_url
         return r
@@ -46,8 +46,7 @@ def delete_response(request: Request, *, htmx_redirect_url: str | None = None) -
     fragment, an OOB swap) should branch on wants_json() themselves and call this only
     for the JSON case, keeping their own HTML path untouched."""
     r = Response(status_code=status.HTTP_204_NO_CONTENT)
-    is_htmx = request.headers.get("HX-Request") == "true"
-    if htmx_redirect_url and not wants_json(request) and is_htmx:
+    if htmx_redirect_url and not wants_json(request) and is_htmx(request):
         r.headers["HX-Redirect"] = htmx_redirect_url
     return r
 
@@ -67,12 +66,12 @@ def render_list(
 ) -> Response:
     if wants_json(request):
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
-    is_htmx = request.headers.get("HX-Request") == "true"
-    template = fragment if is_htmx else full
+    htmx = is_htmx(request)
+    template = fragment if htmx else full
     org_handle = request.path_params.get("org_handle", "")
     ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
     if extra:
         ctx |= extra
-    if not is_htmx and context:
+    if not htmx and context:
         ctx |= context
     return templates.TemplateResponse(request, template, ctx)

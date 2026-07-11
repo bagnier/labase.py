@@ -273,31 +273,19 @@ async def create_event(
     org: CurrentOrgModel,
 ) -> Response:
     body = await parse_body(request)
+
+    async def reject(error: str) -> Response:
+        return await _reject(
+            request, session, current_user, org, body, event=body, action="calendar", error=error
+        )
+
     title = str(body.get("title", "")).strip()
     if not title:
-        return await _reject(
-            request,
-            session,
-            current_user,
-            org,
-            body,
-            event=body,
-            action="calendar",
-            error="A title is required",
-        )
+        return await reject("A title is required")
     try:
         start, end = _require_times(_combine(body, "start"), _combine(body, "end"), _org_tz(org))
     except HTTPException as exc:
-        return await _reject(
-            request,
-            session,
-            current_user,
-            org,
-            body,
-            event=body,
-            action="calendar",
-            error=str(exc.detail),
-        )
+        return await reject(str(exc.detail))
     event = await repo.add(
         uuid.UUID(current_user.id),
         title,
@@ -332,15 +320,14 @@ async def view_event(
     event = or_404(await repo.get(event_id))
     if wants_json(request):
         return JSONResponse(CalendarEventRead.model_validate(event).model_dump(mode="json"))
+    tz = _org_tz(org)
     ctx = await fullpage_context(
         session,
         current_user,
         org=org,
         org_handle=org.handle,
         event=event,
-        when=format_event_time(
-            event.starts_at.astimezone(_org_tz(org)), event.ends_at.astimezone(_org_tz(org))
-        ),
+        when=format_event_time(event.starts_at.astimezone(tz), event.ends_at.astimezone(tz)),
     )
     return templates.TemplateResponse(request, "calendar/view.html", ctx)
 
@@ -355,6 +342,8 @@ async def edit_event_form(
     org: CurrentOrgModel,
 ) -> Response:
     event = or_404(await repo.get(event_id))
+    tz = _org_tz(org)
+    start_local, end_local = event.starts_at.astimezone(tz), event.ends_at.astimezone(tz)
     ctx = await fullpage_context(
         session,
         current_user,
@@ -363,10 +352,10 @@ async def edit_event_form(
         event=event,
         action=f"calendar/{event.id}",
         is_edit=True,
-        start_date=f"{event.starts_at.astimezone(_org_tz(org)):%Y-%m-%d}",
-        start_time=f"{event.starts_at.astimezone(_org_tz(org)):%H:%M}",
-        end_date=f"{event.ends_at.astimezone(_org_tz(org)):%Y-%m-%d}",
-        end_time=f"{event.ends_at.astimezone(_org_tz(org)):%H:%M}",
+        start_date=f"{start_local:%Y-%m-%d}",
+        start_time=f"{start_local:%H:%M}",
+        end_date=f"{end_local:%Y-%m-%d}",
+        end_time=f"{end_local:%H:%M}",
     )
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
 

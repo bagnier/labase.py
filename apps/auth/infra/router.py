@@ -132,6 +132,35 @@ def _enabled_oauth_providers(users_settings: SettingsView) -> list[str]:
     ]
 
 
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
+def _error_response(
+    request: Request, template: str, message: str, status_code: int, **context: object
+) -> Response:
+    """The content-negotiated error tail shared by the form-backed auth endpoints: JSON
+    ``{"detail": message}`` for API callers, else the template re-rendered with ``error``."""
+    if wants_json(request):
+        return JSONResponse({"detail": message}, status_code=status_code)
+    return templates.TemplateResponse(
+        request, template, {"error": message, **context}, status_code=status_code
+    )
+
+
+def _set_ephemeral_cookie(response: Response, name: str, value: str, max_age: int) -> None:
+    """Set a short-lived, HttpOnly, lax cookie honouring the ``cookies_secure`` config —
+    the shape shared by the MFA hand-off, OAuth PKCE parking, and impersonation stash."""
+    response.set_cookie(
+        name,
+        value,
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        secure=get_technical_settings().cookies_secure,
+    )
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(
     request: Request,
@@ -163,18 +192,15 @@ async def login_endpoint(
     email = body.get("email", "")
     password = body.get("password", "")
     next = body.get("next", "")
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     if not email or not password:
-        if wants_json(request):
-            return JSONResponse(
-                {"detail": "Email and password are required."},
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-        return templates.TemplateResponse(
+        return _error_response(
             request,
             "login.html",
-            {"error": "Email and password are required.", "email": email, "next": next},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            "Email and password are required.",
+            status.HTTP_400_BAD_REQUEST,
+            email=email,
+            next=next,
         )
     try:
         tokens = await login(email, password)
@@ -197,30 +223,24 @@ async def login_endpoint(
         offer_resend = code == "email_not_confirmed" and bool(
             users_settings.resend_confirmation_enabled
         )
-        if wants_json(request):
-            return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
-        return templates.TemplateResponse(
+        return _error_response(
             request,
             "login.html",
-            {"error": error, "email": email, "next": next, "resend_email": offer_resend and email},
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            error,
+            status.HTTP_401_UNAUTHORIZED,
+            email=email,
+            next=next,
+            resend_email=offer_resend and email,
         )
     except Exception:
         log.exception("auth.login_error", ip=ip, email=email)
-        if wants_json(request):
-            return JSONResponse(
-                {"detail": "A system error occurred. Please try again later."},
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        return templates.TemplateResponse(
+        return _error_response(
             request,
             "login.html",
-            {
-                "error": "A system error occurred. Please try again later.",
-                "email": email,
-                "next": next,
-            },
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            "A system error occurred. Please try again later.",
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            email=email,
+            next=next,
         )
 
 
@@ -245,18 +265,8 @@ async def _mfa_challenge_response(
             "mfa.html",
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next},
         )
-    for name, value in (
-        (_MFA_COOKIE, tokens.access_token),
-        (_MFA_REFRESH_COOKIE, tokens.refresh_token),
-    ):
-        resp.set_cookie(
-            name,
-            value,
-            max_age=_MFA_MAX_SECONDS,
-            httponly=True,
-            samesite="lax",
-            secure=get_technical_settings().cookies_secure,
-        )
+    _set_ephemeral_cookie(resp, _MFA_COOKIE, tokens.access_token, _MFA_MAX_SECONDS)
+    _set_ephemeral_cookie(resp, _MFA_REFRESH_COOKIE, tokens.refresh_token, _MFA_MAX_SECONDS)
     return resp
 
 
@@ -372,6 +382,11 @@ _OAUTH_NEXT_COOKIE = "oauth_next"
 _OAUTH_MAX_SECONDS = 300
 
 
+def _clear_oauth_cookies(resp: Response) -> None:
+    resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
+    resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+
+
 @router.get("/oauth/{provider}")
 @rate_limit("10/minute")
 async def oauth_start(
@@ -385,15 +400,8 @@ async def oauth_start(
         oauth_authorize_url(provider, redirect_to, challenge),
         status_code=status.HTTP_303_SEE_OTHER,
     )
-    for name, value in ((_OAUTH_VERIFIER_COOKIE, verifier), (_OAUTH_NEXT_COOKIE, next)):
-        resp.set_cookie(
-            name,
-            value,
-            max_age=_OAUTH_MAX_SECONDS,
-            httponly=True,
-            samesite="lax",
-            secure=get_technical_settings().cookies_secure,
-        )
+    _set_ephemeral_cookie(resp, _OAUTH_VERIFIER_COOKIE, verifier, _OAUTH_MAX_SECONDS)
+    _set_ephemeral_cookie(resp, _OAUTH_NEXT_COOKIE, next, _OAUTH_MAX_SECONDS)
     return resp
 
 
@@ -404,8 +412,7 @@ def _oauth_failure(request: Request, message: str, users_settings: SettingsView)
         {"error": message, "oauth_providers": _enabled_oauth_providers(users_settings)},
         status_code=status.HTTP_401_UNAUTHORIZED,
     )
-    resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
-    resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+    _clear_oauth_cookies(resp)
     return resp
 
 
@@ -445,13 +452,11 @@ async def oauth_callback(
         factor_id = await verified_totp_factor(tokens.access_token)
         if factor_id:
             resp = await _mfa_challenge_response(request, tokens, factor_id, next)
-            resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
-            resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+            _clear_oauth_cookies(resp)
             return resp
     resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
-    resp.delete_cookie(_OAUTH_VERIFIER_COOKIE)
-    resp.delete_cookie(_OAUTH_NEXT_COOKIE)
+    _clear_oauth_cookies(resp)
     return resp
 
 
@@ -476,18 +481,15 @@ async def register_endpoint(
     email = body.get("email", "")
     password = body.get("password", "")
     next = body.get("next", "")
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     if not email or not password:
-        if wants_json(request):
-            return JSONResponse(
-                {"detail": "Email and password are required."},
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-        return templates.TemplateResponse(
+        return _error_response(
             request,
             "register.html",
-            {"error": "Email and password are required.", "email": email, "next": next},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            "Email and password are required.",
+            status.HTTP_400_BAD_REQUEST,
+            email=email,
+            next=next,
         )
     try:
         result = await register_user(email, password)
@@ -515,24 +517,8 @@ async def register_endpoint(
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."
-    if wants_json(request):
-        return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
-    return templates.TemplateResponse(
-        request,
-        "register.html",
-        {"error": error, "email": email, "next": next},
-        status_code=status.HTTP_400_BAD_REQUEST,
-    )
-
-
-def _set_impersonation_cookie(response: Response, name: str, value: str) -> None:
-    response.set_cookie(
-        name,
-        value,
-        httponly=True,
-        secure=get_technical_settings().cookies_secure,
-        samesite="lax",
-        max_age=IMPERSONATION_MAX_SECONDS,
+    return _error_response(
+        request, "register.html", error, status.HTTP_400_BAD_REQUEST, email=email, next=next
     )
 
 
@@ -546,7 +532,7 @@ async def impersonate_endpoint(
 ) -> Response:
     body = await parse_body(request)
     email = str(body.get("email", "")).strip().lower()
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     if not email or email == admin.email.lower() or not access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Pick another user's email."
@@ -571,10 +557,12 @@ async def impersonate_endpoint(
         resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     # Stash the admin's own session, then become the target — everything time-boxed:
     # when these cookies expire the disguise and the stash die together.
-    _set_impersonation_cookie(resp, IMPERSONATOR_COOKIE, access_token)
-    _set_impersonation_cookie(resp, IMPERSONATOR_REFRESH_COOKIE, refresh_token or "")
-    _set_impersonation_cookie(resp, "access_token", tokens.access_token)
-    _set_impersonation_cookie(resp, "refresh_token", tokens.refresh_token)
+    _set_ephemeral_cookie(resp, IMPERSONATOR_COOKIE, access_token, IMPERSONATION_MAX_SECONDS)
+    _set_ephemeral_cookie(
+        resp, IMPERSONATOR_REFRESH_COOKIE, refresh_token or "", IMPERSONATION_MAX_SECONDS
+    )
+    _set_ephemeral_cookie(resp, "access_token", tokens.access_token, IMPERSONATION_MAX_SECONDS)
+    _set_ephemeral_cookie(resp, "refresh_token", tokens.refresh_token, IMPERSONATION_MAX_SECONDS)
     return resp
 
 
@@ -670,32 +658,18 @@ async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Resp
     body = await parse_body(request)
     token_hash = str(body.get("token_hash", ""))
     password = str(body.get("password", ""))
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     try:
         tokens = await confirm_signup(token_hash, type="recovery")
         await update_password(tokens.access_token, password)
     except PasswordUpdateError as e:
         # The recovery token is single-use and already consumed: a new link is needed.
         error = f"{e}. Please request a new reset link."
-        if wants_json(request):
-            return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
-        return templates.TemplateResponse(
-            request,
-            "forgot_password.html",
-            {"error": error},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
+        return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
         error = "This reset link is invalid or has expired. Please request a new one."
-        if wants_json(request):
-            return JSONResponse({"detail": error}, status_code=status.HTTP_400_BAD_REQUEST)
-        return templates.TemplateResponse(
-            request,
-            "forgot_password.html",
-            {"error": error},
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
+        return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password.
     audit(bg, "auth.password_reset", ip=ip)
     if wants_json(request):

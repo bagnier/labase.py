@@ -208,6 +208,11 @@ class AppSettings:
         self._typed = None
 
     @property
+    def _defs(self) -> list[SettingDef]:
+        """The declared settings, or ``[]`` when no declaration is bound yet (tests)."""
+        return self._declaration.defs if self._declaration is not None else []
+
+    @property
     def _raw(self) -> dict[str, str] | None:
         return self._raw_values
 
@@ -228,10 +233,7 @@ class AppSettings:
     def values(self) -> dict[str, SettingValue]:
         # Coercion runs once per fresh value set, not on every attribute access.
         if self._typed is None:
-            declaration = self._declaration
-            self._typed = _typed(
-                declaration.defs if declaration is not None else [], self._raw or {}
-            )
+            self._typed = _typed(self._defs, self._raw or {})
         return self._typed
 
     def view(self) -> SettingsView:
@@ -244,12 +246,10 @@ class AppSettings:
         Stored values are already normalised text (``validate`` normalises on write; defaults are
         declared as text), so no coercion is needed — this is the same shape the console settings
         page iterates, exposed on the settings model so callers never hand-roll it."""
-        declaration = self._declaration
-        defs = declaration.defs if declaration is not None else []
         raw = self._raw or {}
         return [
             SettingRow(key=d.key, type=d.type, label=d.label, value=str(raw.get(d.key, d.default)))
-            for d in defs
+            for d in self._defs
         ]
 
     def __getattr__(self, name: str) -> Any:
@@ -264,9 +264,7 @@ class AppSettings:
 
     def merged_for_org(self, overrides: dict[str, str]) -> SettingsView:
         """Server-wide values overlaid with per-org overrides, coerced to declared types."""
-        declaration = self.declaration
-        defs = declaration.defs if declaration is not None else []
-        return SettingsView(_typed(defs, {**(self._raw or {}), **overrides}))
+        return SettingsView(_typed(self._defs, {**(self._raw or {}), **overrides}))
 
     async def for_org(self, session: AsyncSession, org_id: uuid.UUID) -> SettingsView:
         """This org's effective settings — the server value unless the console overrode it.

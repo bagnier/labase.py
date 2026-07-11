@@ -16,6 +16,21 @@ from apps.shared.persistence.supabase import get_user_supabase
 log = structlog.get_logger("labase.auth.service")
 
 
+def _auth_headers(access_token: str) -> dict[str, str]:
+    """Bearer + apikey headers for a stateless authenticated GoTrue call."""
+    s = get_technical_settings()
+    return {"Authorization": f"Bearer {access_token}", "apikey": s.supabase_publishable_key}
+
+
+def _error_message(res: httpx.Response, fallback: str) -> str:
+    """The GoTrue error ``msg`` from a failed response, or ``fallback`` when the body is absent
+    or not JSON — the user-safe message extraction shared by the stateless GoTrue calls."""
+    try:
+        return res.json().get("msg", fallback)
+    except ValueError:
+        return fallback
+
+
 @dataclass
 class AuthTokens:
     access_token: str
@@ -39,10 +54,7 @@ async def logout(access_token: str) -> None:
         async with httpx.AsyncClient() as client:
             await client.post(
                 f"{s.supabase_api_url}/auth/v1/logout",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "apikey": s.supabase_publishable_key,
-                },
+                headers=_auth_headers(access_token),
             )
     except Exception:
         log.warning("auth.signout_failed")
@@ -159,11 +171,7 @@ async def _passkey_request(
             method, f"{s.supabase_api_url}/auth/v1/passkeys{path}", headers=headers, json=json
         )
     if res.status_code >= 400:
-        try:
-            message = res.json().get("msg", "Passkey operation failed.")
-        except ValueError:
-            message = "Passkey operation failed."
-        raise PasskeyError(message)
+        raise PasskeyError(_error_message(res, "Passkey operation failed."))
     return res.json() if res.content else None
 
 
@@ -226,18 +234,11 @@ async def _factors_request(method: str, path: str, access_token: str, json: dict
         res = await client.request(
             method,
             f"{s.supabase_api_url}/auth/v1/factors{path}",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "apikey": s.supabase_publishable_key,
-            },
+            headers=_auth_headers(access_token),
             json=json,
         )
     if res.status_code >= 400:
-        try:
-            message = res.json().get("msg", "Two-factor operation failed.")
-        except ValueError:
-            message = "Two-factor operation failed."
-        raise TotpError(message)
+        raise TotpError(_error_message(res, "Two-factor operation failed."))
     return res.json()
 
 
@@ -271,10 +272,7 @@ async def verified_totp_factor(access_token: str) -> str | None:
     async with httpx.AsyncClient() as client:
         res = await client.get(
             f"{s.supabase_api_url}/auth/v1/user",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "apikey": s.supabase_publishable_key,
-            },
+            headers=_auth_headers(access_token),
         )
     if res.status_code >= 400:
         return None
@@ -288,24 +286,27 @@ class PasswordUpdateError(Exception):
     """GoTrue refused the new password (typically weak_password); message is user-safe."""
 
 
-async def update_password(access_token: str, new_password: str) -> None:
-    """Set a new password for the session's user — stateless GoTrue call, like logout()."""
+async def _update_user(
+    access_token: str, payload: dict, error_type: type[Exception], fallback: str
+) -> None:
+    """PUT to GoTrue's ``/auth/v1/user`` (password or email change) — stateless, like logout();
+    on a 4xx/5xx raise ``error_type`` carrying the user-safe GoTrue message."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.put(
             f"{s.supabase_api_url}/auth/v1/user",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "apikey": s.supabase_publishable_key,
-            },
-            json={"password": new_password},
+            headers=_auth_headers(access_token),
+            json=payload,
         )
     if res.status_code >= 400:
-        try:
-            message = res.json().get("msg", "Password update failed.")
-        except ValueError:
-            message = "Password update failed."
-        raise PasswordUpdateError(message)
+        raise error_type(_error_message(res, fallback))
+
+
+async def update_password(access_token: str, new_password: str) -> None:
+    """Set a new password for the session's user."""
+    await _update_user(
+        access_token, {"password": new_password}, PasswordUpdateError, "Password update failed."
+    )
 
 
 class EmailChangeError(Exception):
@@ -313,23 +314,8 @@ class EmailChangeError(Exception):
 
 
 async def request_email_change(access_token: str, new_email: str) -> None:
-    """Ask GoTrue to mail a confirmation to the new address — stateless, like update_password."""
-    s = get_technical_settings()
-    async with httpx.AsyncClient() as client:
-        res = await client.put(
-            f"{s.supabase_api_url}/auth/v1/user",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "apikey": s.supabase_publishable_key,
-            },
-            json={"email": new_email},
-        )
-    if res.status_code >= 400:
-        try:
-            message = res.json().get("msg", "Email change failed.")
-        except ValueError:
-            message = "Email change failed."
-        raise EmailChangeError(message)
+    """Ask GoTrue to mail a confirmation to the new address."""
+    await _update_user(access_token, {"email": new_email}, EmailChangeError, "Email change failed.")
 
 
 async def confirm_signup(token_hash: str, type: str = "signup") -> AuthTokens:

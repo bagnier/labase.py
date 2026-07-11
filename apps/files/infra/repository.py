@@ -2,7 +2,6 @@ import uuid
 from datetime import timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.files.domain.models import OrgFile, OrgFileShareToken
 from apps.shared import clock
@@ -67,9 +66,6 @@ class FileShareRepository(BaseRepository[OrgFile]):
     """Admin-scoped repository for public share download — no org isolation."""
 
     model = OrgFile
-
-    def __init__(self, session: AsyncSession) -> None:
-        super().__init__(session)
 
     async def get_share_token(self, token: uuid.UUID) -> OrgFileShareToken | None:
         return await self.session.scalar(

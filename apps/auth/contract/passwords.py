@@ -30,8 +30,5 @@ async def change_password(
     Raises `WrongPassword` when the current password is wrong and
     `PasswordUpdateError` (user-safe message) when GoTrue refuses the new one.
     """
-    try:
-        await login(email, current_password)
-    except AuthApiError as exc:
-        raise WrongPassword from exc
+    await verify_password(email, current_password)
     await update_password(session_access_token, new_password)

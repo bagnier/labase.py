@@ -14,21 +14,31 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from apps.shared.config import get_technical_settings
+from apps.shared.config import TechnicalSettings, get_technical_settings
 from apps.shared.observability.sql import instrument_engine
+
+
+def search_path_connect_args(settings: TechnicalSettings) -> dict:
+    """asyncpg ``connect_args`` pinning every connection to the worktree's schema.
+
+    One source of truth for the three engines that need it (user, admin, and the
+    throwaway mount-time engine in ``settings_store``)."""
+    return {"server_settings": {"search_path": f"{settings.supabase_database_schema},public"}}
+
+
+def admin_url(settings: TechnicalSettings) -> str:
+    """The BYPASSRLS admin DB URL, falling back to the user URL when unset."""
+    return settings.supabase_database_admin_url or settings.supabase_database_user_url
 
 
 @lru_cache
 def _user_engine():
     settings = get_technical_settings()
-    connect_args = {
-        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
-    }
     engine = create_async_engine(
         settings.supabase_database_user_url,
         echo=False,
         pool_pre_ping=True,
-        connect_args=connect_args,
+        connect_args=search_path_connect_args(settings),
     )
     instrument_engine(engine)
     return engine
@@ -37,11 +47,12 @@ def _user_engine():
 @lru_cache
 def _admin_engine():
     settings = get_technical_settings()
-    url = settings.supabase_database_admin_url or settings.supabase_database_user_url
-    connect_args = {
-        "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}
-    }
-    engine = create_async_engine(url, echo=False, pool_pre_ping=True, connect_args=connect_args)
+    engine = create_async_engine(
+        admin_url(settings),
+        echo=False,
+        pool_pre_ping=True,
+        connect_args=search_path_connect_args(settings),
+    )
     instrument_engine(engine)
     return engine
 

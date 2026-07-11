@@ -74,6 +74,11 @@
 ### technical
 
 - [ ] awareness, @citation, notification
+- [ ] console should list all business events from each app
+- [ ] event driven ? CQRS ?
+- [ ] Command Query Responsibility Segregation ?
+- [ ] no audit() for error/exception, logger instead
+- [ ] trop de fichiers racine
 - [ ] export RGPD
 - [ ] product tour
 - [x] ApexCharts integration

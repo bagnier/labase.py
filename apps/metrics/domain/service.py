@@ -25,6 +25,10 @@ def percentile_ms(bucket_counts: list[int], quantile: float = 0.95) -> float | N
     return None  # only +Inf observations — slower than the largest bound
 
 
+def _error_rate(errors: int, requests: int) -> float:
+    return round(100 * errors / requests, 1) if requests else 0.0
+
+
 def _merged_buckets(rows: list[RequestMetric]) -> list[int]:
     merged = [0] * (len(BUCKET_BOUNDS_MS) + 1)
     for row in rows:
@@ -65,7 +69,7 @@ def aggregate(rows: list[RequestMetric]) -> tuple[list[RouteLoad], LoadTotals]:
                 label=f"{method} {route}",
                 requests=requests,
                 errors=errors,
-                error_rate_pct=round(100 * errors / requests, 1) if requests else 0.0,
+                error_rate_pct=_error_rate(errors, requests),
                 p95_ms=percentile_ms(_merged_buckets(group)),
             )
         )
@@ -75,7 +79,7 @@ def aggregate(rows: list[RequestMetric]) -> tuple[list[RouteLoad], LoadTotals]:
     total_errors = sum(load.errors for load in loads)
     totals = LoadTotals(
         requests=total_requests,
-        error_rate_pct=round(100 * total_errors / total_requests, 1) if total_requests else 0.0,
+        error_rate_pct=_error_rate(total_errors, total_requests),
         p95_ms=percentile_ms(_merged_buckets(rows)),
     )
     return loads, totals

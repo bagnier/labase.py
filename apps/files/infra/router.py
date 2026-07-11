@@ -1,7 +1,7 @@
 import re
 import unicodedata
 import uuid
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -11,7 +11,7 @@ from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSessio
 from apps.files.contract.current import FilesSettings
 from apps.files.domain.models import OrgFileRead
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
-from apps.files.infra.storage import rewrite_signed_url, storage_path
+from apps.files.infra.storage import signed_redirect_url, storage_path
 from apps.organizations.contract.current import (
     CurrentMembership,
     CurrentOrg,
@@ -193,8 +193,7 @@ async def download_file(
     result = await storage.from_(bucket()).create_signed_url(
         org_file.storage_path, settings.signed_url_ttl
     )
-    signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
-    return RedirectResponse(url=signed_url, status_code=302)
+    return RedirectResponse(url=signed_redirect_url(result), status_code=302)
 
 
 @router.delete("/{file_id}", response_class=HTMLResponse)
@@ -315,40 +314,23 @@ async def public_share_download(
     admin_session: AdminSession,
 ):
     ip = request.client.host if request.client else None
+
+    def reject(reason: str, code: int, detail: str) -> NoReturn:
+        audit(
+            bg, "files.share_link_rejected", level="warning", ip=ip, token=str(token), reason=reason
+        )
+        raise HTTPException(code, detail)
+
     repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
-        audit(
-            bg,
-            "files.share_link_rejected",
-            level="warning",
-            ip=ip,
-            token=str(token),
-            reason="invalid",
-        )
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Link not found")
+        reject("invalid", status.HTTP_404_NOT_FOUND, "Link not found")
     if share_token.expires_at < now():
-        audit(
-            bg,
-            "files.share_link_rejected",
-            level="warning",
-            ip=ip,
-            token=str(token),
-            reason="expired",
-        )
-        raise HTTPException(status.HTTP_410_GONE, "Link expired")
+        reject("expired", status.HTTP_410_GONE, "Link expired")
 
     org_file = await repo.get(share_token.file_id)
     if org_file is None:
-        audit(
-            bg,
-            "files.share_link_rejected",
-            level="warning",
-            ip=ip,
-            token=str(token),
-            reason="file_missing",
-        )
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
+        reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
 
     audit(
         bg,
@@ -365,5 +347,4 @@ async def public_share_download(
     result = await storage.from_(bucket()).create_signed_url(
         org_file.storage_path, effective.signed_url_ttl
     )
-    signed_url = rewrite_signed_url(result.get("signedURL") or result.get("signedUrl") or "")
-    return RedirectResponse(url=signed_url, status_code=302)
+    return RedirectResponse(url=signed_redirect_url(result), status_code=302)

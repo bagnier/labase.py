@@ -41,16 +41,14 @@ def _mask(value: str) -> str:
     return f"•••• ({len(value)} chars)" if value else "(empty)"
 
 
+def _env_var(name: str, value: str) -> EnvVar:
+    masked = _is_sensitive(name)
+    return EnvVar(name=name, value=_mask(value) if masked else value, masked=masked)
+
+
 def env_snapshot() -> list[EnvVar]:
     """Every variable the process sees, masking anything whose name looks sensitive."""
-    return [
-        EnvVar(
-            name=name,
-            value=_mask(value) if _is_sensitive(name) else value,
-            masked=_is_sensitive(name),
-        )
-        for name, value in sorted(os.environ.items())
-    ]
+    return [_env_var(n, v) for n, v in sorted(os.environ.items())]
 
 
 def technical_settings_snapshot() -> dict[str, str]:

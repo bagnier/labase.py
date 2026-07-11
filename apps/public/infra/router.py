@@ -1,15 +1,28 @@
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import OptionalCurrentUser
-from apps.organizations.contract.queries import org_by_handle
+from apps.organizations.contract.queries import OrganizationRead, org_by_handle
 from apps.pages.contract.public import get_public_nav, get_public_page, get_public_pages
 from apps.public.contract.current import PublicSettings
 from apps.shared.http import with_etag
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
+from apps.shared.settings import SettingsView
 
 router = APIRouter(tags=["public"])
+
+
+async def _featured_org(
+    admin: AsyncSession, public_settings: SettingsView
+) -> OrganizationRead | None:
+    """The configured featured org, or ``None`` when unset or unknown — the shared preamble
+    of the two public routes (each decides its own bail: home page vs 404)."""
+    handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
+    if not handle:
+        return None
+    return await org_by_handle(admin, handle)
 
 
 @router.get("/", response_class=HTMLResponse, response_model=None)
@@ -19,10 +32,7 @@ async def index(
     current_user: OptionalCurrentUser,
     public_settings: PublicSettings,
 ) -> Response:
-    handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
-    if not handle:
-        return with_etag(request, templates.TemplateResponse(request, "home.html"))
-    org = await org_by_handle(admin, handle)
+    org = await _featured_org(admin, public_settings)
     if org is None:
         return with_etag(request, templates.TemplateResponse(request, "home.html"))
     nav_items = await get_public_nav(admin, org.id)
@@ -36,7 +46,7 @@ async def index(
             "home_featured.html",
             {
                 "org": org,
-                "org_handle": handle,
+                "org_handle": org.handle,
                 "pages": pages,
                 "page_nav": nav_items,
                 "current_user": current_user,

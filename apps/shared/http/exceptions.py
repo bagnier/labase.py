@@ -2,7 +2,7 @@ import structlog
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from apps.shared.http import wants_json
+from apps.shared.http import is_htmx, wants_json
 from apps.shared.http.templates import templates
 
 log = structlog.get_logger("labase.app")
@@ -63,7 +63,7 @@ async def handle_http_error(request: Request, exc: HTTPException) -> Response:
         detail=str(exc.detail),
     )
     if exc.status_code == 401:
-        if request.headers.get("HX-Request"):
+        if is_htmx(request):
             r = Response(status_code=status.HTTP_204_NO_CONTENT)
             r.headers["HX-Redirect"] = "/auth/login"
             return r

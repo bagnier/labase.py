@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSession
 from apps.organizations.contract.current import (
@@ -10,6 +11,7 @@ from apps.organizations.contract.current import (
     CurrentOrg,
     CurrentOrgModel,
     Membership,
+    OrganizationRead,
     OrgRole,
 )
 from apps.organizations.contract.queries import org_by_handle, role_in_org
@@ -46,13 +48,46 @@ async def _get_repo(session: RlsSession, org_id: CurrentOrg) -> PageRepository:
 PageRepo = Annotated[PageRepository, Depends(_get_repo)]
 
 
-def _can_edit(page: Page, membership: Membership) -> bool:
+def _can_edit_role(visibility: PageVisibility, role: OrgRole | None) -> bool:
     """Drafts are collaborative (any member); once published, only owners may change them."""
-    return membership.role == OrgRole.owner or page.visibility == PageVisibility.draft
+    return role == OrgRole.owner or (role is not None and visibility == PageVisibility.draft)
 
 
 def _can_view(visibility: PageVisibility, role: OrgRole | None) -> bool:
     return visibility == PageVisibility.public or role is not None
+
+
+async def _editable_page(repo: PageRepository, slug: str, membership: Membership) -> Page:
+    page = or_404(await repo.by_slug(slug))
+    if not _can_edit_role(page.visibility, membership.role):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
+    return page
+
+
+def _require_nav_owner(membership: Membership) -> None:
+    if membership.role != OrgRole.owner:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
+
+
+def _parse_visibility(value: str) -> PageVisibility:
+    try:
+        return PageVisibility(value)
+    except ValueError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility") from None
+
+
+async def _resolve_org_role(
+    admin: AsyncSession,
+    rls: AsyncSession,
+    org_handle: str,
+    current_user: OptionalCurrentUser,
+) -> tuple[OrganizationRead, OrgRole | None, AsyncSession]:
+    """The org, the caller's role in it (``None`` if anonymous/non-member), and the session to
+    read pages with — RLS for members, admin (BYPASSRLS) for the public/anonymous view."""
+    org = or_404(await org_by_handle(admin, org_handle))
+    role = await role_in_org(rls, org.id, uuid.UUID(current_user.id)) if current_user else None
+    session = rls if role is not None else admin
+    return org, role, session
 
 
 # ── authed management routes (mounted under /{org_handle}, RLS) ────────────────
@@ -127,9 +162,7 @@ async def edit_page(
     repo: PageRepo,
     org: CurrentOrgModel,
 ) -> Response:
-    page = or_404(await repo.by_slug(slug))
-    if not _can_edit(page, membership):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
+    page = await _editable_page(repo, slug, membership)
     ctx = await fullpage_context(
         session,
         current_user,
@@ -152,9 +185,7 @@ async def update_page(
     org_id: CurrentOrg,
     org: CurrentOrgModel,
 ) -> Response:
-    page = or_404(await repo.by_slug(slug))
-    if not _can_edit(page, membership):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
+    page = await _editable_page(repo, slug, membership)
     body = await parse_body(request)
     event = "pages.updated"
     new_slug = body.get("slug")
@@ -172,12 +203,7 @@ async def update_page(
     if body.get("title") is not None:
         page.title = str(body["title"]).strip() or page.title
     if body.get("visibility") is not None:
-        try:
-            visibility = PageVisibility(str(body["visibility"]))
-        except ValueError:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility"
-            ) from None
+        visibility = _parse_visibility(str(body["visibility"]))
         if visibility != page.visibility:
             if membership.role != OrgRole.owner:
                 raise HTTPException(
@@ -214,9 +240,7 @@ async def delete_page(
     org_id: CurrentOrg,
     org: CurrentOrgModel,
 ) -> Response:
-    page = or_404(await repo.by_slug(slug))
-    if not _can_edit(page, membership):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is read-only")
+    page = await _editable_page(repo, slug, membership)
     await repo.delete(page)
     audit(
         bg,
@@ -255,10 +279,7 @@ async def set_visibility(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can change a page's visibility")
     page = or_404(await repo.by_slug(slug))
     body = await parse_body(request)
-    try:
-        visibility = PageVisibility(str(body.get("visibility")))
-    except ValueError:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility") from None
+    visibility = _parse_visibility(str(body.get("visibility")))
     page.visibility = visibility
     await repo.save(page)
     audit(
@@ -289,8 +310,7 @@ async def nav_manager(
     nav_repo: PageNavRepo,
     org: CurrentOrgModel,
 ) -> Response:
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
+    _require_nav_owner(membership)
     candidates = await nav_repo.candidates()
     if wants_json(request):
         return JSONResponse([c.model_dump(mode="json") for c in candidates])
@@ -312,8 +332,7 @@ async def add_to_nav(
     nav_repo: PageNavRepo,
     org: CurrentOrgModel,
 ) -> Response:
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
+    _require_nav_owner(membership)
     body = await parse_body(request)
     slug = str(body.get("slug", "")).strip()
     page = or_404(await repo.by_slug(slug))
@@ -339,8 +358,7 @@ async def remove_from_nav(
     nav_repo: PageNavRepo,
     org: CurrentOrgModel,
 ) -> Response:
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
+    _require_nav_owner(membership)
     page = or_404(await repo.by_slug(slug))
     await nav_repo.remove(page.id)
     if wants_json(request):
@@ -356,8 +374,7 @@ async def reorder_nav(
     repo: PageRepo,
     nav_repo: PageNavRepo,
 ) -> Response:
-    if membership.role != OrgRole.owner:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
+    _require_nav_owner(membership)
     body = await parse_body(request)
     page = or_404(await repo.by_slug(slug))
     above_slug = body.get("above_slug")
@@ -384,9 +401,7 @@ async def list_pages(
     rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> Response:
-    org = or_404(await org_by_handle(admin, org_handle))
-    role = await role_in_org(rls, org.id, uuid.UUID(current_user.id)) if current_user else None
-    session = rls if role is not None else admin
+    org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)
     query = request.query_params.get("q", "").strip()
     if query:
         pages = await search_visible_pages(session, org.id, query, role=role)
@@ -437,15 +452,11 @@ async def view_page(
     rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> Response:
-    org = or_404(await org_by_handle(admin, org_handle))
-    role = await role_in_org(rls, org.id, uuid.UUID(current_user.id)) if current_user else None
-    session = rls if role is not None else admin
+    org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)
     page = or_404(await PageRepository(session, org.id).by_slug(slug))
     if not _can_view(page.visibility, role):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
-    can_edit = role == OrgRole.owner or (
-        role is not None and page.visibility == PageVisibility.draft
-    )
+    can_edit = _can_edit_role(page.visibility, role)
     body = render_markdown(page.content)
     if current_user:
         ctx = await fullpage_context(
