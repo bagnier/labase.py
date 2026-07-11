@@ -4,7 +4,7 @@ Feature: Org file storage
   So that we can centralise our documents and collaborate efficiently
 
   Background:
-    Given a user is signed in as "alice@example.com" within org "Acme"
+    Given a user is signed in as "alice@example.com" as owner of "Acme"
 
   # Upload
 

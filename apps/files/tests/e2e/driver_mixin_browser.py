@@ -1,9 +1,14 @@
 import contextlib
 import tempfile
 
-from apps.auth.tests.given_helpers import delete_user_if_exists
+from apps.auth.tests.given_helpers import (
+    create_user,
+    delete_user_if_exists,
+    user_id_for_email,
+)
+from apps.organizations.tests.given_helpers import add_membership, create_org_for_user
 from apps.shared.settings import get_settings
-from tests.e2e.drivers.browser_base import BrowserBase
+from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 
 class OrgFileBrowserMixin(BrowserBase):
@@ -140,6 +145,22 @@ class OrgFileBrowserMixin(BrowserBase):
             lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
         ):
             self.page.click("form:has(input[name=name]) button[type=submit]")
+
+    def sign_in_as_member_of_org(self, email: str, org_name: str) -> None:
+        # Non-owner member: seed the org under a synthetic owner (committed, for the
+        # same RLS reason as sign_in_within_org), register `email` on their own
+        # context, then join them as a plain member. Truncate teardown reaps both.
+        owner_email = f"owner-{org_name.lower().replace(' ', '-')}@example.com"
+        delete_user_if_exists(email)
+        delete_user_if_exists(owner_email)
+        owner_id = create_user(owner_email, _PASSWORD)
+        org = create_org_for_user(org_name, owner_id)
+        self.active_org_handle = org["handle"]
+        self.primary_email = email
+        self.last_registered_email = email
+        self.context_for(email)  # registers + logs in the member on their own context
+        add_membership(org["id"], user_id_for_email(email), role="member")
+        self.set_acting_email(email)
 
     # ── multi-user operations ─────────────────────────────────────────────────
 

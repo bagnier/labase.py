@@ -94,6 +94,28 @@ class OrgFileApiMixin(ApiBase):
         self._clients[email] = client
         self.set_acting_email(email)
 
+    def sign_in_as_member_of_org(self, email: str, org_name: str) -> None:
+        # A genuine non-owner member: the org belongs to a synthetic owner and
+        # `email` joins as a plain member. This is what makes "within org" mean
+        # member-level access, in contrast to sign_in_within_org (owner).
+        self.primary_email = email
+        self.last_registered_email = email
+        owner_email = f"owner-{org_name.lower().replace(' ', '-')}@example.com"
+        delete_user_if_exists(email)
+        delete_user_if_exists(owner_email)
+        owner_id = create_user(owner_email, _PASSWORD)
+        self._track_auth_email(owner_email)
+        org = create_org_for_user(org_name, owner_id)
+        self.track_org_id(org["id"])
+        self.active_org_handle = org["handle"]
+        member_id = create_user(email, _PASSWORD)
+        self._track_auth_email(email)
+        add_membership(org["id"], member_id, role="member")
+        client = self._clients.get(email) or self._make_client()
+        client.post("/auth/login", json={"email": email, "password": _PASSWORD})
+        self._clients[email] = client
+        self.set_acting_email(email)
+
     # ── file operations ───────────────────────────────────────────────────────
 
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:

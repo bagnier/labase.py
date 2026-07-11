@@ -3,7 +3,8 @@ from pytest_bdd import given, parsers, then, when
 
 @given(parsers.parse('a user is signed in as "{email}" within org "{org_name}"'))
 def step_user_signed_in_within_org(driver, email, org_name):
-    driver.sign_in_within_org(email, org_name)
+    # "within org" = a genuine non-owner member; "as owner of" grants ownership.
+    driver.sign_in_as_member_of_org(email, org_name)
 
 
 @given(parsers.parse('a user is signed in as "{email}" as owner of "{org_name}"'))

@@ -1,6 +1,6 @@
 """Integration: the flusher really persists deltas; rollup downsamples and purges."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -22,8 +22,14 @@ def _clear_engine_caches() -> None:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def metrics_isolation():
+async def metrics_isolation(monkeypatch):
     _clear_engine_caches()
+    # Pin the clock. Flush and rollup call clock.now() several times to derive
+    # minute/hour buckets; against the real wall clock those calls can straddle a
+    # minute or hour boundary (e.g. seeding "old" then "old + 1 min" at :59 lands
+    # them in two different hours), which made this suite fail ~1 run in 60. A
+    # fixed instant makes the bucket maths deterministic.
+    monkeypatch.setattr(clock, "now", lambda: datetime(2024, 1, 15, 12, 0, tzinfo=UTC))
     yield
     async with db.admin_session_factory()() as session:
         await session.execute(
