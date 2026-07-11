@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
@@ -11,7 +12,8 @@ from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.admin import resolve_user_emails
 from apps.auth.contract.current import CurrentAdmin
-from apps.logs.infra.repository import LogFilter, LogReader
+from apps.logs.domain.models import LogEntry
+from apps.logs.infra.repository import LogFilter, LogReader, request_desc
 from apps.organizations.contract.queries import org_handles
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
@@ -76,51 +78,52 @@ def _as_uuid(value: str) -> uuid.UUID | None:
         return None
 
 
-async def _label_orgs(session: AdminSession, org_facet: list[dict[str, Any]], selected: str) -> str:
-    """Resolve every org id in the org facet (and the currently selected one) to its handle,
-    annotating each option in place with a ``label`` and returning the selected value's label.
-    Handles are looked up in bulk; ids with no org row (background/app logs, test fixtures) fall
-    back to the short id."""
-    ids = {_as_uuid(o["value"]) for o in org_facet}
-    ids.add(_as_uuid(selected))
-    handles = await org_handles(session, {i for i in ids if i is not None})
+def _ids(
+    facet: list[dict[str, Any]], entries: list[LogEntry], attr: str, selected: str | None
+) -> set[str]:
+    """Every id that needs a label for this dimension: the facet options, the visible rows' ids,
+    and the current selection — deduplicated so the resolver is called once."""
+    values = {o["value"] for o in facet}
+    values |= {v for e in entries if (v := getattr(e, attr))}
+    if selected:
+        values.add(selected)
+    return values
+
+
+async def _org_labeler(session: AdminSession, values: set[str]) -> Callable[[str], str]:
+    """A ``value -> handle`` labeller over the given org ids, resolved in one bulk lookup. Ids with
+    no org row (background/app logs, test fixtures) fall back to the short id."""
+    uuids = {_as_uuid(v) for v in values}
+    handles = await org_handles(session, {i for i in uuids if i is not None})
 
     def label(value: str) -> str:
         oid = _as_uuid(value)
         return handles.get(oid, _short(value)) if oid else _short(value)
 
-    for option in org_facet:
-        option["label"] = label(option["value"])
-    return label(selected) if selected else ""
+    return label
 
 
-async def _label_users(user_facet: list[dict[str, Any]], selected: str) -> str:
-    """Resolve every user id in the user facet (and the selected one) to its email, annotating each
-    option in place and returning the selected value's label. Emails come in bulk from the auth
-    admin API; ids the directory can't resolve (deleted users, test fixtures) fall back to the
-    short id."""
-    ids = {_as_uuid(o["value"]) for o in user_facet}
-    ids.add(_as_uuid(selected))
-    emails = await resolve_user_emails([i for i in ids if i is not None])
+async def _user_labeler(values: set[str]) -> Callable[[str], str]:
+    """A ``value -> email`` labeller over the given user ids, resolved in bulk from the auth admin
+    API. Ids the directory can't resolve (deleted users, fixtures) fall back to the short id."""
+    uuids = {_as_uuid(v) for v in values}
+    emails = await resolve_user_emails([i for i in uuids if i is not None])
 
     def label(value: str) -> str:
         uid = _as_uuid(value)
         return (emails.get(uid) or _short(value)) if uid else _short(value)
 
-    for option in user_facet:
-        option["label"] = label(option["value"])
-    return label(selected) if selected else ""
+    return label
 
 
-def _selected_label(facet: list[dict[str, Any]], selected: str) -> str:
-    """The label a facet already carries for the selected value (e.g. the request's route), falling
-    back to the short id when the current window doesn't include that value."""
-    if not selected:
-        return ""
-    for option in facet:
-        if option["value"] == selected:
-            return option.get("label") or _short(selected)
-    return _short(selected)
+def _request_routes(facet: list[dict[str, Any]], entries: list[LogEntry]) -> dict[str, str]:
+    """A ``request_id -> route`` map: the facet already carries a route per request over its window;
+    supplement it from the visible rows so a request narrowed outside that window still resolves."""
+    routes = {o["value"]: o["label"] for o in facet}
+    for e in entries:
+        if e.request_id and (desc := request_desc(e)):
+            routes[e.request_id] = desc
+    return routes
 
 
 @router.get("", response_model=None)
@@ -144,9 +147,29 @@ async def logs_screen(
     entries = await reader.search(flt)
     activity = await reader.activity(flt)
     facets = await reader.facets(flt)
-    org_label = await _label_orgs(session, facets["org"], org_id or "")
-    user_label = await _label_users(facets["user"], user_id or "")
-    request_label = _selected_label(facets["request"], request_id or "")
+
+    # Resolve ids to intelligible names once, over the union of the facet options (the pill
+    # dropdowns) and the ids on the visible rows (the table) — one bulk lookup feeds both.
+    org_of = await _org_labeler(session, _ids(facets["org"], entries, "org_id", org_id))
+    user_of = await _user_labeler(_ids(facets["user"], entries, "user_id", user_id))
+    routes = _request_routes(facets["request"], entries)
+    for option in facets["org"]:
+        option["label"] = org_of(option["value"])
+    for option in facets["user"]:
+        option["label"] = user_of(option["value"])
+
+    org_label = org_of(org_id) if org_id else ""
+    user_label = user_of(user_id) if user_id else ""
+    request_label = (routes.get(request_id) or _short(request_id)) if request_id else ""
+    row_labels = {
+        "org": {e.org_id: org_of(e.org_id) for e in entries if e.org_id},
+        "user": {e.user_id: user_of(e.user_id) for e in entries if e.user_id},
+        "request": {
+            e.request_id: routes.get(e.request_id) or _short(e.request_id)
+            for e in entries
+            if e.request_id
+        },
+    }
     settings = _settings_rows()
     if wants_json(request):
         return JSONResponse(
@@ -179,6 +202,7 @@ async def logs_screen(
             "org_label": org_label,
             "user_label": user_label,
             "request_label": request_label,
+            "labels": row_labels,
             # Only the firehose level is tuned from the screen; the enabled switch stays on the
             # console's app page like every other app.
             "settings": [r for r in settings if r["key"] == _LOG_LEVEL_KEY],

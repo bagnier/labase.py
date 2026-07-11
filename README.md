@@ -180,6 +180,7 @@ signup → emit(UserCreated)
       → learning: seeds Welcome deck
       → todo:     seeds 3 welcome todos
       → calendar: seeds a welcome event
+      → pages:    seeds a public Welcome page (the base's own pitch, in the public nav)
 ```
 
 **Dashboard query:**

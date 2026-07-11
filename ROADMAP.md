@@ -1,28 +1,61 @@
-## issues
+## now — finir / fiabiliser (état des lieux 2026-07-11)
 
-- [ ] better graphical language
-- [x] réorganiser toute la console pour mettre les features en valeurs en les distingant des settings. issues, logs, metrics ne sont pas visibles
-- [x] http://127.0.0.1:8000/az-az/learning/sessions cards should be displayed one by one
-- [x] timezone in org, calendar accorded
-- [x] apps/calendar should display multi-day events
-- [x] apps/pages fulltext search
-- [x] blue/black color of open links on http://127.0.0.1:8000/az-az/dashboard
-- [x] org-settings divided into tabs : members, naming, api keys
-- [x] org-settings save > confirm
-- [x] org-settings save alignement
-- [x] console setting for organizations to limit the number of invitation
-- [x] profile divided into tabs : profile, organizations, email, authentication
-- [x] console Per-organisation overrides, org finding uses current log  filter widgets
-- [x] issues dont use the same graphic language that other
-- [x] console load, where are the results ?
-- [x] console load rename > metrics
-- [x] organisations settings, limit the number of invitations
-- [x] images for apps/pages
-- [x] Per-organisation overrides not meaningful for featured_org_handle
-- [x] http://127.0.0.1:8000/console/users "Accounts →" make it more visible
-- [x] calendar new-event validation error re-renders the form as "Edit event" (title + breadcrumb) — `/{org}/calendar/new` — [preuve](reports/explore-2026-07-09/calendar-new-mislabel-edit.png)
-- [x] console + metrics cards for API keys / Issues / Load show a blank icon (missing glyph) while other apps render one — [preuve](reports/explore-2026-07-09/v-console.png)
-- [x] logs display, rework the GUI to match @features/unified-logs.mockup.html
+### auth — prouver que ça marche
+
+- [ ] OAuth round-trip untested end-to-end (callback + PKCE cookie + org bootstrap are
+      only covered by mocked units) — fake OIDC provider in the e2e drivers, or a
+      documented manual smoke checklist
+- [ ] TOTP-after-OAuth branch (`apps/auth/infra/router.py:442`) has zero coverage
+- [ ] passkeys: the browser JS (`navigator.credentials`) is never executed by tests —
+      Playwright virtual authenticator (CDP)
+- [ ] `/auth/confirm` error path redirects with `?info=registered`, key missing from
+      `_INFO_MESSAGES` → blank banner
+
+### GUI — harmoniser
+
+- [ ] land PR #4 — labase-light/labase-dark identity, shared type scale,
+      hardcoded-color guardrail in `make lint`
+- [ ] `page_header` macro + one content-width convention (~20 hand-rolled headers,
+      3 idioms)
+- [ ] `empty_state` macro (5 idioms today)
+- [ ] shared `data_table` + `filter_bar` partials (logs/metrics/issues each invent
+      their own)
+- [ ] `input_field`: error + select variants (profile/settings fork the markup)
+- [ ] one avatar-initials macro (3 spellings: base.html, profile.html, styleguide)
+
+### dashboards — rendre vivants
+
+- [ ] shared chart macro over the `charts.js` `data-chart-config` contract + a
+      series-shaping helper (unlocks everything below)
+- [ ] org dashboard: 14-day activity chart — `LogReader.activity(org_id=…)` already
+      returns per-day/per-source counts
+- [ ] profile: "Recent activity" timeline — `search_audit_logs(user_id=…)` already
+      filters per user
+- [ ] wire the `metric_card` stub ("No data yet") to the counts `overviews.json`
+      already computes
+- [ ] logs: replace the hand-rolled CSS activity bars with the ApexCharts stack
+- [ ] issues: per-day occurrence sparkline on the detail page
+- [ ] console: signups / orgs growth chart (`UserCreated`/`OrgCreated` or audit events)
+
+### découplage — finaliser
+
+- [ ] `host.register_app(manifest)`: collapse the ~15-step mount ceremony copy-pasted
+      in todo/files/learning/pages/calendar (incl. the console-tile-before-enabled-gate
+      ordering trap)
+- [ ] declarative mount phases instead of the hand-ordered tuple in `apps/main.py`
+- [ ] unify the four collect-slice queries (`OverviewQuery` / `ConsoleOverviewQuery` /
+      `OrgSettingsSectionQuery` / `OrgNavQuery`)
+- [ ] one settings registry (`host.declarations` vs `settings._registry`) + fix naming
+      drift (auth→"users", console→"appearance")
+- [ ] import-linter: add the missing "logs internals are private" contract
+- [ ] one slug rule: drop calendar's pointless `reserve`, move `register_open_list`
+      onto `Host`
+
+### vitrine
+
+- [x] laudative Welcome page seeded public + in nav by `pages` on `OrgCreated` — set
+      `public.featured_org_handle` to make it the site home
+
 
 ## goals
 

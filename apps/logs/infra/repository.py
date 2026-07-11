@@ -98,7 +98,7 @@ def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> l
     return [{"value": value, "count": count} for value, count in ranked]
 
 
-def _request_desc(entry: LogEntry) -> str | None:
+def request_desc(entry: LogEntry) -> str | None:
     """The human label for a request: its ``METHOD /path`` — the request source binds both onto
     every ``request.started/finished`` line's payload. Correlated audit/issue rows carry neither,
     so a request only gets a label once one of its firehose lines is in the window."""
@@ -117,7 +117,7 @@ def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
         if not rid:
             continue
         counts[rid] = counts.get(rid, 0) + 1
-        if rid not in labels and (desc := _request_desc(e)):
+        if rid not in labels and (desc := request_desc(e)):
             labels[rid] = desc
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return [{"value": rid, "count": count, "label": labels.get(rid, rid)} for rid, count in ranked]
