@@ -14,8 +14,9 @@
 
 ### GUI — harmoniser
 
-- [ ] land PR #4 — labase-light/labase-dark identity, shared type scale,
-      hardcoded-color guardrail in `make lint`
+- [x] land PR #4 — labase-light/labase-dark identity, shared type scale,
+      hardcoded-color guardrail in `make lint` (+ migration flipping the old seeded
+      "light" default so existing installs adopt the identity)
 - [ ] `page_header` macro + one content-width convention (~20 hand-rolled headers,
       3 idioms)
 - [ ] `empty_state` macro (5 idioms today)
