@@ -7,8 +7,11 @@
       branching now also covered by `apps/auth/tests/test_oauth_callback.py`
 - [x] TOTP-after-OAuth branch (`apps/auth/infra/router.py:442`) has zero coverage
       → covered (session withheld until the code, cookies parked, opt-out paths)
-- [ ] passkeys: the browser JS (`navigator.credentials`) is never executed by tests —
-      Playwright virtual authenticator (CDP)
+- [x] passkeys: the browser JS (`navigator.credentials`) is never executed by tests —
+      done via a Playwright CDP virtual authenticator: the browser e2e server now
+      sits on a pinned origin (`http://localhost:8801`, allow-listed in
+      `rp_origins`), the scenarios click the real buttons and GoTrue verifies the
+      real ceremonies (docs/passkeys.md)
 - [x] `/auth/confirm` error path redirects with `?info=registered`, key missing from
       `_INFO_MESSAGES` → blank banner — now `?info=confirm_failed` with a real message
 

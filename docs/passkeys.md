@@ -23,13 +23,18 @@ Passwordless, phishing-resistant sign-in on GoTrue's **beta** passkeys API
 
 ## Testing status — read before trusting
 
-A real browser WebAuthn prompt cannot run in E2E: GoTrue pins `rp_origins` and
-the in-process browser test server runs on a random port. Both drivers instead
-run the **real server-side ceremony** (app → GoTrue → auth schema) through a
-software authenticator (vendored in `tests/e2e/drivers/webauthn.py` on
-`cryptography` alone — the off-the-shelf ones pin a vulnerable range) that
-signs the configured rp origin; the browser driver additionally asserts the
-visible affordances. The one thing never exercised automatically is
-`navigator.credentials` itself — verify it manually once per browser family:
-enable the switch, add a passkey from `/profile`, sign out, click
-**Use a passkey**.
+Both drivers exercise the **real GoTrue ceremony** (app → GoTrue → auth schema),
+each at its own depth:
+
+- **Browser driver** — the real thing, end to end: the e2e server runs on a
+  pinned origin (`http://localhost:8801`, listed in `rp_origins`), so
+  `static/js/passkeys.js` executes `navigator.credentials` against a Playwright
+  **CDP virtual authenticator** (`WebAuthn.addVirtualAuthenticator`); the tests
+  click the real **Add a passkey** / **Use a passkey** buttons, and the
+  credential is carried into the visitor context for the discoverable sign-in.
+- **API driver** — the server-side ceremony through a software authenticator
+  (vendored in `tests/e2e/drivers/webauthn.py` on `cryptography` alone — the
+  off-the-shelf ones pin a vulnerable range) that signs the configured rp
+  origin.
+
+Nothing is mocked in either path: GoTrue verifies every attestation/assertion.

@@ -1,11 +1,11 @@
-"""Software WebAuthn authenticator for the passkey E2E scenarios.
+"""Software WebAuthn authenticator for the API driver's passkey scenarios.
 
 GoTrue validates the origin *inside the signed clientDataJSON* against its
 configured ``rp_origins`` — and this device signs whatever origin we claim.
-That is what lets both drivers run the real server-side ceremony (app →
-GoTrue → auth schema) even though the browser E2E server lives on a random
-port GoTrue would reject, and the API driver has no browser at all. The
-browser-visible affordances (buttons, sections) are asserted separately.
+That is what lets the API driver, which has no browser, still run the real
+server-side ceremony (app → GoTrue → auth schema). The browser driver goes
+further: it executes ``navigator.credentials`` for real via a CDP virtual
+authenticator against the pinned e2e origin (see the auth browser mixin).
 
 Self-contained on ``cryptography`` (P-256 / ES256, "none" attestation, minimal
 CBOR): the off-the-shelf soft authenticators pin a vulnerable ``cryptography``

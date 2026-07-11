@@ -24,6 +24,22 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _loopback_binds(port: int) -> list[str]:
+    """Both loopback sockets when the machine has them.
+
+    The base URL says ``localhost`` (WebAuthn rp_id), and resolvers differ on
+    whether that means ``::1`` or ``127.0.0.1`` — listening on both makes the
+    URL work either way."""
+    binds = [f"127.0.0.1:{port}"]
+    try:
+        with socket.socket(socket.AF_INET6) as s:
+            s.bind(("::1", 0))
+        binds.append(f"[::1]:{port}")
+    except OSError:
+        pass
+    return binds
+
+
 async def _make_event() -> asyncio.Event:
     return asyncio.Event()
 
@@ -35,20 +51,25 @@ class InProcessServer:
         self._server_future = None
         self._port: int | None = None
 
-    def start(self) -> str:
-        """Launch the server on a free port and return its base URL."""
-        self._port = _free_port()
+    def start(self, port: int | None = None) -> str:
+        """Launch the server (on `port`, or a free one) and return its base URL.
+
+        The URL says ``localhost`` (same socket) so the browser's origin domain
+        matches the WebAuthn ``rp_id`` GoTrue pins; a pinned `port` listed in
+        ``rp_origins`` is what lets ``navigator.credentials`` ceremonies verify
+        in e2e (see the browser driver)."""
+        self._port = port or _free_port()
         self._bg = BackgroundLoop()
         self._bg.start()
         config = Config()
-        config.bind = [f"127.0.0.1:{self._port}"]
+        config.bind = _loopback_binds(self._port)
         config.accesslog = config.errorlog = None
         self._shutdown = self._bg.run(_make_event())
         self._server_future = self._bg.submit(
             serve(app, config, shutdown_trigger=self._shutdown.wait)
         )
         self._wait_for_server()
-        return f"http://127.0.0.1:{self._port}"
+        return f"http://localhost:{self._port}"
 
     def run(self, coro):
         """Run a coroutine on the server's event loop and return its result.

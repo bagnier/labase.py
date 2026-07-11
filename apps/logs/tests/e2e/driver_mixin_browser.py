@@ -83,14 +83,17 @@ class LogsBrowserMixin(BrowserBase):
             self.open_logs_screen()
 
     def _submit_filter(self, **fields: str) -> None:
-        """Fill the on-screen filter controls and let them apply — no URL crafting. The toolbar
-        has no Filter button; free text and the date range submit on change, so we fill each
-        control then fire the form's ``requestSubmit()`` (the same path their onchange uses)."""
+        """Fill the on-screen filter controls and let them apply — no URL crafting.
+
+        Values are set without firing events: the live controls auto-submit on change,
+        so a Playwright ``fill()`` per field would navigate once per field and race the
+        assertions. One silent set per field, then one ``requestSubmit()`` — the same
+        submission path their onchange uses, exactly once."""
         self.open_logs_screen()
         control = None
         for name, value in fields.items():
             control = self.page.locator(f"[name='{name}']").first
-            control.fill(value)
+            control.evaluate("(el, v) => { el.value = v }", value)
         assert control is not None, "no filter fields to submit"
         with self.page.expect_navigation(wait_until="load"):
             control.evaluate("el => el.form.requestSubmit()")
@@ -170,7 +173,7 @@ class LogsBrowserMixin(BrowserBase):
         self.page.wait_for_selector("[data-logs-empty]", timeout=5000)
 
     def assert_entry_listed(self, event: str) -> None:
-        assert event in self._events(), f"{event!r} not listed in {self._events()}"
+        self.page.wait_for_selector(f"tr[data-log-event='{event}']", timeout=5000)
 
     def assert_entry_not_listed(self, event: str) -> None:
         assert event not in self._events(), f"{event!r} unexpectedly listed in {self._events()}"

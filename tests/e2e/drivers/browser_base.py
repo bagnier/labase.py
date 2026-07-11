@@ -24,6 +24,13 @@ _PASSWORD = "Secret1!"
 _VISITOR = "visitor"  # sentinel — unauthenticated context, no associated user
 VISITOR = _VISITOR  # public alias, mirroring api_base.VISITOR
 
+# Pinned so http://localhost:8801 can sit in supabase/config.toml [auth.webauthn]
+# rp_origins — GoTrue verifies the origin signed into WebAuthn ceremonies, and a
+# random port could never be allow-listed. Override with LABASE_E2E_PORT when two
+# checkouts run browser e2e at once (passkey scenarios then need that origin
+# allow-listed too).
+_E2E_PORT = 8801
+
 
 class BrowserBase:
     def __init__(self) -> None:
@@ -42,7 +49,8 @@ class BrowserBase:
     def start(self) -> None:
         if not self.base_url:
             self._server = InProcessServer()
-            self.base_url = self._server.start()
+            port = int(os.environ.get("LABASE_E2E_PORT", _E2E_PORT))
+            self.base_url = self._server.start(port=port)
 
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch()

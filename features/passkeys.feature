@@ -3,10 +3,10 @@ Feature: Passkeys (WebAuthn)
   I want to sign in with a passkey instead of a password
   So that phishing-resistant sign-in is one console switch away
 
-  # A real browser WebAuthn prompt cannot run against the E2E server (GoTrue
-  # pins rp origins; the in-process server uses a random port), so both drivers
-  # run the real GoTrue ceremony through a software authenticator — see
-  # tests/e2e/drivers/webauthn.py. The visible affordances are asserted too.
+  # Both drivers run the real GoTrue ceremony. The browser driver executes
+  # navigator.credentials for real: the e2e server sits on a pinned origin
+  # (rp_origins) and a Playwright CDP virtual authenticator answers the prompts.
+  # The API driver uses the software authenticator in tests/e2e/drivers/webauthn.py.
 
   Background: running
     Given the application is running

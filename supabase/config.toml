@@ -54,7 +54,9 @@ enabled = true
 [auth.webauthn]
 rp_display_name = "labase"
 rp_id = "localhost"
-rp_origins = ["http://localhost:8000"]
+# 8000 = dev server; 8801 = the pinned browser-e2e server (tests/e2e/drivers/browser_base.py),
+# so navigator.credentials ceremonies verify against real GoTrue in e2e.
+rp_origins = ["http://localhost:8000", "http://localhost:8801"]
 
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.

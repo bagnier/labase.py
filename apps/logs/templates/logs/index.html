@@ -17,10 +17,12 @@
       'One timeline across every source — the structlog firehose, the audit trail and tracked
       issues — server-wide. Correlate by request id.') %}
       <a class="btn btn-sm btn-ghost"
+         aria-label="Export NDJSON"
          href="/console/logs/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">
         <i class="ph ph-download-simple" aria-hidden="true"></i>NDJSON
       </a>
       <a class="btn btn-sm btn-ghost"
+         aria-label="Export CSV"
          href="/console/logs/export?format=csv{{ '&' ~ export_qs if export_qs }}">
         <i class="ph ph-download-simple" aria-hidden="true"></i>CSV
       </a>

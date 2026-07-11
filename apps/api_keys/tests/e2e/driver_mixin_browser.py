@@ -17,8 +17,14 @@ class ApiKeysBrowserMixin(BrowserBase):
         slug = getattr(self, "active_org_handle", "")
         return f"{self.base_url}/{slug}/settings"
 
-    def create_api_key(self, name: str) -> None:
+    def _open_keys_panel(self) -> None:
+        """The keys section sits in the settings page's "API keys" tab (client-side
+        daisyUI tabs); check its radio so the panel is visible."""
         self.page.goto(self._keys_page_url(), wait_until="load")
+        self.page.get_by_role("tab", name="API keys", exact=True).check()
+
+    def create_api_key(self, name: str) -> None:
+        self._open_keys_panel()
         self.page.get_by_label("Key name").fill(name)
         self.page.get_by_role("button", name="Create key").click()
         self.page.wait_for_selector("[data-api-key-secret]", timeout=5000)
@@ -49,7 +55,7 @@ class ApiKeysBrowserMixin(BrowserBase):
         assert isinstance(resp.json(), list)
 
     def revoke_api_key(self, name: str) -> None:
-        self.page.goto(self._keys_page_url(), wait_until="load")
+        self._open_keys_panel()
         self.page.get_by_role("button", name=f"Revoke key {name}").click()
         self.page.wait_for_selector(
             f"[data-api-key='{name}'][data-api-key-status='revoked']", timeout=5000

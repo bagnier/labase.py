@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -9,7 +8,6 @@ from apps.auth.tests.given_helpers import (
 )
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import VISITOR, BrowserBase
-from tests.e2e.drivers.webauthn import PasskeyDevice
 
 
 class AuthBrowserMixin(BrowserBase):
@@ -279,17 +277,26 @@ class AuthBrowserMixin(BrowserBase):
         assert f"provider={provider}" in location, f"unexpected provider in: {location}"
 
     # ── Passkeys ───────────────────────────────────────────────────────────────
-    # The WebAuthn ceremony runs through page.request (real HTTP, the context's
-    # cookies) + the software authenticator — see tests/e2e/drivers/webauthn.py
-    # for why the browser prompt itself cannot run here.
-    def _passkey_post(self, page, path: str, payload: dict) -> dict:
-        resp = page.request.post(
-            f"{self.base_url}{path}",
-            data=json.dumps(payload),
-            headers={"content-type": "application/json", "accept": "application/json"},
+    # The real thing: static/js/passkeys.js drives navigator.credentials against a
+    # CDP virtual authenticator, and GoTrue verifies the signed origin — possible
+    # because the e2e server's origin is pinned into rp_origins (see browser_base).
+    def _attach_virtual_authenticator(self, page):
+        client = page.context.new_cdp_session(page)
+        client.send("WebAuthn.enable")
+        added = client.send(
+            "WebAuthn.addVirtualAuthenticator",
+            {
+                "options": {
+                    "protocol": "ctap2",
+                    "transport": "internal",
+                    "hasResidentKey": True,
+                    "hasUserVerification": True,
+                    "isUserVerified": True,
+                    "automaticPresenceSimulation": True,
+                },
+            },
         )
-        assert resp.ok, f"POST {path}: {resp.status} {resp.text()}"
-        return resp.json()
+        return client, added["authenticatorId"]
 
     def assert_passkey_signin_offered(self) -> None:
         page = self.page_for(VISITOR)
@@ -302,34 +309,42 @@ class AuthBrowserMixin(BrowserBase):
         assert page.locator("[data-passkey-signin]").count() == 0, "unexpected passkey button"
 
     def add_passkey(self) -> None:
-        self._passkey_device = PasskeyDevice()
         page = self.page
-        registration = self._passkey_post(page, "/profile/passkeys/options", {})
-        credential = self._passkey_device.create_credential(registration)
-        self._passkey_post(
-            page,
-            "/profile/passkeys/verify",
-            {"challenge_id": registration["challenge_id"], "credential": credential},
-        )
+        client, authenticator_id = self._attach_virtual_authenticator(page)
+        page.goto(f"{self.base_url}/profile", wait_until="load")
+        self._open_profile_auth_tab()
+        page.locator("[data-passkey-register]").click()
+        # passkeys.js reloads the page once GoTrue accepted the attestation; the
+        # fresh page opens on the default tab, so re-open Authentication to see it.
+        page.locator("[data-passkey-name]").first.wait_for(state="attached", timeout=10000)
+        self._open_profile_auth_tab()
+        page.locator("[data-passkey-name]").first.wait_for(timeout=5000)
+        # Carry the credential over to the sign-in context's own authenticator.
+        credentials = client.send("WebAuthn.getCredentials", {"authenticatorId": authenticator_id})[
+            "credentials"
+        ]
+        assert credentials, "the virtual authenticator holds no credential"
+        self._passkey_credential = credentials[0]
 
     def assert_passkey_listed(self) -> None:
         self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self._open_profile_auth_tab()
         self.page.locator("[data-passkey-name]").first.wait_for(timeout=5000)
 
     def sign_in_with_passkey(self) -> None:
-        device = getattr(self, "_passkey_device", None)
-        assert device is not None, "add_passkey was not called"
+        credential = getattr(self, "_passkey_credential", None)
+        assert credential is not None, "add_passkey was not called"
         self.clear_acting_email()  # the visitor doing the ceremony becomes the acting context
         page = self.page_for(VISITOR)
-        authentication = self._passkey_post(page, "/auth/passkeys/options", {})
-        assertion = device.get_assertion(authentication)
-        self._passkey_post(
-            page,
-            "/auth/passkeys/verify",
-            {"challenge_id": authentication["challenge_id"], "credential": assertion},
+        client, authenticator_id = self._attach_virtual_authenticator(page)
+        client.send(
+            "WebAuthn.addCredential",
+            {"authenticatorId": authenticator_id, "credential": credential},
         )
-        # Session cookies landed in the visitor context: enter the app.
-        page.goto(f"{self.base_url}/profile", wait_until="load")
+        page.goto(f"{self.base_url}/auth/login", wait_until="load")
+        page.locator("[data-passkey-signin]").click()
+        # passkeys.js follows the server's redirect once the assertion verified.
+        page.wait_for_url(f"{self.base_url}/profile*", timeout=10000)
 
     # ── user management (console accounts screen) ─────────────────────────────
     def _accounts_as_admin(self) -> None:

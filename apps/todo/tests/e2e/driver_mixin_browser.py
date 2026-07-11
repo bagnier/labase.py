@@ -9,7 +9,8 @@ class TodoBrowserMixin(BrowserBase):
         return f"{self.base_url}/{slug}/todos"
 
     def _dom_todo_rows(self) -> list:
-        return self.page.locator("#todo-list > li").all()
+        # :not([data-empty]) — an empty list renders the empty_state macro's <li>.
+        return self.page.locator("#todo-list > li:not([data-empty])").all()
 
     def _dom_todo_titles(self) -> list[str]:
         return [
