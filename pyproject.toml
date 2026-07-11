@@ -175,6 +175,12 @@ protected_modules = ["apps.learning.domain", "apps.learning.infra"]
 allowed_importers = ["apps.learning.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]
+name = "logs internals are private"
+type = "protected"
+protected_modules = ["apps.logs.domain", "apps.logs.infra"]
+allowed_importers = ["apps.logs.**", "apps.*.tests.**"]
+
+[[tool.importlinter.contracts]]
 name = "metrics internals are private"
 type = "protected"
 protected_modules = ["apps.metrics.domain", "apps.metrics.infra"]

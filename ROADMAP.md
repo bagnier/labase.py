@@ -48,7 +48,7 @@
       `OrgSettingsSectionQuery` / `OrgNavQuery`)
 - [ ] one settings registry (`host.declarations` vs `settings._registry`) + fix naming
       drift (auth→"users", console→"appearance")
-- [ ] import-linter: add the missing "logs internals are private" contract
+- [x] import-linter: add the missing "logs internals are private" contract
 - [ ] one slug rule: drop calendar's pointless `reserve`, move `register_open_list`
       onto `Host`
 
