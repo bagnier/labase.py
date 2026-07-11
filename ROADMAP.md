@@ -46,8 +46,11 @@
 - [ ] declarative mount phases instead of the hand-ordered tuple in `apps/main.py`
 - [ ] unify the four collect-slice queries (`OverviewQuery` / `ConsoleOverviewQuery` /
       `OrgSettingsSectionQuery` / `OrgNavQuery`)
-- [ ] one settings registry (`host.declarations` vs `settings._registry`) + fix naming
-      drift (auth→"users", console→"appearance")
+- [x] one settings registry (`host.declarations` vs `settings._registry`) — the
+      declaration now lives on the `AppSettings` handle only; `Host` indexes handles.
+      Naming decision: "users"/"appearance" are deliberate admin-facing group names
+      (renaming would migrate DB rows + URLs for no gain); documented on `Host` and
+      in each declaring contract
 - [x] import-linter: add the missing "logs internals are private" contract
 - [x] one slug rule: drop calendar's (and pages') pointless `reserve`, move
       `register_open_list` onto `Host` — rule documented on `Host.reserve`

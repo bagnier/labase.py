@@ -63,7 +63,10 @@ class Host:
     events: EventBus = field(default_factory=EventBus)
     nav_items: list[NavItem] = field(default_factory=list)
     fullpage_providers: list[FullpageProvider] = field(default_factory=list)
-    declarations: dict[str, SettingsDeclaration] = field(default_factory=dict)
+    # The live settings handles of this composition, by declared group name (an app may
+    # declare under a name meant for admins: auth declares "users", console "appearance").
+    # The declaration itself lives on the handle — one source of truth, no parallel dict.
+    settings_handles: dict[str, AppSettings] = field(default_factory=dict)
 
     def reserve(self, *slugs: str) -> None:
         """Claim URL slugs so no org handle can shadow them
@@ -106,18 +109,24 @@ class Host:
         the console to render, seed and read values, register the handle in the process registry
         (:func:`~apps.shared.settings.get_settings`), and subscribe it to :class:`SettingsChanged`.
         Returns the live handle, so ``if not settings.enabled`` works immediately."""
-        self.declarations[declaration.app_name] = declaration
         settings = bind_settings(declaration)
+        self.settings_handles[declaration.app_name] = settings
         self.events.on(SettingsChanged, settings.reload)
         return settings
 
     def declared_settings(self, app: str) -> SettingsDeclaration | None:
         """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
-        return self.declarations.get(app)
+        handle = self.settings_handles.get(app)
+        return handle.declaration if handle is not None else None
 
     def declared_console_links(self) -> list[ConsoleLink]:
         """Every console screen declared by mounted apps — the console overview renders them."""
-        return [link for d in self.declarations.values() for link in d.links]
+        return [
+            link
+            for handle in self.settings_handles.values()
+            if handle.declaration is not None
+            for link in handle.declaration.links
+        ]
 
 
 # Production singleton: share the process-wide event bus so runtime ``bus.emit/collect`` and

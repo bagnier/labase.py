@@ -313,8 +313,8 @@ def get_settings(app_name: str) -> AppSettings:
 def bind_settings(declaration: SettingsDeclaration) -> AppSettings:
     """Seed missing values, then create (or reuse) the app's registry handle, bind
     ``declaration`` and read its current persisted values — everything
-    :meth:`Host.register_settings` does that doesn't touch ``host`` itself (registering into
-    ``host.declarations``, subscribing to ``host.events``)."""
+    :meth:`Host.register_settings` does that doesn't touch ``host`` itself (indexing into
+    ``host.settings_handles``, subscribing to ``host.events``)."""
     seed_values(declaration.app_name, {d.key: d.default for d in declaration.defs})
     settings = _registry.setdefault(declaration.app_name, AppSettings())
     settings.declaration = declaration
