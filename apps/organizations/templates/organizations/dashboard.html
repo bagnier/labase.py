@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
+{% from "macros/chart.html" import chart_scripts %}
 {% block title %}Dashboard — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -14,4 +15,7 @@
       {% endfor %}
     </div>
   </div>
+{% endblock %}
+{% block scripts %}
+  {{ chart_scripts() }}
 {% endblock %}

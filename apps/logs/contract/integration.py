@@ -12,7 +12,11 @@ console's /console/{app} catch-all.
 import structlog
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.logs.contract.queries import org_activity
 from apps.logs.infra.router import router
+from apps.organizations.contract.overviews import Overview, OverviewQuery
+from apps.shared import clock
+from apps.shared.charts import day_buckets_series
 from apps.shared.host import Host
 from apps.shared.observability.logging import apply_log_level
 from apps.shared.settings import (
@@ -45,6 +49,7 @@ def mount(host: Host) -> None:
     apply_log_level(str(settings.log_level))
     host.events.on(SettingsChanged, _reload_level)
     host.events.on(ConsoleOverviewQuery, _overview)
+    host.events.on(OverviewQuery, _org_overview)
     host.app.include_router(router, prefix="/console/logs")
 
 
@@ -53,6 +58,29 @@ async def _reload_level(event: SettingsChanged) -> None:
     event's own values, independent of registry-reload ordering on the bus)."""
     if event.app_name == LOGS_APP:
         apply_log_level(str(event.values.get(LOG_LEVEL_KEY) or DEFAULT_LOG_LEVEL))
+
+
+_ACTIVITY_DAYS = 14
+_SOURCE_NAMES = {"request": "Requests", "audit": "Audit", "issue": "Errors"}
+
+
+async def _org_overview(query: OverviewQuery) -> Overview:
+    """The org dashboard's activity graph — logs' one member-facing contribution.
+
+    Aggregates only (see :func:`org_activity`); the card spans the dashboard grid and
+    disappears with the app, like any other overview."""
+    buckets = await org_activity(query.org_id, days=_ACTIVITY_DAYS)
+    config = day_buckets_series(
+        buckets, days=_ACTIVITY_DAYS, end=clock.now().date(), names=_SOURCE_NAMES
+    )
+    return Overview(
+        key="activity",
+        title=f"Activity — last {_ACTIVITY_DAYS} days",
+        icon="pulse",
+        href="dashboard",
+        template="logs/_org_activity.html",
+        data={"config": config, "active": bool(buckets)},
+    )
 
 
 async def _overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:

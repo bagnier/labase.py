@@ -1,0 +1,17 @@
+{% from "macros/chart.html" import chart %}
+{% from "macros/empty_state.html" import empty_state %}
+<section class="card-panel col-span-full" data-overview="{{ o.key }}">
+  <div class="card-body">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="icon-badge">
+        <i class="ph ph-{{ o.icon }}" aria-hidden="true"></i>
+      </div>
+      <h3 class="subsection-title">{{ o.title }}</h3>
+    </div>
+    {% if o.data.active %}
+      {{ chart(o.data.config, label='Events per day over the last two weeks') }}
+    {% else %}
+      {{ empty_state("No activity yet — it will show up here as your team works.") }}
+    {% endif %}
+  </div>
+</section>
