@@ -99,3 +99,11 @@ Feature: Org CMS pages
     Given a draft page titled "Welcome" with slug "welcome" and content "hi"
     When they view their org dashboard
     Then the "pages" overview is visible on the dashboard
+
+  Scenario: Pages stay private to their organisation
+    Given a draft page titled "Roadmap" with slug "roadmap" and content "internal"
+    And a page titled "Announce" with slug "announce" published to members
+    And "carol@example.com" is a member of "Beta Corp"
+    When "carol@example.com" views their pages list
+    Then "Roadmap" is not in that pages list
+    And "Announce" is not in that pages list

@@ -136,6 +136,23 @@ class PagesBrowserMixin(BrowserBase):
         titles = self._row_titles()
         assert title not in titles, f"'{title}' should be absent: {titles}"
 
+    # ── cross-tenant isolation ────────────────────────────────────────────────
+    def view_pages_list_as(self, email: str) -> None:
+        # Read another tenant's pages list from their own page/org handle (seeded by
+        # the "is a member of" step) to prove one org's pages never surface elsewhere.
+        page = self.page_for(email)
+        slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
+        page.goto(self._pages_url(handle=slug), wait_until="load")
+        page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
+        self._viewed_page_titles = [
+            el.inner_text().strip() for el in page.locator("#pages-list .page-title-link").all()
+        ]
+
+    def assert_page_hidden_from_view(self, title: str) -> None:
+        titles = getattr(self, "_viewed_page_titles", None)
+        assert titles is not None, "view the tenant's pages list first"
+        assert title not in titles, f"'{title}' leaked into another tenant's pages list: {titles}"
+
     def assert_page_exists(self, slug: str) -> None:
         self._goto_list()
         assert slug in self._row_slugs(), f"page '{slug}' not found: {self._row_slugs()}"

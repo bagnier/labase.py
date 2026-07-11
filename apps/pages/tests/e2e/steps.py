@@ -136,6 +136,16 @@ def step_view_pages_list(driver):
     driver.view_pages_list()
 
 
+@when(parsers.parse('"{email}" views their pages list'))
+def step_view_pages_list_as(driver, email):
+    driver.view_pages_list_as(email)
+
+
+@then(parsers.parse('"{title}" is not in that pages list'))
+def step_assert_page_hidden(driver, title):
+    driver.assert_page_hidden_from_view(title)
+
+
 @then(parsers.parse('"{a}", "{b}" and "{c}" appear in the pages list'))
 def step_assert_three_listed(driver, a, b, c):
     for title in (a, b, c):

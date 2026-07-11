@@ -110,3 +110,19 @@ class TodoApiMixin(ApiBase):
         resp = self.client().get(self._todos_url())
         titles = [t["title"] for t in resp.json()]
         assert title not in titles, f"'{title}' should be absent but found in: {titles}"
+
+    # ── cross-tenant isolation ────────────────────────────────────────────────
+    def view_todo_list_as(self, email: str) -> None:
+        # Read the todo list of another tenant, from their own org handle (seeded by
+        # the organizations/files "is a member of" step), to prove it stays private.
+        slug = getattr(self, "secondary_handles", {}).get(
+            email, getattr(self, "active_org_handle", "")
+        )
+        resp = self.client_for(email).get(f"/{slug}/todos")
+        resp.raise_for_status()
+        self._viewed_todo_titles = [t["title"] for t in resp.json()]
+
+    def assert_todo_hidden_from_view(self, title: str) -> None:
+        titles = getattr(self, "_viewed_todo_titles", None)
+        assert titles is not None, "view the tenant's todo list first"
+        assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"

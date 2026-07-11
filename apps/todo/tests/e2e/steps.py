@@ -89,3 +89,13 @@ def step_org_setting_override(driver, app, key, value):
 @when(parsers.parse('they try to add a todo item "{title}"'))
 def step_try_add_todo(driver, title):
     driver.try_add_todo(title)
+
+
+@when(parsers.parse('"{email}" views their todo list'))
+def step_view_todo_list_as(driver, email):
+    driver.view_todo_list_as(email)
+
+
+@then(parsers.parse('"{title}" is not in that todo list'))
+def step_assert_todo_hidden(driver, title):
+    driver.assert_todo_hidden_from_view(title)

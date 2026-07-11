@@ -170,3 +170,22 @@ class TodoBrowserMixin(BrowserBase):
         assert title not in titles, (
             f"'{title}' should be absent but found in #todo-list DOM: {titles}"
         )
+
+    # ── cross-tenant isolation ────────────────────────────────────────────────
+    def view_todo_list_as(self, email: str) -> None:
+        # Read another tenant's todo list from their own page/org handle to prove
+        # it stays private (seeded by the "is a member of" step).
+        page = self.page_for(email)
+        slug = getattr(self, "secondary_handles", {}).get(
+            email, getattr(self, "active_org_handle", "")
+        )
+        page.goto(f"{self.base_url}/{slug}/todos", wait_until="load")
+        self._viewed_todo_titles = [
+            row.locator("[data-title-id]").inner_text().strip()
+            for row in page.locator("#todo-list > li:not([data-empty])").all()
+        ]
+
+    def assert_todo_hidden_from_view(self, title: str) -> None:
+        titles = getattr(self, "_viewed_todo_titles", None)
+        assert titles is not None, "view the tenant's todo list first"
+        assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"

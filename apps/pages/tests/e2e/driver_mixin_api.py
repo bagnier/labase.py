@@ -95,6 +95,20 @@ class PagesApiMixin(ApiBase):
         titles = [p["title"] for p in self._list()]
         assert title not in titles, f"'{title}' should be absent: {titles}"
 
+    # ── cross-tenant isolation ────────────────────────────────────────────────
+    def view_pages_list_as(self, email: str) -> None:
+        # Read another tenant's pages list from their own org handle (seeded by the
+        # "is a member of" step) to prove one org's pages never surface in another.
+        slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
+        self._viewed_page_titles = [
+            p["title"] for p in self._list(client=self.client_for(email), handle=slug)
+        ]
+
+    def assert_page_hidden_from_view(self, title: str) -> None:
+        titles = getattr(self, "_viewed_page_titles", None)
+        assert titles is not None, "view the tenant's pages list first"
+        assert title not in titles, f"'{title}' leaked into another tenant's pages list: {titles}"
+
     def assert_page_exists(self, slug: str) -> None:
         slugs = [p["slug"] for p in self._list()]
         assert slug in slugs, f"page '{slug}' not found: {slugs}"

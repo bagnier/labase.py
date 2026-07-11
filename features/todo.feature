@@ -57,3 +57,10 @@ Feature: Todo list
     And they have a todo item "Only one"
     When they try to add a todo item "One too many"
     Then the action is forbidden
+
+  Scenario: Todos stay private to their organisation
+    Given they have todo items "Buy groceries", "Call dentist"
+    And "carol@example.com" is a member of "Beta Corp"
+    When "carol@example.com" views their todo list
+    Then "Buy groceries" is not in that todo list
+    And "Call dentist" is not in that todo list
