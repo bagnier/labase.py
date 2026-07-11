@@ -1,10 +1,10 @@
-{% macro metric_card(label, icon) %}
+{% macro metric_card(label, icon, value=none, desc='') %}
   <div class="stat bg-base-100 border border-base-300 rounded-box">
     <div class="stat-figure text-primary">
       <i class="ph ph-{{ icon }} ph-lg" aria-hidden="true"></i>
     </div>
     <div class="stat-title">{{ label }}</div>
-    <div class="stat-value">—</div>
-    <div class="stat-desc">No data yet</div>
+    <div class="stat-value">{{ value if value is not none else '—' }}</div>
+    <div class="stat-desc">{{ desc if value is not none else 'No data yet' }}</div>
   </div>
 {% endmacro %}

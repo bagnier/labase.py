@@ -48,9 +48,9 @@ from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
+from apps.shared.observability.audit import audit, search_audit_logs
 from apps.shared.page import fullpage_context
-from apps.shared.persistence.database import AdminSession
+from apps.shared.persistence.database import AdminSession, admin_session_factory
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings import SettingsView, get_settings
 from apps.shared.slug_registry import validate_handle
@@ -108,6 +108,25 @@ async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
 ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 
 
+_RECENT_ACTIVITY = 8
+
+
+def _event_label(event: str) -> str:
+    """`auth.oauth_signed_in` → `Oauth signed in` — readable without a per-event table."""
+    return event.split(".", 1)[-1].replace("_", " ").capitalize()
+
+
+async def _recent_activity(user_id: str) -> list[dict]:
+    """The user's own trail for the profile timeline.
+
+    Audit is an admin-only table (RLS grants no member read), but a user may see their
+    own actions — so this reads on the admin session, hard-filtered to the user, and
+    exposes only the event label and moment, never payloads or ips."""
+    async with admin_session_factory()() as session:
+        rows = await search_audit_logs(session, user_id=user_id, limit=_RECENT_ACTIVITY)
+    return [{"label": _event_label(r.event), "ts": r.ts} for r in rows]
+
+
 async def _profile_context(
     request: Request, session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
 ) -> dict:
@@ -144,6 +163,7 @@ async def _profile_context(
         "twofa_active": twofa_active,
         "passkeys_enabled": passkeys_enabled,
         "passkeys": passkeys,
+        "recent_activity": await _recent_activity(current_user.id),
         **context,
     }
 

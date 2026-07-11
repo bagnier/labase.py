@@ -180,6 +180,9 @@ async def org_dashboard(
     ctx["overviews"] = sorted(
         await bus.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
     )
+    # The org's own numbers — apps contribute cards below, these two are organizations'.
+    ctx["member_count"] = len(await repo.list_members(org_id))
+    ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 

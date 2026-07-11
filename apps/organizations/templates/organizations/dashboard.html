@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/chart.html" import chart_scripts %}
+{% from "macros/metric_card.html" import metric_card %}
 {% block title %}Dashboard — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -9,6 +10,11 @@
 {% block content %}
   <div class="space-y-6">
     {{ page_header('Overview', 'Welcome, ' ~ profile_handle) }}
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {{ metric_card('Members', 'users', value=member_count, desc='in ' ~ org.name) }}
+      {{ metric_card('Pending invitations', 'envelope', value=pending_invitations,
+            desc='awaiting an answer' if pending_invitations else 'none waiting') }}
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {% for o in overviews %}
         {% include o.template %}
