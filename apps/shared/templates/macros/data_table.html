@@ -1,0 +1,27 @@
+{# The one table shell: card panel + horizontal scroll + daisyUI table. The caller
+   brings thead/tbody through the call block; column semantics stay in the page.
+
+     {% call data_table('Accounts') %}
+       <thead>…</thead>
+       <tbody>…</tbody>
+     {% endcall %}
+#}
+{% macro data_table(label='', table_class='') %}
+  <div class="card-panel overflow-x-auto">
+    <table class="table table-sm{% if table_class %} {{ table_class }}{% endif %}"
+           {% if label %}aria-label="{{ label }}"{% endif %}>
+      {{ caller() }}
+    </table>
+  </div>
+{% endmacro %}
+{# The one filter toolbar above a table: a live GET form, controls in a wrapping
+   flex row. Extra classes (e.g. logs' p-3 border-b when embedded in the panel)
+   through `class_`. #}
+{% macro filter_bar(action, label, class_='') %}
+  <form method="get"
+        action="{{ action }}"
+        class="flex flex-wrap items-center gap-2{% if class_ %} {{ class_ }}{% endif %}"
+        aria-label="{{ label }}">
+    {{ caller() }}
+  </form>
+{% endmacro %}

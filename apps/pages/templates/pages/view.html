@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}{{ page.title }}{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -7,8 +8,7 @@
 {% endblock %}
 {% block content %}
   <article class="min-w-0 max-w-2xl space-y-6">
-    <div class="flex items-center justify-between gap-4">
-      <h1 class="section-title">{{ page.title }}</h1>
+    {% call page_header(page.title) %}
       {% if can_edit %}
         <a href="/{{ org_handle }}/pages/{{ page.slug }}/edit"
            class="btn btn-sm flex-none">
@@ -16,7 +16,7 @@
           Edit
         </a>
       {% endif %}
-    </div>
+    {% endcall %}
     <div class="card-panel">
       <div class="card-body">
         <div class="md-body">{{ body | safe }}</div>

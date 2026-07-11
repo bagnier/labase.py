@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% from "issues/_badge.html" import status_badge %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/empty_state.html" import empty_state %}
+{% from "macros/data_table.html" import filter_bar %}
 {% block title %}Issues — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -7,14 +10,10 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-4xl space-y-6">
-    <div>
-      <h1 class="section-title">Issues</h1>
-      <p class="text-sm text-base-content/70 mt-0.5">
-        Captured errors, grouped by stack fingerprint. The request id of each event
-        links it to the structured logs.
-      </p>
-    </div>
-    <form method="get" action="/console/issues" class="flex items-center gap-2">
+    {{ page_header('Issues',
+        'Captured errors, grouped by stack fingerprint. The request id of each event
+        links it to the structured logs.') }}
+    {% call filter_bar('/console/issues', 'Filter issues') %}
       <label for="status-filter" class="text-sm text-base-content/70">Status</label>
       <select id="status-filter"
               name="status_filter"
@@ -25,7 +24,7 @@
           <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
-    </form>
+    {% endcall %}
     {% if groups %}
       <div class="list-panel">
         {% for g in groups %}
@@ -42,7 +41,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="text-sm text-base-content/70">No captured error. Good.</p>
+      {{ empty_state("No captured error. Good.") }}
     {% endif %}
   </div>
 {% endblock %}

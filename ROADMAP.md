@@ -17,13 +17,14 @@
 - [x] land PR #4 — labase-light/labase-dark identity, shared type scale,
       hardcoded-color guardrail in `make lint` (+ migration flipping the old seeded
       "light" default so existing installs adopt the identity)
-- [ ] `page_header` macro + one content-width convention (~20 hand-rolled headers,
-      3 idioms)
-- [ ] `empty_state` macro (5 idioms today)
-- [ ] shared `data_table` + `filter_bar` partials (logs/metrics/issues each invent
-      their own)
-- [ ] `input_field`: error + select variants (profile/settings fork the markup)
-- [ ] one avatar-initials macro (3 spellings: base.html, profile.html, styleguide)
+- [x] `page_header` macro + one content-width convention (~20 hand-rolled headers,
+      3 idioms) — auth card headers and the error hero stay their own idioms
+- [x] `empty_state` macro (5 idioms today) — p/li/td/icon variants, test hooks via `attr`
+- [x] shared `data_table` + `filter_bar` partials (logs/metrics/issues each invent
+      their own) — logs' table stays embedded in its single panel by design
+- [x] `input_field`: error + select variants (profile/settings fork the markup)
+- [x] one avatar-initials macro (3 spellings: base.html, profile.html, styleguide) —
+      photo avatars stay explicit; styleguide gallery keeps its demos
 
 ### dashboards — rendre vivants
 

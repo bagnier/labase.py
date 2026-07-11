@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros/input_field.html" import input_field %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Edit {{ page.title }} — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -8,7 +9,7 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    <h1 class="section-title">Edit page</h1>
+    {{ page_header("Edit page") }}
     <form id="edit-page-form"
           class="card-panel"
           hx-patch="/{{ org_handle }}/pages/{{ page.slug }}"

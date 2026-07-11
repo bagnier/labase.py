@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Settings — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -9,7 +10,7 @@
        x-data="{ tab: 'appearance', syncTabFromHash() { const h = window.location.hash.slice(1); this.tab = ['appearance', 'technical'].includes(h) ? h : 'appearance' } }"
        x-init=" syncTabFromHash(); window.addEventListener('hashchange', () => syncTabFromHash()) ">
     <div>
-      <h1 class="section-title">Settings</h1>
+      {{ page_header("Settings") }}
       <p class="text-sm text-base-content/70 mt-0.5">
         Server-wide — appearance, environment and process. Logs and their level live on the
         <a class="link" href="/console/logs">logs screen</a>.

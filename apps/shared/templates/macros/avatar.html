@@ -1,0 +1,11 @@
+{# The one initials avatar (daisyUI avatar-placeholder). `name` yields the initial;
+   size/color/shape vary by spot (nav w-8, member rows w-8 role-tinted, profile w-16
+   rounded-2xl) but the spelling stays this one. Photo avatars (an <img> behind
+   /profile/avatar/…) are a different thing and stay explicit in their templates. #}
+{% macro avatar(name, size='w-8', color='bg-primary/20 text-primary', text_class='text-xs font-semibold', shape='rounded-full') %}
+  <div class="avatar avatar-placeholder">
+    <div class="{{ size }} {{ shape }} {{ color }}">
+      <span class="{{ text_class }}">{{ name | first | upper }}</span>
+    </div>
+  </div>
+{% endmacro %}

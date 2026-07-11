@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Todos — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -6,7 +7,7 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    <h1 class="section-title">Todos</h1>
+    {{ page_header("Todos") }}
     {% if creation_enabled %}
       <form hx-post="/{{ org_handle }}/todos"
             hx-target="#todo-list"

@@ -1,5 +1,7 @@
-<div id="accounts" class="card-panel overflow-x-auto">
-  <table class="table table-sm">
+{% from "macros/data_table.html" import data_table %}
+{% from "macros/empty_state.html" import empty_state %}
+<div id="accounts">
+  {% call data_table('Accounts') %}
     <thead>
       <tr>
         <th scope="col">Email</th>
@@ -50,10 +52,8 @@
           </td>
         </tr>
       {% else %}
-        <tr>
-          <td colspan="4" class="text-sm text-base-content/60">No matching account.</td>
-        </tr>
+        <tr>{{ empty_state('No matching account.', tag='td', colspan=4) }}</tr>
       {% endfor %}
     </tbody>
-  </table>
+  {% endcall %}
 </div>

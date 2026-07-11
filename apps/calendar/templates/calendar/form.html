@@ -20,15 +20,10 @@
 {% endblock %}
 {% from "macros/input_field.html" import input_field, textarea_field %}
 {% from "macros/alert.html" import alert %}
+{% from "macros/page_header.html" import page_header %}
 {% block content %}
   <div class="max-w-xl space-y-6">
-    <h1 class="section-title">
-      {% if is_edit %}
-        Edit event
-      {% else %}
-        New event
-      {% endif %}
-    </h1>
+    {{ page_header('Edit event' if is_edit else 'New event') }}
     {{ alert("error", error) }}
     <form method="post"
           action="/{{ org_handle }}/{{ action }}"

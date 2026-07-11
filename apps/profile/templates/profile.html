@@ -1,16 +1,15 @@
 {% extends "base.html" %}
 {% from "macros/alert.html" import alert %}
 {% from "macros/input_field.html" import input_field %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/avatar.html" import avatar %}
 {% block title %}Profile — labase{% endblock %}
 {% block breadcrumb %}
   <li>Profile</li>
 {% endblock %}
 {% block content %}
   <div class="space-y-6 max-w-2xl">
-    <div>
-      <h1 class="section-title">Profile</h1>
-      <p class="text-sm text-base-content/70 mt-0.5">Manage your personal information.</p>
-    </div>
+    {{ page_header('Profile', 'Manage your personal information.') }}
     {# Keep the tab that owns a just-rendered alert/enrolment open across the
        full-page reload a form POST triggers, so its message stays visible. #}
     {% set active_tab = "profile" %}
@@ -39,8 +38,12 @@
                        alt="Your avatar"
                        class="w-16 h-16 rounded-2xl object-cover flex-none" />
                 {% else %}
-                  <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center flex-none">
-                    <span class="text-2xl font-bold text-primary">{{ (profile_handle or user.email) | first | upper }}</span>
+                  <div class="flex-none">
+                    {{ avatar(profile_handle or user.email,
+                                        size='w-16 h-16',
+                                        shape='rounded-2xl',
+                                        color='bg-primary/10 text-primary',
+                                        text_class='text-2xl font-bold') }}
                   </div>
                 {% endif %}
                 <div>
@@ -83,17 +86,9 @@
                       hx-target="body"
                       class="space-y-4"
                       data-handle-form>
-                  <fieldset class="fieldset">
-                    <legend class="fieldset-legend" id="handle-label">Handle</legend>
-                    <input id="handle"
-                           name="handle"
-                           type="text"
-                           placeholder="your-handle"
-                           aria-labelledby="handle-label"
-                           value="{{ profile.handle if (profile and profile.handle) else '' }}"
-                           class="input w-full font-mono {% if error %}input-error{% endif %}" />
-                    {% if error %}<p class="label text-xs text-error">{{ error }}</p>{% endif %}
-                  </fieldset>
+                  {{ input_field("handle", "handle", label="Handle", placeholder="your-handle", mono=true,
+                                    value=(profile.handle if (profile and profile.handle) else ''),
+                  error=error) }}
                   {{ input_field("email", "email", label="Email",
                                     value=user.email, disabled=true,
                                     hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}

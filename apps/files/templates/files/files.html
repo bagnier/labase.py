@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Files — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -6,7 +7,7 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    <h1 class="section-title">Organisation files</h1>
+    {{ page_header("Organisation files") }}
     {% if welcome_message %}
       <p class="text-sm text-base-content/70">{{ welcome_message }}</p>
     {% endif %}

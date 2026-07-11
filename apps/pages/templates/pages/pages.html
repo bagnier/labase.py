@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Pages — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -6,17 +7,14 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    <div class="flex items-center justify-between">
-      <h1 class="section-title">Pages</h1>
-      <div class="flex items-center gap-2">
-        {% if is_owner %}
-          <a href="/{{ org_handle }}/pages/nav" class="btn">Manage navigation</a>
-        {% endif %}
-        {% if can_create %}
-          <a href="/{{ org_handle }}/pages/new/edit" class="btn btn-primary">New page</a>
-        {% endif %}
-      </div>
-    </div>
+    {% call page_header('Pages') %}
+      {% if is_owner %}
+        <a href="/{{ org_handle }}/pages/nav" class="btn">Manage navigation</a>
+      {% endif %}
+      {% if can_create %}
+        <a href="/{{ org_handle }}/pages/new/edit" class="btn btn-primary">New page</a>
+      {% endif %}
+    {% endcall %}
     <script type="application/json" id="pages-data">{{ pages_data | tojson }}</script>
     <section id="pages-app"
              aria-label="Pages list"

@@ -1,3 +1,4 @@
+{% from "macros/empty_state.html" import empty_state %}
 <ul id="file-list" class="list-panel" aria-live="polite">
   {% for f in files %}
     <li class="flex flex-col px-4 py-3 group"
@@ -61,6 +62,6 @@
       <div id="share-result-{{ f.id }}" aria-live="polite"></div>
     </li>
   {% else %}
-    <li class="px-4 py-6 text-sm text-center text-base-content/50">No files yet.</li>
+    {{ empty_state('No files yet.', tag='li') }}
   {% endfor %}
 </ul>

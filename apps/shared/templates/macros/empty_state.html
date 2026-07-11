@@ -1,0 +1,32 @@
+{# The one "nothing here yet" idiom. Three shapes, one voice:
+   - default: a quiet paragraph (`tag='p'`), for cards and sections;
+   - `tag='li'` / `tag='td'`: the same line placed inside a list panel or a table
+     (pass `colspan` for td);
+   - `icon='…'`: the tall centered variant with a phosphor icon and an optional hint,
+     for full-page empties.
+   `attr` takes one extra attribute name (e.g. a test hook like `data-logs-empty`);
+   `data-empty` is always present. #}
+{% macro empty_state(message, hint='', icon='', tag='p', colspan=4, attr='') %}
+  {% if icon %}
+    <div class="text-center py-12 px-3" data-empty {{ attr }}>
+      <i class="ph ph-{{ icon }} text-3xl text-base-content/30"
+         aria-hidden="true"></i>
+      <p class="font-semibold mt-2">{{ message }}</p>
+      {% if hint %}<p class="text-sm text-base-content/60 mt-1">{{ hint }}</p>{% endif %}
+    </div>
+  {% elif tag == 'li' %}
+    <li class="px-4 py-6 text-sm text-center text-base-content/50"
+        data-empty
+        {{ attr }}>{{ message }}
+    </li>
+  {% elif tag == 'td' %}
+    <td colspan="{{ colspan }}"
+        class="px-4 py-6 text-sm text-center text-base-content/60"
+        data-empty
+        {{ attr }}>{{ message }}
+    </td>
+  {% else %}
+    <p class="text-sm text-base-content/70" data-empty {{ attr }}>{{ message }}
+    </p>
+  {% endif %}
+{% endmacro %}

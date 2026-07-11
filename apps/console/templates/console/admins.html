@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Server admins — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -7,10 +8,9 @@
 {% block content %}
   <div class="max-w-2xl space-y-6">
     <div>
-      <h1 class="section-title">Server admins</h1>
-      <p class="text-sm text-base-content/70 mt-0.5">
-        Admins oversee every organisation and configure each app. {{ admin_count }} admin{{ 's' if admin_count != 1 else '' }}.
-      </p>
+      {{ page_header('Server admins',
+            'Admins oversee every organisation and configure each app. '
+            ~ admin_count ~ ' admin' ~ ('s' if admin_count != 1 else '') ~ '.') }}
       <a href="/console/accounts" class="text-sm text-primary link link-hover">Manage accounts →</a>
     </div>
     <section aria-label="Server admins">

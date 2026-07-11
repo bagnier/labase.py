@@ -1,14 +1,13 @@
 {% from "macros/role_badge.html" import role_badge %}
+{% from "macros/avatar.html" import avatar %}
 <li id="member-row-{{ m.auth_user_id }}"
     class="flex items-center justify-between px-4 py-3"
     data-member-email="{{ m.email }}"
     data-member-role="{{ m.role.value }}">
   <div class="flex items-center gap-3">
-    <div class="avatar avatar-placeholder">
-      <div class="w-8 rounded-full {{ 'bg-primary/20 text-primary' if m.role == 'owner' else 'bg-base-300 text-base-content/70' }}">
-        <span class="text-sm font-bold">{{ m.email[0] | upper }}</span>
-      </div>
-    </div>
+    {{ avatar(m.email,
+        color=('bg-primary/20 text-primary' if m.role == 'owner' else 'bg-base-300 text-base-content/70') ,
+    text_class='text-sm font-bold') }}
     <div>
       <p class="text-sm font-medium">
         {{ m.email }}

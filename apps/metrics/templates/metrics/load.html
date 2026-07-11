@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/empty_state.html" import empty_state %}
+{% from "macros/data_table.html" import data_table %}
 {% block title %}Metrics — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -6,13 +9,9 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-4xl space-y-6">
-    <div>
-      <h1 class="section-title">Metrics</h1>
-      <p class="text-sm text-base-content/70 mt-0.5">
-        HTTP traffic over the last {{ window_hours }} hours, aggregated per route
-        across all instances. Percentiles come from histogram buckets, Prometheus-style.
-      </p>
-    </div>
+    {{ page_header('Metrics',
+        'HTTP traffic over the last ' ~ window_hours ~ ' hours, aggregated per route
+        across all instances. Percentiles come from histogram buckets, Prometheus-style.') }}
     {% if routes %}
       <div class="card-panel">
         <div class="p-4">
@@ -41,41 +40,37 @@
           </div>
         </div>
       </div>
-      <div class="card-panel overflow-x-auto">
-        <table class="table table-sm">
-          <thead>
-            <tr>
-              <th scope="col">Route</th>
-              <th scope="col">Requests</th>
-              <th scope="col">Errors</th>
-              <th scope="col">p95</th>
+      {% call data_table('Routes') %}
+        <thead>
+          <tr>
+            <th scope="col">Route</th>
+            <th scope="col">Requests</th>
+            <th scope="col">Errors</th>
+            <th scope="col">p95</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in routes %}
+            <tr data-load-route="{{ r.label }}">
+              <td class="font-mono text-xs">{{ r.label }}</td>
+              <td data-load-requests>{{ r.requests }}</td>
+              <td data-load-errors
+                  class="{% if r.error_rate_pct %}text-error{% else %}text-success{% endif %}">
+                {{ r.error_rate_pct | int }}%
+              </td>
+              <td data-load-p95>
+                {% if r.p95_ms is not none %}
+                  {{ r.p95_ms | int }} ms
+                {% else %}
+                  —
+                {% endif %}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {% for r in routes %}
-              <tr data-load-route="{{ r.label }}">
-                <td class="font-mono text-xs">{{ r.label }}</td>
-                <td data-load-requests>{{ r.requests }}</td>
-                <td data-load-errors
-                    class="{% if r.error_rate_pct %}text-error{% else %}text-success{% endif %}">
-                  {{ r.error_rate_pct | int }}%
-                </td>
-                <td data-load-p95>
-                  {% if r.p95_ms is not none %}
-                    {{ r.p95_ms | int }} ms
-                  {% else %}
-                    —
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
     {% else %}
-      <p class="text-sm text-base-content/70" data-load-empty>
-        No traffic recorded yet. Metrics are flushed every minute — check back shortly.
-      </p>
+      {{ empty_state('No traffic recorded yet. Metrics are flushed every minute — check back shortly.', attr='data-load-empty') }}
     {% endif %}
     <p class="text-sm space-x-4">
       <a class="link" href="/console/metrics">Settings →</a>

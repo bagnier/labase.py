@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/empty_state.html" import empty_state %}
 {% block title %}Navigation — {{ org.name }}{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -7,10 +9,7 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    <div>
-      <h1 class="section-title">Navigation</h1>
-      <p class="text-sm text-base-content/70 mt-1">Check pages to include them. Drag to reorder.</p>
-    </div>
+    {{ page_header('Navigation', 'Check pages to include them. Drag to reorder.') }}
     <ul id="nav-list" class="list-panel">
       {% for c in candidates %}
         <li class="nav-candidate flex items-center gap-3 px-4 py-3 group"
@@ -29,7 +28,7 @@
           </span>
         </li>
       {% else %}
-        <li class="px-4 py-6 text-sm text-center text-base-content/50">No published pages yet.</li>
+        {{ empty_state('No published pages yet.', tag='li') }}
       {% endfor %}
     </ul>
   </div>

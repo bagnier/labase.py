@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% from "macros/empty_state.html" import empty_state %}
 {% block title %}Calendar — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -6,14 +8,13 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-3xl space-y-6">
-    <div class="flex items-center justify-between gap-4">
-      <h1 class="section-title">Calendar</h1>
+    {% call page_header('Calendar') %}
       <a href="/{{ org_handle }}/calendar/new"
          class="btn btn-primary btn-sm flex-none">
         <i class="ph ph-calendar-dots ph-4" aria-hidden="true"></i>
         New event
       </a>
-    </div>
+    {% endcall %}
     <!-- Month grid (visual) -->
     <section class="card-panel" aria-label="Month view">
       <div class="card-body">
@@ -64,7 +65,7 @@
     <section aria-label="Events">
       <h2 class="subsection-title mb-2">Events</h2>
       <div id="event-list" class="space-y-5">
-        {% if not has_events %}<p class="text-xs opacity-60" data-empty>No events yet.</p>{% endif %}
+        {% if not has_events %}{{ empty_state("No events yet.") }}{% endif %}
         {% for group in agenda %}
           <div>
             <h3 class="eyebrow mb-1">{{ group.label }}</h3>

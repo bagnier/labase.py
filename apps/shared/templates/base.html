@@ -1,3 +1,4 @@
+{% from "macros/avatar.html" import avatar %}
 <!DOCTYPE html>
 <html lang="en" class="h-full" data-theme="{{ app_theme() }}">
   <head>
@@ -126,11 +127,7 @@
                     </div>
                   </div>
                 {% else %}
-                  <div class="avatar avatar-placeholder">
-                    <div class="w-8 rounded-full bg-primary/20 text-primary">
-                      <span class="text-xs font-semibold">{{ (profile_handle or user.email) | first | upper }}</span>
-                    </div>
-                  </div>
+                  {{ avatar(profile_handle or user.email) }}
                 {% endif %}
                 <div class="min-w-0">
                   <p class="truncate text-xs font-medium">{{ profile_handle }}</p>

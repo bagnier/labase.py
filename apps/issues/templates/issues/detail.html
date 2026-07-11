@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Issue #{{ group.id }} — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -9,7 +10,7 @@
   <div class="max-w-4xl space-y-6">
     <a href="/console/issues" class="text-sm text-primary hover:underline">← Issues</a>
     <div>
-      <h1 class="section-title font-mono break-all">{{ group.title }}</h1>
+      {{ page_header(group.title, title_class='font-mono break-all') }}
       <p class="text-sm text-base-content/70 mt-0.5">
         ×{{ group.count }} · first seen {{ group.first_seen.strftime("%Y-%m-%d %H:%M") }}
         ({{ group.first_version }}) · last seen {{ group.last_seen.strftime("%Y-%m-%d %H:%M") }}

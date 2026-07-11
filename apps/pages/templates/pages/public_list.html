@@ -1,3 +1,4 @@
+{% from "macros/empty_state.html" import empty_state %}
 <!DOCTYPE html>
 <html lang="en" class="h-full" data-theme="{{ app_theme() }}">
   <head>
@@ -35,7 +36,7 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="text-sm text-base-content/50">No public pages yet.</p>
+        {{ empty_state("No public pages yet.") }}
       {% endif %}
     </main>
   </body>

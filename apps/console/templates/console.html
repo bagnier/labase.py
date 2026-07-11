@@ -1,20 +1,15 @@
 {% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
 {% block title %}Console — labase{% endblock %}
 {% block breadcrumb %}
   <li>Admin</li>
 {% endblock %}
 {% block content %}
   <div class="space-y-6">
-    <div class="flex items-start justify-between">
-      <div>
-        <h1 class="section-title">Admin console</h1>
-        <p class="text-sm text-base-content/70 mt-0.5">Server-wide — every organisation. Click an app to configure it.</p>
-      </div>
-      <div class="flex gap-2">
-        {% for link in links %}<a href="{{ link.href }}" class="btn btn-sm">{{ link.label }}</a>{% endfor %}
-        <a href="/console/admins" class="btn btn-sm">Manage admins</a>
-      </div>
-    </div>
+    {% call page_header('Admin console', 'Server-wide — every organisation. Click an app to configure it.') %}
+      {% for link in links %}<a href="{{ link.href }}" class="btn btn-sm">{{ link.label }}</a>{% endfor %}
+      <a href="/console/admins" class="btn btn-sm">Manage admins</a>
+    {% endcall %}
     {% for section in sections %}
       <section class="space-y-3" aria-labelledby="console-section-{{ section.key }}">
         <h2 id="console-section-{{ section.key }}" class="eyebrow">{{ section.label }}</h2>

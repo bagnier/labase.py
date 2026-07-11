@@ -1,0 +1,14 @@
+{# One way to put an ApexCharts graph on a page — the declarative charts.js contract
+   (static/js/charts.js reads the JSON sibling, themes it with daisyUI variables and
+   re-renders on theme switch). `config` is a dict shaped by apps.shared.charts helpers
+   (or hand-rolled: {"type", "series", "options"}). Pages using it must load the chart
+   scripts once: `{% call chart_scripts() %}` inside their `{% block scripts %}`. #}
+{% macro chart(config, label='') %}
+  <script type="application/json" data-chart-config>{{ config | tojson }}</script>
+  <div data-chart
+       {% if label %}role="img" aria-label="{{ label }}"{% endif %}></div>
+{% endmacro %}
+{% macro chart_scripts() %}
+  <script src="/static/js/apexcharts.min.js"></script>
+  <script src="/static/js/charts.js" defer></script>
+{% endmacro %}
