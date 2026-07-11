@@ -14,11 +14,13 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_with_owner
-from apps.shared.host import Host, NavItem
+from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.domain.models import TodoItem
 from apps.todo.infra.repository import TodoRepository
 from apps.todo.infra.router import router
+
+PHASE = MountPhase.ORG
 
 _RECENT = 3
 
@@ -29,19 +31,16 @@ _WELCOME_TODOS = [
 ]
 
 
-# Mounts an org-scoped router under /{org_handle}; mounted last (see apps.main).
-
-
 def mount(host: Host) -> None:
-    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
-    host.events.on(ConsoleOverviewQuery, _console_overview)
-    settings = host.register_settings(_declare_settings())
-    if not settings.enabled:
-        return
-    host.app.include_router(router, prefix=ORG_PREFIX)
-    host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos", order=10))
-    host.events.on(OverviewQuery, _overview)
-    host.events.on(OrgCreated, _seed)
+    host.register_app(
+        AppManifest(
+            settings=_declare_settings(),
+            on=[(ConsoleOverviewQuery, _console_overview)],
+            routers=[(router, ORG_PREFIX)],
+            nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)],
+            when_enabled=[(OverviewQuery, _overview), (OrgCreated, _seed)],
+        )
+    )
 
 
 def _declare_settings() -> SettingsDeclaration:

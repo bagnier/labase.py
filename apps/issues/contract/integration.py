@@ -23,7 +23,7 @@ from apps.issues.infra.router import router
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
-from apps.shared.host import Host
+from apps.shared.host import Host, MountPhase
 from apps.shared.observability.capture import CaptureDrain
 from apps.shared.observability.errors import ExceptionCaptured
 from apps.shared.persistence.database import admin_session_factory
@@ -35,6 +35,8 @@ from apps.shared.settings import (
     feature_switch,
     get_settings,
 )
+
+PHASE = MountPhase.CONSOLE_SCREEN
 
 log = structlog.get_logger("labase.issues")
 

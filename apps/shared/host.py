@@ -6,9 +6,10 @@ production singleton; tests can build a fresh :class:`Host` in isolation.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from enum import IntEnum
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 
@@ -26,6 +27,39 @@ from apps.shared.slug_registry import reserve as _reserve_slugs
 
 if TYPE_CHECKING:
     from apps.shared.page import FullpageQuery
+
+
+class MountPhase(IntEnum):
+    """Route-registration order classes — FastAPI matches routes in registration order,
+    so catch-alls must come after every fixed prefix they could shadow. Each context's
+    ``integration`` module declares its ``PHASE``; the composition root sorts by it
+    (stable, so ties keep their listing order) instead of hand-ordering a tuple."""
+
+    FOUNDATION = 0  # fixed prefixes only (/auth, /profile, /health, static)
+    CONSOLE_SCREEN = 1  # fixed /console/<x> routers — before the console's catch-all
+    CONSOLE = 2  # the console's /console/{app} catch-all
+    ORG = 3  # /{org_handle}/… catch-alls
+    PUBLIC = 4  # the single-segment /{slug} catch-all — last
+
+
+@dataclass(frozen=True)
+class AppManifest:
+    """Everything a standard org app contributes, declared as one object.
+
+    :meth:`Host.register_app` walks it in the one correct order, so each app stops
+    re-spelling the mount ceremony — including the trap that the console tile must
+    register *before* the enabled gate (a disabled app still shows its tile, which is
+    how an admin re-enables it). ``on`` handlers live even when the app is disabled;
+    everything else only exists when it is enabled. Apps with needs beyond this shape
+    (startup hooks, fullpage providers, open lists) keep an explicit ``mount()``.
+    """
+
+    settings: SettingsDeclaration
+    on: Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]] = ()  # alive when disabled
+    routers: Sequence[tuple[Any, str]] = ()  # (APIRouter, prefix)
+    nav: Sequence[NavItem] = ()
+    when_enabled: Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]] = ()
+    reserve: Sequence[str] = ()  # top-level slugs the app routes (see Host.reserve)
 
 
 @dataclass(frozen=True)
@@ -82,6 +116,25 @@ class Host:
         (see :mod:`apps.shared.slug_registry`) — the flip side of :meth:`reserve`,
         routed through the host so mounts touch one slug surface."""
         _register_open_list(name, checker)
+
+    def register_app(self, manifest: AppManifest) -> AppSettings:
+        """Mount a standard app from its :class:`AppManifest`, in the one correct order:
+        disabled-safe subscriptions first (console tile), then settings + the enabled
+        gate, then routers, nav and enabled-only subscriptions. Returns the live
+        settings handle, like :meth:`register_settings`."""
+        for event_type, handler in manifest.on:
+            self.events.on(event_type, handler)
+        settings = self.register_settings(manifest.settings)
+        self.reserve(*manifest.reserve)
+        if not settings.enabled:
+            return settings
+        for router, prefix in manifest.routers:
+            self.app.include_router(router, prefix=prefix)
+        for item in manifest.nav:
+            self.register_nav(item)
+        for event_type, handler in manifest.when_enabled:
+            self.events.on(event_type, handler)
+        return settings
 
     def register_nav(self, item: NavItem) -> None:
         """Add a sidebar link, contributed by an app from its :func:`mount`."""

@@ -16,10 +16,9 @@ This is the home for owner-scoped administration of an app (e.g. managing API ke
 metric, so it is *not* a dashboard ``Overview``. It is a setting of the org — hence here.
 """
 
-import uuid
 from dataclasses import dataclass, field
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from apps.organizations.contract.collect import OrgMemberQuery
 
 
 @dataclass(frozen=True)
@@ -32,9 +31,7 @@ class OrgSettingsSection:
 
 
 @dataclass(frozen=True)
-class OrgSettingsSectionQuery:
-    """Asked by the org settings page; each app answers with its :class:`OrgSettingsSection`."""
-
-    session: AsyncSession
-    org_id: uuid.UUID
-    is_owner: bool
+class OrgSettingsSectionQuery(OrgMemberQuery):
+    """Asked by the org settings page; each app answers with its
+    :class:`OrgSettingsSection` (one collect grammar — see
+    :mod:`apps.organizations.contract.collect`)."""

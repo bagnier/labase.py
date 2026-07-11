@@ -25,9 +25,11 @@ from apps.console.contract.technical import overview as technical_overview
 from apps.console.infra.refresh import SettingsRefresher
 from apps.console.infra.router import router
 from apps.shared.config import get_technical_settings
-from apps.shared.host import Host
+from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
 from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
+
+PHASE = MountPhase.CONSOLE
 
 
 def mount(host: Host) -> None:

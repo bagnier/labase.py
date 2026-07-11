@@ -17,11 +17,13 @@ from apps.organizations.contract.queries import get_org_owner_id
 from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
-from apps.shared.host import Host, NavItem
+from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.persistence.repository import count_all
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
+
+PHASE = MountPhase.ORG
 
 _RECENT = 3
 
@@ -31,17 +33,15 @@ _WELCOME_BODY = (Path(__file__).parent / "welcome_page.md").read_text()
 
 
 def mount(host: Host) -> None:
-    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
-    host.events.on(ConsoleOverviewQuery, _console_overview)
-    settings = host.register_settings(_declare_settings())
-    if not settings.enabled:
-        return
-    host.app.include_router(router, prefix=ORG_PREFIX)
-    host.app.include_router(public_router)
-    host.register_nav(NavItem("Pages", "note-pencil", "pages", "/pages", order=40))
-    host.events.on(OverviewQuery, _overview)
-    host.events.on(OrgNavQuery, _org_nav)
-    host.events.on(OrgCreated, _seed)
+    host.register_app(
+        AppManifest(
+            settings=_declare_settings(),
+            on=[(ConsoleOverviewQuery, _console_overview)],
+            routers=[(router, ORG_PREFIX), (public_router, "")],
+            nav=[NavItem("Pages", "note-pencil", "pages", "/pages", order=40)],
+            when_enabled=[(OverviewQuery, _overview), (OrgNavQuery, _org_nav), (OrgCreated, _seed)],
+        )
+    )
 
 
 def _declare_settings() -> SettingsDeclaration:

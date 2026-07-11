@@ -17,28 +17,28 @@ from apps.shared.host import host
 from apps.todo.contract import integration as todo
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
-# Order matters: FastAPI matches routes in registration order, not by specificity.
-# - public mounts GET /{slug} (single-segment catch-all) and must come LAST so fixed-prefix
-#   routers like /console and /organizations are never shadowed by it.
-# - org-scoped contexts (organizations, files, todo, learning, pages) mount /{org_handle}/...
-#   catch-alls and must also come after fixed-prefix routers for the same reason.
-_apps = (
-    shared,
-    auth,
-    profile,
-    health,
-    issues,  # before console: its /console/issues routes must precede /console/{app}
-    metrics,  # before console: its /console/load routes must precede /console/{app}
-    logs,  # before console: its /console/logs routes must precede /console/{app}
-    console,
-    organizations,
-    api_keys,
-    files,
-    todo,
-    learning,
-    pages,
-    calendar,
-    public,
+# FastAPI matches routes in registration order, so registration follows each module's
+# declared MountPhase (see apps.shared.host.MountPhase); ties keep this listing order.
+_apps = sorted(
+    (
+        shared,
+        auth,
+        profile,
+        health,
+        issues,
+        metrics,
+        logs,
+        console,
+        organizations,
+        api_keys,
+        files,
+        todo,
+        learning,
+        pages,
+        calendar,
+        public,
+    ),
+    key=lambda module: module.PHASE,
 )
 for _app in _apps:
     _app.mount(host)

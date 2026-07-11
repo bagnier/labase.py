@@ -10,7 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from apps.shared.config import get_technical_settings
 from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
-from apps.shared.host import Host
+from apps.shared.host import Host, MountPhase
 from apps.shared.http.exceptions import (
     handle_http_error,
     handle_rate_limit,
@@ -27,6 +27,8 @@ from apps.shared.http.security import cors_config, csrf_protect, security_header
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
+
+PHASE = MountPhase.FOUNDATION
 
 _STATIC_DIR = Path(__file__).parents[3] / "static"
 

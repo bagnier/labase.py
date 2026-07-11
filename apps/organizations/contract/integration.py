@@ -22,11 +22,13 @@ from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
-from apps.shared.host import Host, NavItem
+from apps.shared.host import Host, MountPhase, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.persistence.repository import count_created_per_day
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize
+
+PHASE = MountPhase.ORG
 
 _GROWTH_DAYS = 14
 

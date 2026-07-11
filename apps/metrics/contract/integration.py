@@ -20,7 +20,7 @@ from apps.metrics.infra.repository import purge, rollup, total_requests
 from apps.metrics.infra.router import WINDOW_HOURS, exposition_router, router
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.host import Host
+from apps.shared.host import Host, MountPhase
 from apps.shared.queue import ensure_scheduled, register_task_handler
 from apps.shared.settings import (
     SettingDef,
@@ -29,6 +29,8 @@ from apps.shared.settings import (
     feature_switch,
     get_settings,
 )
+
+PHASE = MountPhase.CONSOLE_SCREEN
 
 log = structlog.get_logger("labase.metrics")
 

@@ -43,12 +43,14 @@
 
 ### découplage — finaliser
 
-- [ ] `host.register_app(manifest)`: collapse the ~15-step mount ceremony copy-pasted
-      in todo/files/learning/pages/calendar (incl. the console-tile-before-enabled-gate
-      ordering trap)
-- [ ] declarative mount phases instead of the hand-ordered tuple in `apps/main.py`
-- [ ] unify the four collect-slice queries (`OverviewQuery` / `ConsoleOverviewQuery` /
-      `OrgSettingsSectionQuery` / `OrgNavQuery`)
+- [x] `host.register_app(manifest)`: collapse the ~15-step mount ceremony copy-pasted
+      in todo/files/learning/pages/calendar (+ api_keys; incl. the
+      console-tile-before-enabled-gate ordering trap, now encoded in `AppManifest.on`)
+- [x] declarative mount phases instead of the hand-ordered tuple in `apps/main.py` —
+      each integration declares `PHASE = MountPhase.…`; the root sorts
+- [x] unify the four collect-slice queries — one grammar in
+      `apps/organizations/contract/collect.py` (`OrgQuery`/`OrgMemberQuery` bases);
+      `ConsoleOverviewQuery` is the same grammar minus the org dimension
 - [x] one settings registry (`host.declarations` vs `settings._registry`) — the
       declaration now lives on the `AppSettings` handle only; `Host` indexes handles.
       Naming decision: "users"/"appearance" are deliberate admin-facing group names

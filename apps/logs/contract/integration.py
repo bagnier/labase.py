@@ -17,7 +17,7 @@ from apps.logs.infra.router import router
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.shared import clock
 from apps.shared.charts import day_buckets_series
-from apps.shared.host import Host
+from apps.shared.host import Host, MountPhase
 from apps.shared.observability.logging import apply_log_level
 from apps.shared.settings import (
     SettingDef,
@@ -27,6 +27,8 @@ from apps.shared.settings import (
     feature_switch,
     get_settings,
 )
+
+PHASE = MountPhase.CONSOLE_SCREEN
 
 log = structlog.get_logger("labase.logs")
 

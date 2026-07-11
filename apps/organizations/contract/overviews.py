@@ -11,10 +11,9 @@ By convention ``data`` holds ``lines`` (short metric strings) and ``recent`` (re
 labels); both surfaces render the same content.
 """
 
-import uuid
 from dataclasses import dataclass, field
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from apps.organizations.contract.collect import OrgQuery
 
 
 @dataclass(frozen=True)
@@ -28,8 +27,6 @@ class Overview:
 
 
 @dataclass(frozen=True)
-class OverviewQuery:
-    """Asked by the org dashboard; each app answers with its :class:`Overview`."""
-
-    session: AsyncSession
-    org_id: uuid.UUID
+class OverviewQuery(OrgQuery):
+    """Asked by the org dashboard; each app answers with its :class:`Overview`
+    (one collect grammar — see :mod:`apps.organizations.contract.collect`)."""

@@ -15,8 +15,8 @@ import uuid
 from dataclasses import dataclass, field
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.organizations.contract.collect import OrgMemberQuery
 from apps.organizations.contract.queries import get_user_orgs
 from apps.shared.bus import bus
 from apps.shared.page import FullpageQuery
@@ -35,13 +35,10 @@ class OrgNavItem:
 
 
 @dataclass(frozen=True)
-class OrgNavQuery:
+class OrgNavQuery(OrgMemberQuery):
     """Collected per org by :func:`provide_org_nav`: "give me this org's specific nav
-    items". Handlers return ``list[OrgNavItem]``."""
-
-    session: AsyncSession
-    org_id: uuid.UUID
-    is_owner: bool
+    items". Handlers return ``list[OrgNavItem]`` (one collect grammar — see
+    :mod:`apps.organizations.contract.collect`)."""
 
 
 @dataclass

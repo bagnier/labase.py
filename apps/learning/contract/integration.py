@@ -12,10 +12,12 @@ from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrgCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.shared.host import Host, NavItem
+from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
+
+PHASE = MountPhase.ORG
 
 _WELCOME_DECK = "Welcome"
 _WELCOME_CARDS = [
@@ -32,19 +34,16 @@ _WELCOME_CARDS = [
 ]
 
 
-# Mounts an org-scoped router under /{org_handle}; mounted last (see apps.main).
-
-
 def mount(host: Host) -> None:
-    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
-    host.events.on(ConsoleOverviewQuery, _console_overview)
-    settings = host.register_settings(_declare_settings())
-    if not settings.enabled:
-        return
-    host.app.include_router(router, prefix=ORG_PREFIX)
-    host.register_nav(NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20))
-    host.events.on(OverviewQuery, _overview)
-    host.events.on(OrgCreated, _seed)
+    host.register_app(
+        AppManifest(
+            settings=_declare_settings(),
+            on=[(ConsoleOverviewQuery, _console_overview)],
+            routers=[(router, ORG_PREFIX)],
+            nav=[NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20)],
+            when_enabled=[(OverviewQuery, _overview), (OrgCreated, _seed)],
+        )
+    )
 
 
 def _declare_settings() -> SettingsDeclaration:

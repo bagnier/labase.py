@@ -23,19 +23,21 @@ from apps.organizations.contract.settings_sections import (
     OrgSettingsSection,
     OrgSettingsSectionQuery,
 )
-from apps.shared.host import Host
+from apps.shared.host import AppManifest, Host, MountPhase
 from apps.shared.settings import SettingsDeclaration, SupabaseLink, feature_switch
+
+PHASE = MountPhase.ORG
 
 
 def mount(host: Host) -> None:
-    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
-    host.events.on(ConsoleOverviewQuery, _console_overview)
-    settings = host.register_settings(_declare_settings())
-    if not settings.enabled:
-        return
-    host.app.include_router(router, prefix=ORG_PREFIX)
-    host.events.on(OrgSettingsSectionQuery, _settings_section)
-    host.events.on(ApiKeyQuery, _resolve)
+    host.register_app(
+        AppManifest(
+            settings=_declare_settings(),
+            on=[(ConsoleOverviewQuery, _console_overview)],
+            routers=[(router, ORG_PREFIX)],
+            when_enabled=[(OrgSettingsSectionQuery, _settings_section), (ApiKeyQuery, _resolve)],
+        )
+    )
 
 
 async def _settings_section(query: OrgSettingsSectionQuery) -> OrgSettingsSection:
