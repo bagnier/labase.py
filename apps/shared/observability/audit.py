@@ -128,7 +128,9 @@ async def _insert_audit_log(
             )
             await session.commit()
     except Exception:
-        log.warning("audit.write_failed", event=event, user_id=user_id)
+        # `event` is structlog's positional message parameter — the audited event
+        # must travel under another key or the call itself raises.
+        log.warning("audit.write_failed", audit_event=event, user_id=user_id)
 
 
 def _record_audit_event(

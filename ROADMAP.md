@@ -2,14 +2,15 @@
 
 ### auth — prouver que ça marche
 
-- [ ] OAuth round-trip untested end-to-end (callback + PKCE cookie + org bootstrap are
-      only covered by mocked units) — fake OIDC provider in the e2e drivers, or a
-      documented manual smoke checklist
-- [ ] TOTP-after-OAuth branch (`apps/auth/infra/router.py:442`) has zero coverage
+- [x] OAuth round-trip untested end-to-end — settled by the documented manual smoke
+      checklist (`docs/oauth.md`, "Manual verification, local stack"); callback
+      branching now also covered by `apps/auth/tests/test_oauth_callback.py`
+- [x] TOTP-after-OAuth branch (`apps/auth/infra/router.py:442`) has zero coverage
+      → covered (session withheld until the code, cookies parked, opt-out paths)
 - [ ] passkeys: the browser JS (`navigator.credentials`) is never executed by tests —
       Playwright virtual authenticator (CDP)
-- [ ] `/auth/confirm` error path redirects with `?info=registered`, key missing from
-      `_INFO_MESSAGES` → blank banner
+- [x] `/auth/confirm` error path redirects with `?info=registered`, key missing from
+      `_INFO_MESSAGES` → blank banner — now `?info=confirm_failed` with a real message
 
 ### GUI — harmoniser
 

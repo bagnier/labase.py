@@ -113,6 +113,8 @@ _INFO_MESSAGES: dict[str, str] = {
     "password_reset": "Your password was changed. You can now sign in.",
     "email_change_failed": "This confirmation link is invalid or has expired. "
     "Please request the change again from your profile.",
+    "confirm_failed": "This confirmation link is invalid or has expired. "
+    "Sign in to receive a new one.",
     "account_deleted": "Your account has been deleted.",
 }
 
@@ -745,5 +747,5 @@ async def confirm_endpoint(
     except Exception as e:
         _log_gotrue_failure("auth.confirm_error", e, token_hash=token_hash[:8])
         return RedirectResponse(
-            "/auth/login?info=registered", status_code=status.HTTP_303_SEE_OTHER
+            "/auth/login?info=confirm_failed", status_code=status.HTTP_303_SEE_OTHER
         )
