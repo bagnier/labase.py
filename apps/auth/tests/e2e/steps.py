@@ -16,6 +16,11 @@ def step_user_registered(driver, email, password):
     driver.register_disposable(email, password)
 
 
+@given(parsers.parse('a user is registered with email "{email}"'))
+def step_user_registered_default(driver, email):
+    driver.register_disposable(email, driver.PASSWORD)
+
+
 @given(parsers.parse('a user is signed in as "{email}"'))
 def step_user_signed_in_email_only(driver, email):
     driver.ensure_registered(email, "Test1234!")

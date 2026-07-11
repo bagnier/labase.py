@@ -6,13 +6,13 @@ Feature: Organisation management
   # Bootstrapping — one org per user, isolated by default
 
   Scenario: A new user gets a personal organisation on registration
-    Given a user is registered with email "alice@example.com" and password "Secret1!"
+    Given a user is registered with email "alice@example.com"
     Then they have exactly one organisation
     And they are its owner
 
   Scenario: Two users cannot see each other's organisation
-    Given a user is registered with email "alice@example.com" and password "Secret1!"
-    And a user is registered with email "bob@example.com" and password "Secret1!"
+    Given a user is registered with email "alice@example.com"
+    And a user is registered with email "bob@example.com"
     When "alice@example.com" views their organisation list
     Then "bob@example.com"'s organisation does not appear in the list
 

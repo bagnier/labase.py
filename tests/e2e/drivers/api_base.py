@@ -29,6 +29,11 @@ VISITOR = "visitor"  # sentinel — unauthenticated client, no associated user
 
 
 class ApiBase:
+    # Canonical e2e password. client_for() re-authenticates every seeded email
+    # with it, so a scenario that only *names* a user (no auth intent) can omit
+    # the password and rely on this default.
+    PASSWORD = _PASSWORD
+
     def __init__(self) -> None:
         self._runner = AsyncRunner()
         self._test_auth_emails: list[str] = []

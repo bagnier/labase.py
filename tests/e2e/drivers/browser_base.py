@@ -33,6 +33,10 @@ _E2E_PORT = 8801
 
 
 class BrowserBase:
+    # Canonical e2e password — mirror of ApiBase.PASSWORD; the per-email contexts
+    # sign in with it, so scenarios that only name a user can omit the password.
+    PASSWORD = _PASSWORD
+
     def __init__(self) -> None:
         self.base_url: str = os.environ.get("APP_URL", "")
         self._server: InProcessServer | None = None
