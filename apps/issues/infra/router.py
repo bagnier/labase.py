@@ -1,9 +1,13 @@
+from typing import Any
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.issues.domain.models import ErrorEventRead, ErrorGroupRead, IssueStatus
 from apps.issues.infra.repository import ErrorGroupRepository
+from apps.shared import clock
+from apps.shared.charts import last_days, sparkline
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -14,6 +18,7 @@ from apps.shared.persistence.database import AdminSession
 router = APIRouter(tags=["issues"])
 
 _TRIAGE_STATUSES = {IssueStatus.resolved, IssueStatus.ignored, IssueStatus.unresolved}
+_SPARK_DAYS = 14
 
 
 @router.get("", response_model=None)
@@ -67,13 +72,17 @@ async def issue_detail(
         )
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "issues/_events.html" if is_htmx else "issues/detail.html"
-    ctx = {
+    ctx: dict[str, Any] = {
         "user": current_user,
         "group": group_read,
         "events": event_reads,
         "next_before_id": next_before_id,
     }
     if not is_htmx:
+        counts = await repo.daily_counts(group_id, days=_SPARK_DAYS)
+        window = last_days(_SPARK_DAYS, end=clock.now().date())
+        ctx["spark"] = sparkline([counts.get(d.isoformat(), 0) for d in window], color="error")
+        ctx["spark_days"] = _SPARK_DAYS
         ctx |= await fullpage_context(session, current_user)
     return templates.TemplateResponse(request, template, ctx)
 

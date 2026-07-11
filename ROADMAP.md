@@ -28,17 +28,18 @@
 
 ### dashboards — rendre vivants
 
-- [ ] shared chart macro over the `charts.js` `data-chart-config` contract + a
-      series-shaping helper (unlocks everything below)
-- [ ] org dashboard: 14-day activity chart — `LogReader.activity(org_id=…)` already
-      returns per-day/per-source counts
-- [ ] profile: "Recent activity" timeline — `search_audit_logs(user_id=…)` already
-      filters per user
-- [ ] wire the `metric_card` stub ("No data yet") to the counts `overviews.json`
-      already computes
-- [ ] logs: replace the hand-rolled CSS activity bars with the ApexCharts stack
-- [ ] issues: per-day occurrence sparkline on the detail page
-- [ ] console: signups / orgs growth chart (`UserCreated`/`OrgCreated` or audit events)
+- [x] shared chart macro over the `charts.js` `data-chart-config` contract + a
+      series-shaping helper (`apps/shared/charts.py`) — unlocked everything below
+- [x] org dashboard: 14-day activity chart — logs contributes a full-width Overview
+      card (admin session behind a contract query, org-scoped aggregates only)
+- [x] profile: "Recent activity" timeline — the user's own audit trail, labels only
+- [x] wire the `metric_card` stub ("No data yet") to live values — org dashboard
+      opens with Members / Pending invitations
+- [x] logs: replace the hand-rolled CSS activity bars with the ApexCharts stack
+      (the `data-activity` JSON attribute stays the machine-readable contract)
+- [x] issues: per-day occurrence sparkline on the detail page
+- [x] console: signups / orgs growth chart — any console tile may carry a `growth`
+      slice; profiles + organizations do, the landing folds them into one chart
 
 ### découplage — finaliser
 

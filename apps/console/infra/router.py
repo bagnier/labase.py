@@ -11,7 +11,9 @@ from apps.console.domain.admins import AdminNotFound, LastAdminViolation
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.infra.repository import AppSettingRepository
 from apps.organizations.contract.queries import list_org_handles
+from apps.shared import clock
 from apps.shared.bus import bus
+from apps.shared.charts import day_buckets_series
 from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
@@ -75,6 +77,28 @@ def _sectioned(overviews: list[ConsoleOverview]) -> list[dict]:
             label = _SECTION_LABELS.get(section, section)
             sections.append({"key": section, "label": label, "overviews": members})
     return sections
+
+
+_GROWTH_DAYS = 14
+
+
+def _growth_chart(overviews: list[ConsoleOverview]) -> dict | None:
+    """Fold every tile's ``growth`` slice ({iso_day: n}) into one stacked chart.
+
+    The console stays ignorant of who grows: any app may put a ``growth`` dict in its
+    console overview data (profiles and organizations do) and lands on the chart."""
+    buckets: dict[str, dict[str, int]] = {}
+    names: dict[str, str] = {}
+    for o in overviews:
+        for day, n in (o.data.get("growth") or {}).items():
+            buckets.setdefault(day, {})[o.key] = n
+        if o.data.get("growth") is not None:
+            names[o.key] = o.title
+    if not names:
+        return None
+    return day_buckets_series(
+        buckets, days=_GROWTH_DAYS, end=clock.now().date(), names=names, height=180
+    )
 
 
 async def _raw_overviews(session: AdminSession) -> list[ConsoleOverview]:
@@ -143,6 +167,8 @@ async def get_console(
         {
             "user": current_user,
             "sections": _sectioned(overviews),
+            "growth_chart": _growth_chart(overviews),
+            "growth_days": _GROWTH_DAYS,
             "disabled": disabled,
             "links": links,
             **await fullpage_context(session, current_user),

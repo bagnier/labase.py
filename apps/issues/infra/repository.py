@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select, text
@@ -93,6 +94,17 @@ class ErrorGroupRepository:
         rows = list(await self.session.scalars(query))
         next_before_id = rows[limit - 1].id if len(rows) > limit else None
         return rows[:limit], next_before_id
+
+    async def daily_counts(self, group_id: int, *, days: int) -> dict[str, int]:
+        """Occurrences per ISO day over the trailing window — the detail sparkline."""
+        since = clock.now() - timedelta(days=days - 1)
+        day = func.date(ErrorEvent.created_at)
+        rows = await self.session.execute(
+            select(day, func.count())
+            .where(ErrorEvent.group_id == group_id, ErrorEvent.created_at >= since)
+            .group_by(day)
+        )
+        return {d.isoformat(): n for d, n in rows.all()}
 
     async def unresolved_count(self) -> int:
         return (

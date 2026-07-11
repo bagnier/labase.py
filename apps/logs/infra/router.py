@@ -15,6 +15,7 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.logs.domain.models import LogEntry
 from apps.logs.infra.repository import LogFilter, LogReader, request_desc
 from apps.organizations.contract.queries import org_handles
+from apps.shared.charts import chart_config
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
@@ -31,6 +32,27 @@ def _settings_rows() -> list[SettingRow]:
     """The logs app's own settings, straight from the settings model. The logs screen owns both
     its timeline and its settings surface, so ``GET /console/logs`` carries them together."""
     return get_settings(_LOGS_APP).rows()
+
+
+def _activity_chart(activity: dict[str, dict[str, int]]) -> dict[str, Any]:
+    """The stacked per-day columns over whatever days the filtered window carries.
+
+    Series colors mirror the legend swatches in the template (info/secondary/error),
+    which is why the chart's own legend stays off."""
+    days = sorted(activity)
+    series = [
+        {"name": source, "data": [activity[d].get(source, 0) for d in days]}
+        for source in ("request", "audit", "issue")
+    ]
+    return chart_config(
+        "bar",
+        series,
+        colors=["info", "secondary", "error"],
+        chart={"height": 130, "stacked": True},
+        xaxis={"categories": [d[5:] for d in days]},
+        yaxis={"min": 0, "forceNiceScale": True},
+        legend={"show": False},
+    )
 
 
 def _bound(value: str | None) -> datetime | None:
@@ -198,6 +220,7 @@ async def logs_screen(
             "user": current_user,
             "entries": entries,
             "activity": activity,
+            "activity_chart": _activity_chart(activity),
             "facets": facets,
             "org_label": org_label,
             "user_label": user_label,

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
+{% from "macros/chart.html" import chart, chart_scripts %}
 {% block title %}Console — labase{% endblock %}
 {% block breadcrumb %}
   <li>Admin</li>
@@ -10,6 +11,14 @@
       {% for link in links %}<a href="{{ link.href }}" class="btn btn-sm">{{ link.label }}</a>{% endfor %}
       <a href="/console/admins" class="btn btn-sm">Manage admins</a>
     {% endcall %}
+    {% if growth_chart %}
+      <section class="card-panel" aria-label="Growth">
+        <div class="p-4">
+          <h2 class="text-sm font-semibold mb-2">Growth — last {{ growth_days }} days</h2>
+          {{ chart(growth_chart, label='Sign-ups and organisations created per day') }}
+        </div>
+      </section>
+    {% endif %}
     {% for section in sections %}
       <section class="space-y-3" aria-labelledby="console-section-{{ section.key }}">
         <h2 id="console-section-{{ section.key }}" class="eyebrow">{{ section.label }}</h2>
@@ -25,3 +34,4 @@
     {% endfor %}
   </div>
 {% endblock %}
+{% block scripts %}{{ chart_scripts() }}{% endblock %}

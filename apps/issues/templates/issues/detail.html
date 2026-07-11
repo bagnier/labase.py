@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
+{% from "macros/chart.html" import chart, chart_scripts %}
 {% block title %}Issue #{{ group.id }} — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -19,9 +20,16 @@
       </p>
     </div>
     <div id="triage" aria-live="polite">{% include "issues/_triage.html" %}</div>
+    <section class="card-panel" aria-label="Occurrence trend">
+      <div class="p-4">
+        <h2 class="text-sm font-semibold mb-2">Occurrences — last {{ spark_days }} days</h2>
+        {{ chart(spark, label='Occurrences per day') }}
+      </div>
+    </section>
     <section aria-label="Occurrences">
       <h2 class="text-sm font-semibold mb-3">Occurrences</h2>
       <div id="issue-events" class="space-y-3">{% include "issues/_events.html" %}</div>
     </section>
   </div>
 {% endblock %}
+{% block scripts %}{{ chart_scripts() }}{% endblock %}

@@ -3,6 +3,7 @@
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/empty_state.html" import empty_state %}
 {% from "macros/data_table.html" import filter_bar %}
+{% from "macros/chart.html" import chart, chart_scripts %}
 {% block title %}Logs — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
@@ -26,14 +27,8 @@
     {% endcall %}
     {# overflow-visible so the combobox popovers can escape the card (matches the mockup). #}
     <div class="card-panel overflow-visible">
-      {# ── Activity: stacked bars per bucket, themed like the console ──────────── #}
-      {% set ns = namespace(max=1) %}
-      {% for day, c in activity.items() %}
-        {% set t = (c.audit or 0) + (c.request or 0) + (c.issue or 0) %}
-        {% if t > ns.max %}
-          {% set ns.max = t %}
-        {% endif %}
-      {% endfor %}
+      {# ── Activity: the shared ApexCharts stack; the JSON attribute stays the
+         machine-readable contract the drivers assert on. #}
       <div class="p-4 border-b border-base-300"
            data-activity='{{ activity | tojson }}'>
         <div class="flex items-center gap-4 mb-3">
@@ -45,25 +40,7 @@
           </span>
         </div>
         {% if activity %}
-          <div class="flex items-end gap-1 h-24"
-               data-activity-bars
-               aria-hidden="true">
-            {% for day, c in activity.items() %}
-              <div class="flex-1 flex flex-col-reverse min-w-0"
-                   title="{{ day }}: {{ c.request or 0 }}r / {{ c.audit or 0 }}a / {{ c.issue or 0 }}i">
-                <div class="bg-info"
-                     style="height: {{ ((c.request or 0) / ns.max * 84) | round(1) }}px"></div>
-                <div class="bg-secondary"
-                     style="height: {{ ((c.audit or 0) / ns.max * 84) | round(1) }}px"></div>
-                <div class="bg-error"
-                     style="height: {{ ((c.issue or 0) / ns.max * 84) | round(1) }}px"></div>
-              </div>
-            {% endfor %}
-          </div>
-          <div class="flex justify-between text-[10px] text-base-content/50 mt-1.5"
-               data-activity-summary>
-            {% for day in activity.keys() %}<span>{{ day[5:] }}</span>{% endfor %}
-          </div>
+          {{ chart(activity_chart, label='Log events per day, stacked by source') }}
         {% else %}
           <p class="text-xs text-base-content/60" data-activity-summary>No activity in the current window.</p>
         {% endif %}
@@ -159,4 +136,7 @@
       {% endwith %}
     </section>
   </div>
+{% endblock %}
+{% block scripts %}
+  {{ chart_scripts() }}
 {% endblock %}

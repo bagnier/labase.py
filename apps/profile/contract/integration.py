@@ -11,8 +11,10 @@ from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
 from apps.shared.host import Host
+from apps.shared.persistence.repository import count_created_per_day
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
-from apps.shared.slug_registry import register_open_list
+
+_GROWTH_DAYS = 14
 
 
 def mount(host: Host) -> None:
@@ -23,7 +25,7 @@ def mount(host: Host) -> None:
     host.register_settings(_declare_settings())
     host.events.on(UserDeleted, _forget_user)
     host.reserve("profile")
-    register_open_list("profiles", profile_handle_taken)
+    host.register_open_list("profiles", profile_handle_taken)
 
 
 def _declare_settings() -> SettingsDeclaration:
@@ -86,5 +88,10 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         title="Profiles",
         icon="user-circle",
         section="configuration",
-        data={"lines": lines},
+        data={
+            "lines": lines,
+            # Sign-ups per day (every account gets a profile row on creation) — the
+            # console landing folds every tile's "growth" slice into one chart.
+            "growth": await count_created_per_day(query.session, Profile, days=_GROWTH_DAYS),
+        },
     )

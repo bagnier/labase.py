@@ -1,10 +1,12 @@
 import uuid
+from datetime import timedelta
 from operator import attrgetter
 from typing import Any, ClassVar, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared import clock
 from apps.shared.persistence.base import Base, Positioned
 
 
@@ -113,3 +115,16 @@ class PositionedRepository[T: Base](OrgScopedRepository[T]):
 async def count_all(session: AsyncSession, model: type[Any]) -> int:
     """Server-wide count for `model`, across every organisation (console overview)."""
     return int(await session.scalar(select(func.count()).select_from(model)) or 0)
+
+
+async def count_created_per_day(
+    session: AsyncSession, model: type[Any], *, days: int
+) -> dict[str, int]:
+    """Server-wide rows per creation day over the trailing window, as ``{iso_day: n}`` —
+    the ``growth`` slice a console tile may carry for the landing growth chart."""
+    since = clock.now() - timedelta(days=days - 1)
+    day = func.date(model.created_at)
+    rows = await session.execute(
+        select(day, func.count()).where(model.created_at >= since).group_by(day)
+    )
+    return {d.isoformat(): int(n) for d, n in rows.all()}
