@@ -20,6 +20,8 @@ from apps.shared.settings import (
     SettingsDeclaration,
     bind_settings,
 )
+from apps.shared.slug_registry import OpenListChecker
+from apps.shared.slug_registry import register_open_list as _register_open_list
 from apps.shared.slug_registry import reserve as _reserve_slugs
 
 if TYPE_CHECKING:
@@ -65,8 +67,18 @@ class Host:
 
     def reserve(self, *slugs: str) -> None:
         """Claim URL slugs so no org handle can shadow them
-        (see :mod:`apps.shared.slug_registry`)."""
+        (see :mod:`apps.shared.slug_registry`).
+
+        One rule: an app reserves a slug iff it routes that *top-level* path
+        (``/files/share/…``, ``/metrics``). Org-scoped routers live under
+        ``/{org_handle}/…`` where no handle can shadow them — nothing to reserve."""
         _reserve_slugs(*slugs)
+
+    def register_open_list(self, name: str, checker: OpenListChecker) -> None:
+        """Register a handle namespace to check for cross-context slug uniqueness
+        (see :mod:`apps.shared.slug_registry`) — the flip side of :meth:`reserve`,
+        routed through the host so mounts touch one slug surface."""
+        _register_open_list(name, checker)
 
     def register_nav(self, item: NavItem) -> None:
         """Add a sidebar link, contributed by an app from its :func:`mount`."""

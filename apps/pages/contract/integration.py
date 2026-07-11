@@ -34,7 +34,6 @@ def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.events.on(ConsoleOverviewQuery, _console_overview)
     settings = host.register_settings(_declare_settings())
-    host.reserve("pages")  # reserved even when disabled, to keep the slug from being squatted
     if not settings.enabled:
         return
     host.app.include_router(router, prefix=ORG_PREFIX)

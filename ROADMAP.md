@@ -49,8 +49,8 @@
 - [ ] one settings registry (`host.declarations` vs `settings._registry`) + fix naming
       drift (auth→"users", console→"appearance")
 - [x] import-linter: add the missing "logs internals are private" contract
-- [ ] one slug rule: drop calendar's pointless `reserve`, move `register_open_list`
-      onto `Host`
+- [x] one slug rule: drop calendar's (and pages') pointless `reserve`, move
+      `register_open_list` onto `Host` — rule documented on `Host.reserve`
 
 ### vitrine
 

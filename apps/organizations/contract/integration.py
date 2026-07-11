@@ -25,7 +25,6 @@ from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
-from apps.shared.slug_registry import register_open_list
 from apps.shared.text import pluralize
 
 # Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
@@ -46,7 +45,7 @@ def mount(host: Host) -> None:
         NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
     )
     host.reserve("invitations")
-    register_open_list("organizations", org_handle_taken)
+    host.register_open_list("organizations", org_handle_taken)
 
 
 def _declare_settings() -> SettingsDeclaration:
