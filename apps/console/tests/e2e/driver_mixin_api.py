@@ -47,10 +47,6 @@ class ConsoleApiMixin(ApiBase):
         # Acts as the current (non-admin) user — no admin re-targeting.
         self.response = self.client().get("/console")
 
-    def assert_console_not_found(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"
-
     def set_org_override(self, app: str, key: str, value: str) -> None:
         self._as_admin()
         handle = getattr(self, "active_org_handle", "")

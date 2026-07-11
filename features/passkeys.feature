@@ -8,9 +8,8 @@ Feature: Passkeys (WebAuthn)
   # (rp_origins) and a Playwright CDP virtual authenticator answers the prompts.
   # The API driver uses the software authenticator in tests/e2e/drivers/webauthn.py.
 
-  Background: running
-    Given the application is running
-    And the server already has an admin
+  Background:
+    Given the server already has an admin
 
   Scenario: Passkey sign-in stays hidden until enabled
     Then the sign-in page does not offer passkey sign-in

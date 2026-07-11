@@ -170,6 +170,7 @@ class LogsApiMixin(ApiBase):
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
     def assert_activity(self, date: str, audit: int, request: int, issue: int) -> None:
+        assert self.response is not None
         act = self.response.json()["activity"].get(date, {})
         assert act.get("audit", 0) == audit, f"activity {date} audit: {act}"
         assert act.get("request", 0) == request, f"activity {date} request: {act}"
@@ -190,7 +191,3 @@ class LogsApiMixin(ApiBase):
 
     def try_open_logs_screen(self) -> None:
         self.response = self.client().get("/console/logs", headers={"accept": "application/json"})
-
-    def assert_logs_not_found(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"

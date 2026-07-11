@@ -24,7 +24,7 @@ Feature: Org file storage
 
   Scenario: Upload is rejected for a filename with path traversal
     When they upload a file with filename "../../../etc/passwd"
-    Then the upload is rejected with status 400
+    Then the upload is rejected
 
   Scenario: Upload with XSS characters in filename is sanitized and succeeds
     When they upload a file with filename "<img onerror=alert(1)>.txt"
@@ -58,7 +58,7 @@ Feature: Org file storage
     And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
     When they delete the file "budget.xlsx"
-    Then the action is denied
+    Then the action is forbidden
     And "budget.xlsx" appears in the file list
 
   Scenario: Owner can delete any file in the org
@@ -81,7 +81,7 @@ Feature: Org file storage
     And "bob@example.com" is a member of the org
     And "bob@example.com" has uploaded "budget.xlsx" to the org
     When they rename the file "budget.xlsx" to "budget-final.xlsx"
-    Then the action is denied
+    Then the action is forbidden
 
   # Org isolation
 

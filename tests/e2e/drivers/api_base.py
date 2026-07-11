@@ -34,6 +34,20 @@ class ApiBase:
         self._test_auth_emails: list[str] = []
         self._clients: dict[str, httpx.Client] = {}
         self._acting_email: str = VISITOR
+        self.response: httpx.Response | None = None
+
+    # ── shared access-control assertions (phrases live in tests/e2e/steps_common) ─
+    def assert_forbidden(self) -> None:
+        assert self.response is not None, "No response stored — cannot check forbidden"
+        assert self.response.status_code == 403, (
+            f"Expected 403, got {self.response.status_code}: {self.response.text}"
+        )
+
+    def assert_not_found(self) -> None:
+        assert self.response is not None, "No response stored — cannot check not-found"
+        assert self.response.status_code == 404, (
+            f"Expected 404, got {self.response.status_code}: {self.response.text}"
+        )
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:

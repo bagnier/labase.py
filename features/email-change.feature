@@ -3,9 +3,8 @@ Feature: Email change
   I want to change my sign-in email, confirmed from the new mailbox
   So that my account follows my current address
 
-  Background: running
-    Given the application is running
-    And a user is registered with email "moving@labase.dev" and password "Test1234!"
+  Background:
+    Given a user is registered with email "moving@labase.dev" and password "Test1234!"
 
   # Requesting
 

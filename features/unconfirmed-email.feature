@@ -3,9 +3,8 @@ Feature: Unconfirmed email verification
   I want a clear explanation and a way to get the confirmation email again
   So that I am not stuck in front of a generic sign-in error
 
-  Background: running
-    Given the application is running
-    And an unconfirmed user is registered with email "pending@labase.dev" and password "Test1234!"
+  Background:
+    Given an unconfirmed user is registered with email "pending@labase.dev" and password "Test1234!"
 
   Scenario: An unconfirmed sign-in is blocked with a clear message
     When a visitor signs in with email "pending@labase.dev" and password "Test1234!"

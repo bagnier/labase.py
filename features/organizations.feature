@@ -17,7 +17,7 @@ Feature: Organisation management
     Then "bob@example.com"'s organisation does not appear in the list
 
   Scenario: A user cannot own more organisations than allowed
-    Given a user is signed in as "alice@example.com" within org "Acme"
+    Given a user is signed in as "alice@example.com" as owner of "Acme"
     And the maximum owned organisations per user is 1
     When they try to create an organisation named "Beta"
     Then the action is forbidden
@@ -34,13 +34,13 @@ Feature: Organisation management
   # Rename
 
   Scenario: Owner can rename their organisation
-    Given a user is signed in as "alice@example.com" within org "Acme"
+    Given a user is signed in as "alice@example.com" as owner of "Acme"
     When they rename the active organisation to "Acme Corp"
     Then "Acme Corp" appears in their organisation list
     And "Acme" no longer appears in their organisation list
 
   Scenario: Member cannot rename the organisation
-    Given a user is signed in as "alice@example.com" within org "Acme"
+    Given a user is signed in as "alice@example.com" as owner of "Acme"
     And "bob@example.com" is a member of the org
     And they are signed in as "bob@example.com" in the same org
     When they rename the active organisation to "Hacked Name"
@@ -49,7 +49,6 @@ Feature: Organisation management
   # Access control
 
   Scenario: The org dashboard requires authentication
-    Given the application is running
     When they try to access an org dashboard without signing in
     Then access is denied
 
@@ -64,5 +63,5 @@ Feature: Organisation management
     Given a user is signed in as "alice@example.com" within org "Acme"
     And they have also joined "Beta Corp" as member "alice@example.com"
     When they view the dashboard
-    Then "Acme" appears as a workspace card
-    And "Beta Corp" appears as a workspace card
+    Then "Acme" appears as a workspace
+    And "Beta Corp" appears as a workspace

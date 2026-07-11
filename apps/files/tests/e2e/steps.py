@@ -117,11 +117,6 @@ def step_access_share_unauthenticated(driver):
     driver.access_share_link_unauthenticated()
 
 
-@then("the action is denied")
-def step_action_denied(driver):
-    driver.assert_action_denied()
-
-
 @then("the action is rejected")
 def step_action_rejected(driver):
     driver.assert_action_rejected()
@@ -132,9 +127,9 @@ def step_upload_raw_filename(driver, filename):
     driver.upload_file_with_raw_filename(filename)
 
 
-@then(parsers.parse("the upload is rejected with status {status:d}"))
-def step_upload_rejected_with_status(driver, status):
-    driver.assert_upload_rejected(status)
+@then("the upload is rejected")
+def step_upload_rejected(driver):
+    driver.assert_upload_rejected(400)
 
 
 @then(

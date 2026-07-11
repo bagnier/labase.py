@@ -4,6 +4,5 @@ Feature: Public domain
   So that I can discover the platform
 
   Scenario: The home page is publicly accessible
-    Given the application is running
     When they access the home page without signing in
     Then it is publicly accessible

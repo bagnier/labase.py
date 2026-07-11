@@ -3,9 +3,8 @@ Feature: Account deletion
   I want to delete my account myself
   So that I do not depend on support to close it
 
-  Background: running
-    Given the application is running
-    And a user is registered with email "leaving@labase.dev" and password "Test1234!"
+  Background:
+    Given a user is registered with email "leaving@labase.dev" and password "Test1234!"
 
   Scenario: Deleting the account signs the user out and closes access
     Given a visitor signs in with email "leaving@labase.dev" and password "Test1234!"

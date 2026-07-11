@@ -78,13 +78,5 @@ class MetricsApiMixin(ApiBase):
     def try_open_load_screen(self) -> None:
         self.response = self.client().get("/console/load", headers={"accept": "application/json"})
 
-    def assert_load_screen_not_found(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"
-
     def try_fetch_metrics_exposition(self) -> None:
         self.response = self.client().get("/metrics", headers={"accept": "text/plain"})
-
-    def assert_metrics_exposition_not_found(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"

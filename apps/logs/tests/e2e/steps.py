@@ -197,8 +197,3 @@ def step_logs_empty(driver):
 @when("they try to open the logs screen")
 def step_try_open_logs(driver):
     driver.try_open_logs_screen()
-
-
-@then("the logs screen is not found")
-def step_logs_not_found(driver):
-    driver.assert_logs_not_found()

@@ -114,9 +114,9 @@ class LearningApiMixin(ApiBase):
         async def _do(s):
             for r in rows:
                 cid = await setup.card_id_by_external(s, org_id, r["ID"])
-                d, m, y = r["Date de dernière révision"].split("/")
+                d, m, y = r["Last reviewed on"].split("/")
                 last = date(int(y), int(m), int(d))
-                await setup.set_state(s, org_id, uid, cid, int(r["Niveau"]), last)
+                await setup.set_state(s, org_id, uid, cid, int(r["Level"]), last)
 
         self.run(db.seed_fixtures(_do))
 
@@ -164,14 +164,14 @@ class LearningApiMixin(ApiBase):
         key = self._user(name)
         cards = self._learn_json(key, "/sessions")["cards"]
         actual = [(c["external_id"], c["level"]) for c in cards]
-        expected = [(r["ID"], int(r["Niveau"])) for r in rows]
+        expected = [(r["ID"], int(r["Level"])) for r in rows]
         assert actual == expected, f"order {actual} != {expected}"
 
     def assert_resources(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
         items = self._learn_json(key, "/resources")
         actual = [(i["deck"], i["resource"]) for i in items]
-        expected = [(r["Paquet"], r["Ressources"]) for r in rows]
+        expected = [(r["Deck"], r["Resources"]) for r in rows]
         assert actual == expected, f"resources {actual} != {expected}"
 
     def assert_no_resources(self, name: str) -> None:

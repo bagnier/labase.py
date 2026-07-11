@@ -3,9 +3,8 @@ Feature: Two-factor authentication (TOTP)
   I want sign-in to require a code from my authenticator app
   So that a stolen password is not enough to enter my account
 
-  Background: running
-    Given the application is running
-    And a user is registered with email "vault@labase.dev" and password "Test1234!"
+  Background:
+    Given a user is registered with email "vault@labase.dev" and password "Test1234!"
 
   # Enrolment
 

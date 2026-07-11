@@ -394,10 +394,6 @@ class AuthBrowserMixin(BrowserBase):
         self._accounts_as_admin()
         self.try_open_accounts_screen()
 
-    def assert_accounts_screen_not_found(self) -> None:
-        assert self.last_response is not None
-        assert self.last_response.status == 404, f"Expected 404, got {self.last_response.status}"
-
     def assert_redirected_to_dashboard(self) -> None:
         self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
         assert "/profile" in self.page.url, f"Expected /profile, got {self.page.url}"

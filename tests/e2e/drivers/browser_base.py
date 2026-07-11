@@ -45,6 +45,21 @@ class BrowserBase:
         self._pages: dict[str, Page] = {}
         self._acting_email: str = _VISITOR
 
+    # ── shared access-control assertions (phrases live in tests/e2e/steps_common) ─
+    def assert_forbidden(self) -> None:
+        assert self.last_response is not None, "No response stored — cannot check forbidden"
+        assert self.last_response.status == 403, f"Expected 403, got {self.last_response.status}"
+
+    def assert_not_found(self) -> None:
+        # Some denials come back through an AJAX/fetch, not a page navigation; a mixin
+        # that took that path stashes the status in ``_denied_status`` (absent otherwise,
+        # so the plain page-navigation case falls through to ``last_response``).
+        status = getattr(self, "_denied_status", None)
+        if status is None:
+            assert self.last_response is not None, "No response stored — cannot check not-found"
+            status = self.last_response.status
+        assert status == 404, f"Expected 404, got {status}"
+
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
         if not self.base_url:

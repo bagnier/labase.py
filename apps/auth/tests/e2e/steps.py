@@ -1,11 +1,6 @@
 from pytest_bdd import given, parsers, then, when
 
 
-@given("the application is running")
-def step_app_running():
-    """Session reset is centralised in the db_rollback fixture; nothing to do here."""
-
-
 @given(parsers.parse('a user is signed in as "{email}" within org "{org_name}"'))
 def step_user_signed_in_within_org(driver, email, org_name):
     driver.sign_in_within_org(email, org_name)
@@ -309,11 +304,6 @@ def step_try_open_accounts(driver):
 @when("the admin tries to open the accounts screen")
 def step_admin_tries_open_accounts(driver):
     driver.try_open_accounts_screen_as_admin()
-
-
-@then("the accounts screen is not found")
-def step_assert_accounts_not_found(driver):
-    driver.assert_accounts_screen_not_found()
 
 
 @given("they enrol an authenticator app")

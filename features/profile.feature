@@ -6,21 +6,21 @@ Feature: Profile management
   # Access control
 
   Scenario: The profile page requires authentication
-    Given the application is running
     When they try to access the profile without signing in
     Then access is denied
 
-  Scenario: The profile page shows org links after sign-in
+  Scenario: From their profile, a signed-in user reaches their org and todos
     Given a user is signed in
     When they view their profile
-    Then there is a link to their org dashboard
-    And there is a link to their todo list
+    Then their org dashboard is reachable from their profile
+    And their todo list is reachable from their profile
 
-  Scenario: The profile is accessible via the user footer
+  @web
+  Scenario: The profile is reached from the account area, not the main navigation
     Given a user is signed in
     When they view their profile
-    Then there is a link to the profile in the user footer
-    And there is no profile link in the navigation
+    Then their profile is reachable from the account area
+    And their profile is not in the main navigation
 
   # Handle edition
 
@@ -39,4 +39,4 @@ Feature: Profile management
   Scenario: A signed-in user cannot change their email
     Given a user is signed in
     When they view their profile
-    Then their email is shown as read-only
+    Then they cannot change their email from their profile

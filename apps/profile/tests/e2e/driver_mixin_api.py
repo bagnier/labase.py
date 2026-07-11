@@ -176,16 +176,3 @@ class ProfileApiMixin(ApiBase):
         assert resp.status_code == 200, (
             f"Todo list /{handle}/todos not reachable: {resp.status_code}"
         )
-
-    def assert_profile_link_in_footer(self) -> None:
-        # Discoverability: the profile resource is reachable at its canonical URL.
-        resp = self.client().get("/profile")
-        assert resp.status_code == 200 and resp.json().get("email"), (
-            f"Profile not reachable as a resource: {resp.status_code}"
-        )
-
-    def assert_no_profile_nav_link(self) -> None:
-        # No REST equivalent of "absent from the nav chrome"; the discoverability stand-in is
-        # that the profile is its own canonical resource (/profile), not embedded elsewhere.
-        resp = self.client().get("/profile")
-        assert resp.status_code == 200, f"Profile resource not reachable: {resp.status_code}"

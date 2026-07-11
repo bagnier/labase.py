@@ -9,7 +9,6 @@ Feature: Console domain
   #   - settings: a per-app key/value store the admin can read and edit
 
   Scenario: The console requires authentication
-    Given the application is running
     When they try to access the console without signing in
     Then access is denied
 

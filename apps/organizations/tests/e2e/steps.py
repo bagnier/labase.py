@@ -69,12 +69,7 @@ def step_sign_in_as_member(driver, email):
     driver.sign_in_as_member(email)
 
 
-@then("the action is forbidden")
-def step_action_forbidden(driver):
-    driver.assert_action_forbidden()
-
-
-@then(parsers.parse('"{org_name}" appears as a workspace card'))
+@then(parsers.parse('"{org_name}" appears as a workspace'))
 def step_assert_workspace_card(driver, org_name):
     driver.assert_workspace_card(org_name)
 

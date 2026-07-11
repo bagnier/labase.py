@@ -368,10 +368,6 @@ class AuthApiMixin(ApiBase):
         self._accounts_as_admin()
         self.try_open_accounts_screen()
 
-    def assert_accounts_screen_not_found(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"
-
     def assert_redirected_to_dashboard(self) -> None:
         assert self.response is not None
         is_303 = self.response.status_code == 303 and "/profile" in self.response.headers.get(

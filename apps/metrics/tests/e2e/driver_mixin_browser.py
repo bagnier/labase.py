@@ -53,15 +53,7 @@ class MetricsBrowserMixin(BrowserBase):
         assert probe is not None
         probe("GET", "/console/load")
 
-    def assert_load_screen_not_found(self) -> None:
-        assert self.last_response is not None
-        assert self.last_response.status == 404, f"Expected 404, got {self.last_response.status}"
-
     def try_fetch_metrics_exposition(self) -> None:
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None
         probe("GET", "/metrics")
-
-    def assert_metrics_exposition_not_found(self) -> None:
-        assert self.last_response is not None
-        assert self.last_response.status == 404, f"Expected 404, got {self.last_response.status}"

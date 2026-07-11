@@ -46,8 +46,3 @@ def step_assert_detail(driver, count):
 @when("they try to open the issues screen")
 def step_try_open_issues_screen(driver):
     driver.try_open_issues_screen()
-
-
-@then("the issues screen is not found")
-def step_assert_issues_not_found(driver):
-    driver.assert_issues_screen_not_found()

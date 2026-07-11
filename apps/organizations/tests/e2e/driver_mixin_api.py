@@ -104,12 +104,6 @@ class OrgApiMixin(ApiBase):
     def sign_in_as_member(self, email: str) -> None:
         self.set_acting_email(email)
 
-    def assert_action_forbidden(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 403, (
-            f"Expected 403, got {self.response.status_code}: {self.response.text}"
-        )
-
     def _handle(self) -> str:
         slug = getattr(self, "active_org_handle", "")
         assert slug, "No active org handle"

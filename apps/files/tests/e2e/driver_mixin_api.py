@@ -236,10 +236,6 @@ class OrgFileApiMixin(ApiBase):
             f"Expected 200 or 302, got {self.response.status_code}"
         )
 
-    def assert_action_denied(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 403, f"Expected 403, got {self.response.status_code}"
-
     def assert_action_rejected(self) -> None:
         assert self.response is not None
         assert self.response.status_code in (413, 422), (

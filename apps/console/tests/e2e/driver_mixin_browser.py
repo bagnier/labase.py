@@ -51,13 +51,6 @@ class ConsoleBrowserMixin(BrowserBase):
         # Acts as the current (non-admin) user's page — no admin re-targeting.
         self.last_response = self.page.goto(f"{self.base_url}/console", wait_until="load")
 
-    def assert_console_not_found(self) -> None:
-        status = getattr(self, "_denied_status", None)
-        if status is None:
-            assert self.last_response is not None
-            status = self.last_response.status
-        assert status == 404, f"Expected 404, got {status}"
-
     def reset_session(self) -> None:
         self._denied_status = None
         self._admin_email = None

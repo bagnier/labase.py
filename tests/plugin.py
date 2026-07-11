@@ -28,6 +28,7 @@ cleanup.reset_app_switches()
 
 pytest_plugins = [
     "tests.e2e.plugin",
+    "tests.e2e.steps_common",
     "apps.auth.tests.e2e.steps",
     "apps.api_keys.tests.e2e.steps",
     "apps.issues.tests.e2e.steps",
@@ -46,6 +47,14 @@ pytest_plugins = [
 
 def pytest_addoption(parser):
     parser.addoption("--driver", default="api", choices=["api", "browser"])
+
+
+def pytest_runtest_setup(item):
+    """A @web scenario only makes sense through a browser (rendered chrome, DOM
+    placement); skip it on any non-browser driver so the functional suite stays
+    surface-agnostic. pytest-bdd turns the Gherkin @web tag into this marker."""
+    if item.get_closest_marker("web") and item.config.getoption("--driver") != "browser":
+        pytest.skip("web-only scenario; runs under the browser driver")
 
 
 @pytest.fixture

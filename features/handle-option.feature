@@ -7,12 +7,8 @@ Feature: Handle option
   # covers only the admin switch (2026-07-06 decision: every advanced-auth
   # option gets its own declared setting).
 
-  Background: running
-    Given the application is running
-    And a user is registered with email "plain@labase.dev" and password "Test1234!"
-
   Scenario: An admin can turn handles off
-    Given a visitor signs in with email "plain@labase.dev" and password "Test1234!"
+    Given a user is signed in as "plain@labase.dev"
     And a server admin is signed in as "root@example.com"
     When the admin sets the "profile" setting "handle_enabled" to "false"
     Then the handle option is not offered

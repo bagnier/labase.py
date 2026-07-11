@@ -6,7 +6,7 @@ def step_access_profile_unauthenticated(driver):
     driver.visit_profile_unauthenticated()
 
 
-@then("there is a link to their org dashboard")
+@then("their org dashboard is reachable from their profile")
 def step_link_to_org_dashboard(driver):
     driver.assert_link_to_org_dashboard()
 
@@ -16,17 +16,17 @@ def step_view_dashboard(driver):
     driver.view_dashboard()
 
 
-@then("there is a link to their todo list")
+@then("their todo list is reachable from their profile")
 def step_link_to_todos(driver):
     driver.assert_link_to_todos()
 
 
-@then("there is a link to the profile in the user footer")
+@then("their profile is reachable from the account area")
 def step_profile_link_in_footer(driver):
     driver.assert_profile_link_in_footer()
 
 
-@then("there is no profile link in the navigation")
+@then("their profile is not in the main navigation")
 def step_no_profile_nav_link(driver):
     driver.assert_no_profile_nav_link()
 
@@ -61,7 +61,7 @@ def step_assert_update_rejected(driver):
     driver.assert_last_update_rejected()
 
 
-@then("their email is shown as read-only")
+@then("they cannot change their email from their profile")
 def step_assert_email_read_only(driver):
     driver.assert_email_read_only()
 

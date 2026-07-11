@@ -284,10 +284,6 @@ class OrgFileBrowserMixin(BrowserBase):
             f"Expected 200 or 302, got {self.last_response.status}"
         )
 
-    def assert_action_denied(self) -> None:
-        assert self.last_response is not None
-        assert self.last_response.status == 403, f"Expected 403, got {self.last_response.status}"
-
     def assert_action_rejected(self) -> None:
         assert self.last_response is not None
         assert self.last_response.status in (413, 422), (

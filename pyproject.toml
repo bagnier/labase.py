@@ -50,6 +50,11 @@ perf = [
 asyncio_mode = "strict"
 testpaths = ["tests", "apps"]
 pythonpath = ["."]
+# A scenario is surface-agnostic by default — it must pass on every driver (api,
+# browser, and the future cli). Tag it @web only when the interaction has meaning
+# solely through a browser (rendered chrome, DOM placement); such scenarios run
+# under the browser driver and are skipped elsewhere (see pytest_runtest_setup).
+markers = ["web: browser-only scenario — skipped by the api (and future cli) driver"]
 addopts = "-p tests.plugin --cov=apps --cov-report=term-missing --cov-append --junitxml=.cov/junit.xml"
 # Third-party deprecations we cannot fix at the source (no app code passes these args):
 # - supabase-py forwards deprecated timeout/verify to SyncPostgrestClient

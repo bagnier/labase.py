@@ -62,7 +62,3 @@ class IssuesApiMixin(ApiBase):
 
     def try_open_issues_screen(self) -> None:
         self.response = self.client().get("/console/issues", headers={"accept": "application/json"})
-
-    def assert_issues_screen_not_found(self) -> None:
-        assert self.response is not None
-        assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"

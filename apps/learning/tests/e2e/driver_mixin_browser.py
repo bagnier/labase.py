@@ -183,9 +183,9 @@ class LearningBrowserMixin(BrowserBase):
         async def _do(s):
             for r in rows:
                 cid = await setup.card_id_by_external(s, org_id, r["ID"])
-                d, m, y = r["Date de dernière révision"].split("/")
+                d, m, y = r["Last reviewed on"].split("/")
                 last = date(int(y), int(m), int(d))
-                await setup.set_state(s, org_id, uid, cid, int(r["Niveau"]), last)
+                await setup.set_state(s, org_id, uid, cid, int(r["Level"]), last)
 
         self._seed(_do)
 
@@ -252,7 +252,7 @@ class LearningBrowserMixin(BrowserBase):
             (c.get_attribute("data-card-id"), int(c.get_attribute("data-card-level") or "0"))
             for c in cards
         ]
-        expected = [(r["ID"], int(r["Niveau"])) for r in rows]
+        expected = [(r["ID"], int(r["Level"])) for r in rows]
         assert actual == expected, f"order {actual} != {expected}"
 
     def assert_resources(self, name: str, rows: list[dict]) -> None:
@@ -267,7 +267,7 @@ class LearningBrowserMixin(BrowserBase):
             )
             for i in items
         ]
-        expected = [(r["Paquet"], r["Ressources"]) for r in rows]
+        expected = [(r["Deck"], r["Resources"]) for r in rows]
         assert actual == expected, f"resources {actual} != {expected}"
 
     def assert_no_resources(self, name: str) -> None:

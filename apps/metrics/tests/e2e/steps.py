@@ -50,16 +50,6 @@ def step_try_open_load_screen(driver):
     driver.try_open_load_screen()
 
 
-@then("the load screen is not found")
-def step_assert_load_not_found(driver):
-    driver.assert_load_screen_not_found()
-
-
 @when("they try to fetch the metrics exposition")
 def step_try_fetch_exposition(driver):
     driver.try_fetch_metrics_exposition()
-
-
-@then("the metrics exposition is not found")
-def step_assert_exposition_not_found(driver):
-    driver.assert_metrics_exposition_not_found()

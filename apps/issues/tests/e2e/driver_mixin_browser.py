@@ -55,7 +55,3 @@ class IssuesBrowserMixin(BrowserBase):
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None
         probe("GET", "/console/issues")
-
-    def assert_issues_screen_not_found(self) -> None:
-        assert self.last_response is not None
-        assert self.last_response.status == 404, f"Expected 404, got {self.last_response.status}"

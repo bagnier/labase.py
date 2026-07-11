@@ -3,9 +3,8 @@ Feature: Authentication
   I want to manage my account access
   So that I can securely use the application
 
-  Background: running
-    Given the application is running
-    And a user is registered with email "test@labase.dev" and password "Test1234!"
+  Background:
+    Given a user is registered with email "test@labase.dev" and password "Test1234!"
 
   Scenario: A visitor can initiate sign-in
     Then the sign-in form is available

@@ -21,11 +21,6 @@ def step_admin_opens_console(driver):
     driver.visit_console()
 
 
-@then("the console is not found")
-def step_console_not_found(driver):
-    driver.assert_console_not_found()
-
-
 @then(parsers.parse('the "{key}" overview is visible on the console'))
 def step_console_overview_visible(driver, key):
     driver.assert_console_overview_visible(key)

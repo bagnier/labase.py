@@ -69,7 +69,7 @@ class OrgBrowserMixin(BrowserBase):
         """The owner-only UI control is hidden for the acting user. UI-hiding alone is
         not proof of server enforcement, so fire the request the control would have
         triggered — from the acting user's authenticated context — and store the
-        response so assert_action_forbidden can require the server itself to reject it.
+        response so assert_forbidden can require the server itself to reject it.
         """
         self.last_response = self.page.request.fetch(
             f"{self.base_url}{path}", method=method, **fetch_kwargs
@@ -183,10 +183,6 @@ class OrgBrowserMixin(BrowserBase):
     def sign_in_as_member(self, email: str) -> None:
         self.set_acting_email(email)
         self.context_for(email)
-
-    def assert_action_forbidden(self) -> None:
-        assert self.last_response is not None, "No response stored — cannot check forbidden"
-        assert self.last_response.status == 403, f"Expected 403, got {self.last_response.status}"
 
     def view_member_list(self) -> None:
         self._goto_members()
