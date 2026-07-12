@@ -93,6 +93,67 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
   friendly: a fake "Pro plan" gating one demo feature shows the pattern.
   (2026-07-05: out of scope for now) https://github.com/t3dotgg/stripe-recommendations
 
+### production readiness
+
+Objectif 1 (contrats client) : passer de « ça tourne chez moi » à « livrable et exploitable ».
+Déjà en place, à ne pas refaire : observabilité 4 couches, sondes `health/`, rate limiting
+inter-instances (Postgres), RLS, en-têtes de sécurité (HSTS/CSP/X-Frame/nosniff dans
+`apps/shared/http/security.py`), CSRF `Sec-Fetch-Site`, doc backups. Le trou n'est pas le
+runtime, c'est le **chemin vers la prod et l'exploitation**.
+
+#### P0 — bloquant pour un premier déploiement client
+
+- [ ] **`docker/docker-compose.prod.yml`** — le compose actuel est dev-only. Prod : `restart:
+  unless-stopped`, `healthcheck` branché sur la sonde readiness de `health/`, limites
+  CPU/mémoire, worker séparé si le `TaskWorker` sort du process web.
+- [ ] **Terminaison TLS + reverse proxy** — Hypercorn accepte des certs en env mais ce n'est pas
+  un plan de prod. Caddy devant (TLS auto Let's Encrypt, une ligne) ou déploiement derrière une
+  plateforme managée. HSTS existe déjà côté app → soumettre le domaine au **preload**.
+  (cf. Supabase « SSL enforcement » pour le lien app→DB.)
+- [ ] **`make preflight`** — gate qui refuse de booter en prod si la config est dangereuse :
+  `COOKIES_SECURE=false`, debug on, secret faible/par défaut, CORS `*`, CSP permissive. Profil
+  prod via `LABASE_ENV=production` dans `apps/shared/config.py` (Pydantic valide déjà à l'import).
+  = le `check --deploy` de cookiecutter.
+- [ ] **Pooling via Supavisor** — le piège Supabase : asyncpg en direct épuise la limite de
+  connexions sous charge. Router l'app par Supavisor (mode transaction) + documenter le sizing
+  du pool asyncpg. (cf. « Supavisor » / « Dedicated Poolers » plus bas.)
+- [ ] **Flux de migration en prod** — cadrer `supabase db push` : forward-only, revue, discipline
+  zéro-downtime (pas de `DROP`/`NOT NULL` brutal sur table vivante), migration jouée **dans** le
+  pipeline de deploy, pas à la main.
+- [ ] **Backup du Storage** — trou connu (`docs/backups.md` : les octets Storage ne sont pas dans
+  le dump SQL). Job de sauvegarde des buckets. Seul vrai risque de perte de données.
+- [ ] **Arrêt gracieux** — draining sur SIGTERM : finir les requêtes en vol + relâche propre des
+  locks `FOR UPDATE SKIP LOCKED` du `TaskWorker`, pour des deploys sans 502.
+- [ ] **Doc secrets prod** — documenter l'injection via le secret store de la plateforme
+  (rappel : `.env` n'est **pas** commité, seul `.env.test` l'est). Recoupe « prod deployment doc
+  (secrets, env) » ci-dessus.
+
+#### P1 — juste après le premier deploy
+
+- [ ] **CI/CD de déploiement** — pipeline gated sur `make ci`, build + push image taguée par
+  **version** (`apps/issues` track déjà la régression par version — s'en servir), migration, rollback.
+- [ ] **Alerting** (la télémétrie existe, pas la boucle) — sur régression d'issue, tâches *parkées*
+  dans la file, seuils de charge (`/metrics` existe déjà), échecs readiness. Scrape Prometheus +
+  dashboard Grafana.
+- [ ] **Expédition des logs** — logs JSON structurés → agrégateur (Loki/CloudWatch/…).
+  (cf. Supabase « Log Drains ».)
+- [ ] **Scan d'image + secret-scan CI** — Trivy sur l'image ; talisman (déjà en pre-commit) promu
+  en **gate CI** bloquant.
+- [ ] **Durcir la CSP** — resserrer `script-src`/`connect-src` maintenant que le front est stable
+  (HTMX, pas de JS externe).
+- [ ] **Délivrabilité email** — un vrai provider derrière le `Mailer` port + SPF/DKIM/DMARC.
+  (recoupe « email » ci-dessus.)
+- [ ] **Monitoring d'uptime** — check synthétique externe sur `/health` readiness.
+
+#### P2 — maturité d'exploitation
+
+- [ ] **Drill de restauration automatisé** + cibles **RTO/RPO** écrites (le drill est documenté,
+  pas testé en continu).
+- [ ] **Runbooks** — deploy, incident, on-call ; doc SLO / error budget.
+- [ ] **Timeouts explicites** sur tous les appels sortants (Supabase, SMTP) — la file a déjà le backoff.
+- [ ] **Guide de scaling horizontal** — le `TaskWorker` est déjà multi-instances safe ; documenter
+  le sizing pooler/workers + un load test au-delà du `perf-smoke`.
+
 ### possible Supabase integrations
 
 - [ ] AI Integrations - Enhance applications with OpenAI and Hugging Face integrations.
