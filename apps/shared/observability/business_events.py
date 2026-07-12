@@ -174,7 +174,7 @@ async def persist_business_event(event: BusinessEvent) -> None:
 
 # ── Presentation — humanize rows for the profile/dashboard timeline ──────────────────────────
 
-_FALLBACK_ICON = "circle"  # for legacy rows that carry no icon (the withdrawn audit() writer)
+_FALLBACK_ICON = "circle"  # for legacy rows written before events carried an icon
 
 
 def activity_label(kind: str) -> str:

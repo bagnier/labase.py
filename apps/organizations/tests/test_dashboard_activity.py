@@ -2,7 +2,7 @@
 
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.organizations.tests.given_helpers import orgs_for_user
-from apps.shared.observability.audit import _insert_audit_log
+from apps.shared.observability.business_events import insert_business_event
 
 _EMAIL = "dashboard-activity@example.com"
 
@@ -12,7 +12,15 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
     user_id = user_id_for_email(_EMAIL)
     org = orgs_for_user(user_id)[0]
     driver.run(
-        _insert_audit_log("info", "calendar.event_created", user_id, None, org["id"], None, {})
+        insert_business_event(
+            kind="calendar.event_created",
+            level="info",
+            user_id=user_id,
+            ip=None,
+            org_id=org["id"],
+            request_id=None,
+            payload=None,
+        )
     )
 
     body = client.get(f"/{org['handle']}/dashboard", headers={"accept": "text/html"}).text
