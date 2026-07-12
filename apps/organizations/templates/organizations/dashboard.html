@@ -2,6 +2,7 @@
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/chart.html" import chart_scripts %}
 {% from "macros/metric_card.html" import metric_card %}
+{% from "macros/activity_timeline.html" import activity_timeline %}
 {% block title %}Dashboard — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
@@ -20,6 +21,12 @@
         {% include o.template %}
       {% endfor %}
     </div>
+    <section class="card-panel" data-recent-activity>
+      <div class="card-body">
+        <h2 class="card-title text-sm font-semibold mb-3">Recent activity</h2>
+        {{ activity_timeline(recent_activity, empty="Nothing recorded yet — activity in " ~ org.name ~ " will appear here.") }}
+      </div>
+    </section>
   </div>
 {% endblock %}
 {% block scripts %}

@@ -1,0 +1,27 @@
+{# The recent-business-events timeline (daisyUI `timeline`), shared by the profile
+   (the user's own trail) and the org dashboard (the org's trail). Each entry is a
+   `{label, icon, ts}` dict from `activity_entries` — label and moment only, never
+   payloads or actors. Falls back to the shared empty state when nothing is recorded. #}
+{% from "macros/empty_state.html" import empty_state %}
+{% macro activity_timeline(entries, empty="Nothing recorded yet — activity will appear here.") %}
+  {% if entries %}
+    <ul class="timeline timeline-vertical timeline-compact timeline-snap-icon">
+      {% for e in entries %}
+        <li>
+          {% if not loop.first %}<hr />{% endif %}
+          <div class="timeline-middle">
+            <i class="ph ph-{{ e.icon }} text-primary" aria-hidden="true"></i>
+          </div>
+          <div class="timeline-end timeline-box">
+            <span class="text-sm">{{ e.label }}</span>
+            <time class="block text-xs text-base-content/60"
+                  datetime="{{ e.ts.strftime('%Y-%m-%dT%H:%M:%S%z') }}">{{ e.ts.strftime("%Y-%m-%d %H:%M") }}</time>
+          </div>
+          {% if not loop.last %}<hr />{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    {{ empty_state(empty) }}
+  {% endif %}
+{% endmacro %}

@@ -108,5 +108,5 @@ def _declare_settings() -> SettingsDeclaration:
                 "Firehose log level for structlog and stdlib — applies live, no restart",
             ),
         ],
-        supabase=SupabaseLink("Browse the audit trail in Supabase", table="audit_logs"),
+        supabase=SupabaseLink("Browse the business events in Supabase", table="business_events"),
     )

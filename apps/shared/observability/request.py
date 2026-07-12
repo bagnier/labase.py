@@ -27,8 +27,9 @@ class RequestLogger(BaseHTTPMiddleware):
             return await call_next(request)
 
         request_id = str(uuid.uuid4())[:8]
+        ip = request.client.host if request.client else None
         structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id)
+        structlog.contextvars.bind_contextvars(request_id=request_id, ip=ip)
         start_request_stats()
 
         start = time.perf_counter()

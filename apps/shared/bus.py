@@ -46,19 +46,34 @@ class EventBus:
     """Type-keyed async pub/sub. Handlers are dispatched by the event's runtime type."""
 
     def __init__(self) -> None:
-        self._subs: dict[type, list[Callable[..., Awaitable[Any]]]] = defaultdict(list)
+        self._subs: dict[type, list[Callable[[Any], Awaitable[object]]]] = defaultdict(list)
 
-    def on(self, event_type: type[E], handler: Callable[[E], Awaitable[Any]]) -> None:
+    def on(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         self._subs[event_type].append(handler)
 
-    async def emit(self, event: object) -> list[Any]:
-        """Run every handler for this event type in order; propagate exceptions.
+    async def emit(self, event: object) -> list[object]:
+        """Run every handler for this event in order; propagate exceptions.
+
+        Dispatch walks the event's MRO — handlers registered on the concrete type fire first
+        (most specific), then handlers registered on any base class. This lets a single
+        subscriber on a base (e.g. the business-events persister on ``BusinessEvent``) catch
+        every subclass, while exact-type subscribers keep working unchanged. A handler
+        registered on several classes in the MRO runs once.
 
         Every emitted event is logged here — a single, cheap trace point instead of each
         publisher remembering to log its own event. Secret-shaped fields are redacted by name.
         """
         log.info("event.emitted", event_type=type(event).__name__, **_loggable_payload(event))
-        return [await handler(event) for handler in self._subs[type(event)]]
+        # Command semantics: results are typed `object`, not `Any` — callers fire and discard
+        # them. (`collect` keeps `Any`: its callers consume heterogeneous typed aggregates.)
+        results: list[object] = []
+        seen: set[int] = set()
+        for klass in type(event).__mro__:
+            for handler in self._subs.get(klass, ()):
+                if id(handler) not in seen:
+                    seen.add(id(handler))
+                    results.append(await handler(event))
+        return results
 
     async def collect(self, query: object) -> list[Any]:
         """Run every handler for this query type; log and skip failing handlers.

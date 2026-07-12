@@ -50,7 +50,7 @@ def truncate_app_tables() -> None:
     s = get_technical_settings().supabase_database_schema
     tables = [
         "app_settings",
-        "audit_logs",
+        "business_events",
         "error_events",
         "error_groups",
         "request_metrics",

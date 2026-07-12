@@ -4,6 +4,7 @@
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/avatar.html" import avatar %}
 {% from "macros/empty_state.html" import empty_state %}
+{% from "macros/activity_timeline.html" import activity_timeline %}
 {% block title %}Profile — labase{% endblock %}
 {% block breadcrumb %}
   <li>Profile</li>
@@ -107,19 +108,7 @@
           <section class="card-panel" data-recent-activity>
             <div class="card-body">
               <h2 class="card-title text-sm font-semibold mb-3">Recent activity</h2>
-              {% if recent_activity %}
-                <ul class="space-y-2">
-                  {% for a in recent_activity %}
-                    <li class="flex items-baseline justify-between gap-4 text-sm">
-                      <span>{{ a.label }}</span>
-                      <time class="text-xs text-base-content/60 flex-none"
-                            datetime="{{ a.ts.strftime('%Y-%m-%dT%H:%M:%S%z') }}">{{ a.ts.strftime("%Y-%m-%d %H:%M") }}</time>
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                {{ empty_state("Nothing recorded yet — your actions will appear here.") }}
-              {% endif %}
+              {{ activity_timeline(recent_activity, empty="Nothing recorded yet — your actions will appear here.") }}
             </div>
           </section>
           <section class="card-panel">

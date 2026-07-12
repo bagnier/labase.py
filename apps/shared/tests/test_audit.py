@@ -1,25 +1,32 @@
-"""Audit trail write path — the failure seam must degrade, never raise."""
+"""Business-events write path — the failure seam must degrade, never raise."""
 
 from unittest.mock import patch
 
 import pytest
 
-from apps.shared.observability.audit import _insert_audit_log
+from apps.shared.observability.business_events import insert_business_event
 
 
 @pytest.mark.asyncio
-async def test_failed_audit_write_logs_a_warning_instead_of_raising():
-    # Regression: the warning passed `event=` as a kwarg, colliding with
-    # structlog's positional message parameter — the fallback itself raised,
-    # turning a lost audit row into a crashed background task.
+async def test_failed_write_logs_a_warning_instead_of_raising():
+    # Regression: the warning must not pass `event=`/`kind=` under structlog's positional
+    # message key, and a lost row must never crash the fire-and-forget write task.
     with (
         patch(
-            "apps.shared.observability.audit.admin_session_factory",
+            "apps.shared.observability.business_events.admin_session_factory",
             side_effect=RuntimeError("db down"),
         ),
-        patch("apps.shared.observability.audit.log") as log,
+        patch("apps.shared.observability.business_events.log") as log,
     ):
-        await _insert_audit_log("info", "auth.signed_in", "not-a-uuid", None, None, None, {})
+        await insert_business_event(
+            kind="auth.signed_in",
+            level="info",
+            user_id="not-a-uuid",
+            ip=None,
+            org_id=None,
+            request_id=None,
+            payload=None,
+        )
     log.warning.assert_called_once_with(
-        "audit.write_failed", audit_event="auth.signed_in", user_id="not-a-uuid"
+        "business_event.write_failed", kind="auth.signed_in", user_id="not-a-uuid"
     )

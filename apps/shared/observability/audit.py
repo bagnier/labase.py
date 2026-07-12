@@ -1,107 +1,25 @@
-"""Append-only audit trail for sensitive business actions.
+"""Best-effort audit shim over the business-events store — being withdrawn.
 
-Best-effort by doctrine (README): logged immediately, then persisted to ``audit_logs``
-as a background task — a lost audit write never blocks or fails the mutation. The unified
-logs viewer (``apps/logs``) reads this trail through :func:`search_audit_logs` — audit is
-shared infra, so its read query lives here with its writer, not in a bounded context.
+Historically its own append-only trail; now a thin writer in front of
+:mod:`apps.shared.observability.business_events`. Each ``audit()`` call site is being migrated
+to emit a typed :class:`~apps.shared.events.BusinessEvent` on the bus (which the store's
+persister records); until the last site moves, ``audit()`` keeps the trail complete by writing
+to the SAME ``business_events`` table — its ``event`` string is the event ``kind``.
+
+Best-effort by doctrine (README): logged immediately, then persisted after the response via the
+request ``BackgroundTasks`` — a lost write never blocks or fails the mutation.
 """
 
 import uuid
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 import structlog
 from fastapi import BackgroundTasks
-from sqlalchemy import BigInteger, DateTime, Text, cast, or_, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
 from structlog.contextvars import get_contextvars
 
-from apps.shared import clock
-from apps.shared.persistence.base import Base
-from apps.shared.persistence.database import admin_session_factory
+from apps.shared.observability.business_events import insert_business_event
 
 log = structlog.get_logger("labase.audit")
-
-
-class AuditLog(Base):
-    """The append-only audit row. RLS-enabled with no policy — written and read only through
-    the BYPASSRLS admin session (``admin_session_factory``)."""
-
-    __tablename__ = "audit_logs"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-    level: Mapped[str]
-    event: Mapped[str]
-    user_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    ip: Mapped[str | None] = mapped_column(default=None)
-    org_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    request_id: Mapped[str | None] = mapped_column(default=None)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
-
-
-@dataclass(frozen=True)
-class AuditRow:
-    """A read of the audit trail, flattened for the unified timeline."""
-
-    ts: datetime
-    level: str
-    event: str
-    org_id: str | None
-    user_id: str | None
-    request_id: str | None
-    payload: dict[str, Any]
-
-
-async def search_audit_logs(
-    session: AsyncSession,
-    *,
-    level: str | None = None,
-    org_id: str | None = None,
-    user_id: str | None = None,
-    request_id: str | None = None,
-    text: str | None = None,
-    from_dt: datetime | None = None,
-    to_dt: datetime | None = None,
-    limit: int = 100,
-) -> list[AuditRow]:
-    """Newest-first, bounded read of the audit trail under the given filters."""
-    query = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
-    if level:
-        query = query.where(AuditLog.level == level)
-    if org_id:
-        query = query.where(AuditLog.org_id == uuid.UUID(org_id))
-    if user_id:
-        query = query.where(AuditLog.user_id == uuid.UUID(user_id))
-    if request_id:
-        query = query.where(AuditLog.request_id == request_id)
-    if text:
-        like = f"%{text}%"
-        query = query.where(
-            or_(AuditLog.event.ilike(like), cast(AuditLog.payload, Text).ilike(like))
-        )
-    if from_dt:
-        query = query.where(AuditLog.created_at >= from_dt)
-    if to_dt:
-        query = query.where(AuditLog.created_at <= to_dt)
-    rows = await session.scalars(query)
-    return [
-        AuditRow(
-            ts=r.created_at,
-            level=r.level,
-            event=r.event,
-            org_id=str(r.org_id) if r.org_id else None,
-            user_id=str(r.user_id) if r.user_id else None,
-            request_id=r.request_id,
-            payload=r.payload or {},
-        )
-        for r in rows
-    ]
 
 
 async def _insert_audit_log(
@@ -113,24 +31,16 @@ async def _insert_audit_log(
     request_id: str | None,
     payload: dict[str, Any],
 ) -> None:
-    try:
-        async with admin_session_factory()() as session:
-            session.add(
-                AuditLog(
-                    level=level,
-                    event=event,
-                    user_id=uuid.UUID(user_id) if user_id else None,
-                    ip=ip,
-                    org_id=uuid.UUID(org_id) if org_id else None,
-                    request_id=request_id,
-                    payload=payload or None,
-                )
-            )
-            await session.commit()
-    except Exception:
-        # `event` is structlog's positional message parameter — the audited event
-        # must travel under another key or the call itself raises.
-        log.warning("audit.write_failed", audit_event=event, user_id=user_id)
+    """Positional writer kept for existing call sites/tests — delegates to the store."""
+    await insert_business_event(
+        kind=event,
+        level=level,
+        user_id=user_id,
+        ip=ip,
+        org_id=org_id,
+        request_id=request_id,
+        payload=payload or None,
+    )
 
 
 def _record_audit_event(
@@ -159,11 +69,10 @@ def audit(
     **fields: Any,
 ) -> None:
     """Record a sensitive action: logged now, persisted after the response via ``bg`` (the
-    request's ``BackgroundTasks``), so the audit write never delays the mutation.
+    request's ``BackgroundTasks``), so the write never delays the mutation.
 
-    ``org_id`` and the request's ``request_id`` (read from the structlog contextvars bound by
-    ``RequestLogger``) are persisted as first-class columns — the unified logs viewer filters
-    by org and correlates on request_id.
+    ``org_id`` and the request's ``request_id`` (from the structlog contextvars bound by
+    ``RequestLogger``) are persisted as first-class columns.
     """
     _record_audit_event(
         bg,

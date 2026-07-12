@@ -11,7 +11,7 @@ from tests.e2e import cleanup
 # already truncates between scenarios). The unified logs feature is the first to *read* these
 # tables, so scrub them before each scenario to keep the timeline hermetic. The firehose lives
 # in files, outside any transaction, so it needs the same scrub.
-_OBSERVABILITY_TABLES = ["audit_logs", "error_events", "error_groups"]
+_OBSERVABILITY_TABLES = ["business_events", "error_events", "error_groups"]
 
 
 @pytest.fixture(autouse=True)

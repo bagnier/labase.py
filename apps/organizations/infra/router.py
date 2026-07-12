@@ -4,6 +4,7 @@ from zoneinfo import available_timezones
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.admin import find_user_id_by_email, resolve_user_emails
 from apps.auth.contract.current import CurrentUser, RlsSession
@@ -34,6 +35,7 @@ from apps.shared.email import enqueue_email
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.observability.audit import audit
+from apps.shared.observability.business_events import activity_entries, search_business_events
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
@@ -190,6 +192,19 @@ async def list_organizations(
 # ── Org-scoped pages ────────────────────────────────────────────────────────────
 
 
+_RECENT_ACTIVITY = 8
+
+
+async def _recent_activity(session: AsyncSession, org_id: uuid.UUID) -> list[dict]:
+    """The org's recent business events for the dashboard timeline.
+
+    Reads on the request's own RLS session: the ``business_events`` policy lets a member read
+    every event of any org they belong to, so filtering by ``org_id`` narrows to this org.
+    Exposes only the humanized label and moment — never payloads, actors or ips."""
+    rows = await search_business_events(session, org_id=str(org_id), limit=_RECENT_ACTIVITY)
+    return activity_entries(rows)
+
+
 @org_router.get("/dashboard", response_class=HTMLResponse)
 async def org_dashboard(
     request: Request,
@@ -208,6 +223,7 @@ async def org_dashboard(
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
     ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
+    ctx["recent_activity"] = await _recent_activity(session, org_id)
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 

@@ -2,7 +2,7 @@
 
 Two of the three sources are seeded through their real writers:
 - request lines → the firehose's own writer (``append_firehose``);
-- audit rows    → the shared ``AuditLog`` model.
+- business events → the shared ``BusinessEventLog`` model.
 
 Issue occurrences are the exception. The production path — emitting ``ExceptionCaptured`` —
 records through the app's *shared* engine (``admin_session_factory``), which asyncpg can't be
@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import text
 
 from apps.shared import clock
-from apps.shared.observability.audit import AuditLog
+from apps.shared.observability.business_events import BusinessEventLog
 
 # Deterministic ids so a seed step and a filter step agree on "Acme" / "alice@…" without needing
 # a real org/user row (the timeline filters by the raw id it stored).
@@ -46,13 +46,13 @@ def audit_model(
     level: str = "info",
     when: datetime | None = None,
     request_id: str | None = None,
-) -> AuditLog:
-    """A ready-to-``add`` audit row — the same model ``audit()`` writes, with an explicit
-    ``created_at`` so a fixture can predate the current day (the real writer can't backdate)."""
-    return AuditLog(
+) -> BusinessEventLog:
+    """A ready-to-``add`` business-event row — the same model the persister writes, with an
+    explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate)."""
+    return BusinessEventLog(
         created_at=when or clock.now(),
         level=level,
-        event=event,
+        kind=event,
         user_id=_uuid(user),
         org_id=_uuid(org),
         request_id=request_id,

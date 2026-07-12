@@ -1,86 +1,23 @@
-## now — finir / fiabiliser (état des lieux 2026-07-11)
-
-### auth — prouver que ça marche
-
-- [x] OAuth round-trip untested end-to-end — settled by the documented manual smoke
-      checklist (`docs/oauth.md`, "Manual verification, local stack"); callback
-      branching now also covered by `apps/auth/tests/test_oauth_callback.py`
-- [x] TOTP-after-OAuth branch (`apps/auth/infra/router.py:442`) has zero coverage
-      → covered (session withheld until the code, cookies parked, opt-out paths)
-- [x] passkeys: the browser JS (`navigator.credentials`) is never executed by tests —
-      done via a Playwright CDP virtual authenticator: the browser e2e server now
-      sits on a pinned origin (`http://localhost:8801`, allow-listed in
-      `rp_origins`), the scenarios click the real buttons and GoTrue verifies the
-      real ceremonies (docs/passkeys.md)
-- [x] `/auth/confirm` error path redirects with `?info=registered`, key missing from
-      `_INFO_MESSAGES` → blank banner — now `?info=confirm_failed` with a real message
-
-### GUI — harmoniser
-
-- [x] land PR #4 — labase-light/labase-dark identity, shared type scale,
-      hardcoded-color guardrail in `make lint` (+ migration flipping the old seeded
-      "light" default so existing installs adopt the identity)
-- [x] `page_header` macro + one content-width convention (~20 hand-rolled headers,
-      3 idioms) — auth card headers and the error hero stay their own idioms
-- [x] `empty_state` macro (5 idioms today) — p/li/td/icon variants, test hooks via `attr`
-- [x] shared `data_table` + `filter_bar` partials (logs/metrics/issues each invent
-      their own) — logs' table stays embedded in its single panel by design
-- [x] `input_field`: error + select variants (profile/settings fork the markup)
-- [x] one avatar-initials macro (3 spellings: base.html, profile.html, styleguide) —
-      photo avatars stay explicit; styleguide gallery keeps its demos
-
-### dashboards — rendre vivants
-
-- [x] shared chart macro over the `charts.js` `data-chart-config` contract + a
-      series-shaping helper (`apps/shared/charts.py`) — unlocked everything below
-- [x] org dashboard: 14-day activity chart — logs contributes a full-width Overview
-      card (admin session behind a contract query, org-scoped aggregates only)
-- [x] profile: "Recent activity" timeline — the user's own audit trail, labels only
-- [x] wire the `metric_card` stub ("No data yet") to live values — org dashboard
-      opens with Members / Pending invitations
-- [x] logs: replace the hand-rolled CSS activity bars with the ApexCharts stack
-      (the `data-activity` JSON attribute stays the machine-readable contract)
-- [x] issues: per-day occurrence sparkline on the detail page
-- [x] console: signups / orgs growth chart — any console tile may carry a `growth`
-      slice; profiles + organizations do, the landing folds them into one chart
-
-### découplage — finaliser
-
-- [x] `host.register_app(manifest)`: collapse the ~15-step mount ceremony copy-pasted
-      in todo/files/learning/pages/calendar (+ api_keys; incl. the
-      console-tile-before-enabled-gate ordering trap, now encoded in `AppManifest.on`)
-- [x] declarative mount phases instead of the hand-ordered tuple in `apps/main.py` —
-      each integration declares `PHASE = MountPhase.…`; the root sorts
-- [x] unify the four collect-slice queries — one grammar in
-      `apps/organizations/contract/collect.py` (`OrgQuery`/`OrgMemberQuery` bases);
-      `ConsoleOverviewQuery` is the same grammar minus the org dimension
-- [x] one settings registry (`host.declarations` vs `settings._registry`) — the
-      declaration now lives on the `AppSettings` handle only; `Host` indexes handles.
-      Naming decision: "users"/"appearance" are deliberate admin-facing group names
-      (renaming would migrate DB rows + URLs for no gain); documented on `Host` and
-      in each declaring contract
-- [x] import-linter: add the missing "logs internals are private" contract
-- [x] one slug rule: drop calendar's (and pages') pointless `reserve`, move
-      `register_open_list` onto `Host` — rule documented on `Host.reserve`
-
-### vitrine
-
-- [x] laudative Welcome page seeded public + in nav by `pages` on `OrgCreated` — set
-      `public.featured_org_handle` to make it the site home
-
-
 ## goals
+
+### features
+
+- [ ] console should list all business events from each app
+- [ ] profile & dashboard should display the recent business events
+- [ ] profile, dashboard & console should show a github like activity
+- [ ] console should show a dedicated growth activity report
+- [ ] AARRR metrics
+- [ ] product tour
 
 ### technical
 
 - [ ] awareness, @citation, notification
-- [ ] console should list all business events from each app
+- [ ] better styleguide
 - [ ] event driven ? CQRS ?
 - [ ] Command Query Responsibility Segregation ?
 - [ ] no audit() for error/exception, logger instead
 - [ ] trop de fichiers racine
 - [ ] export RGPD
-- [ ] product tour
 - [x] ApexCharts integration
 - [ ] MCP server ?
 - [ ] CLI

@@ -2,8 +2,8 @@
 and (added in a later step) the firehose file into one timeline, applies sorting, and
 paginates over a bounded recent window.
 
-It never touches another context's tables: audit is read through
-``shared.observability.search_audit_logs`` (audit is shared infra), issues through
+It never touches another context's tables: business events are read through
+``shared.observability.search_business_events`` (shared infra), issues through
 ``issues.contract.queries.search_issue_events``. Sorting/pagination happen in memory over the
 merged window — the only way to order a file stream and two tables as one timeline.
 """
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
-from apps.shared.observability.audit import AuditRow, search_audit_logs
+from apps.shared.observability.business_events import BusinessEventRow, search_business_events
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "request"}
@@ -55,7 +55,7 @@ class LogReader:
         if flt.wants(LogSource.request):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         if flt.wants(LogSource.audit):
-            rows = await search_audit_logs(self.session, **_audit_kwargs(flt, limit))
+            rows = await search_business_events(self.session, **_audit_kwargs(flt, limit))
             entries += [_from_audit(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
         if flt.wants(LogSource.issue) and flt.level in (None, "error"):
@@ -160,12 +160,12 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
     )
 
 
-def _from_audit(row: AuditRow) -> LogEntry:
+def _from_audit(row: BusinessEventRow) -> LogEntry:
     return LogEntry(
         ts=row.ts,
         source=LogSource.audit,
         level=row.level,
-        event=row.event,
+        event=row.kind,
         org_id=row.org_id,
         user_id=row.user_id,
         request_id=row.request_id,

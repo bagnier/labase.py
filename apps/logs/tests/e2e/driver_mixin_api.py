@@ -3,7 +3,7 @@ from datetime import datetime
 
 from apps.logs.tests.e2e import seed_data
 from apps.logs.tests.e2e.seed_data import logs_org_id, logs_user_id
-from apps.shared.observability.audit import AuditLog
+from apps.shared.observability.business_events import BusinessEventLog
 from apps.shared.observability.firehose import append_firehose
 from apps.shared.observability.logging import apply_log_level
 from tests.e2e.drivers import api_transaction as db
@@ -17,7 +17,7 @@ class LogsApiMixin(ApiBase):
         as_admin()
 
     # ── seeding (through the real write paths) ────────────────────────────────
-    def _add_audit(self, model: AuditLog) -> None:
+    def _add_audit(self, model: BusinessEventLog) -> None:
         async def _do(s):
             s.add(model)
 

@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from apps.shared.config import get_technical_settings
 from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
+from apps.shared.events import BusinessEvent
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.exceptions import (
     handle_http_error,
@@ -24,6 +25,7 @@ from apps.shared.http.limiter import (
     purge_counters,
 )
 from apps.shared.http.security import cors_config, csrf_protect, security_headers
+from apps.shared.observability.business_events import persist_business_event
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
@@ -48,6 +50,10 @@ def mount(host: Host) -> None:
     app.middleware("http")(csrf_protect)
     app.add_middleware(RequestLogger)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
+
+    # Every emitted business event is recorded (non-blocking) to the business_events store —
+    # one subscriber on the base type, reached for all subclasses via the bus's MRO dispatch.
+    host.events.on(BusinessEvent, persist_business_event)
 
     # Async substrate: one task worker per process; recurring jobs planted at startup.
     register_task_handler(PURGE_TOPIC, purge_counters)
