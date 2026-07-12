@@ -5,7 +5,7 @@ Feature: Unified logs
 
   # The unified log gathers three sources into one append-only stream:
   #   - request  : the structlog firehose (request/app diagnostics), gated by the log level
-  #   - audit    : the sensitive-action audit trail (contributes regardless of the log level)
+  #   - event    : the business-events trail (contributes regardless of the log level)
   #   - issue    : occurrences of tracked errors (contributes regardless of the log level)
   # Every entry carries org_id / user_id / request_id, so the timeline filters and correlates.
   # The screen is server-wide and admin-only, like the rest of the console.
@@ -18,7 +18,7 @@ Feature: Unified logs
     And an error log entry "ValueError: boom" from org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then the entry "todo.created" is listed with source "audit"
+    Then the entry "todo.created" is listed with source "event"
     And the entry "request.finished" is listed with source "request"
     And the entry "ValueError: boom" is listed with source "issue"
 
@@ -41,9 +41,17 @@ Feature: Unified logs
     Given an audit log entry "todo.created" from org "Acme"
     And a request log entry "request.finished" from org "Acme"
     And a server admin is signed in as "root@example.com"
-    When the admin filters the logs by source "audit"
+    When the admin filters the logs by source "event"
     Then the entry "todo.created" is listed
     And the entry "request.finished" is not listed
+
+  Scenario: An admin filters the logs by app
+    Given an audit log entry "todo.created" from org "Acme"
+    And an audit log entry "calendar.event_created" from org "Acme"
+    And a server admin is signed in as "root@example.com"
+    When the admin filters the logs by app "todo"
+    Then the entry "todo.created" is listed
+    And the entry "calendar.event_created" is not listed
 
   Scenario: An admin filters the logs by level
     Given a request log entry "request.finished" at level "info" from org "Acme"
@@ -141,7 +149,7 @@ Feature: Unified logs
     And an audit event "todo.created" is recorded in org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then the entry "todo.created" is listed with source "audit"
+    Then the entry "todo.created" is listed with source "event"
 
   # Activity graph
 

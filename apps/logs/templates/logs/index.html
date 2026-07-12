@@ -14,8 +14,8 @@
   <div class="max-w-6xl space-y-6">
     {# Export is a page-level action on the current filtered view — kept away from the filters. #}
     {% call page_header('Logs',
-      'One timeline across every source — the structlog firehose, the audit trail and tracked
-      issues — server-wide. Correlate by request id.') %}
+      'One timeline across every source — the structlog firehose, the business-events trail and
+      tracked issues — server-wide. Correlate by request id.') %}
       <a class="btn btn-sm btn-ghost"
          aria-label="Export NDJSON"
          href="/console/logs/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">
@@ -37,7 +37,7 @@
           <span class="eyebrow">Activity</span>
           <span class="flex gap-3 text-xs text-base-content/60">
             <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span>request</span>
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>audit</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>event</span>
             <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span>issue</span>
           </span>
         </div>
@@ -53,6 +53,7 @@
          Filter button: the whole toolbar is live. #}
       {% call filter_bar('/console/logs', 'Filter logs', class_='p-3 border-b border-base-300') %}
         {{ combobox("source", "source", filters.source, filters.source, facets.source) }}
+        {{ combobox("app", "app", filters.app, filters.app, facets.app) }}
         {{ combobox("level", "level", filters.level, filters.level, facets.level) }}
         {{ combobox("org_id", "org", filters.org_id, org_label, facets.org) }}
         {{ combobox("user_id", "user", filters.user_id, user_label, facets.user) }}
@@ -130,8 +131,8 @@
     <section aria-label="Logs settings" class="max-w-2xl">
       <h2 class="text-sm font-semibold mb-1">Firehose level</h2>
       <p class="text-xs text-base-content/70 mb-3">
-        Gates the request/app firehose. Audit and issue events are recorded regardless. Applies
-        live — no restart.
+        Gates the request/app firehose. Business events and issues are recorded regardless.
+        Applies live — no restart.
       </p>
       {% with app = "logs", saved_key = none %}
         {% include "console/_settings.html" %}

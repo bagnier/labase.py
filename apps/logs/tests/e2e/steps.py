@@ -91,6 +91,11 @@ def step_filter_source(driver, source):
     driver.filter_logs_by_source(source)
 
 
+@when(parsers.parse('the admin filters the logs by app "{app}"'))
+def step_filter_app(driver, app):
+    driver.filter_logs_by_app(app)
+
+
 @when(parsers.parse('the admin filters the logs by level "{level}"'))
 def step_filter_level(driver, level):
     driver.filter_logs_by_level(level)

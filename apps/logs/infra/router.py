@@ -42,7 +42,7 @@ def _activity_chart(activity: dict[str, dict[str, int]]) -> dict[str, Any]:
     days = sorted(activity)
     series = [
         {"name": source, "data": [activity[d].get(source, 0) for d in days]}
-        for source in ("request", "audit", "issue")
+        for source in ("request", "event", "issue")
     ]
     return chart_config(
         "bar",
@@ -64,6 +64,7 @@ def _bound(value: str | None) -> datetime | None:
 
 def _filter(
     source: str | None,
+    app: str | None,
     level: str | None,
     org_id: str | None,
     user_id: str | None,
@@ -76,6 +77,7 @@ def _filter(
 ) -> LogFilter:
     return LogFilter(
         source=source or None,
+        app=app or None,
         level=level or None,
         org_id=org_id or None,
         user_id=user_id or None,
@@ -154,6 +156,7 @@ async def logs_screen(
     current_user: CurrentAdmin,
     session: AdminSession,
     source: str | None = None,
+    app: str | None = None,
     level: str | None = None,
     org_id: str | None = None,
     user_id: str | None = None,
@@ -164,7 +167,7 @@ async def logs_screen(
     sort: str = "ts",
     dir: str = "desc",
 ) -> Response:
-    flt = _filter(source, level, org_id, user_id, request_id, q, from_dt, to_dt, sort, dir)
+    flt = _filter(source, app, level, org_id, user_id, request_id, q, from_dt, to_dt, sort, dir)
     reader = LogReader(session)
     entries = await reader.search(flt)
     activity = await reader.activity(flt)
@@ -205,6 +208,7 @@ async def logs_screen(
         )
     filters = {
         "source": source or "",
+        "app": app or "",
         "level": level or "",
         "org_id": org_id or "",
         "user_id": user_id or "",
@@ -260,6 +264,7 @@ async def export_logs(
     session: AdminSession,
     format: str = "ndjson",
     source: str | None = None,
+    app: str | None = None,
     level: str | None = None,
     org_id: str | None = None,
     user_id: str | None = None,
@@ -273,7 +278,7 @@ async def export_logs(
     """Structured export of the *current filter's* window — the same LogFilter the timeline uses,
     so what you see is what you download. NDJSON keeps the nested payload; CSV flattens the core
     columns for a spreadsheet."""
-    flt = _filter(source, level, org_id, user_id, request_id, q, from_dt, to_dt, sort, dir)
+    flt = _filter(source, app, level, org_id, user_id, request_id, q, from_dt, to_dt, sort, dir)
     entries = await LogReader(session).search(flt, limit=_EXPORT_LIMIT)
     rows = [e.model_dump(mode="json") for e in entries]
     if format == "csv":

@@ -1,6 +1,6 @@
-"""The merge reader — orchestrates the durable DB sources (audit trail + issue occurrences)
-and (added in a later step) the firehose file into one timeline, applies sorting, and
-paginates over a bounded recent window.
+"""The merge reader — orchestrates the durable DB sources (business-events trail + issue
+occurrences) and (added in a later step) the firehose file into one timeline, applies sorting,
+and paginates over a bounded recent window.
 
 It never touches another context's tables: business events are read through
 ``shared.observability.search_business_events`` (shared infra), issues through
@@ -25,10 +25,11 @@ _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "request"}
 
 @dataclass(frozen=True)
 class LogFilter:
-    """The seven combinable filters (all optional) plus sort — the read contract shared by
+    """The combinable filters (all optional) plus sort — the read contract shared by
     the timeline, the activity graph and the export."""
 
     source: str | None = None
+    app: str | None = None
     level: str | None = None
     org_id: str | None = None
     user_id: str | None = None
@@ -44,6 +45,13 @@ class LogFilter:
         return self.source is None or self.source == source
 
 
+def entry_app(entry: LogEntry) -> str:
+    """The owning app of an entry — the first dotted segment of its event key (``todo.created``
+    → ``todo``, ``request.finished`` → ``request``). Business events are ``<app>.<verb>``, so this
+    is the per-app axis the console browses by; issues (bare titles) collapse to their full name."""
+    return entry.event.split(".", 1)[0]
+
+
 class LogReader:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -54,13 +62,17 @@ class LogReader:
         # stream, level-gated at write time; the durable sources below carry full history.
         if flt.wants(LogSource.request):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
-        if flt.wants(LogSource.audit):
-            rows = await search_business_events(self.session, **_audit_kwargs(flt, limit))
-            entries += [_from_audit(r) for r in rows]
+        if flt.wants(LogSource.event):
+            rows = await search_business_events(self.session, **_event_kwargs(flt, limit))
+            entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
         if flt.wants(LogSource.issue) and flt.level in (None, "error"):
             rows = await search_issue_events(self.session, **_issue_kwargs(flt, limit))
             entries += [_from_issue(r) for r in rows]
+        # The app filter narrows the merged timeline to one app's event key prefix — applied in
+        # memory over every source at once, the same seam sort/pagination already live in.
+        if flt.app:
+            entries = [e for e in entries if entry_app(e) == flt.app]
         return _sorted(entries, flt)[:limit]
 
     async def activity(self, flt: LogFilter, *, cap: int = 5000) -> dict[str, dict[str, int]]:
@@ -77,10 +89,14 @@ class LogReader:
         lists behind the combobox pills. Honours only the date + text window (the categorical
         selections are cleared) so every pill offers all its pickable values and counts stay
         stable as an admin stacks filters — a discovery aid, not a live recount."""
-        base = replace(flt, source=None, level=None, org_id=None, user_id=None, request_id=None)
+        base = replace(
+            flt, source=None, app=None, level=None, org_id=None, user_id=None, request_id=None
+        )
         entries = await self.search(base, limit=cap)
         return {
             "source": _tally(entries, lambda e: e.source.value),
+            # The app axis is a business-events notion (``<app>.<verb>``); only event rows have it.
+            "app": _tally([e for e in entries if e.source == LogSource.event], entry_app),
             "level": _tally(entries, lambda e: e.level),
             "org": _tally(entries, lambda e: e.org_id),
             "user": _tally(entries, lambda e: e.user_id),
@@ -100,7 +116,7 @@ def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> l
 
 def request_desc(entry: LogEntry) -> str | None:
     """The human label for a request: its ``METHOD /path`` — the request source binds both onto
-    every ``request.started/finished`` line's payload. Correlated audit/issue rows carry neither,
+    every ``request.started/finished`` line's payload. Correlated event/issue rows carry neither,
     so a request only gets a label once one of its firehose lines is in the window."""
     method, path = entry.payload.get("method"), entry.payload.get("path")
     return f"{method} {path}" if method and path else None
@@ -123,7 +139,7 @@ def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
     return [{"value": rid, "count": count, "label": labels.get(rid, rid)} for rid, count in ranked]
 
 
-def _audit_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     return {
         "level": flt.level,
         "org_id": flt.org_id,
@@ -137,14 +153,14 @@ def _audit_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
 
 
 def _issue_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
-    kwargs = _audit_kwargs(flt, limit)
+    kwargs = _event_kwargs(flt, limit)
     del kwargs["level"]  # issues carry no level column — always "error"
     return kwargs
 
 
 def _firehose_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     # The firehose keeps its own retention window; it takes the same filters as the DB sources.
-    return _audit_kwargs(flt, limit)
+    return _event_kwargs(flt, limit)
 
 
 def _from_firehose(row: FirehoseRow) -> LogEntry:
@@ -160,10 +176,10 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
     )
 
 
-def _from_audit(row: BusinessEventRow) -> LogEntry:
+def _from_event(row: BusinessEventRow) -> LogEntry:
     return LogEntry(
         ts=row.ts,
-        source=LogSource.audit,
+        source=LogSource.event,
         level=row.level,
         event=row.kind,
         org_id=row.org_id,

@@ -2,8 +2,8 @@
 
 ### features
 
-- [ ] console should list all business events from each app
-- [ ] profile & dashboard should display the recent business events
+- [x] console should list all business events from each app
+- [x] profile & dashboard should display the recent business events
 - [ ] profile, dashboard & console should show a github like activity
 - [ ] console should show a dedicated growth activity report
 - [ ] AARRR metrics

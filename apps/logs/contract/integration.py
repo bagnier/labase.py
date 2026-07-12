@@ -1,9 +1,9 @@
 """How the logs context plugs into the running app.
 
 ``apps/logs`` is the single observability *read* context: it merges the firehose (a rotated
-JSON file), the audit trail (``audit_logs``) and issue occurrences (``error_events``) into one
-admin-only timeline, with an activity graph and structured export. The *write* primitives stay
-in ``apps/shared/observability`` — a foundation every app imports downward.
+JSON file), the business-events trail (``business_events``) and issue occurrences
+(``error_events``) into one admin-only timeline, with an activity graph and structured export.
+The *write* primitives stay in ``apps/shared/observability`` — a foundation every app imports down.
 
 NOTE: mounted BEFORE the console context so its /console/logs routes register ahead of the
 console's /console/{app} catch-all.
@@ -13,6 +13,7 @@ import structlog
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.logs.contract.queries import org_activity
+from apps.logs.infra.events_router import events_router
 from apps.logs.infra.router import router
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.shared import clock
@@ -36,8 +37,8 @@ LOGS_APP = "logs"
 LOG_LEVEL_KEY = "log_level"
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 # The firehose defaults to WARNING — quiet enough that request/app diagnostics don't drown the
-# audit and issue signal — and an admin can lower it live from the logs screen when they need
-# the detail. Audit and issue contributions never depend on this level (own persistence path).
+# event and issue signal — and an admin can lower it live from the logs screen when they need
+# the detail. Event and issue contributions never depend on this level (own persistence path).
 DEFAULT_LOG_LEVEL = "WARNING"
 
 
@@ -51,8 +52,12 @@ def mount(host: Host) -> None:
     apply_log_level(str(settings.log_level))
     host.events.on(SettingsChanged, _reload_level)
     host.events.on(ConsoleOverviewQuery, _overview)
+    host.events.on(ConsoleOverviewQuery, _events_overview)
     host.events.on(OverviewQuery, _org_overview)
     host.app.include_router(router, prefix="/console/logs")
+    # A fixed /console/events screen — registered in this CONSOLE_SCREEN phase, ahead of the
+    # console's /console/{app} catch-all, exactly like /console/logs above.
+    host.app.include_router(events_router, prefix="/console/events")
 
 
 async def _reload_level(event: SettingsChanged) -> None:
@@ -63,7 +68,7 @@ async def _reload_level(event: SettingsChanged) -> None:
 
 
 _ACTIVITY_DAYS = 14
-_SOURCE_NAMES = {"request": "Requests", "audit": "Audit", "issue": "Errors"}
+_SOURCE_NAMES = {"request": "Requests", "event": "Events", "issue": "Errors"}
 
 
 async def _org_overview(query: OverviewQuery) -> Overview:
@@ -93,6 +98,18 @@ async def _overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
         icon="scroll",
         section="operations",
         data={"lines": [f"firehose level {get_settings(LOGS_APP).log_level}"]},
+    )
+
+
+async def _events_overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
+    """The business-events tile — the per-app timeline of every app's typed events."""
+    return ConsoleOverview(
+        key="events",
+        title="Business events",
+        icon="broadcast",
+        section="operations",
+        href="/console/events",
+        data={"lines": ["every app's typed events, grouped per app"]},
     )
 
 

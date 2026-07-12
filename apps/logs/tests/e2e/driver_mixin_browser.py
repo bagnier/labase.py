@@ -117,6 +117,9 @@ class LogsBrowserMixin(BrowserBase):
     def filter_logs_by_source(self, source: str) -> None:
         self._pick_combobox("source", source)
 
+    def filter_logs_by_app(self, app: str) -> None:
+        self._pick_combobox("app", app)
+
     def filter_logs_by_level(self, level: str) -> None:
         self._pick_combobox("level", level)
 
@@ -201,7 +204,7 @@ class LogsBrowserMixin(BrowserBase):
     def assert_activity(self, date: str, audit: int, request: int, issue: int) -> None:
         raw = self.page.locator("[data-activity]").first.get_attribute("data-activity")
         act = json.loads(raw or "{}").get(date, {})
-        assert act.get("audit", 0) == audit, f"activity {date} audit: {act}"
+        assert act.get("event", 0) == audit, f"activity {date} event: {act}"
         assert act.get("request", 0) == request, f"activity {date} request: {act}"
         assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
 

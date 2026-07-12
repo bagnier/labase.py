@@ -38,5 +38,5 @@ def test_org_overview_spans_the_window_and_counts_the_orgs_own_events(driver):
     assert overview.data["active"] is True
     config = overview.data["config"]
     assert len(config["options"]["xaxis"]["categories"]) == _ACTIVITY_DAYS
-    audit_series = next(s for s in config["series"] if s["name"] == "Audit")
-    assert audit_series["data"][-1] == 2  # today's bucket, this org only
+    event_series = next(s for s in config["series"] if s["name"] == "Events")
+    assert event_series["data"][-1] == 2  # today's bucket, this org only

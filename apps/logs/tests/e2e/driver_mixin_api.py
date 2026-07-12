@@ -101,6 +101,9 @@ class LogsApiMixin(ApiBase):
     def filter_logs_by_source(self, source: str) -> None:
         self._open_logs(source=source)
 
+    def filter_logs_by_app(self, app: str) -> None:
+        self._open_logs(app=app)
+
     def filter_logs_by_level(self, level: str) -> None:
         self._open_logs(level=level)
 
@@ -172,7 +175,7 @@ class LogsApiMixin(ApiBase):
     def assert_activity(self, date: str, audit: int, request: int, issue: int) -> None:
         assert self.response is not None
         act = self.response.json()["activity"].get(date, {})
-        assert act.get("audit", 0) == audit, f"activity {date} audit: {act}"
+        assert act.get("event", 0) == audit, f"activity {date} event: {act}"
         assert act.get("request", 0) == request, f"activity {date} request: {act}"
         assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
 
