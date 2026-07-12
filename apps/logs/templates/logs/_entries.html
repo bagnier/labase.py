@@ -13,6 +13,16 @@
     <td class="font-mono text-xs text-base-content/60"
         title="{{ e.user_id }}">{{ labels.user.get(e.user_id) if e.user_id else "—" }}</td>
     <td class="font-mono text-xs text-base-content/60"
+        title="{{ e.entity_id }}">
+      {% if e.entity_id %}
+        <a class="link link-hover"
+           href="/console/logs?entity_id={{ e.entity_id | urlencode }}"
+           title="Every event for this entity">{{ e.entity_id[:12] }}</a>
+      {% else %}
+        —
+      {% endif %}
+    </td>
+    <td class="font-mono text-xs text-base-content/60"
         title="{{ e.request_id }}">{{ labels.request.get(e.request_id) if e.request_id else "—" }}</td>
     {% set details = e.payload.items() | map("join", "=") | join(" ") %}
     <td class="font-mono text-xs text-base-content/60 max-w-xs truncate"

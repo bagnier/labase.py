@@ -3,7 +3,7 @@
 ``apps/logs`` is a pure reader: it never writes logs. It merges, at read time, the
 structlog firehose (a rotated JSON file), the business-events trail (``business_events``)
 and issue occurrences (``error_events``) into this single shape, keyed for correlation by
-``request_id`` / ``org_id`` / ``user_id``.
+``request_id`` / ``org_id`` / ``user_id`` / ``entity_id`` (the concerned entity).
 """
 
 from datetime import datetime
@@ -29,5 +29,6 @@ class LogEntry(BaseModel):
     event: str
     org_id: str | None = None
     user_id: str | None = None
+    entity_id: str | None = None
     request_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)

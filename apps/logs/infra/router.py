@@ -68,6 +68,7 @@ def _filter(
     level: str | None,
     org_id: str | None,
     user_id: str | None,
+    entity_id: str | None,
     request_id: str | None,
     q: str | None,
     from_dt: str | None,
@@ -81,6 +82,7 @@ def _filter(
         level=level or None,
         org_id=org_id or None,
         user_id=user_id or None,
+        entity_id=entity_id or None,
         request_id=request_id or None,
         text=q or None,
         from_dt=_bound(from_dt),
@@ -160,6 +162,7 @@ async def logs_screen(
     level: str | None = None,
     org_id: str | None = None,
     user_id: str | None = None,
+    entity_id: str | None = None,
     request_id: str | None = None,
     q: str | None = None,
     from_dt: str | None = None,
@@ -167,7 +170,9 @@ async def logs_screen(
     sort: str = "ts",
     dir: str = "desc",
 ) -> Response:
-    flt = _filter(source, app, level, org_id, user_id, request_id, q, from_dt, to_dt, sort, dir)
+    flt = _filter(
+        source, app, level, org_id, user_id, entity_id, request_id, q, from_dt, to_dt, sort, dir
+    )
     reader = LogReader(session)
     entries = await reader.search(flt)
     activity = await reader.activity(flt)
@@ -212,6 +217,7 @@ async def logs_screen(
         "level": level or "",
         "org_id": org_id or "",
         "user_id": user_id or "",
+        "entity_id": entity_id or "",
         "request_id": request_id or "",
         "q": q or "",
         "from_dt": from_dt or "",
@@ -243,7 +249,7 @@ async def logs_screen(
 
 
 _EXPORT_LIMIT = 5000
-_CSV_COLUMNS = ("ts", "source", "level", "event", "org_id", "user_id", "request_id")
+_CSV_COLUMNS = ("ts", "source", "level", "event", "org_id", "user_id", "entity_id", "request_id")
 
 
 def _ndjson(rows: list[dict[str, Any]]) -> str:
@@ -268,6 +274,7 @@ async def export_logs(
     level: str | None = None,
     org_id: str | None = None,
     user_id: str | None = None,
+    entity_id: str | None = None,
     request_id: str | None = None,
     q: str | None = None,
     from_dt: str | None = None,
@@ -278,7 +285,9 @@ async def export_logs(
     """Structured export of the *current filter's* window — the same LogFilter the timeline uses,
     so what you see is what you download. NDJSON keeps the nested payload; CSV flattens the core
     columns for a spreadsheet."""
-    flt = _filter(source, app, level, org_id, user_id, request_id, q, from_dt, to_dt, sort, dir)
+    flt = _filter(
+        source, app, level, org_id, user_id, entity_id, request_id, q, from_dt, to_dt, sort, dir
+    )
     entries = await LogReader(session).search(flt, limit=_EXPORT_LIMIT)
     rows = [e.model_dump(mode="json") for e in entries]
     if format == "csv":

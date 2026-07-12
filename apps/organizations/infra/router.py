@@ -14,6 +14,7 @@ from apps.organizations.contract.current import (
     CurrentOwnerMembership,
     OrganizationsSettings,
 )
+from apps.organizations.contract.entity_links import entity_url
 from apps.organizations.contract.events import (
     InvitationRevoked,
     InvitationSent,
@@ -195,14 +196,15 @@ async def list_organizations(
 _RECENT_ACTIVITY = 8
 
 
-async def _recent_activity(session: AsyncSession, org_id: uuid.UUID) -> list[dict]:
+async def _recent_activity(session: AsyncSession, org_id: uuid.UUID, org_handle: str) -> list[dict]:
     """The org's recent business events for the dashboard timeline.
 
     Reads on the request's own RLS session: the ``business_events`` policy lets a member read
     every event of any org they belong to, so filtering by ``org_id`` narrows to this org.
-    Exposes only the humanized label and moment — never payloads, actors or ips."""
+    Each entry deep-links to the concerned entity's page where the app exposes one. Exposes only
+    the humanized label and moment — never payloads or ips."""
     rows = await search_business_events(session, org_id=str(org_id), limit=_RECENT_ACTIVITY)
-    return activity_entries(rows)
+    return activity_entries(rows, link=lambda r: entity_url(r.kind, r.entity_id, org_handle))
 
 
 @org_router.get("/dashboard", response_class=HTMLResponse)
@@ -223,7 +225,7 @@ async def org_dashboard(
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
     ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
-    ctx["recent_activity"] = await _recent_activity(session, org_id)
+    ctx["recent_activity"] = await _recent_activity(session, org_id, org_handle)
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 

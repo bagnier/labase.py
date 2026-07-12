@@ -37,7 +37,6 @@ class FileRenamed(FileEvent, EntityUpdated):
 @dataclass(frozen=True, kw_only=True)
 class FileShareLinkCreated(FileEvent):
     kind: ClassVar[str] = "files.share_link_created"
-    entity_id: str | None = None
     token: str | None = None
 
 
@@ -52,5 +51,4 @@ class FileShareLinkRejected(FileEvent):
 @dataclass(frozen=True, kw_only=True)
 class FileShareDownloaded(FileEvent):
     kind: ClassVar[str] = "files.share_downloaded"
-    entity_id: str | None = None
     token: str | None = None

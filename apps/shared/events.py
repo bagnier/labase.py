@@ -31,6 +31,7 @@ class BusinessEvent:
 
     actor_id: str | None = None
     org_id: str | None = None
+    entity_id: str | None = None  # the concerned entity's id (todo pk, page slug…), for correlation
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
     kind: ClassVar[str] = ""  # dotted "<app>.<subject>"; derived for CRUD, explicit otherwise
@@ -50,10 +51,10 @@ class BusinessEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class EntityCreated(BusinessEvent):
-    """An org-scoped entity was created — ``kind`` becomes ``"<entity>.created"``."""
+    """An org-scoped entity was created — ``kind`` becomes ``"<entity>.created"``. The created
+    row's id rides on the base's ``entity_id``; ``label`` is its display name."""
 
     verb: ClassVar[str] = "created"
-    entity_id: str | None = None
     label: str | None = None
 
 
@@ -62,7 +63,6 @@ class EntityUpdated(BusinessEvent):
     """An org-scoped entity was updated — ``kind`` becomes ``"<entity>.updated"``."""
 
     verb: ClassVar[str] = "updated"
-    entity_id: str | None = None
     label: str | None = None
 
 
@@ -71,5 +71,4 @@ class EntityDeleted(BusinessEvent):
     """An org-scoped entity was deleted — ``kind`` becomes ``"<entity>.deleted"``."""
 
     verb: ClassVar[str] = "deleted"
-    entity_id: str | None = None
     label: str | None = None

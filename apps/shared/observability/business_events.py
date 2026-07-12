@@ -13,12 +13,13 @@ timeline; the raw ``kind``/payload never reach a member.
 
 import asyncio
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import BigInteger, DateTime, Text, cast, or_, select
+from sqlalchemy import BigInteger, DateTime, Text, cast, or_, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,6 +50,7 @@ class BusinessEventLog(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     ip: Mapped[str | None] = mapped_column(default=None)
     org_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
+    entity_id: Mapped[str | None] = mapped_column(default=None)
     request_id: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
 
@@ -63,6 +65,7 @@ class BusinessEventRow:
     icon: str | None
     org_id: str | None
     user_id: str | None
+    entity_id: str | None
     request_id: str | None
     payload: dict[str, Any]
 
@@ -73,6 +76,7 @@ async def search_business_events(
     level: str | None = None,
     org_id: str | None = None,
     user_id: str | None = None,
+    entity_id: str | None = None,
     request_id: str | None = None,
     text: str | None = None,
     from_dt: datetime | None = None,
@@ -90,6 +94,8 @@ async def search_business_events(
         query = query.where(BusinessEventLog.org_id == uuid.UUID(org_id))
     if user_id:
         query = query.where(BusinessEventLog.user_id == uuid.UUID(user_id))
+    if entity_id:
+        query = query.where(BusinessEventLog.entity_id == entity_id)
     if request_id:
         query = query.where(BusinessEventLog.request_id == request_id)
     if text:
@@ -110,11 +116,28 @@ async def search_business_events(
             icon=r.icon,
             org_id=str(r.org_id) if r.org_id else None,
             user_id=str(r.user_id) if r.user_id else None,
+            entity_id=r.entity_id,
             request_id=r.request_id,
             payload=r.payload or {},
         )
         for r in rows
     ]
+
+
+async def _actor_handle(session: AsyncSession, user_id: str | None) -> str | None:
+    """Resolve the actor's handle, to denormalize into the event so the feed can show *who* acted.
+    Runs on the persister's admin session: profiles are ``own read`` under RLS, so a member could
+    never resolve a co-member at read time — storing it at write time keeps 'who' visible to every
+    viewer, and pins the handle the actor bore at the moment of the action."""
+    if not user_id:
+        return None
+    try:
+        return await session.scalar(
+            text("select handle from profiles where auth_user_id = :id"),
+            {"id": uuid.UUID(user_id)},  # bind as uuid, not text, so the column compare holds
+        )
+    except Exception:
+        return None
 
 
 async def insert_business_event(
@@ -125,12 +148,17 @@ async def insert_business_event(
     user_id: str | None,
     ip: str | None,
     org_id: str | None,
+    entity_id: str | None = None,
     request_id: str | None,
     payload: dict[str, Any] | None,
 ) -> None:
     """Write one row on a fresh admin session. Swallows failures (best-effort trail)."""
     try:
         async with admin_session_factory()() as session:
+            stored = dict(payload) if payload else {}
+            handle = await _actor_handle(session, user_id)
+            if handle:
+                stored["actor"] = handle  # denormalized 'who' — RLS hides co-members' profiles
             session.add(
                 BusinessEventLog(
                     kind=kind,
@@ -139,8 +167,9 @@ async def insert_business_event(
                     user_id=uuid.UUID(user_id) if user_id else None,
                     ip=ip,
                     org_id=uuid.UUID(org_id) if org_id else None,
+                    entity_id=entity_id,
                     request_id=request_id,
-                    payload=payload or None,
+                    payload=stored or None,
                 )
             )
             await session.commit()
@@ -158,6 +187,7 @@ async def persist_business_event(event: BusinessEvent) -> None:
     payload = _loggable_payload(event)
     payload.pop("actor_id", None)
     payload.pop("org_id", None)
+    payload.pop("entity_id", None)  # promoted to its own column, like actor_id/org_id
     asyncio.create_task(
         insert_business_event(
             kind=event.kind,
@@ -166,6 +196,7 @@ async def persist_business_event(event: BusinessEvent) -> None:
             user_id=event.actor_id,
             ip=ctx.get("ip"),
             org_id=event.org_id,
+            entity_id=event.entity_id,
             request_id=ctx.get("request_id"),
             payload=payload or None,
         )
@@ -183,10 +214,53 @@ def activity_label(kind: str) -> str:
     return kind.split(".", 1)[-1].replace("_", " ").capitalize()
 
 
-def activity_entries(rows: list[BusinessEventRow]) -> list[dict[str, Any]]:
-    """Humanize rows for a timeline — label, icon and moment only, never payload/actor/ip. The
-    icon rides on the row (the emitting app chose it); shared only supplies a neutral fallback."""
-    return [
-        {"label": activity_label(r.kind), "icon": r.icon or _FALLBACK_ICON, "ts": r.ts}
-        for r in rows
-    ]
+def _ago(ts: datetime, now: datetime) -> str:
+    """A compact relative moment (`3h ago`, `2d ago`, `Mar 4`) — an activity feed reads better in
+    elapsed time than in wall-clock; the exact instant stays on the row's ``title``/``datetime``."""
+    secs = max(0.0, (now - ts).total_seconds())
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)}m ago"
+    if secs < 86400:
+        return f"{int(secs // 3600)}h ago"
+    if secs < 604800:
+        return f"{int(secs // 86400)}d ago"
+    return ts.strftime("%b %-d")
+
+
+def activity_entries(
+    rows: list[BusinessEventRow],
+    *,
+    show_actor: bool = True,
+    link: Callable[[BusinessEventRow], str | None] | None = None,
+) -> list[dict[str, Any]]:
+    """Humanize rows for the activity feed — *who did what to which document, when*:
+
+    - ``who``    the actor's handle (denormalized into the payload at write time); dropped when
+                 ``show_actor`` is off, as on the profile's own trail where it's always the viewer.
+    - ``label``  the verb (``created``/``ticked``/``member joined``…), humanized from the kind.
+    - ``detail`` the object's own name (the todo title, the page, the file) — the *which*.
+    - ``icon`` / ``level``  the event's phosphor glyph and severity (colours the node).
+    - ``ts`` / ``ago``  the absolute instant (for ``time``) and a compact relative moment.
+    - ``href``   an optional deep link the surface supplies via ``link`` (the entity's page, the
+                 filtered logs…) — the timeline renders the row as a link when present.
+
+    Never the raw ``kind`` or the rest of the payload — only these projected, safe fields."""
+    now = clock.now()
+    entries = []
+    for r in rows:
+        payload = r.payload or {}
+        entries.append(
+            {
+                "who": payload.get("actor") if show_actor else None,
+                "label": activity_label(r.kind),
+                "detail": payload.get("label"),
+                "icon": r.icon or _FALLBACK_ICON,
+                "level": r.level,
+                "ts": r.ts,
+                "ago": _ago(r.ts, now),
+                "href": link(r) if link else None,
+            }
+        )
+    return entries

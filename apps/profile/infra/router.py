@@ -48,6 +48,7 @@ from apps.auth.contract.two_factor import (
     verified_totp_factor,
     verify_totp,
 )
+from apps.organizations.contract.entity_links import entity_url
 from apps.profile.contract.current import ProfileSettings
 from apps.profile.contract.events import AccountDeleted, AvatarUpdated, HandleChanged
 from apps.profile.domain.models import ProfileRead, ProfileUpdate
@@ -56,7 +57,11 @@ from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.business_events import activity_entries, search_business_events
+from apps.shared.observability.business_events import (
+    BusinessEventRow,
+    activity_entries,
+    search_business_events,
+)
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
@@ -119,14 +124,22 @@ ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 _RECENT_ACTIVITY = 8
 
 
-async def _recent_activity(session: AsyncSession, user_id: str) -> list[dict]:
+async def _recent_activity(
+    session: AsyncSession, user_id: str, handles: dict[str, str]
+) -> list[dict]:
     """The user's own trail for the profile timeline.
 
     Reads on the request's own RLS session: the ``business_events`` policy scopes rows to the
     reader (own actions + their orgs), so filtering by ``user_id`` narrows to the user's own
-    actions. Exposes only the humanized label and moment — never payloads, actors or ips."""
+    actions. Each entry deep-links to the concerned entity's page, resolving the row's org to a
+    handle from the user's own orgs (``handles``). Exposes only the humanized label and moment."""
     rows = await search_business_events(session, user_id=user_id, limit=_RECENT_ACTIVITY)
-    return activity_entries(rows)
+
+    # The trail is all the viewer's own actions, so 'who' would just repeat the viewer.
+    def link(r: BusinessEventRow) -> str | None:
+        return entity_url(r.kind, r.entity_id, handles.get(r.org_id))
+
+    return activity_entries(rows, show_actor=False, link=link)
 
 
 async def _profile_context(
@@ -165,7 +178,9 @@ async def _profile_context(
         "twofa_active": twofa_active,
         "passkeys_enabled": passkeys_enabled,
         "passkeys": passkeys,
-        "recent_activity": await _recent_activity(session, current_user.id),
+        "recent_activity": await _recent_activity(
+            session, current_user.id, {str(o.id): o.handle for o in orgs}
+        ),
         **context,
     }
 

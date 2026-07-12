@@ -20,7 +20,7 @@ from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared.observability.business_events import BusinessEventRow, search_business_events
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
-_SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "request"}
+_SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ class LogFilter:
     level: str | None = None
     org_id: str | None = None
     user_id: str | None = None
+    entity_id: str | None = None
     request_id: str | None = None
     text: str | None = None
     from_dt: datetime | None = None
@@ -73,6 +74,10 @@ class LogReader:
         # memory over every source at once, the same seam sort/pagination already live in.
         if flt.app:
             entries = [e for e in entries if entry_app(e) == flt.app]
+        # Correlating by the concerned entity keeps only its rows — which excludes the firehose and
+        # issue sources outright, since neither carries an entity_id (only business events do).
+        if flt.entity_id:
+            entries = [e for e in entries if e.entity_id == flt.entity_id]
         return _sorted(entries, flt)[:limit]
 
     async def activity(self, flt: LogFilter, *, cap: int = 5000) -> dict[str, dict[str, int]]:
@@ -144,6 +149,7 @@ def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
         "level": flt.level,
         "org_id": flt.org_id,
         "user_id": flt.user_id,
+        "entity_id": flt.entity_id,
         "request_id": flt.request_id,
         "text": flt.text,
         "from_dt": flt.from_dt,
@@ -155,12 +161,16 @@ def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
 def _issue_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     kwargs = _event_kwargs(flt, limit)
     del kwargs["level"]  # issues carry no level column — always "error"
+    del kwargs["entity_id"]  # issue occurrences aren't keyed to a domain entity
     return kwargs
 
 
 def _firehose_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
-    # The firehose keeps its own retention window; it takes the same filters as the DB sources.
-    return _event_kwargs(flt, limit)
+    # The firehose keeps its own retention window; it takes the same filters as the DB sources,
+    # minus entity_id — firehose lines aren't keyed to a domain entity (dropped in memory below).
+    kwargs = _event_kwargs(flt, limit)
+    del kwargs["entity_id"]
+    return kwargs
 
 
 def _from_firehose(row: FirehoseRow) -> LogEntry:
@@ -184,6 +194,7 @@ def _from_event(row: BusinessEventRow) -> LogEntry:
         event=row.kind,
         org_id=row.org_id,
         user_id=row.user_id,
+        entity_id=row.entity_id,
         request_id=row.request_id,
         payload=row.payload,
     )
@@ -206,7 +217,9 @@ def _from_issue(row: IssueEventRow) -> LogEntry:
 def _sort_value(entry: LogEntry, key: str) -> Any:
     if key == "ts":
         return entry.ts
-    attr = {"org": "org_id", "user": "user_id", "request": "request_id"}.get(key, key)
+    attr = {"org": "org_id", "user": "user_id", "entity": "entity_id", "request": "request_id"}.get(
+        key, key
+    )
     return getattr(entry, attr, "") or ""
 
 

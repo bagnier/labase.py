@@ -13,7 +13,6 @@ import structlog
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.logs.contract.queries import org_activity
-from apps.logs.infra.events_router import events_router
 from apps.logs.infra.router import router
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.shared import clock
@@ -52,12 +51,8 @@ def mount(host: Host) -> None:
     apply_log_level(str(settings.log_level))
     host.events.on(SettingsChanged, _reload_level)
     host.events.on(ConsoleOverviewQuery, _overview)
-    host.events.on(ConsoleOverviewQuery, _events_overview)
     host.events.on(OverviewQuery, _org_overview)
     host.app.include_router(router, prefix="/console/logs")
-    # A fixed /console/events screen — registered in this CONSOLE_SCREEN phase, ahead of the
-    # console's /console/{app} catch-all, exactly like /console/logs above.
-    host.app.include_router(events_router, prefix="/console/events")
 
 
 async def _reload_level(event: SettingsChanged) -> None:
@@ -91,25 +86,16 @@ async def _org_overview(query: OverviewQuery) -> Overview:
 
 
 async def _overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
-    """The consolidated logs tile on the console grid — the single observability entry point."""
+    """The consolidated logs tile on the console grid — the single observability entry point.
+
+    Business events are one source *inside* the logs viewer (filter by source ``event``, narrow by
+    app, correlate by entity), so there's no separate business-events screen to link out to."""
     return ConsoleOverview(
         key=LOGS_APP,
         title="Logs",
         icon="scroll",
         section="operations",
         data={"lines": [f"firehose level {get_settings(LOGS_APP).log_level}"]},
-    )
-
-
-async def _events_overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
-    """The business-events tile — the per-app timeline of every app's typed events."""
-    return ConsoleOverview(
-        key="events",
-        title="Business events",
-        icon="broadcast",
-        section="operations",
-        href="/console/events",
-        data={"lines": ["every app's typed events, grouped per app"]},
     )
 
 

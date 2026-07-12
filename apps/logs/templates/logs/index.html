@@ -81,6 +81,18 @@
         </span>
         <input type="hidden" name="sort" value="{{ sort }}" />
         <input type="hidden" name="dir" value="{{ dir }}" />
+        {# entity_id has no pickable option list (opaque ids); it's reached by drilling into a row.
+           Keep it across other filter changes, and offer a chip to drop it. #}
+        <input type="hidden" name="entity_id" value="{{ filters.entity_id }}" />
+        {% if filters.entity_id %}
+          <a class="badge badge-sm badge-neutral gap-1"
+             data-entity-filter
+             href="/console/logs"
+             title="Clear entity filter">
+            entity: {{ filters.entity_id[:12] }}
+            <i class="ph ph-x" aria-hidden="true"></i>
+          </a>
+        {% endif %}
         <span class="ml-auto inline-flex items-center gap-2 text-xs text-base-content/60"
               data-live-state="{{ 'paused' if paused else 'live' }}">
           {% if paused %}
@@ -98,7 +110,7 @@
           <table class="table table-sm">
             <thead>
               <tr>
-                {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("event", "Event"), ("user", "User"), ("request", "Request")] %}
+                {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("event", "Event"), ("user", "User"), ("entity", "Entity"), ("request", "Request")] %}
                   <th>
                     <a class="inline-flex items-center gap-1 hover:text-base-content"
                        data-sort="{{ col }}"

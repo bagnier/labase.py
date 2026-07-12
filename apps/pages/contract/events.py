@@ -18,6 +18,12 @@ class PageEvent(BusinessEvent):
     icon: ClassVar[str] = "file-text"
     slug: str | None = None
 
+    def __post_init__(self) -> None:
+        # A page's stable id *is* its slug — mirror it into the systematic entity_id correlation
+        # column so pages join todos/files/… in the logs viewer's per-entity filter.
+        if self.entity_id is None and self.slug is not None:
+            object.__setattr__(self, "entity_id", self.slug)
+
 
 @dataclass(frozen=True, kw_only=True)
 class PageCreated(PageEvent, EntityCreated):

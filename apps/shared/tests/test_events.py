@@ -90,7 +90,8 @@ async def test_persist_is_fire_and_forget_and_scoped():
     assert kwargs["icon"] == "cube"
     assert kwargs["user_id"] == "u"
     assert kwargs["org_id"] == "o"
+    assert kwargs["entity_id"] == "w"  # the concerned entity, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
     assert "actor_id" not in kwargs["payload"]
     assert "org_id" not in kwargs["payload"]
-    assert kwargs["payload"]["entity_id"] == "w"
+    assert "entity_id" not in kwargs["payload"]
