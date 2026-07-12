@@ -3,12 +3,20 @@ import unicodedata
 import uuid
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.files.contract.current import FilesSettings
+from apps.files.contract.events import (
+    FileDeleted,
+    FileRenamed,
+    FileShareDownloaded,
+    FileShareLinkCreated,
+    FileShareLinkRejected,
+    FileUploaded,
+)
 from apps.files.domain.models import OrgFileRead
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.storage import signed_redirect_url, storage_path
@@ -19,6 +27,7 @@ from apps.organizations.contract.current import (
     Membership,
     OrgRole,
 )
+from apps.shared.bus import bus
 from apps.shared.clock import now
 from apps.shared.http import (
     delete_response,
@@ -29,7 +38,6 @@ from apps.shared.http import (
     wants_json,
 )
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
@@ -107,7 +115,6 @@ async def file_list(
 @router.post("", response_class=HTMLResponse)
 async def upload_file(
     request: Request,
-    bg: BackgroundTasks,
     file: UploadFile,
     current_user: CurrentUser,
     session: RlsSession,
@@ -156,13 +163,13 @@ async def upload_file(
         size_bytes=len(content),
         uploader_email=current_user.email,
     )
-    audit(
-        bg,
-        "files.uploaded",
-        user_id=current_user.id,
-        org_id=org_id,
-        file_id=str(org_file.id),
-        filename=org_file.filename,
+    await bus.emit(
+        FileUploaded(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            entity_id=str(org_file.id),
+            label=org_file.filename,
+        )
     )
 
     if wants_json(request):
@@ -199,7 +206,6 @@ async def download_file(
 @router.delete("/{file_id}", response_class=HTMLResponse)
 async def delete_file(
     request: Request,
-    bg: BackgroundTasks,
     file_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
@@ -216,12 +222,13 @@ async def delete_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(bucket()).remove([org_file.storage_path])
     await repo.delete(org_file)
-    audit(
-        bg,
-        "files.deleted",
-        user_id=current_user.id,
-        org_id=org_id,
-        file_id=str(file_id),
+    await bus.emit(
+        FileDeleted(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            entity_id=str(file_id),
+            label=org_file.filename,
+        )
     )
 
     if wants_json(request):
@@ -233,7 +240,6 @@ async def delete_file(
 @router.patch("/{file_id}", response_class=HTMLResponse)
 async def rename_file(
     request: Request,
-    bg: BackgroundTasks,
     file_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
@@ -263,14 +269,15 @@ async def rename_file(
 
     old_filename = org_file.filename
     await repo.rename(org_file, safe_name, new_path)
-    audit(
-        bg,
-        "files.renamed",
-        user_id=current_user.id,
-        org_id=org_id,
-        file_id=str(file_id),
-        old_filename=old_filename,
-        new_filename=safe_name,
+    await bus.emit(
+        FileRenamed(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            entity_id=str(file_id),
+            label=safe_name,
+            old_filename=old_filename,
+            new_filename=safe_name,
+        )
     )
 
     files = await repo.all()
@@ -280,7 +287,6 @@ async def rename_file(
 @router.post("/{file_id}/share")
 async def generate_share_link(
     request: Request,
-    bg: BackgroundTasks,
     file_id: uuid.UUID,
     current_user: CurrentUser,
     org_id: CurrentOrg,
@@ -288,13 +294,13 @@ async def generate_share_link(
 ):
     org_file = or_404(await repo.get(file_id))
     token = await repo.add_share_token(file_id)
-    audit(
-        bg,
-        "files.share_link_created",
-        user_id=current_user.id,
-        org_id=org_id,
-        file_id=str(file_id),
-        token=str(token.token),
+    await bus.emit(
+        FileShareLinkCreated(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            entity_id=str(file_id),
+            token=str(token.token),
+        )
     )
     url = str(request.base_url) + f"files/share/{token.token}"
     if wants_json(request):
@@ -308,37 +314,29 @@ async def generate_share_link(
 
 @public_router.get("/share/{token}")
 async def public_share_download(
-    request: Request,
-    bg: BackgroundTasks,
     token: uuid.UUID,
     admin_session: AdminSession,
 ):
-    ip = request.client.host if request.client else None
-
-    def reject(reason: str, code: int, detail: str) -> NoReturn:
-        audit(
-            bg, "files.share_link_rejected", level="warning", ip=ip, token=str(token), reason=reason
-        )
+    async def reject(reason: str, code: int, detail: str) -> NoReturn:
+        # Anonymous attempt: no actor/org, ip rides in from the request contextvars.
+        await bus.emit(FileShareLinkRejected(token=str(token), reason=reason))
         raise HTTPException(code, detail)
 
     repo = FileShareRepository(admin_session)
     share_token = await repo.get_share_token(token)
     if share_token is None:
-        reject("invalid", status.HTTP_404_NOT_FOUND, "Link not found")
+        await reject("invalid", status.HTTP_404_NOT_FOUND, "Link not found")
     if share_token.expires_at < now():
-        reject("expired", status.HTTP_410_GONE, "Link expired")
+        await reject("expired", status.HTTP_410_GONE, "Link expired")
 
     org_file = await repo.get(share_token.file_id)
     if org_file is None:
-        reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
+        await reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
 
-    audit(
-        bg,
-        "files.share_downloaded",
-        org_id=org_file.org_id,
-        file_id=str(org_file.id),
-        token=str(token),
-        ip=ip,
+    await bus.emit(
+        FileShareDownloaded(
+            org_id=str(org_file.org_id), entity_id=str(org_file.id), token=str(token)
+        )
     )
     # Effective TTL for the file's org — the admin session reads its overrides (no RLS caller
     # here: share downloads are anonymous, the org comes from the file row).

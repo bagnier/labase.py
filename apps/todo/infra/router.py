@@ -1,11 +1,12 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
+from apps.shared.bus import bus
 from apps.shared.http import (
     delete_response,
     or_404,
@@ -15,10 +16,16 @@ from apps.shared.http import (
     wants_full_page,
     wants_json,
 )
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.settings import SettingsView
 from apps.todo.contract.current import TodoSettings
+from apps.todo.contract.events import (
+    TodoCreated,
+    TodoDeleted,
+    TodoEdited,
+    TodoTicked,
+    TodoUnticked,
+)
 from apps.todo.domain.models import TodoRead
 from apps.todo.infra.repository import TodoRepository
 
@@ -70,7 +77,6 @@ async def todo_list(
 @router.post("", response_class=HTMLResponse)
 async def add_todo(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: TodoRepo,
@@ -85,12 +91,10 @@ async def add_todo(
 
     title = await parse_field(request, "title")
     todo = await repo.add(uuid.UUID(current_user.id), title)
-    audit(
-        bg,
-        "todo.created",
-        user_id=current_user.id,
-        org_id=org_id,
-        todo_id=str(todo.id),
+    await bus.emit(
+        TodoCreated(
+            actor_id=current_user.id, org_id=str(org_id), entity_id=str(todo.id), label=title
+        )
     )
     return await _render(request, session, current_user, repo, org, settings)
 
@@ -98,7 +102,6 @@ async def add_todo(
 @router.patch("/{todo_id}", response_class=HTMLResponse)
 async def patch_todo(
     request: Request,
-    bg: BackgroundTasks,
     todo_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
@@ -118,21 +121,18 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
+    scope = {"actor_id": current_user.id, "org_id": str(org_id), "entity_id": str(todo_id)}
+    if done is not None:
+        ticked = TodoTicked if done else TodoUnticked
+        await bus.emit(ticked(label=todo.title, **scope))
     if title is not None:
-        audit(
-            bg,
-            "todo.updated",
-            user_id=current_user.id,
-            org_id=org_id,
-            todo_id=str(todo_id),
-        )
+        await bus.emit(TodoEdited(label=title, **scope))
     return await _render(request, session, current_user, repo, org, settings)
 
 
 @router.delete("/{todo_id}", response_class=HTMLResponse)
 async def delete_todo(
     request: Request,
-    bg: BackgroundTasks,
     todo_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
@@ -144,12 +144,13 @@ async def delete_todo(
     todo = await repo.get(todo_id)
     if todo:
         await repo.delete(todo)
-        audit(
-            bg,
-            "todo.deleted",
-            user_id=current_user.id,
-            org_id=org_id,
-            todo_id=str(todo_id),
+        await bus.emit(
+            TodoDeleted(
+                actor_id=current_user.id,
+                org_id=str(org_id),
+                entity_id=str(todo_id),
+                label=todo.title,
+            )
         )
     if wants_json(request):
         return delete_response(request)

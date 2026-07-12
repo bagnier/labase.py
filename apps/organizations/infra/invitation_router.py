@@ -2,16 +2,17 @@ import uuid
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.exc import DBAPIError
 
 from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSession
+from apps.organizations.contract.events import InvitationEmailMismatch, MemberJoined
 from apps.organizations.domain.models import InvitationRead, InvitationStatus
 from apps.organizations.infra.repository import OrganizationRepository
+from apps.shared.bus import bus
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import auth_user_exists
 
@@ -111,7 +112,6 @@ async def get_invitation(
 @router.post("/{token}/accept", status_code=status.HTTP_200_OK, response_model=None)
 async def accept_invitation(
     request: Request,
-    bg: BackgroundTasks,
     token: uuid.UUID,
     current_user: CurrentUser,
     rls_session: RlsSession,
@@ -134,14 +134,12 @@ async def accept_invitation(
     if current_user.email.lower() != invitation["email"].lower():
         org = await rls_repo.get(invitation["org_id"])
         org_name = org.name if org else ""
-        audit(
-            bg,
-            "organizations.invitation_email_mismatch",
-            level="warning",
-            user_id=current_user.id,
-            org_id=invitation["org_id"],
-            target_email=invitation["email"],
-            ip=request.client.host if request.client else None,
+        await bus.emit(
+            InvitationEmailMismatch(
+                actor_id=current_user.id,
+                org_id=str(invitation["org_id"]),
+                target_email=invitation["email"],
+            )
         )
         if wants_json(request):
             raise HTTPException(
@@ -179,10 +177,5 @@ async def accept_invitation(
         log.exception("invitation.accept_error")
         raise
 
-    audit(
-        bg,
-        "organizations.member_joined",
-        user_id=current_user.id,
-        org_id=invitation["org_id"],
-    )
+    await bus.emit(MemberJoined(actor_id=current_user.id, org_id=str(invitation["org_id"])))
     return await _dashboard_redirect(request, rls_repo, invitation["org_id"])

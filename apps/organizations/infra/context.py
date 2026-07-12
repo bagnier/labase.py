@@ -1,13 +1,14 @@
 import uuid
 
 import structlog
-from fastapi import BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.user import AuthenticatedUser
+from apps.organizations.contract.events import OwnershipViolation
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.observability.audit import audit
+from apps.shared.bus import bus
 from apps.shared.slug_registry import is_reserved
 
 
@@ -103,40 +104,31 @@ async def get_membership_by_org_id(
     return membership
 
 
-def _audit_ownership_violation(
-    bg: BackgroundTasks, request: Request, membership: Membership
-) -> None:
-    audit(
-        bg,
-        "organizations.ownership_violation",
-        level="warning",
-        user_id=membership.auth_user_id,
-        org_id=membership.org_id,
-        ip=request.client.host if request.client else None,
-        path=request.url.path,
-    )
-
-
-def _gate_owner(request: Request, bg: BackgroundTasks, membership: Membership) -> Membership:
+async def _gate_owner(request: Request, membership: Membership) -> Membership:
     if membership.role != OrgRole.owner:
-        _audit_ownership_violation(bg, request, membership)
+        # ip rides in from the request contextvars; the persister enriches it at write time.
+        await bus.emit(
+            OwnershipViolation(
+                actor_id=str(membership.auth_user_id),
+                org_id=str(membership.org_id),
+                path=request.url.path,
+            )
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership
 
 
 async def require_owner(
     request: Request,
-    bg: BackgroundTasks,
     membership: Membership = Depends(get_membership_by_org_id),
 ) -> Membership:
     """Owner gate for routes with an ``{org_id}`` path parameter (JSON API)."""
-    return _gate_owner(request, bg, membership)
+    return await _gate_owner(request, membership)
 
 
 async def require_current_owner(
     request: Request,
-    bg: BackgroundTasks,
     membership: Membership = Depends(get_current_membership),
 ) -> Membership:
     """Owner gate for ``/{org_handle}/...`` routes (resolves the org from the slug)."""
-    return _gate_owner(request, bg, membership)
+    return await _gate_owner(request, membership)

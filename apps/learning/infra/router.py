@@ -2,12 +2,13 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.learning.contract.current import LearningSettings
+from apps.learning.contract.events import CardReviewed
 from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import (
     CardResource,
@@ -25,9 +26,9 @@ from apps.learning.domain.service import (
 from apps.learning.infra.repository import CatalogRow, LearningRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
+from apps.shared.bus import bus
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.settings import SettingsView
 
@@ -173,7 +174,6 @@ async def card_detail(
 @router.post("/cards/{external_id}/reviews", response_model=None)
 async def mark_card(
     request: Request,
-    bg: BackgroundTasks,
     external_id: str,
     current_user: CurrentUser,
     session: RlsSession,
@@ -192,13 +192,13 @@ async def mark_card(
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, "Daily review limit reached"
         ) from None
-    audit(
-        bg,
-        "learning.card_marked",
-        user_id=current_user.id,
-        org_id=org_id,
-        card_id=str(card.id),
-        outcome=outcome.value,
+    await bus.emit(
+        CardReviewed(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            entity_id=str(card.id),
+            outcome=outcome.value,
+        )
     )
     rows = _due_rows(await repo.catalog(), today_date)
     return await _render_session(request, session, current_user, rows, org, repo, settings)

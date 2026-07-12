@@ -1,7 +1,6 @@
 import structlog
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Cookie,
     HTTPException,
     Query,
@@ -14,6 +13,21 @@ from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
 from apps.auth.application import confirm_user, register_user
 from apps.auth.contract.current import CurrentAdmin, CurrentUser, OptionalCurrentUser
+from apps.auth.contract.events import (
+    ConfirmationResent,
+    EmailChanged,
+    ImpersonationStarted,
+    ImpersonationStopped,
+    LoginFailed,
+    MfaFailed,
+    MfaVerified,
+    OAuthFailed,
+    OAuthSignedIn,
+    PasskeyFailed,
+    PasskeySignedIn,
+    PasswordReset,
+    RegisterFailed,
+)
 from apps.auth.contract.impersonation import (
     IMPERSONATION_MAX_SECONDS,
     IMPERSONATOR_COOKIE,
@@ -46,11 +60,11 @@ from apps.auth.domain.service import (
 )
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
+from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.settings import SettingsView
 
 log = structlog.get_logger("labase.auth.router")
@@ -185,9 +199,7 @@ async def login_page(
 
 @router.post("/login")
 @rate_limit("10/minute")
-async def login_endpoint(
-    request: Request, bg: BackgroundTasks, users_settings: UsersSettings
-) -> Response:
+async def login_endpoint(request: Request, users_settings: UsersSettings) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
     password = body.get("password", "")
@@ -216,7 +228,7 @@ async def login_endpoint(
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        audit(bg, "auth.login_failed", level="warning", ip=ip, email=email)
+        await bus.emit(LoginFailed(email=email))
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -274,7 +286,6 @@ async def _mfa_challenge_response(
 @rate_limit("10/minute")
 async def mfa_verify_endpoint(
     request: Request,
-    bg: BackgroundTasks,
     mfa_access_token: str | None = Cookie(default=None),
 ) -> Response:
     body = await parse_body(request)
@@ -287,7 +298,7 @@ async def mfa_verify_endpoint(
     try:
         tokens = await verify_totp(mfa_access_token, factor_id, challenge_id, code)
     except TotpError:
-        audit(bg, "auth.mfa_failed", level="warning", factor_id=factor_id)
+        await bus.emit(MfaFailed(factor_id=factor_id))
         error = "That code did not work. Try the next one from your app."
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
@@ -299,7 +310,7 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    audit(bg, "auth.mfa_verified", factor_id=factor_id)
+    await bus.emit(MfaVerified(factor_id=factor_id))
     if wants_json(request):
         resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
     else:
@@ -342,9 +353,7 @@ async def passkey_options_endpoint(request: Request, users_settings: UsersSettin
 
 @router.post("/passkeys/verify")
 @rate_limit("10/minute")
-async def passkey_verify_endpoint(
-    request: Request, bg: BackgroundTasks, users_settings: UsersSettings
-) -> Response:
+async def passkey_verify_endpoint(request: Request, users_settings: UsersSettings) -> Response:
     _ensure_passkeys_enabled(users_settings)
     body = await parse_body(request)
     challenge_id = str(body.get("challenge_id", ""))
@@ -357,10 +366,10 @@ async def passkey_verify_endpoint(
     try:
         tokens = await verify_passkey_authentication(challenge_id, credential)
     except PasskeyError as e:
-        audit(bg, "auth.passkey_failed", level="warning")
+        await bus.emit(PasskeyFailed())
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
     claims = decode_jwt(tokens.access_token)
-    audit(bg, "auth.passkey_signed_in", user_id=str(claims.get("sub", "")))
+    await bus.emit(PasskeySignedIn(actor_id=str(claims.get("sub", "")) or None))
     resp = JSONResponse(
         {
             "access_token": tokens.access_token,
@@ -420,7 +429,6 @@ def _oauth_failure(request: Request, message: str, users_settings: SettingsView)
 @rate_limit("10/minute")
 async def oauth_callback(
     request: Request,
-    bg: BackgroundTasks,
     users_settings: UsersSettings,
     code: str = Query(default=""),
     error_description: str = Query(default=""),
@@ -442,11 +450,11 @@ async def oauth_callback(
     try:
         tokens = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
-        audit(bg, "auth.oauth_failed", level="warning")
+        await bus.emit(OAuthFailed())
         return _oauth_failure(request, str(e), users_settings)
     await confirm_user(tokens.access_token)  # first visit bootstraps the personal org
     claims = decode_jwt(tokens.access_token)
-    audit(bg, "auth.oauth_signed_in", user_id=str(claims.get("sub", "")))
+    await bus.emit(OAuthSignedIn(actor_id=str(claims.get("sub", "")) or None))
     next = oauth_next or ""
     if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
@@ -473,10 +481,7 @@ async def register_page(
 
 @router.post("/register")
 @rate_limit("5/minute")
-async def register_endpoint(
-    request: Request,
-    bg: BackgroundTasks,
-) -> Response:
+async def register_endpoint(request: Request) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
     password = body.get("password", "")
@@ -513,7 +518,7 @@ async def register_endpoint(
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
-        audit(bg, "auth.register_failed", level="warning", ip=ip, email=email)
+        await bus.emit(RegisterFailed(email=email))
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."
@@ -525,14 +530,12 @@ async def register_endpoint(
 @router.post("/impersonate")
 async def impersonate_endpoint(
     request: Request,
-    bg: BackgroundTasks,
     admin: CurrentAdmin,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
 ) -> Response:
     body = await parse_body(request)
     email = str(body.get("email", "")).strip().lower()
-    ip = _client_ip(request)
     if not email or email == admin.email.lower() or not access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Pick another user's email."
@@ -543,14 +546,7 @@ async def impersonate_endpoint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No user with this email."
         ) from None
-    audit(
-        bg,
-        "auth.impersonation_started",
-        level="warning",
-        user_id=admin.id,
-        ip=ip,
-        target_email=email,
-    )
+    await bus.emit(ImpersonationStarted(actor_id=admin.id, target_email=email))
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": email})
     else:
@@ -569,7 +565,6 @@ async def impersonate_endpoint(
 @router.post("/impersonate/stop")
 async def stop_impersonation_endpoint(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
 ) -> Response:
     stash = request.cookies.get(IMPERSONATOR_COOKIE)
@@ -579,15 +574,9 @@ async def stop_impersonation_endpoint(
     admin_id = None
     try:
         admin_id = decode_jwt(stash)["sub"]
-    except Exception:  # expired stash: still drop the disguise, audit without the id
+    except Exception:  # expired stash: still drop the disguise, record without the id
         log.warning("auth.impersonation_stash_invalid")
-    audit(
-        bg,
-        "auth.impersonation_stopped",
-        level="warning",
-        user_id=admin_id,
-        target_email=current_user.email,
-    )
+    await bus.emit(ImpersonationStopped(actor_id=admin_id, target_email=current_user.email))
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": None})
     else:
@@ -622,9 +611,7 @@ async def forgot_password_endpoint(request: Request) -> Response:
 
 @router.post("/resend-confirmation")
 @rate_limit("10/minute")
-async def resend_confirmation_endpoint(
-    request: Request, bg: BackgroundTasks, users_settings: UsersSettings
-) -> Response:
+async def resend_confirmation_endpoint(request: Request, users_settings: UsersSettings) -> Response:
     """Send the signup confirmation again — the way out for an unconfirmed account.
 
     Neutral answer whatever happens (no account enumeration), like forgot-password.
@@ -637,7 +624,7 @@ async def resend_confirmation_endpoint(
     if email:
         try:
             await resend_confirmation(email)
-            audit(bg, "auth.confirmation_resent", email=email)
+            await bus.emit(ConfirmationResent(email=email))
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
     if wants_json(request):
@@ -654,7 +641,7 @@ async def reset_password_page(request: Request, token_hash: str = Query(default=
 
 @router.post("/reset-password")
 @rate_limit("10/minute")
-async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Response:
+async def reset_password_endpoint(request: Request) -> Response:
     body = await parse_body(request)
     token_hash = str(body.get("token_hash", ""))
     password = str(body.get("password", ""))
@@ -671,7 +658,7 @@ async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Resp
         error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password.
-    audit(bg, "auth.password_reset", ip=ip)
+    await bus.emit(PasswordReset())
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
     return RedirectResponse(
@@ -681,9 +668,7 @@ async def reset_password_endpoint(request: Request, bg: BackgroundTasks) -> Resp
 
 @router.get("/confirm-email")
 @rate_limit("10/minute")
-async def confirm_email_endpoint(
-    request: Request, bg: BackgroundTasks, token_hash: str = Query(default="")
-) -> Response:
+async def confirm_email_endpoint(request: Request, token_hash: str = Query(default="")) -> Response:
     """Finalize an email change from the link mailed to the new address.
 
     Anonymous on purpose — the single-use token IS the credential (the reader of
@@ -697,7 +682,7 @@ async def confirm_email_endpoint(
             "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
         )
     claims = decode_jwt(tokens.access_token)
-    audit(bg, "auth.email_changed", user_id=str(claims.get("sub", "")))
+    await bus.emit(EmailChanged(actor_id=str(claims.get("sub", "")) or None))
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     return resp

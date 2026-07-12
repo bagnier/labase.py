@@ -1,10 +1,17 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract import appearance
+from apps.console.contract.events import (
+    AdminGranted,
+    AdminRevoked,
+    LastAdminViolationBlocked,
+    OrgOverrideRemoved,
+    OrgOverrideSet,
+)
 from apps.console.contract.overviews import SECTIONS, ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import admins, service, technical
 from apps.console.domain.admins import AdminNotFound, LastAdminViolation
@@ -18,7 +25,6 @@ from apps.shared.config import get_technical_settings
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsChanged, SettingsDeclaration
@@ -214,7 +220,7 @@ async def get_admins(
 
 
 @router.post("/admins", response_class=HTMLResponse)
-async def add_admin(request: Request, current_user: CurrentAdmin, bg: BackgroundTasks) -> Response:
+async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
     body = await parse_body(request)
     email = str(body.get("email") or "").strip()
     try:
@@ -229,22 +235,14 @@ async def add_admin(request: Request, current_user: CurrentAdmin, bg: Background
             error=exc.email,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    audit(
-        bg,
-        "settings.admin_granted",
-        level="warning",
-        user_id=current_user.id,
-        target_email=email,
-    )
+    await bus.emit(AdminGranted(actor_id=current_user.id, target_email=email))
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
 
 
 @router.put("/admins/{email}", response_class=HTMLResponse)
-async def update_admin(
-    request: Request, email: str, current_user: CurrentAdmin, bg: BackgroundTasks
-) -> Response:
+async def update_admin(request: Request, email: str, current_user: CurrentAdmin) -> Response:
     body = await parse_body(request)
     is_admin = service.coerce_bool(body.get("is_admin"))
     try:
@@ -252,22 +250,14 @@ async def update_admin(
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
-        audit(
-            bg,
-            "settings.last_admin_violation",
-            level="warning",
-            user_id=current_user.id,
-            target_email=email,
-            ip=request.client.host if request.client else None,
-        )
+        await bus.emit(LastAdminViolationBlocked(actor_id=current_user.id, target_email=email))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    audit(
-        bg,
-        "settings.admin_granted" if is_admin else "settings.admin_revoked",
-        level="warning",
-        user_id=current_user.id,
-        target_email=email,
+    granted: AdminGranted | AdminRevoked = (
+        AdminGranted(actor_id=current_user.id, target_email=email)
+        if is_admin
+        else AdminRevoked(actor_id=current_user.id, target_email=email)
     )
+    await bus.emit(granted)
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -373,7 +363,6 @@ async def _render_org_overrides(
 @router.post("/{app}/org-settings", response_class=HTMLResponse)
 async def create_org_override(
     request: Request,
-    bg: BackgroundTasks,
     app: str,
     current_user: CurrentAdmin,
     session: AdminSession,
@@ -404,14 +393,8 @@ async def create_org_override(
 
     await repo.set_org_override(app, key, org_id, stored)
     await session.commit()
-    audit(
-        bg,
-        "settings.org_override_set",
-        user_id=current_user.id,
-        org_id=org_id,
-        app=app,
-        key=key,
-        value=stored,
+    await bus.emit(
+        OrgOverrideSet(actor_id=current_user.id, org_id=str(org_id), app=app, key=key, value=stored)
     )
     return await _render_org_overrides(request, session, app, group)
 
@@ -419,7 +402,6 @@ async def create_org_override(
 @router.delete("/{app}/org-settings/{key}/{org_id}", response_class=HTMLResponse)
 async def delete_org_override(
     request: Request,
-    bg: BackgroundTasks,
     app: str,
     key: str,
     org_id: uuid.UUID,
@@ -430,13 +412,8 @@ async def delete_org_override(
     repo = AppSettingRepository(session)
     await repo.delete_org_override(app, key, org_id)
     await session.commit()
-    audit(
-        bg,
-        "settings.org_override_removed",
-        user_id=current_user.id,
-        org_id=org_id,
-        app=app,
-        key=key,
+    await bus.emit(
+        OrgOverrideRemoved(actor_id=current_user.id, org_id=str(org_id), app=app, key=key)
     )
     return await _render_org_overrides(request, session, app, group)
 

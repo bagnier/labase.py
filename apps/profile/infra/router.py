@@ -5,7 +5,6 @@ from typing import Annotated
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Cookie,
     Depends,
     HTTPException,
@@ -19,7 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
-from apps.auth.contract.events import UserDeleted
+from apps.auth.contract.events import (
+    EmailChangeRequested,
+    PasskeyAdded,
+    PasskeyRemoved,
+    PasswordChanged,
+    TwoFactorEnabled,
+    UserDeleted,
+)
 from apps.auth.contract.passkeys import (
     PasskeyError,
     delete_passkey,
@@ -43,13 +49,13 @@ from apps.auth.contract.two_factor import (
     verify_totp,
 )
 from apps.profile.contract.current import ProfileSettings
+from apps.profile.contract.events import AccountDeleted, AvatarUpdated, HandleChanged
 from apps.profile.domain.models import ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.observability.business_events import activity_entries, search_business_events
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -215,7 +221,6 @@ async def profile_page(
 @router.post("/profile/password", response_model=None)
 async def password_change(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
@@ -240,7 +245,7 @@ async def password_change(
             request, session, current_user, repo, key="password_error", message=error
         )
 
-    audit(bg, "profile.password_changed", user_id=current_user.id)
+    await bus.emit(PasswordChanged(actor_id=current_user.id))
     if wants_json(request):
         return JSONResponse({"message": "Password changed."})
     return _profile_redirect("password_changed")
@@ -249,7 +254,6 @@ async def password_change(
 @router.post("/profile/email", response_model=None)
 async def email_change(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
@@ -277,7 +281,7 @@ async def email_change(
             request, session, current_user, repo, key="email_error", message=error
         )
 
-    audit(bg, "profile.email_change_requested", user_id=current_user.id, new_email=new_email)
+    await bus.emit(EmailChangeRequested(actor_id=current_user.id, new_email=new_email))
     if wants_json(request):
         return JSONResponse({"message": f"A confirmation email is on its way to {new_email}."})
     return _profile_redirect("email_requested")
@@ -315,7 +319,6 @@ async def passkey_options(
 @router.post("/profile/passkeys/verify", response_model=None)
 async def passkey_verify(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     users_settings: UsersSettings,
     access_token: str | None = Cookie(default=None),
@@ -333,14 +336,13 @@ async def passkey_verify(
         created = await verify_passkey_registration(access_token, challenge_id, credential)
     except PasskeyError as e:
         return JSONResponse({"detail": str(e)}, status_code=400)
-    audit(bg, "profile.passkey_added", user_id=current_user.id)
+    await bus.emit(PasskeyAdded(actor_id=current_user.id))
     return JSONResponse({"message": "Passkey added.", "passkey": created})
 
 
 @router.post("/profile/passkeys/{passkey_id}/delete", response_model=None)
 async def passkey_delete(
     request: Request,
-    bg: BackgroundTasks,
     passkey_id: str,
     current_user: CurrentUser,
     session: RlsSession,
@@ -356,7 +358,7 @@ async def passkey_delete(
         return await _profile_error(
             request, session, current_user, repo, key="passkey_error", message=str(e)
         )
-    audit(bg, "profile.passkey_removed", user_id=current_user.id, passkey_id=passkey_id)
+    await bus.emit(PasskeyRemoved(actor_id=current_user.id, passkey_id=passkey_id))
     if wants_json(request):
         return JSONResponse({"message": "Passkey removed."})
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -403,7 +405,6 @@ async def twofa_enroll(
 @router.post("/profile/2fa/verify", response_model=None)
 async def twofa_verify(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
@@ -423,7 +424,7 @@ async def twofa_verify(
         return await _profile_error(
             request, session, current_user, repo, key="twofa_error", message=error
         )
-    audit(bg, "profile.twofa_enabled", user_id=current_user.id)
+    await bus.emit(TwoFactorEnabled(actor_id=current_user.id))
     if wants_json(request):
         return JSONResponse({"message": "Two-factor enabled."})
     return _profile_redirect("twofa_enabled")
@@ -433,7 +434,6 @@ async def twofa_verify(
 @router.post("/profile/delete", response_model=None)
 async def account_delete(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     admin_session: AdminSession,
     session: RlsSession,
@@ -458,7 +458,7 @@ async def account_delete(
             request, session, current_user, repo, key="deletion_error", message=error
         )
 
-    audit(bg, "profile.account_deleted", level="warning", user_id=current_user.id)
+    await bus.emit(AccountDeleted(actor_id=current_user.id))
     # Handlers (organizations, profile itself…) join the admin session: one
     # transaction for the whole deletion.
     await bus.emit(UserDeleted(user_id=current_user.id, session=admin_session))
@@ -479,7 +479,6 @@ async def account_delete(
 @router.post("/profile/avatar", response_model=None)
 async def avatar_upload(
     request: Request,
-    bg: BackgroundTasks,
     file: UploadFile,
     current_user: CurrentUser,
     session: RlsSession,
@@ -508,7 +507,7 @@ async def avatar_upload(
     profile = await repo.get_or_create(uuid.UUID(current_user.id), current_user.email)
     profile.avatar_path = path
     await session.flush()
-    audit(bg, "profile.avatar_updated", user_id=current_user.id)
+    await bus.emit(AvatarUpdated(actor_id=current_user.id))
     if wants_json(request):
         return JSONResponse({"message": "Avatar updated."})
     return _profile_redirect("avatar_updated")
@@ -537,7 +536,6 @@ async def avatar_image(
 @router.post("/profile", response_model=None)
 async def profile_update(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
@@ -569,12 +567,7 @@ async def profile_update(
     old_handle = profile.handle
     await repo.update(profile, ProfileUpdate(handle=handle))
     if old_handle != handle:
-        audit(
-            bg,
-            "profile.handle_changed",
-            user_id=current_user.id,
-            new_handle=handle,
-        )
+        await bus.emit(HandleChanged(actor_id=current_user.id, new_handle=handle))
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(request, session, current_user, repo)

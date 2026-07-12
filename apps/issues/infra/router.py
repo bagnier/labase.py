@@ -1,17 +1,18 @@
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
+from apps.issues.contract.events import IssueStatusChanged
 from apps.issues.domain.models import ErrorEventRead, ErrorGroup, ErrorGroupRead, IssueStatus
 from apps.issues.infra.repository import ErrorGroupRepository
 from apps.shared import clock
+from apps.shared.bus import bus
 from apps.shared.charts import last_days, sparkline
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 
@@ -95,7 +96,6 @@ async def issue_detail(
 @router.post("/{group_id}/status", response_model=None)
 async def set_issue_status(
     request: Request,
-    bg: BackgroundTasks,
     group_id: int,
     current_user: CurrentAdmin,
     session: AdminSession,
@@ -109,12 +109,10 @@ async def set_issue_status(
     group = await _group_or_404(repo, group_id)
     await repo.set_status(group, new_status, get_technical_settings().app_version)
     await session.commit()
-    audit(
-        bg,
-        "issues.status_changed",
-        user_id=current_user.id,
-        group_id=str(group_id),
-        status=new_status.value,
+    await bus.emit(
+        IssueStatusChanged(
+            actor_id=current_user.id, entity_id=str(group_id), status=new_status.value
+        )
     )
     group_read = ErrorGroupRead.model_validate(group)
     if wants_json(request):

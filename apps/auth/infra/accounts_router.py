@@ -10,16 +10,20 @@ import asyncio
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.auth.contract.deletion import disable_account
-from apps.auth.contract.events import UserDeleted
+from apps.auth.contract.events import (
+    AccountDeletedByAdmin,
+    AccountDisabled,
+    AccountEnabled,
+    UserDeleted,
+)
 from apps.shared.bus import bus
 from apps.shared.http import wants_full_page, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import get_admin_supabase
@@ -109,39 +113,34 @@ def _done(request: Request, message: str) -> Response:
 
 
 @accounts_router.post("/{user_id}/disable", response_model=None)
-async def disable_user(
-    request: Request, bg: BackgroundTasks, user_id: str, current_user: CurrentAdmin
-) -> Response:
+async def disable_user(request: Request, user_id: str, current_user: CurrentAdmin) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
-    audit(bg, "accounts.disabled", level="warning", user_id=current_user.id, target=user_id)
+    await bus.emit(AccountDisabled(actor_id=current_user.id, target_user_id=user_id))
     return _done(request, "Account disabled.")
 
 
 @accounts_router.post("/{user_id}/enable", response_model=None)
-async def enable_user(
-    request: Request, bg: BackgroundTasks, user_id: str, current_user: CurrentAdmin
-) -> Response:
+async def enable_user(request: Request, user_id: str, current_user: CurrentAdmin) -> Response:
     _ensure_enabled()
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": "none"})
-    audit(bg, "accounts.enabled", level="warning", user_id=current_user.id, target=user_id)
+    await bus.emit(AccountEnabled(actor_id=current_user.id, target_user_id=user_id))
     return _done(request, "Account enabled.")
 
 
 @accounts_router.post("/{user_id}/delete", response_model=None)
 async def delete_user(
     request: Request,
-    bg: BackgroundTasks,
     user_id: str,
     current_user: CurrentAdmin,
     admin_session: AdminSession,
 ) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
-    audit(bg, "accounts.deleted", level="warning", user_id=current_user.id, target=user_id)
+    await bus.emit(AccountDeletedByAdmin(actor_id=current_user.id, target_user_id=user_id))
     await bus.emit(UserDeleted(user_id=user_id, session=admin_session))
     await disable_account(user_id)
     await admin_session.commit()

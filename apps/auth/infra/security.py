@@ -3,7 +3,6 @@ from functools import lru_cache
 import jwt
 import structlog
 from fastapi import (
-    BackgroundTasks,
     Cookie,
     Depends,
     Header,
@@ -16,12 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
+from apps.auth.contract.events import AdminProbe
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
-from apps.shared.observability.audit import audit
 from apps.shared.persistence.database import get_admin_session
 
 log = structlog.get_logger("labase.auth.security")
@@ -126,7 +125,6 @@ def _report_refresh_failure(exc: Exception) -> None:
 
 async def get_current_admin(
     request: Request,
-    bg: BackgroundTasks,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> AuthenticatedUser:
     """Gate for server-admin-only surfaces (the console).
@@ -135,14 +133,7 @@ async def get_current_admin(
     plain 404 — a 403 would confirm the protected surface exists.
     """
     if not user.is_admin:
-        audit(
-            bg,
-            "auth.admin_probe",
-            level="warning",
-            user_id=user.id,
-            ip=request.client.host if request.client else None,
-            path=request.url.path,
-        )
+        await bus.emit(AdminProbe(actor_id=user.id, path=request.url.path))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return user
 

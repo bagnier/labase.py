@@ -1,18 +1,19 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
+from apps.api_keys.contract.events import ApiKeyIssued, ApiKeyRevoked
 from apps.api_keys.domain.models import ApiKeyCreated, ApiKeyRead
 from apps.api_keys.domain.service import generate_key
 from apps.api_keys.infra.repository import ApiKeyRepository
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOwnerMembership
 from apps.shared import clock
+from apps.shared.bus import bus
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 
@@ -58,7 +59,6 @@ async def list_keys(
 @router.post("", response_model=None)
 async def create_key(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: KeyRepo,
     org_id: CurrentOrg,
@@ -76,13 +76,10 @@ async def create_key(
             key_hash=material.key_hash,
         )
     )
-    audit(
-        bg,
-        "api_keys.created",
-        user_id=current_user.id,
-        org_id=org_id,
-        key_id=str(key.id),
-        name=name,
+    await bus.emit(
+        ApiKeyIssued(
+            actor_id=current_user.id, org_id=str(org_id), entity_id=str(key.id), label=name
+        )
     )
     created = ApiKeyCreated(secret=material.token, **ApiKeyRead.model_validate(key).model_dump())
     if wants_json(request):
@@ -93,7 +90,6 @@ async def create_key(
 @router.delete("/{key_id}", response_model=None)
 async def revoke_key(
     request: Request,
-    bg: BackgroundTasks,
     key_id: uuid.UUID,
     current_user: CurrentUser,
     repo: KeyRepo,
@@ -104,13 +100,13 @@ async def revoke_key(
     if key.revoked_at is None:
         key.revoked_at = clock.now()
         await repo.save(key)
-        audit(
-            bg,
-            "api_keys.revoked",
-            user_id=current_user.id,
-            org_id=org_id,
-            key_id=str(key.id),
-            name=key.name,
+        await bus.emit(
+            ApiKeyRevoked(
+                actor_id=current_user.id,
+                org_id=str(org_id),
+                entity_id=str(key.id),
+                label=key.name,
+            )
         )
     if wants_json(request):
         return delete_response(request)

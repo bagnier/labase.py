@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 from zoneinfo import available_timezones
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,15 @@ from apps.organizations.contract.current import (
     CurrentOrg,
     CurrentOwnerMembership,
     OrganizationsSettings,
+)
+from apps.organizations.contract.events import (
+    InvitationRevoked,
+    InvitationSent,
+    LastOwnerViolationBlocked,
+    MemberLeft,
+    MemberRemoved,
+    MemberRoleChanged,
+    OrganizationCreated,
 )
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.organizations.contract.settings_sections import OrgSettingsSectionQuery
@@ -34,7 +43,6 @@ from apps.shared.bus import bus
 from apps.shared.email import enqueue_email
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.observability.business_events import activity_entries, search_business_events
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
@@ -102,21 +110,16 @@ async def _pending_invitations_html(request, repo, org_id, caller_role: str) -> 
     ).decode()
 
 
-def _audit_last_owner_violation(
-    bg: BackgroundTasks,
-    request: Request,
+async def _emit_last_owner_violation(
     current_user: CurrentUser,
     org_id: uuid.UUID,
-    **extra: str,
+    target_user_id: str | None = None,
 ) -> None:
-    audit(
-        bg,
-        "organizations.last_owner_violation",
-        level="warning",
-        user_id=current_user.id,
-        org_id=org_id,
-        ip=request.client.host if request.client else None,
-        **extra,
+    # ip rides in from the request contextvars; the persister enriches it at write time.
+    await bus.emit(
+        LastOwnerViolationBlocked(
+            actor_id=current_user.id, org_id=str(org_id), target_user_id=target_user_id
+        )
     )
 
 
@@ -140,7 +143,6 @@ async def _build_members(repo: OrganizationRepository, org_id: uuid.UUID) -> lis
 @router.post("", response_model=None)
 async def create_organization(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_settings: OrganizationsSettings,
@@ -160,12 +162,10 @@ async def create_organization(
         )
 
     org = await repo.create_with_owner(name, user_id)
-    audit(
-        bg,
-        "organizations.created",
-        user_id=current_user.id,
-        org_id=org.id,
-        name=name,
+    await bus.emit(
+        OrganizationCreated(
+            actor_id=current_user.id, org_id=str(org.id), entity_id=str(org.id), label=name
+        )
     )
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
     return mutation_response(
@@ -423,7 +423,6 @@ async def update_org_timezone(
 @org_router.delete("/members/me", response_class=HTMLResponse)
 async def leave_organization(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
@@ -434,7 +433,7 @@ async def leave_organization(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
-        _audit_last_owner_violation(bg, request, current_user, org_id)
+        await _emit_last_owner_violation(current_user, org_id)
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         msg = "You are the last owner. Transfer ownership before leaving."
@@ -443,12 +442,7 @@ async def leave_organization(
             status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
-    audit(
-        bg,
-        "organizations.member_left",
-        user_id=current_user.id,
-        org_id=org_id,
-    )
+    await bus.emit(MemberLeft(actor_id=current_user.id, org_id=str(org_id)))
     return delete_response(request, htmx_redirect_url="/profile")
 
 
@@ -456,7 +450,6 @@ async def leave_organization(
 async def update_member_role(
     request: Request,
     user_id: uuid.UUID,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
@@ -473,9 +466,7 @@ async def update_member_role(
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
         except LastOwnerViolation as exc:
-            _audit_last_owner_violation(
-                bg, request, current_user, org_id, target_user_id=str(user_id)
-            )
+            await _emit_last_owner_violation(current_user, org_id, target_user_id=str(user_id))
             if wants_json(request):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
             return HTMLResponse(
@@ -484,13 +475,13 @@ async def update_member_role(
     updated = await repo.update_member_role(org_id, user_id, new_role)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    audit(
-        bg,
-        "organizations.member_role_changed",
-        user_id=current_user.id,
-        org_id=org_id,
-        target_user_id=str(user_id),
-        role=new_role.value,
+    await bus.emit(
+        MemberRoleChanged(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            target_user_id=str(user_id),
+            role=new_role.value,
+        )
     )
     emails = await resolve_user_emails([updated.auth_user_id])
     member = MemberRead(
@@ -519,7 +510,6 @@ async def update_member_role(
 async def remove_member(
     request: Request,
     user_id: uuid.UUID,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
@@ -528,7 +518,7 @@ async def remove_member(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
-        _audit_last_owner_violation(bg, request, current_user, org_id, target_user_id=str(user_id))
+        await _emit_last_owner_violation(current_user, org_id, target_user_id=str(user_id))
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         return HTMLResponse(
@@ -537,12 +527,8 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    audit(
-        bg,
-        "organizations.member_removed",
-        user_id=current_user.id,
-        org_id=org_id,
-        target_user_id=str(user_id),
+    await bus.emit(
+        MemberRemoved(actor_id=current_user.id, org_id=str(org_id), target_user_id=str(user_id))
     )
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
     # so this only ever uses delete_response's JSON branch.
@@ -562,7 +548,6 @@ async def remove_member(
 @org_router.post("/invitations", response_class=HTMLResponse)
 async def create_invitation(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
@@ -596,12 +581,8 @@ async def create_invitation(
                 role=OrgRole.member,
                 invited_by=uuid.UUID(current_user.id),
             )
-            audit(
-                bg,
-                "organizations.invitation_sent",
-                user_id=current_user.id,
-                org_id=org_id,
-                target_email=email,
+            await bus.emit(
+                InvitationSent(actor_id=current_user.id, org_id=str(org_id), target_email=email)
             )
 
     link = ""
@@ -656,7 +637,6 @@ async def list_invitations(
 async def revoke_invitation(
     request: Request,
     invitation_id: uuid.UUID,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
@@ -664,12 +644,10 @@ async def revoke_invitation(
 ) -> Response:
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
-    audit(
-        bg,
-        "organizations.invitation_revoked",
-        user_id=current_user.id,
-        org_id=org_id,
-        invitation_id=str(invitation_id),
+    await bus.emit(
+        InvitationRevoked(
+            actor_id=current_user.id, org_id=str(org_id), invitation_id=str(invitation_id)
+        )
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,
     # so this only ever uses delete_response's JSON branch.

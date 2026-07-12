@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,16 @@ from apps.organizations.contract.current import (
     OrgRole,
 )
 from apps.organizations.contract.queries import org_by_handle, role_in_org
+from apps.pages.contract.events import (
+    PageCreated,
+    PageDeleted,
+    PageEvent,
+    PagePublishedMembers,
+    PagePublishedPublic,
+    PageSlugChanged,
+    PageUnpublished,
+    PageUpdated,
+)
 from apps.pages.domain.models import NavItemRead, Page, PageRead, PageVisibility
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
@@ -23,6 +33,7 @@ from apps.pages.infra.repository import (
     search_visible_pages,
     visible_pages,
 )
+from apps.shared.bus import bus
 from apps.shared.http import (
     delete_response,
     mutation_response,
@@ -32,7 +43,6 @@ from apps.shared.http import (
     with_etag,
 )
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.slug_registry import slugify
@@ -96,7 +106,6 @@ async def _resolve_org_role(
 @router.post("")
 async def create_page(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     membership: CurrentMembership,
     repo: PageRepo,
@@ -112,12 +121,8 @@ async def create_page(
     if await repo.slug_taken(slug):
         raise HTTPException(status.HTTP_409_CONFLICT, "A page with this slug already exists")
     page = await repo.add(uuid.UUID(current_user.id), title, slug, content)
-    audit(
-        bg,
-        "pages.created",
-        user_id=current_user.id,
-        org_id=org_id,
-        slug=slug,
+    await bus.emit(
+        PageCreated(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=title)
     )
     if wants_json(request):
         return JSONResponse(PageRead.model_validate(page).model_dump(mode="json"), status_code=201)
@@ -127,7 +132,6 @@ async def create_page(
 @router.get("/new/edit")
 async def new_page(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     _membership: CurrentMembership,
     repo: PageRepo,
@@ -142,12 +146,8 @@ async def new_page(
         counter += 1
     title = "New page"
     await repo.add(uuid.UUID(current_user.id), title, slug, "")
-    audit(
-        bg,
-        "pages.created",
-        user_id=current_user.id,
-        org_id=org_id,
-        slug=slug,
+    await bus.emit(
+        PageCreated(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=title)
     )
     return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
 
@@ -177,7 +177,6 @@ async def edit_page(
 @router.patch("/{slug}")
 async def update_page(
     request: Request,
-    bg: BackgroundTasks,
     slug: str,
     current_user: CurrentUser,
     membership: CurrentMembership,
@@ -187,7 +186,7 @@ async def update_page(
 ) -> Response:
     page = await _editable_page(repo, slug, membership)
     body = await parse_body(request)
-    event = "pages.updated"
+    event_cls: type[PageEvent] = PageUpdated
     new_slug = body.get("slug")
     if new_slug is not None:
         normalized = slugify(str(new_slug)) or page.slug
@@ -197,7 +196,7 @@ async def update_page(
                     status.HTTP_409_CONFLICT, "A page with this slug already exists"
                 )
             page.slug = normalized
-            event = "pages.slug_changed"
+            event_cls = PageSlugChanged
     if body.get("content") is not None:
         page.content = str(body["content"])
     if body.get("title") is not None:
@@ -210,15 +209,9 @@ async def update_page(
                     status.HTTP_403_FORBIDDEN, "Only owners can change a page's visibility"
                 )
             page.visibility = visibility
-            event = _PUBLISH_EVENT[visibility]
+            event_cls = _PUBLISH_EVENT[visibility]
     await repo.save(page)
-    audit(
-        bg,
-        event,
-        user_id=current_user.id,
-        org_id=org_id,
-        slug=page.slug,
-    )
+    await bus.emit(event_cls(actor_id=current_user.id, org_id=str(org_id), slug=page.slug))
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
     # page so the save lands on visible, rendered output instead of a silent swap.
     return mutation_response(
@@ -232,7 +225,6 @@ async def update_page(
 @router.delete("/{slug}")
 async def delete_page(
     request: Request,
-    bg: BackgroundTasks,
     slug: str,
     current_user: CurrentUser,
     membership: CurrentMembership,
@@ -242,12 +234,8 @@ async def delete_page(
 ) -> Response:
     page = await _editable_page(repo, slug, membership)
     await repo.delete(page)
-    audit(
-        bg,
-        "pages.deleted",
-        user_id=current_user.id,
-        org_id=org_id,
-        slug=slug,
+    await bus.emit(
+        PageDeleted(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=page.title)
     )
     # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
     # from a list row (X-Skip-Redirect) stays put and removes just that row client-side.
@@ -257,17 +245,16 @@ async def delete_page(
     return delete_response(request, htmx_redirect_url=htmx_redirect_url)
 
 
-_PUBLISH_EVENT = {
-    PageVisibility.draft: "pages.unpublished",
-    PageVisibility.members: "pages.published_members",
-    PageVisibility.public: "pages.published_public",
+_PUBLISH_EVENT: dict[PageVisibility, type[PageEvent]] = {
+    PageVisibility.draft: PageUnpublished,
+    PageVisibility.members: PagePublishedMembers,
+    PageVisibility.public: PagePublishedPublic,
 }
 
 
 @router.post("/{slug}/visibility")
 async def set_visibility(
     request: Request,
-    bg: BackgroundTasks,
     slug: str,
     current_user: CurrentUser,
     membership: CurrentMembership,
@@ -282,12 +269,8 @@ async def set_visibility(
     visibility = _parse_visibility(str(body.get("visibility")))
     page.visibility = visibility
     await repo.save(page)
-    audit(
-        bg,
-        _PUBLISH_EVENT[visibility],
-        user_id=current_user.id,
-        org_id=org_id,
-        slug=slug,
+    await bus.emit(
+        _PUBLISH_EVENT[visibility](actor_id=current_user.id, org_id=str(org_id), slug=slug)
     )
     return mutation_response(
         request, obj=PageRead.model_validate(page), redirect_url=f"/{org.handle}/pages"

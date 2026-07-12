@@ -12,7 +12,8 @@
 ### technical
 
 - [ ] awareness, @citation, notification
-- [ ] better styleguide
+- [ ] dataclass or pydantic ?
+- [ ] better styleguide inspired by my apps and daisyui templates
 - [ ] event driven ? CQRS ?
 - [ ] Command Query Responsibility Segregation ?
 - [ ] no audit() for error/exception, logger instead

@@ -4,17 +4,18 @@ from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.calendar.contract.events import CalendarCreated, CalendarDeleted, CalendarUpdated
 from apps.calendar.domain.models import CalendarEvent, CalendarEventRead, format_event_time
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
+from apps.shared.bus import bus
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.audit import audit
 from apps.shared.page import fullpage_context
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -265,7 +266,6 @@ async def _reject(
 @router.post("")
 async def create_event(
     request: Request,
-    bg: BackgroundTasks,
     current_user: CurrentUser,
     session: RlsSession,
     repo: CalendarRepo,
@@ -294,12 +294,10 @@ async def create_event(
         location=str(body.get("location", "")),
         description=str(body.get("description", "")),
     )
-    audit(
-        bg,
-        "calendar.created",
-        user_id=current_user.id,
-        org_id=org_id,
-        event_id=str(event.id),
+    await bus.emit(
+        CalendarCreated(
+            actor_id=current_user.id, org_id=str(org_id), entity_id=str(event.id), label=title
+        )
     )
     if wants_json(request):
         return JSONResponse(
@@ -363,7 +361,6 @@ async def edit_event_form(
 @router.api_route("/{event_id}", methods=["PATCH", "POST"])
 async def update_event(
     request: Request,
-    bg: BackgroundTasks,
     event_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
@@ -397,12 +394,13 @@ async def update_event(
     if body.get("description") is not None:
         event.description = str(body["description"])
     await repo.save(event)
-    audit(
-        bg,
-        "calendar.updated",
-        user_id=current_user.id,
-        org_id=org_id,
-        event_id=str(event.id),
+    await bus.emit(
+        CalendarUpdated(
+            actor_id=current_user.id,
+            org_id=str(org_id),
+            entity_id=str(event.id),
+            label=event.title,
+        )
     )
     if wants_json(request):
         return JSONResponse(CalendarEventRead.model_validate(event).model_dump(mode="json"))
@@ -412,7 +410,6 @@ async def update_event(
 @router.delete("/{event_id}")
 async def delete_event(
     request: Request,
-    bg: BackgroundTasks,
     event_id: uuid.UUID,
     current_user: CurrentUser,
     repo: CalendarRepo,
@@ -422,11 +419,12 @@ async def delete_event(
     event = await repo.get(event_id)
     if event is not None:
         await repo.delete(event)
-        audit(
-            bg,
-            "calendar.deleted",
-            user_id=current_user.id,
-            org_id=org_id,
-            event_id=str(event_id),
+        await bus.emit(
+            CalendarDeleted(
+                actor_id=current_user.id,
+                org_id=str(org_id),
+                entity_id=str(event_id),
+                label=event.title,
+            )
         )
     return delete_response(request, htmx_redirect_url=f"/{org.handle}/calendar")
