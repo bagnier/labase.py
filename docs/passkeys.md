@@ -17,7 +17,7 @@ Passwordless, phishing-resistant sign-in on GoTrue's **beta** passkeys API
   access token lives in an httpOnly cookie the JS cannot read.
 - **Login page**: "Use a passkey" button → discoverable-credential sign-in
   (`/auth/passkeys/options` + `/verify`), session cookies issued on success,
-  `auth.passkey_signed_in` audited.
+  `auth.passkey_signed_in` recorded as a business event.
 - GoTrue enforces the ceremonies, challenge replay protection, and requires an
   AAL2 session to add/remove a passkey when the user has 2FA enabled.
 

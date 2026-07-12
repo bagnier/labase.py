@@ -1,4 +1,4 @@
-"""The dashboard "Recent activity" timeline — the org's own audit trail, labels only."""
+"""The dashboard "Recent activity" timeline — the org's own business events, labels only."""
 
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.organizations.tests.given_helpers import orgs_for_user

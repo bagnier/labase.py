@@ -17,17 +17,17 @@ class LogsApiMixin(ApiBase):
         as_admin()
 
     # ── seeding (through the real write paths) ────────────────────────────────
-    def _add_audit(self, model: BusinessEventLog) -> None:
+    def _add_event(self, model: BusinessEventLog) -> None:
         async def _do(s):
             s.add(model)
 
         self.run(db.seed_fixtures(_do))
 
-    def seed_audit_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
-        self._add_audit(seed_data.audit_model(event, org=logs_org_id(org), when=when))
+    def seed_event_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
+        self._add_event(seed_data.event_model(event, org=logs_org_id(org), when=when))
 
-    def seed_audit_by_user(self, event: str, email: str) -> None:
-        self._add_audit(seed_data.audit_model(event, user=logs_user_id(email)))
+    def seed_event_by_user(self, event: str, email: str) -> None:
+        self._add_event(seed_data.event_model(event, user=logs_user_id(email)))
 
     def _append_request(
         self,
@@ -71,10 +71,10 @@ class LogsApiMixin(ApiBase):
         # In-process: the API driver shares the running app, so this is the live firehose level.
         apply_log_level(level)
 
-    def seed_correlated_request(self, request_id: str, org: str, audit: str, error: str) -> None:
+    def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
         oid = logs_org_id(org)
         self._append_request("request.finished", org=oid, request_id=request_id)
-        self._add_audit(seed_data.audit_model(audit, org=oid, request_id=request_id))
+        self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
         self._insert_error(error, org=oid, request_id=request_id)
 
     # ── reads ────────────────────────────────────────────────────────────────
@@ -172,10 +172,10 @@ class LogsApiMixin(ApiBase):
         assert a in events and b in events, f"{a!r}/{b!r} not both listed: {events}"
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
-    def assert_activity(self, date: str, audit: int, request: int, issue: int) -> None:
+    def assert_activity(self, date: str, event: int, request: int, issue: int) -> None:
         assert self.response is not None
         act = self.response.json()["activity"].get(date, {})
-        assert act.get("event", 0) == audit, f"activity {date} event: {act}"
+        assert act.get("event", 0) == event, f"activity {date} event: {act}"
         assert act.get("request", 0) == request, f"activity {date} request: {act}"
         assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
 

@@ -61,7 +61,7 @@ def _parse_ts(value: Any) -> datetime:
 
 def append_firehose(record: dict[str, Any]) -> None:
     """Append one event as a JSON line to its day's file. Best-effort: a firehose write must
-    never break the request that logged it (matches the audit/metrics doctrine)."""
+    never break the request that logged it (matches the business-event/metrics doctrine)."""
     when = _parse_ts(record.get("timestamp"))
     line = json.dumps(record, default=str)
     try:

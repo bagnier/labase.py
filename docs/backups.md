@@ -11,7 +11,7 @@ tracking are the `apps/metrics` and `apps/issues` bricks.
 | App tables (orgs, todos, pages, …) | Postgres `public` schema | yes |
 | Auth users, identities, MFA factors | Postgres `auth` schema (GoTrue) | yes |
 | Uploaded files (org files, avatars) | Supabase **Storage** — metadata in Postgres (`storage.objects`), **bytes in object storage** | metadata only — the bytes are NOT in any SQL dump |
-| App settings, audit trail, task queue, metrics, issues | Postgres `public` schema | yes |
+| App settings, business events, task queue, metrics, issues | Postgres `public` schema | yes |
 | Secrets (`.env`, SMTP, service keys) | env files / your secret store | no — keep them in your secret manager, they are not data |
 
 The one trap: **Storage bytes are outside Postgres**. A database-only restore

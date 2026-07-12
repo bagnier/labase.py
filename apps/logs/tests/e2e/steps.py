@@ -8,19 +8,19 @@ def _date(value: str) -> datetime:
 
 
 # ── Seeding ──────────────────────────────────────────────────────────────────
-@given(parsers.parse('an audit log entry "{event}" from org "{org}"'))
-def step_seed_audit_org(driver, event, org):
-    driver.seed_audit_from_org(event, org)
+@given(parsers.parse('a business event "{event}" from org "{org}"'))
+def step_seed_event_org(driver, event, org):
+    driver.seed_event_from_org(event, org)
 
 
-@given(parsers.parse('an audit log entry "{event}" from org "{org}" recorded on "{date}"'))
-def step_seed_audit_org_dated(driver, event, org, date):
-    driver.seed_audit_from_org(event, org, when=_date(date))
+@given(parsers.parse('a business event "{event}" from org "{org}" recorded on "{date}"'))
+def step_seed_event_org_dated(driver, event, org, date):
+    driver.seed_event_from_org(event, org, when=_date(date))
 
 
-@given(parsers.parse('an audit log entry "{event}" attributed to "{email}"'))
-def step_seed_audit_user(driver, event, email):
-    driver.seed_audit_by_user(event, email)
+@given(parsers.parse('a business event "{event}" attributed to "{email}"'))
+def step_seed_event_user(driver, event, email):
+    driver.seed_event_by_user(event, email)
 
 
 # Anchored regex (not parse): the "at level" variants below share this prefix, and parse's
@@ -58,11 +58,11 @@ def step_seed_error_leveled(driver, event, level, org):
 @given(
     parsers.parse(
         'request "{rid}" in org "{org}" recorded a request log, '
-        'an audit event "{audit}", and a captured error "{error}"'
+        'a business event "{event}", and a captured error "{error}"'
     )
 )
-def step_seed_correlated(driver, rid, org, audit, error):
-    driver.seed_correlated_request(rid, org, audit, error)
+def step_seed_correlated(driver, rid, org, event, error):
+    driver.seed_correlated_request(rid, org, event, error)
 
 
 @given(parsers.parse('the log level is "{level}"'))
@@ -70,9 +70,9 @@ def step_log_level_is(driver, level):
     driver.set_process_log_level(level)
 
 
-@given(parsers.parse('an audit event "{event}" is recorded in org "{org}"'))
-def step_audit_event_recorded(driver, event, org):
-    driver.seed_audit_from_org(event, org)
+@given(parsers.parse('a business event "{event}" is recorded in org "{org}"'))
+def step_event_recorded(driver, event, org):
+    driver.seed_event_from_org(event, org)
 
 
 # ── Filtering / sorting ──────────────────────────────────────────────────────
@@ -153,10 +153,12 @@ def step_entry_above(driver, a, b):
 
 
 @then(
-    parsers.parse('the request entry, the audit "{audit}", and the error "{error}" are all listed')
+    parsers.parse(
+        'the request entry, the business event "{event}", and the error "{error}" are all listed'
+    )
 )
-def step_correlated_all_listed(driver, audit, error):
-    driver.assert_all_listed("request.finished", audit, error)
+def step_correlated_all_listed(driver, event, error):
+    driver.assert_all_listed("request.finished", event, error)
 
 
 @then(parsers.parse("{n:d} request entry is listed"))
@@ -181,11 +183,11 @@ def step_csv_export(driver, needle):
 
 @then(
     parsers.parse(
-        'the activity for "{date}" shows {audit:d} audit, {request:d} request, and {issue:d} issue'
+        'the activity for "{date}" shows {event:d} event, {request:d} request, and {issue:d} issue'
     )
 )
-def step_activity(driver, date, audit, request, issue):
-    driver.assert_activity(date, audit, request, issue)
+def step_activity(driver, date, event, request, issue):
+    driver.assert_activity(date, event, request, issue)
 
 
 # ── Access + empty state ─────────────────────────────────────────────────────

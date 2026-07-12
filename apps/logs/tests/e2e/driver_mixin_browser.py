@@ -17,14 +17,14 @@ class LogsBrowserMixin(BrowserBase):
 
     def _run_seed(self, fn) -> None:
         # ``_seed`` (learning mixin) commits fixtures on a fresh session — the browser driver has
-        # no shared rolled-back transaction, so audit rows must be committed and are scrubbed by
+        # no shared rolled-back transaction, so event rows must be committed and are scrubbed by
         # the per-scenario isolation fixture + browser teardown.
         seed = getattr(self, "_seed", None)
         assert seed is not None
         seed(fn)
 
     # ── seeding (through the real write paths) ────────────────────────────────
-    def _add_audit(self, model: BusinessEventLog) -> None:
+    def _add_event(self, model: BusinessEventLog) -> None:
         async def _do(s):
             s.add(model)
 
@@ -45,11 +45,11 @@ class LogsBrowserMixin(BrowserBase):
 
         self._run_seed(_do)
 
-    def seed_audit_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
-        self._add_audit(seed_data.audit_model(event, org=logs_org_id(org), when=when))
+    def seed_event_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
+        self._add_event(seed_data.event_model(event, org=logs_org_id(org), when=when))
 
-    def seed_audit_by_user(self, event: str, email: str) -> None:
-        self._add_audit(seed_data.audit_model(event, user=logs_user_id(email)))
+    def seed_event_by_user(self, event: str, email: str) -> None:
+        self._add_event(seed_data.event_model(event, user=logs_user_id(email)))
 
     def seed_request_from_org(
         self, event: str, org: str, *, level: str = "info", when: datetime | None = None
@@ -65,12 +65,12 @@ class LogsBrowserMixin(BrowserBase):
         # The browser app runs in-process, so this is the live firehose level.
         apply_log_level(level)
 
-    def seed_correlated_request(self, request_id: str, org: str, audit: str, error: str) -> None:
+    def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
         oid = logs_org_id(org)
         append_firehose(
             seed_data.firehose_record("request.finished", org=oid, request_id=request_id)
         )
-        self._add_audit(seed_data.audit_model(audit, org=oid, request_id=request_id))
+        self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
         self._insert_error(error, org=oid, request_id=request_id)
 
     # ── navigation / filters (follow links, submit the real form) ─────────────
@@ -201,10 +201,10 @@ class LogsBrowserMixin(BrowserBase):
         missing = [e for e in events if e not in listed]
         assert not missing, f"{missing!r} not all listed in {listed}"
 
-    def assert_activity(self, date: str, audit: int, request: int, issue: int) -> None:
+    def assert_activity(self, date: str, event: int, request: int, issue: int) -> None:
         raw = self.page.locator("[data-activity]").first.get_attribute("data-activity")
         act = json.loads(raw or "{}").get(date, {})
-        assert act.get("event", 0) == audit, f"activity {date} event: {act}"
+        assert act.get("event", 0) == event, f"activity {date} event: {act}"
         assert act.get("request", 0) == request, f"activity {date} request: {act}"
         assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
 

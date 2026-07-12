@@ -1,6 +1,6 @@
 """Transactional email: `Mailer` port + SMTP adapter + `email.send` queue topic.
 
-Sending never blocks a mutation — but unlike auditing it is not fire-and-forget:
+Sending never blocks a mutation — but unlike a business-event write it is not fire-and-forget:
 callers outbox the mail with :func:`enqueue_email` through their own session, so
 the task exists iff the business transaction commits, and the ``TaskWorker``
 delivers it with the queue's retry-then-park semantics. The process-wide mailer

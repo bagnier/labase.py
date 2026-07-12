@@ -82,7 +82,7 @@ class ErrorGroupRepository:
     async def events(
         self, group_id: int, before_id: int | None = None, limit: int = 20
     ) -> tuple[list[ErrorEvent], int | None]:
-        """Newest-first cursor page of a group's events (audit-viewer pattern)."""
+        """Newest-first cursor page of a group's events (log-viewer pattern)."""
         query = (
             select(ErrorEvent)
             .where(ErrorEvent.group_id == group_id)

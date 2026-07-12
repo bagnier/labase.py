@@ -1,4 +1,4 @@
-"""The profile "Recent activity" timeline — the user's own audit trail, labels only."""
+"""The profile "Recent activity" timeline — the user's own business events, labels only."""
 
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.shared.observability.business_events import insert_business_event

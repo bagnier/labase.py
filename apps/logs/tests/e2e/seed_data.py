@@ -38,7 +38,7 @@ def _uuid(value: str | None) -> uuid.UUID | None:
     return uuid.UUID(value) if value else None
 
 
-def audit_model(
+def event_model(
     event: str,
     *,
     org: str | None = None,

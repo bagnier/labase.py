@@ -13,7 +13,7 @@ Feature: Unified logs
   # Unified timeline
 
   Scenario: The logs screen gathers every source in one timeline
-    Given an audit log entry "todo.created" from org "Acme"
+    Given a business event "todo.created" from org "Acme"
     And a request log entry "request.finished" from org "Acme"
     And an error log entry "ValueError: boom" from org "Acme"
     And a server admin is signed in as "root@example.com"
@@ -30,15 +30,15 @@ Feature: Unified logs
   # Filtering
 
   Scenario: An admin filters the logs by organisation
-    Given an audit log entry "todo.created" from org "Acme"
-    And an audit log entry "todo.deleted" from org "Globex"
+    Given a business event "todo.created" from org "Acme"
+    And a business event "todo.deleted" from org "Globex"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by org "Acme"
     Then the entry "todo.created" is listed
     And the entry "todo.deleted" is not listed
 
   Scenario: An admin filters the logs by source
-    Given an audit log entry "todo.created" from org "Acme"
+    Given a business event "todo.created" from org "Acme"
     And a request log entry "request.finished" from org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by source "event"
@@ -46,8 +46,8 @@ Feature: Unified logs
     And the entry "request.finished" is not listed
 
   Scenario: An admin filters the logs by app
-    Given an audit log entry "todo.created" from org "Acme"
-    And an audit log entry "calendar.event_created" from org "Acme"
+    Given a business event "todo.created" from org "Acme"
+    And a business event "calendar.event_created" from org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by app "todo"
     Then the entry "todo.created" is listed
@@ -62,7 +62,7 @@ Feature: Unified logs
     And the entry "request.finished" is not listed
 
   Scenario: An admin searches the logs by free text
-    Given an audit log entry "todo.created" from org "Acme"
+    Given a business event "todo.created" from org "Acme"
     And a request log entry "request.finished" from org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin searches the logs for "todo.created"
@@ -70,8 +70,8 @@ Feature: Unified logs
     And the entry "request.finished" is not listed
 
   Scenario: An admin filters the logs by user
-    Given an audit log entry "todo.created" attributed to "alice@example.com"
-    And an audit log entry "todo.deleted" attributed to "bob@example.com"
+    Given a business event "todo.created" attributed to "alice@example.com"
+    And a business event "todo.deleted" attributed to "bob@example.com"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by user "alice@example.com"
     Then the entry "todo.created" is listed
@@ -79,8 +79,8 @@ Feature: Unified logs
 
   Scenario: An admin filters the logs by date range
     Given the current date is "2026-06-26"
-    And an audit log entry "todo.created" from org "Acme" recorded on "2026-06-20"
-    And an audit log entry "todo.deleted" from org "Acme" recorded on "2026-06-25"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-20"
+    And a business event "todo.deleted" from org "Acme" recorded on "2026-06-25"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs to dates from "2026-06-24" to "2026-06-26"
     Then the entry "todo.deleted" is listed
@@ -88,26 +88,26 @@ Feature: Unified logs
 
   # Correlation
 
-  Scenario: One request correlates its request, audit and error entries
-    Given request "r-100" in org "Acme" recorded a request log, an audit event "todo.created", and a captured error "ValueError: boom"
+  Scenario: One request correlates its request, event and error entries
+    Given request "r-100" in org "Acme" recorded a request log, a business event "todo.created", and a captured error "ValueError: boom"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by request "r-100"
-    Then the request entry, the audit "todo.created", and the error "ValueError: boom" are all listed
+    Then the request entry, the business event "todo.created", and the error "ValueError: boom" are all listed
 
   # Sorting
 
   Scenario: Entries are listed newest first by default
     Given the current date is "2026-06-26"
-    And an audit log entry "todo.created" from org "Acme" recorded on "2026-06-24"
-    And an audit log entry "todo.deleted" from org "Acme" recorded on "2026-06-26"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-24"
+    And a business event "todo.deleted" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
     Then "todo.deleted" is listed above "todo.created"
 
   Scenario: An admin sorts the entries by a column
     Given the current date is "2026-06-26"
-    And an audit log entry "todo.created" from org "Acme" recorded on "2026-06-24"
-    And an audit log entry "todo.deleted" from org "Acme" recorded on "2026-06-26"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-24"
+    And a business event "todo.deleted" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin sorts the logs by "event" ascending
     Then "todo.created" is listed above "todo.deleted"
@@ -115,8 +115,8 @@ Feature: Unified logs
   # Export
 
   Scenario: An admin exports the filtered logs as NDJSON
-    Given an audit log entry "todo.created" from org "Acme"
-    And an audit log entry "todo.deleted" from org "Globex"
+    Given a business event "todo.created" from org "Acme"
+    And a business event "todo.deleted" from org "Globex"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by org "Acme"
     And the admin exports the filtered logs as NDJSON
@@ -124,7 +124,7 @@ Feature: Unified logs
     And the export does not contain "todo.deleted"
 
   Scenario: An admin exports the filtered logs as CSV
-    Given an audit log entry "todo.created" from org "Acme"
+    Given a business event "todo.created" from org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin exports the filtered logs as CSV
     Then the CSV export has a header row and lists "todo.created"
@@ -144,9 +144,9 @@ Feature: Unified logs
 
   # Contribution independent of the log level
 
-  Scenario: Audit events reach the unified log even at WARNING level
+  Scenario: Business events reach the unified log even at WARNING level
     Given the log level is "WARNING"
-    And an audit event "todo.created" is recorded in org "Acme"
+    And a business event "todo.created" is recorded in org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
     Then the entry "todo.created" is listed with source "event"
@@ -155,31 +155,31 @@ Feature: Unified logs
 
   Scenario: The activity graph sums each source over time
     Given the current date is "2026-06-26"
-    And an audit log entry "todo.created" from org "Acme" recorded on "2026-06-26"
-    And an audit log entry "todo.deleted" from org "Acme" recorded on "2026-06-26"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-26"
+    And a business event "todo.deleted" from org "Acme" recorded on "2026-06-26"
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-26"
     And an error log entry "ValueError: boom" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then the activity for "2026-06-26" shows 2 audit, 1 request, and 1 issue
+    Then the activity for "2026-06-26" shows 2 event, 1 request, and 1 issue
 
   Scenario: The activity graph follows the organisation filter
     Given the current date is "2026-06-26"
-    And an audit log entry "todo.created" from org "Acme" recorded on "2026-06-26"
-    And an audit log entry "todo.deleted" from org "Globex" recorded on "2026-06-26"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-26"
+    And a business event "todo.deleted" from org "Globex" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by org "Acme"
-    Then the activity for "2026-06-26" shows 1 audit, 0 request, and 0 issue
+    Then the activity for "2026-06-26" shows 1 event, 0 request, and 0 issue
 
   Scenario: The graph and table stay in sync on the selected period
     Given the current date is "2026-06-26"
-    And an audit log entry "todo.created" from org "Acme" recorded on "2026-06-22"
-    And an audit log entry "todo.deleted" from org "Acme" recorded on "2026-06-26"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-22"
+    And a business event "todo.deleted" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs to dates from "2026-06-25" to "2026-06-26"
     Then the entry "todo.deleted" is listed
     And the entry "todo.created" is not listed
-    And the activity for "2026-06-26" shows 1 audit, 0 request, and 0 issue
+    And the activity for "2026-06-26" shows 1 event, 0 request, and 0 issue
 
   # Recent window
 

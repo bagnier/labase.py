@@ -58,8 +58,8 @@ deleting an app removes every trace of it.
 console, declares its admin-tunable settings there, and can be switched on or off at
 runtime — a disabled app disappears everywhere but stays visible to admins for
 re-enabling. Beyond per-app stats, the console ships the operational screens:
-accounts (disable, delete, impersonate — bannered and audited), the audit viewer,
-error issues, load metrics, and runtime log level.
+accounts (disable, delete, impersonate — bannered and recorded), the business-events
+browser, the unified logs viewer, error issues, load metrics, and runtime log level.
 
 **The database enforces isolation.** Row-level security, versioned as plain SQL
 migrations, is the single source of truth for who sees what. Python never re-implements
@@ -67,8 +67,8 @@ isolation for authenticated access.
 
 **Observability is built in.** Structured, machine-readable logs correlated per
 request; every domain event on the bus is logged; sensitive business actions are
-audited to an append-only trail, browsable in the admin console. Auditing is
-best-effort by doctrine — it never blocks a mutation.
+recorded as typed events to an append-only trail, browsable in the admin console. The
+write is best-effort by doctrine — it never blocks a mutation.
 
 **Tests are sincere.** The same plain-language scenarios run twice — over real HTTP and
 through a real browser — against a real database. Nothing business-critical is mocked;
@@ -220,17 +220,19 @@ Five layers, all wired by default:
 - **Request correlation** — the `RequestLogger` middleware binds a `request_id`
   (contextvars), so every log line of a request correlates automatically. Every domain
   event emitted through the bus is logged too (with sensitive fields redacted).
-- **Audit trail** — sensitive business actions go through `record_audit_event`: logged
-  immediately, then persisted to the append-only `audit_logs` table as a background
-  task. The admin console ships an **audit viewer** with cursor pagination. Auditing is
-  best-effort by doctrine: a lost audit write never blocks or fails a mutation.
+- **Business events** — sensitive business actions are emitted as typed `BusinessEvent`
+  dataclasses on the bus; a persistence subscriber records each to the append-only
+  `business_events` table (RLS-scoped: members read their own and their orgs' events). The
+  profile and dashboard show a per-user/per-org timeline, and the console **Business events**
+  screen browses them per app. The write is best-effort by doctrine: fire-and-forget, so a lost
+  write never blocks or fails the mutation.
 - **Load metrics** — every request feeds a shared accumulator, exposed as a Prometheus
   `/metrics` endpoint and persisted per minute by `apps/metrics`; the console **Load**
   screen graphs it, and a daily rollup downsamples minute → hour and applies retention.
 - **Error tracking** — unhandled 500s and event-bus failures emit `ExceptionCaptured`;
   `apps/issues` groups events by stack fingerprint into issues with a lifecycle
   (open → resolved → regressed on a later version), browsable in the console.
-  Best-effort like auditing: a failing tracker never worsens the failure it tracks.
+  Best-effort like the business-events trail: a failing tracker never worsens what it tracks.
 
 ### Conventions
 
@@ -305,7 +307,7 @@ labase.py/
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations
 │   ├── profile/           # User profile
 │   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav
-│   ├── settings/          # App settings / SaaS admin console (stats, settings, audit viewer)
+│   ├── settings/          # App settings / SaaS admin console (stats, settings, business events)
 │   ├── issues/            # Error tracking (Sentry-as-Postgres): fingerprint-grouped issues
 │   ├── metrics/           # Load metrics: /metrics Prometheus endpoint + console Load screen
 │   ├── public/            # Public landing pages + public org pages (/{org_handle}/{slug})

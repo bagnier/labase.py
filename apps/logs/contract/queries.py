@@ -1,6 +1,6 @@
 """Aggregate read queries other contexts may ask of the logs timeline.
 
-The underlying sources (audit trail, error events) are admin-only tables — RLS grants
+The underlying sources (business-events trail, error events) are admin-only tables — RLS grants
 no member read — so these run on the admin session, hard-scope the ``org_id`` filter
 in code, and return **aggregates only** (day/source counts, never rows): what an org
 member may see about their own org's pulse without opening the admin timeline.

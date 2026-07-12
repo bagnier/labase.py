@@ -47,7 +47,7 @@ Sincere E2E against real Google/GitHub is impossible, so coverage is split
 4. Switch `oauth_github_enabled` on in `/console/users`.
 5. Sign out, open `/auth/login`, click **Continue with Github** and complete the
    provider consent. You must land signed-in on `/profile`, with a personal org
-   on first visit, and an `auth.oauth_signed_in` audit event.
+   on first visit, and an `auth.oauth_signed_in` business event.
 6. Merge check: register the same email with a password first, verify it, then
    sign in via the provider — `auth.identities` gains a second row for the same
    user, no duplicate account.

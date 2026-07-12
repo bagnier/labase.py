@@ -1,8 +1,8 @@
 """How the issues context (error tracking) plugs into the running app.
 
 Subscribes to shared's ``ExceptionCaptured`` (500 handler + event-bus failures),
-groups events by stack fingerprint, and serves the console screen. Audit
-doctrine verbatim: persistence is best-effort through collect()'s log-and-skip
+groups events by stack fingerprint, and serves the console screen. Best-effort
+doctrine verbatim: persistence goes through collect()'s log-and-skip
 semantics — a failing tracker never worsens the failure it is tracking.
 
 NOTE: mounted BEFORE the console context so its /console/issues routes register

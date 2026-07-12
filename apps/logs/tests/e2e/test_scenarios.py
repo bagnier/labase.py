@@ -6,7 +6,7 @@ from apps.shared.observability.firehose import clear_firehose
 from apps.shared.observability.logging import apply_log_level
 from tests.e2e import cleanup
 
-# Audit/issue rows are persisted through a background admin session that commits outside the
+# Business-event/issue rows are persisted through a background admin session that commits outside
 # API driver's rolled-back transaction, so they leak across scenarios (the browser driver
 # already truncates between scenarios). The unified logs feature is the first to *read* these
 # tables, so scrub them before each scenario to keep the timeline hermetic. The firehose lives

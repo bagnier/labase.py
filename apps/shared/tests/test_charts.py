@@ -8,10 +8,10 @@ from apps.shared.charts import day_buckets_series, sparkline
 def test_day_buckets_series_fills_quiet_days_with_zero():
     today = date(2026, 7, 11)
     config = day_buckets_series(
-        {today.isoformat(): {"audit": 3}}, days=5, end=today, names={"audit": "Audit"}
+        {today.isoformat(): {"event": 3}}, days=5, end=today, names={"event": "Events"}
     )
     assert config["type"] == "bar"
-    assert config["series"] == [{"name": "Audit", "data": [0, 0, 0, 0, 3]}]
+    assert config["series"] == [{"name": "Events", "data": [0, 0, 0, 0, 3]}]
     assert len(config["options"]["xaxis"]["categories"]) == 5
     assert config["options"]["chart"]["stacked"] is True
 
