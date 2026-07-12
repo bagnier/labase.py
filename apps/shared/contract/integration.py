@@ -28,6 +28,7 @@ from apps.shared.http.static import CachingStaticFiles
 from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
+from apps.shared.preflight import enforce_at_boot
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
 
 PHASE = MountPhase.FOUNDATION
@@ -38,6 +39,7 @@ _STATIC_DIR = Path(__file__).parents[3] / "static"
 def mount(host: Host) -> None:
     setup_logging()
     settings = get_technical_settings()
+    enforce_at_boot(settings)  # refuse to boot on an unsafe production config
     app = host.app
 
     app.exception_handler(RateLimitExceeded)(handle_rate_limit)

@@ -103,30 +103,29 @@ runtime, c'est le **chemin vers la prod et l'exploitation**.
 
 #### P0 — bloquant pour un premier déploiement client
 
-- [ ] **`docker/docker-compose.prod.yml`** — le compose actuel est dev-only. Prod : `restart:
-  unless-stopped`, `healthcheck` branché sur la sonde readiness de `health/`, limites
-  CPU/mémoire, worker séparé si le `TaskWorker` sort du process web.
-- [ ] **Terminaison TLS + reverse proxy** — Hypercorn accepte des certs en env mais ce n'est pas
-  un plan de prod. Caddy devant (TLS auto Let's Encrypt, une ligne) ou déploiement derrière une
-  plateforme managée. HSTS existe déjà côté app → soumettre le domaine au **preload**.
-  (cf. Supabase « SSL enforcement » pour le lien app→DB.)
-- [ ] **`make preflight`** — gate qui refuse de booter en prod si la config est dangereuse :
-  `COOKIES_SECURE=false`, debug on, secret faible/par défaut, CORS `*`, CSP permissive. Profil
-  prod via `LABASE_ENV=production` dans `apps/shared/config.py` (Pydantic valide déjà à l'import).
-  = le `check --deploy` de cookiecutter.
-- [ ] **Pooling via Supavisor** — le piège Supabase : asyncpg en direct épuise la limite de
-  connexions sous charge. Router l'app par Supavisor (mode transaction) + documenter le sizing
-  du pool asyncpg. (cf. « Supavisor » / « Dedicated Poolers » plus bas.)
-- [ ] **Flux de migration en prod** — cadrer `supabase db push` : forward-only, revue, discipline
-  zéro-downtime (pas de `DROP`/`NOT NULL` brutal sur table vivante), migration jouée **dans** le
-  pipeline de deploy, pas à la main.
-- [ ] **Backup du Storage** — trou connu (`docs/backups.md` : les octets Storage ne sont pas dans
-  le dump SQL). Job de sauvegarde des buckets. Seul vrai risque de perte de données.
-- [ ] **Arrêt gracieux** — draining sur SIGTERM : finir les requêtes en vol + relâche propre des
-  locks `FOR UPDATE SKIP LOCKED` du `TaskWorker`, pour des deploys sans 502.
-- [ ] **Doc secrets prod** — documenter l'injection via le secret store de la plateforme
-  (rappel : `.env` n'est **pas** commité, seul `.env.test` l'est). Recoupe « prod deployment doc
-  (secrets, env) » ci-dessus.
+→ implémenté 2026-07-12, runbook complet dans [docs/production.md](docs/production.md).
+Non testé en local (toolchain 3.14 absente du conteneur) : lancer `make finalize` avant deploy.
+
+- [x] **`docker/docker-compose.prod.yml`** — compose de prod : `restart: unless-stopped`,
+  `healthcheck` (python, pas curl — l'image slim n'a pas curl) sur `/health/ready`, limites
+  CPU/mémoire, `stop_grace_period: 30s`.
+- [x] **Terminaison TLS + reverse proxy** — `docker/Caddyfile` : Caddy devant, TLS auto
+  Let's Encrypt (`DOMAIN`/`ACME_EMAIL` en env). HSTS déjà côté app → reste à soumettre au
+  **preload** (opérationnel). (cf. Supabase « SSL enforcement » pour le lien app→DB.)
+- [x] **`make preflight`** — gate `apps/shared/preflight.py` : refuse de booter en prod
+  (`ENVIRONMENT`/`LABASE_ENV=production`) si `COOKIES_SECURE=false`, CORS `*`, DB en localhost,
+  secret trop court ; warnings sinon. Enforce au boot **et** en CLI. (Durcissement CSP → P1,
+  la CSP est une constante, pas un réglage.) = le `check --deploy` de cookiecutter.
+- [x] **Pooling via Supavisor** — documenté dans docs/production.md (URLs via le pooler en mode
+  transaction + sizing du pool asyncpg). Routage = config opérateur. (cf. « Supavisor » plus bas.)
+- [x] **Flux de migration en prod** — cadré dans docs/production.md : forward-only, discipline
+  expand→migrate→contract, `supabase db push` joué dans le pipeline, RLS dans la migration.
+- [x] **Backup du Storage** — `scripts/backup_storage.py` + `make backup-storage` : miroir complet
+  du bucket (récursif) sur disque. Reste à planifier (cron) + drill de restauration → P2.
+- [x] **Arrêt gracieux** — `--graceful-timeout` (Hypercorn) dans `entrypoint.sh` + `stop_grace_period`
+  compose ; le `TaskWorker` relâchait déjà ses locks proprement sur `stop()`.
+- [x] **Doc secrets prod** — docs/production.md : injection via `env_file`/secret store, table des
+  variables minimales (rappel : `.env` n'est **pas** commité, seul `.env.test` l'est).
 
 #### P1 — juste après le premier deploy
 

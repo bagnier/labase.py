@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -133,6 +133,18 @@ upgrade-base:
 # accepts TCP but multiplies every round-trip — see scripts/doctor.py).
 doctor:
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/doctor.py
+
+# --- Production ---
+# preflight: production config safety gate. Point it at the prod env file; exits
+# non-zero on any blocking error, so it can gate a deploy. Docs: docs/production.md.
+#   make preflight ENV_FILE=.env.production
+preflight:
+	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/preflight.py
+
+# backup-storage: mirror the Supabase Storage bucket to disk (bytes aren't in SQL dumps).
+#   make backup-storage DEST=/backups/storage ENV_FILE=.env.production
+backup-storage:
+	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/backup_storage.py --dest $(if $(DEST),$(DEST),backups/storage)
 
 # --- Tests ---
 # The suite normally runs in ~100s; way beyond that means the environment is

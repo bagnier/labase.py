@@ -8,7 +8,7 @@ editable from the console at runtime.
 import os
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +23,12 @@ class TechnicalSettings(BaseSettings):
     supabase_database_user_url: str
     supabase_database_admin_url: str = ""
     supabase_database_schema: str = "public"
+    # Deployment environment. "production" activates the boot-time preflight gate
+    # (apps/shared/preflight.py). Accepts either ENVIRONMENT or LABASE_ENV.
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ENVIRONMENT", "LABASE_ENV"),
+    )
     log_debug: bool = False
     # Firehose: structlog events are rendered to stdout AND appended to per-day JSON files
     # under this directory, giving the unified logs viewer a recent window to read back.
@@ -68,6 +74,10 @@ class TechnicalSettings(BaseSettings):
         if not self.supabase_storage_url:
             self.supabase_storage_url = self.supabase_api_url
         return self
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() == "production"
 
 
 @lru_cache

@@ -1,0 +1,61 @@
+# Production topology: the app (Hypercorn) behind Caddy (automatic HTTPS).
+# Secrets come from an uncommitted production env file — never baked into the image.
+#
+#   ENV_FILE=../.env.production DOMAIN=app.example.com ACME_EMAIL=ops@example.com \
+#     docker compose -f docker/docker-compose.prod.yml up -d --build
+#
+# Full runbook: docs/production.md.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-../.env.production}
+    environment:
+      # Activates the boot-time preflight gate (apps/shared/preflight.py).
+      ENVIRONMENT: production
+      # Git SHA, so error-tracking regression detection works across deploys.
+      APP_VERSION: ${APP_VERSION:-dev}
+      # Seconds to drain in-flight requests on SIGTERM (see stop_grace_period).
+      GRACEFUL_TIMEOUT: ${GRACEFUL_TIMEOUT:-25}
+    expose:
+      - "8000"
+    stop_grace_period: 30s
+    healthcheck:
+      # python (not curl): the slim image ships no curl.
+      test:
+        - CMD
+        - python
+        - -c
+        - import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready').status == 200 else 1)
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to your public hostname}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ../docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
