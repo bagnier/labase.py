@@ -23,6 +23,8 @@ from apps.organizations.contract.events import (
     MemberRemoved,
     MemberRoleChanged,
     OrganizationCreated,
+    OrganizationRenamed,
+    OrgHandleChanged,
 )
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.organizations.contract.settings_sections import OrgSettingsSectionQuery
@@ -346,6 +348,11 @@ async def rename_organization(
             request, "organizations/settings.html", ctx, status_code=422
         )
     await repo.rename(org, name)
+    await bus.emit(
+        OrganizationRenamed(
+            actor_id=current_user.id, org_id=str(org_id), entity_id=str(org_id), label=name
+        )
+    )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
     return RedirectResponse(url=f"/{org.handle}/settings?saved=1", status_code=303)
@@ -384,6 +391,11 @@ async def update_org_handle(
         response.headers["HX-Push-Url"] = "false"
         return response
     await repo.update_handle(org, handle)
+    await bus.emit(
+        OrgHandleChanged(
+            actor_id=current_user.id, org_id=str(org_id), entity_id=str(org_id), label=handle
+        )
+    )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
     return RedirectResponse(url=f"/{handle}/settings?saved=1", status_code=303)

@@ -11,6 +11,7 @@ from apps.console.contract.events import (
     LastAdminViolationBlocked,
     OrgOverrideRemoved,
     OrgOverrideSet,
+    ServerSettingChanged,
 )
 from apps.console.contract.overviews import SECTIONS, ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import admins, service, technical
@@ -437,7 +438,10 @@ async def update_setting(
     await session.commit()
 
     values = await repo.values(app)
+    # SettingsChanged is the config-propagation signal (cross-instance reload); ServerSettingChanged
+    # is the trail record of who changed which server-wide setting.
     await bus.emit(SettingsChanged(app, values))
+    await bus.emit(ServerSettingChanged(actor_id=current_user.id, app=app, key=key, value=stored))
     settings = service.settings_view(group, values)
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})

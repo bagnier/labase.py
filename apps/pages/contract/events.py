@@ -17,6 +17,9 @@ class PageEvent(BusinessEvent):
     entity: ClassVar[str] = "pages"
     icon: ClassVar[str] = "file-text"
     slug: str | None = None
+    # Every concrete page event is an EntityCreated/Updated/Deleted (all of which carry ``label``);
+    # declaring it on the shared base too lets a ``type[PageEvent]`` handler pass the page title.
+    label: str | None = None
 
     def __post_init__(self) -> None:
         # A page's stable id *is* its slug — mirror it into the systematic entity_id correlation

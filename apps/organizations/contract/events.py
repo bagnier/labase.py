@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityCreated
+from apps.shared.events import BusinessEvent, EntityCreated, EntityUpdated
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,22 @@ class OrgEvent(BusinessEvent):
 @dataclass(frozen=True, kw_only=True)
 class OrganizationCreated(OrgEvent, EntityCreated):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrganizationRenamed(OrgEvent, EntityUpdated):
+    """The org's display name changed — ``kind`` → ``"organizations.renamed"``. ``entity_id`` is
+    the org id, ``label`` the new name, so it joins the org's rows in the per-entity filter."""
+
+    verb: ClassVar[str] = "renamed"
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrgHandleChanged(OrgEvent, EntityUpdated):
+    """The org handle changed — rewrites every ``/{handle}/…`` URL, so it is a sensitive,
+    high-visibility change. ``label`` is the new handle."""
+
+    verb: ClassVar[str] = "handle_changed"
 
 
 @dataclass(frozen=True, kw_only=True)

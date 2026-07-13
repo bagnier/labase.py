@@ -211,28 +211,49 @@ singleton (`apps.shared.bus`) directly; `host.events` is that same bus, wired at
 
 ### Observability
 
-Five layers, all wired by default:
+**Two systems, one timeline.** A _business_ event ("something happened in the domain")
+and a _technical_ log ("a trace of the machinery") are different things, so they have
+different primitives — but the console's **Logs** screen merges them into one correlated
+timeline, filterable by source. The two are complementary, never redundant: the bus skips
+its own `event.emitted` trace line for a `BusinessEvent` (the durable trail already records
+it, with richer scoping), so a single business action shows up once, not twice.
 
-- **Structured logs** — `structlog.get_logger("labase.<context>.<subject>")`; events
-  are dotted `snake_case` with kwargs, never f-strings or `print`. JSON output in
-  production, pretty console in dev. The level (`observability.log_level`) is
-  admin-tunable from the console and applies live, no restart.
-- **Request correlation** — the `RequestLogger` middleware binds a `request_id`
-  (contextvars), so every log line of a request correlates automatically. Every domain
-  event emitted through the bus is logged too (with sensitive fields redacted).
-- **Business events** — sensitive business actions are emitted as typed `BusinessEvent`
-  dataclasses on the bus; a persistence subscriber records each to the append-only
-  `business_events` table (RLS-scoped: members read their own and their orgs' events). The
-  profile and dashboard show a per-user/per-org timeline, and the console **Business events**
-  screen browses them per app. The write is best-effort by doctrine: fire-and-forget, so a lost
-  write never blocks or fails the mutation.
+- **Business events — `bus.emit(...)`.** A sensitive domain action is emitted as a typed,
+  frozen `BusinessEvent` dataclass (each app owns its vocabulary in `contract/events.py`;
+  the `kind` — `todo.ticked`, `organizations.renamed` — is derived from an app prefix + a
+  verb, no magic strings). A single persistence subscriber on the `BusinessEvent` base
+  records every subclass to the append-only `business_events` table (RLS-scoped: members
+  read their own and their orgs' events). The **profile** and **`/{org}/dashboard`** show a
+  per-user / per-org timeline; the console **Business events** screen browses them per app.
+- **Technical logs — `structlog`.** `structlog.get_logger("labase.<context>.<subject>")`;
+  events are dotted `snake_case` with kwargs, never f-strings or `print`. Rendered to stdout
+  (JSON in production, pretty console in dev) **and** teed to the **firehose** — per-day JSON
+  files that give the Logs viewer a recent window to read back. The level
+  (`observability.log_level`) is admin-tunable from the console and applies live, no restart.
+
+**Non-blocking by doctrine.** Observability never sits on a mutation's critical path.
+Business-event writes are fire-and-forget (`asyncio.create_task`); the firehose only
+_enqueues_ on the request path (a background `FirehoseWriter` batches the queue to disk);
+error capture enqueues to a bounded deque drained by a background task; load metrics
+accumulate in memory and flush on a timer. A lost or failed observability write never blocks,
+fails, or slows the action it observes.
+
+**Qualified events.** Both systems tag every record with the correlation keys that make the
+merged timeline navigable — **user**, **org**, **request**, and the concerned **entity**.
+Business events carry `actor_id` / `org_id` / `entity_id` explicitly (plus the actor's handle,
+denormalized so RLS can't hide _who_); technical logs inherit `request_id` (+ `ip`), `user_id`
+and `org_id` from contextvars bound by the request / auth / org-scope layers, merged onto every
+line. The Logs viewer's facets and per-entity filter join both sources on these keys.
+
+Two supporting layers ride the same non-blocking doctrine:
+
 - **Load metrics** — every request feeds a shared accumulator, exposed as a Prometheus
   `/metrics` endpoint and persisted per minute by `apps/metrics`; the console **Load**
   screen graphs it, and a daily rollup downsamples minute → hour and applies retention.
 - **Error tracking** — unhandled 500s and event-bus failures emit `ExceptionCaptured`;
   `apps/issues` groups events by stack fingerprint into issues with a lifecycle
   (open → resolved → regressed on a later version), browsable in the console.
-  Best-effort like the business-events trail: a failing tracker never worsens what it tracks.
+  A failing tracker never worsens what it tracks.
 
 ### Conventions
 

@@ -1,3 +1,5 @@
+import contextlib
+
 import structlog
 from fastapi import (
     APIRouter,
@@ -27,6 +29,8 @@ from apps.auth.contract.events import (
     PasskeySignedIn,
     PasswordReset,
     RegisterFailed,
+    SignedIn,
+    SignedOut,
 )
 from apps.auth.contract.impersonation import (
     IMPERSONATION_MAX_SECONDS,
@@ -150,6 +154,12 @@ def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
+def _token_sub(token: str) -> str | None:
+    """The ``sub`` (user id) claim of a freshly minted token — the actor of a just-completed auth
+    ceremony, for attributing its business event when no request user is in hand yet."""
+    return str(decode_jwt(token).get("sub", "")) or None
+
+
 def _error_response(
     request: Request, template: str, message: str, status_code: int, **context: object
 ) -> Response:
@@ -220,6 +230,9 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
             factor_id = await verified_totp_factor(tokens.access_token)
             if factor_id:
                 return await _mfa_challenge_response(request, tokens, factor_id, next)
+        # Past the 2FA gate: this is a completed password sign-in (the 2FA branch is marked by
+        # MfaVerified). Record it — the freshly minted token carries the actor.
+        await bus.emit(SignedIn(actor_id=_token_sub(tokens.access_token)))
         if wants_json(request):
             resp = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
             set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -310,7 +323,7 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    await bus.emit(MfaVerified(factor_id=factor_id))
+    await bus.emit(MfaVerified(actor_id=_token_sub(tokens.access_token), factor_id=factor_id))
     if wants_json(request):
         resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
     else:
@@ -325,6 +338,12 @@ async def mfa_verify_endpoint(
 async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Response:
     if access_token:
         await logout(access_token)
+        # Attribute the sign-out to the account holder — but the cookie may be expired by now, so
+        # a failed decode must not turn a logout into a 500; record it with no actor instead.
+        actor_id = None
+        with contextlib.suppress(Exception):
+            actor_id = str(decode_jwt(access_token).get("sub", "")) or None
+        await bus.emit(SignedOut(actor_id=actor_id))
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
@@ -657,8 +676,9 @@ async def reset_password_endpoint(request: Request) -> Response:
         _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
         error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
-    # The recovery session is dropped on purpose: the user signs in with the new password.
-    await bus.emit(PasswordReset())
+    # The recovery session is dropped on purpose: the user signs in with the new password — but
+    # decode its ``sub`` first, so the reset lands on the trail attributed to the account holder.
+    await bus.emit(PasswordReset(actor_id=_token_sub(tokens.access_token)))
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
     return RedirectResponse(

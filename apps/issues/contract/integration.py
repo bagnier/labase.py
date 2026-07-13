@@ -103,11 +103,12 @@ async def _record(event: ExceptionCaptured) -> None:
     # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
     # bus here is unconditional — no mount-state guard needed.
     if recorded.opened:
-        await bus.emit(IssueOpened(group_id=group_id, title=title))
+        await bus.emit(IssueOpened(group_id=group_id, entity_id=str(group_id), title=title))
     if recorded.regressed:
         await bus.emit(
             IssueRegressed(
                 group_id=group_id,
+                entity_id=str(group_id),
                 title=title,
                 resolved_in_version=resolved_in,
                 seen_version=version,

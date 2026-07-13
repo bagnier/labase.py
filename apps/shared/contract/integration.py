@@ -26,6 +26,7 @@ from apps.shared.http.limiter import (
 )
 from apps.shared.http.security import cors_config, csrf_protect, security_headers
 from apps.shared.observability.business_events import persist_business_event
+from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
@@ -62,6 +63,11 @@ def mount(host: Host) -> None:
     host.on_startup(_plant_recurring_tasks)
     host.on_startup(worker.start)
     host.on_shutdown(worker.stop)
+
+    # Firehose drains off the request path: the log processor only enqueues; this task writes.
+    firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)
+    host.on_startup(firehose_writer.start)
+    host.on_shutdown(firehose_writer.stop)
 
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 

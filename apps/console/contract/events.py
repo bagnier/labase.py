@@ -40,6 +40,18 @@ class LastAdminViolationBlocked(SettingsEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ServerSettingChanged(SettingsEvent):
+    """A server-wide (default) setting value changed from the console — the platform peer of the
+    per-org ``OrgOverrideSet``, so global config changes stop being a blind spot in the admin
+    trail. Server-wide, so ``org_id`` stays ``None``."""
+
+    kind: ClassVar[str] = "settings.server_changed"
+    app: str | None = None
+    key: str | None = None
+    value: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
 class OrgOverrideSet(SettingsEvent):
     kind: ClassVar[str] = "settings.org_override_set"
     app: str | None = None

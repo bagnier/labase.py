@@ -103,6 +103,22 @@ class PasswordReset(AuthEvent):
     kind: ClassVar[str] = "auth.password_reset"
 
 
+@dataclass(frozen=True, kw_only=True)
+class SignedIn(AuthEvent):
+    """A session issued via email+password — the password peer of ``OAuthSignedIn`` /
+    ``PasskeySignedIn`` (a 2FA sign-in is marked by ``MfaVerified``). Closes the trail's blind
+    spot where only *failed* sign-ins were recorded."""
+
+    kind: ClassVar[str] = "auth.signed_in"
+
+
+@dataclass(frozen=True, kw_only=True)
+class SignedOut(AuthEvent):
+    """A session was ended from the app — the lifecycle bookend of the sign-in events."""
+
+    kind: ClassVar[str] = "auth.signed_out"
+
+
 # ── Self-service account security (from the profile page) ────────────────────────
 
 

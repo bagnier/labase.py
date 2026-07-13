@@ -111,7 +111,10 @@ async def set_issue_status(
     await session.commit()
     await bus.emit(
         IssueStatusChanged(
-            actor_id=current_user.id, entity_id=str(group_id), status=new_status.value
+            actor_id=current_user.id,
+            entity_id=str(group_id),
+            label=group.title,
+            status=new_status.value,
         )
     )
     group_read = ErrorGroupRead.model_validate(group)

@@ -20,6 +20,8 @@ from typing import Any, TypeVar
 
 import structlog
 
+from apps.shared.events import BusinessEvent
+
 log = structlog.get_logger("labase.shared.bus")
 
 E = TypeVar("E")
@@ -60,10 +62,15 @@ class EventBus:
         every subclass, while exact-type subscribers keep working unchanged. A handler
         registered on several classes in the MRO runs once.
 
-        Every emitted event is logged here — a single, cheap trace point instead of each
-        publisher remembering to log its own event. Secret-shaped fields are redacted by name.
+        Every *non-business* event is logged here — a single, cheap trace point instead of each
+        publisher remembering to log its own event (secret-shaped fields redacted by name). A
+        ``BusinessEvent`` is skipped: the persister already records it durably to the trail with
+        richer scoping (user/org/entity/request), and logging it too would surface the one action
+        twice in the unified logs viewer — the technical `event.emitted` line beside its own trail
+        row. The two systems stay visible side by side without overlapping on the same event.
         """
-        log.info("event.emitted", event_type=type(event).__name__, **_loggable_payload(event))
+        if not isinstance(event, BusinessEvent):
+            log.info("event.emitted", event_type=type(event).__name__, **_loggable_payload(event))
         # Command semantics: results are typed `object`, not `Any` — callers fire and discard
         # them. (`collect` keeps `Any`: its callers consume heterogeneous typed aggregates.)
         results: list[object] = []

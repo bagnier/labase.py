@@ -211,7 +211,9 @@ async def update_page(
             page.visibility = visibility
             event_cls = _PUBLISH_EVENT[visibility]
     await repo.save(page)
-    await bus.emit(event_cls(actor_id=current_user.id, org_id=str(org_id), slug=page.slug))
+    await bus.emit(
+        event_cls(actor_id=current_user.id, org_id=str(org_id), slug=page.slug, label=page.title)
+    )
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
     # page so the save lands on visible, rendered output instead of a silent swap.
     return mutation_response(
@@ -270,7 +272,9 @@ async def set_visibility(
     page.visibility = visibility
     await repo.save(page)
     await bus.emit(
-        _PUBLISH_EVENT[visibility](actor_id=current_user.id, org_id=str(org_id), slug=slug)
+        _PUBLISH_EVENT[visibility](
+            actor_id=current_user.id, org_id=str(org_id), slug=slug, label=page.title
+        )
     )
     return mutation_response(
         request, obj=PageRead.model_validate(page), redirect_url=f"/{org.handle}/pages"

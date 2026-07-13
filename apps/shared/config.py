@@ -37,6 +37,9 @@ class TechnicalSettings(BaseSettings):
     task_worker_interval_seconds: float = 1.0
     # Load metrics: per-process flush of the request accumulator; 0 disables.
     metrics_flush_seconds: float = 60
+    # Firehose: per-process drain of the in-memory log queue to the per-day files; 0 disables
+    # the background writer (the runtime log path then drops lines instead of blocking on I/O).
+    firehose_flush_seconds: float = 1.0
     # Deployed version (git SHA in Docker); drives error-tracking regression detection.
     app_version: str = "dev"
     # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets
