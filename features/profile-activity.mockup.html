@@ -1,0 +1,349 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — /profile activity (GitHub-like, daisyUI + ApexCharts)</title>
+<!--
+  Design intent (maps 1:1 to the real build):
+  - daisyUI: `tabs tabs-lift`, `card` / `card-body`, `stats` / `stat`, `input`, `join`,
+    `select`, `btn`, `badge`, `timeline`. Tokens are the app's labase-light theme.
+  - ApexCharts: the "Actions over time" area chart is the existing declarative
+    `chart()` macro (static/js/charts.js) with {"type":"area", ...}; here it is
+    hand-rendered on <canvas> because a standalone mockup can't load the lib.
+  - The contribution calendar is a native CSS grid (like GitHub) — crisper than an
+    ApexCharts heatmap for a 52-week calendar. Indigo ramp = the app's single accent,
+    NOT GitHub green (the theme forbids a second hue).
+-->
+<style>
+  :root {
+    /* labase-light tokens (oklch → hex), from static/css/input.css */
+    --base-100: #ffffff;
+    --base-200: #fafafb;
+    --base-300: #e6e6ea;
+    --ink: #2a2a30;
+    --muted: #6d6d75;
+    --muted-2: #9a9aa2;
+    --primary: #4a56a6;
+    --primary-strong: #3d4788;
+    --primary-soft: #eef0f8;
+    --hl-0: #f0f0f3;
+    --hl-1: #dfe2f1;
+    --hl-2: #b6bde3;
+    --hl-3: #8089c9;
+    --hl-4: #4a56a6;
+    --success: #43976a;
+    --warning: #c68a2e;
+    --error: #cf4c3f;
+    --rbox: 0.625rem;
+    --rfield: 0.375rem;
+    --border: 1px solid var(--base-300);
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: var(--font); color: var(--ink);
+    background: var(--base-200); line-height: 1.5; font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  svg { display: block; }
+
+  /* App chrome (slim, to situate the page) */
+  .topbar {
+    height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 20px;
+    background: var(--base-100); border-bottom: var(--border);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand .logo { width: 26px; height: 26px; border-radius: 7px; background: var(--primary); color: #fff; display: grid; place-items: center; }
+  .crumbs { color: var(--muted); font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
+  .crumbs .here { color: var(--ink); font-weight: 500; }
+  .topbar .spacer { flex: 1; }
+  .avatar-sm { width: 28px; height: 28px; border-radius: 8px; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 26px 20px 90px; }
+  .page-head { margin-bottom: 16px; }
+  .page-head h1 { font-size: 22px; letter-spacing: -0.02em; }
+  .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+
+  /* daisyUI tabs tabs-lift */
+  .tabs { display: flex; gap: 2px; align-items: flex-end; border-bottom: var(--border); margin-bottom: -1px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    appearance: none; background: transparent; border: 1px solid transparent; border-bottom: none;
+    border-radius: var(--rfield) var(--rfield) 0 0; padding: 9px 15px; font: inherit; font-size: 13.5px;
+    font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { background: var(--base-100); border-color: var(--base-300); color: var(--ink); position: relative; z-index: 2; }
+  .tab .badge { font-size: 10.5px; background: var(--primary-soft); color: var(--primary); border-radius: 999px; padding: 1px 7px; font-weight: 600; }
+
+  .panel { background: var(--base-100); border: var(--border); border-radius: 0 var(--rbox) var(--rbox) var(--rbox); padding: 20px; }
+  @media (max-width: 560px) { .panel { padding: 14px; } }
+
+  .card { background: var(--base-100); border: var(--border); border-radius: var(--rbox); box-shadow: 0 1px 2px rgba(20,20,40,.03); }
+  .card + .card { margin-top: 14px; }
+  .card-body { padding: 16px 18px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .card-title { font-size: 14px; font-weight: 600; margin-top: 2px; }
+
+  /* daisyUI stats */
+  .stats { display: flex; gap: 0; border: var(--border); border-radius: var(--rbox); overflow: hidden; background: var(--base-100); margin-bottom: 14px; }
+  .stat { flex: 1; padding: 12px 16px; border-left: var(--border); }
+  .stat:first-child { border-left: none; }
+  .stat-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-top: 2px; }
+  .stat-desc { font-size: 11.5px; color: var(--muted-2); margin-top: 1px; }
+  @media (max-width: 560px) { .stats { flex-wrap: wrap; } .stat { flex: 1 0 45%; } }
+
+  /* Contribution calendar */
+  .heat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .heatmap { overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .heat-grid { display: grid; grid-template-columns: 24px 1fr; gap: 5px; min-width: 560px; }
+  .months { grid-column: 2; display: flex; font-size: 10px; color: var(--muted); letter-spacing: .02em; margin-bottom: 3px; text-transform: uppercase; }
+  .weekdays { display: grid; grid-auto-rows: 12px; gap: 3px; font-size: 9px; color: var(--muted); }
+  .weekdays span { line-height: 12px; height: 12px; }
+  .cells { display: grid; grid-template-rows: repeat(7, 12px); grid-auto-flow: column; grid-auto-columns: 12px; gap: 3px; }
+  .cell { width: 12px; height: 12px; border-radius: 3px; background: var(--hl-0); outline: 1px solid rgba(20,20,40,.04); outline-offset: -1px; }
+  .cell.l1 { background: var(--hl-1); } .cell.l2 { background: var(--hl-2); } .cell.l3 { background: var(--hl-3); } .cell.l4 { background: var(--hl-4); }
+  .cell:hover { outline: 1.5px solid var(--primary-strong); outline-offset: 0; }
+  .legend { display: flex; align-items: center; gap: 5px; justify-content: flex-end; margin-top: 9px; font-size: 11px; color: var(--muted); }
+  .legend .cell { width: 11px; height: 11px; }
+
+  /* Toolbar (daisyUI input + join) */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 18px 0 4px; }
+  .input { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; border: var(--border); border-radius: var(--rfield); padding: 7px 11px; background: var(--base-100); color: var(--muted); min-width: 200px; }
+  .input input { border: none; outline: none; background: transparent; font: inherit; font-size: 13.5px; color: var(--ink); width: 100%; }
+  .join { display: inline-flex; border: var(--border); border-radius: var(--rfield); overflow: hidden; }
+  .join .chip { padding: 7px 12px; font-size: 12.5px; color: var(--muted); border-left: var(--border); cursor: pointer; white-space: nowrap; }
+  .join .chip:first-child { border-left: none; }
+  .join .chip[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+  .select { border: var(--border); border-radius: var(--rfield); padding: 7px 11px; background: var(--base-100); font: inherit; font-size: 13px; color: var(--ink); display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .select .chev { color: var(--muted-2); }
+
+  /* Day-grouped timeline feed */
+  .feed { margin-top: 8px; }
+  .day-label { display: flex; align-items: center; gap: 10px; margin: 20px 0 8px; }
+  .day-label:first-child { margin-top: 6px; }
+  .day-label .d { font-size: 12px; font-weight: 600; }
+  .day-label .n { font-size: 11.5px; color: var(--muted-2); }
+  .day-label .rule { flex: 1; height: 1px; background: var(--base-300); }
+  .events { list-style: none; margin: 0; padding: 0; position: relative; }
+  .events::before { content: ""; position: absolute; left: 15px; top: 6px; bottom: 6px; width: 1px; background: var(--base-300); }
+  .event { display: flex; align-items: flex-start; gap: 12px; padding: 7px 8px; border-radius: var(--rfield); position: relative; }
+  .event:hover { background: var(--base-200); }
+  .event.link { cursor: pointer; }
+  .node { flex: 0 0 auto; width: 31px; height: 31px; border-radius: 999px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); box-shadow: 0 0 0 4px var(--base-100); position: relative; z-index: 1; }
+  .node.warn { background: #f7edd8; color: var(--warning); } .node.err { background: #f7dedb; color: var(--error); } .node.ok { background: #dcefe4; color: var(--success); }
+  .node svg { width: 16px; height: 16px; }
+  .event .body { flex: 1; min-width: 0; padding-top: 4px; }
+  .event .body .txt { font-size: 13.5px; }
+  .event .body .txt .verb { color: var(--muted); }
+  .event .body .txt .obj { font-weight: 600; }
+  .event .body .txt a.obj:hover { color: var(--primary); text-decoration: underline; }
+  .event .body .sub { font-size: 12px; color: var(--muted-2); margin-top: 1px; }
+  .event .arrow { color: var(--base-300); align-self: center; flex: 0 0 auto; width: 1rem; text-align: center; }
+  .event.link:hover .arrow { color: var(--primary); }
+  .event .when { flex: 0 0 auto; align-self: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .btn-more { display: block; width: 100%; margin-top: 20px; padding: 9px; background: var(--base-100); border: var(--border); border-radius: var(--rfield); font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; }
+  .btn-more:hover { color: var(--ink); border-color: var(--muted-2); }
+
+  .callout { margin: 20px auto 0; max-width: 940px; padding: 12px 16px; background: #fff; border: 1px dashed var(--base-300); border-radius: var(--rbox); font-size: 12.5px; color: var(--muted); }
+  .callout b { color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="topbar">
+  <span class="brand"><span class="logo" aria-hidden="true">
+    <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="M215.79 118.17a8 8 0 0 0-5-5.66L153.18 90.9l14.66-73.33a8 8 0 0 0-13.69-7l-112 120a8 8 0 0 0 3 13l57.63 21.61-14.62 73.34a8 8 0 0 0 13.69 7l112-120a8 8 0 0 0 1.94-7.95Z"/></svg>
+  </span>labase</span>
+  <span class="crumbs">/ <span class="here">Profile</span></span>
+  <span class="spacer"></span>
+  <span class="avatar-sm" aria-hidden="true">S</span>
+</div>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>Profile</h1>
+    <p>Your activity, and your account settings.</p>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Profile sections">
+    <button class="tab" role="tab" aria-selected="true">
+      <svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M232 208a8 8 0 0 1-8 8H32a8 8 0 0 1-8-8V48a8 8 0 0 1 16 0v94.37L90.73 98a8 8 0 0 1 10.07-.38l58.81 44.11L218.73 90a8 8 0 1 1 10.54 12l-64 56a8 8 0 0 1-10.07.38L96.39 114.29 40 163.63V200h184a8 8 0 0 1 8 8Z"/></svg>
+      Activity
+    </button>
+    <button class="tab" role="tab" aria-selected="false">Profile</button>
+    <button class="tab" role="tab" aria-selected="false">Organisations</button>
+    <button class="tab" role="tab" aria-selected="false">Email</button>
+    <button class="tab" role="tab" aria-selected="false">Authentication</button>
+    <button class="tab" role="tab" aria-selected="false">Account</button>
+  </div>
+
+  <div class="panel" role="tabpanel">
+
+    <!-- daisyUI stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-title">Actions · last year</div>
+        <div class="stat-value tnum">142</div>
+        <div class="stat-desc">across 4 apps</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Active days</div>
+        <div class="stat-value tnum">27</div>
+        <div class="stat-desc">last active today</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Longest streak</div>
+        <div class="stat-value tnum">9</div>
+        <div class="stat-desc">days in a row</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">This week</div>
+        <div class="stat-value tnum">18</div>
+        <div class="stat-desc">+5 vs last week</div>
+      </div>
+    </div>
+
+    <!-- Contribution calendar (native grid) -->
+    <div class="card">
+      <div class="card-body">
+        <div class="heat-head">
+          <div>
+            <div class="eyebrow">Contributions</div>
+            <div class="card-title">Last 12 months</div>
+          </div>
+        </div>
+        <div class="heatmap">
+          <div class="heat-grid">
+            <div class="months" id="months"></div>
+            <div style="grid-column:1; grid-row:2" class="weekdays">
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div style="grid-column:2; grid-row:2" class="cells" id="cells"></div>
+          </div>
+        </div>
+        <div class="legend">
+          Less <span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> More
+        </div>
+      </div>
+    </div>
+
+    <!-- Toolbar: search + type filter + range -->
+    <div class="toolbar">
+      <label class="input">
+        <svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="m229.66 218.34-50.07-50.06a88.11 88.11 0 1 0-11.31 11.31l50.06 50.07a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72Z"/></svg>
+        <input type="text" placeholder="Search your activity…" aria-label="Search your activity" />
+      </label>
+      <div class="join" role="group" aria-label="Filter by type">
+        <span class="chip" aria-pressed="true">All</span>
+        <span class="chip" aria-pressed="false">Todos</span>
+        <span class="chip" aria-pressed="false">Files</span>
+        <span class="chip" aria-pressed="false">Pages</span>
+        <span class="chip" aria-pressed="false">Security</span>
+      </div>
+      <span class="select" tabindex="0">Last 30 days <span class="chev">▾</span></span>
+    </div>
+
+    <!-- Day-grouped feed -->
+    <div class="feed">
+      <div class="day-label"><span class="d">Today</span><span class="n tnum">· 4</span><span class="rule"></span></div>
+      <ul class="events">
+        <li class="event link">
+          <span class="node ok" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M173.66 98.34a8 8 0 0 1 0 11.32l-56 56a8 8 0 0 1-11.32 0l-24-24a8 8 0 0 1 11.32-11.32L112 148.69l50.34-50.35a8 8 0 0 1 11.32 0ZM232 128A104 104 0 1 1 128 24a104.11 104.11 0 0 1 104 104Zm-16 0a88 88 0 1 0-88 88 88.1 88.1 0 0 0 88-88Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Ticked</span> <a class="obj" href="#">Write the changelog</a></span><span class="sub">todo · acme-widgets</span></span>
+          <span class="when tnum">14:32</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+        <li class="event link">
+          <span class="node" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v176a16 16 0 0 0 16 16h144a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM152 88V44l44 44Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Uploaded</span> <a class="obj" href="#">note-wc65j.txt</a></span><span class="sub">files · acme-widgets</span></span>
+          <span class="when tnum">13:08</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+        <li class="event link">
+          <span class="node" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208 32h-24v-8a8 8 0 0 0-16 0v8H88v-8a8 8 0 0 0-16 0v8H48a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16Zm0 176H48V96h160v112Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Created event</span> <a class="obj" href="#">Sprint review</a></span><span class="sub">calendar · acme-widgets</span></span>
+          <span class="when tnum">11:20</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+        <li class="event link">
+          <span class="node" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208 24H72a32 32 0 0 0-32 32v168a8 8 0 0 0 8 8h144a8 8 0 0 0 0-16H56a16 16 0 0 1 16-16h136a8 8 0 0 0 8-8V32a8 8 0 0 0-8-8Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Published</span> <a class="obj" href="#">Roadmap</a></span><span class="sub">pages · acme-widgets</span></span>
+          <span class="when tnum">09:45</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+      </ul>
+
+      <div class="day-label"><span class="d">Yesterday</span><span class="n tnum">· 3</span><span class="rule"></span></div>
+      <ul class="events">
+        <li class="event">
+          <span class="node warn" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208 80h-24V56a56 56 0 0 0-112 0v24H48a16 16 0 0 0-16 16v112a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V96a16 16 0 0 0-16-16ZM88 56a40 40 0 0 1 80 0v24H88Zm48 114.66V184a8 8 0 0 1-16 0v-13.34a16 16 0 1 1 16 0Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Changed password</span></span><span class="sub">security · from 192.168.1.24</span></span>
+          <span class="when tnum">17:02</span><span class="arrow" aria-hidden="true"></span>
+        </li>
+        <li class="event link">
+          <span class="node ok" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M173.66 98.34a8 8 0 0 1 0 11.32l-56 56a8 8 0 0 1-11.32 0l-24-24a8 8 0 0 1 11.32-11.32L112 148.69l50.34-50.35a8 8 0 0 1 11.32 0ZM232 128A104 104 0 1 1 128 24a104.11 104.11 0 0 1 104 104Zm-16 0a88 88 0 1 0-88 88 88.1 88.1 0 0 0 88-88Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Ticked</span> <a class="obj" href="#">Ship v0.4</a></span><span class="sub">todo · personal</span></span>
+          <span class="when tnum">15:30</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+        <li class="event link">
+          <span class="node" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v176a16 16 0 0 0 16 16h144a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM152 88V44l44 44Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Renamed</span> <a class="obj" href="#">Q3-budget.xlsx</a></span><span class="sub">files · acme-widgets</span></span>
+          <span class="when tnum">11:15</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+      </ul>
+
+      <div class="day-label"><span class="d">Mon, Jul 13</span><span class="n tnum">· 2</span><span class="rule"></span></div>
+      <ul class="events">
+        <li class="event">
+          <span class="node" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0c-27.39 8.94-50.86 27.82-66.09 54.16a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Signed in</span></span><span class="sub">security · Chrome on macOS</span></span>
+          <span class="when tnum">09:14</span><span class="arrow" aria-hidden="true"></span>
+        </li>
+        <li class="event link">
+          <span class="node" aria-hidden="true"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208 32H48a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16Zm-40 128H88a8 8 0 0 1 0-16h80a8 8 0 0 1 0 16Zm0-32H88a8 8 0 0 1 0-16h80a8 8 0 0 1 0 16Z"/></svg></span>
+          <span class="body"><span class="txt"><span class="verb">Created</span> <a class="obj" href="#">Draft onboarding doc</a></span><span class="sub">todo · acme-widgets</span></span>
+          <span class="when tnum">08:50</span><span class="arrow" aria-hidden="true">→</span>
+        </li>
+      </ul>
+
+      <button class="btn-more">Load older activity</button>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>What this shows.</b> The rich activity lives on <b>/profile</b> as its primary <b>Activity</b>
+    tab, settings alongside. Every entry deep-links to the thing it concerns — todos &amp; files
+    included (list&nbsp;+&nbsp;anchor). Visuals use the app's own <b>daisyUI</b> system
+    (tabs-lift, stats, card, input, join, btn, timeline). The contribution calendar stays in the
+    app's <b>indigo</b> accent — one hue, no GitHub green. Search + type filter + date range make
+    the trail mobilisable; the feed is grouped by day and paginated.
+  </div>
+</div>
+
+<script>
+  // Deterministic pseudo-activity so the mockup is stable across reloads.
+  function seeded(i) { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); }
+
+  // Contribution calendar: 53 weeks × 7 days.
+  const cells = document.getElementById("cells");
+  const WEEKS = 53;
+  for (let w = 0; w < WEEKS; w++) {
+    for (let d = 0; d < 7; d++) {
+      const i = w * 7 + d, r = seeded(i);
+      const weekend = d === 0 || d === 6;
+      const dead = seeded(w * 3.1) < 0.14;
+      let level = 0;
+      if (!dead) { const base = weekend ? r * 0.55 : r;
+        if (base > 0.86) level = 4; else if (base > 0.68) level = 3; else if (base > 0.45) level = 2; else if (base > 0.24) level = 1; }
+      const c = document.createElement("div");
+      c.className = "cell" + (level ? " l" + level : "");
+      c.title = level ? (level * 2 - 1) + "–" + (level * 3) + " actions" : "No activity";
+      cells.appendChild(c);
+    }
+  }
+  const months = ["Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun","Jul"];
+  const mEl = document.getElementById("months");
+  months.forEach(function (m) { const s = document.createElement("span"); s.textContent = m; s.style.width = (WEEKS * 15 / months.length) + "px"; mEl.appendChild(s); });
+</script>

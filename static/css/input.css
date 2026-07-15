@@ -548,6 +548,97 @@
   }
 }
 
+/* Contribution calendar (profile activity) — a GitHub-style grid of day cells, one column
+   per ISO week. Tints are a color-mix on the single primary accent, so they track the active
+   theme (light/dark) instead of a hard-coded ramp. Structure is a semantic <table role="grid">
+   (see macros/activity_heatmap.html). */
+.heatmap {
+  border-collapse: separate;
+  border-spacing: 3px;
+  table-layout: fixed; /* with the colgroup below, every week stays a 12px column */
+}
+.heatmap-col {
+  width: 12px;
+}
+.heatmap-col-label {
+  width: 26px;
+}
+.heatmap th {
+  font-weight: 400;
+  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+}
+.heatmap-day {
+  font-size: 9px;
+  text-align: end;
+  padding-inline-end: 4px;
+  height: 12px;
+  white-space: nowrap;
+}
+.heatmap-month {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+  text-align: start;
+  padding-bottom: 2px;
+  white-space: nowrap; /* labels overflow into the following empty month cells, like GitHub */
+}
+.heatmap-cell {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 3px;
+  background: var(--color-base-200);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-base-content) 6%, transparent);
+}
+.heatmap-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+.heatmap-cell[data-level="1"],
+.heatmap-swatch[data-level="1"] {
+  background: color-mix(in oklch, var(--color-primary) 32%, var(--color-base-200));
+}
+.heatmap-cell[data-level="2"],
+.heatmap-swatch[data-level="2"] {
+  background: color-mix(in oklch, var(--color-primary) 55%, var(--color-base-200));
+}
+.heatmap-cell[data-level="3"],
+.heatmap-swatch[data-level="3"] {
+  background: color-mix(in oklch, var(--color-primary) 78%, var(--color-base-200));
+}
+.heatmap-cell[data-level="4"],
+.heatmap-swatch[data-level="4"] {
+  background: var(--color-primary);
+}
+.heatmap-cell.is-empty {
+  background: transparent;
+  box-shadow: none;
+}
+.heatmap-cell:hover:not(.is-empty) {
+  outline: 1.5px solid var(--color-primary);
+  outline-offset: 0;
+  cursor: default;
+}
+
+/* Activity feed — a centered vertical timeline (content · node · time). The rail is a single
+   spine down the middle; each row is a 1fr / node / 1fr grid, so the node column sits at 50%
+   and the rail aligns through it. The nodes' ring-4 halo masks the rail behind each one. */
+.activity-timeline {
+  position: relative;
+}
+.activity-timeline::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-0.5px);
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 1px;
+  background: var(--color-base-300);
+}
+
 /* Learning session: 3D card flip */
 .scene {
   perspective: 1200px;

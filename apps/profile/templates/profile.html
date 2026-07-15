@@ -4,23 +4,118 @@
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/avatar.html" import avatar %}
 {% from "macros/empty_state.html" import empty_state %}
-{% from "macros/activity_timeline.html" import activity_timeline %}
+{% from "macros/activity_heatmap.html" import activity_heatmap %}
 {% block title %}Profile — labase{% endblock %}
 {% block breadcrumb %}
   <li>Profile</li>
 {% endblock %}
 {% block content %}
-  <div class="space-y-6 max-w-2xl">
-    {{ page_header('Profile', 'Manage your personal information.') }}
-    {# Keep the tab that owns a just-rendered alert/enrolment open across the
-       full-page reload a form POST triggers, so its message stays visible. #}
-    {% set active_tab = "profile" %}
-    {% if password_error or password_info or twofa_error or twofa_info or twofa_enrollment or passkey_error %}
+  <div class="space-y-6 max-w-4xl">
+    {{ page_header('Profile', 'Your activity, and your account settings.') }}
+    {# Activity is the primary tab; a form POST re-renders the whole page, so keep the tab that
+       owns a just-shown alert/enrolment open across that reload. #}
+    {% set active_tab = "activity" %}
+    {% if error or success or avatar_error or avatar_info %}
+      {% set active_tab = "profile" %}
+    {% elif password_error or password_info or twofa_error or twofa_info or twofa_enrollment or passkey_error %}
       {% set active_tab = "authentication" %}
     {% elif email_error or email_info %}
       {% set active_tab = "email" %}
+    {% elif deletion_error %}
+      {% set active_tab = "account" %}
     {% endif %}
     <div role="tablist" class="tabs tabs-lift">
+      {# ── Activity ───────────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="profile-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Activity"
+             {% if active_tab == "activity" %}checked{% endif %} />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <div class="stats stats-horizontal border border-base-300 w-full">
+            <div class="stat">
+              <div class="stat-title">Actions · last year</div>
+              <div class="stat-value text-2xl">{{ activity_stats.total }}</div>
+              <div class="stat-desc">across your apps</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">Active days</div>
+              <div class="stat-value text-2xl">{{ activity_stats.active_days }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">Longest streak</div>
+              <div class="stat-value text-2xl">{{ activity_stats.longest_streak }}</div>
+              <div class="stat-desc">days in a row</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">This week</div>
+              <div class="stat-value text-2xl">{{ activity_stats.this_week }}</div>
+              <div class="stat-desc">
+                {% if activity_stats.week_delta > 0 %}
+                  +{{ activity_stats.week_delta }} vs last week
+                {% elif activity_stats.week_delta < 0 %}
+                  {{ activity_stats.week_delta }} vs last week
+                {% else %}
+                  same as last week
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <section class="card-panel">
+            <div class="card-body">
+              <h2 class="eyebrow mb-3">Contributions · {{ activity_calendar.range_label }}</h2>
+              {{ activity_heatmap(activity_calendar) }}
+            </div>
+          </section>
+          <section class="card-panel" data-recent-activity>
+            <div class="card-body">
+              <h2 class="card-title text-sm font-semibold mb-3">Activity</h2>
+              <form class="flex flex-wrap items-center gap-2 mb-1"
+                    hx-get="/profile/activity"
+                    hx-target="#activity-feed"
+                    hx-swap="outerHTML"
+                    hx-trigger="change, keyup changed delay:400ms"
+                    hx-push-url="false"
+                    aria-label="Filter your activity">
+                <label class="input input-sm flex-1 min-w-48">
+                  <i class="ph ph-magnifying-glass ph-sm text-base-content/50"
+                     aria-hidden="true"></i>
+                  <input type="search"
+                         name="q"
+                         value="{{ activity_q }}"
+                         placeholder="Search your activity…"
+                         aria-label="Search your activity" />
+                </label>
+                <select name="app"
+                        class="select select-sm w-auto"
+                        aria-label="Filter by type">
+                  <option value="">All types</option>
+                  <option value="todo" {% if activity_app == "todo" %}selected{% endif %}>Todos</option>
+                  <option value="files" {% if activity_app == "files" %}selected{% endif %}>Files</option>
+                  <option value="pages" {% if activity_app == "pages" %}selected{% endif %}>Pages</option>
+                  <option value="calendar"
+                          {% if activity_app == "calendar" %}selected{% endif %}>Calendar</option>
+                  <option value="auth" {% if activity_app == "auth" %}selected{% endif %}>Security</option>
+                </select>
+                <input type="date"
+                       name="from_dt"
+                       value="{{ activity_from }}"
+                       class="input input-sm w-auto"
+                       aria-label="From date" />
+                <input type="date"
+                       name="to_dt"
+                       value="{{ activity_to }}"
+                       class="input input-sm w-auto"
+                       aria-label="To date" />
+              </form>
+              {% include "profile/activity_feed.html" %}
+            </div>
+          </section>
+        </div>
+      </div>
       {# ── Profile ────────────────────────────────────────────────────────── #}
       <input type="radio"
              name="profile-tabs"
@@ -105,41 +200,6 @@
               {% endif %}
             </div>
           </div>
-          <section class="card-panel" data-recent-activity>
-            <div class="card-body">
-              <h2 class="card-title text-sm font-semibold mb-3">Recent activity</h2>
-              {{ activity_timeline(recent_activity, empty="Nothing recorded yet — your actions will appear here.") }}
-            </div>
-          </section>
-          <section class="card-panel">
-            <div class="card-body">
-              <h2 class="card-title text-sm font-semibold mb-3">Session</h2>
-              <form method="post" action="/auth/logout">
-                <button type="submit" class="btn">
-                  <i class="ph ph-sign-out ph-4" aria-hidden="true"></i>
-                  Sign out
-                </button>
-              </form>
-            </div>
-          </section>
-          {% if account_deletion_enabled %}
-            <section class="card bg-base-100 border border-error/30 shadow-sm"
-                     data-account-deletion>
-              <div class="card-body">
-                <h2 class="card-title text-sm font-semibold mb-3">Danger zone</h2>
-                <p class="text-sm text-base-content/70 mb-4">
-                  Deleting your account is irreversible: your personal organisation and its
-                  data are removed. Organisations you share with others survive without you.
-                </p>
-                {{ alert('error', deletion_error) }}
-                <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
-                  {{ input_field("deletion_password", "current_password", type="password",
-                                    label="Your password", required=true) }}
-                  <button type="submit" class="btn btn-error btn-outline">Delete my account</button>
-                </form>
-              </div>
-            </section>
-          {% endif %}
         </div>
       </div>
       {# ── Organizations ──────────────────────────────────────────────────── #}
@@ -308,6 +368,48 @@
                    data-passkey-error
                    aria-live="polite"></p>
                 <script src="/static/js/passkeys.js" defer></script>
+              </div>
+            </section>
+          {% endif %}
+        </div>
+      </div>
+      {# ── Account ────────────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="profile-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Account"
+             {% if active_tab == "account" %}checked{% endif %} />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <section class="card-panel">
+            <div class="card-body">
+              <h2 class="card-title text-sm font-semibold mb-3">Session</h2>
+              <p class="text-sm text-base-content/70 mb-3">Sign out of this browser.</p>
+              <form method="post" action="/auth/logout">
+                <button type="submit" class="btn">
+                  <i class="ph ph-sign-out ph-4" aria-hidden="true"></i>
+                  Sign out
+                </button>
+              </form>
+            </div>
+          </section>
+          {% if account_deletion_enabled %}
+            <section class="card bg-base-100 border border-error/30 shadow-sm"
+                     data-account-deletion>
+              <div class="card-body">
+                <h2 class="card-title text-sm font-semibold mb-3">Danger zone</h2>
+                <p class="text-sm text-base-content/70 mb-4">
+                  Deleting your account is irreversible: your personal organisation and its
+                  data are removed. Organisations you share with others survive without you.
+                </p>
+                {{ alert('error', deletion_error) }}
+                <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
+                  {{ input_field("deletion_password", "current_password", type="password",
+                                    label="Your password", required=true) }}
+                  <button type="submit" class="btn btn-error btn-outline">Delete my account</button>
+                </form>
               </div>
             </section>
           {% endif %}

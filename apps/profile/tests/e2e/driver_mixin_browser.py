@@ -99,6 +99,7 @@ class ProfileBrowserMixin(BrowserBase):
     # ── account deletion ──────────────────────────────────────────────────────
     def delete_account(self, password: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
+        self._open_profile_tab("Account")
         section = self.page.locator("[data-account-deletion]")
         section.get_by_label("Your password").fill(password)
         section.get_by_role("button", name="Delete my account").click()

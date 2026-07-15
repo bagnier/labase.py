@@ -1,7 +1,8 @@
 {% from "macros/empty_state.html" import empty_state %}
 <ul id="file-list" class="list-panel" aria-live="polite">
   {% for f in files %}
-    <li class="flex flex-col px-4 py-3 group"
+    <li id="file-{{ f.id }}"
+        class="flex flex-col px-4 py-3 group target:bg-primary/5 target:rounded-box"
         data-file-id="{{ f.id }}"
         x-data="{ renaming: false }">
       <div class="flex items-center gap-3">

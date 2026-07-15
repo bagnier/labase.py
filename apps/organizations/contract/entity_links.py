@@ -10,10 +10,13 @@ calendar event id). Owned here because ``organizations`` owns the org-handle rou
 from urllib.parse import quote
 
 # app segment → org-scoped route template ({handle}, {id} = entity_id). Extend as apps grow a
-# member-facing detail page; unknown apps simply don't link.
+# member-facing detail page; unknown apps simply don't link. Apps that only have a list page
+# (no per-entity detail route) link to that list with an anchor on the item's `id="<app>-<id>"`.
 _ENTITY_ROUTES = {
     "pages": "/{handle}/pages/{id}",  # id is the slug
     "calendar": "/{handle}/calendar/{id}",
+    "todo": "/{handle}/todos#todo-{id}",
+    "files": "/{handle}/files#file-{id}",
 }
 
 

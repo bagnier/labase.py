@@ -1,7 +1,9 @@
 import base64
 import json
 import uuid
+from datetime import datetime
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import (
     APIRouter,
@@ -53,6 +55,7 @@ from apps.profile.contract.current import ProfileSettings
 from apps.profile.contract.events import AccountDeleted, AvatarUpdated, HandleChanged
 from apps.profile.domain.models import ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
+from apps.shared import clock
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
@@ -60,6 +63,10 @@ from apps.shared.http.templates import templates
 from apps.shared.observability.business_events import (
     BusinessEventRow,
     activity_entries,
+    activity_stats,
+    daily_activity_counts,
+    group_activity_by_day,
+    heatmap_calendar,
     search_business_events,
 )
 from apps.shared.page import fullpage_context
@@ -121,25 +128,70 @@ async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
 ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 
 
-_RECENT_ACTIVITY = 8
+_ACTIVITY_PAGE = 25  # rows per activity view; "Load older" grows the window by this step
+_ACTIVITY_MAX = 250  # a personal trail is bounded — cap the growable window
 
 
-async def _recent_activity(
-    session: AsyncSession, user_id: str, handles: dict[str, str]
-) -> list[dict]:
-    """The user's own trail for the profile timeline.
+def _parse_dt(value: str | None) -> datetime | None:
+    """A date/datetime from the toolbar's date inputs, or None when blank/unparseable."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _activity_query(q: str, app: str, from_dt: str, to_dt: str) -> str:
+    """The current filter as a ``&``-prefixed querystring, to carry across a Load-older click."""
+    raw = {"q": q, "app": app, "from_dt": from_dt, "to_dt": to_dt}
+    params = {k: v for k, v in raw.items() if v}
+    return f"&{urlencode(params)}" if params else ""
+
+
+async def _activity_context(
+    session: AsyncSession,
+    user_id: str,
+    handles: dict[str, str],
+    *,
+    q: str = "",
+    app: str = "",
+    from_dt: str = "",
+    to_dt: str = "",
+    limit: int = _ACTIVITY_PAGE,
+) -> dict:
+    """The day-grouped activity feed under the given filters — shared by the profile page's
+    initial render and the ``/profile/activity`` HTMX fragment.
 
     Reads on the request's own RLS session: the ``business_events`` policy scopes rows to the
-    reader (own actions + their orgs), so filtering by ``user_id`` narrows to the user's own
-    actions. Each entry deep-links to the concerned entity's page, resolving the row's org to a
-    handle from the user's own orgs (``handles``). Exposes only the humanized label and moment."""
-    rows = await search_business_events(session, user_id=user_id, limit=_RECENT_ACTIVITY)
+    reader (own actions + their orgs), so ``user_id`` narrows to the user's own trail. Each entry
+    deep-links to the concerned entity, resolving the row's org to a handle from the user's own
+    orgs (``handles``). ``who`` is dropped — every row is the viewer."""
+    rows = await search_business_events(
+        session,
+        user_id=user_id,
+        app=app or None,
+        text=q or None,
+        from_dt=_parse_dt(from_dt),
+        to_dt=_parse_dt(to_dt),
+        limit=limit,
+    )
 
-    # The trail is all the viewer's own actions, so 'who' would just repeat the viewer.
     def link(r: BusinessEventRow) -> str | None:
         return entity_url(r.kind, r.entity_id, handles.get(r.org_id))
 
-    return activity_entries(rows, show_actor=False, link=link)
+    entries = activity_entries(rows, show_actor=False, link=link)
+    return {
+        "activity_groups": group_activity_by_day(entries, now=clock.now()),
+        "activity_has_more": len(rows) >= limit and limit < _ACTIVITY_MAX,
+        "activity_limit": limit,
+        "activity_next_limit": min(limit + _ACTIVITY_PAGE, _ACTIVITY_MAX),
+        "activity_q": q,
+        "activity_app": app,
+        "activity_from": from_dt,
+        "activity_to": to_dt,
+        "activity_query": _activity_query(q, app, from_dt, to_dt),
+    }
 
 
 async def _profile_context(
@@ -165,6 +217,9 @@ async def _profile_context(
             passkeys_enabled = False  # server-side feature off: hide the section
     context = await fullpage_context(session, current_user)
     orgs = context["org_nav"]
+    handles = {str(o.id): o.handle for o in orgs}
+    counts = await daily_activity_counts(session, user_id=current_user.id)
+    now = clock.now()
     return {
         "user": current_user,
         "profile": profile,
@@ -178,9 +233,11 @@ async def _profile_context(
         "twofa_active": twofa_active,
         "passkeys_enabled": passkeys_enabled,
         "passkeys": passkeys,
-        "recent_activity": await _recent_activity(
-            session, current_user.id, {str(o.id): o.handle for o in orgs}
+        "activity_calendar": heatmap_calendar(
+            counts, now=now, since=profile.created_at if profile else None
         ),
+        "activity_stats": activity_stats(counts, now=now),
+        **await _activity_context(session, current_user.id, handles),
         **context,
     }
 
@@ -231,6 +288,31 @@ async def profile_page(
         # One-shot: the enrolment secret is shown once, then cleared.
         response.delete_cookie(_ENROLLMENT_COOKIE, path="/profile")
     return response
+
+
+@router.get("/profile/activity", response_model=None)
+async def profile_activity(
+    request: Request,
+    current_user: CurrentUser,
+    session: RlsSession,
+    q: str = "",
+    app: str = "",
+    from_dt: str = "",
+    to_dt: str = "",
+    limit: int = _ACTIVITY_PAGE,
+) -> HTMLResponse | JSONResponse:
+    """The day-grouped activity feed as an HTMX fragment — search, type filter, date range and
+    Load-older all re-render it. API callers get the same trail as JSON."""
+    limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
+    context = await fullpage_context(session, current_user)
+    handles = {str(o.id): o.handle for o in context["org_nav"]}
+    ctx = await _activity_context(
+        session, current_user.id, handles, q=q, app=app, from_dt=from_dt, to_dt=to_dt, limit=limit
+    )
+    if wants_json(request):
+        entries = [e for g in ctx["activity_groups"] for e in g["entries"]]
+        return JSONResponse({"entries": [{**e, "ts": e["ts"].isoformat()} for e in entries]})
+    return templates.TemplateResponse(request, "profile/activity_feed.html", ctx)
 
 
 @router.post("/profile/password", response_model=None)

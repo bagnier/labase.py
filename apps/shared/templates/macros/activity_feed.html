@@ -1,0 +1,64 @@
+{# The day-grouped activity feed as a centered vertical timeline — content · node · time
+   (e.g. "Ticked Write the changelog   ●   14:32"). Takes the day sections
+   `group_activity_by_day()` returns; each row is an `activity_entries` dict
+   {who, label, detail, app, icon, level, ts, href}. A row with an `href` links the whole
+   content block to the entity it concerns (todo, file, page, calendar event). The node tint
+   follows severity so a security event stands out; the rail (`.activity-timeline`) is a single
+   centered spine. The day header carries the date, so each row shows the clock time. #}
+{% from "macros/empty_state.html" import empty_state %}
+{% macro _row(e) %}
+  {% set tone = 'bg-warning/15 text-warning' if e.level == 'warning'
+      else 'bg-error/15 text-error' if e.level == 'error'
+    else 'bg-primary/10 text-primary' %}
+  {% set content %}
+    <span class="text-sm leading-snug">
+      {% if e.who %}
+        <span class="font-semibold text-base-content">{{ e.who }}</span>
+        <span class="text-base-content/60">{{ e.label|lower }}</span>
+      {% else %}
+        <span class="text-base-content/80">{{ e.label }}</span>
+      {% endif %}
+      {% if e.detail %}
+        <span class="font-semibold text-base-content {% if e.href %}group-hover:text-primary group-hover:underline{% endif %}">{{ e.detail }}</span>
+      {% endif %}
+    </span>
+    {% if e.app %}<span class="block text-xs text-base-content/40 mt-0.5">{{ e.app }}</span>{% endif %}
+  {% endset %}
+  <li class="grid grid-cols-[1fr_2.25rem_1fr] items-center">
+    {# content — right-aligned toward the central rail #}
+    {% if e.href %}
+      <a href="{{ e.href }}"
+         class="group block text-right px-4 py-2 min-w-0 rounded-box hover:bg-base-200 transition-colors">{{ content }}</a>
+    {% else %}
+      <div class="block text-right px-4 py-2 min-w-0">{{ content }}</div>
+    {% endif %}
+    {# node — on the rail #}
+    <span class="flex justify-center">
+      <span class="relative z-10 grid place-items-center size-8 rounded-full ring-4 ring-base-100 {{ tone }}">
+        <i class="ph ph-{{ e.icon }} text-sm" aria-hidden="true"></i>
+      </span>
+    </span>
+    {# time — left-aligned from the rail #}
+    <span class="text-left px-4 py-2 text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ e.ts.strftime("%H:%M") }}</span>
+  </li>
+{% endmacro %}
+{% macro activity_feed(groups, empty="Nothing recorded yet — your actions will appear here.") %}
+  {% if groups %}
+    <div data-activity-feed>
+      {% for g in groups %}
+        <div class="flex items-center gap-3 mt-6 first:mt-1 mb-1">
+          <span class="flex-1 h-px bg-base-300"></span>
+          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60 whitespace-nowrap">
+            {{ g.label }} <span class="text-base-content/30 font-medium tabular-nums">· {{ g.count }}</span>
+          </span>
+          <span class="flex-1 h-px bg-base-300"></span>
+        </div>
+        <ul class="activity-timeline list-none m-0 p-0">
+          {% for e in g.entries %}{{ _row(e) }}{% endfor %}
+        </ul>
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state(empty) }}
+  {% endif %}
+{% endmacro %}

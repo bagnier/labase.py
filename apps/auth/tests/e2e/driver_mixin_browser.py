@@ -102,8 +102,15 @@ class AuthBrowserMixin(BrowserBase):
         self._store_active_org_handle()
 
     def logout_action(self) -> None:
-        self.page.evaluate("fetch('/auth/logout',{method:'POST'})")
-        self.page.goto(f"{self.base_url}/auth/login", wait_until="load")
+        # Sign out the way a human does — no fetch(): from the profile's Account tab,
+        # submit the Sign out form. If the session is already gone, /profile bounces to
+        # the login page and there is nothing left to click.
+        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        if "/auth/login" in self.page.url:
+            return
+        self.page.get_by_role("tab", name="Account", exact=True).check()
+        self.page.get_by_role("button", name="Sign out").click()
+        self.page.wait_for_load_state("load")
 
     def request_password_reset(self, email: str) -> None:
         self._reset_email = email
