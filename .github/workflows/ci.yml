@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+
+# Supersede in-flight runs on the same ref: a newer push cancels the older run
+# instead of queueing behind it — fewer billed minutes, faster feedback.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci:
@@ -46,7 +58,10 @@ jobs:
           version: 2.109.0
 
       - name: Start Supabase local
-        run: supabase start
+        # Exclude services the app and test suite never touch (verified: avatars use
+        # raw Storage downloads not imgproxy; no edge functions; no realtime channels).
+        # Keeps db, auth, rest, storage, mailpit — everything the suite exercises.
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime
 
       - name: Run CI
         run: make ci
