@@ -93,9 +93,15 @@ function daisyDefaults(theme, type) {
     colors: theme.palette,
     grid: { borderColor: theme.gridBorder, strokeDashArray: 4 },
     dataLabels: { enabled: false },
+    // A bar takes no stroke: a non-zero width paints every zero-height stacked
+    // segment as a thin line in the series colour — e.g. an always-present but
+    // empty "issue" series would cap each logs-activity bar in phantom red.
+    // (curve:'smooth' only means something for line/area anyway.)
     stroke: RADIAL_TYPES.has(type)
       ? { width: 2, colors: [theme.base100] }
-      : { width: 2, curve: 'smooth' },
+      : type === 'bar'
+        ? { width: 0 }
+        : { width: 2, curve: 'smooth' },
     plotOptions: { bar: { borderRadius: theme.barRadius, borderRadiusApplication: 'end' } },
     tooltip: { theme: mode },
     legend: { labels: { colors: theme.baseContent } },
