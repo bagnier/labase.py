@@ -1,28 +1,18 @@
-"""Org's public events — membership, invitations and org lifecycle on the shared trail.
+"""Org's public events — org lifecycle, membership and invitations on the shared trail.
 
-Two families share this module:
+All are :class:`OrgEvent` business events (org-scoped) — an org being created, a member
+joining/leaving, roles changing, invitations, and the ``warning``-level guard rejections;
+the persister on the :class:`~apps.shared.events.BusinessEvent` base records every one.
 
-- :class:`OrgCreated` — the internal *signal* emitted when a personal org is auto-seeded (carries
-  the owner's ``access_token`` so subscribers can seed a welcome page). It stays a lean signal.
-- the :class:`OrgEvent` business events — an org being created, a member joining/leaving, roles
-  changing, invitations, and the ``warning``-level guard rejections. All are org-scoped; the
-  persister on the :class:`~apps.shared.events.BusinessEvent` base records them.
+:class:`OrganizationCreated` doubles as the welcome-seeding trigger: the per-app seeders
+subscribe to it directly, so emitting it dispatches to them (by concrete type) and then to
+the persister (by base type). One event, one business meaning — no separate seeding signal.
 """
 
-import uuid
 from dataclasses import dataclass
 from typing import ClassVar
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityUpdated
-
-
-@dataclass(frozen=True)
-class OrgCreated:
-    """Emitted post-commit once a new organisation and its owner exist; subscribers seed without
-    importing one another. Not a trail event — a lean integration signal carrying the token."""
-
-    org_id: uuid.UUID
-    access_token: str
 
 
 class OrgEvent(BusinessEvent):

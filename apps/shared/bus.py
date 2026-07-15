@@ -26,8 +26,8 @@ log = structlog.get_logger("labase.shared.bus")
 
 E = TypeVar("E")
 
-# Field-name substrings that must never reach the log verbatim (e.g. UserCreated.access_token,
-# OrgCreated.access_token). Matched case-insensitively against each dataclass field's name.
+# Field-name substrings that must never reach the log verbatim (e.g. UserCreated.access_token).
+# Matched case-insensitively against each dataclass field's name.
 _REDACT_SUBSTRINGS = ("token", "password", "secret")
 
 

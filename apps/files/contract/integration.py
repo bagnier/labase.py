@@ -2,22 +2,23 @@
 
 Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the public
 share router and the org-scoped router, claims the ``files`` slug, answers the dashboard
-``OverviewQuery``, and drops a welcome file on ``OrgCreated``.
+``OverviewQuery``, and drops a welcome file on ``OrganizationCreated``.
 """
 
 import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
 from apps.files.infra.storage import storage_path
 from apps.organizations.contract import ORG_PREFIX
-from apps.organizations.contract.events import OrgCreated
+from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import get_org_owner_id
+from apps.organizations.contract.queries import spawn_org_seed
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.persistence.database import admin_session_factory
-from apps.shared.persistence.storage import bucket, user_storage_client
+from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import pluralize
 
@@ -40,7 +41,7 @@ def mount(host: Host) -> None:
             on=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(public_router, ""), (router, ORG_PREFIX)],
             nav=[NavItem("Files", "folder", "files", "/files", order=50)],
-            when_enabled=[(OverviewQuery, _overview), (OrgCreated, _seed)],
+            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
             reserve=("files",),  # even when disabled, to keep the slug from being squatted
         )
     )
@@ -105,24 +106,23 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})
 
 
-async def _seed(event: OrgCreated) -> None:
-    async with admin_session_factory()() as session:
-        owner_id = await get_org_owner_id(session, event.org_id)
-    if owner_id is None:
-        return
+async def _seed(event: OrganizationCreated) -> None:
+    spawn_org_seed(event.org_id, _seed_welcome)
 
+
+async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
     file_id = uuid.uuid4()
-    path = storage_path(event.org_id, file_id, _WELCOME_FILENAME)
-    storage = user_storage_client(event.access_token)
-    await storage.from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
-
-    async with admin_session_factory()() as session:
-        repo = OrgFileRepository(session, event.org_id)
-        await repo.add(
-            user_id=owner_id,
-            filename=_WELCOME_FILENAME,
-            storage_path=path,
-            content_type="text/plain",
-            size_bytes=len(_WELCOME_BODY),
-        )
-        await session.commit()
+    path = storage_path(org_id, file_id, _WELCOME_FILENAME)
+    # Server-side seeding runs without a caller JWT (e.g. an org created via an API key), so the
+    # upload goes through the service-role client rather than a user token. Fire-and-forget (off
+    # the request path), so holding the session across the small upload is fine.
+    await (
+        admin_storage().from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
+    )
+    await OrgFileRepository(session, org_id).add(
+        user_id=owner_id,
+        filename=_WELCOME_FILENAME,
+        storage_path=path,
+        content_type="text/plain",
+        size_bytes=len(_WELCOME_BODY),
+    )

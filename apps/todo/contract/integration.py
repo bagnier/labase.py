@@ -1,7 +1,7 @@
 """How the to-do context plugs into the running app.
 
 Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the router,
-answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrgCreated``.
+answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrganizationCreated``.
 """
 
 import uuid
@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
-from apps.organizations.contract.events import OrgCreated
+from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import seed_with_owner
+from apps.organizations.contract.queries import spawn_org_seed
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.domain.models import TodoItem
@@ -38,7 +38,7 @@ def mount(host: Host) -> None:
             on=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)],
-            when_enabled=[(OverviewQuery, _overview), (OrgCreated, _seed)],
+            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
         )
     )
 
@@ -80,11 +80,12 @@ async def _overview(query: OverviewQuery) -> Overview:
     )
 
 
-async def _seed(event: OrgCreated) -> None:
-    async def seed(session: AsyncSession, owner_id: uuid.UUID) -> None:
-        repo = TodoRepository(session, event.org_id)
-        # add() prepends, so insert in reverse to keep list order.
-        for title in reversed(_WELCOME_TODOS):
-            await repo.add(owner_id, title)
+async def _seed(event: OrganizationCreated) -> None:
+    spawn_org_seed(event.org_id, _seed_welcome)
 
-    await seed_with_owner(event.org_id, seed)
+
+async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    repo = TodoRepository(session, org_id)
+    # add() prepends, so insert in reverse to keep list order.
+    for title in reversed(_WELCOME_TODOS):
+        await repo.add(owner_id, title)

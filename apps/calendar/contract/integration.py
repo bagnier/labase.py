@@ -2,7 +2,7 @@
 
 Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the org-scoped
 router, answers the dashboard ``OverviewQuery`` (upcoming events) and the server-wide
-``ConsoleOverviewQuery`` (total events), and seeds a welcome event on ``OrgCreated``.
+``ConsoleOverviewQuery`` (total events), and seeds a welcome event on ``OrganizationCreated``.
 """
 
 import uuid
@@ -15,9 +15,9 @@ from apps.calendar.infra.repository import CalendarEventRepository
 from apps.calendar.infra.router import router
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
-from apps.organizations.contract.events import OrgCreated
+from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import seed_with_owner
+from apps.organizations.contract.queries import spawn_org_seed
 from apps.shared import clock
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.persistence.repository import count_all
@@ -37,7 +37,7 @@ def mount(host: Host) -> None:
             on=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=30)],
-            when_enabled=[(OverviewQuery, _overview), (OrgCreated, _seed)],
+            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
         )
     )
 
@@ -72,20 +72,20 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     )
 
 
-async def _seed(event: OrgCreated) -> None:
+async def _seed(event: OrganizationCreated) -> None:
     """Drop a single welcome event dated today, so a brand-new org's calendar isn't empty.
 
-    Production-only: ``OrgCreated`` is suppressed in the test schema, so this never runs under
-    the E2E drivers (mirrors the todo/files/learning seed handlers)."""
+    Suppressed in the test schema (via ``spawn_org_seed``), so this never runs under the E2E
+    drivers (mirrors the todo/files/learning seed handlers)."""
+    spawn_org_seed(event.org_id, _seed_welcome)
 
-    async def seed(session: AsyncSession, owner_id: uuid.UUID) -> None:
-        start = clock.now().replace(hour=9, minute=0, second=0, microsecond=0)
-        await CalendarEventRepository(session, event.org_id).add(
-            owner_id,
-            _WELCOME_TITLE,
-            start,
-            start + timedelta(hours=1),
-            description="Edit or delete this sample event to get started.",
-        )
 
-    await seed_with_owner(event.org_id, seed)
+async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    start = clock.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    await CalendarEventRepository(session, org_id).add(
+        owner_id,
+        _WELCOME_TITLE,
+        start,
+        start + timedelta(hours=1),
+        description="Edit or delete this sample event to get started.",
+    )

@@ -2,8 +2,8 @@
 
 Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the
 collection, invitation and org-scoped routers, claims the ``invitations`` slug, and reacts to
-auth's ``UserCreated`` by creating the user's personal org then scheduling ``OrgCreated`` so
-apps can seed welcome data.
+auth's ``UserCreated`` by creating the user's personal org then emitting ``OrganizationCreated``
+— the trail record that also triggers the welcome seeders.
 """
 
 import uuid
@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
-from apps.organizations.contract.events import OrgCreated
+from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.fullpage import provide_org_nav
 from apps.organizations.contract.queries import org_handle_taken
 from apps.organizations.domain.models import Membership, Organization
@@ -21,7 +21,6 @@ from apps.organizations.infra.invitation_router import router as invitation_rout
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.shared.bus import bus
-from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, MountPhase, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.persistence.repository import count_created_per_day
@@ -117,8 +116,15 @@ async def _create_org(event: UserCreated) -> None:
             auth_user_id=user_id,
         )
         await session.commit()
-    if event.access_token and get_technical_settings().supabase_database_schema != "test":
-        await bus.emit(OrgCreated(org_id=org.id, access_token=event.access_token))
+    # Committed above so the seeders (each on its own admin session) can read the org back.
+    await bus.emit(
+        OrganizationCreated(
+            actor_id=str(user_id),
+            org_id=str(org.id),
+            entity_id=str(org.id),
+            label=org.name,
+        )
+    )
 
 
 async def _forget_user(event: UserDeleted) -> None:

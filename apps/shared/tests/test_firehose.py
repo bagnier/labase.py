@@ -5,10 +5,12 @@ queue grows), and a tick funnels the queue to the day files, batching a burst pe
 """
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 import structlog
 
+from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.observability import firehose
 from apps.shared.observability.firehose import (
@@ -20,6 +22,11 @@ from apps.shared.observability.firehose import (
     read_firehose,
 )
 
+# The fixed day every test's log lines are stamped with. read_firehose() reads only the recent
+# window (now - FIREHOSE_WINDOW), so the clock is pinned here to keep that window deterministic
+# regardless of the real date (otherwise these rows fall out of the window a few days on).
+_NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
+
 
 @pytest.fixture(autouse=True)
 def _isolate_firehose(tmp_path, monkeypatch):
@@ -28,6 +35,7 @@ def _isolate_firehose(tmp_path, monkeypatch):
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
     monkeypatch.setattr(firehose, "get_technical_settings", lambda: settings)
+    monkeypatch.setattr(clock, "now", lambda: _NOW)
     clear_firehose()
     yield
     clear_firehose()

@@ -1,19 +1,22 @@
 """How the learning context plugs into the running app.
 
 Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the router,
-answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrgCreated``.
+answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrganizationCreated``.
 """
 
+import uuid
+
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.learning.domain.models import Card, Deck
 from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
-from apps.organizations.contract.events import OrgCreated
+from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
+from apps.organizations.contract.queries import spawn_org_seed
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
 
@@ -41,7 +44,7 @@ def mount(host: Host) -> None:
             on=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20)],
-            when_enabled=[(OverviewQuery, _overview), (OrgCreated, _seed)],
+            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
         )
     )
 
@@ -92,20 +95,23 @@ async def _overview(query: OverviewQuery) -> Overview:
     )
 
 
-async def _seed(event: OrgCreated) -> None:
-    async with admin_session_factory()() as session:
-        deck = Deck(org_id=event.org_id, name=_WELCOME_DECK, position=0)
-        session.add(deck)
-        await session.flush()
-        for position, card in enumerate(_WELCOME_CARDS):
-            session.add(
-                Card(
-                    org_id=event.org_id,
-                    deck_id=deck.id,
-                    external_id=card["external_id"],
-                    question=card["question"],
-                    answer=card["answer"],
-                    position=position,
-                )
+async def _seed(event: OrganizationCreated) -> None:
+    spawn_org_seed(event.org_id, _seed_welcome)
+
+
+async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, _owner_id: uuid.UUID) -> None:
+    # Decks and cards are org-scoped, not owner-scoped, so the owner isn't needed here.
+    deck = Deck(org_id=org_id, name=_WELCOME_DECK, position=0)
+    session.add(deck)
+    await session.flush()
+    for position, card in enumerate(_WELCOME_CARDS):
+        session.add(
+            Card(
+                org_id=org_id,
+                deck_id=deck.id,
+                external_id=card["external_id"],
+                question=card["question"],
+                answer=card["answer"],
+                position=position,
             )
-        await session.commit()
+        )
