@@ -1,0 +1,70 @@
+{% from "macros/empty_state.html" import empty_state %}
+{% from "macros/data_table.html" import data_table %}
+{# Totals + routes for the current window. Reloaded on its own when the chart is brushed. #}
+{% if windowed %}
+  <p class="text-xs text-base-content/60" data-load-range>
+    Brushed range —
+    <a class="link"
+       hx-get="/console/load"
+       hx-target="#load-detail"
+       hx-swap="innerHTML"
+       href="/console/load"
+       data-load-reset>reset to {{ window_hours }} h</a>
+  </p>
+{% endif %}
+{% if routes %}
+  <div class="stats shadow" role="group" aria-label="Traffic totals">
+    <div class="stat">
+      <div class="stat-title">
+        Requests
+        {% if not windowed %} ({{ window_hours }} h){% endif %}
+      </div>
+      <div class="stat-value text-2xl" data-load-total-requests>{{ totals.requests }}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Error rate</div>
+      <div class="stat-value text-2xl {% if totals.error_rate_pct %}text-error{% endif %}">{{ totals.error_rate_pct }}%</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">p95 latency</div>
+      <div class="stat-value text-2xl">
+        {% if totals.p95_ms is not none %}
+          {{ totals.p95_ms | int }} ms
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% call data_table('Routes') %}
+    <thead>
+      <tr>
+        <th scope="col">Route</th>
+        <th scope="col">Requests</th>
+        <th scope="col">Errors</th>
+        <th scope="col">p95</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in routes %}
+        <tr data-load-route="{{ r.label }}">
+          <td class="font-mono text-xs">{{ r.label }}</td>
+          <td data-load-requests>{{ r.requests }}</td>
+          <td data-load-errors
+              class="{% if r.error_rate_pct %}text-error{% else %}text-success{% endif %}">
+            {{ r.error_rate_pct | int }}%
+          </td>
+          <td data-load-p95>
+            {% if r.p95_ms is not none %}
+              {{ r.p95_ms | int }} ms
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  {% endcall %}
+{% else %}
+  {{ empty_state('No traffic in the selected range.', attr='data-load-empty') }}
+{% endif %}

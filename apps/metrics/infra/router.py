@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
@@ -34,10 +34,26 @@ async def metrics_exposition(current_user: CurrentAdmin) -> PlainTextResponse:
 async def load_screen(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
-    since = clock.now() - timedelta(hours=WINDOW_HOURS)
-    rows = await window_rows(session, since)
-    routes, totals = service.aggregate(rows)
-    series = service.timeseries(rows)
+    full_since = clock.now() - timedelta(hours=WINDOW_HOURS)
+    since, until, windowed = _detail_window(request, full_since)
+    routes, totals = service.aggregate(await window_rows(session, since, until))
+
+    # A drill on the chart reloads only the totals + routes for the brushed range; the
+    # chart itself (the full window) stays put as the navigation surface.
+    if request.headers.get("hx-request"):
+        return templates.TemplateResponse(
+            request,
+            "metrics/_detail.html",
+            {
+                "routes": routes,
+                "totals": totals,
+                "windowed": windowed,
+                "window_hours": WINDOW_HOURS,
+            },
+        )
+
+    full_rows = await window_rows(session, full_since)
+    series = service.timeseries(full_rows)
     if wants_json(request):
         return JSONResponse(
             {
@@ -53,12 +69,34 @@ async def load_screen(
             "user": current_user,
             "routes": routes,
             "totals": totals,
+            "windowed": windowed,
+            "has_traffic": bool(full_rows),
             "series_json": _series_chart_json(series),
             "window_hours": WINDOW_HOURS,
             "studio_url": _studio_url(),
             **await fullpage_context(session, current_user),
         },
     )
+
+
+def _detail_window(
+    request: Request, full_since: datetime
+) -> tuple[datetime, datetime | None, bool]:
+    """Resolve the totals/routes window from the chart's ``from``/``to`` brush (epoch ms).
+    Absent or malformed params fall back to the full ``WINDOW_HOURS`` — a drill never errors."""
+    since = _from_ms(request.query_params.get("from")) or full_since
+    until = _from_ms(request.query_params.get("to"))
+    windowed = since is not full_since or until is not None
+    return since, until, windowed
+
+
+def _from_ms(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        return datetime.fromtimestamp(int(float(raw)) / 1000, tz=UTC)
+    except TypeError, ValueError:
+        return None
 
 
 def _series_chart_json(series: list[LoadPoint]) -> str:
@@ -72,9 +110,14 @@ def _series_chart_json(series: list[LoadPoint]) -> str:
                 {"name": "Requests", "data": requests},
                 {"name": "Errors", "data": errors},
             ],
+            # Brushing the chart reloads #load-detail for the selected range (charts.js).
+            "drilldown": {"url": "/console/load", "target": "#load-detail"},
             "options": {
                 "colors": ["primary", "error"],
                 "chart": {"height": 240, "stacked": False},
+                # Stepline, not a spline: each step is exactly one bucket's count — no
+                # interpolated dips or phantom peaks between the real data points.
+                "stroke": {"curve": "stepline"},
                 "xaxis": {"type": "datetime"},
                 "yaxis": {"min": 0, "forceNiceScale": True},
                 "fill": {"type": "gradient", "gradient": {"opacityFrom": 0.35, "opacityTo": 0.05}},

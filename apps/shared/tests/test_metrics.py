@@ -1,5 +1,7 @@
 from apps.shared.observability.metrics import (
     BUCKET_BOUNDS_MS,
+    UNMATCHED_LABEL_CAP,
+    UNMATCHED_ROUTE,
     MetricsAccumulator,
     RouteStats,
     bucket_index,
@@ -74,6 +76,32 @@ def test_render_prometheus_exposes_cumulative_histogram():
     assert 'le="+Inf"} 3' in text
     assert 'http_request_duration_seconds_count{method="GET",route="/console"} 3' in text
     assert text.endswith("\n")
+
+
+def test_unmatched_keeps_the_real_path_as_label():
+    acc = MetricsAccumulator()
+    acc.observe("GET", "/.env", 404, 5, unmatched=True)
+    acc.observe("GET", "/acme/dead-link", 404, 5, unmatched=True)
+    assert set(acc.snapshot()) == {("GET", "/.env"), ("GET", "/acme/dead-link")}
+
+
+def test_unmatched_paths_overflow_collapses_into_the_bucket():
+    acc = MetricsAccumulator()
+    for i in range(UNMATCHED_LABEL_CAP):
+        acc.observe("GET", f"/missing/{i}", 404, 5, unmatched=True)
+    acc.observe("GET", "/one-too-many", 404, 5, unmatched=True)  # over the cap
+    acc.observe("GET", "/another", 404, 5, unmatched=True)
+
+    snap = acc.snapshot()
+    assert ("GET", "/one-too-many") not in snap
+    assert ("GET", "/another") not in snap
+    assert snap[("GET", UNMATCHED_ROUTE)].requests == 2  # both overflowed here
+
+
+def test_matched_route_is_never_capped():
+    acc = MetricsAccumulator()
+    acc.observe("GET", "/todo", 200, 10)  # default: unmatched=False
+    assert ("GET", "/todo") in acc.snapshot()
 
 
 def test_route_stats_copy_is_deep_enough():

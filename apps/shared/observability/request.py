@@ -7,12 +7,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from apps.shared.observability.metrics import UNMATCHED_ROUTE, accumulator
+from apps.shared.observability.metrics import accumulator
 from apps.shared.observability.sql import read_request_stats, start_request_stats
 
 log = structlog.get_logger("labase.http")
 
 _SKIP_PATHS = {"/health/live", "/health/ready"}
+_INFRA_PROBE_PREFIXES = ("/.well-known/",)
 _ASSET_SUFFIXES = (
     ".ico",
     ".png",
@@ -36,11 +37,39 @@ def _is_asset(path: str) -> bool:
     return path == "/favicon.ico" or path.startswith("/static/") or path.endswith(_ASSET_SUFFIXES)
 
 
+def _is_infra_probe(path: str) -> bool:
+    """A path the browser or infra fetches on its own — Chrome's devtools probe, ACME
+    challenges — always under ``/.well-known/``, never one of our links. Its 404 is noise
+    for both the timeline and the load metrics, even with a same-host referer."""
+    return path.startswith(_INFRA_PROBE_PREFIXES)
+
+
 def _is_internal_referer(request: Request) -> bool:
     """Whether the request followed a link from one of our own pages — a same-host ``Referer``.
     That's what makes a 404 a *dead link from ourselves* rather than a bot scan or a stray URL."""
     referer = request.headers.get("referer")
     return bool(referer) and urlparse(referer).hostname == request.url.hostname
+
+
+def _is_internal_dead_link(request: Request, status: int) -> bool:
+    """A 4xx that is a dead link from ourselves — a same-host ``Referer`` to a real, non-asset,
+    non-infra-probe path. The single test shared by the timeline (what to log) and the load
+    metrics (what to count)."""
+    path = request.url.path
+    return (
+        400 <= status < 500
+        and _is_internal_referer(request)
+        and not _is_asset(path)
+        and not _is_infra_probe(path)
+    )
+
+
+def _feeds_load_metrics(request: Request, status: int) -> bool:
+    """Which requests count toward ``/console/load``. Same universe as the timeline: our own
+    traffic and our own failures, never the noise. 2xx/3xx and every 5xx always count; a 4xx
+    (all of ``unmatched`` — a 404 before routing — plus matched 4xx) counts only when it's a
+    dead link from ourselves, so bot scans, the favicon probe and stray URLs stay out."""
+    return status < 400 or status >= 500 or _is_internal_dead_link(request, status)
 
 
 class RequestLogger(BaseHTTPMiddleware):
@@ -68,10 +97,22 @@ class RequestLogger(BaseHTTPMiddleware):
         response = await call_next(request)
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
-        # The router mutates the shared scope during matching, so the template
+        # The router mutates the shared scope during matching, so the matched template
         # (low-cardinality label) is only readable after call_next.
-        route_template = getattr(request.scope.get("route"), "path", UNMATCHED_ROUTE)
-        accumulator.observe(request.method, route_template, response.status_code, duration_ms)
+        if _feeds_load_metrics(request, response.status_code):
+            route = request.scope.get("route")
+            if route is not None:
+                accumulator.observe(request.method, route.path, response.status_code, duration_ms)
+            else:
+                # No route matched: record the real path (bounded by the accumulator) rather
+                # than an opaque label, so a genuine dead link from ourselves is identifiable.
+                accumulator.observe(
+                    request.method,
+                    request.url.path,
+                    response.status_code,
+                    duration_ms,
+                    unmatched=True,
+                )
 
         self._log_if_failed(request, response.status_code, duration_ms)
         response.headers["X-Request-ID"] = request_id
@@ -82,11 +123,7 @@ class RequestLogger(BaseHTTPMiddleware):
         """Emit the single ``request.failed`` line, or nothing. 5xx logs at ``error`` (a server
         fault, correlated with its captured issue); an internal dead-link 4xx at ``warning``."""
         server_error = status >= 500
-        internal_dead_link = (
-            400 <= status < 500
-            and _is_internal_referer(request)
-            and not _is_asset(request.url.path)
-        )
+        internal_dead_link = _is_internal_dead_link(request, status)
         if not (server_error or internal_dead_link):
             return
         db = read_request_stats()

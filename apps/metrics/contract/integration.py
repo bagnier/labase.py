@@ -85,7 +85,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     lines = [f"{total} requests ({WINDOW_HOURS}h)"] if total else ["No traffic yet"]
     return ConsoleOverview(
         key="metrics",
-        title="Metrics",
+        title="Load",
         icon="gauge",
         section="operations",
         href="/console/load",

@@ -145,9 +145,44 @@ function deepMerge(base, override) {
 // Every live chart, so a theme switch can re-apply the baseline to all of them.
 const charts = [];
 
+// A `drilldown: { url, target }` config makes the chart a navigation surface: drag to
+// zoom the x-range and the server reloads `target` scoped to the brushed [from, to]
+// (epoch ms) so the totals + table follow the zoom; the built-in reset button (min/max
+// come back undefined) restores the full view and reloads `target` whole.
+function wireDrilldown(options, drill) {
+  options.chart.toolbar = {
+    show: true,
+    tools: {
+      download: false,
+      selection: false,
+      zoom: true,
+      zoomin: false,
+      zoomout: false,
+      pan: false,
+      reset: true,
+    },
+  };
+  options.chart.zoom = { enabled: true, type: 'x', autoScaleYaxis: true };
+  const reload = (params) => {
+    const query = params ? `?${new URLSearchParams(params)}` : '';
+    window.htmx?.ajax('GET', `${drill.url}${query}`, { target: drill.target, swap: 'innerHTML' });
+  };
+  options.chart.events = {
+    ...(options.chart.events || {}),
+    zoomed: (_ctx, { xaxis }) => {
+      if (xaxis?.min != null && xaxis?.max != null) {
+        reload({ from: Math.round(xaxis.min), to: Math.round(xaxis.max) });
+      } else {
+        reload(null); // toolbar reset — back to the full window
+      }
+    },
+  };
+}
+
 function optionsFor(config, theme) {
   const merged = deepMerge(daisyDefaults(theme, config.type || 'line'), config.options || {});
   if (Array.isArray(merged.colors)) merged.colors = resolveTokens(merged.colors);
+  if (config.drilldown) wireDrilldown(merged, config.drilldown);
   merged.series = config.series;
   return merged;
 }

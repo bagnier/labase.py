@@ -79,8 +79,13 @@ async def add_deltas(
         )
 
 
-async def window_rows(session: AsyncSession, since: datetime) -> list[RequestMetric]:
-    return list(await session.scalars(select(RequestMetric).where(RequestMetric.bucket >= since)))
+async def window_rows(
+    session: AsyncSession, since: datetime, until: datetime | None = None
+) -> list[RequestMetric]:
+    query = select(RequestMetric).where(RequestMetric.bucket >= since)
+    if until is not None:
+        query = query.where(RequestMetric.bucket <= until)
+    return list(await session.scalars(query))
 
 
 async def total_requests(session: AsyncSession, since: datetime) -> int:

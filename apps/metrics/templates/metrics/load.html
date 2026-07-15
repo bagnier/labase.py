@@ -1,74 +1,26 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/empty_state.html" import empty_state %}
-{% from "macros/data_table.html" import data_table %}
-{% block title %}Metrics — Console{% endblock %}
+{% block title %}Load — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
-  <li>Metrics</li>
+  <li>Load</li>
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    {{ page_header('Metrics',
+    {{ page_header('Load',
         'HTTP traffic over the last ' ~ window_hours ~ ' hours, aggregated per route
         across all instances. Percentiles come from histogram buckets, Prometheus-style.') }}
-    {% if routes %}
+    {% if has_traffic %}
       <div class="card-panel">
         <div class="p-4">
           <h2 class="text-sm font-semibold mb-2">Requests over time</h2>
+          <p class="text-xs text-base-content/60 mb-2">Drag across the chart to focus the table on a range.</p>
           <script type="application/json" data-chart-config>{{ series_json | safe }}</script>
           <div data-chart></div>
         </div>
       </div>
-      <div class="stats shadow" role="group" aria-label="Traffic totals">
-        <div class="stat">
-          <div class="stat-title">Requests ({{ window_hours }} h)</div>
-          <div class="stat-value text-2xl" data-load-total-requests>{{ totals.requests }}</div>
-        </div>
-        <div class="stat">
-          <div class="stat-title">Error rate</div>
-          <div class="stat-value text-2xl {% if totals.error_rate_pct %}text-error{% endif %}">{{ totals.error_rate_pct }}%</div>
-        </div>
-        <div class="stat">
-          <div class="stat-title">p95 latency</div>
-          <div class="stat-value text-2xl">
-            {% if totals.p95_ms is not none %}
-              {{ totals.p95_ms | int }} ms
-            {% else %}
-              —
-            {% endif %}
-          </div>
-        </div>
-      </div>
-      {% call data_table('Routes') %}
-        <thead>
-          <tr>
-            <th scope="col">Route</th>
-            <th scope="col">Requests</th>
-            <th scope="col">Errors</th>
-            <th scope="col">p95</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in routes %}
-            <tr data-load-route="{{ r.label }}">
-              <td class="font-mono text-xs">{{ r.label }}</td>
-              <td data-load-requests>{{ r.requests }}</td>
-              <td data-load-errors
-                  class="{% if r.error_rate_pct %}text-error{% else %}text-success{% endif %}">
-                {{ r.error_rate_pct | int }}%
-              </td>
-              <td data-load-p95>
-                {% if r.p95_ms is not none %}
-                  {{ r.p95_ms | int }} ms
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endcall %}
+      <div id="load-detail" class="space-y-6">{% include "metrics/_detail.html" %}</div>
     {% else %}
       {{ empty_state('No traffic recorded yet. Metrics are flushed every minute — check back shortly.', attr='data-load-empty') }}
     {% endif %}

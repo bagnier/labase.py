@@ -66,3 +66,38 @@ def test_every_5xx_logs_an_error_regardless_of_referer(monkeypatch):
 
 def test_successful_request_leaves_no_row(monkeypatch):
     assert _decision(monkeypatch, "/console/logs", 200, "https://example.com/") == "none"
+
+
+# The load metrics count the same universe the timeline shows: our own traffic and our own
+# failures, never the bot-scan / favicon noise that would otherwise flood ``GET unmatched``.
+
+
+def test_load_metrics_count_success_and_server_errors():
+    assert R._feeds_load_metrics(_req("/todo"), 200)
+    assert R._feeds_load_metrics(_req("/todo"), 302)
+    assert R._feeds_load_metrics(_req("/api/x"), 500)
+
+
+def test_load_metrics_drop_bot_and_favicon_4xx():
+    assert not R._feeds_load_metrics(_req("/wp-login.php"), 404)  # no referer — a scan
+    assert not R._feeds_load_metrics(_req("/x", referer="https://evil.com/"), 404)  # external
+    assert not R._feeds_load_metrics(_req("/favicon.ico", referer="https://example.com/"), 404)
+
+
+def test_load_metrics_count_internal_dead_links():
+    assert R._feeds_load_metrics(_req("/acme/missing", referer="https://example.com/acme/"), 404)
+
+
+# ``/.well-known/*`` is fetched by the browser/infra itself (Chrome's devtools probe), so even
+# with a same-host referer it is noise, not a dead link — dropped from both logs and metrics.
+
+
+def test_well_known_probe_is_an_infra_probe():
+    assert R._is_infra_probe("/.well-known/appspecific/com.chrome.devtools.json")
+    assert not R._is_infra_probe("/acme/missing")
+
+
+def test_well_known_probe_stays_silent_even_from_our_page(monkeypatch):
+    path = "/.well-known/appspecific/com.chrome.devtools.json"
+    assert _decision(monkeypatch, path, 404, "https://example.com/home") == "none"
+    assert not R._feeds_load_metrics(_req(path, referer="https://example.com/home"), 404)

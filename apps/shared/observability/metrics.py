@@ -8,8 +8,13 @@ share it (collection is written once):
   and persists **deltas**, one row per (route, minute) — never one per request.
 
 Labels stay low-cardinality by design: route *template* (``/{org_handle}/todos``,
-not the expanded path), method, status class. Unmatched requests (404 before
-routing) all collapse into ``unmatched``.
+not the expanded path), method, status class. A request that matched no route is
+recorded under its real path (so a dead link from ourselves is identifiable), but
+only up to ``UNMATCHED_LABEL_CAP`` distinct paths — the overflow collapses into
+``unmatched`` so nothing can explode the label set. And only 4xx worth an admin's
+eyes reach here at all: ``RequestLogger`` gates them to internal dead links, so bot
+scans, the favicon probe and ``/.well-known`` browser probes never feed the
+accumulator (see ``_feeds_load_metrics``).
 """
 
 from dataclasses import dataclass, field
@@ -18,6 +23,10 @@ from dataclasses import dataclass, field
 # Prometheus-style; the +Inf bucket is the implicit last slot of ``buckets``.
 BUCKET_BOUNDS_MS: tuple[float, ...] = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000)
 UNMATCHED_ROUTE = "unmatched"
+# How many distinct no-route paths keep their real label before overflow collapses into
+# ``unmatched``. A safety net: recordable unmatched are already gated to our own dead links
+# (a handful), so this only caps a same-host-referer scanner.
+UNMATCHED_LABEL_CAP = 25
 
 
 def _empty_buckets() -> list[int]:
@@ -61,19 +70,40 @@ def bucket_index(duration_ms: float) -> int:
 class MetricsAccumulator:
     def __init__(self) -> None:
         self._stats: MetricsSnapshot = {}
+        self._unmatched_paths: set[str] = set()
 
-    def observe(self, method: str, route: str, status_code: int, duration_ms: float) -> None:
+    def observe(
+        self,
+        method: str,
+        route: str,
+        status_code: int,
+        duration_ms: float,
+        *,
+        unmatched: bool = False,
+    ) -> None:
+        if unmatched:
+            route = self._bounded_unmatched_label(route)
         stats = self._stats.setdefault((method, route), RouteStats())
         status_class = f"{status_code // 100}xx"
         stats.by_status[status_class] = stats.by_status.get(status_class, 0) + 1
         stats.buckets[bucket_index(duration_ms)] += 1
         stats.duration_sum_ms += duration_ms
 
+    def _bounded_unmatched_label(self, path: str) -> str:
+        """The real path while under the cap; the collapsed ``unmatched`` bucket beyond it."""
+        if path in self._unmatched_paths:
+            return path
+        if len(self._unmatched_paths) >= UNMATCHED_LABEL_CAP:
+            return UNMATCHED_ROUTE
+        self._unmatched_paths.add(path)
+        return path
+
     def snapshot(self) -> MetricsSnapshot:
         return {key: stats.copy() for key, stats in self._stats.items()}
 
     def reset(self) -> None:
         self._stats.clear()
+        self._unmatched_paths.clear()
 
     def render_prometheus(self) -> str:
         """Standard text exposition — cumulative counters since process start."""
