@@ -10,7 +10,7 @@
   <li>Profile</li>
 {% endblock %}
 {% block content %}
-  <div class="space-y-6 max-w-4xl">
+  <div class="space-y-6 max-w-2xl">
     {{ page_header('Profile', 'Your activity, and your account settings.') }}
     {# Activity is the primary tab; a form POST re-renders the whole page, so keep the tab that
        owns a just-shown alert/enrolment open across that reload. #}
@@ -158,20 +158,22 @@
                 </div>
               </div>
               {% if avatar_enabled %}
-                <div class="mb-6 space-y-3" data-avatar-upload>
+                <div class="mb-5 space-y-2" data-avatar-upload>
                   {{ alert('error', avatar_error) }}
                   {{ alert('success', avatar_info) }}
+                  <label class="fieldset-legend" for="avatar-file">Photo</label>
                   <form method="post"
                         action="/profile/avatar"
                         enctype="multipart/form-data"
                         class="flex items-center gap-2">
                     <input type="file"
+                           id="avatar-file"
                            name="file"
                            accept="image/png,image/jpeg,image/webp"
                            required
                            aria-label="Avatar image"
-                           class="file-input file-input-sm" />
-                    <button type="submit" class="btn btn-sm">
+                           class="file-input file-input-sm flex-1" />
+                    <button type="submit" class="btn btn-sm flex-none">
                       {{ "Replace photo" if (profile and profile.avatar_path) else "Upload photo" }}
                     </button>
                   </form>
@@ -183,22 +185,22 @@
                       action="/profile"
                       hx-post="/profile"
                       hx-target="body"
-                      class="space-y-4"
+                      class="space-y-1"
                       data-handle-form>
-                  {{ input_field("handle", "handle", label="Handle", placeholder="your-handle", mono=true,
-                                    value=(profile.handle if (profile and profile.handle) else ''),
-                  error=error) }}
-                  {{ input_field("email", "email", label="Email",
-                                    value=user.email, disabled=true,
-                                    hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
-                  <div class="pt-1">
-                    <button type="submit" class="btn btn-primary">Save changes</button>
+                  <label class="fieldset-legend" for="handle">Handle</label>
+                  <div class="flex items-center gap-2">
+                    <input type="text"
+                           id="handle"
+                           name="handle"
+                           value="{{ profile.handle if (profile and profile.handle) else '' }}"
+                           placeholder="your-handle"
+                           class="input input-sm font-mono flex-1{% if error %} input-error{% endif %}" />
+                    <button type="submit" class="btn btn-primary btn-sm flex-none">Save changes</button>
                   </div>
+                  {% if error %}
+                    <p class="text-xs text-error">{{ error }}</p>
+                  {% endif %}
                 </form>
-              {% else %}
-                {{ input_field("email", "email", label="Email",
-                                value=user.email, disabled=true,
-                                hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
               {% endif %}
             </div>
           </div>
@@ -231,7 +233,7 @@
             <form hx-post="/organizations"
                   hx-target="#org-create-result"
                   hx-swap="innerHTML"
-                  class="flex gap-2">
+                  class="flex gap-2 items-center">
               <input type="text"
                      name="name"
                      placeholder="Name of the new organisation"
@@ -239,8 +241,8 @@
                      required
                      minlength="1"
                      maxlength="255"
-                     class="input w-full flex-1" />
-              <button type="submit" class="btn btn-primary flex-none">Create</button>
+                     class="input input-sm flex-1" />
+              <button type="submit" class="btn btn-primary btn-sm flex-none">Create</button>
             </form>
             <div id="org-create-result" aria-live="polite"></div>
           </div>
@@ -265,10 +267,10 @@
               {{ alert('success', email_info) }}
               <form method="post" action="/profile/email" class="space-y-4 max-w-sm">
                 {{ input_field("new_email", "new_email", type="email",
-                                label="New email", required=true) }}
+                                label="New email", required=true, sm=true) }}
                 {{ input_field("email_current_password", "current_password", type="password",
-                                label="Confirm with your password", required=true) }}
-                <button type="submit" class="btn btn-primary">Send confirmation link</button>
+                                label="Confirm with your password", required=true, sm=true) }}
+                <button type="submit" class="btn btn-primary btn-sm">Send confirmation link</button>
               </form>
             </div>
           </section>
@@ -276,8 +278,8 @@
           <section class="card-panel">
             <div class="card-body">
               <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
-              {{ input_field("email_ro", "email", label="Email",
-                            value=user.email, disabled=true, hint="Email cannot be changed.") }}
+              {{ input_field("email_ro", "email", label="Email", label_hidden=true,
+                            value=user.email, disabled=true, sm=true, hint="Email cannot be changed.") }}
             </div>
           </section>
         {% endif %}
@@ -300,10 +302,10 @@
               {{ alert('success', password_info) }}
               <form method="post" action="/profile/password" class="space-y-4 max-w-sm">
                 {{ input_field("current_password", "current_password", type="password",
-                                label="Current password", required=true) }}
+                                label="Current password", required=true, sm=true) }}
                 {{ input_field("new_password", "new_password", type="password",
-                                label="New password", required=true) }}
-                <button type="submit" class="btn btn-primary">Change password</button>
+                                label="New password", required=true, sm=true) }}
+                <button type="submit" class="btn btn-primary btn-sm">Change password</button>
               </form>
             </div>
           </section>
@@ -327,15 +329,15 @@
                            name="factor_id"
                            value="{{ twofa_enrollment.factor_id }}">
                     {{ input_field("twofa_code", "code", label="Authenticator code",
-                                        placeholder="123456", required=true) }}
-                    <button type="submit" class="btn btn-primary">Confirm</button>
+                                        placeholder="123456", required=true, sm=true) }}
+                    <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
                   </form>
                 {% elif twofa_active %}
                   <p class="text-sm text-base-content/70">Sign-in now asks for a code after the password.</p>
                 {% else %}
                   <p class="text-sm text-base-content/70 mb-3">Require a code from your authenticator app at sign-in.</p>
                   <form method="post" action="/profile/2fa/enroll">
-                    <button type="submit" class="btn">Enable two-factor</button>
+                    <button type="submit" class="btn btn-sm">Enable two-factor</button>
                   </form>
                 {% endif %}
               </div>
@@ -359,13 +361,13 @@
                           <p class="text-xs text-base-content/60">Added {{ pk.created_at[:10] }}</p>
                         </div>
                         <form method="post" action="/profile/passkeys/{{ pk.id }}/delete">
-                          <button type="submit" class="btn btn-xs btn-error btn-outline">Remove</button>
+                          <button type="submit" class="btn btn-error btn-outline btn-sm">Remove</button>
                         </form>
                       </li>
                     {% endfor %}
                   </ul>
                 {% endif %}
-                <button type="button" class="btn" data-passkey-register>
+                <button type="button" class="btn btn-sm" data-passkey-register>
                   <i class="ph ph-fingerprint" aria-hidden="true"></i>
                   Add a passkey
                 </button>
@@ -394,7 +396,7 @@
               <h2 class="card-title text-sm font-semibold mb-3">Session</h2>
               <p class="text-sm text-base-content/70 mb-3">Sign out of this browser.</p>
               <form method="post" action="/auth/logout">
-                <button type="submit" class="btn">
+                <button type="submit" class="btn btn-sm">
                   <i class="ph ph-sign-out ph-4" aria-hidden="true"></i>
                   Sign out
                 </button>
@@ -413,8 +415,8 @@
                 {{ alert('error', deletion_error) }}
                 <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
                   {{ input_field("deletion_password", "current_password", type="password",
-                                    label="Your password", required=true) }}
-                  <button type="submit" class="btn btn-error btn-outline">Delete my account</button>
+                                    label="Your password", required=true, sm=true) }}
+                  <button type="submit" class="btn btn-error btn-outline btn-sm">Delete my account</button>
                 </form>
               </div>
             </section>

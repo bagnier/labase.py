@@ -1,5 +1,6 @@
 {% macro input_field(id, name, type="text", label="", placeholder="", value="",
-  disabled=false, required=false, optional=false, mono=false, hint="", error="", label_hidden=false) %}
+  disabled=false, required=false, optional=false, mono=false, hint="", error="", label_hidden=false,
+  sm=false) %}
   <fieldset class="fieldset">
     {% if label %}
       <legend class="fieldset-legend{% if label_hidden %} sr-only{% endif %}"
@@ -17,13 +18,13 @@
            {% if disabled %}disabled{% endif %}
            {% if required %}required{% endif %}
            {% if error %}aria-invalid="true"{% endif %}
-           class="input w-full{% if mono %} font-mono{% endif %}{% if error %} input-error{% endif %}" />
+           class="input w-full{% if sm %} input-sm{% endif %}{% if mono %} font-mono{% endif %}{% if error %} input-error{% endif %}" />
     {% if error %}<p class="label text-xs text-error">{{ error }}</p>{% endif %}
     {% if hint %}<p class="label text-xs">{{ hint }}</p>{% endif %}
   </fieldset>
 {% endmacro %}
 {% macro select_field(id, name, options, selected="", label="", hint="",
-  required=false, disabled=false, label_hidden=false) %}
+  required=false, disabled=false, label_hidden=false, sm=false) %}
   {# options: a list of values, or of (value, label) pairs. #}
   <fieldset class="fieldset">
     {% if label %}
@@ -35,7 +36,7 @@
             {% if label %}aria-labelledby="{{ id }}-label"{% endif %}
             {% if required %}required{% endif %}
             {% if disabled %}disabled{% endif %}
-            class="select w-full">
+            class="select w-full{% if sm %} select-sm{% endif %}">
       {% for opt in options %}
         {% set val = opt if opt is string else opt[0] %}
         {% set text = opt if opt is string else opt[1] %}
