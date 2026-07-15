@@ -22,9 +22,10 @@ Feature: Unified logs
     And the entry "request.finished" is listed with source "http"
     And the entry "ValueError: boom" is listed with source "error"
 
-  Scenario: The logs screen has an empty state before anything is logged
-    Given a server admin is signed in as "root@example.com"
-    When the admin opens the logs screen
+  Scenario: The logs screen shows an empty state when nothing matches the filter
+    Given the current date is "2026-06-26"
+    And a server admin is signed in as "root@example.com"
+    When the admin filters the logs to dates from "2020-01-01" to "2020-01-02"
     Then the logs screen reports no entries
 
   # Filtering
@@ -149,12 +150,14 @@ Feature: Unified logs
     And a business event "todo.created" is recorded in org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then the entry "todo.created" is listed with source "event"
+    Then the entry "todo.created" is listed with source "business"
 
   # Activity graph
 
   Scenario: The activity graph sums each source over time
-    Given the current date is "2026-06-26"
+    # Current day sits a day after the seeded events so the admin's own sign-in
+    # (a business event dated "now") lands in a different bucket than the one asserted.
+    Given the current date is "2026-06-27"
     And a business event "todo.created" from org "Acme" recorded on "2026-06-26"
     And a business event "todo.deleted" from org "Acme" recorded on "2026-06-26"
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-26"
@@ -164,7 +167,9 @@ Feature: Unified logs
     Then the activity for "2026-06-26" shows 2 business, 1 http, and 1 error
 
   Scenario: The activity graph re-buckets by the selected grain
-    Given the current date is "2026-06-26"
+    # Current month sits after the seeded event so the admin's own sign-in business
+    # event (dated "now") falls in a later month than the one asserted.
+    Given the current date is "2026-07-01"
     And a business event "todo.created" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin views the activity by "month"
@@ -179,7 +184,9 @@ Feature: Unified logs
     Then the activity for "2026-06-26" shows 1 business, 0 http, and 0 error
 
   Scenario: The graph and table stay in sync on the selected period
-    Given the current date is "2026-06-26"
+    # Current day sits just past the filter window so the admin's own sign-in business
+    # event (dated "now") is excluded from both the table and the graph.
+    Given the current date is "2026-06-27"
     And a business event "todo.created" from org "Acme" recorded on "2026-06-22"
     And a business event "todo.deleted" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
