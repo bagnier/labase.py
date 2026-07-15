@@ -1,45 +1,49 @@
 {% from "macros/empty_state.html" import empty_state %}
 {% if new_key %}
-  <div role="alert"
-       class="alert alert-success flex-col items-start gap-2 mb-4">
-    <p class="font-medium">Key "{{ new_key.name }}" created.</p>
-    <p class="text-xs">Copy it now — it will not be shown again:</p>
-    <code class="select-all w-full text-sm font-mono text-base-content bg-base-100 border border-base-300 rounded px-2 py-1.5 break-all"
-          data-api-key-secret>{{ new_key.secret }}</code>
+  <div role="alert" class="alert alert-success flex items-start gap-3 mb-4">
+    <i class="ph ph-check-circle text-lg shrink-0" aria-hidden="true"></i>
+    <div class="min-w-0 flex-1 space-y-2">
+      <p class="text-sm">
+        <span class="font-semibold">Key "{{ new_key.name }}" created.</span>
+        Copy it now — it will not be shown again:
+      </p>
+      <code class="select-all block w-full text-sm font-mono text-base-content bg-base-100 border border-base-300 rounded px-2 py-1.5 break-all"
+            data-api-key-secret>{{ new_key.secret }}</code>
+    </div>
   </div>
 {% endif %}
 {% if keys %}
   <div class="list-panel mb-4">
     {% for k in keys %}
-      <div class="grid grid-cols-1 sm:grid-cols-[1fr_140px_170px_90px] gap-4 items-center p-4"
+      <div class="flex items-center justify-between gap-4 p-4"
            data-api-key="{{ k.name }}"
            data-api-key-status="{{ 'revoked' if k.revoked_at else 'active' }}">
-        <div>
+        <div class="min-w-0">
           <span class="font-medium text-sm">{{ k.name }}</span>
-          <div class="font-mono text-xs text-base-content/70 mt-0.5">{{ k.prefix }}…</div>
+          <div class="font-mono text-xs text-base-content/70 mt-0.5 truncate">{{ k.prefix }}…</div>
         </div>
-        <span class="text-xs text-base-content/70">
-          {% if k.last_used_at %}
-            used <time datetime="{{ k.last_used_at.isoformat() }}">{{ k.last_used_at.strftime("%Y-%m-%d %H:%M") }}</time>
-          {% else %}
-            never used
-          {% endif %}
-        </span>
-        <span class="text-xs">
+        <div class="flex items-center gap-3 flex-none">
+          <span class="text-xs text-base-content/70 whitespace-nowrap">
+            {% if k.last_used_at %}
+              used <time datetime="{{ k.last_used_at.isoformat() }}">{{ k.last_used_at.strftime("%Y-%m-%d %H:%M") }}</time>
+            {% else %}
+              never used
+            {% endif %}
+          </span>
           {% if k.revoked_at %}
-            <span class="badge badge-ghost">revoked</span>
+            <span class="badge badge-ghost badge-sm">revoked</span>
           {% else %}
-            <span class="badge badge-success badge-outline">active</span>
+            <span class="badge badge-success badge-sm">active</span>
           {% endif %}
-        </span>
-        {% if not k.revoked_at %}
-          <button type="button"
-                  class="btn btn-ghost btn-sm text-error justify-self-end"
-                  aria-label="Revoke key {{ k.name }}"
-                  hx-delete="/{{ org_handle }}/api-keys/{{ k.id }}"
-                  hx-target="#api-keys"
-                  hx-swap="innerHTML">Revoke</button>
-        {% endif %}
+          {% if not k.revoked_at %}
+            <button type="button"
+                    class="btn btn-error btn-outline btn-sm"
+                    aria-label="Revoke key {{ k.name }}"
+                    hx-delete="/{{ org_handle }}/api-keys/{{ k.id }}"
+                    hx-target="#api-keys"
+                    hx-swap="innerHTML">Revoke</button>
+          {% endif %}
+        </div>
       </div>
     {% endfor %}
   </div>
@@ -56,6 +60,6 @@
          aria-label="Key name"
          required
          maxlength="120"
-         class="input flex-1" />
-  <button type="submit" class="btn btn-primary flex-none">Create key</button>
+         class="input input-sm flex-1" />
+  <button type="submit" class="btn btn-primary btn-sm flex-none">Create key</button>
 </form>

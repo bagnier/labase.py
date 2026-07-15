@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros/role_badge.html" import role_badge %}
-{% from "macros/input_field.html" import input_field, select_field %}
+{% from "macros/input_field.html" import input_field %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/empty_state.html" import empty_state %}
 {% block title %}Settings — {{ org.name }} — labase{% endblock %}
@@ -36,15 +36,20 @@
                 <form hx-patch="/{{ org_handle }}"
                       hx-target="body"
                       hx-push-url="true"
-                      class="space-y-3">
-                  {{ input_field("org-name", "name", label="Organisation name", value=org.name, required=true,
-                                    label_hidden=true) }}
+                      class="space-y-1">
+                  <div class="flex gap-2 items-center">
+                    <input type="text"
+                           id="org-name"
+                           name="name"
+                           value="{{ org.name }}"
+                           required
+                           aria-label="Organisation name"
+                           class="input input-sm flex-1" />
+                    <button type="submit" class="btn btn-primary btn-sm flex-none">Save</button>
+                  </div>
                   {% if name_error %}
                     <p class="text-xs text-error">{{ name_error }}</p>
                   {% endif %}
-                  <div class="flex justify-end">
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                  </div>
                 </form>
               {% else %}
                 {{ input_field("org-name", "name", label="Organisation name", value=org.name, disabled=true,
@@ -59,17 +64,21 @@
                 <form hx-patch="/{{ org_handle }}/handle"
                       hx-target="body"
                       hx-push-url="true"
-                      class="space-y-3">
-                  {{ input_field("org-handle", "handle", label="Handle", mono=true, required=true,
-                                    value=(handle_value if handle_value is defined else org.handle) ,
-                  label_hidden=true,
-                  hint="Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.") }}
+                      class="space-y-1">
+                  <div class="flex gap-2 items-center">
+                    <input type="text"
+                           id="org-handle"
+                           name="handle"
+                           value="{{ handle_value if handle_value is defined else org.handle }}"
+                           required
+                           aria-label="Handle"
+                           class="input input-sm font-mono flex-1" />
+                    <button type="submit" class="btn btn-primary btn-sm flex-none">Save</button>
+                  </div>
+                  <p class="text-xs opacity-60">Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.</p>
                   {% if handle_error %}
                     <p class="text-xs text-error">{{ handle_error }}</p>
                   {% endif %}
-                  <div class="flex justify-end">
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                  </div>
                 </form>
               {% else %}
                 {{ input_field("org-handle", "handle", label="Handle", value=org.handle, disabled=true, mono=true,
@@ -84,16 +93,22 @@
                 <form hx-patch="/{{ org_handle }}/timezone"
                       hx-target="body"
                       hx-push-url="true"
-                      class="space-y-3">
-                  {{ select_field("org-tz", "timezone", timezones, selected=current_timezone,
-                                    label="Timezone", label_hidden=true,
-                                    hint="Dates in the calendar are entered and shown in this zone.") }}
+                      class="space-y-1">
+                  <div class="flex gap-2 items-center">
+                    <select id="org-tz"
+                            name="timezone"
+                            aria-label="Timezone"
+                            class="select select-sm flex-1">
+                      {% for tz in timezones %}
+                        <option value="{{ tz }}" {% if tz == current_timezone %}selected{% endif %}>{{ tz }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm flex-none">Save</button>
+                  </div>
+                  <p class="text-xs opacity-60">Dates in the calendar are entered and shown in this zone.</p>
                   {% if timezone_error %}
                     <p class="text-xs text-error">{{ timezone_error }}</p>
                   {% endif %}
-                  <div class="flex justify-end">
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                  </div>
                 </form>
               {% else %}
                 <p class="text-sm">
@@ -138,6 +153,4 @@
     </div>
   </div>
 {% endblock %}
-{% block scripts %}
-  <script src="/static/js/hash-tabs.js" defer></script>
-{% endblock %}
+{% block scripts %}<script src="/static/js/hash-tabs.js" defer></script>{% endblock %}
