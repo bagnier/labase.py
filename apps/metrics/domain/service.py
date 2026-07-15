@@ -1,11 +1,12 @@
 """Pure aggregation: flushed rows → per-route loads and screen totals.
 
-Percentiles come from the histogram buckets (upper bound of the bucket where the
-cumulative count crosses the quantile), exactly how Prometheus computes them —
-that is what makes sums across rows/instances legitimate.
+Percentiles come from the histogram buckets, linearly interpolated inside the
+bucket where the cumulative count crosses the quantile — exactly how Prometheus'
+``histogram_quantile`` computes them. That is what makes sums across rows/instances
+legitimate, and it keeps p95 off the bucket bounds (a raw upper bound would report
+every latency as one of 5/10/25/50/100/250/500…, and always the bucket ceiling).
 """
 
-import math
 from datetime import datetime
 
 from apps.metrics.domain.models import LoadPoint, LoadTotals, RequestMetric, RouteLoad
@@ -16,17 +17,26 @@ def percentile_ms(bucket_counts: list[int], quantile: float = 0.95) -> float | N
     total = sum(bucket_counts)
     if total == 0:
         return None
-    threshold = math.ceil(quantile * total)
+    rank = quantile * total
     cumulative = 0
+    lower = 0.0  # lower edge of the current bucket (previous bound, 0 for the first)
     for bound, count in zip(BUCKET_BOUNDS_MS, bucket_counts, strict=False):
+        if cumulative + count >= rank:
+            # The rank lands in this finite bucket (lower, bound]. Assume the
+            # observations are spread uniformly across it and interpolate.
+            return lower + (bound - lower) * (rank - cumulative) / count
         cumulative += count
-        if cumulative >= threshold:
-            return bound
-    return None  # only +Inf observations — slower than the largest bound
+        lower = bound
+    return None  # rank lands in the +Inf bucket — slower than the largest bound
 
 
 def _error_rate(errors: int, requests: int) -> float:
     return round(100 * errors / requests, 1) if requests else 0.0
+
+
+def _mean_ms(duration_sum_ms: float, requests: int) -> float | None:
+    """The true, unbucketed average — a sanity check next to the interpolated p95."""
+    return duration_sum_ms / requests if requests else None
 
 
 def _merged_buckets(rows: list[RequestMetric]) -> list[int]:
@@ -70,6 +80,7 @@ def aggregate(rows: list[RequestMetric]) -> tuple[list[RouteLoad], LoadTotals]:
                 requests=requests,
                 errors=errors,
                 error_rate_pct=_error_rate(errors, requests),
+                avg_ms=_mean_ms(sum(r.duration_sum_ms for r in group), requests),
                 p95_ms=percentile_ms(_merged_buckets(group)),
             )
         )
@@ -80,6 +91,7 @@ def aggregate(rows: list[RequestMetric]) -> tuple[list[RouteLoad], LoadTotals]:
     totals = LoadTotals(
         requests=total_requests,
         error_rate_pct=_error_rate(total_errors, total_requests),
+        avg_ms=_mean_ms(sum(r.duration_sum_ms for r in rows), total_requests),
         p95_ms=percentile_ms(_merged_buckets(rows)),
     )
     return loads, totals

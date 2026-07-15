@@ -30,6 +30,11 @@ def step_assert_route_p95(driver, label, p95):
     driver.assert_route_p95(label, p95)
 
 
+@then(parsers.parse('the route "{label}" shows an average of {avg:d} ms'))
+def step_assert_route_avg(driver, label, avg):
+    driver.assert_route_avg(label, avg)
+
+
 @then("the load screen reports no recorded traffic")
 def step_assert_load_empty(driver):
     driver.assert_load_screen_empty()

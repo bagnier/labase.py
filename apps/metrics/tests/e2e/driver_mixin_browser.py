@@ -34,6 +34,10 @@ class MetricsBrowserMixin(BrowserBase):
         shown = self._route_row(label).locator("[data-load-p95]").inner_text().strip()
         assert shown == f"{p95_ms} ms", f"expected p95 {p95_ms} ms, got {shown!r}"
 
+    def assert_route_avg(self, label: str, avg_ms: int) -> None:
+        shown = self._route_row(label).locator("[data-load-avg]").inner_text().strip()
+        assert shown == f"{avg_ms} ms", f"expected avg {avg_ms} ms, got {shown!r}"
+
     def assert_load_screen_empty(self) -> None:
         self.page.wait_for_selector("[data-load-empty]", timeout=5000)
 

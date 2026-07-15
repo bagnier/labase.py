@@ -27,13 +27,14 @@ def _row(method: str, route: str, requests: int, errors: int, buckets: list[int]
     )
 
 
-def test_percentile_is_the_bucket_upper_bound():
-    # 30 observations ≤100ms: the 95th percentile lands in the 100ms bucket.
-    assert percentile_ms(_buckets(ms_100=30)) == 100
-    # 95 fast + 5 slow: p95 still inside the fast bucket (ceil(0.95*100)=95).
+def test_percentile_interpolates_inside_the_crossing_bucket():
+    # 30 observations in the (50, 100] bucket: p95 sits 95% of the way up it.
+    # rank = 0.95 * 30 = 28.5 → 50 + (100-50) * 28.5/30 = 97.5, not a bare 100.
+    assert percentile_ms(_buckets(ms_100=30)) == 97.5
+    # 95 fast + 5 slow: rank 95 lands exactly on the (10, 25] bucket's top edge.
     assert percentile_ms(_buckets(ms_25=95, ms_5000=5)) == 25
-    # one more slow observation tips it over
-    assert percentile_ms(_buckets(ms_25=94, ms_5000=6)) == 5000
+    # one more slow observation tips p95 into the (2500, 5000] bucket, near its floor.
+    assert percentile_ms(_buckets(ms_25=94, ms_5000=6)) == 2500 + 2500 / 6
 
 
 def test_percentile_edge_cases():
@@ -55,7 +56,7 @@ def test_aggregate_sums_rows_across_instances_and_sorts_by_volume():
     assert get_todo.requests == 30
     assert get_todo.errors == 3
     assert get_todo.error_rate_pct == 10.0
-    assert get_todo.p95_ms == 100
+    assert get_todo.p95_ms == 97.5  # 30 obs in (50,100] → interpolated, not the 100 ceiling
     assert totals.requests == 70
     assert totals.error_rate_pct == round(100 * 3 / 70, 1)
 

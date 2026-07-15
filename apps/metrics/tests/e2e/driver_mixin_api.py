@@ -56,7 +56,11 @@ class MetricsApiMixin(ApiBase):
 
     def assert_route_p95(self, label: str, p95_ms: int) -> None:
         load = self._route_load(label)
-        assert int(load["p95_ms"]) == p95_ms, f"expected p95 {p95_ms}, got {load['p95_ms']}"
+        assert round(load["p95_ms"]) == p95_ms, f"expected p95 {p95_ms}, got {load['p95_ms']}"
+
+    def assert_route_avg(self, label: str, avg_ms: int) -> None:
+        load = self._route_load(label)
+        assert round(load["avg_ms"]) == avg_ms, f"expected avg {avg_ms}, got {load['avg_ms']}"
 
     def assert_load_screen_empty(self) -> None:
         assert self.response is not None

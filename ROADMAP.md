@@ -1,29 +1,34 @@
+## issues
+
+- [ ] /console/users bouton Accounts &  all organisations Users 13 users inerte
+- [ ] /console/organizations should list organizations and give metrics
+- [ ] audit des .goto() .fetch() code smells
+
 ## goals
 
 ### features
 
 - [x] console should list all business events from each app
 - [x] profile & dashboard should display the recent business events
-- [ ] profile, dashboard & console should show a github like activity
+- [x] profile, dashboard & console should show a github like activity
 - [ ] console should show a dedicated growth activity report
 - [ ] AARRR metrics
 - [ ] product tour
+- [ ] awareness, @citation, notification
 
 ### technical
 
-- [ ] awareness, @citation, notification
 - [ ] dataclass or pydantic ?
+- [ ] multi processes ?
 - [ ] better styleguide inspired by my apps and daisyui templates
 - [ ] event driven ? CQRS ?
 - [ ] Command Query Responsibility Segregation ?
+- [ ] DB index ?
 - [ ] no audit() for error/exception, logger instead
 - [ ] trop de fichiers racine
 - [ ] export RGPD
-- [x] ApexCharts integration
 - [ ] MCP server ?
 - [ ] CLI
-- [x] logs
-- [x] ETag on public pages
 - [ ] COW, soft deletion, soft update
 - [ ] async task queue
 - [ ] fulltext index - elastic

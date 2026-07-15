@@ -12,7 +12,8 @@ Feature: Load metrics
     When the admin opens the load screen
     Then the route "GET /todo" is listed with 30 requests and a 10% error rate
     And the route "POST /todo" is listed with 10 requests and a 0% error rate
-    And the route "GET /todo" shows a p95 of 100 ms
+    And the route "GET /todo" shows a p95 of 98 ms
+    And the route "GET /todo" shows an average of 80 ms
 
   Scenario: The Load screen has an empty state before any traffic is recorded
     Given a server admin is signed in as "root@example.com"

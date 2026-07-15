@@ -26,10 +26,20 @@
       <div class="stat-value text-2xl {% if totals.error_rate_pct %}text-error{% endif %}">{{ totals.error_rate_pct }}%</div>
     </div>
     <div class="stat">
+      <div class="stat-title">avg latency</div>
+      <div class="stat-value text-2xl">
+        {% if totals.avg_ms is not none %}
+          {{ totals.avg_ms | round | int }} ms
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat">
       <div class="stat-title">p95 latency</div>
       <div class="stat-value text-2xl">
         {% if totals.p95_ms is not none %}
-          {{ totals.p95_ms | int }} ms
+          {{ totals.p95_ms | round | int }} ms
         {% else %}
           —
         {% endif %}
@@ -42,6 +52,7 @@
         <th scope="col">Route</th>
         <th scope="col">Requests</th>
         <th scope="col">Errors</th>
+        <th scope="col">avg</th>
         <th scope="col">p95</th>
       </tr>
     </thead>
@@ -54,9 +65,16 @@
               class="{% if r.error_rate_pct %}text-error{% else %}text-success{% endif %}">
             {{ r.error_rate_pct | int }}%
           </td>
+          <td data-load-avg>
+            {% if r.avg_ms is not none %}
+              {{ r.avg_ms | round | int }} ms
+            {% else %}
+              —
+            {% endif %}
+          </td>
           <td data-load-p95>
             {% if r.p95_ms is not none %}
-              {{ r.p95_ms | int }} ms
+              {{ r.p95_ms | round | int }} ms
             {% else %}
               —
             {% endif %}

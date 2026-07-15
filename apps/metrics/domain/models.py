@@ -45,12 +45,14 @@ class RouteLoad(BaseModel):
     requests: int
     errors: int
     error_rate_pct: float
+    avg_ms: float | None
     p95_ms: float | None
 
 
 class LoadTotals(BaseModel):
     requests: int
     error_rate_pct: float
+    avg_ms: float | None
     p95_ms: float | None
 
 
