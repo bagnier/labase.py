@@ -1,8 +1,9 @@
 {% macro input_field(id, name, type="text", label="", placeholder="", value="",
-  disabled=false, required=false, optional=false, mono=false, hint="", error="") %}
+  disabled=false, required=false, optional=false, mono=false, hint="", error="", label_hidden=false) %}
   <fieldset class="fieldset">
     {% if label %}
-      <legend class="fieldset-legend" id="{{ id }}-label">
+      <legend class="fieldset-legend{% if label_hidden %} sr-only{% endif %}"
+              id="{{ id }}-label">
         {{ label }}
         {% if optional %}<span class="font-normal opacity-60">(optional)</span>{% endif %}
       </legend>
@@ -22,11 +23,12 @@
   </fieldset>
 {% endmacro %}
 {% macro select_field(id, name, options, selected="", label="", hint="",
-  required=false, disabled=false) %}
+  required=false, disabled=false, label_hidden=false) %}
   {# options: a list of values, or of (value, label) pairs. #}
   <fieldset class="fieldset">
     {% if label %}
-      <legend class="fieldset-legend" id="{{ id }}-label">{{ label }}</legend>
+      <legend class="fieldset-legend{% if label_hidden %} sr-only{% endif %}"
+              id="{{ id }}-label">{{ label }}</legend>
     {% endif %}
     <select id="{{ id }}"
             name="{{ name }}"

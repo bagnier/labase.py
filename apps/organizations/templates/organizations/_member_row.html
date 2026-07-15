@@ -17,56 +17,66 @@
   </div>
   <div class="flex items-center gap-3">
     {{ role_badge(m.role) }}
-    {% if caller_role == "owner" and m.email != current_user.email %}
+    {# One "Manage" combo per row — owners act on others (promote/demote/remove); everyone gets
+       "Leave" on their own row. The menu is a daisyUI dropdown; the enclosing list overrides
+       `overflow-hidden` to `overflow-visible` so the popup isn't clipped by the panel. #}
+    {% set is_self = m.email == current_user.email %}
+    {% if caller_role == "owner" or is_self %}
       <div class="dropdown dropdown-end">
         <button data-manage
                 aria-label="Manage {{ m.email }}"
                 aria-haspopup="true"
                 tabindex="0"
-                class="btn btn-sm">
+                class="btn btn-sm btn-ghost">
           Manage <i class="ph ph-caret-down ph-4" aria-hidden="true"></i>
         </button>
         <ul role="menu"
             tabindex="0"
-            class="dropdown-content menu z-10 mt-1 min-w-40 bg-base-100 border border-base-300 rounded-box shadow-lg">
-          {% if m.role == "member" %}
+            class="dropdown-content menu z-20 mt-1 min-w-max whitespace-nowrap bg-base-100 border border-base-300 rounded-box shadow-lg">
+          {% if caller_role == "owner" and not is_self %}
+            {% if m.role == "member" %}
+              <li>
+                <button data-promote
+                        role="menuitem"
+                        hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
+                        hx-vals='{"role": "owner"}'
+                        hx-target="#member-row-{{ m.auth_user_id }}"
+                        hx-swap="outerHTML">Promote to owner</button>
+              </li>
+            {% else %}
+              <li>
+                <button data-demote
+                        role="menuitem"
+                        hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
+                        hx-vals='{"role": "member"}'
+                        hx-target="#member-row-{{ m.auth_user_id }}"
+                        hx-swap="outerHTML">Demote to member</button>
+              </li>
+            {% endif %}
             <li>
-              <button data-promote
+              <button data-remove
                       role="menuitem"
-                      hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
-                      hx-vals='{"role": "owner"}'
+                      class="text-error"
+                      hx-delete="/{{ org_handle }}/members/{{ m.auth_user_id }}"
                       hx-target="#member-row-{{ m.auth_user_id }}"
-                      hx-swap="outerHTML">Promote to owner</button>
-            </li>
-          {% else %}
-            <li>
-              <button data-demote
-                      role="menuitem"
-                      hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
-                      hx-vals='{"role": "member"}'
-                      hx-target="#member-row-{{ m.auth_user_id }}"
-                      hx-swap="outerHTML">Demote to member</button>
+                      hx-swap="outerHTML"
+                      hx-confirm="Remove {{ m.email }} from the organisation?">Remove from org</button>
             </li>
           {% endif %}
-          <li>
-            <button data-remove
-                    role="menuitem"
-                    class="text-error"
-                    hx-delete="/{{ org_handle }}/members/{{ m.auth_user_id }}"
-                    hx-target="#member-row-{{ m.auth_user_id }}"
-                    hx-swap="outerHTML"
-                    hx-confirm="Remove {{ m.email }} from the organisation?">Remove from org</button>
-          </li>
+          {% if is_self %}
+            <li>
+              <button data-leave
+                      role="menuitem"
+                      class="text-error"
+                      aria-label="Leave {{ org.name }}"
+                      hx-delete="/{{ org_handle }}/members/me"
+                      hx-target="#leave-error"
+                      hx-swap="innerHTML"
+                      hx-confirm="Leave {{ org.name }}?">Leave organisation</button>
+            </li>
+          {% endif %}
         </ul>
       </div>
-    {% elif m.email == current_user.email %}
-      <button data-leave
-              aria-label="Leave {{ org.name }}"
-              class="btn btn-sm"
-              hx-delete="/{{ org_handle }}/members/me"
-              hx-target="#leave-error"
-              hx-swap="innerHTML"
-              hx-confirm="Leave {{ org.name }}?">Leave</button>
     {% endif %}
   </div>
 </li>

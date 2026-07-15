@@ -4,12 +4,10 @@
    oldest→newest. Each day cell carries its count as an accessible label + tooltip; styling and
    the 0–4 indigo tint live in the `.heatmap` component (static/css/input.css), so the ramp
    tracks the theme (light/dark) and this stays payload-free markup. #}
-{% macro activity_heatmap(calendar) %}
+{% macro activity_heatmap(calendar, label="Your activity over the last year") %}
   <div class="overflow-x-auto pb-1">
-    <table class="heatmap"
-           role="grid"
-           aria-label="Your activity over the last year">
-      <caption class="sr-only">Your activity over the last year — each cell is one day.</caption>
+    <table class="heatmap" role="grid" aria-label="{{ label }}">
+      <caption class="sr-only">{{ label }} — each cell is one day.</caption>
       {# Fixed layout + colgroup pin every week to a 12px column, so a month label can never
          stretch a cell. Month labels ride colspan segments instead of per-week cells. #}
       <colgroup>

@@ -24,13 +24,14 @@
     {% elif deletion_error %}
       {% set active_tab = "account" %}
     {% endif %}
-    <div role="tablist" class="tabs tabs-lift">
+    <div role="tablist" class="tabs tabs-lift" data-hash-tabs>
       {# ── Activity ───────────────────────────────────────────────────────── #}
       <input type="radio"
              name="profile-tabs"
              role="tab"
              class="tab"
              aria-label="Activity"
+             data-tab="activity"
              {% if active_tab == "activity" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
@@ -122,6 +123,7 @@
              role="tab"
              class="tab"
              aria-label="Profile"
+             data-tab="profile"
              {% if active_tab == "profile" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
@@ -207,7 +209,8 @@
              name="profile-tabs"
              role="tab"
              class="tab"
-             aria-label="Organisations" />
+             aria-label="Organisations"
+             data-tab="organisations" />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
         <div class="card-panel">
@@ -249,6 +252,7 @@
              role="tab"
              class="tab"
              aria-label="Email"
+             data-tab="email"
              {% if active_tab == "email" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
@@ -284,6 +288,7 @@
              role="tab"
              class="tab"
              aria-label="Authentication"
+             data-tab="authentication"
              {% if active_tab == "authentication" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
@@ -379,6 +384,7 @@
              role="tab"
              class="tab"
              aria-label="Account"
+             data-tab="account"
              {% if active_tab == "account" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
@@ -418,3 +424,4 @@
     </div>
   </div>
 {% endblock %}
+{% block scripts %}<script src="/static/js/hash-tabs.js" defer></script>{% endblock %}

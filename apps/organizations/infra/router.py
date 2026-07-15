@@ -1,5 +1,7 @@
 import uuid
+from datetime import datetime
 from typing import Annotated
+from urllib.parse import urlencode
 from zoneinfo import available_timezones
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -42,11 +44,20 @@ from apps.organizations.domain.models import (
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
+from apps.shared import clock
 from apps.shared.bus import bus
 from apps.shared.email import enqueue_email
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.business_events import activity_entries, search_business_events
+from apps.shared.observability.business_events import (
+    BusinessEventRow,
+    activity_entries,
+    activity_stats,
+    daily_activity_counts,
+    group_activity_by_day,
+    heatmap_calendar,
+    search_business_events,
+)
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
@@ -199,18 +210,70 @@ async def list_organizations(
 # ── Org-scoped pages ────────────────────────────────────────────────────────────
 
 
-_RECENT_ACTIVITY = 8
+_ACTIVITY_PAGE = 8  # rows shown by default; "Load older" grows the window by this step
+_ACTIVITY_MAX = 250  # the dashboard trail is bounded — cap the growable window
 
 
-async def _recent_activity(session: AsyncSession, org_id: uuid.UUID, org_handle: str) -> list[dict]:
-    """The org's recent business events for the dashboard timeline.
+def _parse_dt(value: str | None) -> datetime | None:
+    """A date/datetime from the toolbar's date inputs, or None when blank/unparseable."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _activity_query(q: str, app: str, from_dt: str, to_dt: str) -> str:
+    """The current filter as a ``&``-prefixed querystring, to carry across a Load-older click."""
+    raw = {"q": q, "app": app, "from_dt": from_dt, "to_dt": to_dt}
+    params = {k: v for k, v in raw.items() if v}
+    return f"&{urlencode(params)}" if params else ""
+
+
+async def _activity_context(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    org_handle: str,
+    *,
+    q: str = "",
+    app: str = "",
+    from_dt: str = "",
+    to_dt: str = "",
+    limit: int = _ACTIVITY_PAGE,
+) -> dict:
+    """The org's day-grouped activity feed under the given filters — shared by the dashboard's
+    initial render and the ``/{org}/dashboard/activity`` HTMX fragment.
 
     Reads on the request's own RLS session: the ``business_events`` policy lets a member read
-    every event of any org they belong to, so filtering by ``org_id`` narrows to this org.
-    Each entry deep-links to the concerned entity's page where the app exposes one. Exposes only
-    the humanized label and moment — never payloads or ips."""
-    rows = await search_business_events(session, org_id=str(org_id), limit=_RECENT_ACTIVITY)
-    return activity_entries(rows, link=lambda r: entity_url(r.kind, r.entity_id, org_handle))
+    every event of any org they belong to, so ``org_id`` narrows to this org's trail. Each entry
+    keeps its actor (``who did what``, a shared org feed) and deep-links to the concerned entity
+    where the app exposes a page. Exposes only humanized labels and moments — never payloads."""
+    rows = await search_business_events(
+        session,
+        org_id=str(org_id),
+        app=app or None,
+        text=q or None,
+        from_dt=_parse_dt(from_dt),
+        to_dt=_parse_dt(to_dt),
+        limit=limit,
+    )
+
+    def link(r: BusinessEventRow) -> str | None:
+        return entity_url(r.kind, r.entity_id, org_handle)
+
+    entries = activity_entries(rows, link=link)
+    return {
+        "activity_groups": group_activity_by_day(entries, now=clock.now()),
+        "activity_has_more": len(rows) >= limit and limit < _ACTIVITY_MAX,
+        "activity_limit": limit,
+        "activity_next_limit": min(limit + _ACTIVITY_PAGE, _ACTIVITY_MAX),
+        "activity_q": q,
+        "activity_app": app,
+        "activity_from": from_dt,
+        "activity_to": to_dt,
+        "activity_query": _activity_query(q, app, from_dt, to_dt),
+    }
 
 
 @org_router.get("/dashboard", response_class=HTMLResponse)
@@ -231,8 +294,40 @@ async def org_dashboard(
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
     ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
-    ctx["recent_activity"] = await _recent_activity(session, org_id, org_handle)
+    counts = await daily_activity_counts(session, org_id=str(org_id))
+    now = clock.now()
+    ctx["activity_calendar"] = heatmap_calendar(counts, now=now, since=org.created_at)
+    ctx["activity_stats"] = activity_stats(counts, now=now)
+    ctx.update(await _activity_context(session, org_id, org_handle))
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
+
+
+@org_router.get("/dashboard/activity", response_model=None)
+async def org_dashboard_activity(
+    request: Request,
+    session: RlsSession,
+    repo: OrgRepo,
+    org_id: CurrentOrg,
+    membership: CurrentMembership,
+    q: str = "",
+    app: str = "",
+    from_dt: str = "",
+    to_dt: str = "",
+    limit: int = _ACTIVITY_PAGE,
+) -> HTMLResponse | JSONResponse:
+    """The org's day-grouped activity feed as an HTMX fragment — search, type filter, date range
+    and Load-older all re-render it. API callers get the same trail as JSON."""
+    limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
+    org = or_404(await repo.get(org_id))
+    org_handle = request.path_params.get("org_handle", org.handle)
+    ctx = await _activity_context(
+        session, org_id, org_handle, q=q, app=app, from_dt=from_dt, to_dt=to_dt, limit=limit
+    )
+    if wants_json(request):
+        entries = [e for g in ctx["activity_groups"] for e in g["entries"]]
+        return JSONResponse({"entries": [{**e, "ts": e["ts"].isoformat()} for e in entries]})
+    ctx["org_handle"] = org_handle
+    return templates.TemplateResponse(request, "organizations/activity_feed.html", ctx)
 
 
 @org_router.get("/dashboard/overviews.json")

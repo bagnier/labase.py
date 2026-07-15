@@ -233,9 +233,12 @@ class OrgBrowserMixin(BrowserBase):
 
     def leave_org(self) -> None:
         page = self._goto_members()
-        if page.query_selector("[data-leave]") is None:
+        # Leave now lives inside the row's Manage combo — open that row's combo before clicking.
+        manage = page.query_selector("li:has([data-leave]) [data-manage]")
+        if manage is None:
             self._probe_blocked("DELETE", f"/{self._active_slug()}/members/me")
             return
+        manage.click()
         self.last_response = self.click_and_capture(page, "[data-leave]", "DELETE", "/members/me")
         if self.last_response.status < 400:
             page.wait_for_load_state("load")

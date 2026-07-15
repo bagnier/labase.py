@@ -2,33 +2,88 @@
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/chart.html" import chart_scripts %}
 {% from "macros/metric_card.html" import metric_card %}
-{% from "macros/activity_timeline.html" import activity_timeline %}
+{% from "macros/activity_heatmap.html" import activity_heatmap %}
 {% block title %}Dashboard — labase{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
-  <li>Overview</li>
+  <li>Dashboard</li>
 {% endblock %}
 {% block content %}
-  <div class="space-y-6">
-    {{ page_header('Overview', 'Welcome, ' ~ profile_handle) }}
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="space-y-6 max-w-2xl">
+    {{ page_header('Dashboard', 'Welcome, ' ~ profile_handle) }}
+    {% set wd = activity_stats.week_delta %}
+    {% set week_desc = ('+' ~ wd ~ ' vs last week') if wd > 0
+        else (wd ~ ' vs last week') if wd < 0 else 'same as last week' %}
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {{ metric_card('Members', 'users', value=member_count, desc='in ' ~ org.name) }}
       {{ metric_card('Pending invitations', 'envelope', value=pending_invitations,
             desc='awaiting an answer' if pending_invitations else 'none waiting') }}
+      {{ metric_card('This week', 'pulse', value=activity_stats.this_week, desc=week_desc) }}
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {# ── Activity ─ the org's pulse: contribution calendar + day-grouped feed. Moved up (above the
+       app cards) and built from the org's own business events — no raw request/technical counts,
+       which mean nothing to a member. #}
+    <section class="space-y-6" data-org-activity>
+      <section class="card-panel">
+        <div class="card-body">
+          <h2 class="eyebrow mb-3">Contributions · {{ activity_calendar.range_label }}</h2>
+          {{ activity_heatmap(activity_calendar, label='Activity in ' ~ org.name ~ ' over the last year') }}
+        </div>
+      </section>
+      <section class="card-panel" data-recent-activity>
+        <div class="card-body">
+          <h2 class="card-title text-sm font-semibold mb-3">Recent activity</h2>
+          <form class="flex flex-wrap items-center gap-2 mb-1"
+                hx-get="/{{ org_handle }}/dashboard/activity"
+                hx-target="#activity-feed"
+                hx-swap="outerHTML"
+                hx-trigger="change, keyup changed delay:400ms"
+                hx-push-url="false"
+                aria-label="Filter the activity">
+            <label class="input input-sm flex-1 min-w-48">
+              <i class="ph ph-magnifying-glass ph-sm text-base-content/50"
+                 aria-hidden="true"></i>
+              <input type="search"
+                     name="q"
+                     value="{{ activity_q }}"
+                     placeholder="Search activity…"
+                     aria-label="Search activity" />
+            </label>
+            <select name="app"
+                    class="select select-sm w-auto"
+                    aria-label="Filter by type">
+              <option value="">All types</option>
+              <option value="todo" {% if activity_app == "todo" %}selected{% endif %}>Todos</option>
+              <option value="files" {% if activity_app == "files" %}selected{% endif %}>Files</option>
+              <option value="pages" {% if activity_app == "pages" %}selected{% endif %}>Pages</option>
+              <option value="calendar"
+                      {% if activity_app == "calendar" %}selected{% endif %}>Calendar</option>
+              <option value="learning"
+                      {% if activity_app == "learning" %}selected{% endif %}>Learning</option>
+              <option value="organizations"
+                      {% if activity_app == "organizations" %}selected{% endif %}>Organization</option>
+            </select>
+            <input type="date"
+                   name="from_dt"
+                   value="{{ activity_from }}"
+                   class="input input-sm w-auto"
+                   aria-label="From date" />
+            <input type="date"
+                   name="to_dt"
+                   value="{{ activity_to }}"
+                   class="input input-sm w-auto"
+                   aria-label="To date" />
+          </form>
+          {% include "organizations/activity_feed.html" %}
+        </div>
+      </section>
+    </section>
+    {# The apps' own cards — reference state, so they sit below the pulse. #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {% for o in overviews %}
         {% include o.template %}
       {% endfor %}
     </div>
-    <section class="card-panel" data-recent-activity>
-      <div class="card-body">
-        <h2 class="card-title text-sm font-semibold mb-3">Recent activity</h2>
-        {{ activity_timeline(recent_activity, empty="Nothing recorded yet — activity in " ~ org.name ~ " will appear here.") }}
-      </div>
-    </section>
   </div>
 {% endblock %}
-{% block scripts %}
-  {{ chart_scripts() }}
-{% endblock %}
+{% block scripts %}{{ chart_scripts() }}{% endblock %}

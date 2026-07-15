@@ -21,7 +21,8 @@
                 class="btn btn-primary btn-sm">Invite a member</button>
       {% endif %}
     </div>
-    <ul id="member-list" class="list-panel">
+    {# overflow-visible (not the panel's default hidden) so a row's Manage dropdown isn't clipped. #}
+    <ul id="member-list" class="list-panel overflow-visible">
       {% for m in members %}
         {% include "organizations/_member_row.html" %}
       {% endfor %}
@@ -33,14 +34,14 @@
           <form hx-post="/{{ org_handle }}/invitations"
                 hx-target="#invite-result"
                 hx-swap="innerHTML"
-                class="flex gap-3 items-start"
+                class="flex gap-2 items-center"
                 hx-on:htmx:after-request="if(event.detail.successful) this.reset()">
             <input type="email"
                    name="email"
                    placeholder="email@example.com"
                    required
                    aria-label="Invite email"
-                   class="input w-full flex-1" />
+                   class="input flex-1" />
             <button type="submit" class="btn btn-primary flex-none">Invite</button>
           </form>
           <div id="invite-result" aria-live="polite"></div>

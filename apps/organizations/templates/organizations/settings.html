@@ -17,13 +17,14 @@
         <span>Changes saved.</span>
       </div>
     {% endif %}
-    <div role="tablist" class="tabs tabs-lift">
+    <div role="tablist" class="tabs tabs-lift" data-hash-tabs>
       {# ── Naming ─────────────────────────────────────────────────────────── #}
       <input type="radio"
              name="org-settings-tabs"
              role="tab"
              class="tab"
              aria-label="Naming"
+             data-tab="naming"
              checked />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
@@ -36,17 +37,18 @@
                       hx-target="body"
                       hx-push-url="true"
                       class="space-y-3">
-                  {{ input_field("org-name", "name", label="Organisation name", value=org.name, required=true) }}
+                  {{ input_field("org-name", "name", label="Organisation name", value=org.name, required=true,
+                                    label_hidden=true) }}
                   {% if name_error %}
                     <p class="text-xs text-error">{{ name_error }}</p>
                   {% endif %}
-                  <div>
+                  <div class="flex justify-end">
                     <button type="submit" class="btn btn-primary btn-sm">Save</button>
                   </div>
                 </form>
               {% else %}
                 {{ input_field("org-name", "name", label="Organisation name", value=org.name, disabled=true,
-                                hint="Only an owner can rename the organisation.") }}
+                                label_hidden=true, hint="Only an owner can rename the organisation.") }}
               {% endif %}
             </div>
           </section>
@@ -60,17 +62,18 @@
                       class="space-y-3">
                   {{ input_field("org-handle", "handle", label="Handle", mono=true, required=true,
                                     value=(handle_value if handle_value is defined else org.handle) ,
+                  label_hidden=true,
                   hint="Used in URLs. Lowercase, alphanumeric and hyphens, max 39 chars.") }}
                   {% if handle_error %}
                     <p class="text-xs text-error">{{ handle_error }}</p>
                   {% endif %}
-                  <div>
+                  <div class="flex justify-end">
                     <button type="submit" class="btn btn-primary btn-sm">Save</button>
                   </div>
                 </form>
               {% else %}
                 {{ input_field("org-handle", "handle", label="Handle", value=org.handle, disabled=true, mono=true,
-                                hint="Only an owner can change the handle.") }}
+                                label_hidden=true, hint="Only an owner can change the handle.") }}
               {% endif %}
             </div>
           </section>
@@ -83,12 +86,12 @@
                       hx-push-url="true"
                       class="space-y-3">
                   {{ select_field("org-tz", "timezone", timezones, selected=current_timezone,
-                                    label="Timezone",
+                                    label="Timezone", label_hidden=true,
                                     hint="Dates in the calendar are entered and shown in this zone.") }}
                   {% if timezone_error %}
                     <p class="text-xs text-error">{{ timezone_error }}</p>
                   {% endif %}
-                  <div>
+                  <div class="flex justify-end">
                     <button type="submit" class="btn btn-primary btn-sm">Save</button>
                   </div>
                 </form>
@@ -107,7 +110,8 @@
              name="org-settings-tabs"
              role="tab"
              class="tab"
-             aria-label="Members" />
+             aria-label="Members"
+             data-tab="members" />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
         {% include "organizations/_members_panel.html" %}
@@ -117,7 +121,8 @@
              name="org-settings-tabs"
              role="tab"
              class="tab"
-             aria-label="API keys" />
+             aria-label="API keys"
+             data-tab="api-keys" />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
         {% if settings_sections %}
@@ -132,4 +137,7 @@
       </div>
     </div>
   </div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/hash-tabs.js" defer></script>
 {% endblock %}

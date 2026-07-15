@@ -49,13 +49,13 @@
 <form hx-post="/{{ org_handle }}/api-keys"
       hx-target="#api-keys"
       hx-swap="innerHTML"
-      class="flex gap-2 max-w-md">
+      class="flex gap-2 items-center">
   <input type="text"
          name="name"
          placeholder="Key name (e.g. CI robot)"
          aria-label="Key name"
          required
          maxlength="120"
-         class="input w-full flex-1" />
+         class="input flex-1" />
   <button type="submit" class="btn btn-primary flex-none">Create key</button>
 </form>

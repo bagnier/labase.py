@@ -1,0 +1,13 @@
+{# The org activity feed fragment — the HTMX swap target for the dashboard's activity toolbar
+   (search / type filter / date range) and the Load-older pager. Re-rendered whole each time
+   (the trail is bounded), so day grouping stays correct across the growing window. #}
+{% from "macros/activity_feed.html" import activity_feed %}
+<div id="activity-feed">
+  {{ activity_feed(activity_groups, empty="No activity matches — try another search or range.") }}
+  {% if activity_has_more %}
+    <button class="btn btn-block btn-ghost btn-sm mt-4"
+            hx-get="/{{ org_handle }}/dashboard/activity?limit={{ activity_next_limit }}{{ activity_query }}"
+            hx-target="#activity-feed"
+            hx-swap="outerHTML">Load older activity</button>
+  {% endif %}
+</div>
