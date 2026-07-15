@@ -4,9 +4,9 @@ Feature: Unified logs
   So that I can trace what happened across the server without juggling three screens
 
   # The unified log gathers three sources into one append-only stream:
-  #   - request  : the structlog firehose (request/app diagnostics), gated by the log level
-  #   - event    : the business-events trail (contributes regardless of the log level)
-  #   - issue    : occurrences of tracked errors (contributes regardless of the log level)
+  #   - http     : the structlog firehose (failed requests — dead links & 5xx), gated by the log level
+  #   - business : the business-events trail (contributes regardless of the log level)
+  #   - error    : occurrences of tracked errors (contributes regardless of the log level)
   # Every entry carries org_id / user_id / request_id, so the timeline filters and correlates.
   # The screen is server-wide and admin-only, like the rest of the console.
 
@@ -18,9 +18,9 @@ Feature: Unified logs
     And an error log entry "ValueError: boom" from org "Acme"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then the entry "todo.created" is listed with source "event"
-    And the entry "request.finished" is listed with source "request"
-    And the entry "ValueError: boom" is listed with source "issue"
+    Then the entry "todo.created" is listed with source "business"
+    And the entry "request.finished" is listed with source "http"
+    And the entry "ValueError: boom" is listed with source "error"
 
   Scenario: The logs screen has an empty state before anything is logged
     Given a server admin is signed in as "root@example.com"
@@ -41,7 +41,7 @@ Feature: Unified logs
     Given a business event "todo.created" from org "Acme"
     And a request log entry "request.finished" from org "Acme"
     And a server admin is signed in as "root@example.com"
-    When the admin filters the logs by source "event"
+    When the admin filters the logs by source "business"
     Then the entry "todo.created" is listed
     And the entry "request.finished" is not listed
 
@@ -161,7 +161,14 @@ Feature: Unified logs
     And an error log entry "ValueError: boom" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then the activity for "2026-06-26" shows 2 event, 1 request, and 1 issue
+    Then the activity for "2026-06-26" shows 2 business, 1 http, and 1 error
+
+  Scenario: The activity graph re-buckets by the selected grain
+    Given the current date is "2026-06-26"
+    And a business event "todo.created" from org "Acme" recorded on "2026-06-26"
+    And a server admin is signed in as "root@example.com"
+    When the admin views the activity by "month"
+    Then the activity for "2026-06" shows 1 business, 0 http, and 0 error
 
   Scenario: The activity graph follows the organisation filter
     Given the current date is "2026-06-26"
@@ -169,7 +176,7 @@ Feature: Unified logs
     And a business event "todo.deleted" from org "Globex" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin filters the logs by org "Acme"
-    Then the activity for "2026-06-26" shows 1 event, 0 request, and 0 issue
+    Then the activity for "2026-06-26" shows 1 business, 0 http, and 0 error
 
   Scenario: The graph and table stay in sync on the selected period
     Given the current date is "2026-06-26"
@@ -179,7 +186,7 @@ Feature: Unified logs
     When the admin filters the logs to dates from "2026-06-25" to "2026-06-26"
     Then the entry "todo.deleted" is listed
     And the entry "todo.created" is not listed
-    And the activity for "2026-06-26" shows 1 event, 0 request, and 0 issue
+    And the activity for "2026-06-26" shows 1 business, 0 http, and 0 error
 
   # Recent window
 
@@ -189,7 +196,7 @@ Feature: Unified logs
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the logs screen
-    Then 1 request entry is listed
+    Then 1 http entry is listed
 
   # Access
 

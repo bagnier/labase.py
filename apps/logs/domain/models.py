@@ -14,10 +14,10 @@ from pydantic import BaseModel, Field
 
 
 class LogSource(StrEnum):
-    request = "request"  # per-request firehose lines (request.started/finished)
-    app = "app"  # non-request structlog lines (queue, events…)
-    event = "event"  # the append-only business-events trail
-    issue = "issue"  # occurrences of tracked errors
+    http = "http"  # per-request firehose lines (request.failed — dead links & 5xx)
+    app = "app"  # non-request structlog lines (queue, background…)
+    business = "business"  # the append-only business-events trail
+    error = "error"  # occurrences of tracked errors
 
 
 class LogEntry(BaseModel):

@@ -139,6 +139,12 @@ class LogsBrowserMixin(BrowserBase):
             self.page.locator("[name='dir']").input_value(),
         )
 
+    def view_activity_by(self, grain: str) -> None:
+        # Follow the grain toggle link above the chart — a real click, no URL crafting.
+        self.open_logs_screen()
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.locator(f"[data-grain-option='{grain}']").click()
+
     def sort_logs(self, column: str, direction: str) -> None:
         # Follow the sortable column header link; one click toggles, so click until it lands on
         # the requested (column, direction).
@@ -201,12 +207,12 @@ class LogsBrowserMixin(BrowserBase):
         missing = [e for e in events if e not in listed]
         assert not missing, f"{missing!r} not all listed in {listed}"
 
-    def assert_activity(self, date: str, event: int, request: int, issue: int) -> None:
+    def assert_activity(self, date: str, business: int, http: int, error: int) -> None:
         raw = self.page.locator("[data-activity]").first.get_attribute("data-activity")
         act = json.loads(raw or "{}").get(date, {})
-        assert act.get("event", 0) == event, f"activity {date} event: {act}"
-        assert act.get("request", 0) == request, f"activity {date} request: {act}"
-        assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
+        assert act.get("business", 0) == business, f"activity {date} business: {act}"
+        assert act.get("http", 0) == http, f"activity {date} http: {act}"
+        assert act.get("error", 0) == error, f"activity {date} error: {act}"
 
     def assert_export_contains(self, needle: str) -> None:
         assert needle in self._export_text, f"{needle!r} not in export:\n{self._export_text}"

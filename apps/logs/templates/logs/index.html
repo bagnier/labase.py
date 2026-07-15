@@ -11,7 +11,9 @@
 {% endblock %}
 {% block content %}
   {% set paused = filters.from_dt or filters.to_dt %}
-  <div class="max-w-2xl space-y-6">
+  {# Full width (unlike the max-w-2xl console pages): the timeline is a wide, many-columned table
+     that reads far better with room to breathe. #}
+  <div class="space-y-6">
     {# Export is a page-level action on the current filtered view — kept away from the filters. #}
     {% call page_header('Logs',
       'One timeline across every source — the structlog firehose, the business-events trail and
@@ -32,17 +34,28 @@
       {# ── Activity: the shared ApexCharts stack; the JSON attribute stays the
          machine-readable contract the drivers assert on. #}
       <div class="p-4 border-b border-base-300"
-           data-activity='{{ activity | tojson }}'>
-        <div class="flex items-center gap-4 mb-3">
+           data-activity='{{ activity | tojson }}'
+           data-grain="{{ grain }}">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-1">
           <span class="eyebrow">Activity</span>
           <span class="flex gap-3 text-xs text-base-content/60">
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span>request</span>
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>event</span>
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span>issue</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span>HTTP</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>Business</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span>Error</span>
+          </span>
+          {# Grain toggle — a chart-only control; keeps the current filters and table sort. #}
+          <span class="join ml-auto" role="group" aria-label="Activity grain">
+            {% for g in grains %}
+              <a class="btn btn-xs join-item {{ 'btn-active' if g == grain else 'btn-ghost' }}"
+                 data-grain-option="{{ g }}"
+                 aria-current="{{ 'true' if g == grain else 'false' }}"
+                 href="/console/logs?bucket={{ g }}&sort={{ sort }}&dir={{ dir }}{{ '&' ~ export_qs if export_qs }}">{{ g }}</a>
+            {% endfor %}
           </span>
         </div>
+        <p class="text-xs text-base-content/50 mb-3">Log rows per {{ grain }}, stacked by source.</p>
         {% if activity %}
-          {{ chart(activity_chart, label='Log events per day, stacked by source') }}
+          {{ chart(activity_chart, label='Log rows per ' ~ grain ~ ', stacked by source') }}
         {% else %}
           <p class="text-xs text-base-content/60" data-activity-summary>No activity in the current window.</p>
         {% endif %}
@@ -81,6 +94,7 @@
         </span>
         <input type="hidden" name="sort" value="{{ sort }}" />
         <input type="hidden" name="dir" value="{{ dir }}" />
+        <input type="hidden" name="bucket" value="{{ grain }}" />
         {# entity_id has no pickable option list (opaque ids); it's reached by drilling into a row.
            Keep it across other filter changes, and offer a chip to drop it. #}
         <input type="hidden" name="entity_id" value="{{ filters.entity_id }}" />
@@ -114,7 +128,7 @@
                   <th>
                     <a class="inline-flex items-center gap-1 hover:text-base-content"
                        data-sort="{{ col }}"
-                       href="/console/logs?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}{{ '&' ~ export_qs if export_qs }}">
+                       href="/console/logs?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}&bucket={{ grain }}{{ '&' ~ export_qs if export_qs }}">
                       {{ label }}
                       {% if sort == col %}
                         <span aria-hidden="true">{{ "▼" if dir == "desc" else "▲" }}</span>

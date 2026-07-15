@@ -10,17 +10,40 @@ merged window — the only way to order a file stream and two tables as one time
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
+from apps.shared import clock
 from apps.shared.observability.business_events import BusinessEventRow, search_business_events
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
+
+# The activity chart's own lookback per grain — wider than the paginated table, so the graph can
+# zoom out to a month without the timeline pulling a year of rows. Bounds match the fixed x-axis
+# spans in ``router._GRAIN_SPAN``. Skipped when the caller already set a date bound (filter wins).
+_GRAIN_WINDOW = {
+    "hour": timedelta(hours=24),
+    "day": timedelta(days=14),
+    "week": timedelta(weeks=12),
+    "month": timedelta(days=366),
+}
+
+
+def bucket_key(ts: datetime, grain: str) -> str:
+    """The activity bucket a timestamp falls in, for the selected grain. ``day`` returns the ISO
+    date (the machine-readable contract the drivers assert on); the others widen or narrow it."""
+    if grain == "hour":
+        return ts.strftime("%Y-%m-%d %H:00")
+    if grain == "week":
+        return ts.strftime("%G-W%V")  # ISO year + week, so weeks sort chronologically
+    if grain == "month":
+        return ts.strftime("%Y-%m")
+    return ts.date().isoformat()
 
 
 @dataclass(frozen=True)
@@ -48,7 +71,7 @@ class LogFilter:
 
 def entry_app(entry: LogEntry) -> str:
     """The owning app of an entry — the first dotted segment of its event key (``todo.created``
-    → ``todo``, ``request.finished`` → ``request``). Business events are ``<app>.<verb>``, so this
+    → ``todo``, ``request.failed`` → ``request``). Business events are ``<app>.<verb>``, so this
     is the per-app axis the console browses by; issues (bare titles) collapse to their full name."""
     return entry.event.split(".", 1)[0]
 
@@ -59,15 +82,15 @@ class LogReader:
 
     async def search(self, flt: LogFilter, *, limit: int = 100) -> list[LogEntry]:
         entries: list[LogEntry] = []
-        # The firehose is a synchronous read of local files — the 'request'/'app' diagnostics
-        # stream, level-gated at write time; the durable sources below carry full history.
-        if flt.wants(LogSource.request):
+        # The firehose is a synchronous read of local files — the HTTP diagnostics stream
+        # (request.failed), level-gated at write time; the durable sources below carry full history.
+        if flt.wants(LogSource.http):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
-        if flt.wants(LogSource.event):
+        if flt.wants(LogSource.business):
             rows = await search_business_events(self.session, **_event_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
-        if flt.wants(LogSource.issue) and flt.level in (None, "error"):
+        if flt.wants(LogSource.error) and flt.level in (None, "error"):
             rows = await search_issue_events(self.session, **_issue_kwargs(flt, limit))
             entries += [_from_issue(r) for r in rows]
         # The app filter narrows the merged timeline to one app's event key prefix — applied in
@@ -80,13 +103,20 @@ class LogReader:
             entries = [e for e in entries if e.entity_id == flt.entity_id]
         return _sorted(entries, flt)[:limit]
 
-    async def activity(self, flt: LogFilter, *, cap: int = 5000) -> dict[str, dict[str, int]]:
-        """Per-day, per-source counts over the filtered window — feeds the stacked graph.
-        Honours the same filters as the timeline (see the two activity scenarios)."""
+    async def activity(
+        self, flt: LogFilter, *, grain: str = "day", cap: int = 20000
+    ) -> dict[str, dict[str, int]]:
+        """Per-bucket, per-source counts over the filtered window — feeds the stacked graph.
+        Honours the same filters as the timeline (see the two activity scenarios); ``grain`` picks
+        the bucket size (hour/day/week/month). Non-day grains widen the chart's own lookback so the
+        graph can zoom out past the paginated table without dragging its window along."""
+        chart_flt = flt
+        if grain in _GRAIN_WINDOW and not flt.from_dt:
+            chart_flt = replace(flt, from_dt=clock.now() - _GRAIN_WINDOW[grain])
         buckets: dict[str, dict[str, int]] = {}
-        for e in await self.search(flt, limit=cap):
-            day = buckets.setdefault(e.ts.date().isoformat(), {})
-            day[e.source.value] = day.get(e.source.value, 0) + 1
+        for e in await self.search(chart_flt, limit=cap):
+            b = buckets.setdefault(bucket_key(e.ts, grain), {})
+            b[e.source.value] = b.get(e.source.value, 0) + 1
         return buckets
 
     async def facets(self, flt: LogFilter, *, cap: int = 2000) -> dict[str, list[dict[str, Any]]]:
@@ -100,8 +130,8 @@ class LogReader:
         entries = await self.search(base, limit=cap)
         return {
             "source": _tally(entries, lambda e: e.source.value),
-            # The app axis is a business-events notion (``<app>.<verb>``); only event rows have it.
-            "app": _tally([e for e in entries if e.source == LogSource.event], entry_app),
+            # The app axis is a business notion (``<app>.<verb>``); only business rows have one.
+            "app": _tally([e for e in entries if e.source == LogSource.business], entry_app),
             "level": _tally(entries, lambda e: e.level),
             "org": _tally(entries, lambda e: e.org_id),
             "user": _tally(entries, lambda e: e.user_id),
@@ -176,7 +206,7 @@ def _firehose_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
 def _from_firehose(row: FirehoseRow) -> LogEntry:
     return LogEntry(
         ts=row.ts,
-        source=LogSource.request,
+        source=LogSource.http,
         level=row.level,
         event=row.event,
         org_id=row.org_id,
@@ -189,7 +219,7 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
 def _from_event(row: BusinessEventRow) -> LogEntry:
     return LogEntry(
         ts=row.ts,
-        source=LogSource.event,
+        source=LogSource.business,
         level=row.level,
         event=row.kind,
         org_id=row.org_id,
@@ -204,7 +234,7 @@ def _from_issue(row: IssueEventRow) -> LogEntry:
     ctx = row.context
     return LogEntry(
         ts=row.ts,
-        source=LogSource.issue,
+        source=LogSource.error,
         level="error",
         event=row.title,
         org_id=ctx.get("org_id"),

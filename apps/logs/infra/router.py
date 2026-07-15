@@ -3,7 +3,7 @@ import io
 import json
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
@@ -15,6 +15,7 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.logs.domain.models import LogEntry
 from apps.logs.infra.repository import LogFilter, LogReader, request_desc
 from apps.organizations.contract.queries import org_handles
+from apps.shared import clock
 from apps.shared.charts import chart_config
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
@@ -34,23 +35,74 @@ def _settings_rows() -> list[SettingRow]:
     return get_settings(_LOGS_APP).rows()
 
 
-def _activity_chart(activity: dict[str, dict[str, int]]) -> dict[str, Any]:
-    """The stacked per-day columns over whatever days the filtered window carries.
+_GRAINS = ("hour", "day", "week", "month")
+# (source value, human series label) — the label rides the ApexCharts tooltip; colors mirror the
+# template's legend swatches (info/secondary/error), which is why the chart's own legend stays off.
+_SOURCE_SERIES = (("http", "HTTP"), ("business", "Business"), ("error", "Error"))
+# How many buckets the x-axis shows per grain — a *fixed* count ending at the current period, so
+# the axis width is stable and bounded no matter how the data clusters (aligned with the data
+# windows in ``repository._GRAIN_WINDOW``).
+_GRAIN_SPAN = {"hour": 24, "day": 14, "week": 12, "month": 12}
 
-    Series colors mirror the legend swatches in the template (info/secondary/error),
-    which is why the chart's own legend stays off."""
-    days = sorted(activity)
+
+def _bucket_label(key: str, grain: str) -> str:
+    """The compact x-axis label for a bucket key at the given grain."""
+    if grain == "hour":
+        return key[11:16]  # HH:00
+    if grain == "week":
+        return key.split("-", 1)[1]  # W##
+    if grain == "month":
+        return key  # YYYY-MM
+    return key[5:]  # MM-DD (day)
+
+
+def _axis_keys(grain: str, now: datetime) -> list[str]:
+    """The fixed run of consecutive bucket keys ending at the current period — the chart's x-axis.
+    Fixed-length (see ``_GRAIN_SPAN``) so the axis stays a stable, bounded width; buckets with no
+    data render as zero columns rather than collapsing the timeline."""
+    n = _GRAIN_SPAN[grain]
+    ago = range(n - 1, -1, -1)  # oldest bucket first, current period last
+    if grain == "hour":
+        base = now.replace(minute=0, second=0, microsecond=0)
+        return [(base - timedelta(hours=i)).strftime("%Y-%m-%d %H:00") for i in ago]
+    if grain == "week":
+        monday = now.date() - timedelta(days=now.weekday())
+        return [(monday - timedelta(weeks=i)).strftime("%G-W%V") for i in ago]
+    if grain == "month":
+        y, m, seq = now.year, now.month, []
+        for _ in range(n):
+            seq.append(f"{y:04d}-{m:02d}")
+            y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+        return list(reversed(seq))
+    base = now.date()  # day
+    return [(base - timedelta(days=i)).isoformat() for i in ago]
+
+
+def _activity_chart(
+    activity: dict[str, dict[str, int]], grain: str, now: datetime
+) -> dict[str, Any]:
+    """The stacked columns over the grain's fixed window ending now. Per-bucket tick marks are
+    hidden and labels thinned to ~6, so even a 24-column hour view reads cleanly; the y-axis gets
+    height and four gridlines for gradation."""
+    keys = _axis_keys(grain, now)
     series = [
-        {"name": source, "data": [activity[d].get(source, 0) for d in days]}
-        for source in ("request", "event", "issue")
+        {"name": label, "data": [activity.get(k, {}).get(source, 0) for k in keys]}
+        for source, label in _SOURCE_SERIES
     ]
     return chart_config(
         "bar",
         series,
         colors=["info", "secondary", "error"],
-        chart={"height": 130, "stacked": True},
-        xaxis={"categories": [d[5:] for d in days]},
-        yaxis={"min": 0, "forceNiceScale": True},
+        chart={"height": 200, "stacked": True},
+        plotOptions={"bar": {"columnWidth": "65%"}},
+        xaxis={
+            "categories": [_bucket_label(k, grain) for k in keys],
+            "tickAmount": 6,  # ApexCharts thins the labels evenly to at most this many
+            "axisTicks": {"show": False},  # drop the per-bucket tick marks that crowd the axis
+            "labels": {"rotate": 0, "hideOverlappingLabels": True},
+        },
+        yaxis={"min": 0, "forceNiceScale": True, "tickAmount": 4},
+        grid={"padding": {"left": 8, "right": 8}},
         legend={"show": False},
     )
 
@@ -169,13 +221,15 @@ async def logs_screen(
     to_dt: str | None = None,
     sort: str = "ts",
     dir: str = "desc",
+    bucket: str = "day",
 ) -> Response:
     flt = _filter(
         source, app, level, org_id, user_id, entity_id, request_id, q, from_dt, to_dt, sort, dir
     )
+    grain = bucket if bucket in _GRAINS else "day"
     reader = LogReader(session)
     entries = await reader.search(flt)
-    activity = await reader.activity(flt)
+    activity = await reader.activity(flt, grain=grain)
     facets = await reader.facets(flt)
 
     # Resolve ids to intelligible names once, over the union of the facet options (the pill
@@ -230,7 +284,9 @@ async def logs_screen(
             "user": current_user,
             "entries": entries,
             "activity": activity,
-            "activity_chart": _activity_chart(activity),
+            "activity_chart": _activity_chart(activity, grain, clock.now()),
+            "grain": grain,
+            "grains": _GRAINS,
             "facets": facets,
             "org_label": org_label,
             "user_label": user_label,

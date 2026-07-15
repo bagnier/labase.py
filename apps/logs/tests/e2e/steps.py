@@ -131,6 +131,11 @@ def step_sort_asc(driver, column):
     driver.sort_logs(column, "asc")
 
 
+@when(parsers.parse('the admin views the activity by "{grain}"'))
+def step_view_activity_grain(driver, grain):
+    driver.view_activity_by(grain)
+
+
 # ── Assertions ───────────────────────────────────────────────────────────────
 @then(parsers.parse('the entry "{event}" is listed'))
 def step_entry_listed(driver, event):
@@ -161,9 +166,9 @@ def step_correlated_all_listed(driver, event, error):
     driver.assert_all_listed("request.finished", event, error)
 
 
-@then(parsers.parse("{n:d} request entry is listed"))
+@then(parsers.parse("{n:d} http entry is listed"))
 def step_request_count(driver, n):
-    driver.assert_source_count("request", n)
+    driver.assert_source_count("http", n)
 
 
 @then(parsers.parse('the export contains "{needle}"'))
@@ -183,11 +188,11 @@ def step_csv_export(driver, needle):
 
 @then(
     parsers.parse(
-        'the activity for "{date}" shows {event:d} event, {request:d} request, and {issue:d} issue'
+        'the activity for "{date}" shows {business:d} business, {http:d} http, and {error:d} error'
     )
 )
-def step_activity(driver, date, event, request, issue):
-    driver.assert_activity(date, event, request, issue)
+def step_activity(driver, date, business, http, error):
+    driver.assert_activity(date, business, http, error)
 
 
 # ── Access + empty state ─────────────────────────────────────────────────────

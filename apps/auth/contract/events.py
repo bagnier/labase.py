@@ -154,7 +154,7 @@ class TwoFactorEnabled(AuthEvent):
     kind: ClassVar[str] = "auth.twofa_enabled"
 
 
-# ── Admin: impersonation and the admin-only probe ────────────────────────────────
+# ── Admin: impersonation and denied admin access ─────────────────────────────────
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -172,8 +172,11 @@ class ImpersonationStopped(AuthEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AdminProbe(AuthEvent):
-    kind: ClassVar[str] = "auth.admin_probe"
+class ForbiddenAdminAccess(AuthEvent):
+    """A signed-in non-admin was denied an admin-only surface (answered 404, not 403). Recorded as
+    a security signal — someone reaching for the console without rights — with the path tried."""
+
+    kind: ClassVar[str] = "auth.forbidden_admin_access"
     level: ClassVar[str] = "warning"
     path: str | None = None
 

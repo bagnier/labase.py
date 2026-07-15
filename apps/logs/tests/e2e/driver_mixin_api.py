@@ -119,6 +119,9 @@ class LogsApiMixin(ApiBase):
     def sort_logs(self, column: str, direction: str) -> None:
         self._open_logs(sort=column, dir=direction)
 
+    def view_activity_by(self, grain: str) -> None:
+        self._open_logs(bucket=grain)
+
     # ── export ───────────────────────────────────────────────────────────────
     def _export_logs(self, fmt: str) -> None:
         self._logs_as_admin()
@@ -172,12 +175,12 @@ class LogsApiMixin(ApiBase):
         assert a in events and b in events, f"{a!r}/{b!r} not both listed: {events}"
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
-    def assert_activity(self, date: str, event: int, request: int, issue: int) -> None:
+    def assert_activity(self, date: str, business: int, http: int, error: int) -> None:
         assert self.response is not None
         act = self.response.json()["activity"].get(date, {})
-        assert act.get("event", 0) == event, f"activity {date} event: {act}"
-        assert act.get("request", 0) == request, f"activity {date} request: {act}"
-        assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
+        assert act.get("business", 0) == business, f"activity {date} business: {act}"
+        assert act.get("http", 0) == http, f"activity {date} http: {act}"
+        assert act.get("error", 0) == error, f"activity {date} error: {act}"
 
     def assert_export_contains(self, needle: str) -> None:
         body = self.export_response.text
