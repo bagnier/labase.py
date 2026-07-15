@@ -93,5 +93,5 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     )
     lines = [f"{active} active", f"{total - active} revoked"] if total else ["No API keys yet"]
     return ConsoleOverview(
-        key="api_keys", title="API keys", icon="key", section="configuration", data={"lines": lines}
+        key="api_keys", title="API keys", icon="key", section="identity", data={"lines": lines}
     )

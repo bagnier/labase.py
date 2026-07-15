@@ -23,13 +23,10 @@ from apps.organizations.infra.router import org_router, router
 from apps.shared.bus import bus
 from apps.shared.host import Host, MountPhase, NavItem
 from apps.shared.persistence.database import admin_session_factory
-from apps.shared.persistence.repository import count_created_per_day
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize
 
 PHASE = MountPhase.ORG
-
-_GROWTH_DAYS = 14
 
 # Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
 # contexts last (see apps.main) so fixed-prefix routers (e.g. /console) are never shadowed.
@@ -93,11 +90,11 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         key="organizations",
         title="Organisations",
         icon="buildings",
-        section="configuration",
-        data={
-            "lines": lines,
-            "growth": await count_created_per_day(query.session, Organization, days=_GROWTH_DAYS),
-        },
+        section="identity",
+        # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day
+        # would just shadow the Sign-ups series on the console growth chart. Team creation
+        # isn't structurally distinguishable from a personal org, so we don't fake a signal.
+        data={"lines": lines},
     )
 
 

@@ -9,7 +9,7 @@
   <li>Issues</li>
 {% endblock %}
 {% block content %}
-  <div class="max-w-4xl space-y-6">
+  <div class="max-w-2xl space-y-6">
     {{ page_header('Issues',
         'Captured errors, grouped by stack fingerprint. The request id of each event
         links it to the structured logs.') }}
@@ -41,7 +41,11 @@
         {% endfor %}
       </div>
     {% else %}
-      {{ empty_state("No captured error. Good.") }}
+      {{ empty_state("No errors captured — the app is healthy." if not status_filter
+            else "No " ~ status_filter ~ " issues.",
+            hint="Unhandled 500s and event-bus failures land here automatically, grouped by
+            stack fingerprint. An empty list means nothing has thrown — not that tracking is off.",
+            icon="shield-check") }}
     {% endif %}
   </div>
 {% endblock %}

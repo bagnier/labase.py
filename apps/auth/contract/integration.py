@@ -71,7 +71,12 @@ def _declare_settings() -> SettingsDeclaration:
             ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
-        links=(ConsoleLink("Accounts", "/console/accounts"),),
+        # Both people-management screens hang off the Users tile (their "right place"),
+        # not off floating buttons in the console header.
+        links=(
+            ConsoleLink("Accounts", "/console/accounts"),
+            ConsoleLink("Manage admins", "/console/admins"),
+        ),
     )
 
 
@@ -80,5 +85,5 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     count = len(await list_server_admins())
     lines = [f"{count} user" + ("s" if count > 1 else "")] if count else ["No users yet"]
     return ConsoleOverview(
-        key="users", title="Users", icon="users", section="operations", data={"lines": lines}
+        key="users", title="Users", icon="users", section="identity", data={"lines": lines}
     )

@@ -43,6 +43,7 @@ _GROUP_DISPLAY: dict[str, tuple[str, str, str]] = {
 # Human labels for the console landing sections (order comes from SECTIONS).
 _SECTION_LABELS: dict[str, str] = {
     "operations": "Operations",
+    "identity": "Identity & access",
     "features": "Features",
     "configuration": "Configuration",
 }
@@ -100,7 +101,7 @@ def _growth_chart(overviews: list[ConsoleOverview]) -> dict | None:
         for day, n in (o.data.get("growth") or {}).items():
             buckets.setdefault(day, {})[o.key] = n
         if o.data.get("growth") is not None:
-            names[o.key] = o.title
+            names[o.key] = o.data.get("growth_label") or o.title
     if not names:
         return None
     return day_buckets_series(
@@ -157,7 +158,6 @@ async def get_console(
 ) -> Response:
     overviews = await _collect_overviews(session)
     disabled = await AppSettingRepository(session).disabled_apps()
-    links = host.declared_console_links()
     if wants_json(request):
         return JSONResponse(
             {
@@ -165,7 +165,6 @@ async def get_console(
                     {"key": o.key, "title": o.title, "disabled": o.key in disabled, **o.data}
                     for o in overviews
                 ],
-                "links": [{"label": link.label, "href": link.href} for link in links],
             }
         )
     return templates.TemplateResponse(
@@ -177,7 +176,6 @@ async def get_console(
             "growth_chart": _growth_chart(overviews),
             "growth_days": _GROWTH_DAYS,
             "disabled": disabled,
-            "links": links,
             **await fullpage_context(session, current_user),
         },
     )

@@ -12,9 +12,10 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 #: Console landing sections, in display order. ``operations`` groups the monitoring
-#: screens (accounts, issues, metrics, logs) so they are visible at a glance; ``features``
+#: screens (issues, metrics, logs) so they are visible at a glance; ``identity`` groups
+#: the who-and-tenancy screens (users, organisations, profiles) in one place; ``features``
 #: are the product apps; ``configuration`` are the platform/foundation settings.
-SECTIONS: tuple[str, ...] = ("operations", "features", "configuration")
+SECTIONS: tuple[str, ...] = ("operations", "identity", "features", "configuration")
 
 
 @dataclass(frozen=True)

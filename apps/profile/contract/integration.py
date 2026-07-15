@@ -81,19 +81,23 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         )
         or 0
     )
+    # A profile exists 1:1 per account, so the raw total just echoes the Users tile.
+    # Lead with what's profile-specific instead: handle adoption (public identity).
     if count:
-        lines = [f"{count} profile" + ("s" if count > 1 else ""), f"{handles} with a handle"]
+        lines = [f"{handles} with a handle", f"{count - handles} without"]
     else:
         lines = ["No profiles yet"]
     return ConsoleOverview(
         key="profile",
         title="Profiles",
         icon="user-circle",
-        section="configuration",
+        section="identity",
         data={
             "lines": lines,
             # Sign-ups per day (every account gets a profile row on creation) — the
-            # console landing folds every tile's "growth" slice into one chart.
+            # console landing folds every tile's "growth" slice into one chart. The
+            # series reads "Sign-ups", not the tile title, via "growth_label".
             "growth": await count_created_per_day(query.session, Profile, days=_GROWTH_DAYS),
+            "growth_label": "Sign-ups",
         },
     )

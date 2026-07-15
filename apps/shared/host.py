@@ -16,7 +16,6 @@ from fastapi import FastAPI
 from apps.shared.bus import EventBus, bus
 from apps.shared.settings import (
     AppSettings,
-    ConsoleLink,
     SettingsChanged,
     SettingsDeclaration,
     bind_settings,
@@ -171,15 +170,6 @@ class Host:
         """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
         handle = self.settings_handles.get(app)
         return handle.declaration if handle is not None else None
-
-    def declared_console_links(self) -> list[ConsoleLink]:
-        """Every console screen declared by mounted apps — the console overview renders them."""
-        return [
-            link
-            for handle in self.settings_handles.values()
-            if handle.declaration is not None
-            for link in handle.declaration.links
-        ]
 
 
 # Production singleton: share the process-wide event bus so runtime ``bus.emit/collect`` and

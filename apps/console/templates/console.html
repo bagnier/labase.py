@@ -6,23 +6,21 @@
   <li>Admin</li>
 {% endblock %}
 {% block content %}
-  <div class="space-y-6">
-    {% call page_header('Admin console', 'Server-wide — every organisation. Click an app to configure it.') %}
-      {% for link in links %}<a href="{{ link.href }}" class="btn btn-sm">{{ link.label }}</a>{% endfor %}
-      <a href="/console/admins" class="btn btn-sm">Manage admins</a>
-    {% endcall %}
+  <div class="max-w-2xl space-y-6">
+    {{ page_header('Admin console', 'Server-wide — every organisation. Click an app to configure it.') }}
     {% if growth_chart %}
-      <section class="card-panel" aria-label="Growth">
+      <section class="card-panel" aria-label="New sign-ups">
         <div class="p-4">
-          <h2 class="text-sm font-semibold mb-2">Growth — last {{ growth_days }} days</h2>
-          {{ chart(growth_chart, label='Sign-ups and organisations created per day') }}
+          <h2 class="text-sm font-semibold">New sign-ups</h2>
+          <p class="text-xs text-base-content/60 mb-2">New accounts created per day, over the last {{ growth_days }} days.</p>
+          {{ chart(growth_chart, label='New sign-ups per day') }}
         </div>
       </section>
     {% endif %}
     {% for section in sections %}
       <section class="space-y-3" aria-labelledby="console-section-{{ section.key }}">
         <h2 id="console-section-{{ section.key }}" class="eyebrow">{{ section.label }}</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {% for o in section.overviews %}
             <a href="{{ o.href or '/console/' ~ o.key }}"
                class="block hover:-translate-y-0.5 transition-transform {% if o.key in disabled %}opacity-60{% endif %}">
