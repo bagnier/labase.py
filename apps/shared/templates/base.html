@@ -5,11 +5,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}labase{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/tailwind.css?v={{ css_v }}" />
+    <link rel="stylesheet" href="{{ asset('/static/css/tailwind.css') }}" />
     <meta name="htmx-config"
           content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":false}]}' />
-    <script src="/static/js/htmx.min.js"></script>
-    <script src="/static/js/alpine.min.js" defer></script>
+    <script src="{{ asset('/static/js/htmx.min.js') }}"></script>
+    <script src="{{ asset('/static/js/alpine.min.js') }}" defer></script>
   </head>
   <body class="h-full bg-base-200 text-base-content antialiased">
     <a href="#main-content"

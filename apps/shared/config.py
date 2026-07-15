@@ -37,6 +37,10 @@ class TechnicalSettings(BaseSettings):
     task_worker_interval_seconds: float = 1.0
     # Load metrics: per-process flush of the request accumulator; 0 disables.
     metrics_flush_seconds: float = 60
+    # Static assets: browser cache TTL (seconds) for un-fingerprinted files; fingerprinted
+    # ones (?v=…) are served immutable regardless. 0 → always revalidate (dev). Prod can push
+    # this high, especially once every bundle is fingerprinted.
+    static_cache_seconds: int = 3600
     # Firehose: per-process drain of the in-memory log queue to the per-day files; 0 disables
     # the background writer (the runtime log path then drops lines instead of blocking on I/O).
     firehose_flush_seconds: float = 1.0

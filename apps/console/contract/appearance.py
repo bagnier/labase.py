@@ -4,7 +4,7 @@ Unlike a per-browser preference, the theme is one server-side setting (``app_set
 that only console admins can change; it is rendered into ``<html data-theme>`` for all users.
 
 The live value is exposed to every template via the ``app_theme()`` Jinja global (registered at
-mount, next to ``css_v``), kept fresh by the ``SettingsChanged`` event like any other setting.
+mount, next to ``asset``), kept fresh by the ``SettingsChanged`` event like any other setting.
 """
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery

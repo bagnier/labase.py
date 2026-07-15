@@ -29,8 +29,8 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="/static/js/todo.js"></script>
-  <script src="/static/js/sortable.min.js"></script>
+  <script src="{{ asset('/static/js/todo.js') }}"></script>
+  <script src="{{ asset('/static/js/sortable.min.js') }}"></script>
   <script>
 (function () {
   const list = document.getElementById('todo-list');

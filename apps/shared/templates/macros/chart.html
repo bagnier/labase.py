@@ -9,6 +9,6 @@
        {% if label %}role="img" aria-label="{{ label }}"{% endif %}></div>
 {% endmacro %}
 {% macro chart_scripts() %}
-  <script src="/static/js/apexcharts.min.js"></script>
-  <script src="/static/js/charts.js" defer></script>
+  <script src="{{ asset('/static/js/apexcharts.min.js') }}"></script>
+  <script src="{{ asset('/static/js/charts.js') }}" defer></script>
 {% endmacro %}

@@ -5,8 +5,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ org.name }}</title>
-    <link rel="stylesheet" href="/static/css/tailwind.css" />
-    <script src="/static/js/alpine.min.js" defer></script>
+    <link rel="stylesheet" href="{{ asset('/static/css/tailwind.css') }}" />
+    <script src="{{ asset('/static/js/alpine.min.js') }}" defer></script>
   </head>
   <body class="h-full bg-base-200 text-base-content antialiased">
     <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-6 gap-6">

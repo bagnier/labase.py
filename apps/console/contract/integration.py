@@ -49,7 +49,7 @@ def mount(host: Host) -> None:
     host.on_startup(refresher.start)
     host.on_shutdown(refresher.stop)
 
-    # Live appearance globals, alongside ``css_v`` — every page reads the app-wide theme.
+    # Live appearance globals, alongside ``asset`` — every page reads the app-wide theme.
     jinja_globals = cast("dict[str, object]", templates.env.globals)
     jinja_globals["app_theme"] = current_theme
     jinja_globals["app_themes"] = lambda: THEMES

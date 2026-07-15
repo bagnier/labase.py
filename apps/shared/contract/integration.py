@@ -3,7 +3,6 @@ from pathlib import Path
 import structlog
 from fastapi import HTTPException
 from fastapi.responses import Response
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
@@ -25,6 +24,7 @@ from apps.shared.http.limiter import (
     purge_counters,
 )
 from apps.shared.http.security import cors_config, csrf_protect, security_headers
+from apps.shared.http.static import CachingStaticFiles
 from apps.shared.observability.business_events import persist_business_event
 from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import setup_logging
@@ -69,7 +69,11 @@ def mount(host: Host) -> None:
     host.on_startup(firehose_writer.start)
     host.on_shutdown(firehose_writer.stop)
 
-    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+    app.mount(
+        "/static",
+        CachingStaticFiles(directory=str(_STATIC_DIR), max_age=settings.static_cache_seconds),
+        name="static",
+    )
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon() -> Response:

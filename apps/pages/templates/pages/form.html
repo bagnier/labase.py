@@ -54,7 +54,7 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="/static/js/codemirror-editor.js"></script>
+  <script src="{{ asset('/static/js/codemirror-editor.js') }}"></script>
   <script>
   document.addEventListener('DOMContentLoaded', () => {
     const textarea = document.querySelector('#editor-mount textarea[name="content"]')

@@ -374,7 +374,7 @@
                 <p class="text-xs text-error mt-2 hidden"
                    data-passkey-error
                    aria-live="polite"></p>
-                <script src="/static/js/passkeys.js" defer></script>
+                <script src="{{ asset('/static/js/passkeys.js') }}" defer></script>
               </div>
             </section>
           {% endif %}
@@ -426,4 +426,4 @@
     </div>
   </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/hash-tabs.js" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('/static/js/hash-tabs.js') }}" defer></script>{% endblock %}

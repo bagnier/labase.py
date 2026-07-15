@@ -34,7 +34,7 @@
   </div>
 {% endblock %}
 {% block scripts %}
-  <script src="/static/js/sortable.min.js"></script>
+  <script src="{{ asset('/static/js/sortable.min.js') }}"></script>
   <script>
 (function () {
   const handle = {{ org_handle | tojson }};
