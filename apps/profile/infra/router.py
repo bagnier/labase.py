@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import uuid
@@ -200,25 +201,47 @@ async def _profile_context(
     # Helper outside DI: profile routes carry no org, so the server view is the effective one.
     profile_settings = get_settings("profile").view()
     users_settings = get_settings("users").view()
-    profile = await repo.get_with_auto_handle(
-        uuid.UUID(current_user.id), current_user.email, profile_settings.handle_enabled
-    )
-    two_factor_enabled = bool(users_settings.two_factor_enabled)
     access_token = request.cookies.get("access_token", "")
-    twofa_active = bool(
-        two_factor_enabled and access_token and await verified_totp_factor(access_token)
-    )
+
+    # The verified-factor lookup and the passkey list are two independent GoTrue round-trips
+    # that gate only display state and touch neither the DB session nor each other. Fire them
+    # up front so they overlap each other *and* the sequential DB work below, instead of
+    # serializing three separate waits on the critical path of the site's busiest HTML page.
+    two_factor_enabled = bool(users_settings.two_factor_enabled)
     passkeys_enabled = bool(users_settings.passkeys_enabled)
+    twofa_task = (
+        asyncio.ensure_future(verified_totp_factor(access_token))
+        if two_factor_enabled and access_token
+        else None
+    )
+    passkeys_task = (
+        asyncio.ensure_future(list_passkeys(access_token))
+        if passkeys_enabled and access_token
+        else None
+    )
+    try:
+        profile = await repo.get_with_auto_handle(
+            uuid.UUID(current_user.id), current_user.email, profile_settings.handle_enabled
+        )
+        context = await fullpage_context(session, current_user)
+        orgs = context["org_nav"]
+        handles = {str(o.id): o.handle for o in orgs}
+        counts = await daily_activity_counts(session, user_id=current_user.id)
+        activity = await _activity_context(session, current_user.id, handles)
+    except BaseException:
+        # Don't leave the in-flight GoTrue calls dangling if the DB work fails.
+        for task in (twofa_task, passkeys_task):
+            if task is not None:
+                task.cancel()
+        raise
+
+    twofa_active = bool(twofa_task is not None and await twofa_task)
     passkeys: list[dict] = []
-    if passkeys_enabled and access_token:
+    if passkeys_task is not None:
         try:
-            passkeys = await list_passkeys(access_token)
+            passkeys = await passkeys_task
         except PasskeyError:
             passkeys_enabled = False  # server-side feature off: hide the section
-    context = await fullpage_context(session, current_user)
-    orgs = context["org_nav"]
-    handles = {str(o.id): o.handle for o in orgs}
-    counts = await daily_activity_counts(session, user_id=current_user.id)
     now = clock.now()
     return {
         "user": current_user,
@@ -237,7 +260,7 @@ async def _profile_context(
             counts, now=now, since=profile.created_at if profile else None
         ),
         "activity_stats": activity_stats(counts, now=now),
-        **await _activity_context(session, current_user.id, handles),
+        **activity,
         **context,
     }
 
