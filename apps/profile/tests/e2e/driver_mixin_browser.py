@@ -69,6 +69,7 @@ class ProfileBrowserMixin(BrowserBase):
     # ── avatar & handle switches ──────────────────────────────────────────────
     def upload_avatar(self, filename: str, content: bytes, mime: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
+        self._open_profile_tab("Profile")
         self.page.set_input_files(
             "[data-avatar-upload] input[type=file]",
             files=[{"name": filename, "mimeType": mime, "buffer": content}],
@@ -78,9 +79,13 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_avatar_shown(self) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
+        self._open_profile_tab("Profile")
         self.page.wait_for_selector("[data-avatar]", timeout=5000)
 
     def assert_avatar_rejected(self) -> None:
+        # A rejected upload full-reloads /profile; the server opens the Profile tab (avatar_error),
+        # but open it explicitly so the assertion never races the server-rendered default tab.
+        self._open_profile_tab("Profile")
         alert = self.page.locator("[data-avatar-upload] .alert-error")
         alert.wait_for(timeout=5000)
 
@@ -117,6 +122,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     def update_handle(self, name: str) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
+        self._open_profile_tab("Profile")
         self.last_response = self.submit_labelled_form(
             self.page,
             {"Handle": name},
@@ -127,6 +133,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_handle(self, name: str | None) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
+        self._open_profile_tab("Profile")
         value = self.page.get_by_label("Handle").input_value()
         if name:
             assert value == name, f"Expected handle '{name}', got '{value}'"
@@ -141,8 +148,10 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_email_read_only(self) -> None:
         self.page.goto(self._profile_url(), wait_until="load")
-        disabled = self.page.locator("input[disabled]")
-        assert disabled.count() >= 1, "Expected at least one disabled input on profile page"
+        self._open_profile_tab("Email")
+        assert self.page.locator("input#email[disabled]").count() == 1, (
+            "Expected the sign-in email to be shown as a read-only (disabled) field"
+        )
 
     def visit_profile_unauthenticated(self) -> None:
         self.last_response = self.page.goto(self._profile_url(), wait_until="load")

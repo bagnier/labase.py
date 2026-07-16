@@ -258,31 +258,35 @@
              {% if active_tab == "email" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
-        {% if email_change_enabled %}
-          <section class="card-panel" data-email-change>
-            <div class="card-body">
-              <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
-              <p class="text-sm text-base-content/70 mb-3">Your address changes once you follow the link sent to the new mailbox.</p>
-              {{ alert('error', email_error) }}
-              {{ alert('success', email_info) }}
-              <form method="post" action="/profile/email" class="space-y-4 max-w-sm">
-                {{ input_field("new_email", "new_email", type="email",
-                                label="New email", required=true, sm=true) }}
-                {{ input_field("email_current_password", "current_password", type="password",
-                                label="Confirm with your password", required=true, sm=true) }}
-                <button type="submit" class="btn btn-primary btn-sm">Send confirmation link</button>
-              </form>
-            </div>
-          </section>
-        {% else %}
+        <div class="space-y-6">
+          {# Current sign-in email, always shown read-only: the address itself is never edited in
+             place — a change goes through the confirm-by-link flow below (when enabled). #}
           <section class="card-panel">
             <div class="card-body">
               <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
-              {{ input_field("email_ro", "email", label="Email", label_hidden=true,
-                            value=user.email, disabled=true, sm=true, hint="Email cannot be changed.") }}
+              {{ input_field("email", "email", label="Email", label_hidden=true,
+                            value=user.email, disabled=true, sm=true,
+                            hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
             </div>
           </section>
-        {% endif %}
+          {% if email_change_enabled %}
+            <section class="card-panel" data-email-change>
+              <div class="card-body">
+                <h2 class="card-title text-sm font-semibold mb-3">Change email</h2>
+                <p class="text-sm text-base-content/70 mb-3">Your address changes once you follow the link sent to the new mailbox.</p>
+                {{ alert('error', email_error) }}
+                {{ alert('success', email_info) }}
+                <form method="post" action="/profile/email" class="space-y-4 max-w-sm">
+                  {{ input_field("new_email", "new_email", type="email",
+                                    label="New email", required=true, sm=true) }}
+                  {{ input_field("email_current_password", "current_password", type="password",
+                                    label="Confirm with your password", required=true, sm=true) }}
+                  <button type="submit" class="btn btn-primary btn-sm">Send confirmation link</button>
+                </form>
+              </div>
+            </section>
+          {% endif %}
+        </div>
       </div>
       {# ── Authentication ─────────────────────────────────────────────────── #}
       <input type="radio"

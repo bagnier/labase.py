@@ -204,29 +204,33 @@ class OrgBrowserMixin(BrowserBase):
 
     def set_member_role(self, email: str, role: str) -> None:
         page = self._goto_members()
-        manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
-        if manage is None:
+        action = "[data-promote]" if role == "owner" else "[data-demote]"
+        # The self-row's Manage combo only offers "Leave" — promote/demote render for *other*
+        # members. When the role action is absent (e.g. demoting the sole owner, who is the
+        # acting user), UI-hiding isn't proof: probe the API so the server itself must reject it.
+        if page.query_selector(f"[data-member-email='{email}'] {action}") is None:
             self._probe_blocked(
                 "PATCH",
                 f"/{self._active_slug()}/members/{self._user_id_for(email)}",
                 form={"role": role},
             )
             return
-        manage.click()  # open the dropdown (group-focus-within)
-        action = "[data-promote]" if role == "owner" else "[data-demote]"
+        page.click(f"[data-member-email='{email}'] [data-manage]")  # open the dropdown
         self.last_response = self.click_and_capture(
             page, f"[data-member-email='{email}'] {action}", "PATCH", "/members/"
         )
 
     def remove_member(self, email: str) -> None:
         page = self._goto_members()
-        manage = page.query_selector(f"[data-member-email='{email}'] [data-manage]")
-        if manage is None:
+        # "Remove" renders only on *other* members' rows; the self-row combo offers "Leave", not
+        # "Remove". When it's absent (e.g. removing the sole owner, who is the acting user), probe
+        # the API so the server's last-owner guard — not just the hidden control — is what rejects.
+        if page.query_selector(f"[data-member-email='{email}'] [data-remove]") is None:
             self._probe_blocked(
                 "DELETE", f"/{self._active_slug()}/members/{self._user_id_for(email)}"
             )
             return
-        manage.click()
+        page.click(f"[data-member-email='{email}'] [data-manage]")
         self.last_response = self.click_and_capture(
             page, f"[data-member-email='{email}'] [data-remove]", "DELETE", "/members/"
         )

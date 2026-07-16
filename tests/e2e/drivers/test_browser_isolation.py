@@ -26,6 +26,8 @@ def _email_on_profile(browser: BrowserDriver, email: str) -> str:
     page = browser.page_for(email)
     page.goto(f"{browser.base_url}/profile")
     page.wait_for_url("**/profile", timeout=10000)
+    # The sign-in email lives read-only in the Email tab; open it before reading the field.
+    page.get_by_role("tab", name="Email", exact=True).check()
     return page.locator("input#email").input_value()
 
 
