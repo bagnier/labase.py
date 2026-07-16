@@ -54,9 +54,20 @@ enabled = true
 [auth.webauthn]
 rp_display_name = "labase"
 rp_id = "localhost"
-# 8000 = dev server; 8801 = the pinned browser-e2e server (tests/e2e/drivers/browser_base.py),
-# so navigator.credentials ceremonies verify against real GoTrue in e2e.
-rp_origins = ["http://localhost:8000", "http://localhost:8801"]
+# 8000 = dev server; 8801-8808 = the browser-e2e servers (tests/e2e/drivers/browser_base.py).
+# Serial runs use 8801; under pytest-xdist each worker binds 8801+worker-index, so
+# navigator.credentials ceremonies verify against real GoTrue on whichever worker runs them.
+rp_origins = [
+  "http://localhost:8000",
+  "http://localhost:8801",
+  "http://localhost:8802",
+  "http://localhost:8803",
+  "http://localhost:8804",
+  "http://localhost:8805",
+  "http://localhost:8806",
+  "http://localhost:8807",
+  "http://localhost:8808",
+]
 
 # Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
 # 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.

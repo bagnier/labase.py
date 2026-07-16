@@ -12,6 +12,33 @@ import os
 
 os.environ.setdefault("ENV_FILE", ".env.test")
 
+# pytest-xdist (experimental, opt-in via `-n`): each worker (gw0, gw1, …) gets its own
+# app schema + Storage bucket + e2e port so their DB/files/servers never collide. This
+# runs *before* importing config — settings are cached on first read and an env var
+# overrides the .env file — and provisions here (not in pytest_configure) because the
+# module-level reset_app_switches() below already needs the schema to exist.
+#
+# NOT yet safe for the whole browser suite: GoTrue / auth.users is one shared table, so
+# scenarios that register the same email on two workers, or touch global admin state
+# (clear_all_admin_roles / find_users span every worker), collide (~34/243 fail at -n2).
+# Making it green needs per-worker email namespacing across the driver mixins plus an
+# xdist_group serialising the admin-role scenarios — a large, deferred change. Until then
+# keep `make ci` serial; `-n` is a hand-run experiment (~1.4× on the passing subset).
+# Guarded so the whole block is a single conditional (keeps E402 happy — no module-level
+# assignment lands before the imports below, only this allowed compound statement).
+if os.environ.get("PYTEST_XDIST_WORKER"):
+    _worker = os.environ["PYTEST_XDIST_WORKER"]
+    os.environ["SUPABASE_DATABASE_SCHEMA"] = f"test_{_worker}"
+    os.environ["SUPABASE_STORAGE_BUCKET"] = f"org-files-test-{_worker}"
+    # Each worker binds its own e2e server port so two browser servers never fight
+    # over 8801. 8801+index keeps every port inside the WebAuthn rp_origins band
+    # (supabase/config.toml), so passkey ceremonies verify on whichever worker runs
+    # them — no need to pin those scenarios to one worker.
+    os.environ["LABASE_E2E_PORT"] = str(8801 + int(_worker.removeprefix("gw")))
+    from scripts.provision_schema import provision
+
+    provision(f"test_{_worker}", f"org-files-test-{_worker}", reset=True)
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

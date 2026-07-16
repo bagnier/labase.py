@@ -3,6 +3,8 @@
 - [ ] /console/users bouton Accounts &  all organisations Users 13 users inerte
 - [ ] /console/organizations should list organizations and give metrics
 - [ ] audit des .goto() .fetch() code smells
+- [ ] utiliser https://apexcharts.com/javascript-chart-demos/heatmap-charts/basic/
+- [ ] https://apexcharts.com/javascript-chart-demos/sparklines/basic/
 
 ## goals
 

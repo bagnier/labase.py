@@ -32,9 +32,10 @@ async def get_org_owner_id(session: AsyncSession, org_id: uuid.UUID) -> uuid.UUI
 
 
 def seeding_enabled() -> bool:
-    """Welcome seeding runs everywhere except the test schema, where the browser E2E driver
-    truncates app tables between scenarios and starter rows would break their assertions."""
-    return get_technical_settings().supabase_database_schema != "test"
+    """Welcome seeding runs everywhere except the test schemas, where the browser E2E driver
+    truncates app tables between scenarios and starter rows would break their assertions.
+    Matches the plain ``test`` schema and every per-xdist-worker clone (``test_gw0``, …)."""
+    return not get_technical_settings().supabase_database_schema.startswith("test")
 
 
 def spawn_org_seed(
