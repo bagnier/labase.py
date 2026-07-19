@@ -4,7 +4,7 @@
 # Compose is isolated per checkout so several `make dev` can run at once.
 # Docker compose project names allow only [a-z0-9_-], so sanitise the dir name (e.g. "labase.py").
 WORKTREE := $(subst .,-,$(notdir $(CURDIR)))
-COMPOSE := docker compose --env-file .env -p labase-$(WORKTREE) -f docker/docker-compose.yml
+COMPOSE := docker compose --env-file .env --project-name labase-$(WORKTREE) --file docker/docker-compose.yml
 
 # --- Setup ---
 install: db-start
@@ -15,7 +15,7 @@ install: db-start
 	$(MAKE) js-build
 
 js-build:
-	mkdir -p static/css static/fonts static/js
+	mkdir --parents static/css static/fonts static/js
 	npm run build
 
 # Exports under ENV_FILE=.env.test: TechnicalSettings has required fields with
@@ -62,13 +62,13 @@ dev: db-start js-build
 	$(COMPOSE) up --build
 
 up:
-	$(COMPOSE) up -d
+	$(COMPOSE) up --detach
 
 down:
 	$(COMPOSE) down
 
 logs:
-	$(COMPOSE) logs -f app
+	$(COMPOSE) logs --follow app
 
 # --- Worktrees (isolated schema/bucket/port on the shared Supabase) ---
 worktree:
@@ -125,7 +125,7 @@ upgrade-base:
 	  echo "  git remote add $(BASE_REMOTE) <url-of-labase.py>"; \
 	  exit 1; }
 	git fetch $(BASE_REMOTE) $(BASE_BRANCH)
-	git switch -c upgrade-base-$(shell date +%Y%m%d) 2>/dev/null || git switch upgrade-base-$(shell date +%Y%m%d)
+	git switch --create upgrade-base-$(shell date +%Y%m%d) 2>/dev/null || git switch upgrade-base-$(shell date +%Y%m%d)
 	git merge --no-ff $(BASE_REMOTE)/$(BASE_BRANCH) \
 	  || echo "conflicts to resolve — see docs/upgrade-base.md, then run: make ci"
 
@@ -139,7 +139,7 @@ doctor:
 # degraded (not the tests) — say so instead of letting it pass silently slow.
 test: provision-test
 	@start=$$(date +%s); \
-	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest; rc=$$?; \
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest; rc=$$?; \
 	elapsed=$$(( $$(date +%s) - start )); \
 	if [ $$elapsed -gt 240 ]; then \
 		echo "⚠ pytest took $${elapsed}s (~100s expected) — run 'make doctor'"; \
@@ -147,14 +147,14 @@ test: provision-test
 	exit $$rc
 
 test-e2e: provision-test
-	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
 
 # Perf smoke: boots the app on the test schema, drives it with Locust through
 # the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
 # Depends on client-gen because client/ is generated (gitignored), so CI — which
 # checks out a fresh tree — must build it before the smoke can import it.
 perf-smoke: provision-test client-gen
-	env -i ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
 
 coverage-erase:
 	uv run coverage erase
@@ -163,22 +163,22 @@ coverage-xml:
 	uv run coverage xml -o .cov/coverage.xml
 
 coverage-html:
-	uv run coverage html -d .cov/html
+	uv run coverage html --directory=.cov/html
 
 cert:
 	openssl req -x509 -newkey rsa:4096 -keyout dev.key -out dev.crt -days 365 -nodes -subj '/CN=localhost'
 
 letsencrypt:
-	certbot certonly --standalone -d $(DOMAIN) --agree-tos --non-interactive
+	certbot certonly --standalone --domain $(DOMAIN) --agree-tos --non-interactive
 	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
 
-# -k (keep-going): run every step even if one fails, so no failure is hidden
+# --keep-going: run every step even if one fails, so no failure is hidden
 # behind an earlier one; the sub-make exits non-zero if any step failed.
 ci:
-	$(MAKE) -k js-build lint coverage-erase test test-e2e perf-smoke coverage-xml
+	$(MAKE) --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-xml
 
 # finalize: js-build + fix (also typechecks + audits) + local tests. Run before committing.
 finalize: js-build fix test
 
 act:
-	act push -j ci -P ubuntu-latest=catthehacker/ubuntu:act-24.04 --container-architecture linux/amd64 --network host
+	act push --job ci --platform ubuntu-latest=catthehacker/ubuntu:act-24.04 --container-architecture linux/amd64 --network host
