@@ -6,7 +6,12 @@ from apps.auth.tests.given_helpers import (
     delete_user_if_exists,
     user_id_for_email,
 )
-from apps.organizations.tests.given_helpers import add_membership, create_org_for_user
+from apps.organizations.tests.given_helpers import (
+    add_membership,
+    create_org_for_user,
+    orgs_for_user,
+    set_membership_role,
+)
 from apps.shared.settings import get_settings
 from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
@@ -165,9 +170,11 @@ class OrgFileBrowserMixin(BrowserBase):
     # ── multi-user operations ─────────────────────────────────────────────────
 
     def add_member_to_org(self, email: str) -> None:
+        # Precondition, not behaviour under test: add the member with the admin helper
+        # (mirrors the API driver). The invite/accept UI needs the actor to be an owner,
+        # which scenarios demoting the actor to member have already given up.
         self.context_for(email)  # ensures member user exists
-        self.invite_member(email, "member")  # ty: ignore[unresolved-attribute]
-        self.accept_invitation(email)  # ty: ignore[unresolved-attribute]
+        add_membership(self._primary_org_id(), user_id_for_email(email), role="member")
         self.secondary_handles[email] = self.active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
@@ -211,11 +218,20 @@ class OrgFileBrowserMixin(BrowserBase):
         finally:
             settings_page.close()
 
+    def _primary_org_id(self) -> str:
+        orgs = orgs_for_user(user_id_for_email(self.primary_email))
+        assert orgs, f"No org for {self.primary_email}"
+        return next((o["id"] for o in orgs if o["handle"] == self.active_org_handle), orgs[0]["id"])
+
     def promote_to_owner(self) -> None:
-        self.set_member_role(self.primary_email, "owner")  # ty: ignore[unresolved-attribute]
+        # Role is a precondition here, not the behaviour under test: bypass the last-owner
+        # constraint with the admin helper (mirrors the API driver) instead of driving the
+        # real /members UI, which correctly refuses to demote the sole owner — which would
+        # leave the acting user an owner and silently invalidate the scenario.
+        set_membership_role(self._primary_org_id(), user_id_for_email(self.primary_email), "owner")
 
     def demote_to_member(self) -> None:
-        self.set_member_role(self.primary_email, "member")  # ty: ignore[unresolved-attribute]
+        set_membership_role(self._primary_org_id(), user_id_for_email(self.primary_email), "member")
 
     def generate_share_link(self, filename: str) -> None:
         self._goto_files()
