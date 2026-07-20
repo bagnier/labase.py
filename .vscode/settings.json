@@ -4,7 +4,7 @@
     "editor.formatOnSave": true
   },
   "coverage-gutters.coverageFileNames": [
-    ".cov/coverage.xml"
+    ".cache/cov/coverage.xml"
   ],
   "coverage-gutters.showGutterCoverage": true,
   "coverage-gutters.showLineCoverage": false,
@@ -15,9 +15,6 @@
   },
   // Format + fix on save
   "editor.formatOnSave": true,
-  "files.exclude": {
-    ".cov/": true
-  },
   "python.analysis.typeCheckingMode": "off",
   // Prevent VSCode from injecting VIRTUAL_ENV into terminals (conflicts with uv)
   "python.terminal.activateEnvironment": false,
@@ -42,5 +39,5 @@
     "${workspaceFolder}/.venv/bin/ruff"
   ],
   // ty est le type checker — on désactive le type checking de Pylance pour éviter les conflits
-  "ty.path": "${workspaceFolder}/.venv/bin/ty"
+  "ty.path": ["${workspaceFolder}/.venv/bin/ty"]
 }

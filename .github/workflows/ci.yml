@@ -71,11 +71,11 @@ jobs:
         if: always()
         with:
           name: test-results
-          path: .cov/junit.xml
+          path: .cache/cov/junit.xml
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
-          path: .cov/coverage.xml
+          path: .cache/cov/coverage.xml

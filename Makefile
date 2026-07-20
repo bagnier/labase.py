@@ -85,7 +85,7 @@ provision-test:
 # lint: read-only, fails on non-conforming code (used by `make ci`).
 lint:
 	uv run ruff check .
-	uv run lint-imports
+	uv run lint-imports --cache-dir .cache/import-linter
 	uv run ty check apps/
 	npm run lint
 	uv run djlint apps --lint
@@ -101,7 +101,7 @@ deadcode:
 fix:
 	uv run ruff check --fix .
 	uv run ruff format .
-	uv run lint-imports
+	uv run lint-imports --cache-dir .cache/import-linter
 	uv run ty check apps/
 	npm run format
 	uv run djlint apps --reformat
@@ -160,10 +160,10 @@ coverage-erase:
 	uv run coverage erase
 
 coverage-xml:
-	uv run coverage xml -o .cov/coverage.xml
+	uv run coverage xml -o .cache/cov/coverage.xml
 
 coverage-html:
-	uv run coverage html --directory=.cov/html
+	uv run coverage html --directory=.cache/cov/html
 
 cert:
 	openssl req -x509 -newkey rsa:4096 -keyout dev.key -out dev.crt -days 365 -nodes -subj '/CN=localhost'

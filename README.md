@@ -119,7 +119,7 @@ checker rejects a violation before a test has to.
 | **pre-commit**              | Git hooks — `ruff --fix`, `ruff format`, talisman on staged files                |
 | **pytest + pytest-asyncio** | Unit and integration tests                                                       |
 | **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
-| **pytest-cov**              | Code coverage (generates `.cov/coverage.xml` for VS Code)                        |
+| **pytest-cov**              | Code coverage (generates `.cache/cov/coverage.xml` for VS Code)                  |
 
 ### Architecture
 
@@ -148,16 +148,16 @@ root (`apps/main.py`) mounts them in phase order — catch-all routes (e.g. the 
 `/{slug}`) sort last so a fixed route is never shadowed; no context knows about another.
 At mount time, an app declares **every surface it contributes**:
 
-| Surface           | Declared via                    | Shows up as                                                                                                     |
-| ----------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Routes            | `host.app.include_router(...)`  | its pages and JSON API                                                                                          |
-| Sidebar           | `host.register_nav(...)`        | a global nav entry (per-org entries answer the `OrgNavQuery` event)                                             |
-| Org dashboard     | handling `OverviewQuery`        | a card with counts and recent items on `/{org}/`                                                                |
-| **Admin console** | handling `ConsoleOverviewQuery` | server-wide stats in the SaaS console (across all orgs)                                                         |
-| **Settings**      | `host.register_settings(...)`   | admin-tunable values, overridable per org, live-reloaded on `SettingsChanged` (TTL re-read across instances)    |
-| Feature switch    | a declared on/off setting       | the app can be disabled (applied on restart); its routes, nav and enabled-only handlers short-circuit while its console tile and reserved slugs remain, so the console still lists it for re-enabling |
-| Seeding           | handling `OrgCreated`           | starter data for every new organization                                                                         |
-| URL safety        | `host.reserve(...)`             | its path segments can't be shadowed by an org handle                                                            |
+| Surface           | Declared via                    | Shows up as                                                    |
+| ----------------- | ------------------------------- | -------------------------------------------------------------- |
+| Routes            | `host.app.include_router(...)`  | its pages and JSON API                                         |
+| Sidebar           | `host.register_nav(...)`        | a global nav entry (per-org via `OrgNavQuery`)                 |
+| Org dashboard     | handling `OverviewQuery`        | a card on `/{org}/` with counts + recent items                 |
+| **Admin console** | handling `ConsoleOverviewQuery` | server-wide stats in the SaaS console                          |
+| **Settings**      | `host.register_settings(...)`   | admin-tunable values, per-org overridable, live-reloaded       |
+| Feature switch    | a declared on/off setting       | on/off toggle; disabled drops routes & nav, keeps console tile |
+| Seeding           | handling `OrgCreated`           | starter data for each new org                                  |
+| URL safety        | `host.reserve(...)`             | path segments no org handle can shadow                         |
 
 Because every surface is registered rather than hardcoded, **deleting an app removes its
 nav entry, dashboard card, console stat and seeds automatically** — this is what makes
