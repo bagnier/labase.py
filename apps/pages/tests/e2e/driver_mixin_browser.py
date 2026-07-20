@@ -1,5 +1,7 @@
 import re
 
+from playwright.sync_api import expect
+
 from tests.e2e.drivers.browser_base import _VISITOR, BrowserBase
 
 
@@ -234,39 +236,46 @@ class PagesBrowserMixin(BrowserBase):
         cb = row.locator(".nav-checkbox")
         if not cb.is_checked():
             cb.click()
-            self.page.wait_for_timeout(300)
+            # The JS sets data-in-nav only after the POST resolves — the settled signal.
+            expect(row).to_have_attribute("data-in-nav", "true")
 
     def add_to_nav(self, title: str) -> None:
         row = self._candidate_row(title)
         cb = row.locator(".nav-checkbox")
         if not cb.is_checked():
             cb.click()
-            self.page.wait_for_timeout(300)
+            expect(row).to_have_attribute("data-in-nav", "true")
 
     def remove_from_nav(self, title: str) -> None:
         row = self._candidate_row(title)
         cb = row.locator(".nav-checkbox")
         if cb.is_checked():
             cb.click()
-            self.page.wait_for_timeout(300)
+            expect(row).to_have_attribute("data-in-nav", "false")
 
     def move_nav_above(self, title: str, other: str) -> None:
         source = self._candidate_row(title).locator(".drag-handle")
         target = self._candidate_row(other).locator(".drag-handle")
-        source.drag_to(target)
-        self.page.wait_for_timeout(300)
+        # The reorder persists via a fire-and-forget PUT with no DOM signal — wait on the
+        # server response so a later reload sees the settled order.
+        with self.page.expect_response(
+            lambda r: (
+                "/pages/nav/" in r.url and r.url.endswith("/position") and r.request.method == "PUT"
+            )
+        ):
+            source.drag_to(target)
 
     # ── nav assertions ─────────────────────────────────────────────────────────
 
     def assert_in_nav(self, title: str) -> None:
         self._goto_nav_manager()
         cb = self._candidate_row(title).locator(".nav-checkbox")
-        assert cb.is_checked(), f"'{title}' checkbox is not checked"
+        expect(cb).to_be_checked()
 
     def assert_not_in_nav(self, title: str) -> None:
         self._goto_nav_manager()
         cb = self._candidate_row(title).locator(".nav-checkbox")
-        assert not cb.is_checked(), f"'{title}' checkbox should not be checked"
+        expect(cb).not_to_be_checked()
 
     def assert_nav_order(self, a: str, b: str) -> None:
         self._goto_nav_manager()

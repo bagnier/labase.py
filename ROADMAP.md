@@ -1,3 +1,21 @@
+## à enquêter — audit code 2026-07 (candidats bugs/sécurité, non confirmés)
+
+Trouvés par lecture du code, mécanisme vérifié mais impact réel à confirmer. 
+
+- [ ] **Impersonation : le time-box de 3600 s sauté au refresh de token.** `get_current_user` rafraîchit le JWT expiré et ré-émet `access_token`/`refresh_token` avec le TTL de session normal (long), écrasant les cookies posés à `IMPERSONATION_MAX_SECONDS`. Le `IMPERSONATOR_COOKIE`, lui, n'est pas rafraîchi → à 3600 s la bannière + le stash meurent mais l'admin reste authentifié *en tant que* la cible. `apps/auth/infra/security.py:90` vs `apps/auth/infra/router.py:575-580`.
+- [ ] **Couper `two_factor_enabled` bypasse le TOTP des utilisateurs déjà enrôlés.** `login` reçoit une session AAL1 complète de GoTrue ; le challenge n'est déclenché que `if users_settings.two_factor_enabled`. Setting serveur off → connexion mot-de-passe seul malgré un facteur vérifié. `apps/auth/infra/router.py:229-232`.
+- [ ] **`RlsSession` anonyme = superuser, RLS entièrement bypassée (pas « voit rien », « voit tout »).** `get_rls_session` n'appelle `set_rls_context` que si `current_user is not None` ; sinon la connexion garde son rôle Postgres par défaut. À confirmer que le rôle prod de `SUPABASE_DATABASE_USER_URL` n'est pas superuser (en `.env.test` user == admin == `postgres`). Un read public monté sur `RlsSession` au lieu d'`AdminSession` = fuite cross-tenant. `apps/auth/infra/session.py:25-27` + `apps/shared/persistence/rls.py:32-38`.
+- [ ] **`GET /{org}/pages/new/edit` mute** (crée un draft + `emit(PageCreated)`) → contourne le garde CSRF `Sec-Fetch-Site` (réservé aux mutations non-GET), prefetch/crawler/double-clic créent des brouillons orphelins. `apps/pages/infra/router.py:132-152`.
+- [ ] **Rate limiter sans `X-Forwarded-For`** → derrière proxy/LB tout le monde collapse sur l'IP du proxy (limite globale) ; et **no-op silencieux** si le handler n'a pas de param `Request` ou `request.client is None`. Clé aussi = `func.__name__` → deux `create` de routers différents partagent un bucket. `apps/shared/http/limiter.py:85-89`.
+- [ ] **Business-event fire-and-forget sans référence de task** — `asyncio.create_task(...)` résultat jeté ; CPython peut GC la task en vol sous charge, et rien ne la draine au shutdown. `apps/shared/observability/business_events.py:198`.
+- [ ] **Redaction logs/business-events = match sur le *nom* du champ** (`token|password|secret` en substring). Un champ `api_key`/`otp`/`reset_code`/`session` passe en clair dans les logs ET dans `business_events`. Sûreté par discipline de nommage, pas par type. `apps/shared/bus.py:29,38`.
+- [ ] **Invariant « dernier owner » Python-only** — `ensure_not_last_owner` (domain) seul garde-fou ; les policies RLS `self leave` / `owner delete` n'ont pas de condition last-owner → un chemin qui ne passe pas par le service peut orphaner l'org. `apps/organizations/domain/service.py:16-24`.
+- [ ] **Dé-dup d'invitation case-sensitive côté Python, case-insensitive en SQL** — `Foo@x.com` et `foo@x.com` créent deux invitations, toutes deux acceptables par la même personne. `apps/organizations/infra/repository.py:158-168` vs migration `org_invitations.sql:66`.
+- [ ] **CORS `*` + `allow_credentials=True`** par défaut — posture permissive out-of-the-box à revoir. `apps/shared/config.py:33` + `apps/shared/http/security.py:17-23`.
+- [ ] **Scope « une clé API = une org » = check Python, pas RLS** — la clé s'authentifie comme son créateur ; RLS seule verrait toutes ses orgs. Toute route org-scopée qui ne passe pas par `get_current_org` + `OrgScopedRepository` laisse la clé atteindre les autres orgs du créateur. `apps/organizations/infra/context.py:62-69`.
+- [ ] **Setting `"number"` mal typé silencieusement** — `_coerce` fait `int(raw)` et sur `ValueError` renvoie la *string* brute ; un défaut décimal (`"1.5"`) est relu comme `str`, l'erreur explose loin de la déclaration. Floats non supportés. `apps/shared/settings.py:117-125`.
+- [ ] **Résolution templates = glob trié, pas de namespace par app** — deux apps avec un `_row.html` (ou `errors/404.html`) → l'app alphabétiquement première gagne, silencieusement. `apps/shared/http/templates.py:20-22`.
+
 ## issues
 
 - [ ] /console/users bouton Accounts &  all organisations Users 13 users inerte

@@ -93,7 +93,7 @@ class OrgFileBrowserMixin(BrowserBase):
             ) as resp_info,
             contextlib.suppress(Exception),
         ):
-            self.page.goto(url, wait_until="networkidle")
+            self.page.goto(url, wait_until="commit")
         self.last_response = resp_info.value
 
     def delete_file(self, filename: str) -> None:
@@ -251,7 +251,7 @@ class OrgFileBrowserMixin(BrowserBase):
             ) as resp_info,
             contextlib.suppress(Exception),
         ):
-            page.goto(url, wait_until="networkidle")
+            page.goto(url, wait_until="commit")
         self.last_response = resp_info.value
 
     def access_share_link_as(self, email: str) -> None:

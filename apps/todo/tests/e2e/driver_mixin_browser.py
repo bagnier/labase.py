@@ -1,3 +1,4 @@
+from playwright.sync_api import expect
 from sqlalchemy import text
 
 from tests.e2e.drivers.browser_base import BrowserBase
@@ -150,18 +151,14 @@ class TodoBrowserMixin(BrowserBase):
     def assert_todo_completed(self, title: str) -> None:
         for row in self._dom_todo_rows():
             if row.locator("[data-title-id]").inner_text().strip() == title:
-                assert row.locator("input[data-todo-id]").is_checked(), (
-                    f"Todo '{title}' is not shown as completed in DOM"
-                )
+                expect(row.locator("input[data-todo-id]")).to_be_checked()
                 return
         raise AssertionError(f"Todo '{title}' not found in DOM")
 
     def assert_todo_not_completed(self, title: str) -> None:
         for row in self._dom_todo_rows():
             if row.locator("[data-title-id]").inner_text().strip() == title:
-                assert not row.locator("input[data-todo-id]").is_checked(), (
-                    f"Todo '{title}' is shown as completed in DOM"
-                )
+                expect(row.locator("input[data-todo-id]")).not_to_be_checked()
                 return
         raise AssertionError(f"Todo '{title}' not found in DOM")
 

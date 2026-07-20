@@ -55,11 +55,12 @@ apps' flows travel through typed events — the emitter never knows its subscrib
 deleting an app removes every trace of it.
 
 **The admin console sees every app.** Each app reports server-wide stats to the SaaS
-console, declares its admin-tunable settings there, and can be switched on or off at
-runtime — a disabled app disappears everywhere but stays visible to admins for
-re-enabling. Beyond per-app stats, the console ships the operational screens:
-accounts (disable, delete, impersonate — bannered and recorded), the business-events
-browser, the unified logs viewer, error issues, load metrics, and runtime log level.
+console, declares its admin-tunable settings there, and can be switched on or off
+(applied on restart) — a disabled app drops its routes, nav and dashboard card but 
+keeps its console tile (and still reserves its URL slugs) so admins can re-enable it.
+Beyond per-app stats, the console ships the operational screens: accounts (disable, 
+delete, impersonate — bannered and recorded), the business-events browser, the unified 
+logs viewer, error issues, load metrics, and runtime log level.
 
 **The database enforces isolation.** Row-level security, versioned as plain SQL
 migrations, is the single source of truth for who sees what. Python never re-implements
@@ -83,6 +84,10 @@ org data lives under `/{org_handle}/…`. Members read, owners write.
 
 **One source of truth for the rest.** Time comes from a single clock; styling from one
 component system (Tailwind + daisyUI); markup is semantic and accessible.
+
+**Invariants are types, not checks.** A constraint the domain must uphold is expressed as
+a constrained type (Pydantic `Literal`, a value object) wherever it can be, so the type
+checker rejects a violation before a test has to.
 
 ## The boilerplate
 
@@ -139,7 +144,8 @@ and shared E2E drivers in `tests/e2e/drivers/`.
 
 Each bounded context exposes a single `mount(host)` entry point in its
 `contract/integration.py` — the FastAPI app is carried by `host.app`. The composition
-root (`apps/main.py`) calls them in dependency order; no context knows about another.
+root (`apps/main.py`) mounts them in phase order — catch-all routes (e.g. the org
+`/{slug}`) sort last so a fixed route is never shadowed; no context knows about another.
 At mount time, an app declares **every surface it contributes**:
 
 | Surface           | Declared via                    | Shows up as                                                                                                     |
@@ -149,7 +155,7 @@ At mount time, an app declares **every surface it contributes**:
 | Org dashboard     | handling `OverviewQuery`        | a card with counts and recent items on `/{org}/`                                                                |
 | **Admin console** | handling `ConsoleOverviewQuery` | server-wide stats in the SaaS console (across all orgs)                                                         |
 | **Settings**      | `host.register_settings(...)`   | admin-tunable values, overridable per org, live-reloaded on `SettingsChanged` (TTL re-read across instances)    |
-| Feature switch    | a declared on/off setting       | the app can be disabled at runtime; its `mount()` short-circuits but the console still lists it for re-enabling |
+| Feature switch    | a declared on/off setting       | the app can be disabled (applied on restart); its routes, nav and enabled-only handlers short-circuit while its console tile and reserved slugs remain, so the console still lists it for re-enabling |
 | Seeding           | handling `OrgCreated`           | starter data for every new organization                                                                         |
 | URL safety        | `host.reserve(...)`             | its path segments can't be shadowed by an org handle                                                            |
 
@@ -308,6 +314,12 @@ rolled-back transaction; the browser driver runs an in-process Hypercorn server 
 truncates app tables between scenarios. The browser driver navigates like a human:
 entry point, then links and forms — no deep URLs.
 
+**Anti-flake e2e.** Assert DOM state with `expect(...)` (auto-retries to the settled
+state), never `assert locator.is_visible()` (a snapshot — flakes the moment an HTMX swap
+is mid-flight). `wait_for_load_state("networkidle")` and `wait_for_timeout(ms)` are banned
+as state waits. Reruns are opt-in and justified per named suite; everything else is strict,
+zero rerun.
+
 ### Structure
 
 Every bounded context follows the same layout — `domain/` (models, service), `infra/`
@@ -318,7 +330,7 @@ allowed to know several contexts at once: `main.py`.
 ```
 labase.py/
 ├── apps/
-│   ├── main.py            # FastAPI app, mounts every context in dependency order
+│   ├── main.py            # FastAPI app, mounts every context in phase order (catch-alls last)
 │   ├── shared/            # Cross-context infra: EventBus (bus.py), Host (host.py),
 │   │                      #   task queue (queue.py), Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),
