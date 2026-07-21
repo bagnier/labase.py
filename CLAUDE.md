@@ -1,6 +1,8 @@
-- read @README.md.
+- read @README.md
+- TDD, red, green, refactor any development.
 - import at top, refactor to make it possible.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).
-- please delegate to Sonnet subagent the simple tasks like rtfm, greping, searching, making.
+- /research for codebase, web or documentation digging.
+- /obsidian-markdown for any markdown edition.
 - when you think it's done, run `make finalize` as background task before you claim it.
 - render any UI change and look at a screenshot (Playwright or /run).

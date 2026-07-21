@@ -30,9 +30,12 @@ def add_membership(org_id: str, user_id: str, role: str = "member") -> None:
 
 
 def set_membership_role(org_id: str, user_id: str, role: str) -> None:
+    # Setup escape hatch: forces role states the app forbids (e.g. demoting a sole owner),
+    # so it must bypass the last-owner DB trigger just as it bypasses RLS by running as admin.
     run_sql(
         "update memberships set role = :role where org_id = :org and auth_user_id = :uid",
         {"role": role, "org": org_id, "uid": user_id},
+        bypass_triggers=True,
     )
 
 

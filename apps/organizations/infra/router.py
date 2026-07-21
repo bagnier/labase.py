@@ -668,7 +668,9 @@ async def create_invitation(
     org_settings: OrganizationsSettings,
 ) -> Response:
     body = await parse_body(request)
-    email = str(body.get("email", ""))
+    # Canonicalise once: the accept RPC matches case-insensitively (lower()), so without this
+    # `Foo@x.com` and `foo@x.com` slip past the pending-dedup and both stay acceptable.
+    email = str(body.get("email", "")).strip().lower()
     error: str | None = None
     invitation = None
 

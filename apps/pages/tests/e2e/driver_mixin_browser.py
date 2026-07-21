@@ -48,6 +48,17 @@ class PagesBrowserMixin(BrowserBase):
         fields = {"Title": title, "Slug": slug if slug is not None else _slugify(title)}
         self.submit_labelled_form(self.page, fields, self.page.get_by_role("button", name="Save"))
 
+    def open_new_page_form(self) -> None:
+        # A GET must render only — it must never create a draft (the old bug littered orphans).
+        self._goto_list()
+        self.page.click('a[href$="/pages/new/edit"]')
+        self.page.wait_for_selector("#edit-page-form", timeout=5000)
+
+    def assert_pages_list_empty(self) -> None:
+        self._goto_list()
+        slugs = self._row_slugs()
+        assert slugs == [], f"expected an empty pages list, got: {slugs}"
+
     def create_page(self, title: str, content: str) -> None:
         self._create_via_form(title, None, content)
 

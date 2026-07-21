@@ -6,6 +6,16 @@ def step_create_page(driver, title, content):
     driver.create_page(title, content)
 
 
+@when("they open the new-page form")
+def step_open_new_page_form(driver):
+    driver.open_new_page_form()
+
+
+@then("the pages list is empty")
+def step_pages_list_empty(driver):
+    driver.assert_pages_list_empty()
+
+
 @then(parsers.parse('"{title}" appears in the pages list'))
 def step_assert_page_in_list(driver, title):
     driver.assert_page_in_list(title)

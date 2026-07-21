@@ -34,6 +34,17 @@ class PagesApiMixin(ApiBase):
             self._pages_url(), json={"title": title, "content": _decode(content)}
         )
 
+    def open_new_page_form(self) -> None:
+        # A GET must render only — it must never create a draft (the old bug littered orphans).
+        self.response = self.client().get(self._pages_url("/new/edit"))
+        assert self.response.status_code == 200, (
+            f"new-page form GET got {self.response.status_code}: {self.response.text}"
+        )
+
+    def assert_pages_list_empty(self) -> None:
+        pages = self._list()
+        assert pages == [], f"expected an empty pages list, got: {[p['slug'] for p in pages]}"
+
     def create_draft_page(self, title: str, slug: str, content: str) -> None:
         self.response = self.client().post(
             self._pages_url(), json={"title": title, "slug": slug, "content": _decode(content)}

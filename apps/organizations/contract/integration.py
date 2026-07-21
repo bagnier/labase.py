@@ -16,7 +16,7 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.fullpage import provide_org_nav
 from apps.organizations.contract.queries import org_handle_taken
-from apps.organizations.domain.models import Membership, Organization
+from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
@@ -125,30 +125,53 @@ async def _create_org(event: UserCreated) -> None:
 
 
 async def _forget_user(event: UserDeleted) -> None:
-    """Account deletion: drop the user's memberships, then orgs left with nobody.
+    """Account deletion: drop the user's memberships, reaping any org the departure
+    would leave without an owner (nobody could run it) or without any member.
 
     Writes through the deleting request's session (see UserDeleted) so the whole
-    deletion commits or rolls back as one unit. Shared orgs survive without the
-    user; org-scoped rows of removed orgs go with their org (SQL cascades).
+    deletion commits or rolls back as one unit. A last-owner seat is not deleted
+    directly — the DB guard forbids orphaning an org, and deleting it would strand
+    any remaining members in an ownerless org — so we reap the whole org instead
+    (SQL cascade takes its memberships and org-scoped rows, and the cascade's own
+    membership deletes are exempt from the guard because the org is already gone).
     """
     session = event.session
     user_id = uuid.UUID(event.user_id)
     memberships = list(
         await session.scalars(select(Membership).where(Membership.auth_user_id == user_id))
     )
-    org_ids = [m.org_id for m in memberships]
+    org_ids = {m.org_id for m in memberships}
+    doomed: set[uuid.UUID] = set()
     for membership in memberships:
-        await session.delete(membership)
+        other_owners = (
+            await session.scalar(
+                select(func.count())
+                .select_from(Membership)
+                .where(
+                    Membership.org_id == membership.org_id,
+                    Membership.role == OrgRole.owner,
+                    Membership.auth_user_id != user_id,
+                )
+            )
+            or 0
+        )
+        # Losing the last owner leaves the org unmanageable — reap it whole rather than
+        # delete this seat (which the guard would refuse anyway). Otherwise drop the seat.
+        if membership.role == OrgRole.owner and other_owners == 0:
+            doomed.add(membership.org_id)
+        else:
+            await session.delete(membership)
     await session.flush()
     for org_id in org_ids:
+        org = await session.get(Organization, org_id)
+        if org is None:
+            continue
         remaining = (
             await session.scalar(
                 select(func.count()).select_from(Membership).where(Membership.org_id == org_id)
             )
             or 0
         )
-        if not remaining:
-            org = await session.get(Organization, org_id)
-            if org is not None:
-                await session.delete(org)
+        if org_id in doomed or remaining == 0:
+            await session.delete(org)
     await session.flush()

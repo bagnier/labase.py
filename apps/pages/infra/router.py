@@ -124,32 +124,36 @@ async def create_page(
     await bus.emit(
         PageCreated(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=title)
     )
-    if wants_json(request):
-        return JSONResponse(PageRead.model_validate(page).model_dump(mode="json"), status_code=201)
-    return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
+    # HTMX form submit navigates via HX-Redirect; plain HTML gets a 303 to the same edit page.
+    return mutation_response(
+        request,
+        obj=PageRead.model_validate(page),
+        redirect_url=f"/{org.handle}/pages/{slug}/edit",
+        htmx_redirect_url=f"/{org.handle}/pages/{slug}/edit",
+        status_code=201,
+    )
 
 
-@router.get("/new/edit")
+@router.get("/new/edit", response_class=HTMLResponse)
 async def new_page(
     request: Request,
     current_user: CurrentUser,
-    _membership: CurrentMembership,
-    repo: PageRepo,
-    org_id: CurrentOrg,
+    membership: CurrentMembership,
+    session: RlsSession,
     org: CurrentOrgModel,
 ) -> Response:
-    base = "page"
-    slug = base
-    counter = 2
-    while await repo.slug_taken(slug):
-        slug = f"{base}-{counter}"
-        counter += 1
-    title = "New page"
-    await repo.add(uuid.UUID(current_user.id), title, slug, "")
-    await bus.emit(
-        PageCreated(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=title)
+    # Pure render: the empty form POSTs to create_page. A GET must never mutate — a
+    # prefetch/crawler/double-click used to litter the org with orphan `page-N` drafts.
+    ctx = await fullpage_context(
+        session,
+        current_user,
+        page=None,
+        org=org,
+        org_handle=org.handle,
+        is_owner=membership.role == OrgRole.owner,
+        is_new=True,
     )
-    return RedirectResponse(f"/{org.handle}/pages/{slug}/edit", status_code=303)
+    return templates.TemplateResponse(request, "pages/form.html", ctx)
 
 
 @router.get("/{slug}/edit", response_class=HTMLResponse)

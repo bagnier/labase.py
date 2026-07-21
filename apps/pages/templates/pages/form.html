@@ -1,22 +1,35 @@
 {% extends "base.html" %}
 {% from "macros/input_field.html" import input_field %}
 {% from "macros/page_header.html" import page_header %}
-{% block title %}Edit {{ page.title }} — labase{% endblock %}
+{% block title %}
+  {% if is_new %}
+    New page
+  {% else %}
+    Edit {{ page.title }}
+  {% endif %}
+  — labase
+{% endblock %}
 {% block breadcrumb %}
   <li><a href="/{{ org_handle }}/dashboard">{{ org.name }}</a></li>
   <li><a href="/{{ org_handle }}/pages">Pages</a></li>
-  <li>{{ page.title }}</li>
+  <li>
+    {% if is_new %}
+      New page
+    {% else %}
+      {{ page.title }}
+    {% endif %}
+  </li>
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    {{ page_header("Edit page") }}
+    {{ page_header("New page" if is_new else "Edit page") }}
     <form id="edit-page-form"
           class="card-panel"
-          hx-patch="/{{ org_handle }}/pages/{{ page.slug }}"
+          {% if is_new %}hx-post="/{{ org_handle }}/pages"{% else %}hx-patch="/{{ org_handle }}/pages/{{ page.slug }}"{% endif %}
           hx-swap="none">
       <div class="card-body space-y-4">
-        {{ input_field("page-title", "title", label="Title", value=page.title) }}
-        {{ input_field("page-slug", "slug", label="Slug", value=page.slug, mono=true) }}
+        {{ input_field("page-title", "title", label="Title", value=page.title if page else "") }}
+        {{ input_field("page-slug", "slug", label="Slug", value=page.slug if page else "", mono=true) }}
         <fieldset class="fieldset">
           <legend class="fieldset-legend" id="page-content-label">Content (Markdown)</legend>
           <div class="w-full" id="editor-mount">
@@ -25,7 +38,7 @@
                       aria-labelledby="page-content-label"
                       class="textarea w-full"
                       data-upload-url="/{{ org_handle }}/files"
-                      rows="10">{{ page.content }}</textarea>
+                      rows="10">{{ page.content if page else "" }}</textarea>
           </div>
         </fieldset>
         <div class="flex items-center justify-between pt-1">
@@ -41,13 +54,15 @@
               </select>
             {% endif %}
           </div>
-          <button type="button"
-                  id="delete-page-btn"
-                  class="btn btn-error btn-ghost btn-sm"
-                  aria-label="Delete page"
-                  hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
-                  hx-confirm="Delete &ldquo;{{ page.title }}&rdquo;? This cannot be undone."
-                  hx-swap="none">Delete page</button>
+          {% if not is_new %}
+            <button type="button"
+                    id="delete-page-btn"
+                    class="btn btn-error btn-ghost btn-sm"
+                    aria-label="Delete page"
+                    hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
+                    hx-confirm="Delete &ldquo;{{ page.title }}&rdquo;? This cannot be undone."
+                    hx-swap="none">Delete page</button>
+          {% endif %}
         </div>
       </div>
     </form>

@@ -18,6 +18,11 @@ Feature: Org CMS pages
     When they create a page titled "Our Team" with content "the team"
     Then the page "our-team" exists
 
+  Scenario: Opening the new-page form creates no draft
+    Given they are signed in as "alice@example.com" in the same org
+    When they open the new-page form
+    Then the pages list is empty
+
   Scenario: A member edits the slug of a draft page
     Given they are signed in as "alice@example.com" in the same org
     And a draft page titled "Welcome" with slug "welcome" and content "hi"

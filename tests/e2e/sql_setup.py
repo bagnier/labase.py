@@ -26,13 +26,26 @@ def _engine():
     return create_async_engine(url, poolclass=NullPool, connect_args=connect_args)
 
 
-def run_sql(sql: str, params: Mapping[str, Any] | None = None, *, fetch: bool = False):
-    """Execute a committed statement against the active schema; optionally return rows as dicts."""
+def run_sql(
+    sql: str,
+    params: Mapping[str, Any] | None = None,
+    *,
+    fetch: bool = False,
+    bypass_triggers: bool = False,
+):
+    """Execute a committed statement against the active schema; optionally return rows as dicts.
+
+    ``bypass_triggers`` runs it with ``session_replication_role = replica`` so table triggers
+    stay dormant — for setup helpers that must force states the app's own guards forbid (e.g.
+    demoting a sole owner), mirroring how these helpers already run as admin to bypass RLS.
+    """
 
     async def _exec() -> list[dict]:
         engine = _engine()
         try:
             async with engine.begin() as conn:
+                if bypass_triggers:
+                    await conn.execute(text("set local session_replication_role = replica"))
                 result = await conn.execute(text(sql), params or {})
                 return [dict(r) for r in result.mappings().all()] if fetch else []
         finally:
