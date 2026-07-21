@@ -15,8 +15,11 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import spawn_org_seed
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.outbox import on_async
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
+from apps.todo.contract.events import TodoTicked
 from apps.todo.domain.models import TodoItem
+from apps.todo.infra.completion_stats import bump_completion, completion_count
 from apps.todo.infra.repository import TodoRepository
 from apps.todo.infra.router import router
 
@@ -32,7 +35,7 @@ _WELCOME_TODOS = [
 
 
 def mount(host: Host) -> None:
-    host.register_app(
+    settings = host.register_app(
         AppManifest(
             settings=_declare_settings(),
             on=[(ConsoleOverviewQuery, _console_overview)],
@@ -41,6 +44,12 @@ def mount(host: Host) -> None:
             when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
         )
     )
+    if not settings.enabled:
+        return
+    # Durable async consumer: every `emit(TodoTicked)` fans out here through the outbox and bumps
+    # the org's cumulative completion counter — the producer's emit site never changed. Runs on the
+    # admin session (server-owned aggregate) and is idempotent (at-least-once delivery may repeat).
+    on_async(TodoTicked, "completion_counter", _bump_completed, as_actor=False, idempotent=True)
 
 
 def _declare_settings() -> SettingsDeclaration:
@@ -70,6 +79,9 @@ async def _overview(query: OverviewQuery) -> Overview:
     open_items = [t for t in items if not t.done]
     done = len(items) - len(open_items)
     lines = [f"{len(open_items)} open", f"{done} done"] if items else ["No tasks yet"]
+    # Cumulative completions, kept by the durable async consumer of todo.ticked — a distinct
+    # "N completed" badge (not the live "N done"), so the dashboard reflects the event pipeline.
+    lines.append(f"{await completion_count(query.session, query.org_id)} completed")
     return Overview(
         key="todo",
         title="To-do",
@@ -78,6 +90,12 @@ async def _overview(query: OverviewQuery) -> Overview:
         template="todo/_overview.html",
         data={"lines": lines, "recent": [t.title for t in open_items[:_RECENT]]},
     )
+
+
+async def _bump_completed(session: AsyncSession, event: TodoTicked) -> None:
+    """Durable consumer of ``todo.ticked``: keep the org's cumulative completion counter."""
+    if event.org_id is not None:
+        await bump_completion(session, uuid.UUID(event.org_id))
 
 
 async def _seed(event: OrganizationCreated) -> None:

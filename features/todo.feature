@@ -64,3 +64,8 @@ Feature: Todo list
     When "carol@example.com" views their todo list
     Then "Buy groceries" is not in that todo list
     And "Call dentist" is not in that todo list
+
+  Scenario: Completing a todo raises the organisation's completion counter
+    Given they have a todo item "Buy groceries"
+    When they mark the todo item "Buy groceries" as done
+    Then the todo dashboard card shows "1 completed"

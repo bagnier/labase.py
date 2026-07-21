@@ -13,33 +13,18 @@ onto ``host.events``, which *is* this same ``bus`` in production (``host = Host(
 so registration and dispatch share one registry.
 """
 
-import dataclasses
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from apps.shared.outbox import fan_out_durable
 
 log = structlog.get_logger("labase.shared.bus")
 
 E = TypeVar("E")
-
-# Field-name substrings that must never reach the log verbatim (e.g. UserCreated.access_token).
-# Matched case-insensitively against each dataclass field's name.
-_REDACT_SUBSTRINGS = ("token", "password", "secret")
-
-
-def _loggable_payload(event: object) -> dict[str, Any]:
-    if not dataclasses.is_dataclass(event) or isinstance(event, type):
-        return {}
-    payload: dict[str, Any] = {}
-    for f in dataclasses.fields(event):
-        value = getattr(event, f.name)
-        if any(s in f.name.lower() for s in _REDACT_SUBSTRINGS):
-            payload[f.name] = "***" if value is not None else None
-        else:
-            payload[f.name] = value
-    return payload
 
 
 class EventBus:
@@ -51,14 +36,21 @@ class EventBus:
     def on(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         self._subs[event_type].append(handler)
 
-    async def emit(self, event: object) -> list[object]:
-        """Run every handler for this event in order; propagate exceptions.
+    async def emit(self, event: object, session: AsyncSession | None = None) -> list[object]:
+        """Run every sync handler for this event, then durably fan out to its async subscribers.
 
         Dispatch walks the event's MRO — handlers registered on the concrete type fire first
         (most specific), then handlers registered on any base class. This lets a single
         subscriber on a base (e.g. the business-events persister on ``BusinessEvent``) catch
         every subclass, while exact-type subscribers keep working unchanged. A handler
         registered on several classes in the MRO runs once.
+
+        After the sync handlers, :func:`~apps.shared.outbox.fan_out_durable` enqueues one durable
+        task per :func:`~apps.shared.outbox.on_async` subscriber — on ``session`` or the ambient
+        request unit of work — so any event can grow async behavior without its producer changing.
+        The enqueue rides the same transaction: a sync-handler exception (propagated below) or a
+        later rollback discards the outbox rows too. It is a zero-cost no-op when the event has no
+        async subscribers, so audit-only signals pay nothing.
 
         The bus does *not* log the dispatch itself. Business events are recorded durably to the
         trail by the persister (with full user/org/entity/request scoping); the handful of
@@ -75,6 +67,7 @@ class EventBus:
                 if id(handler) not in seen:
                     seen.add(id(handler))
                     results.append(await handler(event))
+        await fan_out_durable(event, session)
         return results
 
     async def collect(self, query: object) -> list[Any]:

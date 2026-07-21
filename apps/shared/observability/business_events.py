@@ -26,8 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from structlog.contextvars import get_contextvars
 
 from apps.shared import clock
-from apps.shared.bus import _loggable_payload
-from apps.shared.events import BusinessEvent
+from apps.shared.events import BusinessEvent, _loggable_payload
 from apps.shared.persistence.base import Base
 from apps.shared.persistence.database import admin_session_factory
 

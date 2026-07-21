@@ -2,14 +2,6 @@
 
 Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat tracé bout-en-bout (code, rôles Postgres, migrations SQL, config). Verdict + sévérité en tête de ligne.
 
-### confirmés — à corriger
-
-- [x] **[CORRIGÉ 2026-07-21 · était 🔴 haute] Impersonation : le time-box de 3600 s sauté au refresh de token.** Un cookie `impersonator_deadline` (deadline absolue) est posé à l'`impersonate` ; `get_current_user` cap le refresh sur le temps restant (`set_auth_cookies(max_age=…)`) et refuse (401) une fois la fenêtre écoulée → la session cible meurt avec la bannière. `apps/auth/infra/security.py` (`_impersonation_remaining`) + `cookies.py` + `router.py` + `contract/impersonation.py`. Tests : `test_refresh_while_impersonating_caps_cookie_to_window`, `test_refresh_after_impersonation_window_returns_401`.
-- [x] **[CORRIGÉ 2026-07-21 · était 🔴 haute] CORS `*` + `allow_credentials=True`** par défaut. `cors_config` refuse désormais le combo : défaut fermé (`[]`), `*` = lecture publique sans credentials, credentials réservés à un allowlist explicite. `cors_origins` par défaut = `[]`. `apps/shared/http/security.py` + `apps/shared/config.py` + `.env.example`. Tests : `test_cors_closed_default_grants_nothing`, `test_cors_wildcard_drops_credentials`, `test_cors_explicit_allowlist_keeps_credentials`.
-- [x] **[CORRIGÉ 2026-07-21 · était 🟠 haute, 3/3 sous-claims] Rate limiter sans `X-Forwarded-For`.** (a) Nouveau resolver partagé `client_ip` (`apps/shared/http/addressing.py`) honorant `X-Forwarded-For` quand `TRUST_FORWARDED_FOR` est activé (off par défaut, anti-spoof) — utilisé par le limiter et par `_client_ip` du router auth. (b) `request` manquant → `log.error` bruyant (fail-open par doctrine mais visible) ; `client_ip` None → `log.warning`. (c) Clé = `func.__module__ + func.__qualname__` → plus de collision entre `create` de routers différents. `apps/shared/http/limiter.py` + `addressing.py` + `config.py` + `.env.example`. Tests : `test_distinct_endpoints_do_not_share_a_bucket`, `test_missing_request_param_fails_open_but_logs_loudly`, `test_addressing.py`.
-- [x] **[CORRIGÉ 2026-07-21 · était 🟠 moyenne] `GET /{org}/pages/new/edit` mutait** (créait un draft + `emit(PageCreated)`). `new_page` est désormais un rendu pur (aucune écriture) : le formulaire vide POST vers `create_page` (mode `is_new`, pas de bouton delete). `create_page` renvoie via `mutation_response` (HX-Redirect en HTMX). Plus de brouillons orphelins `page-N` par prefetch/crawler/double-clic. `apps/pages/infra/router.py` + `templates/pages/form.html`. Tests : scénario BDD `Opening the new-page form creates no draft` (api + browser).
-- [x] **[CORRIGÉ 2026-07-21 · était 🟠 moyenne — gap DB] Invariant « dernier owner » désormais gardé en base.** Trigger `BEFORE DELETE/UPDATE` sur `memberships` (`prevent_last_owner_removal`, security definer) refuse toute suppression/rétrogradation du dernier owner — y compris via un client PostgREST/supabase-js direct, et ferme la course TOCTOU du check Python. Les cascades (org supprimée, user supprimé) passent : le parent est déjà absent du snapshot. `supabase/migrations/20260721000001_memberships_last_owner_guard.sql`. Test : `test_last_owner_db_guard.py` (SQL direct sur session RLS).
-- [x] **[CORRIGÉ 2026-07-21 · était 🟡 basse] Dé-dup d'invitation normalisée en lowercase à l'invite.** `create_invitation` fait `email.strip().lower()` avant le check membership, le cap et le dedup pending (aligné avec le `lower()` de l'accept RPC). `Foo@x.com` et `foo@x.com` ne créent plus deux invitations pending. `apps/organizations/infra/router.py:673`. Test : `test_invitation_normalization.py`.
 
 ### confirmés mais by-design / latents (pas de fuite live)
 
@@ -46,8 +38,9 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 - [ ] dataclass or pydantic ?
 - [ ] multi processes ?
 - [ ] better styleguide inspired by my apps and daisyui templates
-- [ ] event driven ? CQRS ?
+- [ ] event driven ?
 - [ ] Command Query Responsibility Segregation ?
+- [ ] SQLAlchemy exploiter plus à la JPA
 - [ ] DB index ?
 - [ ] no audit() for error/exception, logger instead
 - [ ] trop de fichiers racine

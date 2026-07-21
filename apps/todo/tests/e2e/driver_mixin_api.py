@@ -126,3 +126,15 @@ class TodoApiMixin(ApiBase):
         titles = getattr(self, "_viewed_todo_titles", None)
         assert titles is not None, "view the tenant's todo list first"
         assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"
+
+    # ── durable async completion counter ──────────────────────────────────────
+    def assert_completion_badge(self, badge: str) -> None:
+        # The counter is maintained by the durable async consumer of todo.ticked; deliver the
+        # outboxed task (the polling worker is off under tests) before reading the dashboard.
+        self.drain_task_queue()
+        slug = getattr(self, "active_org_handle", "")
+        resp = self.client().get(f"/{slug}/dashboard/overviews.json")
+        resp.raise_for_status()
+        todo = next((o for o in resp.json() if o["key"] == "todo"), None)
+        assert todo is not None, "todo overview missing from the dashboard"
+        assert badge in todo["data"]["lines"], f"'{badge}' not in {todo['data']['lines']}"

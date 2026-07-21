@@ -7,6 +7,7 @@ from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.infra.security import try_get_current_user
 from apps.shared.persistence.database import get_user_session
 from apps.shared.persistence.rls import set_rls_context
+from apps.shared.persistence.uow import bind_current_session, reset_current_session
 
 
 async def get_rls_session(
@@ -21,7 +22,15 @@ async def get_rls_session(
     transaction-local, so the request's commit/rollback clears it — no reset needed.
     Tolerant to anonymous callers — authentication (401) is enforced separately by
     ``CurrentUser`` where a route requires it.
+
+    The same session is bound as the ambient unit of work (``uow``) for the request, so
+    ``emit(event)`` can enqueue durable outbox rows on this exact transaction without the
+    producer having to thread a session through.
     """
     if current_user is not None:
         await set_rls_context(session, current_user.claims)
-    yield session
+    token = bind_current_session(session)
+    try:
+        yield session
+    finally:
+        reset_current_session(token)

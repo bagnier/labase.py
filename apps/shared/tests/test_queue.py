@@ -7,6 +7,7 @@ from sqlalchemy import text
 from apps.shared.persistence import database as db
 from apps.shared.queue import (
     TaskWorker,
+    _handlers,
     enqueue,
     ensure_scheduled,
     register_task_handler,
@@ -27,8 +28,13 @@ async def queue_isolation():
     The whole table is emptied up front: a prior in-process E2E server may have
     planted recurring singletons in the (disposable) test schema, and a tick
     running with a reset registry would claim and park them mid-test.
+
+    The registry is snapshotted and restored (not just cleared): apps.main — imported by the
+    e2e drivers — registers the real task handlers at mount, and a later e2e test relies on them
+    still being there. Clearing without restoring would silently unregister the app's consumers.
     """
     _clear_engine_caches()
+    saved_handlers = dict(_handlers)
     reset_task_handlers()
     async with db.admin_session_factory()() as session:
         await session.execute(text("DELETE FROM task_queue"))
@@ -37,7 +43,8 @@ async def queue_isolation():
     async with db.admin_session_factory()() as session:
         await session.execute(text("DELETE FROM task_queue WHERE topic LIKE 'test.%'"))
         await session.commit()
-    reset_task_handlers()
+    _handlers.clear()
+    _handlers.update(saved_handlers)
     await db._user_engine().dispose()
     await db._admin_engine().dispose()
     _clear_engine_caches()

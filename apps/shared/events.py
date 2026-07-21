@@ -20,8 +20,30 @@ Non-CRUD actions (sign-in, a member joining, a page being published) subclass
 :class:`BusinessEvent` directly and set an explicit ``kind``.
 """
 
+import dataclasses
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
+
+# Field-name substrings that must never reach a log line or the durable outbox payload verbatim
+# (e.g. ``UserCreated.access_token``). Matched case-insensitively against each field's name.
+_REDACT_SUBSTRINGS = ("token", "password", "secret")
+
+
+def _loggable_payload(event: object) -> dict[str, Any]:
+    """A dataclass event's instance fields as a plain dict, with secret-named fields redacted.
+
+    Shared by the technical-log line, the business-events persister, and the durable outbox — one
+    place decides what of an event is safe to serialize verbatim."""
+    if not dataclasses.is_dataclass(event) or isinstance(event, type):
+        return {}
+    payload: dict[str, Any] = {}
+    for f in dataclasses.fields(event):
+        value = getattr(event, f.name)
+        if any(s in f.name.lower() for s in _REDACT_SUBSTRINGS):
+            payload[f.name] = "***" if value is not None else None
+        else:
+            payload[f.name] = value
+    return payload
 
 
 @dataclass(frozen=True, kw_only=True)
