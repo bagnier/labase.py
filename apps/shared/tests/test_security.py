@@ -4,7 +4,23 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
-from apps.shared.http.security import csrf_protect
+from apps.shared.http.security import cors_config, csrf_protect
+
+
+def test_cors_closed_default_grants_nothing():
+    assert cors_config([]) == {"allow_origins": [], "allow_credentials": False}
+
+
+def test_cors_wildcard_drops_credentials():
+    cfg = cors_config(["*"])
+    assert cfg["allow_origins"] == ["*"]
+    assert cfg["allow_credentials"] is False
+
+
+def test_cors_explicit_allowlist_keeps_credentials():
+    cfg = cors_config(["https://app.example.com"])
+    assert cfg["allow_origins"] == ["https://app.example.com"]
+    assert cfg["allow_credentials"] is True
 
 
 @pytest_asyncio.fixture()

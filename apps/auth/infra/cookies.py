@@ -4,11 +4,19 @@ from apps.shared.config import get_technical_settings
 from apps.shared.settings import get_settings
 
 
-def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+def set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+    max_age: int | None = None,
+) -> None:
     secure = get_technical_settings().cookies_secure
     # Server-wide auth policy: the cookie is user-global (one session across every org, set at
     # login outside any /{org_handle}), so the TTL is deliberately not org-overridable.
-    max_age = get_settings("users").session_ttl_seconds
+    # Callers may pass an explicit, shorter ``max_age`` to keep a re-emitted session within a
+    # time-boxed window (e.g. impersonation), where the default long TTL would defeat the box.
+    if max_age is None:
+        max_age = get_settings("users").session_ttl_seconds
     response.set_cookie(
         "access_token",
         access_token,

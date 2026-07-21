@@ -87,6 +87,79 @@ async def test_expired_token_with_valid_refresh_returns_200_and_sets_new_cookies
     assert "refresh_token" in response.cookies
 
 
+def _access_cookie_max_age(response) -> int:
+    for header in response.headers.get_list("set-cookie"):
+        if header.startswith("access_token="):
+            for part in header.split(";"):
+                key, _, value = part.strip().partition("=")
+                if key.lower() == "max-age":
+                    return int(value)
+    raise AssertionError("no access_token Set-Cookie with Max-Age")
+
+
+def test_impersonation_remaining_reads_deadline():
+    import time
+
+    from apps.auth.infra.security import _impersonation_remaining
+
+    assert _impersonation_remaining(None) is None
+    assert _impersonation_remaining("") is None
+    assert _impersonation_remaining("not-a-number") is None
+    future = _impersonation_remaining(str(int(time.time()) + 100))
+    assert future is not None and future > 0
+    past = _impersonation_remaining(str(int(time.time()) - 100))
+    assert past is not None and past < 0
+
+
+@pytest.mark.asyncio
+async def test_refresh_while_impersonating_caps_cookie_to_window(client, test_user):
+    # A mid-window refresh must re-emit the session capped to the impersonation window's
+    # remaining time, not the long login TTL — otherwise the disguise outlives its time-box.
+    import time
+
+    email, password = test_user
+    real_tokens = await login(email, password)
+    fake_new_tokens = AuthTokens(
+        access_token=real_tokens.access_token, refresh_token=real_tokens.refresh_token
+    )
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", real_tokens.refresh_token)
+    client.cookies.set("impersonator_deadline", str(int(time.time()) + 120))
+
+    with (
+        patch(
+            "apps.auth.infra.security.decode_jwt",
+            side_effect=[jwt.ExpiredSignatureError, {"sub": "user-id", "email": email}],
+        ),
+        patch("apps.auth.infra.security.refresh_session", return_value=fake_new_tokens),
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 200
+    assert _access_cookie_max_age(response) <= 120
+
+
+@pytest.mark.asyncio
+async def test_refresh_after_impersonation_window_returns_401(client, test_user):
+    # Past the deadline the target session must die with the banner, not silently refresh.
+    import time
+
+    email, password = test_user
+    real_tokens = await login(email, password)
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", real_tokens.refresh_token)
+    client.cookies.set("impersonator_deadline", str(int(time.time()) - 1))
+
+    with (
+        patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
+        patch("apps.auth.infra.security.refresh_session") as refresh,
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+    refresh.assert_not_called()  # refused before spending a refresh round-trip
+
+
 @pytest.mark.asyncio
 async def test_expired_token_without_refresh_returns_401(client):
     client.cookies.set("access_token", "expired.token.value")

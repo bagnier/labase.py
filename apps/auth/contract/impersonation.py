@@ -17,6 +17,9 @@ from apps.shared.persistence.supabase import get_admin_supabase
 # their presence is what renders the banner; deleting them ends the disguise.
 IMPERSONATOR_COOKIE = "impersonator_access_token"
 IMPERSONATOR_REFRESH_COOKIE = "impersonator_refresh_token"
+# Absolute unix deadline of the impersonation window, so a mid-window token refresh can
+# re-cap the re-emitted target session to the time it has left instead of the long login TTL.
+IMPERSONATOR_DEADLINE_COOKIE = "impersonator_deadline"
 
 # Time-box: every impersonation cookie dies after this long, disguise included.
 IMPERSONATION_MAX_SECONDS = 3600

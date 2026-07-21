@@ -1,4 +1,5 @@
 import contextlib
+import time
 
 import structlog
 from fastapi import (
@@ -35,6 +36,7 @@ from apps.auth.contract.events import (
 from apps.auth.contract.impersonation import (
     IMPERSONATION_MAX_SECONDS,
     IMPERSONATOR_COOKIE,
+    IMPERSONATOR_DEADLINE_COOKIE,
     IMPERSONATOR_REFRESH_COOKIE,
     ImpersonationTargetNotFound,
     impersonation_tokens,
@@ -67,6 +69,7 @@ from apps.auth.infra.security import decode_jwt
 from apps.shared.bus import bus
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
+from apps.shared.http.addressing import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
 from apps.shared.settings import SettingsView
@@ -151,7 +154,7 @@ def _enabled_oauth_providers(users_settings: SettingsView) -> list[str]:
 
 
 def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    return client_ip(request)
 
 
 def _token_sub(token: str) -> str | None:
@@ -571,10 +574,16 @@ async def impersonate_endpoint(
     else:
         resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     # Stash the admin's own session, then become the target — everything time-boxed:
-    # when these cookies expire the disguise and the stash die together.
+    # when these cookies expire the disguise and the stash die together. The deadline cookie
+    # carries the absolute end of the window so a mid-window token refresh re-caps the target
+    # session to the time it has left instead of re-minting a full-length login (see security.py).
+    deadline = int(time.time()) + IMPERSONATION_MAX_SECONDS
     _set_ephemeral_cookie(resp, IMPERSONATOR_COOKIE, access_token, IMPERSONATION_MAX_SECONDS)
     _set_ephemeral_cookie(
         resp, IMPERSONATOR_REFRESH_COOKIE, refresh_token or "", IMPERSONATION_MAX_SECONDS
+    )
+    _set_ephemeral_cookie(
+        resp, IMPERSONATOR_DEADLINE_COOKIE, str(deadline), IMPERSONATION_MAX_SECONDS
     )
     _set_ephemeral_cookie(resp, "access_token", tokens.access_token, IMPERSONATION_MAX_SECONDS)
     _set_ephemeral_cookie(resp, "refresh_token", tokens.refresh_token, IMPERSONATION_MAX_SECONDS)
@@ -603,6 +612,7 @@ async def stop_impersonation_endpoint(
     set_auth_cookies(resp, stash, refresh_stash)
     resp.delete_cookie(IMPERSONATOR_COOKIE)
     resp.delete_cookie(IMPERSONATOR_REFRESH_COOKIE)
+    resp.delete_cookie(IMPERSONATOR_DEADLINE_COOKIE)
     return resp
 
 

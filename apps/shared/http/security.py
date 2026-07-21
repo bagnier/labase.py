@@ -15,6 +15,27 @@ logger = structlog.get_logger("labase.shared.security")
 
 
 def cors_config(origins: list[str]) -> dict[str, Any]:
+    """Build the CORS middleware kwargs, refusing the wildcard-plus-credentials footgun.
+
+    Starlette does not neutralise ``allow_origins=["*"]`` when credentials are on — it reflects
+    the caller's ``Origin`` back with ``Allow-Credentials: true``, i.e. *any* site can read
+    authenticated responses. So credentials are only granted to an explicit allowlist; a ``*``
+    (or empty) origin list serves cross-origin reads without credentials. Production should set
+    ``CORS_ORIGINS`` to the exact front-end origins that need cookie-authenticated access.
+    """
+    if not origins:
+        # Closed default: no cross-origin access until an allowlist is configured.
+        return {"allow_origins": [], "allow_credentials": False}
+    if "*" in origins:
+        # Wildcard grants public, credential-less reads only. Pairing "*" with credentials would
+        # let any site read cookie-authenticated responses, so credentials are dropped here.
+        logger.warning("cors.wildcard_without_credentials")
+        return {
+            "allow_origins": ["*"],
+            "allow_credentials": False,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
     return {
         "allow_origins": origins,
         "allow_credentials": True,

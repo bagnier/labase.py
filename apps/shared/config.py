@@ -30,7 +30,14 @@ class TechnicalSettings(BaseSettings):
     firehose_dir: str = ".firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
-    cors_origins: list[str] = ["*"]
+    # Behind a reverse proxy/LB, the socket peer is the proxy, so the real client sits in
+    # X-Forwarded-For. Off by default: trusting that header when nothing upstream strips it
+    # lets any caller spoof their IP (evading rate limits, poisoning logs). Turn on ONLY when a
+    # proxy we control sets it — then the left-most entry (the edge-observed client) is used.
+    trust_forwarded_for: bool = False
+    # Closed by default: no cross-origin access until CORS_ORIGINS lists the exact front-end
+    # origins that need it. "*" is honoured but forces credentials off (see cors_config).
+    cors_origins: list[str] = []
     # Cross-instance settings freshness: TTL of the per-process re-read loop; 0 disables.
     settings_refresh_seconds: float = 30
     # Async substrate: poll interval of the per-process task worker; 0 disables.

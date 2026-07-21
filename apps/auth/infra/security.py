@@ -1,3 +1,4 @@
+import time
 from functools import lru_cache
 
 import jwt
@@ -57,11 +58,25 @@ def decode_jwt(token: str) -> dict:
     )
 
 
+def _impersonation_remaining(deadline: str | None) -> int | None:
+    """Seconds left in the impersonation window, or ``None`` when not impersonating.
+
+    The value can be ``<= 0`` (window elapsed); callers refuse the refresh in that case. A
+    malformed cookie is treated as no window rather than trusting an unbounded session."""
+    if not deadline:
+        return None
+    try:
+        return int(deadline) - int(time.time())
+    except ValueError:
+        return None
+
+
 async def get_current_user(
     response: Response,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
+    impersonator_deadline: str | None = Cookie(default=None),
     admin_session: AsyncSession = Depends(get_admin_session),
 ) -> AuthenticatedUser:
     bearer = _bearer_token(authorization)
@@ -80,6 +95,15 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
             ) from None
+        # A refresh while impersonating must not outlive the impersonation window: re-emitting
+        # the default long-lived login cookies here would silently extend the disguise past
+        # IMPERSONATION_MAX_SECONDS. Cap the re-emitted session to the box's remaining time, and
+        # refuse once the box has closed so the target session dies with the banner.
+        impersonation_ttl = _impersonation_remaining(impersonator_deadline)
+        if impersonation_ttl is not None and impersonation_ttl <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Impersonation window elapsed"
+            ) from None
         try:
             tokens: AuthTokens = await refresh_session(refresh_token)
         except Exception as exc:
@@ -87,7 +111,9 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
             ) from exc
-        set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+        set_auth_cookies(
+            response, tokens.access_token, tokens.refresh_token, max_age=impersonation_ttl
+        )
         access_token = tokens.access_token
         payload = decode_jwt(access_token)
     except jwt.PyJWTError as exc:
@@ -143,13 +169,19 @@ async def try_get_current_user(
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
+    impersonator_deadline: str | None = Cookie(default=None),
     admin_session: AsyncSession = Depends(get_admin_session),
 ) -> AuthenticatedUser | None:
     if not access_token and _bearer_token(authorization) is None:
         return None
     try:
         return await get_current_user(
-            response, access_token, refresh_token, authorization, admin_session
+            response,
+            access_token,
+            refresh_token,
+            authorization,
+            impersonator_deadline,
+            admin_session,
         )
     except HTTPException:
         return None

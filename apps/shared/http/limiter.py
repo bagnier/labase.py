@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
+from apps.shared.http.addressing import client_ip
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger("labase.shared.limiter")
@@ -79,18 +80,32 @@ def rate_limit(limit_string: str) -> Callable[[Any], Any]:
     max_hits, window_seconds = _parse(limit_string)
 
     def decorator(func: Any) -> Any:
+        # Module-qualified so identically-named handlers in different routers (two `create`s)
+        # get distinct buckets instead of silently sharing one.
+        scope = f"{func.__module__}.{func.__qualname__}"
+
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if get_technical_settings().rate_limit_enabled:
-                request: Request | None = kwargs.get("request") or next(
-                    (a for a in args if isinstance(a, Request)), None
-                )
-                if request is not None and request.client is not None:
-                    key = f"{func.__name__}:{request.client.host}"
-                    hits = await _increment(key, window_seconds)
-                    if hits is not None and hits > max_hits:
-                        log.warning("rate_limit.exceeded", key=key, hits=hits, limit=max_hits)
-                        raise RateLimitExceeded(retry_after=window_seconds)
+            if not get_technical_settings().rate_limit_enabled:
+                return await func(*args, **kwargs)
+            request: Request | None = kwargs.get("request") or next(
+                (a for a in args if isinstance(a, Request)), None
+            )
+            if request is None:
+                # The decorator requires a `request: Request` param — its absence is a wiring
+                # bug that would leave the endpoint silently unlimited. Fail open (doctrine)
+                # but loudly, so the hole is visible instead of invisible.
+                log.error("rate_limit.no_request", scope=scope)
+                return await func(*args, **kwargs)
+            ip = client_ip(request)
+            if ip is None:
+                log.warning("rate_limit.no_client_ip", scope=scope)
+                return await func(*args, **kwargs)
+            key = f"{scope}:{ip}"
+            hits = await _increment(key, window_seconds)
+            if hits is not None and hits > max_hits:
+                log.warning("rate_limit.exceeded", key=key, hits=hits, limit=max_hits)
+                raise RateLimitExceeded(retry_after=window_seconds)
             return await func(*args, **kwargs)
 
         return wrapper
