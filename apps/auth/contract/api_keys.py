@@ -1,8 +1,8 @@
 """The seam between auth and the api_keys context — a typed query, no import.
 
-Auth routes `Authorization: Bearer lbk_...` tokens to whoever answers
-`ApiKeyQuery` on the bus (the api_keys context registers a handler at mount);
-deleting that context simply makes API keys stop authenticating.
+Auth routes `Authorization: Bearer lbk_...` tokens to whoever contributes an answer
+to `ApiKeyQuery` (the api_keys context registers a provider at mount); deleting that
+context simply makes API keys stop authenticating.
 """
 
 from dataclasses import dataclass

@@ -66,7 +66,7 @@ from apps.auth.domain.service import (
 )
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.addressing import client_ip
@@ -235,7 +235,7 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
                 return await _mfa_challenge_response(request, tokens, factor_id, next)
         # Past the 2FA gate: this is a completed password sign-in (the 2FA branch is marked by
         # MfaVerified). Record it — the freshly minted token carries the actor.
-        await bus.emit(SignedIn(actor_id=_token_sub(tokens.access_token)))
+        await events.emit(SignedIn(actor_id=_token_sub(tokens.access_token)))
         if wants_json(request):
             resp = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
             set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -244,7 +244,7 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        await bus.emit(LoginFailed(email=email))
+        await events.emit(LoginFailed(email=email))
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -314,7 +314,7 @@ async def mfa_verify_endpoint(
     try:
         tokens = await verify_totp(mfa_access_token, factor_id, challenge_id, code)
     except TotpError:
-        await bus.emit(MfaFailed(factor_id=factor_id))
+        await events.emit(MfaFailed(factor_id=factor_id))
         error = "That code did not work. Try the next one from your app."
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
@@ -326,7 +326,7 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    await bus.emit(MfaVerified(actor_id=_token_sub(tokens.access_token), factor_id=factor_id))
+    await events.emit(MfaVerified(actor_id=_token_sub(tokens.access_token), factor_id=factor_id))
     if wants_json(request):
         resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
     else:
@@ -346,7 +346,7 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
         actor_id = None
         with contextlib.suppress(Exception):
             actor_id = str(decode_jwt(access_token).get("sub", "")) or None
-        await bus.emit(SignedOut(actor_id=actor_id))
+        await events.emit(SignedOut(actor_id=actor_id))
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
@@ -388,10 +388,10 @@ async def passkey_verify_endpoint(request: Request, users_settings: UsersSetting
     try:
         tokens = await verify_passkey_authentication(challenge_id, credential)
     except PasskeyError as e:
-        await bus.emit(PasskeyFailed())
+        await events.emit(PasskeyFailed())
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
     claims = decode_jwt(tokens.access_token)
-    await bus.emit(PasskeySignedIn(actor_id=str(claims.get("sub", "")) or None))
+    await events.emit(PasskeySignedIn(actor_id=str(claims.get("sub", "")) or None))
     resp = JSONResponse(
         {
             "access_token": tokens.access_token,
@@ -472,11 +472,11 @@ async def oauth_callback(
     try:
         tokens = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
-        await bus.emit(OAuthFailed())
+        await events.emit(OAuthFailed())
         return _oauth_failure(request, str(e), users_settings)
     await confirm_user(tokens.access_token)  # first visit bootstraps the personal org
     claims = decode_jwt(tokens.access_token)
-    await bus.emit(OAuthSignedIn(actor_id=str(claims.get("sub", "")) or None))
+    await events.emit(OAuthSignedIn(actor_id=str(claims.get("sub", "")) or None))
     next = oauth_next or ""
     if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
@@ -540,7 +540,7 @@ async def register_endpoint(request: Request) -> Response:
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
-        await bus.emit(RegisterFailed(email=email))
+        await events.emit(RegisterFailed(email=email))
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."
@@ -568,7 +568,7 @@ async def impersonate_endpoint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No user with this email."
         ) from None
-    await bus.emit(ImpersonationStarted(actor_id=admin.id, target_email=email))
+    await events.emit(ImpersonationStarted(actor_id=admin.id, target_email=email))
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": email})
     else:
@@ -604,7 +604,7 @@ async def stop_impersonation_endpoint(
         admin_id = decode_jwt(stash)["sub"]
     except Exception:  # expired stash: still drop the disguise, record without the id
         log.warning("auth.impersonation_stash_invalid")
-    await bus.emit(ImpersonationStopped(actor_id=admin_id, target_email=current_user.email))
+    await events.emit(ImpersonationStopped(actor_id=admin_id, target_email=current_user.email))
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": None})
     else:
@@ -653,7 +653,7 @@ async def resend_confirmation_endpoint(request: Request, users_settings: UsersSe
     if email:
         try:
             await resend_confirmation(email)
-            await bus.emit(ConfirmationResent(email=email))
+            await events.emit(ConfirmationResent(email=email))
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
     if wants_json(request):
@@ -688,7 +688,7 @@ async def reset_password_endpoint(request: Request) -> Response:
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the trail attributed to the account holder.
-    await bus.emit(PasswordReset(actor_id=_token_sub(tokens.access_token)))
+    await events.emit(PasswordReset(actor_id=_token_sub(tokens.access_token)))
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
     return RedirectResponse(
@@ -712,7 +712,7 @@ async def confirm_email_endpoint(request: Request, token_hash: str = Query(defau
             "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
         )
     claims = decode_jwt(tokens.access_token)
-    await bus.emit(EmailChanged(actor_id=str(claims.get("sub", "")) or None))
+    await events.emit(EmailChanged(actor_id=str(claims.get("sub", "")) or None))
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     return resp

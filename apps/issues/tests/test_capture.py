@@ -79,12 +79,12 @@ async def test_failing_bus_handler_is_recorded_as_an_issue():
     async def boom(query: _DummyQuery) -> None:
         raise RuntimeError(query.marker)
 
-    host.events.on(_DummyQuery, boom)
+    host.contribs.provide(_DummyQuery, boom)
     try:
         # collect() logs "query.handler_failed" (log.exception) → the processor enqueues it.
-        await host.events.collect(_DummyQuery(marker))  # must not raise: log-and-skip
+        await host.contribs.collect(_DummyQuery(marker))  # must not raise: log-and-skip
     finally:
-        host.events._subs[_DummyQuery].remove(boom)
+        host.contribs._providers[_DummyQuery].remove(boom)
 
     await CaptureDrain(0).tick()
     group = await _group_titled(marker)

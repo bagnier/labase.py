@@ -6,7 +6,7 @@ caller's role: :class:`~apps.organizations.contract.overviews.OverviewQuery`
 (sidebar items) and
 :class:`~apps.organizations.contract.settings_sections.OrgSettingsSectionQuery`
 (settings sections). The console's server-wide ``ConsoleOverviewQuery`` is the same
-grammar minus the org dimension. The bus dispatches on the *exact* type, so each
+grammar minus the org dimension. Contribs dispatches on the *exact* type, so each
 channel stays its own collection; these bases pin the shape (and this doc) in one
 place instead of four.
 """

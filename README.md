@@ -168,14 +168,28 @@ dependency (`contract/current.py`) and get the request's effective values — or
 applied under `/{org_handle}`, server values elsewhere. Non-request code uses
 `get_settings("todo")`, plus `.for_org(session, org_id)` when an org is in hand.
 
-**`EventBus`** (on `host.events`) exposes two primitives — handlers are keyed by the
-Python type of the event, so there are no magic strings and no shared imports:
+**Two collaboration objects, two shapes.** Push (a fact happened) and pull (who contributes
+to this?) are different animals, so they are different objects — `host.events` (the
+`EventBus`) and `host.contribs` (the `Contribs` registry). Both key handlers by the Python
+type they carry, so there are no magic strings and no shared imports.
 
-|                | `emit(event)`                                             | `collect(query)`                                                |
-| -------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| **Semantic**   | push / command — runs all handlers, returns their results | pull / query — runs all handlers, aggregates successful returns |
-| **On failure** | propagates first exception (caller can compensate)        | logs & skips the failing handler                                |
-| **Used for**   | `UserCreated`, `OrgCreated`, `SettingsChanged`            | `OverviewQuery`, `ConsoleOverviewQuery`, `OrgNavQuery`          |
+**`host.events` — push.** A fact is emitted; handlers react. Two fan-outs, differing only in
+failure policy; both then durably fan out to the event's `on_async` subscribers (see below):
+
+|                | `emit(event)`                                             | `notify(event)`                                             |
+| -------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
+| **Semantic**   | push / command — runs all handlers, returns their results | push / signal — runs all handlers, returns successful ones  |
+| **On failure** | propagates first exception (caller can compensate)        | logs & skips the failing handler (observers can't break it) |
+| **Used for**   | `UserCreated`, `OrgCreated`, `SettingsChanged`            | `ExceptionCaptured` (error capture → trackers)              |
+
+**`host.contribs` — pull.** A registry of contribution providers (an extension point),
+declared at mount and read synchronously on the request path — *not* events:
+
+|                | `provide(query_type, fn)`                           | `collect(query)`                                                      |
+| -------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
+| **Semantic**   | register a contributor for a query type             | pull / query — runs all providers, aggregates successful returns      |
+| **On failure** | —                                                   | logs & skips the failing provider (a down app can't break the page)   |
+| **Used for**   | dashboard/console cards, org nav, settings sections | `OverviewQuery`, `ConsoleOverviewQuery`, `OrgNavQuery`, `ApiKeyQuery` |
 
 **Sign-up event chain:**
 
@@ -192,7 +206,7 @@ signup → emit(UserCreated)
 **Dashboard query:**
 
 ```
-GET /{org}/ → collect(OverviewQuery)
+GET /{org}/ → contribs.collect(OverviewQuery)
   ← files, learning, todo, calendar, pages each return an Overview (icon, title, counts, recent items)
      one context failing does not break the dashboard
 ```
@@ -205,10 +219,11 @@ picks the mechanism:
   `organizations.contract` (org scoping: `CurrentOrg`, `app_settings`, `ORG_PREFIX`), and
   `console.contract.overviews` (the `ConsoleOverviewQuery` type). These are typed, statically
   checked and navigable — you *want* the coupling explicit.
-- **Event** when the call would point *up*, from a foundation into features it must not name:
-  `organizations` emits `OrgCreated` instead of importing calendar/todo/files to seed them;
-  `auth` resolves a bearer token with `collect(ApiKeyQuery)` instead of importing `api_keys`.
-  The bus inverts the dependency so the foundation stays ignorant of its consumers.
+- **Event or contribution** when the call would point *up*, from a foundation into features it
+  must not name: `organizations` emits `OrgCreated` instead of importing calendar/todo/files to
+  seed them; `auth` resolves a bearer token with `contribs.collect(ApiKeyQuery)` instead of
+  importing `api_keys`. The registry inverts the dependency so the foundation stays ignorant of
+  its consumers.
 
 Rule of thumb: a feature importing a foundation is healthy; a foundation importing a feature is
 a smell — reach for an event (an import-linter contract enforces the one-way edges, e.g. auth
@@ -331,8 +346,8 @@ allowed to know several contexts at once: `main.py`.
 labase.py/
 ├── apps/
 │   ├── main.py            # FastAPI app, mounts every context in phase order (catch-alls last)
-│   ├── shared/            # Cross-context infra: EventBus (bus.py), Host (host.py),
-│   │                      #   task queue (queue.py), Mailer (email.py),
+│   ├── shared/            # Cross-context infra: EventBus (bus.py), Contribs (contribs.py),
+│   │                      #   Host (host.py), task queue (queue.py), Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),
 │   │                      #   persistence, http, observability, templates/
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies

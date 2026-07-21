@@ -34,10 +34,11 @@ def mount(host: Host) -> None:
     host.register_app(
         AppManifest(
             settings=_declare_settings(),
-            on=[(ConsoleOverviewQuery, _console_overview)],
+            provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=30)],
-            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
+            when_enabled=[(OrganizationCreated, _seed)],
+            provides_when_enabled=[(OverviewQuery, _overview)],
         )
     )
 

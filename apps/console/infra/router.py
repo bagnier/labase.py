@@ -20,9 +20,10 @@ from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.infra.repository import AppSettingRepository
 from apps.organizations.contract.queries import list_org_handles
 from apps.shared import clock
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.charts import day_buckets_series
 from apps.shared.config import get_technical_settings
+from apps.shared.contribs import contribs
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -110,7 +111,7 @@ def _growth_chart(overviews: list[ConsoleOverview]) -> dict | None:
 
 
 async def _raw_overviews(session: AdminSession) -> list[ConsoleOverview]:
-    return sorted(await bus.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key)
+    return sorted(await contribs.collect(ConsoleOverviewQuery(session)), key=lambda o: o.key)
 
 
 async def _collect_overviews(session: AdminSession) -> list[ConsoleOverview]:
@@ -234,7 +235,7 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
             error=exc.email,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    await bus.emit(AdminGranted(actor_id=current_user.id, target_email=email))
+    await events.emit(AdminGranted(actor_id=current_user.id, target_email=email))
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -249,14 +250,14 @@ async def update_admin(request: Request, email: str, current_user: CurrentAdmin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
-        await bus.emit(LastAdminViolationBlocked(actor_id=current_user.id, target_email=email))
+        await events.emit(LastAdminViolationBlocked(actor_id=current_user.id, target_email=email))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     granted: AdminGranted | AdminRevoked = (
         AdminGranted(actor_id=current_user.id, target_email=email)
         if is_admin
         else AdminRevoked(actor_id=current_user.id, target_email=email)
     )
-    await bus.emit(granted)
+    await events.emit(granted)
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -392,7 +393,7 @@ async def create_org_override(
 
     await repo.set_org_override(app, key, org_id, stored)
     await session.commit()
-    await bus.emit(
+    await events.emit(
         OrgOverrideSet(actor_id=current_user.id, org_id=str(org_id), app=app, key=key, value=stored)
     )
     return await _render_org_overrides(request, session, app, group)
@@ -411,7 +412,7 @@ async def delete_org_override(
     repo = AppSettingRepository(session)
     await repo.delete_org_override(app, key, org_id)
     await session.commit()
-    await bus.emit(
+    await events.emit(
         OrgOverrideRemoved(actor_id=current_user.id, org_id=str(org_id), app=app, key=key)
     )
     return await _render_org_overrides(request, session, app, group)
@@ -438,8 +439,10 @@ async def update_setting(
     values = await repo.values(app)
     # SettingsChanged is the config-propagation signal (cross-instance reload); ServerSettingChanged
     # is the trail record of who changed which server-wide setting.
-    await bus.emit(SettingsChanged(app, values))
-    await bus.emit(ServerSettingChanged(actor_id=current_user.id, app=app, key=key, value=stored))
+    await events.emit(SettingsChanged(app, values))
+    await events.emit(
+        ServerSettingChanged(actor_id=current_user.id, app=app, key=key, value=stored)
+    )
     settings = service.settings_view(group, values)
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})

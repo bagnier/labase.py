@@ -33,9 +33,12 @@ def mount(host: Host) -> None:
     host.register_app(
         AppManifest(
             settings=_declare_settings(),
-            on=[(ConsoleOverviewQuery, _console_overview)],
+            provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
-            when_enabled=[(OrgSettingsSectionQuery, _settings_section), (ApiKeyQuery, _resolve)],
+            provides_when_enabled=[
+                (OrgSettingsSectionQuery, _settings_section),
+                (ApiKeyQuery, _resolve),
+            ],
         )
     )
 

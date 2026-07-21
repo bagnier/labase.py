@@ -33,7 +33,7 @@ from apps.pages.infra.repository import (
     search_visible_pages,
     visible_pages,
 )
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.http import (
     delete_response,
     mutation_response,
@@ -121,7 +121,7 @@ async def create_page(
     if await repo.slug_taken(slug):
         raise HTTPException(status.HTTP_409_CONFLICT, "A page with this slug already exists")
     page = await repo.add(uuid.UUID(current_user.id), title, slug, content)
-    await bus.emit(
+    await events.emit(
         PageCreated(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=title)
     )
     # HTMX form submit navigates via HX-Redirect; plain HTML gets a 303 to the same edit page.
@@ -215,7 +215,7 @@ async def update_page(
             page.visibility = visibility
             event_cls = _PUBLISH_EVENT[visibility]
     await repo.save(page)
-    await bus.emit(
+    await events.emit(
         event_cls(actor_id=current_user.id, org_id=str(org_id), slug=page.slug, label=page.title)
     )
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
@@ -240,7 +240,7 @@ async def delete_page(
 ) -> Response:
     page = await _editable_page(repo, slug, membership)
     await repo.delete(page)
-    await bus.emit(
+    await events.emit(
         PageDeleted(actor_id=current_user.id, org_id=str(org_id), slug=slug, label=page.title)
     )
     # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
@@ -275,7 +275,7 @@ async def set_visibility(
     visibility = _parse_visibility(str(body.get("visibility")))
     page.visibility = visibility
     await repo.save(page)
-    await bus.emit(
+    await events.emit(
         _PUBLISH_EVENT[visibility](
             actor_id=current_user.id, org_id=str(org_id), slug=slug, label=page.title
         )

@@ -18,7 +18,7 @@ def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/auth", tags=["auth"])
     # Before the console context mounts: /console/accounts must precede /console/{app}.
     host.app.include_router(accounts_router, prefix="/console/accounts")
-    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_settings(_declare_settings())
     host.reserve("auth", "login", "logout", "signup")
 

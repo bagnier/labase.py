@@ -10,7 +10,8 @@ A structlog processor (:func:`capture_processor`, wired into the chain *before*
 ``format_exc_info`` so the live exception is still present) tees every ``log.exception`` call
 into a bounded in-memory queue. A background :class:`CaptureDrain` — the ``MetricsFlusher``
 lifespan-task shape — pops the queue and hands each exception to whoever tracks errors through
-``bus.collect(ExceptionCaptured)``.
+``events.notify(ExceptionCaptured)`` — the isolated (log-and-skip) fan-out, so a failing tracker
+never worsens the error it tracks.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
@@ -27,7 +28,7 @@ from typing import Any
 
 import structlog
 
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.observability.errors import ExceptionCaptured
 
 log = structlog.get_logger("labase.issues.capture")
@@ -37,7 +38,7 @@ log = structlog.get_logger("labase.issues.capture")
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
 
 # Set while the drain is recording, so the capture path's own logs (``issue.recorded``, and
-# ``bus.collect``'s ``query.handler_failed`` if a tracker handler fails) never re-enter capture.
+# ``events.notify``'s ``event.notify_handler_failed`` if a tracker handler fails) never re-enter.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
 _SCALARS = (str, int, float, bool, type(None))
@@ -119,7 +120,7 @@ class CaptureDrain:
                 break
             token = _capturing.set(True)
             try:
-                await bus.collect(captured)  # log-and-skip semantics: never raises
+                await events.notify(captured)  # log-and-skip semantics: never raises
             finally:
                 _capturing.reset(token)
 

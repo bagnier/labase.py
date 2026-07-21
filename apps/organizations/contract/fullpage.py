@@ -3,7 +3,7 @@
 Registered as a fullpage provider at organizations' ``mount()`` and collected by
 :func:`apps.shared.page.fullpage_context`. For each org, :func:`provide_org_nav` fires
 :class:`OrgNavQuery` — "collect this org's specific nav items" — and any app can answer
-via ``host.events.on(OrgNavQuery, handler)``, returning a list of :class:`OrgNavItem`
+via ``host.contribs.provide(OrgNavQuery, handler)``, returning a list of :class:`OrgNavItem`
 (e.g. ``pages`` returns the org's published pages).
 
 This is the *org-specific* nav. The *global* app links (Todos, Files, …) are not here:
@@ -18,7 +18,7 @@ import structlog
 
 from apps.organizations.contract.collect import OrgMemberQuery
 from apps.organizations.contract.queries import get_user_orgs
-from apps.shared.bus import bus
+from apps.shared.contribs import contribs
 from apps.shared.page import FullpageQuery
 
 log = structlog.get_logger("labase.organizations.fullpage")
@@ -69,7 +69,7 @@ async def provide_org_nav(query: FullpageQuery) -> dict:
         return {"nav": []}
     nav_orgs = []
     for o in orgs:
-        results = await bus.collect(OrgNavQuery(query.session, o.id, o.is_owner))
+        results = await contribs.collect(OrgNavQuery(query.session, o.id, o.is_owner))
         extra_nav = [item for chunk in results for item in chunk]
         nav_orgs.append(
             NavOrg(id=o.id, name=o.name, handle=o.handle, is_owner=o.is_owner, extra_nav=extra_nav)

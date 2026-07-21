@@ -21,7 +21,7 @@ _GROWTH_DAYS = 14
 
 def mount(host: Host) -> None:
     host.app.include_router(router, tags=["profile"])
-    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("profile", provide_profile_handle)
     # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
     host.register_settings(_declare_settings())

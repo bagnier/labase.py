@@ -1,15 +1,20 @@
 """Type-keyed async event bus — the generic pub/sub mechanism every context wires into.
 
-Two primitives:
+Two ways to fan an event out to its handlers, differing only in failure policy:
 
 - ``emit(event)`` — push/command: run all handlers, propagate the first exception (caller
   can compensate), return their results.
-- ``collect(query)`` — pull/query: run all handlers, isolate failures (log + skip), return
-  successful results.
+- ``notify(event)`` — push/signal: run all handlers, isolate failures (log + skip), return
+  the successful results. For facts whose observers must never break the emitter (error
+  capture fans out to trackers this way — a down tracker can't worsen what it tracks).
 
-Runtime publishers/collectors import the process-wide :data:`bus` singleton directly — a
-focused collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires handlers
-onto ``host.events``, which *is* this same ``bus`` in production (``host = Host(events=bus)``),
+Both then durably fan out to the event's :func:`~apps.shared.outbox.on_async` subscribers.
+The *pull* half of collaboration (``collect`` a query's contributions) lives in a separate
+object, :mod:`apps.shared.contribs` — it is a provider registry, not events.
+
+Runtime publishers import the process-wide :data:`events` singleton directly — a focused
+collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires handlers onto
+``host.events``, which *is* this same ``events`` in production (``host = Host(events=events)``),
 so registration and dispatch share one registry.
 """
 
@@ -70,27 +75,34 @@ class EventBus:
         await fan_out_durable(event, session)
         return results
 
-    async def collect(self, query: object) -> list[Any]:
-        """Run every handler for this query type; log and skip failing handlers.
+    async def notify(self, event: object, session: AsyncSession | None = None) -> list[Any]:
+        """Fan an event out to its handlers like :meth:`emit`, but isolate each failure.
 
-        A handler failure is a bug: ``log.exception`` feeds it to the error tracker through the
-        capture processor (``event_type`` names the failing query so it survives into the issue
-        context). The capture drain runs recording under a reentrancy guard, so a tracker
-        handler that itself fails here cannot recurse.
+        Same MRO dispatch and durable fan-out as ``emit``; the only difference is the failure
+        policy — a handler that raises is logged and skipped instead of propagating. This is for
+        facts whose observers must never break the emitter: error capture fans ``ExceptionCaptured``
+        out this way so a failing tracker cannot worsen the error it tracks. The ``log.exception``
+        feeds the failing handler to the tracker through the capture processor; the drain runs it
+        under a reentrancy guard, so a tracker handler that itself fails here cannot recurse.
         """
         results: list[Any] = []
-        for handler in self._subs[type(query)]:
-            try:
-                results.append(await handler(query))
-            except Exception:
-                log.exception(
-                    "query.handler_failed",
-                    handler=repr(handler),
-                    event_type=type(query).__name__,
-                )
+        seen: set[int] = set()
+        for klass in type(event).__mro__:
+            for handler in self._subs.get(klass, ()):
+                if id(handler) not in seen:
+                    seen.add(id(handler))
+                    try:
+                        results.append(await handler(event))
+                    except Exception:
+                        log.exception(
+                            "event.notify_handler_failed",
+                            handler=repr(handler),
+                            event_type=type(event).__name__,
+                        )
+        await fan_out_durable(event, session)
         return results
 
 
-# Process-wide singleton. Runtime code emits/collects on this directly; the production Host
-# is built with ``events=bus`` so its mount-time ``.on(...)`` registrations land here too.
-bus = EventBus()
+# Process-wide singleton. Runtime code emits/notifies on this directly; the production Host
+# is built with ``events=events`` so its mount-time ``.on(...)`` registrations land here too.
+events = EventBus()

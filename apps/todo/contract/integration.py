@@ -38,10 +38,11 @@ def mount(host: Host) -> None:
     settings = host.register_app(
         AppManifest(
             settings=_declare_settings(),
-            on=[(ConsoleOverviewQuery, _console_overview)],
+            provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)],
-            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
+            when_enabled=[(OrganizationCreated, _seed)],
+            provides_when_enabled=[(OverviewQuery, _overview)],
         )
     )
     if not settings.enabled:

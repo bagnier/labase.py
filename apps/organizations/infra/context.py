@@ -8,7 +8,7 @@ from apps.auth.contract.user import AuthenticatedUser
 from apps.organizations.contract.events import OwnershipViolation
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.slug_registry import is_reserved
 
 
@@ -107,7 +107,7 @@ async def get_membership_by_org_id(
 async def _gate_owner(request: Request, membership: Membership) -> Membership:
     if membership.role != OrgRole.owner:
         # ip rides in from the request contextvars; the persister enriches it at write time.
-        await bus.emit(
+        await events.emit(
             OwnershipViolation(
                 actor_id=str(membership.auth_user_id),
                 org_id=str(membership.org_id),

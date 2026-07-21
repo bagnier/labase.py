@@ -10,7 +10,7 @@ from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSess
 from apps.organizations.contract.events import InvitationEmailMismatch, MemberJoined
 from apps.organizations.domain.models import InvitationRead, InvitationStatus
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
@@ -134,7 +134,7 @@ async def accept_invitation(
     if current_user.email.lower() != invitation["email"].lower():
         org = await rls_repo.get(invitation["org_id"])
         org_name = org.name if org else ""
-        await bus.emit(
+        await events.emit(
             InvitationEmailMismatch(
                 actor_id=current_user.id,
                 org_id=str(invitation["org_id"]),
@@ -177,5 +177,5 @@ async def accept_invitation(
         log.exception("invitation.accept_error")
         raise
 
-    await bus.emit(MemberJoined(actor_id=current_user.id, org_id=str(invitation["org_id"])))
+    await events.emit(MemberJoined(actor_id=current_user.id, org_id=str(invitation["org_id"])))
     return await _dashboard_redirect(request, rls_repo, invitation["org_id"])

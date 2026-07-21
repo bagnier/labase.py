@@ -45,7 +45,8 @@ from apps.organizations.domain.service import ensure_no_pending_invitation, ensu
 from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared import clock
-from apps.shared.bus import bus
+from apps.shared.bus import events
+from apps.shared.contribs import contribs
 from apps.shared.email import enqueue_email
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -130,7 +131,7 @@ async def _emit_last_owner_violation(
     target_user_id: str | None = None,
 ) -> None:
     # ip rides in from the request contextvars; the persister enriches it at write time.
-    await bus.emit(
+    await events.emit(
         LastOwnerViolationBlocked(
             actor_id=current_user.id, org_id=str(org_id), target_user_id=target_user_id
         )
@@ -180,7 +181,7 @@ async def create_organization(
     # org back on its own admin session — they must see a committed row (session has
     # expire_on_commit=False, so `org` stays usable for the response below).
     await repo.session.commit()
-    await bus.emit(
+    await events.emit(
         OrganizationCreated(
             actor_id=current_user.id, org_id=str(org.id), entity_id=str(org.id), label=name
         )
@@ -289,7 +290,7 @@ async def org_dashboard(
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle)
     ctx["overviews"] = sorted(
-        await bus.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
+        await contribs.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
     )
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
@@ -336,7 +337,7 @@ async def org_dashboard_overviews(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> JSONResponse:
-    overviews = sorted(await bus.collect(OverviewQuery(session, org_id)), key=lambda o: o.key)
+    overviews = sorted(await contribs.collect(OverviewQuery(session, org_id)), key=lambda o: o.key)
     return JSONResponse([{"key": o.key, "title": o.title, "data": o.data} for o in overviews])
 
 
@@ -349,7 +350,7 @@ async def _settings_context(
     are always defined."""
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle, role=role)
     ctx["settings_sections"] = sorted(
-        await bus.collect(OrgSettingsSectionQuery(session, org.id, role == "owner")),
+        await contribs.collect(OrgSettingsSectionQuery(session, org.id, role == "owner")),
         key=lambda s: s.order,
     )
     ctx["members"] = await _build_members(repo, org.id)
@@ -447,7 +448,7 @@ async def rename_organization(
             request, "organizations/settings.html", ctx, status_code=422
         )
     await repo.rename(org, name)
-    await bus.emit(
+    await events.emit(
         OrganizationRenamed(
             actor_id=current_user.id, org_id=str(org_id), entity_id=str(org_id), label=name
         )
@@ -490,7 +491,7 @@ async def update_org_handle(
         response.headers["HX-Push-Url"] = "false"
         return response
     await repo.update_handle(org, handle)
-    await bus.emit(
+    await events.emit(
         OrgHandleChanged(
             actor_id=current_user.id, org_id=str(org_id), entity_id=str(org_id), label=handle
         )
@@ -555,7 +556,7 @@ async def leave_organization(
             status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
-    await bus.emit(MemberLeft(actor_id=current_user.id, org_id=str(org_id)))
+    await events.emit(MemberLeft(actor_id=current_user.id, org_id=str(org_id)))
     return delete_response(request, htmx_redirect_url="/profile")
 
 
@@ -588,7 +589,7 @@ async def update_member_role(
     updated = await repo.update_member_role(org_id, user_id, new_role)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    await bus.emit(
+    await events.emit(
         MemberRoleChanged(
             actor_id=current_user.id,
             org_id=str(org_id),
@@ -640,7 +641,7 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    await bus.emit(
+    await events.emit(
         MemberRemoved(actor_id=current_user.id, org_id=str(org_id), target_user_id=str(user_id))
     )
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
@@ -696,7 +697,7 @@ async def create_invitation(
                 role=OrgRole.member,
                 invited_by=uuid.UUID(current_user.id),
             )
-            await bus.emit(
+            await events.emit(
                 InvitationSent(actor_id=current_user.id, org_id=str(org_id), target_email=email)
             )
 
@@ -759,7 +760,7 @@ async def revoke_invitation(
 ) -> Response:
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
-    await bus.emit(
+    await events.emit(
         InvitationRevoked(
             actor_id=current_user.id, org_id=str(org_id), invitation_id=str(invitation_id)
         )

@@ -27,7 +27,7 @@ from apps.organizations.contract.current import (
     Membership,
     OrgRole,
 )
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.clock import now
 from apps.shared.http import (
     delete_response,
@@ -163,7 +163,7 @@ async def upload_file(
         size_bytes=len(content),
         uploader_email=current_user.email,
     )
-    await bus.emit(
+    await events.emit(
         FileUploaded(
             actor_id=current_user.id,
             org_id=str(org_id),
@@ -222,7 +222,7 @@ async def delete_file(
     storage = user_storage_client(current_user.access_token)
     await storage.from_(bucket()).remove([org_file.storage_path])
     await repo.delete(org_file)
-    await bus.emit(
+    await events.emit(
         FileDeleted(
             actor_id=current_user.id,
             org_id=str(org_id),
@@ -269,7 +269,7 @@ async def rename_file(
 
     old_filename = org_file.filename
     await repo.rename(org_file, safe_name, new_path)
-    await bus.emit(
+    await events.emit(
         FileRenamed(
             actor_id=current_user.id,
             org_id=str(org_id),
@@ -294,7 +294,7 @@ async def generate_share_link(
 ):
     org_file = or_404(await repo.get(file_id))
     token = await repo.add_share_token(file_id)
-    await bus.emit(
+    await events.emit(
         FileShareLinkCreated(
             actor_id=current_user.id,
             org_id=str(org_id),
@@ -319,7 +319,7 @@ async def public_share_download(
 ):
     async def reject(reason: str, code: int, detail: str) -> NoReturn:
         # Anonymous attempt: no actor/org, ip rides in from the request contextvars.
-        await bus.emit(FileShareLinkRejected(token=str(token), reason=reason))
+        await events.emit(FileShareLinkRejected(token=str(token), reason=reason))
         raise HTTPException(code, detail)
 
     repo = FileShareRepository(admin_session)
@@ -333,7 +333,7 @@ async def public_share_download(
     if org_file is None:
         await reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
 
-    await bus.emit(
+    await events.emit(
         FileShareDownloaded(
             org_id=str(org_file.org_id), entity_id=str(org_file.id), token=str(token)
         )

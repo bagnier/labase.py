@@ -1,9 +1,9 @@
 """Org settings sections — the settings page's *pull* collaboration surface.
 
 Org-scoped apps contribute one :class:`OrgSettingsSection` each to the org settings page by
-answering the :class:`OrgSettingsSectionQuery` query event (``host.events.on(
+answering the :class:`OrgSettingsSectionQuery` (``host.contribs.provide(
 OrgSettingsSectionQuery, provider)`` at mount). The settings page gathers them at runtime
-with ``bus.collect(OrgSettingsSectionQuery(...))`` — a failing provider is isolated, not
+with ``contribs.collect(OrgSettingsSectionQuery(...))`` — a failing provider is isolated, not
 fatal. Providers stay ignorant of one another and of the settings page.
 
 Each section carries its own Jinja partial (``template``, embedded on the settings page via

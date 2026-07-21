@@ -1,10 +1,10 @@
-"""Server-wide overviews — the console's *pull* surface, carried by the event bus.
+"""Server-wide overviews — the console's *pull* surface, carried by the contribs registry.
 
 Mirrors :mod:`apps.organizations.contract.overviews` but **server-wide**: there is no ``org_id``,
 the session is the BYPASSRLS admin session, and each app aggregates across *every* organisation.
-Apps answer :class:`ConsoleOverviewQuery` via ``host.events.on(ConsoleOverviewQuery, provider)``
-at mount; the console gathers them at runtime with ``bus.collect`` (a failing provider is
-isolated, not fatal).
+Apps answer :class:`ConsoleOverviewQuery` via ``host.contribs.provide(ConsoleOverviewQuery,
+provider)`` at mount; the console gathers them at runtime with ``contribs.collect`` (a failing
+provider is isolated, not fatal).
 """
 
 from dataclasses import dataclass, field

@@ -20,7 +20,7 @@ from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.host import Host, MountPhase, NavItem
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
@@ -40,7 +40,7 @@ def mount(host: Host) -> None:
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
     host.events.on(UserDeleted, _forget_user)
-    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
@@ -114,7 +114,7 @@ async def _create_org(event: UserCreated) -> None:
         )
         await session.commit()
     # Committed above so the seeders (each on its own admin session) can read the org back.
-    await bus.emit(
+    await events.emit(
         OrganizationCreated(
             actor_id=str(user_id),
             org_id=str(org.id),

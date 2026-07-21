@@ -20,8 +20,9 @@ from apps.auth.contract.events import ForbiddenAdminAccess
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.config import get_technical_settings
+from apps.shared.contribs import contribs
 from apps.shared.persistence.database import get_admin_session
 
 log = structlog.get_logger("labase.auth.security")
@@ -34,8 +35,8 @@ def _bearer_token(authorization: str | None) -> str | None:
 
 
 async def _resolve_api_key(token: str, session: AsyncSession) -> AuthenticatedUser:
-    """Route an `lbk_...` bearer token to whoever answers ApiKeyQuery on the bus."""
-    results = await bus.collect(ApiKeyQuery(token, session))
+    """Route an `lbk_...` bearer token to whoever contributes an answer to ApiKeyQuery."""
+    results = await contribs.collect(ApiKeyQuery(token, session))
     principals = [p for p in results if p is not None]
     if not principals:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
@@ -159,7 +160,7 @@ async def get_current_admin(
     plain 404 — a 403 would confirm the protected surface exists.
     """
     if not user.is_admin:
-        await bus.emit(ForbiddenAdminAccess(actor_id=user.id, path=request.url.path))
+        await events.emit(ForbiddenAdminAccess(actor_id=user.id, path=request.url.path))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return user
 

@@ -21,7 +21,7 @@ from apps.auth.contract.events import (
     AccountEnabled,
     UserDeleted,
 )
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.http import wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
@@ -118,7 +118,7 @@ async def disable_user(request: Request, user_id: str, current_user: CurrentAdmi
     _self_guard(current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
-    await bus.emit(AccountDisabled(actor_id=current_user.id, target_user_id=user_id))
+    await events.emit(AccountDisabled(actor_id=current_user.id, target_user_id=user_id))
     return _done(request, "Account disabled.")
 
 
@@ -127,7 +127,7 @@ async def enable_user(request: Request, user_id: str, current_user: CurrentAdmin
     _ensure_enabled()
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": "none"})
-    await bus.emit(AccountEnabled(actor_id=current_user.id, target_user_id=user_id))
+    await events.emit(AccountEnabled(actor_id=current_user.id, target_user_id=user_id))
     return _done(request, "Account enabled.")
 
 
@@ -140,8 +140,8 @@ async def delete_user(
 ) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
-    await bus.emit(AccountDeletedByAdmin(actor_id=current_user.id, target_user_id=user_id))
-    await bus.emit(UserDeleted(user_id=user_id, session=admin_session))
+    await events.emit(AccountDeletedByAdmin(actor_id=current_user.id, target_user_id=user_id))
+    await events.emit(UserDeleted(user_id=user_id, session=admin_session))
     await disable_account(user_id)
     await admin_session.commit()
     return _done(request, "Account deleted.")

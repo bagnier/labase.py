@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 
-from apps.shared.bus import EventBus, bus
+from apps.shared.bus import EventBus, events
+from apps.shared.contribs import Contribs, contribs
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,
@@ -26,6 +27,10 @@ from apps.shared.slug_registry import reserve as _reserve_slugs
 
 if TYPE_CHECKING:
     from apps.shared.page import FullpageQuery
+
+# A sequence of ``(type, async handler)`` pairs — event subscriptions (``on``/``when_enabled``)
+# or contribution providers (``provides``/``provides_when_enabled``) an app declares at mount.
+_Registrations = Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]]
 
 
 class MountPhase(IntEnum):
@@ -48,16 +53,19 @@ class AppManifest:
     :meth:`Host.register_app` walks it in the one correct order, so each app stops
     re-spelling the mount ceremony — including the trap that the console tile must
     register *before* the enabled gate (a disabled app still shows its tile, which is
-    how an admin re-enables it). ``on`` handlers live even when the app is disabled;
-    everything else only exists when it is enabled. Apps with needs beyond this shape
+    how an admin re-enables it). ``on`` event handlers and ``provides`` contributions live
+    even when the app is disabled (the console tile is such a contribution); everything else
+    only exists when it is enabled. Apps with needs beyond this shape
     (startup hooks, fullpage providers, open lists) keep an explicit ``mount()``.
     """
 
     settings: SettingsDeclaration
-    on: Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]] = ()  # alive when disabled
+    on: _Registrations = ()  # event handlers, alive even when the app is disabled
+    provides: _Registrations = ()  # contribution providers, alive even when the app is disabled
     routers: Sequence[tuple[Any, str]] = ()  # (APIRouter, prefix)
     nav: Sequence[NavItem] = ()
-    when_enabled: Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]] = ()
+    when_enabled: _Registrations = ()  # event handlers, registered only when the app is enabled
+    provides_when_enabled: _Registrations = ()  # contribution providers, only when enabled
     reserve: Sequence[str] = ()  # top-level slugs the app routes (see Host.reserve)
 
 
@@ -94,6 +102,7 @@ class FullpageProvider:
 class Host:
     app: FastAPI = field(default_factory=lambda: FastAPI(title="labase"))
     events: EventBus = field(default_factory=EventBus)
+    contribs: Contribs = field(default_factory=Contribs)
     nav_items: list[NavItem] = field(default_factory=list)
     fullpage_providers: list[FullpageProvider] = field(default_factory=list)
     # The live settings handles of this composition, by declared group name (an app may
@@ -123,6 +132,8 @@ class Host:
         settings handle, like :meth:`register_settings`."""
         for event_type, handler in manifest.on:
             self.events.on(event_type, handler)
+        for query_type, provider in manifest.provides:
+            self.contribs.provide(query_type, provider)
         settings = self.register_settings(manifest.settings)
         self.reserve(*manifest.reserve)
         if not settings.enabled:
@@ -133,6 +144,8 @@ class Host:
             self.register_nav(item)
         for event_type, handler in manifest.when_enabled:
             self.events.on(event_type, handler)
+        for query_type, provider in manifest.provides_when_enabled:
+            self.contribs.provide(query_type, provider)
         return settings
 
     def register_nav(self, item: NavItem) -> None:
@@ -172,7 +185,8 @@ class Host:
         return handle.declaration if handle is not None else None
 
 
-# Production singleton: share the process-wide event bus so runtime ``bus.emit/collect`` and
-# these mount-time ``host.events.on(...)`` registrations hit one registry. A bare ``Host()``
-# (e.g. in a test) still gets its own isolated bus via the field default.
-host = Host(events=bus)
+# Production singleton: share the process-wide registries so runtime ``events.emit`` /
+# ``contribs.collect`` and these mount-time ``host.events.on(...)`` / ``host.contribs.provide(...)``
+# registrations hit one registry each. A bare ``Host()`` (e.g. in a test) still gets its own
+# isolated bus and contribs via the field defaults.
+host = Host(events=events, contribs=contribs)

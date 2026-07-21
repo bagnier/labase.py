@@ -8,7 +8,7 @@ from apps.issues.contract.events import IssueStatusChanged
 from apps.issues.domain.models import ErrorEventRead, ErrorGroup, ErrorGroupRead, IssueStatus
 from apps.issues.infra.repository import ErrorGroupRepository
 from apps.shared import clock
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.charts import last_days, sparkline
 from apps.shared.config import get_technical_settings
 from apps.shared.http import parse_body, wants_json
@@ -109,7 +109,7 @@ async def set_issue_status(
     group = await _group_or_404(repo, group_id)
     await repo.set_status(group, new_status, get_technical_settings().app_version)
     await session.commit()
-    await bus.emit(
+    await events.emit(
         IssueStatusChanged(
             actor_id=current_user.id,
             entity_id=str(group_id),

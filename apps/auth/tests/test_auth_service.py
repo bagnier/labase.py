@@ -125,7 +125,7 @@ async def test_register_user_compensates_when_org_creation_fails():
     with (
         patch("apps.auth.application.register", AsyncMock(return_value=fake_result)),
         patch(
-            "apps.auth.application.bus.emit",
+            "apps.auth.application.events.emit",
             AsyncMock(side_effect=RuntimeError("db down")),
         ),
         patch("apps.auth.application.get_admin_supabase", return_value=fake_admin),

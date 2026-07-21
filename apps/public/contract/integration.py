@@ -11,7 +11,7 @@ PHASE = MountPhase.PUBLIC
 def mount(host: Host) -> None:
     host.register_settings(_declare_settings())
     host.app.include_router(router)
-    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _console_overview)
 
 
 def _declare_settings() -> SettingsDeclaration:

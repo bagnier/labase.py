@@ -20,7 +20,7 @@ from apps.issues.infra.repository import (
     record_event,
 )
 from apps.issues.infra.router import router
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.host import Host, MountPhase
@@ -48,7 +48,7 @@ CAPTURE_DRAIN_SECONDS = 1.0
 
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
-    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     settings = host.register_settings(_declare_settings())
     if not settings.enabled:
         return
@@ -103,9 +103,9 @@ async def _record(event: ExceptionCaptured) -> None:
     # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
     # bus here is unconditional — no mount-state guard needed.
     if recorded.opened:
-        await bus.emit(IssueOpened(group_id=group_id, entity_id=str(group_id), title=title))
+        await events.emit(IssueOpened(group_id=group_id, entity_id=str(group_id), title=title))
     if recorded.regressed:
-        await bus.emit(
+        await events.emit(
             IssueRegressed(
                 group_id=group_id,
                 entity_id=str(group_id),

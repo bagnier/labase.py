@@ -38,9 +38,9 @@ def mount(host: Host) -> None:
     host.events.on(UserCreated, _bootstrap_first_admin)
 
     host.register_settings(_declare_appearance_settings())
-    host.events.on(ConsoleOverviewQuery, appearance_overview)
+    host.contribs.provide(ConsoleOverviewQuery, appearance_overview)
 
-    host.events.on(ConsoleOverviewQuery, technical_overview)
+    host.contribs.provide(ConsoleOverviewQuery, technical_overview)
 
     # With N instances only the one handling the console POST reloads in-process;
     # the others converge within one TTL through this per-process re-read loop.

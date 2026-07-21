@@ -11,7 +11,7 @@ from apps.api_keys.infra.repository import ApiKeyRepository
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOwnerMembership
 from apps.shared import clock
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 
@@ -76,7 +76,7 @@ async def create_key(
             key_hash=material.key_hash,
         )
     )
-    await bus.emit(
+    await events.emit(
         ApiKeyIssued(
             actor_id=current_user.id, org_id=str(org_id), entity_id=str(key.id), label=name
         )
@@ -100,7 +100,7 @@ async def revoke_key(
     if key.revoked_at is None:
         key.revoked_at = clock.now()
         await repo.save(key)
-        await bus.emit(
+        await events.emit(
             ApiKeyRevoked(
                 actor_id=current_user.id,
                 org_id=str(org_id),

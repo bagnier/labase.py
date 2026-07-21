@@ -41,7 +41,7 @@ MINUTE_RETENTION_DAYS = 7
 
 def mount(host: Host) -> None:
     # Console presence is kept even when disabled, so an admin can see and re-enable the app.
-    host.events.on(ConsoleOverviewQuery, _console_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     settings = host.register_settings(_declare_settings())
     host.reserve("metrics")
     if not settings.enabled:

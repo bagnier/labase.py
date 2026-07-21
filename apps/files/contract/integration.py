@@ -38,10 +38,11 @@ def mount(host: Host) -> None:
     host.register_app(
         AppManifest(
             settings=_declare_settings(),
-            on=[(ConsoleOverviewQuery, _console_overview)],
+            provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(public_router, ""), (router, ORG_PREFIX)],
             nav=[NavItem("Files", "folder", "files", "/files", order=50)],
-            when_enabled=[(OverviewQuery, _overview), (OrganizationCreated, _seed)],
+            when_enabled=[(OrganizationCreated, _seed)],
+            provides_when_enabled=[(OverviewQuery, _overview)],
             reserve=("files",),  # even when disabled, to keep the slug from being squatted
         )
     )

@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.http import (
     delete_response,
     or_404,
@@ -91,7 +91,7 @@ async def add_todo(
 
     title = await parse_field(request, "title")
     todo = await repo.add(uuid.UUID(current_user.id), title)
-    await bus.emit(
+    await events.emit(
         TodoCreated(
             actor_id=current_user.id, org_id=str(org_id), entity_id=str(todo.id), label=title
         )
@@ -124,9 +124,9 @@ async def patch_todo(
     scope = {"actor_id": current_user.id, "org_id": str(org_id), "entity_id": str(todo_id)}
     if done is not None:
         ticked = TodoTicked if done else TodoUnticked
-        await bus.emit(ticked(label=todo.title, **scope))
+        await events.emit(ticked(label=todo.title, **scope))
     if title is not None:
-        await bus.emit(TodoEdited(label=title, **scope))
+        await events.emit(TodoEdited(label=title, **scope))
     return await _render(request, session, current_user, repo, org, settings)
 
 
@@ -144,7 +144,7 @@ async def delete_todo(
     todo = await repo.get(todo_id)
     if todo:
         await repo.delete(todo)
-        await bus.emit(
+        await events.emit(
             TodoDeleted(
                 actor_id=current_user.id,
                 org_id=str(org_id),

@@ -13,7 +13,7 @@ from apps.calendar.domain.models import CalendarEvent, CalendarEventRead, format
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
-from apps.shared.bus import bus
+from apps.shared.bus import events
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
@@ -294,7 +294,7 @@ async def create_event(
         location=str(body.get("location", "")),
         description=str(body.get("description", "")),
     )
-    await bus.emit(
+    await events.emit(
         CalendarCreated(
             actor_id=current_user.id, org_id=str(org_id), entity_id=str(event.id), label=title
         )
@@ -394,7 +394,7 @@ async def update_event(
     if body.get("description") is not None:
         event.description = str(body["description"])
     await repo.save(event)
-    await bus.emit(
+    await events.emit(
         CalendarUpdated(
             actor_id=current_user.id,
             org_id=str(org_id),
@@ -419,7 +419,7 @@ async def delete_event(
     event = await repo.get(event_id)
     if event is not None:
         await repo.delete(event)
-        await bus.emit(
+        await events.emit(
             CalendarDeleted(
                 actor_id=current_user.id,
                 org_id=str(org_id),

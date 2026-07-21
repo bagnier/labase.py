@@ -46,7 +46,7 @@ def mount(host: Host) -> None:
     # screen that reads the logs.
     apply_log_level(str(settings.log_level))
     host.events.on(SettingsChanged, _reload_level)
-    host.events.on(ConsoleOverviewQuery, _overview)
+    host.contribs.provide(ConsoleOverviewQuery, _overview)
     host.app.include_router(router, prefix="/console/logs")
 
 
