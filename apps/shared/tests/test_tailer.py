@@ -8,8 +8,8 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from apps.shared import outbox
+from apps.shared.business_events import insert_business_event
 from apps.shared.events import BusinessEvent
-from apps.shared.observability.business_events import insert_business_event
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
 from apps.shared.tailer import EventTailer

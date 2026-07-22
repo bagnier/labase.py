@@ -1,7 +1,7 @@
 """The async event tailer — durable, at-least-once fan-out of persisted business events.
 
 ``emit`` writes a ``BusinessEvent`` to the ``business_events`` log inside the request's transaction
-(:func:`~apps.shared.observability.business_events.persist_fact`). This tailer reads that log and,
+(:func:`~apps.shared.business_events.persist_fact`). This tailer reads that log and,
 per new fact, enqueues one task-queue row per registered async consumer (:func:`~apps.shared.outbox`
 ``on_async``). The producer never knows its consumers and never waits for them.
 

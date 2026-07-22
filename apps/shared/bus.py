@@ -25,8 +25,8 @@ from typing import Any, TypeVar
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.business_events import persist_fact
 from apps.shared.events import BusinessEvent
-from apps.shared.observability.business_events import persist_fact
 from apps.shared.persistence.uow import current_session
 
 log = structlog.get_logger("labase.shared.bus")

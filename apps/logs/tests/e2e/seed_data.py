@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import text
 
 from apps.shared import clock
-from apps.shared.observability.business_events import BusinessEventLog
+from apps.shared.business_events import BusinessEventLog
 
 # Deterministic ids so a seed step and a filter step agree on "Acme" / "alice@…" without needing
 # a real org/user row (the timeline filters by the raw id it stored).

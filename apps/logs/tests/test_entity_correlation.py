@@ -1,6 +1,6 @@
 """Correlating the unified log by the concerned entity — every event of one todo/page/file."""
 
-from apps.shared.observability.business_events import insert_business_event
+from apps.shared.business_events import insert_business_event
 
 _ADMIN = "entity-corr@example.com"
 

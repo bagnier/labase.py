@@ -10,8 +10,8 @@ from dataclasses import dataclass
 import pytest
 
 from apps.shared.bus import EventBus
+from apps.shared.business_events import _event_columns
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
-from apps.shared.observability.business_events import _event_columns
 
 
 class WidgetEvent(BusinessEvent):

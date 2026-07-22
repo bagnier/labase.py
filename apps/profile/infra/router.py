@@ -58,10 +58,7 @@ from apps.profile.domain.models import ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
 from apps.shared.bus import events
-from apps.shared.config import get_technical_settings
-from apps.shared.http import parse_body, wants_json
-from apps.shared.http.templates import templates
-from apps.shared.observability.business_events import (
+from apps.shared.business_events import (
     BusinessEventRow,
     activity_entries,
     activity_stats,
@@ -70,6 +67,9 @@ from apps.shared.observability.business_events import (
     heatmap_calendar,
     search_business_events,
 )
+from apps.shared.config import get_technical_settings
+from apps.shared.http import parse_body, wants_json
+from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
