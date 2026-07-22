@@ -16,7 +16,7 @@ Presentation helpers (:func:`activity_entries`) render a scoped, payload-free ti
 import asyncio
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -28,7 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from structlog.contextvars import get_contextvars
 
 from apps.shared import clock
-from apps.shared.events.types import BusinessEvent, _loggable_payload
+from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.base import Base
 from apps.shared.persistence.database import admin_session_factory
 
@@ -197,6 +197,26 @@ async def insert_business_event(
             await own.commit()
     except Exception:
         log.warning("business_event.write_failed", kind=kind, user_id=user_id)
+
+
+# Field-name substrings that must never reach the persisted payload verbatim (e.g.
+# ``UserCreated.access_token``). Matched case-insensitively against each field's name.
+_REDACT_SUBSTRINGS = ("token", "password", "secret")
+
+
+def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
+    """The event's instance fields as a plain dict, with secret-named fields redacted — one place
+    decides what of an event is safe to serialize into the trail's ``payload``."""
+    if not is_dataclass(event) or isinstance(event, type):
+        return {}
+    payload: dict[str, Any] = {}
+    for f in fields(event):
+        value = getattr(event, f.name)
+        if any(s in f.name.lower() for s in _REDACT_SUBSTRINGS):
+            payload[f.name] = "***" if value is not None else None
+        else:
+            payload[f.name] = value
+    return payload
 
 
 def _event_columns(event: BusinessEvent) -> dict[str, Any]:

@@ -3,8 +3,8 @@
 A settings edit is a "run everywhere" event: every process must re-point its in-memory
 ``AppSettings`` handles. ``emit(SettingsChanged, session)`` fires a NOTIFY on the ``spread`` channel
 (:data:`~apps.shared.events.bus.SPREAD_CHANNEL`); each process runs this listener, which — woken by
-the NOTIFY, or by its interval as a durability net — re-reads ``app_settings`` and hands the fresh
-values to the bus's ``spread`` handlers via :meth:`~apps.shared.events.bus.EventBus.deliver_spread`.
+the NOTIFY, or by its interval as a durability net — re-reads ``app_settings`` and applies the bus's
+``spread`` handlers (pulled via :meth:`~apps.shared.events.bus.EventBus.spread_handlers`).
 
 The emitter is just another listener: it applies via its own LISTEN, once. Re-applying every app's
 current values on each wake is deliberate and safe — ``spread`` handlers are idempotent (a reload is
@@ -59,10 +59,12 @@ class SettingsRefresher:
         return grouped
 
     async def tick(self) -> None:
-        """Re-read every app's settings and hand them to the bus's spread handlers. Idempotent —
+        """Re-read every app's settings and apply the bus's spread handlers. Idempotent —
         applying unchanged values is a no-op, so no snapshot/diff is needed."""
         for app, values in (await self._read_all()).items():
-            await self._bus.deliver_spread(SettingsChanged(app, values))
+            event = SettingsChanged(app_name=app, values=values)
+            for handler in self._bus.spread_handlers(event):
+                await handler(event)
 
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:

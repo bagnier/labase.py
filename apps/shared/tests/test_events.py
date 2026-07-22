@@ -81,27 +81,29 @@ async def test_base_subscriber_receives_every_subclass_once():
 
 @pytest.mark.asyncio
 async def test_emit_broadcasts_spread_events_instead_of_running_them():
-    # spread registers a "run everywhere" handler (config propagation, not a fact). emit does NOT
-    # run it — it only broadcasts a NOTIFY; the SpreadListener applies it via deliver_spread. With
-    # no session in scope the broadcast is a best-effort skip, so emit stays inert here.
+    # spread registers a "run everywhere" handler (config propagation). emit does NOT run it in
+    # process — it only broadcasts a NOTIFY; the SpreadListener applies it via the handlers it pulls
+    # from spread_handlers. With no session in scope the broadcast is a best-effort skip, so emit
+    # stays inert here.
     bus = EventBus()
     seen: list[object] = []
 
-    @dataclass(frozen=True)
-    class ConfigChanged:  # a plain signal, not a BusinessEvent
-        app: str
+    @dataclass(frozen=True, kw_only=True)
+    class ConfigChanged(BusinessEvent):
+        kind = "config.changed"
 
     async def reload(event: ConfigChanged) -> None:
         seen.append(event)
 
     bus.spread(ConfigChanged, reload)
-    event = ConfigChanged(app="files")
+    event = ConfigChanged()
 
     await bus.emit(event)
     assert seen == []  # emit broadcasts, it does not run spread handlers in-process
 
-    await bus.deliver_spread(event)
-    assert seen == [event]  # what the SpreadListener calls once woken by the NOTIFY
+    for handler in bus.spread_handlers(event):
+        await handler(event)
+    assert seen == [event]  # what the SpreadListener runs once woken by the NOTIFY
 
 
 def test_event_columns_lift_scoping_and_carry_metadata():

@@ -11,7 +11,6 @@ from apps.console.contract.events import (
     LastAdminViolationBlocked,
     OrgOverrideRemoved,
     OrgOverrideSet,
-    ServerSettingChanged,
 )
 from apps.console.contract.overviews import SECTIONS, ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import admins, service, technical
@@ -434,15 +433,17 @@ async def update_setting(
 
     repo = AppSettingRepository(session)
     await repo.set(app, key, stored)
-    await session.commit()
-
     values = await repo.values(app)
-    # SettingsChanged broadcasts a spread NOTIFY on this session (delivered on commit) so every
-    # instance re-reads and reloads; ServerSettingChanged is the trail record of who changed what.
-    await events.emit(SettingsChanged(app, values), session=session)
+    # One fact: SettingsChanged is persisted as the audit record (who changed what) AND fires the
+    # spread NOTIFY (delivered on commit) so every instance re-reads and reloads — atomic with the
+    # write, all on this session, committed together.
     await events.emit(
-        ServerSettingChanged(actor_id=current_user.id, app=app, key=key, value=stored)
+        SettingsChanged(
+            actor_id=current_user.id, app_name=app, key=key, value=stored, values=values
+        ),
+        session=session,
     )
+    await session.commit()
     settings = service.settings_view(group, values)
     if wants_json(request):
         return JSONResponse({"app": app, "settings": settings})

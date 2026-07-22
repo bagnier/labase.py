@@ -26,11 +26,12 @@ Supabase link) lives in memory — re-declared on every ``mount()``; only the va
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict
+from typing import Any, ClassVar, Literal, TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.events import BusinessEvent
 from apps.shared.persistence.settings_store import (
     BOOL_TRUE,
     ENABLED_KEY,
@@ -165,16 +166,26 @@ class SettingsView:
         return _lookup(self.values, name)
 
 
-@dataclass(frozen=True)
-class SettingsChanged:
-    """A setting of ``app`` was edited in the console; carries the full fresh value set.
+@dataclass(frozen=True, kw_only=True)
+class SettingsChanged(BusinessEvent):
+    """A server-wide setting of ``app_name`` was edited in the console.
 
-    A generic event: the console emits it knowing nothing of what the keys mean. Each app
-    subscribes, filters on its own id, and reinterprets its own values.
+    One fact, two faces: it is **persisted** on the trail as the audit record of who changed what
+    (``actor_id`` + ``key``/``value``, the platform peer of the per-org override events), *and*
+    it drives cross-instance **propagation** — it carries the full fresh ``values`` so each app's
+    :meth:`AppSettings.reload` (subscribed via ``spread``) re-points its in-memory handle. Generic:
+    the console emits it knowing nothing of what the keys mean; each app filters on its own id.
+    Server-wide, so ``org_id`` stays ``None``.
     """
 
+    kind: ClassVar[str] = "settings.server_changed"
+    entity: ClassVar[str] = "settings"
+    icon: ClassVar[str] = "gear"
+
     app_name: str
-    values: dict[str, str]
+    key: str | None = None
+    value: str | None = None
+    values: dict[str, str] = field(default_factory=dict)
 
 
 class AppSettings:

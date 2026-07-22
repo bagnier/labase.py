@@ -34,29 +34,27 @@ async def _noop(event: SettingsChanged) -> None:
 
 @pytest.mark.asyncio
 async def test_tick_delivers_each_apps_fresh_settings_to_the_bus():
-    # On a spread NOTIFY (or its interval net), the refresher re-reads every app and hands the fresh
-    # values to the bus's spread handlers via deliver_spread — no snapshot/diff, since a reload is
-    # idempotent so re-applying unchanged values is a no-op.
+    # On a spread NOTIFY (or its interval net), the refresher re-reads every app and applies the
+    # bus's spread handlers — no snapshot/diff, since a reload is idempotent so re-applying
+    # unchanged values is a no-op.
     host = Host()
     delivered: list[SettingsChanged] = []
 
     async def capture(event: SettingsChanged) -> None:
         delivered.append(event)
 
+    host.events.spread(SettingsChanged, capture)
     refresher = SettingsRefresher(host.events, interval_seconds=30)
-    with (
-        patch.object(host.events, "deliver_spread", capture),
-        patch.object(
-            refresher,
-            "_read_all",
-            AsyncMock(return_value={"files": {"max_upload_mb": "50"}, "todo": {"enabled": "true"}}),
-        ),
+    with patch.object(
+        refresher,
+        "_read_all",
+        AsyncMock(return_value={"files": {"max_upload_mb": "50"}, "todo": {"enabled": "true"}}),
     ):
         await refresher.tick()
 
     assert delivered == [
-        SettingsChanged("files", {"max_upload_mb": "50"}),
-        SettingsChanged("todo", {"enabled": "true"}),
+        SettingsChanged(app_name="files", values={"max_upload_mb": "50"}),
+        SettingsChanged(app_name="todo", values={"enabled": "true"}),
     ]
 
 
@@ -72,7 +70,7 @@ async def test_a_spread_notify_wakes_a_listening_refresher(fresh_engines):
     try:
         refresher._wake.clear()
         async with db.admin_session_factory()() as session:
-            await bus.emit(SettingsChanged("files", {}), session=session)
+            await bus.emit(SettingsChanged(app_name="files", values={}), session=session)
             await session.commit()  # a NOTIFY is delivered to LISTENers on commit
         await asyncio.wait_for(refresher._wake.wait(), timeout=5)
         assert refresher._wake.is_set()
