@@ -8,8 +8,9 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from apps.shared.events import BusinessEvent, outbox
+from apps.shared.events.bus import EventBus
+from apps.shared.events.listener import EventListener
 from apps.shared.events.store import insert_business_event
-from apps.shared.events.tailer import EventTailer
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
 
@@ -18,6 +19,12 @@ from apps.shared.queue import TaskWorker, _handlers
 class _TailEvent(BusinessEvent):
     kind = "test_tailer.happened"
     label: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class _SpreadEvent(BusinessEvent):
+    kind = "test_tailer.spread"
+    value: str | None = None
 
 
 def _clear_engine_caches() -> None:
@@ -93,7 +100,7 @@ async def test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatch
     outbox.on_async(_TailEvent, "search", _noop, as_actor=False)
     await _seed(str(uuid.uuid4()))
 
-    dispatched = await EventTailer(0).tick()
+    dispatched = await EventListener(0).tick()
 
     assert dispatched == 1
     assert await _topics() == [
@@ -115,7 +122,7 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
     await _seed(actor, label="Ship it", entity_id="e7")
 
     factory = db.admin_session_factory()
-    await EventTailer(0, session_factory=factory).tick()
+    await EventListener(0, session_factory=factory).tick()
     worker = TaskWorker(0, session_factory=factory)
     while await worker.tick():
         pass
@@ -139,7 +146,7 @@ async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
         )
         await s.commit()
 
-    assert await EventTailer(0).tick() == 1
+    assert await EventListener(0).tick() == 1
     assert await _topics() == []
     assert await _undispatched("test_tailer.legacy") == 0
 
@@ -167,10 +174,39 @@ def test_org_seed_apps_register_durable_consumers_of_organization_created():
 
 
 @pytest.mark.asyncio
+async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
+    # A spread fact is replayed to this process's spread handler off the trail — no claim, no
+    # dispatch mark (every instance applies it). Reconstructed as its typed event.
+    bus = EventBus()
+    seen: list[object] = []
+
+    async def apply(event: _SpreadEvent) -> None:
+        seen.append(event)
+
+    bus.spread(_SpreadEvent, apply)
+    await insert_business_event(
+        kind="test_tailer.spread",
+        level="info",
+        user_id=None,
+        ip=None,
+        org_id=None,
+        entity_id=None,
+        request_id=None,
+        payload={"value": "on"},
+    )
+
+    await EventListener(0, bus=bus).tick()
+
+    assert len(seen) == 1
+    assert isinstance(seen[0], _SpreadEvent)
+    assert seen[0].value == "on"
+
+
+@pytest.mark.asyncio
 async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
     outbox.on_async(_TailEvent, "counter", _noop, as_actor=False)
     await _seed(str(uuid.uuid4()))
 
-    assert await EventTailer(0).tick() == 1
-    assert await EventTailer(0).tick() == 0  # nothing left undispatched
+    assert await EventListener(0).tick() == 1
+    assert await EventListener(0).tick() == 0  # nothing left undispatched
     assert await _topics() == ["evt:test_tailer.happened:counter"]  # not duplicated

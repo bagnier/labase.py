@@ -16,7 +16,7 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
-from apps.shared.events.tailer import EventTailer
+from apps.shared.events.listener import EventListener
 from apps.shared.queue import TaskWorker
 from tests.e2e import cleanup
 from tests.e2e.drivers.server import InProcessServer
@@ -123,7 +123,7 @@ class BrowserBase:
         engines live; the browser driver commits for real, so the tailer sees committed facts."""
         if self._server is None:
             return  # external APP_URL: that deployment runs its own tailer/worker
-        tailer = EventTailer(0)
+        tailer = EventListener(0)
         worker = TaskWorker(0)
         while True:
             fanned = self._server.run(tailer.tick())

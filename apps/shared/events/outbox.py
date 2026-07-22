@@ -1,7 +1,7 @@
 """The durable async-consumer registry — how a business event grows at-least-once async behavior.
 
 An :func:`on_async` subscriber registers a consumer for an event type (and a task handler for its
-topic). Delivery is driven by the :mod:`apps.shared.events.tailer`: it reads the persisted
+topic). Delivery is driven by the :mod:`apps.shared.events.listener`: it reads the persisted
 ``business_events`` log and, per fact, enqueues one task-queue row per subscriber this module knows
 (:func:`subscribers_for`). The per-process ``TaskWorker`` runs each row with its own
 retry/backoff/park, and competing consumers across instances stay safe via ``SKIP LOCKED``.

@@ -6,8 +6,7 @@ from apps.auth.tests.given_helpers import (
     delete_user_if_exists,
     set_admin_role,
 )
-from apps.console.infra.refresh import SettingsRefresher
-from apps.shared.events.bus import events
+from apps.shared.events.listener import EventListener
 from tests.e2e.drivers.api_base import ApiBase
 
 _ADMIN_PASSWORD = "Test1234!"
@@ -102,10 +101,11 @@ class ConsoleApiMixin(ApiBase):
         self.drive_spread()
 
     def drive_spread(self) -> None:
-        """Apply the settings change now. A settings edit broadcasts a spread NOTIFY to each
-        process's SpreadListener; none runs under the API driver (and it could not see the
-        rolled-back transaction anyway), so re-read on the test connection and reload here."""
-        self.run(SettingsRefresher(events, 0, session_factory=self.test_session_factory()).tick())
+        """Apply the settings change now. A settings edit persists a ``SettingsChanged`` fact; the
+        event tailer replays it to each process's ``spread`` handler off the trail. No tailer runs
+        under the API driver (and it could not see the rolled-back transaction anyway), so drive one
+        tick on the test connection here."""
+        self.run(EventListener(0, session_factory=self.test_session_factory()).tick())
 
     def try_set_console_setting(self, app: str, key: str, value: str) -> None:
         self.response = self.client().put(f"/console/{app}/settings/{key}", json={"value": value})

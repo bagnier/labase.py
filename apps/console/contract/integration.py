@@ -22,9 +22,7 @@ from apps.console.contract.appearance import (
 )
 from apps.console.contract.overviews import ConsoleOverviewQuery
 from apps.console.contract.technical import overview as technical_overview
-from apps.console.infra.refresh import SettingsRefresher
 from apps.console.infra.router import router
-from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
 from apps.shared.settings import SettingDef, SettingsDeclaration
@@ -42,11 +40,9 @@ def mount(host: Host) -> None:
 
     host.contribs.provide(ConsoleOverviewQuery, technical_overview)
 
-    # With N instances only the one handling the console POST reloads in-process;
-    # the others converge within one TTL through this per-process re-read loop.
-    refresher = SettingsRefresher(host.events, get_technical_settings().settings_refresh_seconds)
-    host.on_startup(refresher.start)
-    host.on_shutdown(refresher.stop)
+    # Settings live-reload rides the event tailer: a persisted ``SettingsChanged`` is replayed to
+    # each process's ``spread`` handler (``settings.reload``) off the trail — no per-app re-read
+    # loop here (see ``host.register_settings`` + ``apps.shared.events.listener``).
 
     # Live appearance globals, alongside ``asset`` — every page reads the app-wide theme.
     jinja_globals = cast("dict[str, object]", templates.env.globals)

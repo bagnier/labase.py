@@ -1,35 +1,38 @@
-"""The async event tailer — durable, at-least-once fan-out of persisted business events.
+"""The event listener — reads the persisted trail and runs both deliveries off it.
 
-``emit`` writes a ``BusinessEvent`` to the ``business_events`` log inside the request's transaction
-(:func:`~apps.shared.events.store.persist_fact`). This tailer reads that log and,
-per new fact, enqueues one task-queue row per registered async consumer
-(:func:`~apps.shared.events.outbox` ``on_async``). The producer never knows its consumers and never
-waits for them.
+``emit`` only writes a ``BusinessEvent`` to the ``business_events`` log inside the request's
+transaction (:func:`~apps.shared.events.store.persist_fact`). This listener reads that log, woken by
+the trail's ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the producer no
+longer does — so it never knows its consumers nor waits for them:
 
-- **Claim, don't cursor.** Each tick claims un-dispatched rows with ``FOR UPDATE SKIP LOCKED`` and,
-  in the same transaction, enqueues their tasks and stamps ``dispatched_at``. No sequence-visibility
-  gap, and N instances never double-fan a row.
-- **Wake on NOTIFY, poll as a net.** An ``AFTER INSERT`` trigger ``pg_notify``s on commit, so
-  delivery is ~immediate; the poll loop is the durability net (NOTIFY is lost with no listener).
-- **Reconstruct from the row.** The consumer receives the typed event, rebuilt from the row's
-  ``kind`` via the :func:`~apps.shared.events.types.event_class_for` registry; dedup key is the id.
+- **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched rows with
+  ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one task-queue row per
+  registered consumer (:func:`~apps.shared.events.outbox` ``on_async``) and stamps
+  ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a row.
+- **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
+  each tick reads facts newer than this process's in-memory cursor whose kind has a ``spread``
+  subscriber and runs those handlers in-process (idempotent, so a replay is harmless).
+- **Reconstruct from the row.** Both paths rebuild the typed event from the row's ``kind`` via the
+  :func:`~apps.shared.events.types.event_class_for` registry; the async dedup key is the row id.
 """
 
 import asyncio
 import contextlib
 from collections.abc import Callable
+from dataclasses import fields
 from typing import Any
 
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.events.bus import events
 from apps.shared.events.outbox import subscribers_for
-from apps.shared.events.types import event_class_for
+from apps.shared.events.types import BusinessEvent, event_class_for
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 
-log = structlog.get_logger("labase.shared.tailer")
+log = structlog.get_logger("labase.shared.listener")
 
 NOTIFY_CHANNEL = "business_event"
 
@@ -41,6 +44,16 @@ _CLAIM = text(
     "ORDER BY id "
     "FOR UPDATE SKIP LOCKED "
     "LIMIT :batch"
+)
+
+# Read facts newer than this process's spread cursor whose kind has a ``spread`` subscriber.
+# Unlike the claim above there is NO lock and NO ``dispatched_at`` — a ``spread`` handler must run
+# on *every* instance (config reload), so each process keeps its own in-memory cursor.
+_SPREAD_SCAN = text(
+    "SELECT id, kind, user_id, org_id, entity_id, payload "
+    "FROM business_events "
+    "WHERE id > :cursor AND kind = ANY(:kinds) "
+    "ORDER BY id"
 )
 
 
@@ -57,18 +70,21 @@ def _task_payload(row: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-class EventTailer:
+class EventListener:
     def __init__(
         self,
         interval_seconds: float,
         batch_size: int = 50,
         session_factory: Callable[[], AsyncSession] | None = None,
+        bus: Any | None = None,
     ) -> None:
         # session_factory overrides the admin session (the API test driver injects its rolled-back
         # test connection, so the tailer sees the same uncommitted facts a request just wrote).
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory
+        self._bus = bus or events  # read spread subscribers from here (a test may inject its own)
+        self._spread_cursor: int | None = None  # per-instance high-water for spread delivery
         self._task: asyncio.Task | None = None
         self._listen_conn: Any | None = None
         self._wake = asyncio.Event()
@@ -78,8 +94,15 @@ class EventTailer:
         return factory()
 
     async def tick(self) -> int:
-        """Claim one batch of facts, fan each out to its consumers, stamp them dispatched. Returns
-        how many were dispatched. One transaction: the tasks and the mark commit together."""
+        """One pass of both delivery paths. Returns how much work was processed.
+
+        - **``on`` / async** — claim a batch of never-dispatched facts (``FOR UPDATE SKIP LOCKED``),
+          enqueue one task per durable consumer, stamp them dispatched. Exactly-once cluster-wide;
+          the tasks and the mark commit together.
+        - **``spread``** — read facts newer than this process's cursor whose kind has a ``spread``
+          subscriber and run those handlers **in-process** (config reload). No claim, no dispatched
+          mark: every instance replays them.
+        """
         async with self._session() as session:
             claimed = await session.execute(_CLAIM, {"batch": self._batch})
             rows = [dict(r) for r in claimed.mappings()]
@@ -90,8 +113,44 @@ class EventTailer:
                     text("UPDATE business_events SET dispatched_at = now() WHERE id = ANY(:ids)"),
                     {"ids": [r["id"] for r in rows]},
                 )
+            spread_rows = await self._read_spread(session)
             await session.commit()
+        for row in spread_rows:
+            await self._apply_spread(row)
+        # Return the on-path count only: it drives the drain loop's batching. The spread scan has no
+        # LIMIT — a single tick applies all of it — so it never needs another pass.
         return len(rows)
+
+    async def _read_spread(self, session: AsyncSession) -> list[dict[str, Any]]:
+        """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
+        kinds = [k for t in self._bus._spread_subs if (k := getattr(t, "kind", ""))]
+        if not kinds:
+            return []
+        cursor = self._spread_cursor if self._spread_cursor is not None else 0
+        result = await session.execute(_SPREAD_SCAN, {"cursor": cursor, "kinds": kinds})
+        return [dict(r) for r in result.mappings()]
+
+    async def _apply_spread(self, row: dict[str, Any]) -> None:
+        """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
+        cursor. Handlers are idempotent (a reload is a plain assignment), so a failure is logged and
+        skipped rather than blocking the cursor."""
+        event = self._reconstruct(row)
+        if event is not None:
+            for handler in self._bus._handlers_for(event, self._bus._spread_subs, set()):
+                try:
+                    await handler(event)
+                except Exception:
+                    log.warning("tailer.spread_handler_failed", kind=row["kind"])
+        self._spread_cursor = row["id"]
+
+    def _reconstruct(self, row: dict[str, Any]) -> BusinessEvent | None:
+        """Rebuild the typed event from a business_events row (its own fields + scoping columns)."""
+        event_type = event_class_for(row["kind"])
+        if event_type is None:
+            return None
+        payload = _task_payload(row)
+        names = {f.name for f in fields(event_type)}
+        return event_type(**{k: v for k, v in payload.items() if k in names})
 
     async def _fan_out(self, session: AsyncSession, row: dict[str, Any]) -> None:
         event_type = event_class_for(row["kind"])

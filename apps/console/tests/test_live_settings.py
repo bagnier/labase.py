@@ -1,7 +1,6 @@
 import pytest
 
 import apps.shared.settings as shared_settings
-from apps.shared.events.bus import EventBus
 from apps.shared.settings import (
     AppSettings,
     SettingDef,
@@ -25,17 +24,12 @@ def _settings() -> AppSettings:
 
 @pytest.mark.asyncio
 async def test_reload_and_coerce_to_declared_type() -> None:
-    bus = EventBus()
     settings = _settings()
-    bus.spread(SettingsChanged, settings.reload)
-
-    # spread_handlers yields the registered spread handlers (what the SpreadListener applies on a
-    # NOTIFY); emit itself only broadcasts, so applying is the listener's job.
-    event = SettingsChanged(
-        app_name="files", values={"max_upload_mb": "1", "uploads_enabled": "false"}
+    # ``settings.reload`` is the ``spread`` handler the tailer replays off the trail; applying it
+    # adopts the fresh values, coerced to their declared types on the next read.
+    await settings.reload(
+        SettingsChanged(app_name="files", values={"max_upload_mb": "1", "uploads_enabled": "false"})
     )
-    for handler in bus.spread_handlers(event):
-        await handler(event)
 
     assert settings.max_upload_mb == 1  # int, not "1"
     assert settings.uploads_enabled is False  # bool, not "false"
@@ -43,13 +37,9 @@ async def test_reload_and_coerce_to_declared_type() -> None:
 
 @pytest.mark.asyncio
 async def test_ignores_changes_for_other_apps() -> None:
-    bus = EventBus()
     settings = _settings()
-    bus.spread(SettingsChanged, settings.reload)
 
-    event = SettingsChanged(app_name="todo", values={"max_upload_mb": "1"})
-    for handler in bus.spread_handlers(event):
-        await handler(event)
+    await settings.reload(SettingsChanged(app_name="todo", values={"max_upload_mb": "1"}))
 
     assert settings.max_upload_mb == 25  # declared default, untouched
 

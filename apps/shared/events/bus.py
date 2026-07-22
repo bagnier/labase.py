@@ -5,7 +5,7 @@ the action), then runs every sync ``on`` handler, propagating the first exceptio
 compensate.
 
 Durable **async** consumers are *not* run here: a ``BusinessEvent`` persisted by ``emit`` is read
-back from the log by the :mod:`apps.shared.events.tailer`, which fans it out to
+back from the log by the :mod:`apps.shared.events.listener`, which fans it out to
 :func:`~apps.shared.events.outbox.on_async` subscribers after commit — so the producer never
 waits on, or fails from, a consumer. The *pull* half of collaboration (``collect`` a query's
 contributions) lives in :mod:`apps.shared.contribs` — a provider registry, not events.
@@ -20,21 +20,13 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterator
 from typing import Any, TypeVar
 
-import structlog
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.store import persist_fact
 from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.uow import current_session
 
-log = structlog.get_logger("labase.shared.bus")
-
 E = TypeVar("E")
-
-# The single Postgres channel every "run everywhere" (``spread``) event broadcasts on. A process's
-# SpreadListener LISTENs here and, woken, re-reads fresh state and applies its ``spread`` handlers.
-SPREAD_CHANNEL = "spread"
 
 
 class EventBus:
@@ -50,12 +42,10 @@ class EventBus:
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         """Register a handler that must run on **every** process when the event is emitted.
 
-        This is the "run everywhere" mode — for config propagation (a settings reload), *not* a
-        persisted business fact: ``spread`` events are never written to the trail. Delivery is a
-        NOTIFY broadcast: ``emit`` only fires the signal, and each process's SpreadListener re-reads
-        fresh state and runs these handlers (pulled via :meth:`spread_handlers`). The emitter is
-        just another listener — it applies via its own LISTEN, once, so there is no PID or
-        self-dedup to track.
+        The "run everywhere" mode — for config propagation (a settings reload). Registration only:
+        the :mod:`apps.shared.events.listener` reads the persisted fact off the trail and runs these
+        handlers **per instance** (no claim, no dispatch mark), so every process applies the change.
+        Handlers are idempotent (a reload is a plain assignment), so re-delivery is harmless.
         """
         self._spread_subs[event_type].append(handler)
 
@@ -75,22 +65,18 @@ class EventBus:
                     yield handler
 
     async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
-        """Persist the fact, run every sync ``on`` handler, and broadcast to ``spread`` listeners.
+        """Persist the fact, then run every sync ``on`` handler.
 
         The event — always a ``BusinessEvent`` — is first recorded to the ``business_events`` trail
         on ``session`` (or the ambient request unit of work), atomic with the action, so the fact
-        commits iff the mutation commits. Async consumers are not run here: the
-        :mod:`apps.shared.events.tailer` reads the persisted log and fans each fact out to its
-        :func:`~apps.shared.events.outbox.on_async` subscribers after commit, so the producer never
-        waits on — or fails from — a consumer.
+        commits iff the mutation commits. Two deliveries then ride the persisted log, off this call:
+        the :mod:`apps.shared.events.listener` fans each fact out to its
+        :func:`~apps.shared.events.outbox.on_async` consumers (durable, exactly-once) and runs any
+        ``spread`` handlers per instance — so the producer never waits on, or fails from, a
+        consumer.
 
         ``on`` dispatch walks the event's MRO — handlers on the concrete type fire first (most
-        specific), then any base class; a handler on several MRO classes runs once. ``spread``
-        handlers are **not** run here: if the event has any, ``emit`` fires a NOTIFY so every
-        process's SpreadListener re-reads fresh state and applies them (see :meth:`spread`).
-
-        ``emit`` returns nothing — it is fire-and-forget. Handler return values were never consumed
-        (and once ``on`` is fully durable/async, ``emit`` runs no handlers to return anything from).
+        specific), then any base class; a handler on several MRO classes runs once.
         """
         # The fact first: persisted on the request's own transaction (atomic with the action; a
         # best-effort admin write when no ambient session is in scope).
@@ -98,29 +84,6 @@ class EventBus:
         seen: set[int] = set()
         for handler in self._handlers_for(event, self._subs, seen):
             await handler(event)
-        # "Run everywhere" events are delivered by NOTIFY broadcast, never in-process: fire the
-        # signal so every instance (the emitter included, via its own LISTEN) re-reads and applies.
-        if any(klass in self._spread_subs for klass in type(event).__mro__):
-            await self._broadcast_spread(event, session)
-
-    async def _broadcast_spread(self, event: object, session: AsyncSession | None) -> None:
-        """Fire the spread NOTIFY on the caller's transaction (delivered on commit, so listeners see
-        the committed change). Best-effort: with no session in scope, log and skip — the poll net in
-        each SpreadListener still converges."""
-        conn = session or current_session()
-        if conn is None:
-            log.warning("event.spread_no_session", event_type=type(event).__name__)
-            return
-        await conn.execute(text(f"NOTIFY {SPREAD_CHANNEL}"))
-
-    def spread_handlers(self, event: object) -> Iterator[Callable[[Any], Awaitable[object]]]:
-        """This process's ``spread`` handlers for ``event``, most-specific first, each once.
-
-        The SpreadListener (:class:`~apps.console.infra.refresh.SettingsRefresher`) iterates these
-        with freshly-read state on a NOTIFY (or its poll net) and applies them — the "apply" half of
-        spread, never run by :meth:`emit`. Handlers are idempotent (a settings reload is a plain
-        assignment), so re-delivery is harmless."""
-        return self._handlers_for(event, self._spread_subs, set())
 
 
 # Process-wide singleton. Runtime code emits on this directly; the production Host

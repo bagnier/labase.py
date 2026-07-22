@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.auth.infra.session import get_rls_session
 from apps.auth.tests.given_helpers import delete_user_if_exists
 from apps.main import host
-from apps.shared.events.tailer import EventTailer
+from apps.shared.events.listener import EventListener
 from apps.shared.persistence.database import (
     _admin_engine,
     get_admin_session,
@@ -120,7 +120,7 @@ class ApiBase:
         (worker), looping until both are dry so an event that emits an event is delivered too.
         """
         factory = self.test_session_factory()
-        tailer = EventTailer(0, session_factory=factory)
+        tailer = EventListener(0, session_factory=factory)
         worker = TaskWorker(0, session_factory=factory)
         while True:
             fanned = self.run(tailer.tick())

@@ -4,8 +4,7 @@ from apps.auth.tests.given_helpers import (
     delete_user_if_exists,
     set_admin_role,
 )
-from apps.console.infra.refresh import SettingsRefresher
-from apps.shared.events.bus import events
+from apps.shared.events.listener import EventListener
 from tests.e2e.drivers.browser_base import BrowserBase
 
 _ADMIN_PASSWORD = "Test1234!"
@@ -132,12 +131,12 @@ class ConsoleBrowserMixin(BrowserBase):
         self.drive_spread()
 
     def drive_spread(self) -> None:
-        """Apply the settings change deterministically. The in-process server runs a real
-        SpreadListener that a NOTIFY would wake, but driving a re-read here removes the race between
-        the broadcast and the next assertion."""
+        """Apply the settings change deterministically. The in-process server runs a real event
+        tailer that a NOTIFY would wake, but driving one tick here removes the race between the
+        persist and the next assertion."""
         if self._server is None:
             return
-        self._server.run(SettingsRefresher(events, 0).tick())
+        self._server.run(EventListener(0).tick())
 
     def try_set_console_setting(self, app: str, key: str, value: str) -> None:
         self._denied_status = self.page.evaluate(

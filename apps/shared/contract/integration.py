@@ -9,7 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from apps.shared.config import get_technical_settings
 from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
-from apps.shared.events.tailer import EventTailer
+from apps.shared.events.listener import EventListener
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.exceptions import (
     handle_http_error,
@@ -61,7 +61,7 @@ def mount(host: Host) -> None:
 
     # Event tailer: reads the business_events log and fans each fact out to its async consumers
     # (NOTIFY-woken, poll as a net). One per process, like the worker.
-    tailer = EventTailer(settings.task_worker_interval_seconds)
+    tailer = EventListener(settings.task_worker_interval_seconds)
     host.on_startup(tailer.start)
     host.on_shutdown(tailer.stop)
 
