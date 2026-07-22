@@ -69,6 +69,10 @@ class BusinessEvent:
         verb = getattr(cls, "verb", "")
         if entity and verb and "kind" not in cls.__dict__:
             cls.kind = f"{entity}.{verb}"
+        # A concrete event (non-empty kind) registers itself so the tailer can reconstruct it from
+        # a stored row. Abstract bases (EntityCreated…, kind still "") never do.
+        if cls.kind:
+            _event_classes[cls.kind] = cls
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -94,3 +98,14 @@ class EntityDeleted(BusinessEvent):
 
     verb: ClassVar[str] = "deleted"
     label: str | None = None
+
+
+# Concrete BusinessEvent classes keyed by their dotted ``kind`` — populated by __init_subclass__ as
+# each app's events are imported. Lets the event tailer rebuild a typed event from a persisted
+# ``business_events`` row, which carries only the kind string.
+_event_classes: dict[str, type[BusinessEvent]] = {}
+
+
+def event_class_for(kind: str) -> type[BusinessEvent] | None:
+    """The concrete ``BusinessEvent`` subclass for a dotted ``kind``, or ``None`` if unknown."""
+    return _event_classes.get(kind)

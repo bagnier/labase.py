@@ -1,17 +1,61 @@
 """Business-events store — the write path degrades safely, and the feed projection is rich."""
 
+import uuid
+from dataclasses import dataclass
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import text
 
 from apps.shared import clock
+from apps.shared.events import BusinessEvent
 from apps.shared.observability.business_events import (
     BusinessEventRow,
     _ago,
     activity_entries,
     insert_business_event,
+    persist_fact,
 )
+from apps.shared.persistence import database as db
+
+
+@dataclass(frozen=True, kw_only=True)
+class _P1Event(BusinessEvent):
+    kind = "test_p1.happened"
+    label: str | None = None
+
+
+def _clear_engine_caches() -> None:
+    db._user_engine.cache_clear()
+    db._admin_engine.cache_clear()
+    db.admin_session_factory.cache_clear()
+
+
+@pytest_asyncio.fixture
+async def _clean_p1():
+    # Bypass the ApiDriver's shared test connection (its background loop) with a fresh engine on
+    # this test's loop, and clean up our own committed rows — the pattern test_outbox established.
+    _clear_engine_caches()
+
+    async def _wipe():
+        async with db.admin_session_factory()() as s:
+            await s.execute(text("DELETE FROM business_events WHERE kind LIKE 'test_p1.%'"))
+            await s.commit()
+
+    await _wipe()
+    yield
+    await _wipe()
+    await db._admin_engine().dispose()
+    _clear_engine_caches()
+
+
+async def _count_p1(actor: str) -> int:
+    async with db.admin_session_factory()() as s:
+        return await s.scalar(
+            text("SELECT count(*) FROM business_events WHERE user_id = :a"), {"a": uuid.UUID(actor)}
+        )
 
 
 def _row(*, kind="todo.created", level="info", icon="clipboard-text", payload=None, ts=None):
@@ -94,3 +138,71 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
     log.warning.assert_called_once_with(
         "business_event.write_failed", kind="auth.signed_in", user_id="not-a-uuid"
     )
+
+
+# ── Transactional persist (Phase 1): the fact commits iff the action commits ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
+    """emit persists the fact on the caller's session — scoping to columns, the rest in payload."""
+    actor = str(uuid.uuid4())
+    async with db.admin_session_factory()() as session:
+        await persist_fact(
+            _P1Event(actor_id=actor, org_id=str(uuid.uuid4()), entity_id="e1", label="Hi"), session
+        )
+        await session.commit()
+    async with db.admin_session_factory()() as session:
+        row = (
+            await session.execute(
+                text("SELECT kind, entity_id, payload FROM business_events WHERE user_id = :a"),
+                {"a": uuid.UUID(actor)},
+            )
+        ).first()
+    assert row is not None
+    assert row.kind == "test_p1.happened"
+    assert row.entity_id == "e1"
+    assert row.payload["label"] == "Hi"
+    assert "actor_id" not in row.payload  # scoping fields are lifted to their own columns
+    assert "org_id" not in row.payload
+
+
+@pytest.mark.asyncio
+async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
+    """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
+    actor = str(uuid.uuid4())
+    async with db.admin_session_factory()() as session:
+        await persist_fact(_P1Event(actor_id=actor), session)
+        await session.rollback()
+    assert await _count_p1(actor) == 0
+
+
+@pytest.mark.asyncio
+async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
+    """No ambient session (auth signals) → scheduled off the critical path; emit never awaits it."""
+    import asyncio
+
+    with patch(
+        "apps.shared.observability.business_events.insert_business_event", new=AsyncMock()
+    ) as insert:
+        await persist_fact(_P1Event(actor_id=str(uuid.uuid4()), label="x"), None)
+        insert.assert_not_awaited()  # coroutine scheduled, not yet run
+        await asyncio.sleep(0)  # let the created task run
+    insert.assert_awaited_once()
+    assert insert.await_args is not None
+    assert insert.await_args.kwargs["kind"] == "test_p1.happened"
+
+
+@pytest.mark.asyncio
+async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean_p1):
+    from apps.shared.bus import EventBus
+
+    committed, rolled = str(uuid.uuid4()), str(uuid.uuid4())
+    async with db.admin_session_factory()() as session:
+        await EventBus().emit(_P1Event(actor_id=committed), session=session)
+        await session.commit()
+    async with db.admin_session_factory()() as session:
+        await EventBus().emit(_P1Event(actor_id=rolled), session=session)
+        await session.rollback()
+    assert await _count_p1(committed) == 1
+    assert await _count_p1(rolled) == 0

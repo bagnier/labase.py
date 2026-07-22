@@ -1,14 +1,15 @@
 """The business-events store — the append-only trail every domain event is persisted to.
 
-The producer is the typed event bus (:mod:`apps.shared.events`): a single subscriber on the
-:class:`~apps.shared.events.BusinessEvent` base records every emitted event here. The store is
-member-readable (RLS scopes rows to the reader), so the profile and org-dashboard timelines
-read it on the user's own session; the admin console reads it all through the BYPASSRLS session.
+The producer is the typed event bus (:mod:`apps.shared.events`): :func:`~apps.shared.bus.EventBus`
+``emit`` records every emitted ``BusinessEvent`` here. The store is member-readable (RLS scopes rows
+to the reader), so the profile and org-dashboard timelines read it on the user's own session; the
+admin console reads it all through the BYPASSRLS session.
 
-Best-effort by doctrine (README): the write is fire-and-forget so ``emit()`` never blocks on the
-DB and a lost write never fails the mutation — exactly the semantics of the audit trail this
-store grew out of. Presentation helpers (:func:`activity_entries`) render a scoped, payload-free
-timeline; the raw ``kind``/payload never reach a member.
+Transactional by doctrine: the fact is written on the request's own unit of work
+(:func:`persist_fact`), so it commits iff the action commits (atomic) — a failed write rolls the
+mutation back. Only the fallback path (no ambient session: auth signals, seeders) stays best-effort.
+Presentation helpers (:func:`activity_entries`) render a scoped, payload-free timeline; the raw
+``kind``/payload never reach a member.
 """
 
 import asyncio
@@ -148,6 +149,7 @@ async def _actor_handle(session: AsyncSession, user_id: str | None) -> str | Non
 
 async def insert_business_event(
     *,
+    session: AsyncSession | None = None,
     kind: str,
     level: str,
     icon: str | None = None,
@@ -158,55 +160,77 @@ async def insert_business_event(
     request_id: str | None,
     payload: dict[str, Any] | None,
 ) -> None:
-    """Write one row on a fresh admin session. Swallows failures (best-effort trail)."""
-    try:
-        async with admin_session_factory()() as session:
-            stored = dict(payload) if payload else {}
-            handle = await _actor_handle(session, user_id)
-            if handle:
-                stored["actor"] = handle  # denormalized 'who' — RLS hides co-members' profiles
-            session.add(
-                BusinessEventLog(
-                    kind=kind,
-                    level=level,
-                    icon=icon,
-                    user_id=uuid.UUID(user_id) if user_id else None,
-                    ip=ip,
-                    org_id=uuid.UUID(org_id) if org_id else None,
-                    entity_id=entity_id,
-                    request_id=request_id,
-                    payload=stored or None,
-                )
+    """Write one business-events row.
+
+    With ``session`` (a request's unit of work), the row rides that transaction — it commits iff the
+    action commits, and a failure propagates (atomic). Without one, a **best-effort** admin write on
+    a fresh session that swallows failures (auth signals, seeders, non-request contexts)."""
+
+    async def write(s: AsyncSession) -> None:
+        """Add + flush the row on ``s`` with the actor handle denormalized; the caller commits."""
+        stored = dict(payload) if payload else {}
+        handle = await _actor_handle(s, user_id)
+        if handle:
+            stored["actor"] = handle  # denormalized 'who' — RLS hides co-members' profiles
+        s.add(
+            BusinessEventLog(
+                kind=kind,
+                level=level,
+                icon=icon,
+                user_id=uuid.UUID(user_id) if user_id else None,
+                ip=ip,
+                org_id=uuid.UUID(org_id) if org_id else None,
+                entity_id=entity_id,
+                request_id=request_id,
+                payload=stored or None,
             )
-            await session.commit()
+        )
+        await s.flush()  # surface RLS/constraint errors now, within the caller's transaction
+
+    if session is not None:
+        await write(session)
+        return
+    try:
+        async with admin_session_factory()() as own:
+            await write(own)
+            await own.commit()
     except Exception:
         log.warning("business_event.write_failed", kind=kind, user_id=user_id)
 
 
-async def persist_business_event(event: BusinessEvent) -> None:
-    """Bus subscriber on the ``BusinessEvent`` base: record every emitted event, non-blocking.
-
-    Reads ``ip``/``request_id`` from the request contextvars *now*, then fire-and-forgets the
-    write so ``emit()`` returns immediately — no DB round-trip on the mutation's critical path,
-    and a failed write never fails the mutation."""
+def _event_columns(event: BusinessEvent) -> dict[str, Any]:
+    """Map a ``BusinessEvent`` onto the ``business_events`` row fields — scoping lifted to their own
+    columns, the rest to ``payload``, ``ip``/``request_id`` read from the request contextvars."""
     ctx = get_contextvars()
     payload = _loggable_payload(event)
     payload.pop("actor_id", None)
     payload.pop("org_id", None)
     payload.pop("entity_id", None)  # promoted to its own column, like actor_id/org_id
-    asyncio.create_task(
-        insert_business_event(
-            kind=event.kind,
-            level=event.level,
-            icon=event.icon,
-            user_id=event.actor_id,
-            ip=ctx.get("ip"),
-            org_id=event.org_id,
-            entity_id=event.entity_id,
-            request_id=ctx.get("request_id"),
-            payload=payload or None,
-        )
+    return dict(
+        kind=event.kind,
+        level=event.level,
+        icon=event.icon,
+        user_id=event.actor_id,
+        ip=ctx.get("ip"),
+        org_id=event.org_id,
+        entity_id=event.entity_id,
+        request_id=ctx.get("request_id"),
+        payload=payload or None,
     )
+
+
+async def persist_fact(event: BusinessEvent, session: AsyncSession | None) -> None:
+    """``emit``'s persist path.
+
+    With an ambient request session, the fact is written on it — atomic with the action (commits
+    iff the mutation commits). With none (auth signals, non-request contexts) there is no
+    transaction to join, so it is a best-effort detached write off the critical path — never
+    blocking or failing the caller."""
+    columns = _event_columns(event)
+    if session is not None:
+        await insert_business_event(session=session, **columns)
+    else:
+        asyncio.create_task(insert_business_event(**columns))
 
 
 # ── Presentation — humanize rows for the profile/dashboard timeline ──────────────────────────

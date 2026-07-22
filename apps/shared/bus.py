@@ -25,7 +25,10 @@ from typing import Any, TypeVar
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.events import BusinessEvent
+from apps.shared.observability.business_events import persist_fact
 from apps.shared.outbox import fan_out_durable
+from apps.shared.persistence.uow import current_session
 
 log = structlog.get_logger("labase.shared.bus")
 
@@ -42,27 +45,25 @@ class EventBus:
         self._subs[event_type].append(handler)
 
     async def emit(self, event: object, session: AsyncSession | None = None) -> list[object]:
-        """Run every sync handler for this event, then durably fan out to its async subscribers.
+        """Persist the fact, run every sync handler, then durably fan out to its async subscribers.
 
-        Dispatch walks the event's MRO — handlers registered on the concrete type fire first
-        (most specific), then handlers registered on any base class. This lets a single
-        subscriber on a base (e.g. the business-events persister on ``BusinessEvent``) catch
-        every subclass, while exact-type subscribers keep working unchanged. A handler
-        registered on several classes in the MRO runs once.
+        A ``BusinessEvent`` is first recorded to the ``business_events`` trail on ``session`` (or
+        the ambient request unit of work) — atomic with the action, so the fact commits iff the
+        mutation commits. Non-``BusinessEvent`` signals are not persisted.
 
-        After the sync handlers, :func:`~apps.shared.outbox.fan_out_durable` enqueues one durable
-        task per :func:`~apps.shared.outbox.on_async` subscriber — on ``session`` or the ambient
-        request unit of work — so any event can grow async behavior without its producer changing.
-        The enqueue rides the same transaction: a sync-handler exception (propagated below) or a
-        later rollback discards the outbox rows too. It is a zero-cost no-op when the event has no
-        async subscribers, so audit-only signals pay nothing.
+        Dispatch then walks the event's MRO — handlers on the concrete type fire first (most
+        specific), then handlers on any base class; a handler registered on several classes in the
+        MRO runs once.
 
-        The bus does *not* log the dispatch itself. Business events are recorded durably to the
-        trail by the persister (with full user/org/entity/request scoping); the handful of
-        non-business *signals* (``UserCreated``/``UserDeleted``/``SettingsChanged``) are internal
-        plumbing whose meaningful outcome is already an audited business event — a generic
-        ``event.emitted`` line for them would only be redundant noise in the logs viewer.
+        Finally :func:`~apps.shared.outbox.fan_out_durable` enqueues one durable task per
+        :func:`~apps.shared.outbox.on_async` subscriber — on the same transaction, so a sync-handler
+        exception (propagated below) or a later rollback discards the persisted fact and the outbox
+        rows too. Zero-cost when the event has no async subscribers.
         """
+        # The fact first: a BusinessEvent is persisted on the request's own transaction (atomic
+        # with the action; a best-effort admin write when no ambient session is in scope).
+        if isinstance(event, BusinessEvent):
+            await persist_fact(event, session or current_session())
         # Command semantics: results are typed `object`, not `Any` — callers fire and discard
         # them. (`collect` keeps `Any`: its callers consume heterogeneous typed aggregates.)
         results: list[object] = []

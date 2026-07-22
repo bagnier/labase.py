@@ -5,15 +5,13 @@ strings) and MRO dispatch (so one subscriber on the base records every subclass)
 non-blocking persist contract (``emit`` never waits on — or fails from — the DB write).
 """
 
-import asyncio
 from dataclasses import dataclass
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from apps.shared.bus import EventBus
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
-from apps.shared.observability.business_events import persist_business_event
+from apps.shared.observability.business_events import _event_columns
 
 
 class WidgetEvent(BusinessEvent):
@@ -53,6 +51,16 @@ def test_explicit_kind_wins_over_derivation():
     assert SignedIn.kind == "auth.signed_in"
 
 
+def test_concrete_events_register_by_kind_for_reconstruction():
+    # The tailer rebuilds a typed event from a persisted row's `kind`, so every concrete event
+    # registers itself. Abstract bases (empty kind) do not.
+    from apps.shared.events import event_class_for
+
+    assert event_class_for("widget.created") is WidgetCreated
+    assert event_class_for("widget.deleted") is WidgetDeleted
+    assert event_class_for("no.such_kind") is None
+
+
 @pytest.mark.asyncio
 async def test_base_subscriber_receives_every_subclass_once():
     bus = EventBus()
@@ -71,27 +79,16 @@ async def test_base_subscriber_receives_every_subclass_once():
     assert seen == [event]
 
 
-@pytest.mark.asyncio
-async def test_persist_is_fire_and_forget_and_scoped():
-    # persist schedules the write and returns before it runs; emit never awaits the DB.
-    with patch(
-        "apps.shared.observability.business_events.insert_business_event", new=AsyncMock()
-    ) as insert:
-        await persist_business_event(
-            WidgetCreated(actor_id="u", org_id="o", entity_id="w", label="Gizmo")
-        )
-        insert.assert_not_awaited()  # coroutine built but not yet run
-        await asyncio.sleep(0)  # let the created task run
-
-    insert.assert_awaited_once()
-    assert insert.await_args is not None
-    kwargs = insert.await_args.kwargs
-    assert kwargs["kind"] == "widget.created"
-    assert kwargs["icon"] == "cube"
-    assert kwargs["user_id"] == "u"
-    assert kwargs["org_id"] == "o"
-    assert kwargs["entity_id"] == "w"  # the concerned entity, lifted to its own column
+def test_event_columns_lift_scoping_and_carry_metadata():
+    # emit maps a BusinessEvent onto the business_events row: scoping to columns, rest to payload.
+    cols = _event_columns(WidgetCreated(actor_id="u", org_id="o", entity_id="w", label="Gizmo"))
+    assert cols["kind"] == "widget.created"
+    assert cols["icon"] == "cube"
+    assert cols["user_id"] == "u"
+    assert cols["org_id"] == "o"
+    assert cols["entity_id"] == "w"  # the concerned entity, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
-    assert "actor_id" not in kwargs["payload"]
-    assert "org_id" not in kwargs["payload"]
-    assert "entity_id" not in kwargs["payload"]
+    assert cols["payload"]["label"] == "Gizmo"
+    assert "actor_id" not in cols["payload"]
+    assert "org_id" not in cols["payload"]
+    assert "entity_id" not in cols["payload"]
