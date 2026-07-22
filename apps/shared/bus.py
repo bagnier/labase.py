@@ -1,16 +1,17 @@
-"""Type-keyed async event bus — the generic pub/sub mechanism every context wires into.
+"""Type-keyed event bus — synchronous, in-process pub/sub, plus the persist step for facts.
 
-Two ways to fan an event out to its handlers, differing only in failure policy:
+Two ways to fan an event out to its **sync** handlers, differing only in failure policy:
 
-- ``emit(event)`` — push/command: run all handlers, propagate the first exception (caller
-  can compensate), return their results.
-- ``notify(event)`` — push/signal: run all handlers, isolate failures (log + skip), return
-  the successful results. For facts whose observers must never break the emitter (error
-  capture fans out to trackers this way — a down tracker can't worsen what it tracks).
+- ``emit(event)`` — push/command: first persist a ``BusinessEvent`` to the trail (atomic with the
+  action), then run every sync handler, propagating the first exception (caller can compensate).
+- ``notify(event)`` — push/signal: run every sync handler, isolating failures (log + skip). For
+  facts whose observers must never break the emitter (error capture fans out to trackers this way).
 
-Both then durably fan out to the event's :func:`~apps.shared.outbox.on_async` subscribers.
-The *pull* half of collaboration (``collect`` a query's contributions) lives in a separate
-object, :mod:`apps.shared.contribs` — it is a provider registry, not events.
+Durable **async** consumers are *not* run here: a ``BusinessEvent`` persisted by ``emit`` is read
+back from the log by the :mod:`apps.shared.tailer`, which fans it out to
+:func:`~apps.shared.outbox.on_async` subscribers after commit — so the producer never waits on, or
+fails from, a consumer. The *pull* half of collaboration (``collect`` a query's contributions) lives
+in :mod:`apps.shared.contribs` — a provider registry, not events.
 
 Runtime publishers import the process-wide :data:`events` singleton directly — a focused
 collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires handlers onto
