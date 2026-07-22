@@ -186,7 +186,7 @@ class Host:
         Returns the live handle, so ``if not settings.enabled`` works immediately."""
         settings = bind_settings(declaration)
         self.settings_handles[declaration.app_name] = settings
-        self.events.on(SettingsChanged, settings.reload)
+        self.events.spread(SettingsChanged, settings.reload)
         return settings
 
     def declared_settings(self, app: str) -> SettingsDeclaration | None:

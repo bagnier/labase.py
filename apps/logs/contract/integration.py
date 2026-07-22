@@ -45,7 +45,7 @@ def mount(host: Host) -> None:
     # console edits it — the observability control the console used to own now lives with the
     # screen that reads the logs.
     apply_log_level(str(settings.log_level))
-    host.events.on(SettingsChanged, _reload_level)
+    host.events.spread(SettingsChanged, _reload_level)
     host.contribs.provide(ConsoleOverviewQuery, _overview)
     host.app.include_router(router, prefix="/console/logs")
 

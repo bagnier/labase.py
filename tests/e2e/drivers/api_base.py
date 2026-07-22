@@ -2,7 +2,7 @@
 management, rolled-back test transaction.
 Feature mixins inherit this; ApiDriver assembles them."""
 
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
 
 import httpx
@@ -108,18 +108,18 @@ class ApiBase:
     def _cleanup_committed_data(self) -> None:
         """Hook: feature mixins override to delete data committed outside the transaction."""
 
+    def test_session_factory(self) -> Callable[[], AsyncSession]:
+        """A session factory bound to the rolled-back test connection — for driving background loops
+        (tailer, worker, settings refresher) on the same transaction a request just wrote to, since
+        the real polling loops are off under tests and could not see it anyway."""
+        assert db._test_connection is not None, "No active test transaction"
+        return lambda: AsyncSession(bind=db._test_connection, expire_on_commit=False)
+
     def drain_task_queue(self) -> None:
         """Deliver async work now: fan persisted facts out to consumers (tailer), then run them
         (worker), looping until both are dry so an event that emits an event is delivered too.
-
-        The polling tailer/worker are off under tests — and could not see the rolled-back test
-        transaction anyway, so both tick on the test connection itself.
         """
-        assert db._test_connection is not None, "No active test transaction"
-
-        def factory() -> AsyncSession:
-            return AsyncSession(bind=db._test_connection, expire_on_commit=False)
-
+        factory = self.test_session_factory()
         tailer = EventTailer(0, session_factory=factory)
         worker = TaskWorker(0, session_factory=factory)
         while True:

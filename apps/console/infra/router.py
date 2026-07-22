@@ -437,9 +437,9 @@ async def update_setting(
     await session.commit()
 
     values = await repo.values(app)
-    # SettingsChanged is the config-propagation signal (cross-instance reload); ServerSettingChanged
-    # is the trail record of who changed which server-wide setting.
-    await events.emit(SettingsChanged(app, values))
+    # SettingsChanged broadcasts a spread NOTIFY on this session (delivered on commit) so every
+    # instance re-reads and reloads; ServerSettingChanged is the trail record of who changed what.
+    await events.emit(SettingsChanged(app, values), session=session)
     await events.emit(
         ServerSettingChanged(actor_id=current_user.id, app=app, key=key, value=stored)
     )

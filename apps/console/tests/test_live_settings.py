@@ -27,9 +27,13 @@ def _settings() -> AppSettings:
 async def test_reload_and_coerce_to_declared_type() -> None:
     bus = EventBus()
     settings = _settings()
-    bus.on(SettingsChanged, settings.reload)
+    bus.spread(SettingsChanged, settings.reload)
 
-    await bus.emit(SettingsChanged("files", {"max_upload_mb": "1", "uploads_enabled": "false"}))
+    # deliver_spread runs the registered spread handlers (what the SpreadListener calls on a
+    # NOTIFY); emit itself only broadcasts, so applying is deliver_spread's job.
+    await bus.deliver_spread(
+        SettingsChanged("files", {"max_upload_mb": "1", "uploads_enabled": "false"})
+    )
 
     assert settings.max_upload_mb == 1  # int, not "1"
     assert settings.uploads_enabled is False  # bool, not "false"
@@ -39,9 +43,9 @@ async def test_reload_and_coerce_to_declared_type() -> None:
 async def test_ignores_changes_for_other_apps() -> None:
     bus = EventBus()
     settings = _settings()
-    bus.on(SettingsChanged, settings.reload)
+    bus.spread(SettingsChanged, settings.reload)
 
-    await bus.emit(SettingsChanged("todo", {"max_upload_mb": "1"}))
+    await bus.deliver_spread(SettingsChanged("todo", {"max_upload_mb": "1"}))
 
     assert settings.max_upload_mb == 25  # declared default, untouched
 

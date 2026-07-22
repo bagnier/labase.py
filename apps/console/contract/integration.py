@@ -27,7 +27,7 @@ from apps.console.infra.router import router
 from apps.shared.config import get_technical_settings
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
-from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
+from apps.shared.settings import SettingDef, SettingsDeclaration
 
 PHASE = MountPhase.CONSOLE
 
@@ -45,7 +45,6 @@ def mount(host: Host) -> None:
     # With N instances only the one handling the console POST reloads in-process;
     # the others converge within one TTL through this per-process re-read loop.
     refresher = SettingsRefresher(host.events, get_technical_settings().settings_refresh_seconds)
-    host.events.on(SettingsChanged, refresher.absorb)
     host.on_startup(refresher.start)
     host.on_shutdown(refresher.stop)
 

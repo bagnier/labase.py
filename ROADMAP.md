@@ -14,6 +14,10 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 ## issues
 
+- [ ] no more "audit event" > BusinessEvent, Issue or Log
+- [ ] no more todo_completion_stats > real time count (to generalyze to all apps)
+- [ ] split SQLAlchemy models in domain & Pydantic models in contract (all apps)
+- [ ] _ACTIVITY_PAGE and any other constants should become settongs (all apps)
 - [ ] /console/users bouton Accounts &  all organisations Users 13 users inerte
 - [ ] /console/organizations should list organizations and give metrics
 - [ ] audit des .goto() .fetch() code smells
