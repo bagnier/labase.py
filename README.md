@@ -68,8 +68,9 @@ isolation for authenticated access.
 
 **Observability is built in.** Structured, machine-readable logs correlated per
 request; every domain event on the bus is logged; sensitive business actions are
-recorded as typed events to an append-only trail, browsable in the admin console. The
-write is best-effort by doctrine — it never blocks a mutation.
+recorded as typed events to an append-only trail, browsable in the admin console. Technical
+logs are best-effort (never block a mutation); a business event is written transactionally
+with its action, and its async delivery to consumers rides an event tailer off the trail.
 
 **Tests are sincere.** The same plain-language scenarios run twice — over real HTTP and
 through a real browser — against a real database. Nothing business-critical is mocked;
@@ -173,14 +174,18 @@ to this?) are different animals, so they are different objects — `host.events`
 `EventBus`) and `host.contribs` (the `Contribs` registry). Both key handlers by the Python
 type they carry, so there are no magic strings and no shared imports.
 
-**`host.events` — push.** A fact is emitted; handlers react. Two fan-outs, differing only in
-failure policy; both then durably fan out to the event's `on_async` subscribers (see below):
+**`host.events` — push.** `emit(event)` first **persists** a `BusinessEvent` to the trail on the
+caller's own transaction — atomic with the action, so the fact commits iff the mutation commits —
+then runs the event's *synchronous* handlers. Durable **async** consumers are not run here: the
+event tailer reads the persisted log and fans each fact out to its `on_async` subscribers after
+commit (see Observability), so a producer never waits on — or fails from — a consumer. The two sync
+fan-outs differ only in failure policy:
 
 |                | `emit(event)`                                             | `notify(event)`                                             |
 | -------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
 | **Semantic**   | push / command — runs all handlers, returns their results | push / signal — runs all handlers, returns successful ones  |
 | **On failure** | propagates first exception (caller can compensate)        | logs & skips the failing handler (observers can't break it) |
-| **Used for**   | `UserCreated`, `OrgCreated`, `SettingsChanged`            | `ExceptionCaptured` (error capture → trackers)              |
+| **Used for**   | `UserCreated`, `OrgCreated`, `SettingsChanged` (signals)  | `ExceptionCaptured` (error capture → trackers)              |
 
 **`host.contribs` — pull.** A registry of contribution providers (an extension point),
 declared at mount and read synchronously on the request path — *not* events:
@@ -191,15 +196,16 @@ declared at mount and read synchronously on the request path — *not* events:
 | **On failure** | —                                                   | logs & skips the failing provider (a down app can't break the page)   |
 | **Used for**   | dashboard/console cards, org nav, settings sections | `OverviewQuery`, `ConsoleOverviewQuery`, `OrgNavQuery`, `ApiKeyQuery` |
 
-**Sign-up event chain:**
+**Sign-up event chain:** `UserCreated` runs a sync handler that creates the org and persists
+`OrgCreated`; the welcome seeders are **durable async consumers** of `OrgCreated`, delivered by the
+event tailer (retried and parked on failure, never on the signup's critical path).
 
 ```
-signup → emit(UserCreated)
-  → organizations: creates personal org → emit(OrgCreated)
-      → files:    seeds welcome.txt
-      → learning: seeds Welcome deck
-      → todo:     seeds 3 welcome todos
-      → calendar: seeds a welcome event
+signup → emit(UserCreated) → organizations: creates personal org → emit(OrgCreated) ─┐
+                                                                                      │  (persisted)
+  event tailer reads the log, fans OrgCreated out to each seeder ─────────────────────┘
+      → files:    seeds welcome.txt          → todo:     seeds 3 welcome todos
+      → learning: seeds Welcome deck         → calendar: seeds a welcome event
       → pages:    seeds a public Welcome page (the base's own pitch, in the public nav)
 ```
 
@@ -239,25 +245,28 @@ timeline, filterable by source. The two are complementary, never redundant: the 
 its own `event.emitted` trace line for a `BusinessEvent` (the durable trail already records
 it, with richer scoping), so a single business action shows up once, not twice.
 
-- **Business events — `bus.emit(...)`.** A sensitive domain action is emitted as a typed,
+- **Business events — `emit(...)`.** A sensitive domain action is emitted as a typed,
   frozen `BusinessEvent` dataclass (each app owns its vocabulary in `contract/events.py`;
   the `kind` — `todo.ticked`, `organizations.renamed` — is derived from an app prefix + a
-  verb, no magic strings). A single persistence subscriber on the `BusinessEvent` base
-  records every subclass to the append-only `business_events` table (RLS-scoped: members
-  read their own and their orgs' events). The **profile** and **`/{org}/dashboard`** show a
-  per-user / per-org timeline; the console **Business events** screen browses them per app.
+  verb, no magic strings). `emit` records it to the append-only `business_events` table **on the
+  request's own transaction** — atomic with the action — under a self-attributed INSERT policy
+  (RLS-scoped: members read their own and their orgs' events, and write only events attributed to
+  themselves). The **profile** and **`/{org}/dashboard`** show a per-user / per-org timeline; the
+  console **Business events** screen browses them per app.
 - **Technical logs — `structlog`.** `structlog.get_logger("labase.<context>.<subject>")`;
   events are dotted `snake_case` with kwargs, never f-strings or `print`. Rendered to stdout
   (JSON in production, pretty console in dev) **and** teed to the **firehose** — per-day JSON
   files that give the Logs viewer a recent window to read back. The level
   (`observability.log_level`) is admin-tunable from the console and applies live, no restart.
 
-**Non-blocking by doctrine.** Observability never sits on a mutation's critical path.
-Business-event writes are fire-and-forget (`asyncio.create_task`); the firehose only
-_enqueues_ on the request path (a background `FirehoseWriter` batches the queue to disk);
-error capture enqueues to a bounded deque drained by a background task; load metrics
-accumulate in memory and flush on a timer. A lost or failed observability write never blocks,
-fails, or slows the action it observes.
+**Non-blocking by doctrine.** _Technical_ observability never sits on a mutation's critical path:
+the firehose only _enqueues_ on the request path (a background `FirehoseWriter` batches the queue to
+disk); error capture enqueues to a bounded deque drained by a background task; load metrics
+accumulate in memory and flush on a timer. A lost or failed technical write never blocks, fails, or
+slows the action it observes. _Business_ events are the deliberate exception: the fact is written
+**transactionally** with the action (it commits iff the mutation does, so the trail can't diverge
+from what happened), while its async _delivery_ to consumers rides the event tailer off the log —
+so the producer still never waits on a reaction.
 
 **Qualified events.** Both systems tag every record with the correlation keys that make the
 merged timeline navigable — **user**, **org**, **request**, and the concerned **entity**.
@@ -298,6 +307,9 @@ exists iff the business transaction commits (outbox semantics); a per-process
 backoff, then parks failures for inspection. Recurring jobs (purges, rollups) re-enqueue
 themselves on completion. Transactional email goes the same way: `enqueue_email()`
 behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in dev).
+Durable async event delivery rides the same queue: the event tailer (`apps/shared/tailer.py`,
+NOTIFY-woken, polling as a net) reads the `business_events` log and enqueues one task per
+`on_async` consumer, so a fact's reactions get the queue's retry, parking and at-least-once safety.
 
 **HTTP security.** Cross-site mutations are rejected by a `Sec-Fetch-Site` middleware
 (CSRF protection without tokens); rate limiting counts against a shared Postgres store
