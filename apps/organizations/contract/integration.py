@@ -9,6 +9,7 @@ auth's ``UserCreated`` by creating the user's personal org then emitting ``Organ
 import uuid
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -22,6 +23,7 @@ from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.shared.bus import events
 from apps.shared.host import Host, MountPhase, NavItem
+from apps.shared.outbox import on_async
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize
@@ -39,7 +41,7 @@ def mount(host: Host) -> None:
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org)
-    host.events.on(UserDeleted, _forget_user)
+    on_async(UserDeleted, "organizations_forget", _forget_user, as_actor=False, idempotent=True)
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(
@@ -101,7 +103,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 async def _create_org(event: UserCreated) -> None:
     if not get_settings("organizations").auto_create_personal_org:
         return
-    user_id = uuid.UUID(event.user_id)
+    user_id = uuid.UUID(event.actor_id)
     async with admin_session_factory()() as session:
         already_member = await session.scalar(
             select(func.count()).select_from(Membership).where(Membership.auth_user_id == user_id)
@@ -124,19 +126,18 @@ async def _create_org(event: UserCreated) -> None:
     )
 
 
-async def _forget_user(event: UserDeleted) -> None:
+async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     """Account deletion: drop the user's memberships, reaping any org the departure
     would leave without an owner (nobody could run it) or without any member.
 
-    Writes through the deleting request's session (see UserDeleted) so the whole
-    deletion commits or rolls back as one unit. A last-owner seat is not deleted
-    directly — the DB guard forbids orphaning an org, and deleting it would strand
-    any remaining members in an ownerless org — so we reap the whole org instead
-    (SQL cascade takes its memberships and org-scoped rows, and the cascade's own
-    membership deletes are exempt from the guard because the org is already gone).
+    A durable async consumer of ``UserDeleted`` (run on the admin session off the tailer, keyed on
+    the removed user's ``entity_id``), so cleanup never sits on the deleting request's path and is
+    retried/parked on failure. A last-owner seat is not deleted directly — the DB guard forbids
+    orphaning an org, and deleting it would strand any remaining members in an ownerless org — so we
+    reap the whole org instead (SQL cascade takes its memberships and org-scoped rows, and the
+    cascade's own membership deletes are exempt from the guard because the org is already gone).
     """
-    session = event.session
-    user_id = uuid.UUID(event.user_id)
+    user_id = uuid.UUID(event.entity_id)
     memberships = list(
         await session.scalars(select(Membership).where(Membership.auth_user_id == user_id))
     )

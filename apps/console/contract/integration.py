@@ -71,4 +71,4 @@ def _declare_appearance_settings() -> SettingsDeclaration:
 
 async def _bootstrap_first_admin(event: UserCreated) -> None:
     if await count_server_admins() == 0:
-        await set_server_admin(uuid.UUID(event.user_id), True)
+        await set_server_admin(uuid.UUID(event.actor_id), True)

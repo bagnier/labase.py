@@ -579,9 +579,11 @@ async def account_delete(
         )
 
     await events.emit(AccountDeleted(actor_id=current_user.id))
-    # Handlers (organizations, profile itself…) join the admin session: one
-    # transaction for the whole deletion.
-    await events.emit(UserDeleted(user_id=current_user.id, session=admin_session))
+    # The UserDeleted fact rides the admin session — it commits iff the deletion does. Its forget
+    # consumers (organizations, profile) then run asynchronously off the tailer, by user id.
+    await events.emit(
+        UserDeleted(actor_id=current_user.id, entity_id=current_user.id), session=admin_session
+    )
     # GoTrue last, before commit: if closing access fails, nothing is deleted.
     await disable_account(current_user.id)
     await admin_session.commit()

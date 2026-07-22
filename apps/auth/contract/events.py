@@ -1,38 +1,44 @@
 """Auth's public events — a user's identity, sign-in, and account security on the shared trail.
 
-Two lifecycle *signals* stay lean (subscribers react without importing one another):
-:class:`UserCreated` and :class:`UserDeleted`. Everything else is a typed
-:class:`~apps.shared.events.BusinessEvent`: sign-in outcomes, MFA/passkey, impersonation and the
-self-service security actions a user takes from their profile (password, email, passkeys, 2FA) —
-all ``auth.*`` — plus admin account gating (``accounts.*``). Failed/security-sensitive actions are
-``warning``-level. The persister on the base records them; sign-in failures carry no actor.
+One lifecycle *signal* stays lean (subscribers react without importing one another):
+:class:`UserDeleted`. Everything else is a typed :class:`~apps.shared.events.BusinessEvent`:
+account creation, sign-in outcomes, MFA/passkey, impersonation and the self-service security
+actions a user takes from their profile (password, email, passkeys, 2FA) — all ``auth.*`` — plus
+admin account gating (``accounts.*``). Failed/security-sensitive actions are ``warning``-level.
+The persister on the base records them; sign-in failures carry no actor.
 """
 
 from dataclasses import dataclass
 from typing import ClassVar
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from apps.shared.events import BusinessEvent
 
 
-@dataclass(frozen=True)
-class UserCreated:
-    user_id: str
-    email: str
-    access_token: str | None
+@dataclass(frozen=True, kw_only=True)
+class UserCreated(BusinessEvent):
+    """A new account was provisioned — the fact org seeding and first-admin bootstrap react to.
+
+    Distinct from a sign-in (the ``*SignedIn`` Login events): emitted once, at genuine account
+    creation — never on a returning OAuth login — so the trail records real signups only. The new
+    user is the actor; a token is never carried (and would be redacted from any payload anyway)."""
+
+    kind: ClassVar[str] = "auth.user_created"
+    icon: ClassVar[str] = "user-plus"
+    email: str  # the new account's email — always present at genuine creation
 
 
-@dataclass(frozen=True)
-class UserDeleted:
-    """Emitted by the account-deletion flow, before the GoTrue soft delete.
+@dataclass(frozen=True, kw_only=True)
+class UserDeleted(BusinessEvent):
+    """An account was removed — the fact membership/profile cleanup reacts to.
 
-    Carries the deleting request's (admin) session so handlers join its
-    transaction — the deletion commits or rolls back as one unit.
-    """
+    Distinct from the audit events (:class:`AccountDeleted` / :class:`AccountDeletedByAdmin`): this
+    is the lifecycle trigger the forget consumers key on. The removed user is ``entity_id``;
+    ``actor_id`` is whoever triggered it (the user themselves, or an admin). No live session — the
+    user is gone, so cleanup runs asynchronously on the admin session, by user id (RLS-as-user is
+    impossible)."""
 
-    user_id: str
-    session: AsyncSession
+    kind: ClassVar[str] = "auth.user_deleted"
+    icon: ClassVar[str] = "user-minus"
 
 
 class AuthEvent(BusinessEvent):

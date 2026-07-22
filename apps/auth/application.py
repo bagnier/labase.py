@@ -25,7 +25,7 @@ async def register_user(email: str, password: str) -> RegisterResult:
         return result
     try:
         await events.emit(
-            UserCreated(user_id=result.user_id, email=email, access_token=result.access_token)
+            UserCreated(actor_id=result.user_id, entity_id=result.user_id, email=email)
         )
     except Exception:
         log.exception("registration.org_creation_failed_compensating", user_id=result.user_id)
@@ -39,5 +39,5 @@ async def confirm_user(access_token: str) -> None:
     """Bootstrap the org for a user whose email was just confirmed."""
     claims = decode_jwt(access_token)
     await events.emit(
-        UserCreated(user_id=claims["sub"], email=claims.get("email", ""), access_token=access_token)
+        UserCreated(actor_id=claims["sub"], entity_id=claims["sub"], email=claims.get("email", ""))
     )

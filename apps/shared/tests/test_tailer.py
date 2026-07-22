@@ -145,6 +145,17 @@ async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
     assert await _undispatched("test_tailer.legacy") == 0
 
 
+def test_forget_apps_register_durable_consumers_of_user_deleted():
+    # Account deletion cleanup runs off the tailer: organizations and profile each declare a durable
+    # async consumer of UserDeleted (auth.user_deleted), keyed by topic (shared may not import the
+    # bounded contexts to name the handlers).
+    import apps.main  # noqa: F401
+
+    topics = set(_handlers)
+    assert "evt:auth.user_deleted:organizations_forget" in topics
+    assert "evt:auth.user_deleted:profile_forget" in topics
+
+
 def test_org_seed_apps_register_durable_consumers_of_organization_created():
     # Importing the composition root mounts every app; each welcome-seed app declares a durable
     # async consumer of OrganizationCreated via the manifest's consumes_when_enabled. Checked by

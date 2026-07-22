@@ -3,6 +3,7 @@
 import uuid
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.events import UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -11,6 +12,7 @@ from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
 from apps.shared.host import Host, MountPhase
+from apps.shared.outbox import on_async
 from apps.shared.persistence.repository import count_created_per_day
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
 
@@ -25,7 +27,7 @@ def mount(host: Host) -> None:
     host.register_fullpage_provider("profile", provide_profile_handle)
     # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
     host.register_settings(_declare_settings())
-    host.events.on(UserDeleted, _forget_user)
+    on_async(UserDeleted, "profile_forget", _forget_user, as_actor=False, idempotent=True)
     host.reserve("profile")
     host.register_open_list("profiles", profile_handle_taken)
 
@@ -63,14 +65,15 @@ def _declare_settings() -> SettingsDeclaration:
     )
 
 
-async def _forget_user(event: UserDeleted) -> None:
-    """Account deletion: drop the profile row, in the deleting request's transaction."""
-    profile = await event.session.scalar(
-        select(Profile).where(Profile.auth_user_id == uuid.UUID(event.user_id))
+async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
+    """Account deletion: drop the profile row. A durable async consumer of ``UserDeleted`` (admin
+    session, off the tailer), keyed on the removed user's ``entity_id``."""
+    profile = await session.scalar(
+        select(Profile).where(Profile.auth_user_id == uuid.UUID(event.entity_id))
     )
     if profile is not None:
-        await event.session.delete(profile)
-        await event.session.flush()
+        await session.delete(profile)
+        await session.flush()
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
