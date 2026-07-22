@@ -3,9 +3,7 @@
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true
   },
-  "coverage-gutters.coverageFileNames": [
-    ".cache/cov/coverage.xml"
-  ],
+  "coverage-gutters.coverageFileNames": [".cache/cov/coverage.xml"],
   "coverage-gutters.showGutterCoverage": true,
   "coverage-gutters.showLineCoverage": false,
   "coverage-gutters.showRulerCoverage": false,
@@ -21,10 +19,7 @@
   // Python interpreter — uv managed venv
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   // Pytest
-  "python.testing.pytestArgs": [
-    "tests",
-    "apps"
-  ],
+  "python.testing.pytestArgs": ["tests", "apps"],
   // Load .env.test for tests/runs. Without this, the Python extension injects
   // .env (host.docker.internal) and pydantic-settings, which prioritizes
   // environment variables over env_file, overrides the .env.test values.
@@ -35,9 +30,7 @@
   "ruff.fixAll": true,
   "ruff.organizeImports": true,
   // Ruff — linting + formatting (remplace black, isort, flake8)
-  "ruff.path": [
-    "${workspaceFolder}/.venv/bin/ruff"
-  ],
+  "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
   // ty est le type checker — on désactive le type checking de Pylance pour éviter les conflits
   "ty.path": ["${workspaceFolder}/.venv/bin/ty"]
 }

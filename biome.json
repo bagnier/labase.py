@@ -7,7 +7,11 @@
       "static/js/todo.js",
       "static/js/learning.js",
       "static/js/charts.js",
-      "static/css/input.css"
+      "static/css/input.css",
+      "package.json",
+      "biome.json",
+      ".mcp.json",
+      ".vscode/*.json"
     ]
   },
   "formatter": {
