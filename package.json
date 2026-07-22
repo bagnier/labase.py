@@ -12,7 +12,7 @@
     "build:icons": "mkdir -p static/fonts && cp node_modules/@phosphor-icons/web/src/regular/Phosphor.woff2 static/fonts/",
     "build:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css --minify",
     "lint": "biome check",
-    "lint:gherkin": "gherkin-lint -c .gherkin-lintrc features/",
+    "lint:gherkin": "gherkin-lint -c scripts/.gherkin-lintrc features/",
     "format": "biome check --write"
   },
   "devDependencies": {

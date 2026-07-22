@@ -31,6 +31,15 @@
     "alexkrechik.cucumberautocomplete",
 
     // TOML (pyproject.toml, uv.lock)
-    "tamasfe.even-better-toml"
+    "tamasfe.even-better-toml",
+
+    // SQL — sqlfluff linting (config: scripts/.sqlfluff)
+    "dorzey.vscode-sqlfluff",
+
+    // Biome — JS / CSS / JSON linting + formatting
+    "biomejs.biome",
+
+    // GitHub Actions — workflow validation + autocomplete
+    "github.vscode-github-actions"
   ]
 }

@@ -119,9 +119,9 @@ checker rejects a violation before a test has to.
 | **ruff**                    | Python linting + formatting                                                      |
 | **Biome**                   | JS + CSS + JSON linting/formatting (`biome.json`)                                |
 | **djlint**                  | Jinja2 template linting (configured in `pyproject.toml`)                         |
-| **sqlfluff**                | SQL migration linting — lint-light, no reformat (`.sqlfluff`, Postgres dialect)  |
-| **gherkin-lint**            | BDD `.feature` structure linting (`.gherkin-lintrc`)                             |
-| **yamllint**                | YAML linting (`.yamllint`)                                                       |
+| **sqlfluff**                | SQL migration linting — lint-light, no reformat (`scripts/.sqlfluff`, Postgres)  |
+| **gherkin-lint**            | BDD `.feature` structure linting (`scripts/.gherkin-lintrc`)                     |
+| **yamllint**                | YAML linting (`scripts/.yamllint`)                                              |
 | **validate-pyproject**      | `pyproject.toml` schema validation                                              |
 | **zizmor**                  | GitHub Actions security linting (`.github/zizmor.yml`)                           |
 | **droast**                  | Dockerfile linting — self-contained GitHub Action in CI (`.github/workflows/`)   |

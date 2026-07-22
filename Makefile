@@ -93,8 +93,8 @@ lint:
 	uv run ruff check .
 	uv run lint-imports --cache-dir .cache/import-linter
 	uv run ty check apps/
-	uvx sqlfluff@4.2.2 lint supabase/migrations/
-	uvx yamllint@1.38.0 -c .yamllint .github docker scripts
+	uvx sqlfluff@4.2.2 lint --config scripts/.sqlfluff supabase/migrations/
+	uvx yamllint@1.38.0 -c scripts/.yamllint .github docker scripts
 	uvx --from 'validate-pyproject[all]==0.25' validate-pyproject pyproject.toml
 	uvx zizmor@1.28.0 --offline .github/workflows/
 	npm run lint

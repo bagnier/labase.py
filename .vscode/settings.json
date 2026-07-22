@@ -32,5 +32,8 @@
   // Ruff — linting + formatting (remplace black, isort, flake8)
   "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
   // ty est le type checker — on désactive le type checking de Pylance pour éviter les conflits
-  "ty.path": ["${workspaceFolder}/.venv/bin/ty"]
+  "ty.path": ["${workspaceFolder}/.venv/bin/ty"],
+  // SQL — point the sqlfluff extension at the relocated project config
+  // (needs sqlfluff on PATH locally, e.g. `uv tool install sqlfluff`)
+  "sqlfluff.config": "${workspaceFolder}/scripts/.sqlfluff"
 }
