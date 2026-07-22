@@ -470,11 +470,12 @@ async def oauth_callback(
             users_settings,
         )
     try:
-        tokens = await exchange_oauth_code(code, oauth_code_verifier)
+        tokens, is_new = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
         await events.emit(OAuthFailed())
         return _oauth_failure(request, str(e), users_settings)
-    await confirm_user(tokens.access_token)  # first visit bootstraps the personal org
+    if is_new:
+        await confirm_user(tokens.access_token)  # first visit only: provision the personal org
     claims = decode_jwt(tokens.access_token)
     await events.emit(OAuthSignedIn(actor_id=str(claims.get("sub", "")) or None))
     next = oauth_next or ""

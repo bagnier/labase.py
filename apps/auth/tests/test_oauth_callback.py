@@ -6,7 +6,7 @@ the TOTP step-up, and the failure landings.
 """
 
 from contextlib import contextmanager
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from supabase_auth.errors import AuthApiError
 
@@ -37,7 +37,7 @@ def _callback(driver, **patches):
     client.cookies.set("oauth_code_verifier", "the-verifier")
     client.cookies.set("oauth_next", "/profile")
     defaults = {
-        "exchange_oauth_code": _TOKENS,
+        "exchange_oauth_code": (_TOKENS, True),  # (tokens, is_new): default to a first sign-in
         "confirm_user": None,
         "decode_jwt": {"sub": "00000000-0000-0000-0000-000000000001"},
         "verified_totp_factor": None,
@@ -67,6 +67,28 @@ def test_callback_issues_the_session_and_clears_the_oauth_cookies(driver):
     assert response.cookies.get("access_token") == _TOKENS.access_token
     set_cookie = ",".join(response.headers.get_list("set-cookie"))
     assert 'oauth_code_verifier=""' in set_cookie  # deleted, not left lying around
+
+
+def test_callback_provisions_the_account_only_on_first_sign_in(driver):
+    # UserCreated (via confirm_user) is a genuine-creation fact, not a login: the callback fires it
+    # on the first OAuth sign-in and never on a returning one, keeping the trail free of noise.
+    client = driver.client()
+    client.cookies.set("oauth_code_verifier", "the-verifier")
+    client.cookies.set("oauth_next", "/profile")
+
+    def run(is_new: bool) -> AsyncMock:
+        confirm = AsyncMock()
+        with (
+            patch("apps.auth.infra.router.exchange_oauth_code", return_value=(_TOKENS, is_new)),
+            patch("apps.auth.infra.router.confirm_user", confirm),
+            patch("apps.auth.infra.router.decode_jwt", return_value={"sub": "u1"}),
+            patch("apps.auth.infra.router.verified_totp_factor", return_value=None),
+        ):
+            client.get("/auth/callback?code=the-code", follow_redirects=False)
+        return confirm
+
+    assert run(True).await_count == 1  # first sign-in provisions the personal org
+    assert run(False).await_count == 0  # a returning login never re-provisions
 
 
 def test_callback_with_totp_enrolled_asks_for_the_code_before_any_session(driver):

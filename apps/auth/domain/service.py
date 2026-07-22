@@ -1,7 +1,9 @@
 import base64
 import hashlib
+import re
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, cast
 from urllib.parse import urlencode
 
@@ -134,8 +136,30 @@ def oauth_authorize_url(provider: str, redirect_to: str, code_challenge: str) ->
     return f"{s.supabase_api_url}/auth/v1/authorize?{query}"
 
 
-async def exchange_oauth_code(code: str, code_verifier: str) -> AuthTokens:
-    """PKCE code-for-session exchange — stateless, like every GoTrue call here."""
+def _parse_ts(value: str) -> datetime:
+    """Parse a GoTrue timestamp, tolerating nanosecond precision (9 digits) and a trailing ``Z`` —
+    ``datetime`` only handles microseconds (6 digits) and a numeric offset."""
+    value = re.sub(r"(\.\d{6})\d+", r"\1", value).replace("Z", "+00:00")
+    return datetime.fromisoformat(value)
+
+
+def _is_first_sign_in(user: dict) -> bool:
+    """Whether a GoTrue user object is at its very first sign-in, so the OAuth callback provisions
+    the account (``UserCreated``) once and never on a returning login. GoTrue stamps ``created_at``
+    and ``last_sign_in_at`` in the same sign-up (milliseconds apart); a returning user's last
+    sign-in is far later. A user with no recorded sign-in yet also counts as new."""
+    created = user.get("created_at")
+    last = user.get("last_sign_in_at")
+    if not created:
+        return False  # nothing to key on — don't provision
+    if not last:
+        return True  # exists but never signed in → this is the first
+    return abs(_parse_ts(last) - _parse_ts(created)) < timedelta(seconds=5)
+
+
+async def exchange_oauth_code(code: str, code_verifier: str) -> tuple[AuthTokens, bool]:
+    """PKCE code-for-session exchange — stateless, like every GoTrue call here. Returns the tokens
+    and whether this is the user's first sign-in (so the callback provisions the account once)."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.post(
@@ -151,7 +175,8 @@ async def exchange_oauth_code(code: str, code_verifier: str) -> AuthTokens:
             message = ""
         raise OAuthError(message or "Sign-in with the provider failed.")
     data = res.json()
-    return AuthTokens(access_token=data["access_token"], refresh_token=data["refresh_token"])
+    tokens = AuthTokens(access_token=data["access_token"], refresh_token=data["refresh_token"])
+    return tokens, _is_first_sign_in(data.get("user") or {})
 
 
 class PasskeyError(Exception):

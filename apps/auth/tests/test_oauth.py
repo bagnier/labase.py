@@ -51,11 +51,17 @@ def _client_returning(response) -> MagicMock:
 @pytest.mark.asyncio
 async def test_exchange_oauth_code_returns_tokens():
     response = MagicMock(status_code=200)
-    response.json.return_value = {"access_token": "at", "refresh_token": "rt"}
+    response.json.return_value = {
+        "access_token": "at",
+        "refresh_token": "rt",
+        # created ≈ last sign-in → a genuine first sign-in, so the callback provisions the account.
+        "user": {"created_at": "2026-07-22T09:10:08Z", "last_sign_in_at": "2026-07-22T09:10:08Z"},
+    }
     client_cls = _client_returning(response)
     with patch("apps.auth.domain.service.httpx.AsyncClient", client_cls):
-        tokens = await exchange_oauth_code("the-code", "the-verifier")
+        tokens, is_new = await exchange_oauth_code("the-code", "the-verifier")
     assert (tokens.access_token, tokens.refresh_token) == ("at", "rt")
+    assert is_new is True
     call = client_cls.return_value.__aenter__.return_value.post.call_args
     assert "grant_type=pkce" in call.args[0]
     assert call.kwargs["json"] == {"auth_code": "the-code", "code_verifier": "the-verifier"}

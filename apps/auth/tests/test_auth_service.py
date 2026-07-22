@@ -5,8 +5,17 @@ import pytest
 from supabase_auth.errors import AuthApiError
 
 from apps.auth.application import register_user
-from apps.auth.domain.service import login, logout, refresh_session, register
+from apps.auth.contract.events import UserCreated, UserDeleted
+from apps.auth.domain.service import (
+    RegisterResult,
+    _is_first_sign_in,
+    login,
+    logout,
+    refresh_session,
+    register,
+)
 from apps.auth.tests.given_helpers import delete_user, find_users
+from apps.shared.events import BusinessEvent, event_class_for
 from apps.shared.persistence.supabase import get_admin_supabase
 
 
@@ -112,9 +121,6 @@ async def test_refresh_session_none_raises_value_error():
 
 
 def test_user_created_is_a_persisted_business_event():
-    from apps.auth.contract.events import UserCreated
-    from apps.shared.events import BusinessEvent, event_class_for
-
     event = UserCreated(actor_id="u1", entity_id="u1", email="a@b.c")
 
     assert isinstance(event, BusinessEvent)  # persisted on the trail like any fact
@@ -125,10 +131,25 @@ def test_user_created_is_a_persisted_business_event():
     assert not hasattr(event, "access_token")  # a token is never persisted
 
 
-def test_user_deleted_is_a_persisted_business_event():
-    from apps.auth.contract.events import UserDeleted
-    from apps.shared.events import BusinessEvent, event_class_for
+def test_is_first_sign_in_detects_a_brand_new_oauth_user():
+    # GoTrue stamps created_at and last_sign_in_at in the same sign-up — milliseconds apart, and
+    # last carries nanosecond precision + Z. That is a genuine first sign-in.
+    assert _is_first_sign_in(
+        {
+            "created_at": "2026-07-22T09:10:08.33665Z",
+            "last_sign_in_at": "2026-07-22T09:10:08.358220884Z",
+        }
+    )
+    # A returning user signed up long before this sign-in.
+    assert not _is_first_sign_in(
+        {"created_at": "2026-01-01T00:00:00Z", "last_sign_in_at": "2026-07-22T09:10:08Z"}
+    )
+    # No sign-in recorded yet → treat as new; empty payload → not new (nothing to provision).
+    assert _is_first_sign_in({"created_at": "2026-07-22T09:10:08Z", "last_sign_in_at": None})
+    assert not _is_first_sign_in({})
 
+
+def test_user_deleted_is_a_persisted_business_event():
     event = UserDeleted(actor_id="admin1", entity_id="victim1")
 
     assert isinstance(event, BusinessEvent)
@@ -140,8 +161,6 @@ def test_user_deleted_is_a_persisted_business_event():
 
 @pytest.mark.asyncio
 async def test_register_user_compensates_when_org_creation_fails():
-    from apps.auth.domain.service import RegisterResult
-
     fake_user_id = str(uuid4())
     fake_result = RegisterResult(user_id=fake_user_id, access_token="tok")
     fake_admin = MagicMock()
