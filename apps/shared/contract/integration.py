@@ -28,6 +28,7 @@ from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
+from apps.shared.tailer import EventTailer
 
 PHASE = MountPhase.FOUNDATION
 
@@ -57,6 +58,12 @@ def mount(host: Host) -> None:
     host.on_startup(_plant_recurring_tasks)
     host.on_startup(worker.start)
     host.on_shutdown(worker.stop)
+
+    # Event tailer: reads the business_events log and fans each fact out to its async consumers
+    # (NOTIFY-woken, poll as a net). One per process, like the worker.
+    tailer = EventTailer(settings.task_worker_interval_seconds)
+    host.on_startup(tailer.start)
+    host.on_shutdown(tailer.stop)
 
     # Firehose drains off the request path: the log processor only enqueues; this task writes.
     firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)

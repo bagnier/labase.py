@@ -17,6 +17,7 @@ from playwright.sync_api import (
 )
 
 from apps.shared.queue import TaskWorker
+from apps.shared.tailer import EventTailer
 from tests.e2e import cleanup
 from tests.e2e.drivers.server import InProcessServer
 
@@ -117,13 +118,20 @@ class BrowserBase:
         pass
 
     def drain_task_queue(self) -> None:
-        """Deliver queued tasks (e.g. outboxed email) now — the polling worker is
-        off under tests. Runs on the in-process server's loop, where the engines live."""
+        """Deliver async work now: fan persisted facts out to consumers (tailer), then run them
+        (worker), looping until both are dry. Runs on the in-process server's loop, where the
+        engines live; the browser driver commits for real, so the tailer sees committed facts."""
         if self._server is None:
-            return  # external APP_URL: that deployment runs its own worker
+            return  # external APP_URL: that deployment runs its own tailer/worker
+        tailer = EventTailer(0)
         worker = TaskWorker(0)
-        while self._server.run(worker.tick()):
-            pass
+        while True:
+            fanned = self._server.run(tailer.tick())
+            processed = 0
+            while self._server.run(worker.tick()):
+                processed += 1
+            if not fanned and not processed:
+                break
 
     def teardown_test(self) -> None:
         cleanup.truncate_app_tables()

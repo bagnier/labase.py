@@ -17,6 +17,7 @@ from apps.shared.persistence.database import (
     get_user_session,
 )
 from apps.shared.queue import TaskWorker
+from apps.shared.tailer import EventTailer
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.async_runner import AsyncRunner
 from tests.e2e.drivers.transport import ASGISyncTransport
@@ -108,18 +109,26 @@ class ApiBase:
         """Hook: feature mixins override to delete data committed outside the transaction."""
 
     def drain_task_queue(self) -> None:
-        """Deliver queued tasks (e.g. outboxed email) now.
+        """Deliver async work now: fan persisted facts out to consumers (tailer), then run them
+        (worker), looping until both are dry so an event that emits an event is delivered too.
 
-        The polling worker is off under tests — and could not see the rolled-back
-        test transaction anyway, so the tick runs on the test connection itself.
+        The polling tailer/worker are off under tests — and could not see the rolled-back test
+        transaction anyway, so both tick on the test connection itself.
         """
         assert db._test_connection is not None, "No active test transaction"
-        worker = TaskWorker(
-            0,
-            session_factory=lambda: AsyncSession(bind=db._test_connection, expire_on_commit=False),
-        )
-        while self.run(worker.tick()):
-            pass
+
+        def factory() -> AsyncSession:
+            return AsyncSession(bind=db._test_connection, expire_on_commit=False)
+
+        tailer = EventTailer(0, session_factory=factory)
+        worker = TaskWorker(0, session_factory=factory)
+        while True:
+            fanned = self.run(tailer.tick())
+            processed = 0
+            while self.run(worker.tick()):
+                processed += 1
+            if not fanned and not processed:
+                break
 
     # ── auth user tracking ─────────────────────────────────────────────────────
     def _track_auth_email(self, email: str) -> None:

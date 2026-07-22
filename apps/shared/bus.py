@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events import BusinessEvent
 from apps.shared.observability.business_events import persist_fact
-from apps.shared.outbox import fan_out_durable
 from apps.shared.persistence.uow import current_session
 
 log = structlog.get_logger("labase.shared.bus")
@@ -45,20 +44,18 @@ class EventBus:
         self._subs[event_type].append(handler)
 
     async def emit(self, event: object, session: AsyncSession | None = None) -> list[object]:
-        """Persist the fact, run every sync handler, then durably fan out to its async subscribers.
+        """Persist the fact, then run every sync handler.
 
         A ``BusinessEvent`` is first recorded to the ``business_events`` trail on ``session`` (or
         the ambient request unit of work) — atomic with the action, so the fact commits iff the
-        mutation commits. Non-``BusinessEvent`` signals are not persisted.
+        mutation commits. Non-``BusinessEvent`` signals are not persisted. Async consumers are not
+        run here: the :mod:`apps.shared.tailer` reads the persisted log and fans each fact out to
+        its :func:`~apps.shared.outbox.on_async` subscribers after commit, so the producer never
+        waits on — or fails from — a consumer.
 
         Dispatch then walks the event's MRO — handlers on the concrete type fire first (most
         specific), then handlers on any base class; a handler registered on several classes in the
         MRO runs once.
-
-        Finally :func:`~apps.shared.outbox.fan_out_durable` enqueues one durable task per
-        :func:`~apps.shared.outbox.on_async` subscriber — on the same transaction, so a sync-handler
-        exception (propagated below) or a later rollback discards the persisted fact and the outbox
-        rows too. Zero-cost when the event has no async subscribers.
         """
         # The fact first: a BusinessEvent is persisted on the request's own transaction (atomic
         # with the action; a best-effort admin write when no ambient session is in scope).
@@ -73,18 +70,17 @@ class EventBus:
                 if id(handler) not in seen:
                     seen.add(id(handler))
                     results.append(await handler(event))
-        await fan_out_durable(event, session)
         return results
 
     async def notify(self, event: object, session: AsyncSession | None = None) -> list[Any]:
-        """Fan an event out to its handlers like :meth:`emit`, but isolate each failure.
+        """Fan an event out to its sync handlers like :meth:`emit`, but isolate each failure.
 
-        Same MRO dispatch and durable fan-out as ``emit``; the only difference is the failure
-        policy — a handler that raises is logged and skipped instead of propagating. This is for
-        facts whose observers must never break the emitter: error capture fans ``ExceptionCaptured``
-        out this way so a failing tracker cannot worsen the error it tracks. The ``log.exception``
-        feeds the failing handler to the tracker through the capture processor; the drain runs it
-        under a reentrancy guard, so a tracker handler that itself fails here cannot recurse.
+        Same MRO dispatch as ``emit``; the only difference is the failure policy — a handler that
+        raises is logged and skipped instead of propagating. This is for facts whose observers
+        must never break the emitter: error capture fans ``ExceptionCaptured`` this way so a failing
+        tracker cannot worsen the error it tracks. The ``log.exception`` feeds the failing handler
+        to the tracker through the capture processor; the drain runs it under a reentrancy guard, so
+        a tracker handler that itself fails here cannot recurse.
         """
         results: list[Any] = []
         seen: set[int] = set()
@@ -100,7 +96,6 @@ class EventBus:
                             handler=repr(handler),
                             event_type=type(event).__name__,
                         )
-        await fan_out_durable(event, session)
         return results
 
 
