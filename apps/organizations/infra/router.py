@@ -45,8 +45,10 @@ from apps.organizations.domain.service import ensure_no_pending_invitation, ensu
 from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared import clock
-from apps.shared.bus import events
-from apps.shared.business_events import (
+from apps.shared.contribs import contribs
+from apps.shared.email import enqueue_email
+from apps.shared.events.bus import events
+from apps.shared.events.store import (
     BusinessEventRow,
     activity_entries,
     activity_stats,
@@ -55,8 +57,6 @@ from apps.shared.business_events import (
     heatmap_calendar,
     search_business_events,
 )
-from apps.shared.contribs import contribs
-from apps.shared.email import enqueue_email
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context

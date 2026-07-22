@@ -1,7 +1,7 @@
 """The durable async-consumer registry — how a business event grows at-least-once async behavior.
 
 An :func:`on_async` subscriber registers a consumer for an event type (and a task handler for its
-topic). The delivery itself is driven by the :mod:`apps.shared.tailer`: it reads the persisted
+topic). Delivery is driven by the :mod:`apps.shared.events.tailer`: it reads the persisted
 ``business_events`` log and, per fact, enqueues one task-queue row per subscriber this module knows
 (:func:`subscribers_for`). The per-process ``TaskWorker`` runs each row with its own
 retry/backoff/park, and competing consumers across instances stay safe via ``SKIP LOCKED``.
@@ -29,7 +29,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.events import BusinessEvent
+from apps.shared.events.types import BusinessEvent
 from apps.shared.queue import register_task_handler
 
 log = structlog.get_logger("labase.shared.outbox")

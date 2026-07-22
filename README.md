@@ -234,7 +234,7 @@ picks the mechanism:
 Rule of thumb: a feature importing a foundation is healthy; a foundation importing a feature is
 a smell — reach for an event (an import-linter contract enforces the one-way edges, e.g. auth
 never imports organizations). Runtime publishers/collectors reach the process-wide `bus`
-singleton (`apps.shared.bus`) directly; `host.events` is that same bus, wired at mount.
+singleton (`apps.shared.events.bus`) directly; `host.events` is that same bus, wired at mount.
 
 ### Observability
 
@@ -307,7 +307,7 @@ exists iff the business transaction commits (outbox semantics); a per-process
 backoff, then parks failures for inspection. Recurring jobs (purges, rollups) re-enqueue
 themselves on completion. Transactional email goes the same way: `enqueue_email()`
 behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in dev).
-Durable async event delivery rides the same queue: the event tailer (`apps/shared/tailer.py`,
+Durable async event delivery rides the same queue: the event tailer (`apps/shared/events/tailer.py`,
 NOTIFY-woken, polling as a net) reads the `business_events` log and enqueues one task per
 `on_async` consumer, so a fact's reactions get the queue's retry, parking and at-least-once safety.
 
@@ -358,8 +358,9 @@ allowed to know several contexts at once: `main.py`.
 labase.py/
 ├── apps/
 │   ├── main.py            # FastAPI app, mounts every context in phase order (catch-alls last)
-│   ├── shared/            # Cross-context infra: EventBus (bus.py), Contribs (contribs.py),
-│   │                      #   Host (host.py), task queue (queue.py), Mailer (email.py),
+│   ├── shared/            # Cross-context infra: events/ (types, store, bus, outbox, tailer),
+│   │                      #   Contribs (contribs.py), Host (host.py), task queue (queue.py),
+│   │                      #   Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),
 │   │                      #   persistence, http, observability, templates/
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies

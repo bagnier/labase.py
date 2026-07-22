@@ -2,7 +2,7 @@
 
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.organizations.tests.given_helpers import orgs_for_user
-from apps.shared.business_events import insert_business_event
+from apps.shared.events.store import insert_business_event
 
 _EMAIL = "dashboard-activity@example.com"
 

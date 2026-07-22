@@ -12,7 +12,7 @@ import structlog
 from apps.auth.contract.events import UserCreated
 from apps.auth.domain.service import RegisterResult, register
 from apps.auth.infra.security import decode_jwt
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from apps.shared.persistence.supabase import get_admin_supabase
 
 log = structlog.get_logger("labase.auth.application")

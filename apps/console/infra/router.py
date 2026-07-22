@@ -20,10 +20,10 @@ from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.infra.repository import AppSettingRepository
 from apps.organizations.contract.queries import list_org_handles
 from apps.shared import clock
-from apps.shared.bus import events
 from apps.shared.charts import day_buckets_series
 from apps.shared.config import get_technical_settings
 from apps.shared.contribs import contribs
+from apps.shared.events.bus import events
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates

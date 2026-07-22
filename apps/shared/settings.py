@@ -1,5 +1,5 @@
-"""Per-app settings — cross-cutting, like :mod:`apps.shared.bus`/``email``/``queue``: every app
-declares its settings from its own ``mount()``, so the mechanism lives here rather than in a
+"""Per-app settings — cross-cutting, like :mod:`apps.shared.events.bus`/``email``/``queue``: every
+app declares its settings from its own ``mount()``, so the mechanism lives here rather than in a
 bounded context ``Host`` couldn't reach.
 
 Each app, in ``mount()``, declares the settings it needs via ``host.register_settings(...)`` —

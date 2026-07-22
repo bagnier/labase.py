@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from apps.shared.http import (
     delete_response,
     or_404,

@@ -1,6 +1,6 @@
 """Type-keyed contribution registry — the *pull* half of inter-app collaboration.
 
-Where :mod:`apps.shared.bus` carries *events* (a fact happened, fan out to reactions), this
+Where :mod:`apps.shared.events.bus` carries *events* (a fact happened, fan out to reactions), this
 carries *contributions*: a host asks "who contributes to this query?" and aggregates the
 answers. It is not pub/sub — it is a registry of providers (an extension point), declared at
 mount and read synchronously on the request path:

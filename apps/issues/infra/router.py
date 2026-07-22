@@ -8,9 +8,9 @@ from apps.issues.contract.events import IssueStatusChanged
 from apps.issues.domain.models import ErrorEventRead, ErrorGroup, ErrorGroupRead, IssueStatus
 from apps.issues.infra.repository import ErrorGroupRepository
 from apps.shared import clock
-from apps.shared.bus import events
 from apps.shared.charts import last_days, sparkline
 from apps.shared.config import get_technical_settings
+from apps.shared.events.bus import events
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context

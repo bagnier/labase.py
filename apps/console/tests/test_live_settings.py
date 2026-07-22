@@ -1,7 +1,7 @@
 import pytest
 
 import apps.shared.settings as shared_settings
-from apps.shared.bus import EventBus
+from apps.shared.events.bus import EventBus
 from apps.shared.settings import (
     AppSettings,
     SettingDef,

@@ -8,7 +8,7 @@ from apps.auth.contract.user import AuthenticatedUser
 from apps.organizations.contract.events import OwnershipViolation
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from apps.shared.slug_registry import is_reserved
 
 

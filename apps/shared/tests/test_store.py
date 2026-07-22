@@ -10,14 +10,14 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from apps.shared import clock
-from apps.shared.business_events import (
+from apps.shared.events import BusinessEvent
+from apps.shared.events.store import (
     BusinessEventRow,
     _ago,
     activity_entries,
     insert_business_event,
     persist_fact,
 )
-from apps.shared.events import BusinessEvent
 from apps.shared.persistence import database as db
 
 
@@ -121,10 +121,10 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
     # message key, and a lost row must never crash the fire-and-forget write task.
     with (
         patch(
-            "apps.shared.business_events.admin_session_factory",
+            "apps.shared.events.store.admin_session_factory",
             side_effect=RuntimeError("db down"),
         ),
-        patch("apps.shared.business_events.log") as log,
+        patch("apps.shared.events.store.log") as log,
     ):
         await insert_business_event(
             kind="auth.signed_in",
@@ -182,7 +182,7 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     """No ambient session (auth signals) → scheduled off the critical path; emit never awaits it."""
     import asyncio
 
-    with patch("apps.shared.business_events.insert_business_event", new=AsyncMock()) as insert:
+    with patch("apps.shared.events.store.insert_business_event", new=AsyncMock()) as insert:
         await persist_fact(_P1Event(actor_id=str(uuid.uuid4()), label="x"), None)
         insert.assert_not_awaited()  # coroutine scheduled, not yet run
         await asyncio.sleep(0)  # let the created task run
@@ -193,7 +193,7 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
 
 @pytest.mark.asyncio
 async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean_p1):
-    from apps.shared.bus import EventBus
+    from apps.shared.events.bus import EventBus
 
     committed, rolled = str(uuid.uuid4()), str(uuid.uuid4())
     async with db.admin_session_factory()() as session:

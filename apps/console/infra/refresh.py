@@ -2,9 +2,9 @@
 
 A settings edit is a "run everywhere" event: every process must re-point its in-memory
 ``AppSettings`` handles. ``emit(SettingsChanged, session)`` fires a NOTIFY on the ``spread`` channel
-(:data:`~apps.shared.bus.SPREAD_CHANNEL`); each process runs this listener, which — woken by the
-NOTIFY, or by its interval as a durability net — re-reads ``app_settings`` and hands the fresh
-values to the bus's ``spread`` handlers via :meth:`~apps.shared.bus.EventBus.deliver_spread`.
+(:data:`~apps.shared.events.bus.SPREAD_CHANNEL`); each process runs this listener, which — woken by
+the NOTIFY, or by its interval as a durability net — re-reads ``app_settings`` and hands the fresh
+values to the bus's ``spread`` handlers via :meth:`~apps.shared.events.bus.EventBus.deliver_spread`.
 
 The emitter is just another listener: it applies via its own LISTEN, once. Re-applying every app's
 current values on each wake is deliberate and safe — ``spread`` handlers are idempotent (a reload is
@@ -20,7 +20,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.bus import SPREAD_CHANNEL, EventBus
+from apps.shared.events.bus import SPREAD_CHANNEL, EventBus
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.persistence.settings_store import AppSetting
 from apps.shared.settings import SettingsChanged

@@ -16,8 +16,8 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
+from apps.shared.events.tailer import EventTailer
 from apps.shared.queue import TaskWorker
-from apps.shared.tailer import EventTailer
 from tests.e2e import cleanup
 from tests.e2e.drivers.server import InProcessServer
 

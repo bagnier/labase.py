@@ -8,10 +8,10 @@ Two ways to fan an event out to its **sync** handlers, differing only in failure
   facts whose observers must never break the emitter (error capture fans out to trackers this way).
 
 Durable **async** consumers are *not* run here: a ``BusinessEvent`` persisted by ``emit`` is read
-back from the log by the :mod:`apps.shared.tailer`, which fans it out to
-:func:`~apps.shared.outbox.on_async` subscribers after commit — so the producer never waits on, or
-fails from, a consumer. The *pull* half of collaboration (``collect`` a query's contributions) lives
-in :mod:`apps.shared.contribs` — a provider registry, not events.
+back from the log by the :mod:`apps.shared.events.tailer`, which fans it out to
+:func:`~apps.shared.events.outbox.on_async` subscribers after commit — so the producer never
+waits on, or fails from, a consumer. The *pull* half of collaboration (``collect`` a query's
+contributions) lives in :mod:`apps.shared.contribs` — a provider registry, not events.
 
 Runtime publishers import the process-wide :data:`events` singleton directly — a focused
 collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires handlers onto
@@ -27,8 +27,8 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.business_events import persist_fact
-from apps.shared.events import BusinessEvent
+from apps.shared.events.store import persist_fact
+from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.uow import current_session
 
 log = structlog.get_logger("labase.shared.bus")
@@ -82,9 +82,9 @@ class EventBus:
         A ``BusinessEvent`` is first recorded to the ``business_events`` trail on ``session`` (or
         the ambient request unit of work) — atomic with the action, so the fact commits iff the
         mutation commits. Non-``BusinessEvent`` signals are not persisted. Async consumers are not
-        run here: the :mod:`apps.shared.tailer` reads the persisted log and fans each fact out to
-        its :func:`~apps.shared.outbox.on_async` subscribers after commit, so the producer never
-        waits on — or fails from — a consumer.
+        run here: the :mod:`apps.shared.events.tailer` reads the persisted log and fans each fact
+        out to its :func:`~apps.shared.events.outbox.on_async` subscribers after commit, so the
+        producer never waits on — or fails from — a consumer.
 
         ``on`` dispatch walks the event's MRO — handlers on the concrete type fire first (most
         specific), then any base class; a handler on several MRO classes runs once. ``spread``

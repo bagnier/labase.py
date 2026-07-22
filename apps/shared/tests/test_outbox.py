@@ -10,8 +10,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from apps.shared import outbox
-from apps.shared.events import BusinessEvent
+from apps.shared.events import BusinessEvent, outbox
 from apps.shared.persistence import database as db
 from apps.shared.queue import _handlers
 

@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 
-from apps.shared.bus import EventBus, events
 from apps.shared.contribs import Contribs, contribs
 from apps.shared.events import BusinessEvent
-from apps.shared.outbox import on_async
+from apps.shared.events.bus import EventBus, events
+from apps.shared.events.outbox import on_async
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,

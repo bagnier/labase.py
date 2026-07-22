@@ -20,9 +20,9 @@ from apps.issues.infra.repository import (
     record_event,
 )
 from apps.issues.infra.router import router
-from apps.shared.bus import events
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
+from apps.shared.events.bus import events
 from apps.shared.host import Host, MountPhase
 from apps.shared.observability.capture import CaptureDrain
 from apps.shared.observability.errors import ExceptionCaptured

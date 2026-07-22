@@ -28,7 +28,7 @@ from typing import Any
 
 import structlog
 
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from apps.shared.observability.errors import ExceptionCaptured
 
 log = structlog.get_logger("labase.issues.capture")

@@ -9,6 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from apps.shared.config import get_technical_settings
 from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
+from apps.shared.events.tailer import EventTailer
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.exceptions import (
     handle_http_error,
@@ -28,7 +29,6 @@ from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import setup_logging
 from apps.shared.observability.request import RequestLogger
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
-from apps.shared.tailer import EventTailer
 
 PHASE = MountPhase.FOUNDATION
 

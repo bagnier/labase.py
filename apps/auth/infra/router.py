@@ -66,8 +66,8 @@ from apps.auth.domain.service import (
 )
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
-from apps.shared.bus import events
 from apps.shared.config import get_technical_settings
+from apps.shared.events.bus import events
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.addressing import client_ip
 from apps.shared.http.limiter import rate_limit

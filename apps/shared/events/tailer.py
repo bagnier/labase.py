@@ -1,9 +1,10 @@
 """The async event tailer — durable, at-least-once fan-out of persisted business events.
 
 ``emit`` writes a ``BusinessEvent`` to the ``business_events`` log inside the request's transaction
-(:func:`~apps.shared.business_events.persist_fact`). This tailer reads that log and,
-per new fact, enqueues one task-queue row per registered async consumer (:func:`~apps.shared.outbox`
-``on_async``). The producer never knows its consumers and never waits for them.
+(:func:`~apps.shared.events.store.persist_fact`). This tailer reads that log and,
+per new fact, enqueues one task-queue row per registered async consumer
+(:func:`~apps.shared.events.outbox` ``on_async``). The producer never knows its consumers and never
+waits for them.
 
 - **Claim, don't cursor.** Each tick claims un-dispatched rows with ``FOR UPDATE SKIP LOCKED`` and,
   in the same transaction, enqueues their tasks and stamps ``dispatched_at``. No sequence-visibility
@@ -23,8 +24,8 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.events import event_class_for
-from apps.shared.outbox import subscribers_for
+from apps.shared.events.outbox import subscribers_for
+from apps.shared.events.types import event_class_for
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 

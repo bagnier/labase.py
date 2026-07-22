@@ -27,8 +27,8 @@ from apps.organizations.contract.current import (
     Membership,
     OrgRole,
 )
-from apps.shared.bus import events
 from apps.shared.clock import now
+from apps.shared.events.bus import events
 from apps.shared.http import (
     delete_response,
     or_404,

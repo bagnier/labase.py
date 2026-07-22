@@ -5,7 +5,7 @@ from apps.auth.tests.given_helpers import (
     set_admin_role,
 )
 from apps.console.infra.refresh import SettingsRefresher
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from tests.e2e.drivers.browser_base import BrowserBase
 
 _ADMIN_PASSWORD = "Test1234!"

@@ -33,7 +33,7 @@ from apps.pages.infra.repository import (
     search_visible_pages,
     visible_pages,
 )
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from apps.shared.http import (
     delete_response,
     mutation_response,

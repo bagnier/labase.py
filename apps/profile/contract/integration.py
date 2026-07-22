@@ -11,8 +11,8 @@ from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
+from apps.shared.events.outbox import on_async
 from apps.shared.host import Host, MountPhase
-from apps.shared.outbox import on_async
 from apps.shared.persistence.repository import count_created_per_day
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
 

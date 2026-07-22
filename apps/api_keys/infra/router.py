@@ -11,7 +11,7 @@ from apps.api_keys.infra.repository import ApiKeyRepository
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOwnerMembership
 from apps.shared import clock
-from apps.shared.bus import events
+from apps.shared.events.bus import events
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 

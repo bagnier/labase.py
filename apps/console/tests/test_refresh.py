@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 
 from apps.console.infra.refresh import SettingsRefresher
-from apps.shared.bus import EventBus
+from apps.shared.events.bus import EventBus
 from apps.shared.host import Host
 from apps.shared.persistence import database as db
 from apps.shared.settings import SettingsChanged

@@ -14,8 +14,8 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
+from apps.shared.events.outbox import on_async
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.outbox import on_async
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.contract.events import TodoTicked
 from apps.todo.domain.models import TodoItem

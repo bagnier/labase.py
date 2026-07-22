@@ -1,7 +1,8 @@
 """The business-events store — the append-only trail every domain event is persisted to.
 
-The producer is the typed event bus (:mod:`apps.shared.events`): :func:`~apps.shared.bus.EventBus`
-``emit`` records every emitted ``BusinessEvent`` here. The store is member-readable (RLS scopes rows
+The producer is the typed event bus (:mod:`apps.shared.events`):
+:func:`~apps.shared.events.bus.EventBus` ``emit`` records every emitted ``BusinessEvent`` here.
+The store is member-readable (RLS scopes rows
 to the reader), so the profile and org-dashboard timelines read it on the user's own session; the
 admin console reads it all through the BYPASSRLS session.
 
@@ -27,7 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from structlog.contextvars import get_contextvars
 
 from apps.shared import clock
-from apps.shared.events import BusinessEvent, _loggable_payload
+from apps.shared.events.types import BusinessEvent, _loggable_payload
 from apps.shared.persistence.base import Base
 from apps.shared.persistence.database import admin_session_factory
 

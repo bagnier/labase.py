@@ -21,9 +21,9 @@ from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
-from apps.shared.bus import events
+from apps.shared.events.bus import events
+from apps.shared.events.outbox import on_async
 from apps.shared.host import Host, MountPhase, NavItem
-from apps.shared.outbox import on_async
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize

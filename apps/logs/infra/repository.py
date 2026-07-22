@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared import clock
-from apps.shared.business_events import BusinessEventRow, search_business_events
+from apps.shared.events.store import BusinessEventRow, search_business_events
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
