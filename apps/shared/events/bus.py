@@ -1,11 +1,8 @@
 """Type-keyed event bus — synchronous, in-process pub/sub, plus the persist step for facts.
 
-Two ways to fan an event out to its **sync** handlers, differing only in failure policy:
-
-- ``emit(event)`` — push/command: first persist a ``BusinessEvent`` to the trail (atomic with the
-  action), then run every sync handler, propagating the first exception (caller can compensate).
-- ``notify(event)`` — push/signal: run every sync handler, isolating failures (log + skip). For
-  facts whose observers must never break the emitter (error capture fans out to trackers this way).
+``emit(event)`` is push/command: it first persists a ``BusinessEvent`` to the trail (atomic with
+the action), then runs every sync ``on`` handler, propagating the first exception so the caller can
+compensate.
 
 Durable **async** consumers are *not* run here: a ``BusinessEvent`` persisted by ``emit`` is read
 back from the log by the :mod:`apps.shared.events.tailer`, which fans it out to
@@ -124,30 +121,7 @@ class EventBus:
         for handler in self._handlers_for(event, self._spread_subs, seen):
             await handler(event)
 
-    async def notify(self, event: object, session: AsyncSession | None = None) -> list[Any]:
-        """Fan an event out to its sync handlers like :meth:`emit`, but isolate each failure.
 
-        Same MRO dispatch as ``emit``; the only difference is the failure policy — a handler that
-        raises is logged and skipped instead of propagating. This is for facts whose observers
-        must never break the emitter: error capture fans ``ExceptionCaptured`` this way so a failing
-        tracker cannot worsen the error it tracks. The ``log.exception`` feeds the failing handler
-        to the tracker through the capture processor; the drain runs it under a reentrancy guard, so
-        a tracker handler that itself fails here cannot recurse.
-        """
-        results: list[Any] = []
-        seen: set[int] = set()
-        for handler in self._handlers_for(event, self._subs, seen):
-            try:
-                results.append(await handler(event))
-            except Exception:
-                log.exception(
-                    "event.notify_handler_failed",
-                    handler=repr(handler),
-                    event_type=type(event).__name__,
-                )
-        return results
-
-
-# Process-wide singleton. Runtime code emits/notifies on this directly; the production Host
+# Process-wide singleton. Runtime code emits on this directly; the production Host
 # is built with ``events=events`` so its mount-time ``.on(...)`` registrations land here too.
 events = EventBus()

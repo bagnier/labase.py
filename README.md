@@ -176,16 +176,16 @@ type they carry, so there are no magic strings and no shared imports.
 
 **`host.events` — push.** `emit(event)` first **persists** a `BusinessEvent` to the trail on the
 caller's own transaction — atomic with the action, so the fact commits iff the mutation commits —
-then runs the event's *synchronous* handlers. Durable **async** consumers are not run here: the
-event tailer reads the persisted log and fans each fact out to its `on_async` subscribers after
-commit (see Observability), so a producer never waits on — or fails from — a consumer. The two sync
-fan-outs differ only in failure policy:
+then runs the event's *synchronous* `on` handlers, propagating the first exception so the caller
+can compensate (`UserCreated`, `OrgCreated`, `SettingsChanged`). Durable **async** consumers are
+not run here: the event tailer reads the persisted log and fans each fact out to its `on_async`
+subscribers after commit (see Observability), so a producer never waits on — or fails from — a
+consumer.
 
-|                | `emit(event)`                                             | `notify(event)`                                             |
-| -------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
-| **Semantic**   | push / command — runs all handlers, returns their results | push / signal — runs all handlers, returns successful ones  |
-| **On failure** | propagates first exception (caller can compensate)        | logs & skips the failing handler (observers can't break it) |
-| **Used for**   | `UserCreated`, `OrgCreated`, `SettingsChanged` (signals)  | `ExceptionCaptured` (error capture → trackers)              |
+Technical error capture is *not* on the bus: an `ExceptionCaptured` (not a business fact) is fanned
+out to its trackers by the capture drain with log-and-skip isolation, directly between the
+`observability` and `issues` contexts (see Observability), so a failing tracker never worsens the
+error it tracks.
 
 **`host.contribs` — pull.** A registry of contribution providers (an extension point),
 declared at mount and read synchronously on the request path — *not* events:

@@ -48,11 +48,6 @@ class _Sub:
 _async_subs: dict[type, list[_Sub]] = {}
 
 
-def reset_async_subs() -> None:
-    """Clear the durable-subscriber registry — for test isolation."""
-    _async_subs.clear()
-
-
 def on_async(
     event_type: type[BusinessEvent],
     name: str,

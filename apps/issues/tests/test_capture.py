@@ -101,7 +101,7 @@ async def test_drain_does_not_recurse_when_a_tracker_handler_fails():
     async def failing_tracker(_event: ExceptionCaptured) -> None:
         raise RuntimeError("tracker itself is down")
 
-    host.events.on(ExceptionCaptured, failing_tracker)
+    capture.on_captured(failing_tracker)
     try:
         log = structlog.get_logger("labase.test.capture")
         try:
@@ -112,7 +112,7 @@ async def test_drain_does_not_recurse_when_a_tracker_handler_fails():
         await CaptureDrain(0).tick()  # failing_tracker logs under the guard → no re-enqueue
         assert not capture._QUEUE, "the guard must stop the drain from feeding itself"
     finally:
-        host.events._subs[ExceptionCaptured].remove(failing_tracker)
+        capture._trackers.remove(failing_tracker)
 
     # The real _record still ran alongside the failing handler, so the group landed.
     assert await _group_titled(marker) is not None

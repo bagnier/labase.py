@@ -9,9 +9,11 @@ Doctrine (three levels):
 A structlog processor (:func:`capture_processor`, wired into the chain *before*
 ``format_exc_info`` so the live exception is still present) tees every ``log.exception`` call
 into a bounded in-memory queue. A background :class:`CaptureDrain` — the ``MetricsFlusher``
-lifespan-task shape — pops the queue and hands each exception to whoever tracks errors through
-``events.notify(ExceptionCaptured)`` — the isolated (log-and-skip) fan-out, so a failing tracker
-never worsens the error it tracks.
+lifespan-task shape — pops the queue and hands each exception to whoever tracks errors. Trackers
+register directly here via :func:`on_captured` (``apps/issues`` subscribes its recorder at mount);
+the drain fans each exception out to them with log-and-skip isolation, so a failing tracker never
+worsens the error it tracks. This seam is deliberately off the event bus — ``ExceptionCaptured`` is
+technical observability, not a persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
@@ -22,13 +24,12 @@ import asyncio
 import contextlib
 import sys
 from collections import deque
-from collections.abc import MutableMapping
+from collections.abc import Awaitable, Callable, MutableMapping
 from contextvars import ContextVar
 from typing import Any
 
 import structlog
 
-from apps.shared.events.bus import events
 from apps.shared.observability.errors import ExceptionCaptured
 
 log = structlog.get_logger("labase.issues.capture")
@@ -38,8 +39,25 @@ log = structlog.get_logger("labase.issues.capture")
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
 
 # Set while the drain is recording, so the capture path's own logs (``issue.recorded``, and
-# ``events.notify``'s ``event.notify_handler_failed`` if a tracker handler fails) never re-enter.
+# ``issues.tracker_failed`` if a tracker raises) never re-enter the capture processor.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
+
+# Error trackers, registered directly (not via the event bus) — the drain fans each captured
+# exception out to them. Registered at mount by whoever tracks errors (``apps/issues``); a single
+# event type, so a plain list, no MRO/type-key dispatch.
+ExceptionTracker = Callable[[ExceptionCaptured], Awaitable[None]]
+_trackers: list[ExceptionTracker] = []
+
+
+def on_captured(tracker: ExceptionTracker) -> None:
+    """Subscribe ``tracker`` to captured exceptions — the drain calls it per exception, isolated."""
+    _trackers.append(tracker)
+
+
+def reset_trackers() -> None:
+    """Clear the tracker registry — for test isolation."""
+    _trackers.clear()
+
 
 _SCALARS = (str, int, float, bool, type(None))
 # Render-noise keys that carry no correlation value into a stored issue.
@@ -120,7 +138,13 @@ class CaptureDrain:
                 break
             token = _capturing.set(True)
             try:
-                await events.notify(captured)  # log-and-skip semantics: never raises
+                for tracker in _trackers:
+                    try:
+                        await tracker(captured)
+                    except Exception:
+                        # Log-and-skip: a failing tracker must never worsen the error it tracks,
+                        # nor abort the others. Logged under the guard, so it does not re-capture.
+                        log.exception("issues.tracker_failed", tracker=repr(tracker))
             finally:
                 _capturing.reset(token)
 

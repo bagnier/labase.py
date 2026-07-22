@@ -239,7 +239,7 @@ async def persist_fact(event: BusinessEvent, session: AsyncSession | None) -> No
 _FALLBACK_ICON = "circle"  # for legacy rows written before events carried an icon
 
 
-def activity_label(kind: str) -> str:
+def _activity_label(kind: str) -> str:
     """`auth.oauth_signed_in` → `Oauth signed in` — readable without a per-event table. Purely
     string-shaping: shared never enumerates the apps, it just humanizes whatever kind it's given."""
     return kind.split(".", 1)[-1].replace("_", " ").capitalize()
@@ -285,7 +285,7 @@ def activity_entries(
         entries.append(
             {
                 "who": payload.get("actor") if show_actor else None,
-                "label": activity_label(r.kind),
+                "label": _activity_label(r.kind),
                 "detail": payload.get("label"),
                 "app": r.kind.split(".", 1)[0],
                 "icon": r.icon or _FALLBACK_ICON,

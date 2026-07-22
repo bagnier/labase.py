@@ -1,9 +1,9 @@
 """How the issues context (error tracking) plugs into the running app.
 
-Subscribes to shared's ``ExceptionCaptured`` (500 handler + event-bus failures),
-groups events by stack fingerprint, and serves the console screen. Best-effort
-doctrine verbatim: persistence goes through collect()'s log-and-skip
-semantics — a failing tracker never worsens the failure it is tracking.
+Registers an ``ExceptionCaptured`` tracker with the capture module (500 handler +
+event-bus failures), groups events by stack fingerprint, and serves the console
+screen. Best-effort doctrine verbatim: the capture drain fans out with log-and-skip
+isolation — a failing tracker never worsens the failure it is tracking.
 
 NOTE: mounted BEFORE the console context so its /console/issues routes register
 ahead of the console's /console/{app} catch-all.
@@ -24,7 +24,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.events.bus import events
 from apps.shared.host import Host, MountPhase
-from apps.shared.observability.capture import CaptureDrain
+from apps.shared.observability.capture import CaptureDrain, on_captured
 from apps.shared.observability.errors import ExceptionCaptured
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.queue import ensure_scheduled, register_task_handler
@@ -53,7 +53,7 @@ def mount(host: Host) -> None:
     if not settings.enabled:
         return
     host.app.include_router(router, prefix="/console/issues")
-    host.events.on(ExceptionCaptured, _record)
+    on_captured(_record)  # error capture is delivered off the bus, observability → issues
     host.events.on(IssueOpened, _alert_opened)
     host.events.on(IssueRegressed, _alert_regressed)
     register_task_handler(PURGE_TOPIC, _purge)
