@@ -15,7 +15,6 @@ from apps.shared.events.types import (
     EntityCreated,
     EntityDeleted,
     EntityUpdated,
-    event_class_for,
 )
 
 __all__ = [
@@ -23,5 +22,4 @@ __all__ = [
     "EntityCreated",
     "EntityDeleted",
     "EntityUpdated",
-    "event_class_for",
 ]

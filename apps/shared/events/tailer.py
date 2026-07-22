@@ -11,8 +11,8 @@ waits for them.
   gap, and N instances never double-fan a row.
 - **Wake on NOTIFY, poll as a net.** An ``AFTER INSERT`` trigger ``pg_notify``s on commit, so
   delivery is ~immediate; the poll loop is the durability net (NOTIFY is lost with no listener).
-- **Reconstruct from the row.** The consumer receives the typed event, rebuilt from the row via the
-  ``kind`` → class registry (:func:`~apps.shared.events.event_class_for`); the dedup key is the id.
+- **Reconstruct from the row.** The consumer receives the typed event, rebuilt from the row's
+  ``kind`` via the :func:`~apps.shared.events.types.event_class_for` registry; dedup key is the id.
 """
 
 import asyncio

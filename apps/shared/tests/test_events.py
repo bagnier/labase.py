@@ -54,7 +54,7 @@ def test_explicit_kind_wins_over_derivation():
 def test_concrete_events_register_by_kind_for_reconstruction():
     # The tailer rebuilds a typed event from a persisted row's `kind`, so every concrete event
     # registers itself. Abstract bases (empty kind) do not.
-    from apps.shared.events import event_class_for
+    from apps.shared.events.types import event_class_for
 
     assert event_class_for("widget.created") is WidgetCreated
     assert event_class_for("widget.deleted") is WidgetDeleted

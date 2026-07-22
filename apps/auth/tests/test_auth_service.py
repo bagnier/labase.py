@@ -15,7 +15,7 @@ from apps.auth.domain.service import (
     register,
 )
 from apps.auth.tests.given_helpers import delete_user, find_users
-from apps.shared.events import BusinessEvent, event_class_for
+from apps.shared.events import BusinessEvent
 from apps.shared.persistence.supabase import get_admin_supabase
 
 
@@ -124,8 +124,7 @@ def test_user_created_is_a_persisted_business_event():
     event = UserCreated(actor_id="u1", entity_id="u1", email="a@b.c")
 
     assert isinstance(event, BusinessEvent)  # persisted on the trail like any fact
-    assert UserCreated.kind == "auth.user_created"  # distinct from the sign-in (Login) events
-    assert event_class_for("auth.user_created") is UserCreated  # the tailer can reconstruct it
+    assert event.kind == "auth.user_created"  # distinct from the sign-in (Login) events
     assert event.actor_id == "u1"  # the new user acts
     assert event.email == "a@b.c"
     assert not hasattr(event, "access_token")  # a token is never persisted
@@ -153,8 +152,7 @@ def test_user_deleted_is_a_persisted_business_event():
     event = UserDeleted(actor_id="admin1", entity_id="victim1")
 
     assert isinstance(event, BusinessEvent)
-    assert UserDeleted.kind == "auth.user_deleted"
-    assert event_class_for("auth.user_deleted") is UserDeleted
+    assert event.kind == "auth.user_deleted"
     assert event.entity_id == "victim1"  # the removed user — forget consumers key on it
     assert not hasattr(event, "session")  # no live session travels on a frozen fact
 
