@@ -13,7 +13,7 @@ from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuer
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import spawn_org_seed
+from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.outbox import on_async
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
@@ -41,7 +41,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)],
-            when_enabled=[(OrganizationCreated, _seed)],
+            consumes_when_enabled=[(OrganizationCreated, "todo_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
         )
     )
@@ -99,8 +99,8 @@ async def _bump_completed(session: AsyncSession, event: TodoTicked) -> None:
         await bump_completion(session, uuid.UUID(event.org_id))
 
 
-async def _seed(event: OrganizationCreated) -> None:
-    spawn_org_seed(event.org_id, _seed_welcome)
+async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
+    await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:

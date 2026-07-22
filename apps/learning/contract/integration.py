@@ -15,7 +15,7 @@ from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import spawn_org_seed
+from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
@@ -44,7 +44,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20)],
-            when_enabled=[(OrganizationCreated, _seed)],
+            consumes_when_enabled=[(OrganizationCreated, "learning_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
         )
     )
@@ -96,8 +96,8 @@ async def _overview(query: OverviewQuery) -> Overview:
     )
 
 
-async def _seed(event: OrganizationCreated) -> None:
-    spawn_org_seed(event.org_id, _seed_welcome)
+async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
+    await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, _owner_id: uuid.UUID) -> None:

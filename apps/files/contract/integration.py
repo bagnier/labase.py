@@ -16,7 +16,7 @@ from apps.files.infra.storage import storage_path
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import spawn_org_seed
+from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
@@ -41,7 +41,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(public_router, ""), (router, ORG_PREFIX)],
             nav=[NavItem("Files", "folder", "files", "/files", order=50)],
-            when_enabled=[(OrganizationCreated, _seed)],
+            consumes_when_enabled=[(OrganizationCreated, "files_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
             reserve=("files",),  # even when disabled, to keep the slug from being squatted
         )
@@ -107,8 +107,8 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     return ConsoleOverview(key="files", title="Files", icon="folder", data={"lines": lines})
 
 
-async def _seed(event: OrganizationCreated) -> None:
-    spawn_org_seed(event.org_id, _seed_welcome)
+async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
+    await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:

@@ -16,7 +16,7 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.fullpage import OrgNavItem, OrgNavQuery
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import spawn_org_seed
+from apps.organizations.contract.queries import seed_org_welcome
 from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
@@ -41,7 +41,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX), (public_router, "")],
             nav=[NavItem("Pages", "note-pencil", "pages", "/pages", order=40)],
-            when_enabled=[(OrganizationCreated, _seed)],
+            consumes_when_enabled=[(OrganizationCreated, "pages_welcome", _seed)],
             provides_when_enabled=[
                 (OverviewQuery, _overview),
                 (OrgNavQuery, _org_nav),
@@ -80,14 +80,14 @@ async def _overview(query: OverviewQuery) -> Overview:
     )
 
 
-async def _seed(event: OrganizationCreated) -> None:
+async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
     """Seed a public Welcome page, listed in the public nav.
 
-    Public so that pointing ``public.featured_org_handle`` at the org makes it the site
-    home; in the nav so ``/`` redirects straight to it. Suppressed in the test schema (via
-    ``spawn_org_seed``), so this never runs under the e2e drivers.
+    Public so that pointing ``public.featured_org_handle`` at the org makes it the site home; in
+    the nav so ``/`` redirects straight to it. A durable async consumer of ``OrganizationCreated``,
+    suppressed in the test schema (via ``seed_org_welcome``), so it never runs under e2e.
     """
-    spawn_org_seed(event.org_id, _seed_welcome)
+    await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:

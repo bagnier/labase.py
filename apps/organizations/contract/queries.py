@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
@@ -9,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.domain.models import Membership, Organization, OrganizationRead, OrgRole
 from apps.shared.config import get_technical_settings
-from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger("labase.organizations.seeding")
 
@@ -38,36 +36,25 @@ def seeding_enabled() -> bool:
     return not get_technical_settings().supabase_database_schema.startswith("test")
 
 
-def spawn_org_seed(
+async def seed_org_welcome(
+    session: AsyncSession,
     org_id: str | None,
     seed: Callable[[AsyncSession, uuid.UUID, uuid.UUID], Awaitable[None]],
 ) -> None:
-    """Fire-and-forget welcome seeding for a newly created org.
+    """Run a welcome seeder for a newly created org, on the worker's session.
 
-    Opens a fresh admin session, resolves the org's owner (bailing if there isn't one yet), runs
-    ``seed(session, org_id, owner_id)`` and commits — so each seeder only spells its own welcome
-    rows, never the session/owner/commit boilerplate.
-
-    Scheduled off the emit: seeders react to ``OrganizationCreated`` but must never sit on the
-    mutation's critical path, nor let a failure break org creation — being earlier in the bus MRO
-    than the trail persister, a raised seeder would also suppress the trail write. Failures are
-    logged, mirroring the business-event persister's doctrine. Suppressed in the test schema."""
+    Each app registers its seeder as a durable async consumer of ``OrganizationCreated``
+    (``consumes_when_enabled``); the tailer delivers it and the task worker owns the transaction,
+    retry, parking and idempotency. This helper spells the shared boilerplate — resolve the org's
+    owner (bail if there isn't one yet), honor the test-schema suppression — so each seeder only
+    writes its own welcome rows. No commit: the worker commits the task."""
     if not seeding_enabled() or not org_id:
         return
     resolved = uuid.UUID(org_id)
-
-    async def run() -> None:
-        try:
-            async with admin_session_factory()() as session:
-                owner_id = await get_org_owner_id(session, resolved)
-                if owner_id is None:
-                    return
-                await seed(session, resolved, owner_id)
-                await session.commit()
-        except Exception:
-            log.exception("organizations.seed_failed", org_id=org_id)
-
-    asyncio.create_task(run())
+    owner_id = await get_org_owner_id(session, resolved)
+    if owner_id is None:
+        return
+    await seed(session, resolved, owner_id)
 
 
 @dataclass

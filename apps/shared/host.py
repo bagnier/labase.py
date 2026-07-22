@@ -15,6 +15,8 @@ from fastapi import FastAPI
 
 from apps.shared.bus import EventBus, events
 from apps.shared.contribs import Contribs, contribs
+from apps.shared.events import BusinessEvent
+from apps.shared.outbox import on_async
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,
@@ -66,6 +68,12 @@ class AppManifest:
     nav: Sequence[NavItem] = ()
     when_enabled: _Registrations = ()  # event handlers, registered only when the app is enabled
     provides_when_enabled: _Registrations = ()  # contribution providers, only when enabled
+    # Durable async consumers (event_type, name, handler), registered only when enabled. Run off
+    # the tailer on the admin session, idempotent — for server-owned reactions (welcome seeding)
+    # that must be retryable and never sit on the emitting request's path.
+    consumes_when_enabled: Sequence[
+        tuple[type[BusinessEvent], str, Callable[..., Awaitable[None]]]
+    ] = ()
     reserve: Sequence[str] = ()  # top-level slugs the app routes (see Host.reserve)
 
 
@@ -144,6 +152,8 @@ class Host:
             self.register_nav(item)
         for event_type, handler in manifest.when_enabled:
             self.events.on(event_type, handler)
+        for event_type, name, consumer in manifest.consumes_when_enabled:
+            on_async(event_type, name, consumer, as_actor=False, idempotent=True)
         for query_type, provider in manifest.provides_when_enabled:
             self.contribs.provide(query_type, provider)
         return settings

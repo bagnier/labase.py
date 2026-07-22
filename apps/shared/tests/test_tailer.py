@@ -145,6 +145,17 @@ async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
     assert await _undispatched("test_tailer.legacy") == 0
 
 
+def test_org_seed_apps_register_durable_consumers_of_organization_created():
+    # Importing the composition root mounts every app; each welcome-seed app declares a durable
+    # async consumer of OrganizationCreated via the manifest's consumes_when_enabled. Checked by
+    # topic string (shared may not import a bounded context to name the event type).
+    import apps.main  # noqa: F401
+
+    topics = set(_handlers)
+    for app in ("todo", "files", "calendar", "learning", "pages"):
+        assert f"evt:organizations.created:{app}_welcome" in topics
+
+
 @pytest.mark.asyncio
 async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
     outbox.on_async(_TailEvent, "counter", _noop, as_actor=False)
