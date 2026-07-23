@@ -60,7 +60,7 @@ from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.events.bus import events
 from apps.shared.events.repository import BusinessEventRow, EventRepository
-from apps.shared.events.store import (
+from apps.shared.events.timeline import (
     activity_entries,
     activity_stats,
     group_activity_by_day,

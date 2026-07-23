@@ -49,7 +49,7 @@ from apps.shared.contribs import contribs
 from apps.shared.email import enqueue_email
 from apps.shared.events.bus import events
 from apps.shared.events.repository import BusinessEventRow, EventRepository
-from apps.shared.events.store import (
+from apps.shared.events.timeline import (
     activity_entries,
     activity_stats,
     group_activity_by_day,
