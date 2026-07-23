@@ -33,9 +33,10 @@ from apps.console.contract.events import (
     OrgOverrideRemoved,
     OrgOverrideSet,
 )
-from apps.console.contract.overviews import ConsoleOverviewQuery
+from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.console.contract.technical import overview as technical_overview
 from apps.console.infra.router import router
+from apps.shared.events.bus import events
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
 from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
@@ -65,6 +66,7 @@ def mount(host: Host) -> None:
 
     host.register_settings(_declare_appearance_settings())
     host.contribs.provide(ConsoleOverviewQuery, appearance_overview)
+    host.contribs.provide(ConsoleOverviewQuery, _events_overview)
 
     host.contribs.provide(ConsoleOverviewQuery, technical_overview)
 
@@ -76,6 +78,22 @@ def mount(host: Host) -> None:
     jinja_globals = cast("dict[str, object]", templates.env.globals)
     jinja_globals["app_theme"] = current_theme
     jinja_globals["app_themes"] = lambda: THEMES
+
+
+async def _events_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
+    """Console tile → the event → reaction graph: how many events the system emits, and how many
+    durable reactions wire them together. Read straight from the registry (no DB)."""
+    reg = events.registry
+    emitted = sum(len(events_) for events_ in reg.events_by_app().values())
+    reactions = sum(len(subs) for subs in reg.reactions().values())
+    return ConsoleOverview(
+        key="events",
+        title="Events",
+        icon="lightning",
+        section="operations",
+        href="/console/events",
+        data={"lines": [f"{emitted} events", f"{reactions} reactions"]},
+    )
 
 
 def _declare_appearance_settings() -> SettingsDeclaration:

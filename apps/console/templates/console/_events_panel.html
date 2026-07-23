@@ -1,0 +1,40 @@
+{# The app's event wiring — what it emits and what it reacts to. `event_wiring` is
+   {emits: [kind…], listens: [{kind, owner, reaction}…]}, read from the event registry. #}
+{% if event_wiring.emits or event_wiring.listens %}
+  <div data-events-panel>
+    <h2 class="text-sm font-semibold mb-3">Events</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div>
+        <h3 class="text-xs uppercase tracking-wide text-base-content/60 mb-2">Emits</h3>
+        {% if event_wiring.emits %}
+          <ul class="space-y-1">
+            {% for kind in event_wiring.emits %}
+              <li>
+                <code class="badge badge-ghost badge-sm">{{ kind }}</code>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-xs text-base-content/60">Emits no events.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wide text-base-content/60 mb-2">Listens to</h3>
+        {% if event_wiring.listens %}
+          <ul class="space-y-2">
+            {% for r in event_wiring.listens %}
+              <li class="text-sm flex items-center gap-2 flex-wrap">
+                <code class="badge badge-ghost badge-sm">{{ r.kind }}</code>
+                <i class="ph ph-arrow-right text-xs text-base-content/50"
+                   aria-hidden="true"></i>
+                <span class="font-medium">{{ r.reaction }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-xs text-base-content/60">Reacts to no events.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}

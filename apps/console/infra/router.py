@@ -132,6 +132,41 @@ def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview
     return next((o for o in overviews if o.key == app), None)
 
 
+def _app_event_wiring(app: str) -> dict:
+    """The events ``app`` emits and the events it reacts to — read from the event registry, so no
+    app has to report its own wiring (the console asks the registry directly)."""
+    reg = events.registry
+    emits = sorted(e.kind for e in reg.events_by_app().get(app, []))
+    listens = sorted(
+        (
+            {"kind": event_type.kind, "owner": reg.owner_of(event_type) or "?", "reaction": s.name}
+            for event_type, subs in reg.reactions().items()
+            for s in subs
+            if s.app == app
+        ),
+        key=lambda row: (row["kind"], row["reaction"]),
+    )
+    return {"emits": emits, "listens": listens}
+
+
+def _event_graph() -> list[dict]:
+    """The whole event → reaction graph: every event with a durable consumer, its owner app, and
+    each reaction (listening app + name), kind-sorted for a stable console listing."""
+    reg = events.registry
+    rows = [
+        {
+            "kind": event_type.kind,
+            "owner": reg.owner_of(event_type) or "?",
+            "reactions": sorted(
+                ({"app": sub.app, "name": sub.name} for sub in subs),
+                key=lambda r: (r["app"], r["name"]),
+            ),
+        }
+        for event_type, subs in reg.reactions().items()
+    ]
+    return sorted(rows, key=lambda row: row["kind"])
+
+
 async def _supabase_link(
     group: SettingsDeclaration, session: AdminSession
 ) -> dict[str, str] | None:
@@ -298,12 +333,28 @@ async def get_settings_page(
     )
 
 
+@router.get("/events", response_class=HTMLResponse)
+async def get_events(
+    request: Request, current_user: CurrentAdmin, session: AdminSession
+) -> Response:
+    """The event → reaction graph across the whole system — what each app emits and who reacts."""
+    graph = _event_graph()
+    if wants_json(request):
+        return JSONResponse({"events": graph})
+    return templates.TemplateResponse(
+        request,
+        "console/events.html",
+        {"user": current_user, "graph": graph, **await fullpage_context(session, current_user)},
+    )
+
+
 @router.get("/{app}", response_class=HTMLResponse)
 async def get_app(
     request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
     group = _settings_group(app)
     overview = _overview_for(await _collect_overviews(session), app)
+    event_wiring = _app_event_wiring(app)
     repo = AppSettingRepository(session)
     values = await repo.values(app)
     settings = service.settings_view(group, values)
@@ -326,6 +377,7 @@ async def get_app(
             "user": current_user,
             "app": app,
             "overview": overview,
+            "event_wiring": event_wiring,
             "settings": settings,
             "org_overrides": org_overrides,
             "org_handles": await list_org_handles(session),
