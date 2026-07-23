@@ -17,6 +17,15 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.fullpage import OrgNavItem, OrgNavQuery
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
+from apps.pages.contract.events import (
+    PageCreated,
+    PageDeleted,
+    PagePublishedMembers,
+    PagePublishedPublic,
+    PageSlugChanged,
+    PageUnpublished,
+    PageUpdated,
+)
 from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
@@ -41,6 +50,15 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX), (public_router, "")],
             nav=[NavItem("Pages", "note-pencil", "pages", "/pages", order=40)],
+            emits=[
+                PageCreated,
+                PageDeleted,
+                PageUpdated,
+                PageSlugChanged,
+                PagePublishedMembers,
+                PagePublishedPublic,
+                PageUnpublished,
+            ],
             consumes_when_enabled=[(OrganizationCreated, "pages_welcome", _seed)],
             provides_when_enabled=[
                 (OverviewQuery, _overview),

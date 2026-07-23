@@ -26,12 +26,19 @@ from apps.console.contract.appearance import (
 from apps.console.contract.appearance import (
     overview as appearance_overview,
 )
+from apps.console.contract.events import (
+    AdminGranted,
+    AdminRevoked,
+    LastAdminViolationBlocked,
+    OrgOverrideRemoved,
+    OrgOverrideSet,
+)
 from apps.console.contract.overviews import ConsoleOverviewQuery
 from apps.console.contract.technical import overview as technical_overview
 from apps.console.infra.router import router
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
-from apps.shared.settings import SettingDef, SettingsDeclaration
+from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
 
 PHASE = MountPhase.CONSOLE
 
@@ -41,7 +48,20 @@ log = structlog.get_logger("labase.console.integration")
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console")
     host.reserve("console", "admin", "logs", "settings")
-    host.events.on(UserCreated, _bootstrap_first_admin, name="bootstrap_first_admin")
+    # The console owns the ``settings.*`` namespace: the platform-admin actions plus the
+    # server-wide settings-change fact it emits when an admin edits a setting.
+    host.events.declare(
+        "settings",
+        SettingsChanged,
+        AdminGranted,
+        AdminRevoked,
+        LastAdminViolationBlocked,
+        OrgOverrideSet,
+        OrgOverrideRemoved,
+    )
+    host.events.on(
+        UserCreated, _bootstrap_first_admin, name="bootstrap_first_admin", app="settings"
+    )
 
     host.register_settings(_declare_appearance_settings())
     host.contribs.provide(ConsoleOverviewQuery, appearance_overview)

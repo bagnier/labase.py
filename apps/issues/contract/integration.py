@@ -13,7 +13,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.issues.contract.events import IssueOpened, IssueRegressed
+from apps.issues.contract.events import IssueOpened, IssueRegressed, IssueStatusChanged
 from apps.issues.domain import service
 from apps.issues.infra.repository import (
     ErrorGroupRepository,
@@ -55,8 +55,9 @@ def mount(host: Host) -> None:
         return
     host.app.include_router(router, prefix="/console/issues")
     on_captured(_record)  # error capture is delivered off the bus, observability → issues
-    host.events.on(IssueOpened, _alert_opened, name="alert_opened")
-    host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed")
+    host.events.declare("issues", IssueOpened, IssueRegressed, IssueStatusChanged)
+    host.events.on(IssueOpened, _alert_opened, name="alert_opened", app="issues")
+    host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
     register_task_handler(PURGE_TOPIC, _purge)
     host.on_startup(_plant_purge)
     # Every ``log.exception`` is queued by the capture processor; this drains it into groups.

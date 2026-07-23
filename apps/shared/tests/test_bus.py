@@ -12,8 +12,8 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from apps.shared.events import BusinessEvent
-from apps.shared.events.bus import events
-from apps.shared.events.registry import registry
+from apps.shared.events.bus import EventBus, events
+from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
 from apps.shared.persistence import database as db
 from apps.shared.queue import _handlers
@@ -63,17 +63,42 @@ async def _noop(session, event) -> None:
     return None
 
 
+# ── declare() ownership + emit gate ──────────────────────────────────────────────────────────
+
+
+def test_declare_records_the_owner_app_and_gates_emit():
+    reg = EventRegistry()
+    assert reg.is_declared(_Ticked) is False
+    reg.declare("test_bus", _Ticked)
+    assert reg.is_declared(_Ticked) is True
+    assert reg.owner_of(_Ticked) == "test_bus"
+    assert reg.events_by_app() == {"test_bus": [_Ticked]}
+
+
+def test_declare_rejects_an_event_whose_kind_prefix_is_another_app():
+    reg = EventRegistry()
+    with pytest.raises(ValueError):
+        reg.declare("todo", _Ticked)  # kind is test_bus.*, not todo.*
+
+
+@pytest.mark.asyncio
+async def test_emit_refuses_an_undeclared_event():
+    bus = EventBus(EventRegistry())
+    with pytest.raises(ValueError):
+        await bus.emit(_Ticked())  # no app declared it
+
+
 # ── on() registration ────────────────────────────────────────────────────────────────────────
 
 
 def test_on_rejects_a_duplicate_consumer_name_for_the_same_event():
-    events.on(_Ticked, _noop, name="counter")
+    events.on(_Ticked, _noop, name="counter", app="test_bus")
     with pytest.raises(ValueError):
-        events.on(_Ticked, _noop, name="counter")
+        events.on(_Ticked, _noop, name="counter", app="test_bus")
 
 
 def test_subscribers_for_walks_the_mro_so_a_base_subscription_catches_subclasses():
-    events.on(_Ticked, _noop, name="counter")
+    events.on(_Ticked, _noop, name="counter", app="test_bus")
     expected = ["evt:test_bus.ticked:counter"]
     # A subscriber on the base type is delivered for a subclass event too.
     assert [s.topic for s in registry.subscribers_for(_TickedSub)] == expected
@@ -101,7 +126,7 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
     async def handler(session, event) -> None:
         calls.append(event)
 
-    events.on(_Ticked, handler, name="counter", idempotent=True)
+    events.on(_Ticked, handler, name="counter", app="test_bus", idempotent=True)
     wrapper = _handlers["evt:test_bus.ticked:counter"]
     payload = {"actor_id": str(uuid.uuid4()), "org_id": "o", "label": "Buy milk", "event_id": 99}
     async with db.admin_session_factory()() as session:

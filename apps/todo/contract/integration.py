@@ -16,7 +16,13 @@ from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
-from apps.todo.contract.events import TodoTicked
+from apps.todo.contract.events import (
+    TodoCreated,
+    TodoDeleted,
+    TodoEdited,
+    TodoTicked,
+    TodoUnticked,
+)
 from apps.todo.domain.models import TodoItem
 from apps.todo.infra.completion_stats import bump_completion, completion_count
 from apps.todo.infra.repository import TodoRepository
@@ -40,6 +46,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)],
+            emits=[TodoCreated, TodoDeleted, TodoEdited, TodoTicked, TodoUnticked],
             consumes_when_enabled=[(OrganizationCreated, "todo_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
         )
@@ -49,7 +56,7 @@ def mount(host: Host) -> None:
     # Durable async consumer: every `emit(TodoTicked)` fans out here off the trail and bumps the
     # org's cumulative completion counter — the producer's emit site never changed. Runs on the
     # admin session (server-owned aggregate) and is idempotent (at-least-once delivery may repeat).
-    host.events.on(TodoTicked, _bump_completed, name="completion_counter")
+    host.events.on(TodoTicked, _bump_completed, name="completion_counter", app="todo")
 
 
 def _declare_settings() -> SettingsDeclaration:

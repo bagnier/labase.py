@@ -10,6 +10,14 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.files.contract.events import (
+    FileDeleted,
+    FileRenamed,
+    FileShareDownloaded,
+    FileShareLinkCreated,
+    FileShareLinkRejected,
+    FileUploaded,
+)
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
 from apps.files.infra.storage import storage_path
@@ -41,6 +49,14 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(public_router, ""), (router, ORG_PREFIX)],
             nav=[NavItem("Files", "folder", "files", "/files", order=50)],
+            emits=[
+                FileUploaded,
+                FileDeleted,
+                FileRenamed,
+                FileShareLinkCreated,
+                FileShareLinkRejected,
+                FileShareDownloaded,
+            ],
             consumes_when_enabled=[(OrganizationCreated, "files_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
             reserve=("files",),  # even when disabled, to keep the slug from being squatted

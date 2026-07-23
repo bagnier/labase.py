@@ -48,14 +48,28 @@ class EventBus:
         # classes register once at import).
         self.registry = registry
 
+    def declare(self, app: str, *event_types: type[BusinessEvent]) -> None:
+        """Declare, at mount, the events ``app`` emits — recording their owner in the registry.
+
+        The event's kind prefix must be ``app`` (``todo.*`` → ``todo``), so an app cannot claim
+        another's events. :meth:`emit` then refuses any event no app declared, catching a typo or a
+        forgotten declaration at the emit site rather than silently writing an unowned fact.
+        """
+        self.registry.declare(app, *event_types)
+
     async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
         """Persist the fact — and only that.
 
-        Recorded to the ``business_events`` trail on ``session`` (or the ambient request unit of
-        work), atomic with the action, so the fact commits iff the mutation commits. Every reaction
-        (``on`` consumers, ``spread`` handlers) runs in the listener off the persisted log after
-        commit — so ``emit`` never runs a handler, waits on one, or fails from one.
+        Refuses an event no app declared (:meth:`declare`) — an emitted fact must be owned.
+        Otherwise recorded to the ``business_events`` trail on ``session`` (or the ambient request
+        unit of work), atomic with the action, so the fact commits iff the mutation commits. Every
+        reaction (``on`` consumers, ``spread`` handlers) runs in the listener off the persisted log
+        after commit — so ``emit`` never runs a handler, waits on one, or fails from one.
         """
+        if not self.registry.is_declared(type(event)):
+            raise ValueError(
+                f"{type(event).__name__} ({event.kind!r}) is emitted but declared by no app"
+            )
         await persist_fact(event, session or current_session())
 
     def on(
@@ -64,6 +78,7 @@ class EventBus:
         handler: AsyncEventHandler,
         *,
         name: str,
+        app: str,
         as_actor: bool = False,
         idempotent: bool = True,
     ) -> None:
@@ -71,11 +86,12 @@ class EventBus:
 
         Run by the :mod:`apps.shared.events.listener` off the trail **after commit**, never in
         :meth:`emit`: one task-queue row per consumer, with retry/park. ``name`` disambiguates this
-        consumer among the event's consumers (topic ``evt:<kind>:<name>``, unique per event type).
-        ``as_actor`` runs the handler under the event actor's RLS claims (else on the admin
-        session); ``idempotent`` guards re-delivery via the ``consumed`` ledger.
+        consumer among the event's consumers (topic ``evt:<kind>:<name>``, unique per event type);
+        ``app`` is the listening app (for the console's event → reaction graph). ``as_actor`` runs
+        the handler under the event actor's RLS claims (else on the admin session); ``idempotent``
+        guards re-delivery via the ``consumed`` ledger.
         """
-        topic = self.registry.add_async(event_type, name, as_actor=as_actor)
+        topic = self.registry.add_async(event_type, name, as_actor=as_actor, app=app)
         register_task_handler(topic, self._make_wrapper(event_type, handler, topic, idempotent))
 
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:

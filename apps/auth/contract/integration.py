@@ -5,6 +5,34 @@ orchestrator (:mod:`app.registration`), not here.
 """
 
 from apps.auth.contract.admin import list_server_admins
+from apps.auth.contract.events import (
+    AccountDeletedByAdmin,
+    AccountDisabled,
+    AccountEnabled,
+    ConfirmationResent,
+    EmailChanged,
+    EmailChangeRequested,
+    ForbiddenAdminAccess,
+    ImpersonationStarted,
+    ImpersonationStopped,
+    LoginFailed,
+    MfaFailed,
+    MfaVerified,
+    OAuthFailed,
+    OAuthSignedIn,
+    PasskeyAdded,
+    PasskeyFailed,
+    PasskeyRemoved,
+    PasskeySignedIn,
+    PasswordChanged,
+    PasswordReset,
+    RegisterFailed,
+    SignedIn,
+    SignedOut,
+    TwoFactorEnabled,
+    UserCreated,
+    UserDeleted,
+)
 from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -21,6 +49,35 @@ def mount(host: Host) -> None:
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_settings(_declare_settings())
     host.reserve("auth", "login", "logout", "signup")
+    # Auth owns two event namespaces: the sign-in/identity ``auth.*`` facts and the admin
+    # ``accounts.*`` actions (both emitted from the auth routers).
+    host.events.declare(
+        "auth",
+        UserCreated,
+        UserDeleted,
+        SignedIn,
+        SignedOut,
+        LoginFailed,
+        RegisterFailed,
+        ConfirmationResent,
+        PasswordReset,
+        PasswordChanged,
+        EmailChangeRequested,
+        EmailChanged,
+        MfaFailed,
+        MfaVerified,
+        TwoFactorEnabled,
+        PasskeyAdded,
+        PasskeyRemoved,
+        PasskeyFailed,
+        PasskeySignedIn,
+        OAuthFailed,
+        OAuthSignedIn,
+        ImpersonationStarted,
+        ImpersonationStopped,
+        ForbiddenAdminAccess,
+    )
+    host.events.declare("accounts", AccountDisabled, AccountEnabled, AccountDeletedByAdmin)
 
 
 def _declare_settings() -> SettingsDeclaration:

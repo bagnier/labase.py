@@ -74,6 +74,7 @@ async def test_emit_does_not_run_handlers_in_process():
     async def reload(event: ConfigChanged) -> None:
         seen.append(event)
 
+    bus.registry.declare("config", ConfigChanged)  # emit refuses an undeclared event
     bus.spread(ConfigChanged, reload)
 
     await bus.emit(ConfigChanged())

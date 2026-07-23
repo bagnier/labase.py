@@ -10,6 +10,11 @@ from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.calendar.contract.events import (
+    CalendarCreated,
+    CalendarDeleted,
+    CalendarUpdated,
+)
 from apps.calendar.domain.models import CalendarEvent
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.calendar.infra.router import router
@@ -37,6 +42,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Calendar", "calendar-dots", "calendar", "/calendar", order=30)],
+            emits=[CalendarCreated, CalendarUpdated, CalendarDeleted],
             consumes_when_enabled=[(OrganizationCreated, "calendar_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
         )

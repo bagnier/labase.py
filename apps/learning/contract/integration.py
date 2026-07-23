@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.learning.contract.events import CardReviewed
 from apps.learning.domain.models import Card, Deck
 from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
@@ -44,6 +45,7 @@ def mount(host: Host) -> None:
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
             nav=[NavItem("Learning", "book-open", "learning/sessions", "/learning", order=20)],
+            emits=[CardReviewed],
             consumes_when_enabled=[(OrganizationCreated, "learning_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
         )

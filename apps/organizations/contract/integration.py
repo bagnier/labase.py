@@ -15,7 +15,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
-from apps.organizations.contract.events import OrganizationCreated
+from apps.organizations.contract.events import (
+    InvitationEmailMismatch,
+    InvitationRevoked,
+    InvitationSent,
+    LastOwnerViolationBlocked,
+    MemberJoined,
+    MemberLeft,
+    MemberRemoved,
+    MemberRoleChanged,
+    OrganizationCreated,
+    OrganizationRenamed,
+    OrgHandleChanged,
+    OwnershipViolation,
+)
 from apps.organizations.contract.fullpage import provide_org_nav
 from apps.organizations.contract.queries import org_handle_taken
 from apps.organizations.domain.models import Membership, Organization, OrgRole
@@ -41,8 +54,23 @@ def mount(host: Host) -> None:
     host.app.include_router(invitation_router)
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
-    host.events.on(UserCreated, _create_org, name="create_personal_org")
-    host.events.on(UserDeleted, _forget_user, name="organizations_forget")
+    host.events.declare(
+        "organizations",
+        OrganizationCreated,
+        OrganizationRenamed,
+        OrgHandleChanged,
+        MemberJoined,
+        MemberLeft,
+        MemberRoleChanged,
+        MemberRemoved,
+        InvitationSent,
+        InvitationRevoked,
+        InvitationEmailMismatch,
+        LastOwnerViolationBlocked,
+        OwnershipViolation,
+    )
+    host.events.on(UserCreated, _create_org, name="create_personal_org", app="organizations")
+    host.events.on(UserDeleted, _forget_user, name="organizations_forget", app="organizations")
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(

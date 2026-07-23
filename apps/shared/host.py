@@ -66,6 +66,8 @@ class AppManifest:
     routers: Sequence[tuple[Any, str]] = ()  # (APIRouter, prefix)
     nav: Sequence[NavItem] = ()
     provides_when_enabled: _Registrations = ()  # contribution providers, only when enabled
+    # The events this app owns and may emit (see Host.events.declare) — declared only when enabled.
+    emits: Sequence[type[BusinessEvent]] = ()
     # Durable async consumers (event_type, name, handler), registered only when enabled. Run off
     # the tailer on the admin session, idempotent — for server-owned reactions (welcome seeding)
     # that must be retryable and never sit on the emitting request's path.
@@ -148,8 +150,16 @@ class Host:
             self.app.include_router(router, prefix=prefix)
         for item in manifest.nav:
             self.register_nav(item)
+        self.events.declare(manifest.settings.app_name, *manifest.emits)
         for event_type, name, consumer in manifest.consumes_when_enabled:
-            self.events.on(event_type, consumer, name=name, as_actor=False, idempotent=True)
+            self.events.on(
+                event_type,
+                consumer,
+                name=name,
+                app=manifest.settings.app_name,
+                as_actor=False,
+                idempotent=True,
+            )
         for query_type, provider in manifest.provides_when_enabled:
             self.contribs.provide(query_type, provider)
         return settings

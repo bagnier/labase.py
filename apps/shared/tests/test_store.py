@@ -194,7 +194,9 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
 @pytest.mark.asyncio
 async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean_p1):
     from apps.shared.events.bus import events
+    from apps.shared.events.registry import registry
 
+    registry.declare("test_p1", _P1Event)  # emit refuses an undeclared event
     committed, rolled = str(uuid.uuid4()), str(uuid.uuid4())
     async with db.admin_session_factory()() as session:
         await events.emit(_P1Event(actor_id=committed), session=session)

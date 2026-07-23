@@ -10,6 +10,7 @@ touching auth.
 
 from sqlalchemy import func, select
 
+from apps.api_keys.contract.events import ApiKeyIssued, ApiKeyRevoked
 from apps.api_keys.domain.models import ApiKey, ApiKeyRead
 from apps.api_keys.domain.service import hash_token
 from apps.api_keys.infra.repository import ApiKeyRepository, resolve_active_key, touch_last_used
@@ -35,6 +36,7 @@ def mount(host: Host) -> None:
             settings=_declare_settings(),
             provides=[(ConsoleOverviewQuery, _console_overview)],
             routers=[(router, ORG_PREFIX)],
+            emits=[ApiKeyIssued, ApiKeyRevoked],
             provides_when_enabled=[
                 (OrgSettingsSectionQuery, _settings_section),
                 (ApiKeyQuery, _resolve),
