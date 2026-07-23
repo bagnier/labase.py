@@ -40,9 +40,10 @@ _catalog_by_kind: dict[str, type[BusinessEvent]] = {}
 
 @dataclass(frozen=True)
 class Sub:
-    """A durable ``bus.on`` consumer of an event type: the queue ``topic`` it feeds and the app that
-    listens (for the console's event → reaction graph)."""
+    """A durable ``bus.on`` consumer of an event type: its ``name`` (the reaction), the queue
+    ``topic`` it feeds, and the ``app`` that listens (for the console's event → reaction graph)."""
 
+    name: str
     topic: str
     as_actor: bool
     app: str
@@ -54,7 +55,7 @@ class EventRegistry:
 
     def __init__(self) -> None:
         self._owner_by_type: dict[type[BusinessEvent], str] = {}
-        self._async_subs: dict[type, list[Sub]] = {}
+        self._async_subs: dict[type[BusinessEvent], list[Sub]] = {}
         self._spread_subs: dict[type, list[Callable[[Any], Awaitable[object]]]] = defaultdict(list)
 
     # ── Catalog (process-global; every instance sees the same kinds) ──────────────────────────
@@ -71,7 +72,7 @@ class EventRegistry:
 
     # ── Ownership (declared at mount, per instance) ──────────────────────────────────────────
 
-    def declare(self, app: str, *event_types: type[BusinessEvent]) -> None:
+    def declare_events(self, app: str, *event_types: type[BusinessEvent]) -> None:
         """Record that ``app`` owns (emits) each of ``event_types``. The event's kind prefix must be
         ``app`` (``todo.*`` → ``todo``), so an app cannot claim another's events; re-declaring the
         same event for the same app is idempotent, for a different app is an error."""
@@ -105,7 +106,7 @@ class EventRegistry:
 
     # ── Subscriptions (per instance) ─────────────────────────────────────────────────────────
 
-    def add_async(
+    def register_single_action(
         self, event_type: type[BusinessEvent], name: str, *, as_actor: bool, app: str
     ) -> str:
         """Register a durable consumer ``name`` (in ``app``) for ``event_type``; return its topic.
@@ -116,7 +117,7 @@ class EventRegistry:
         subs = self._async_subs.setdefault(event_type, [])
         if any(s.topic == topic for s in subs):
             raise ValueError(f"duplicate consumer {name!r} for {event_type.__name__}")
-        subs.append(Sub(topic=topic, as_actor=as_actor, app=app))
+        subs.append(Sub(name=name, topic=topic, as_actor=as_actor, app=app))
         return topic
 
     def subscribers_for(self, event_type: type) -> list[Sub]:
@@ -127,7 +128,14 @@ class EventRegistry:
             collected.extend(self._async_subs.get(klass, ()))
         return collected
 
-    def add_spread(self, event_type: type, handler: Callable[[Any], Awaitable[object]]) -> None:
+    def reactions(self) -> dict[type[BusinessEvent], list[Sub]]:
+        """Every event type that has a durable consumer, mapped to its consumers — the console's
+        event → reaction graph (who reacts to what). Read-only copy."""
+        return {event_type: list(subs) for event_type, subs in self._async_subs.items()}
+
+    def register_spread_action(
+        self, event_type: type, handler: Callable[[Any], Awaitable[object]]
+    ) -> None:
         """Register a run-everywhere ``spread`` handler for ``event_type`` (config propagation)."""
         self._spread_subs[event_type].append(handler)
 

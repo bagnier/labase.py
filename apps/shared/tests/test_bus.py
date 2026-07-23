@@ -69,7 +69,7 @@ async def _noop(session, event) -> None:
 def test_declare_records_the_owner_app_and_gates_emit():
     reg = EventRegistry()
     assert reg.is_declared(_Ticked) is False
-    reg.declare("test_bus", _Ticked)
+    reg.declare_events("test_bus", _Ticked)
     assert reg.is_declared(_Ticked) is True
     assert reg.owner_of(_Ticked) == "test_bus"
     assert reg.events_by_app() == {"test_bus": [_Ticked]}
@@ -78,7 +78,7 @@ def test_declare_records_the_owner_app_and_gates_emit():
 def test_declare_rejects_an_event_whose_kind_prefix_is_another_app():
     reg = EventRegistry()
     with pytest.raises(ValueError):
-        reg.declare("todo", _Ticked)  # kind is test_bus.*, not todo.*
+        reg.declare_events("todo", _Ticked)  # kind is test_bus.*, not todo.*
 
 
 @pytest.mark.asyncio

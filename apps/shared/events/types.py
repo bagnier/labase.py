@@ -21,7 +21,7 @@ Non-CRUD actions (sign-in, a member joining, a page being published) subclass
 """
 
 from dataclasses import dataclass, fields
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Self
 
 from apps.shared.events.registry import registry
 
@@ -53,6 +53,15 @@ class BusinessEvent:
         # reconstruct it from a stored row. Abstract bases (EntityCreated…, kind still "") never do.
         if cls.kind:
             registry.register_event(cls)
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> Self:
+        """Factory: rebuild a frozen event from a stored payload/row, keeping only keys that are
+        event fields. Both delivery paths off the trail rebuild the typed event this way —
+        transport-only keys (the row id ``event_id``, the denormalized ``actor`` handle) are
+        dropped."""
+        names = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in payload.items() if k in names})
 
 
 @dataclass(frozen=True, kw_only=True)

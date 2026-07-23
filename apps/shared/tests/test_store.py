@@ -196,7 +196,7 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean
     from apps.shared.events.bus import events
     from apps.shared.events.registry import registry
 
-    registry.declare("test_p1", _P1Event)  # emit refuses an undeclared event
+    registry.declare_events("test_p1", _P1Event)  # emit refuses an undeclared event
     committed, rolled = str(uuid.uuid4()), str(uuid.uuid4())
     async with db.admin_session_factory()() as session:
         await events.emit(_P1Event(actor_id=committed), session=session)

@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.store import persist_fact
-from apps.shared.events.types import BusinessEvent, reconstruct
+from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.uow import current_session
 from apps.shared.queue import register_task_handler
 
@@ -55,7 +55,7 @@ class EventBus:
         another's events. :meth:`emit` then refuses any event no app declared, catching a typo or a
         forgotten declaration at the emit site rather than silently writing an unowned fact.
         """
-        self.registry.declare(app, *event_types)
+        self.registry.declare_events(app, *event_types)
 
     async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
         """Persist the fact — and only that.
@@ -91,7 +91,7 @@ class EventBus:
         the handler under the event actor's RLS claims (else on the admin session); ``idempotent``
         guards re-delivery via the ``consumed`` ledger.
         """
-        topic = self.registry.add_async(event_type, name, as_actor=as_actor, app=app)
+        topic = self.registry.register_single_action(event_type, name, as_actor=as_actor, app=app)
         register_task_handler(topic, self._make_wrapper(event_type, handler, topic, idempotent))
 
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
@@ -102,7 +102,7 @@ class EventBus:
         handlers **per instance** (no claim, no dispatch mark), so every process applies the change.
         Handlers are idempotent (a reload is a plain assignment), so re-delivery is harmless.
         """
-        self.registry.add_spread(event_type, handler)
+        self.registry.register_spread_action(event_type, handler)
 
     @staticmethod
     def _make_wrapper(
@@ -116,7 +116,7 @@ class EventBus:
                 topic, payload["event_id"]
             ):
                 return  # a re-delivery — the ledger row (from the first run) makes this a no-op
-            await handler(session, reconstruct(event_type, payload))
+            await handler(session, event_type.from_payload(payload))
 
         return wrapper
 

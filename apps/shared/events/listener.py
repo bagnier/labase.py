@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
 from apps.shared.events.repository import EventRepository
-from apps.shared.events.types import BusinessEvent, reconstruct
+from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 
@@ -122,7 +122,7 @@ class EventListener:
         event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return None
-        return reconstruct(event_type, _task_payload(row))
+        return event_type.from_payload(_task_payload(row))
 
     async def _fan_out(self, session: AsyncSession, row: dict[str, Any]) -> None:
         event_type = self._bus.registry.event_class_for(row["kind"])
