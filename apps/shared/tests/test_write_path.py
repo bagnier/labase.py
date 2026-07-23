@@ -1,4 +1,4 @@
-"""Business-events store — the write path persists transactionally and degrades safely."""
+"""Business-events write path — persists transactionally on emit and degrades safely."""
 
 import uuid
 from dataclasses import dataclass
@@ -9,7 +9,8 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from apps.shared.events import BusinessEvent
-from apps.shared.events.store import insert_business_event, persist_fact
+from apps.shared.events.bus import events
+from apps.shared.events.repository import insert_business_event
 from apps.shared.persistence import database as db
 
 
@@ -56,10 +57,10 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
     # message key, and a lost row must never crash the fire-and-forget write task.
     with (
         patch(
-            "apps.shared.events.store.admin_session_factory",
+            "apps.shared.events.repository.admin_session_factory",
             side_effect=RuntimeError("db down"),
         ),
-        patch("apps.shared.events.store.log") as log,
+        patch("apps.shared.events.repository.log") as log,
     ):
         await insert_business_event(
             kind="auth.signed_in",
@@ -83,7 +84,7 @@ async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
     """emit persists the fact on the caller's session — scoping to columns, the rest in payload."""
     actor = str(uuid.uuid4())
     async with db.admin_session_factory()() as session:
-        await persist_fact(
+        await events._persist_fact(
             _P1Event(actor_id=actor, org_id=str(uuid.uuid4()), entity_id="e1", label="Hi"), session
         )
         await session.commit()
@@ -107,7 +108,7 @@ async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
     """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
     actor = str(uuid.uuid4())
     async with db.admin_session_factory()() as session:
-        await persist_fact(_P1Event(actor_id=actor), session)
+        await events._persist_fact(_P1Event(actor_id=actor), session)
         await session.rollback()
     assert await _count_p1(actor) == 0
 
@@ -117,13 +118,13 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     """No ambient session (auth signals) → scheduled off the critical path; emit never awaits it."""
     import asyncio
 
-    with patch("apps.shared.events.store.insert_business_event", new=AsyncMock()) as insert:
-        await persist_fact(_P1Event(actor_id=str(uuid.uuid4()), label="x"), None)
-        insert.assert_not_awaited()  # coroutine scheduled, not yet run
+    with patch.object(events, "_record_detached", new=AsyncMock()) as detached:
+        await events._persist_fact(_P1Event(actor_id=str(uuid.uuid4()), label="x"), None)
+        detached.assert_not_awaited()  # coroutine scheduled, not yet run
         await asyncio.sleep(0)  # let the created task run
-    insert.assert_awaited_once()
-    assert insert.await_args is not None
-    assert insert.await_args.kwargs["kind"] == "test_p1.happened"
+    detached.assert_awaited_once()
+    assert detached.await_args is not None
+    assert detached.await_args.args[0].kind == "test_p1.happened"
 
 
 @pytest.mark.asyncio

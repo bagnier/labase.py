@@ -5,6 +5,7 @@ strings) and MRO dispatch (so one subscriber on the base records every subclass)
 non-blocking persist contract (``emit`` never waits on — or fails from — the DB write).
 """
 
+import uuid
 from dataclasses import dataclass
 
 import pytest
@@ -12,7 +13,7 @@ import pytest
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
 from apps.shared.events.bus import EventBus
 from apps.shared.events.registry import EventRegistry, registry
-from apps.shared.events.store import event_columns
+from apps.shared.events.repository import event_to_log
 
 
 class WidgetEvent(BusinessEvent):
@@ -81,16 +82,20 @@ async def test_emit_does_not_run_handlers_in_process():
     assert seen == []  # emit does not run spread handlers in-process
 
 
-def test_event_columns_lift_scoping_and_carry_metadata():
-    # emit maps a BusinessEvent onto the business_events row: scoping to columns, rest to payload.
-    cols = event_columns(WidgetCreated(actor_id="u", org_id="o", entity_id="w", label="Gizmo"))
-    assert cols["kind"] == "widget.created"
-    assert cols["icon"] == "cube"
-    assert cols["user_id"] == "u"
-    assert cols["org_id"] == "o"
-    assert cols["entity_id"] == "w"  # the concerned entity, lifted to its own column
+def test_event_to_log_lifts_scoping_and_carries_metadata():
+    # emit maps a BusinessEvent straight onto a business_events row: scoping to columns, rest to
+    # payload — a single event → row hop, no intermediate column dict.
+    actor, org = str(uuid.uuid4()), str(uuid.uuid4())
+    row = event_to_log(WidgetCreated(actor_id=actor, org_id=org, entity_id="w", label="Gizmo"))
+    assert row.kind == "widget.created"
+    assert row.icon == "cube"
+    assert str(row.user_id) == actor
+    assert str(row.org_id) == org
+    assert row.entity_id == "w"  # the concerned entity, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
-    assert cols["payload"]["label"] == "Gizmo"
-    assert "actor_id" not in cols["payload"]
-    assert "org_id" not in cols["payload"]
-    assert "entity_id" not in cols["payload"]
+    payload = row.payload
+    assert payload is not None
+    assert payload["label"] == "Gizmo"
+    assert "actor_id" not in payload
+    assert "org_id" not in payload
+    assert "entity_id" not in payload

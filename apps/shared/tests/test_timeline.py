@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from apps.shared import clock
-from apps.shared.events.repository import BusinessEventRow
+from apps.shared.events.models import BusinessEventRow
 from apps.shared.events.timeline import activity_entries, ago
 
 

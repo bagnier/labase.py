@@ -1,7 +1,7 @@
 """The dashboard "Recent activity" timeline — the org's own business events, labels only."""
 
 from apps.auth.tests.given_helpers import user_id_for_email
-from apps.shared.events.store import insert_business_event
+from apps.shared.events.repository import insert_business_event
 
 _EMAIL = "dashboard-activity@example.com"
 

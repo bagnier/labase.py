@@ -11,7 +11,7 @@ from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.listener import EventListener
 from apps.shared.events.registry import EventRegistry, registry
-from apps.shared.events.store import insert_business_event
+from apps.shared.events.repository import insert_business_event
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
 

@@ -1,11 +1,8 @@
 """The business-events timeline projection — pure presentation over trail rows.
 
-``emit`` writes facts to the trail (:mod:`apps.shared.events.store`); this module reads them back
-*humanized* for the surfaces that show history — the profile / dashboard activity feed and the
-GitHub-style contribution calendar. Every function here is pure: it takes
-:class:`~apps.shared.events.repository.BusinessEventRow` rows (or per-day counts) and returns
-render-ready dicts — no session, no I/O. The raw ``kind``/payload never reach a member; only these
-projected, safe fields do.
+The repository reads the trail; this module humanizes those rows for the surfaces that show history
+(profile / dashboard feed, contribution calendar). Every function is pure — no session, no I/O — and
+the raw ``kind``/payload never reach a member; only projected, safe fields do.
 """
 
 from collections.abc import Callable
@@ -13,7 +10,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from apps.shared import clock
-from apps.shared.events.repository import BusinessEventRow
+from apps.shared.events.models import BusinessEventRow
 
 # ── Activity feed — humanize rows for the profile/dashboard timeline ──────────────────────────
 
@@ -27,8 +24,8 @@ def _activity_label(kind: str) -> str:
 
 
 def ago(ts: datetime, now: datetime) -> str:
-    """A compact relative moment (`3h ago`, `2d ago`, `Mar 4`) — an activity feed reads better in
-    elapsed time than in wall-clock; the exact instant stays on the row's ``title``/``datetime``."""
+    """A compact relative moment (`3h ago`, `Mar 4`) — a feed reads better in elapsed time; the
+    exact instant stays on the row's ``title``/``datetime``."""
     secs = max(0.0, (now - ts).total_seconds())
     if secs < 60:
         return "just now"
@@ -47,18 +44,9 @@ def activity_entries(
     show_actor: bool = True,
     link: Callable[[BusinessEventRow], str | None] | None = None,
 ) -> list[dict[str, Any]]:
-    """Humanize rows for the activity feed — *who did what to which document, when*:
-
-    - ``who``    the actor's handle (denormalized into the payload at write time); dropped when
-                 ``show_actor`` is off, as on the profile's own trail where it's always the viewer.
-    - ``label``  the verb (``created``/``ticked``/``member joined``…), humanized from the kind.
-    - ``detail`` the object's own name (the todo title, the page, the file) — the *which*.
-    - ``icon`` / ``level``  the event's phosphor glyph and severity (colours the node).
-    - ``ts`` / ``ago``  the absolute instant (for ``time``) and a compact relative moment.
-    - ``href``   an optional deep link the surface supplies via ``link`` (the entity's page, the
-                 filtered logs…) — the timeline renders the row as a link when present.
-
-    Never the raw ``kind`` or the rest of the payload — only these projected, safe fields."""
+    """Project rows to *who did what to which, when* — only safe fields, never the raw ``kind`` or
+    the rest of the payload. ``show_actor`` drops *who* on the profile's own trail (always the
+    viewer); ``link`` lets the surface supply a deep link."""
     now = clock.now()
     entries = []
     for r in rows:
@@ -80,8 +68,8 @@ def activity_entries(
 
 
 def group_activity_by_day(entries: list[dict[str, Any]], *, now: datetime) -> list[dict[str, Any]]:
-    """Group already-humanized entries (newest-first) into day sections for the feed —
-    ``Today`` / ``Yesterday`` / ``Mon, Jul 13`` — each carrying its own count."""
+    """Group humanized entries (newest-first) into ``Today`` / ``Yesterday`` / ``Mon, Jul 13``
+    day sections, each with its count."""
     today = now.date()
     groups: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
@@ -106,11 +94,8 @@ def group_activity_by_day(entries: list[dict[str, Any]], *, now: datetime) -> li
 
 
 def activity_stats(counts: dict[date, int], *, now: datetime) -> dict[str, int]:
-    """Headline numbers for the activity view, derived from per-day counts (pure).
-
-    ``total`` over the window, ``active_days`` with any action, the ``longest_streak`` of
-    consecutive active days, ``this_week`` (trailing 7 days) and its ``week_delta`` vs the 7
-    days before."""
+    """Headline numbers for the activity view, from per-day counts — totals, active days, the
+    longest consecutive-day streak, and this week vs the one before."""
     today = now.date()
     total = sum(counts.values())
     active_days = sum(1 for n in counts.values() if n)
@@ -142,14 +127,10 @@ def heatmap_calendar(
 ) -> dict[str, Any]:
     """A GitHub-style contribution grid, fully computed for the macro to iterate.
 
-    Columns are ISO weeks (Mon–Sun), oldest→newest; cells past today are ``empty``. Intensity
-    is a 0–4 ``level`` from quartiles of the non-zero days, so the ramp adapts to each user
-    instead of a fixed scale that would wash out a light one.
-
-    The window spans the member's history: from the week they joined (``since``) to now, floored
-    at ``min_weeks`` (~a month, so a fresh account isn't a lone column) and capped at ``max_weeks``
-    (a year). ``range_label`` names it — ``Since Jun 2026`` while short, ``Last 12 months`` once
-    capped — so a new account never shows a mostly-empty year."""
+    Intensity is a 0–4 ``level`` from quartiles of the non-zero days, so the ramp adapts to each
+    user instead of a fixed scale that washes out a light one. The window runs from the join week
+    (``since``) to now, floored at ``min_weeks`` (a fresh account isn't a lone column) and capped at
+    ``max_weeks`` (so a new account never shows a mostly-empty year)."""
     today = now.date()
     end_monday = today - timedelta(days=today.weekday())
     since_date = since.date() if isinstance(since, datetime) else since

@@ -19,17 +19,21 @@ onto ``host.events`` — the same ``events`` in production (``host = Host(events
 registration and emit share one registry.
 """
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
-from apps.shared.events.store import persist_fact
 from apps.shared.events.types import BusinessEvent
+from apps.shared.persistence.database import admin_session_factory
 from apps.shared.persistence.uow import current_session
 from apps.shared.queue import register_task_handler
+
+log = structlog.get_logger("labase.business_events")
 
 E = TypeVar("E")
 
@@ -49,28 +53,39 @@ class EventBus:
         self.registry = registry
 
     def declare(self, app: str, *event_types: type[BusinessEvent]) -> None:
-        """Declare, at mount, the events ``app`` emits — recording their owner in the registry.
-
-        The event's kind prefix must be ``app`` (``todo.*`` → ``todo``), so an app cannot claim
-        another's events. :meth:`emit` then refuses any event no app declared, catching a typo or a
-        forgotten declaration at the emit site rather than silently writing an unowned fact.
-        """
+        """Record, at mount, the events ``app`` owns. The kind prefix must be ``app`` (so an app
+        can't claim another's events); :meth:`emit` then refuses any undeclared event."""
         self.registry.declare_events(app, *event_types)
 
     async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
-        """Persist the fact — and only that.
-
-        Refuses an event no app declared (:meth:`declare`) — an emitted fact must be owned.
-        Otherwise recorded to the ``business_events`` trail on ``session`` (or the ambient request
-        unit of work), atomic with the action, so the fact commits iff the mutation commits. Every
-        reaction (``on`` consumers, ``spread`` handlers) runs in the listener off the persisted log
-        after commit — so ``emit`` never runs a handler, waits on one, or fails from one.
-        """
+        """Persist the fact — and only that. Refuses an undeclared event (a fact must be owned).
+        Reactions run in the listener off the persisted log after commit, so ``emit`` never runs a
+        handler, waits on one, or fails from one."""
         if not self.registry.is_declared(type(event)):
             raise ValueError(
                 f"{type(event).__name__} ({event.kind!r}) is emitted but declared by no app"
             )
-        await persist_fact(event, session or current_session())
+        await self._persist_fact(event, session or current_session())
+
+    async def _persist_fact(self, event: BusinessEvent, session: AsyncSession | None) -> None:
+        """Emit's session policy: an ambient session → the fact is atomic with the action; none
+        (auth signals, non-request contexts) → a detached best-effort write off the critical path.
+        The repository owns the write; the bus owns *which session*, since only emit knows the
+        request's ambient unit of work."""
+        if session is not None:
+            await EventRepository(session).record(event)
+        else:
+            asyncio.create_task(self._record_detached(event))
+
+    async def _record_detached(self, event: BusinessEvent) -> None:
+        """The no-ambient-session path: a best-effort admin write off the critical path that
+        swallows failures — a lost technical write never blocks or fails the caller."""
+        try:
+            async with admin_session_factory()() as own:
+                await EventRepository(own).record(event)
+                await own.commit()
+        except Exception:
+            log.warning("business_event.write_failed", kind=event.kind, user_id=event.actor_id)
 
     def on(
         self,
@@ -82,26 +97,18 @@ class EventBus:
         as_actor: bool = False,
         idempotent: bool = True,
     ) -> None:
-        """Register a durable, exactly-once consumer of ``event_type`` (and its subclasses).
-
-        Run by the :mod:`apps.shared.events.listener` off the trail **after commit**, never in
-        :meth:`emit`: one task-queue row per consumer, with retry/park. ``name`` disambiguates this
-        consumer among the event's consumers (topic ``evt:<kind>:<name>``, unique per event type);
-        ``app`` is the listening app (for the console's event → reaction graph). ``as_actor`` runs
-        the handler under the event actor's RLS claims (else on the admin session); ``idempotent``
-        guards re-delivery via the ``consumed`` ledger.
-        """
+        """Register a durable, exactly-once consumer of ``event_type`` (and its subclasses), run by
+        the listener off the trail after commit (one task-queue row per consumer, retry/park).
+        ``name`` disambiguates consumers of the same event; ``app`` is the listening app (console's
+        reaction graph); ``as_actor`` runs under the actor's RLS claims (else admin); ``idempotent``
+        guards re-delivery via the ``consumed`` ledger."""
         topic = self.registry.register_single_action(event_type, name, as_actor=as_actor, app=app)
         register_task_handler(topic, self._make_wrapper(event_type, handler, topic, idempotent))
 
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
-        """Register a handler that must run on **every** process when the event is emitted.
-
-        The "run everywhere" mode — for config propagation (a settings reload). Registration only:
-        the :mod:`apps.shared.events.listener` reads the persisted fact off the trail and runs these
-        handlers **per instance** (no claim, no dispatch mark), so every process applies the change.
-        Handlers are idempotent (a reload is a plain assignment), so re-delivery is harmless.
-        """
+        """Register a run-everywhere handler — for config propagation (a settings reload). The
+        listener runs it **per instance** off the trail (no claim, no dispatch mark), so every
+        process applies the change. Handlers must be idempotent (re-delivery is harmless)."""
         self.registry.register_spread_action(event_type, handler)
 
     @staticmethod

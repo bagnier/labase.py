@@ -1,9 +1,9 @@
 """The event listener — reads the persisted trail and runs both deliveries off it.
 
 ``emit`` only writes a ``BusinessEvent`` to the ``business_events`` log inside the request's
-transaction (:func:`~apps.shared.events.store.persist_fact`). This listener reads that log, woken by
-the trail's ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the producer no
-longer does — so it never knows its consumers nor waits for them:
+transaction (the bus's ``_persist_fact`` → ``EventRepository.record``). This listener reads that
+log, woken by the trail's ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
+producer no longer does — so it never knows its consumers nor waits for them:
 
 - **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched rows with
   ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one task-queue row per

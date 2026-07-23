@@ -1,9 +1,10 @@
 """Business events — the typed vocabulary of "something happened".
 
-A business event is a frozen dataclass emitted on the bus (type-dispatched to subscribers)
-*and* persisted to the ``business_events`` store by the bus persister. It declares only who
-acted (``actor_id``) and which org it concerns (``org_id``); the persister enriches
-``ip``/``request_id``/``level`` from the request contextvars at write time.
+A business event is a frozen dataclass persisted to the ``business_events`` trail by the bus's
+``emit`` — no handler runs at emit; the listener dispatches by type off the trail after commit. It
+declares only who acted (``actor_id``) and which org it concerns (``org_id``); the write path
+enriches ``ip``/``request_id`` from the request contextvars at write time, while
+``kind``/``level``/``icon`` are the event's own class metadata.
 
 Most mutations are CRUD, so the ``EntityCreated``/``EntityUpdated``/``EntityDeleted`` abstracts
 derive the event ``kind`` (``"<app>.<verb>"``, e.g. ``"todo.created"``) from a one-line per-app
@@ -56,10 +57,8 @@ class BusinessEvent:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
-        """Factory: rebuild a frozen event from a stored payload/row, keeping only keys that are
-        event fields. Both delivery paths off the trail rebuild the typed event this way —
-        transport-only keys (the row id ``event_id``, the denormalized ``actor`` handle) are
-        dropped."""
+        """Rebuild the event from a stored row — dropping transport-only keys (``event_id``, the
+        denormalized ``actor`` handle) that aren't event fields. Both delivery paths use this."""
         names = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in payload.items() if k in names})
 
@@ -87,12 +86,3 @@ class EntityDeleted(BusinessEvent):
 
     verb: ClassVar[str] = "deleted"
     label: str | None = None
-
-
-def reconstruct(event_type: type[BusinessEvent], payload: dict[str, Any]) -> BusinessEvent:
-    """Rebuild a frozen event from a stored payload/row, keeping only keys that are event fields.
-
-    Both delivery paths off the trail reconstruct the typed event this way: transport-only keys
-    (the row id ``event_id``, the denormalized ``actor`` handle) are simply dropped."""
-    names = {f.name for f in fields(event_type)}
-    return event_type(**{k: v for k, v in payload.items() if k in names})
