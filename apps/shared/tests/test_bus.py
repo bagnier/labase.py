@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import events
+from apps.shared.events.registry import registry
 from apps.shared.events.repository import EventRepository
 from apps.shared.persistence import database as db
 from apps.shared.queue import _handlers
@@ -41,7 +42,7 @@ async def bus_isolation():
     # would silently unregister the app's own consumers for every later test.
     _clear_engine_caches()
     saved_handlers = dict(_handlers)
-    saved_subs = {k: list(v) for k, v in events._async_subs.items()}
+    saved_subs = {k: list(v) for k, v in registry._async_subs.items()}
     async with db.admin_session_factory()() as session:
         await session.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_bus%'"))
         await session.commit()
@@ -51,8 +52,8 @@ async def bus_isolation():
         await session.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
-    events._async_subs.clear()
-    events._async_subs.update(saved_subs)
+    registry._async_subs.clear()
+    registry._async_subs.update(saved_subs)
     await db._user_engine().dispose()
     await db._admin_engine().dispose()
     _clear_engine_caches()
@@ -73,10 +74,11 @@ def test_on_rejects_a_duplicate_consumer_name_for_the_same_event():
 
 def test_subscribers_for_walks_the_mro_so_a_base_subscription_catches_subclasses():
     events.on(_Ticked, _noop, name="counter")
+    expected = ["evt:test_bus.ticked:counter"]
     # A subscriber on the base type is delivered for a subclass event too.
-    assert [s.topic for s in events.subscribers_for(_TickedSub)] == ["evt:test_bus.ticked:counter"]
+    assert [s.topic for s in registry.subscribers_for(_TickedSub)] == expected
     # And an exact-type event sees its own subscriber.
-    assert [s.topic for s in events.subscribers_for(_Ticked)] == ["evt:test_bus.ticked:counter"]
+    assert [s.topic for s in registry.subscribers_for(_Ticked)] == expected
 
 
 # ── already_consumed (idempotency substrate, keyed on the business_events row id) ─────────────

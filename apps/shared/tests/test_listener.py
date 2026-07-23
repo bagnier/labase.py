@@ -10,6 +10,7 @@ from sqlalchemy import text
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.listener import EventListener
+from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.store import insert_business_event
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
@@ -38,7 +39,7 @@ async def iso():
     # Isolate the tailer's global view: mark every pre-existing fact dispatched so tick() sees only
     # rows this test inserts. Restore the process-wide sub/handler registries afterwards.
     _clear_engine_caches()
-    saved_subs = {k: list(v) for k, v in events._async_subs.items()}
+    saved_subs = {k: list(v) for k, v in registry._async_subs.items()}
     saved_handlers = dict(_handlers)
     async with db.admin_session_factory()() as s:
         await s.execute(
@@ -55,8 +56,8 @@ async def iso():
         await s.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
-    events._async_subs.clear()
-    events._async_subs.update(saved_subs)
+    registry._async_subs.clear()
+    registry._async_subs.update(saved_subs)
     await db._admin_engine().dispose()
     _clear_engine_caches()
 
@@ -176,8 +177,9 @@ def test_org_seed_apps_register_durable_consumers_of_organization_created():
 @pytest.mark.asyncio
 async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
     # A spread fact is replayed to this process's spread handler off the trail — no claim, no
-    # dispatch mark (every instance applies it). Reconstructed as its typed event.
-    bus = EventBus()
+    # dispatch mark (every instance applies it). Reconstructed as its typed event. A fresh registry
+    # isolates the spread sub; the catalog stays shared so event_class_for still resolves the kind.
+    bus = EventBus(EventRegistry())
     seen: list[object] = []
 
     async def apply(event: _SpreadEvent) -> None:

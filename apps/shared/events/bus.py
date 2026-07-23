@@ -12,18 +12,19 @@ Three methods, nothing else:
 - ``spread(event_type, handler)`` — register a **run-everywhere** handler (config reload), replayed
   by the listener **per instance** off the trail.
 
-Runtime publishers import the process-wide :data:`events` singleton directly. Mount wires handlers
+The bus holds no collected state of its own: what events exist and who listens to them live in the
+:class:`~apps.shared.events.registry.EventRegistry` (injectable, default the process singleton).
+Runtime publishers import the process-wide :data:`events` singleton directly; mount wires handlers
 onto ``host.events`` — the same ``events`` in production (``host = Host(events=events)``) — so
 registration and emit share one registry.
 """
 
-from collections import defaultdict
-from collections.abc import Awaitable, Callable, Iterator
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.store import persist_fact
 from apps.shared.events.types import BusinessEvent, reconstruct
@@ -36,23 +37,16 @@ E = TypeVar("E")
 AsyncEventHandler = Callable[[AsyncSession, Any], Awaitable[None]]
 
 
-@dataclass(frozen=True)
-class _Sub:
-    """A durable consumer of an event type, keyed by its queue ``topic``."""
-
-    topic: str
-    as_actor: bool
-
-
 class EventBus:
-    """Registration + emit. Reactions run in the listener, off the persisted trail — never here."""
+    """Registration + emit. The collected knowledge (catalog, subscriptions) lives in the
+    :class:`~apps.shared.events.registry.EventRegistry`; reactions run in the listener off the
+    persisted trail — never here."""
 
-    def __init__(self) -> None:
-        # Two in-process registries the listener reads to deliver off the trail: ``spread`` handlers
-        # (replayed per instance) and ``on`` durable consumers (fanned to one task-queue row each).
-        # ``emit`` itself just persists the fact.
-        self._spread_subs: dict[type, list[Callable[[Any], Awaitable[object]]]] = defaultdict(list)
-        self._async_subs: dict[type, list[_Sub]] = {}
+    def __init__(self, registry: EventRegistry) -> None:
+        # The bus always rides an explicit registry: production shares the singleton (see below);
+        # a test injects a fresh one to isolate its subscriptions (the catalog stays shared — event
+        # classes register once at import).
+        self.registry = registry
 
     async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
         """Persist the fact — and only that.
@@ -81,20 +75,18 @@ class EventBus:
         ``as_actor`` runs the handler under the event actor's RLS claims (else on the admin
         session); ``idempotent`` guards re-delivery via the ``consumed`` ledger.
         """
-        topic = f"evt:{event_type.kind}:{name}"
-        subs = self._async_subs.setdefault(event_type, [])
-        if any(s.topic == topic for s in subs):
-            raise ValueError(f"duplicate consumer {name!r} for {event_type.__name__}")
-        subs.append(_Sub(topic=topic, as_actor=as_actor))
+        topic = self.registry.add_async(event_type, name, as_actor=as_actor)
         register_task_handler(topic, self._make_wrapper(event_type, handler, topic, idempotent))
 
-    def subscribers_for(self, event_type: type) -> list[_Sub]:
-        """All durable subscribers keyed on the event's MRO — a base-type subscription catches
-        subclasses, mirroring :meth:`emit`'s dispatch. Read by the listener to fan a fact out."""
-        collected: list[_Sub] = []
-        for klass in event_type.__mro__:
-            collected.extend(self._async_subs.get(klass, ()))
-        return collected
+    def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
+        """Register a handler that must run on **every** process when the event is emitted.
+
+        The "run everywhere" mode — for config propagation (a settings reload). Registration only:
+        the :mod:`apps.shared.events.listener` reads the persisted fact off the trail and runs these
+        handlers **per instance** (no claim, no dispatch mark), so every process applies the change.
+        Handlers are idempotent (a reload is a plain assignment), so re-delivery is harmless.
+        """
+        self.registry.add_spread(event_type, handler)
 
     @staticmethod
     def _make_wrapper(
@@ -112,31 +104,8 @@ class EventBus:
 
         return wrapper
 
-    def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
-        """Register a handler that must run on **every** process when the event is emitted.
 
-        The "run everywhere" mode — for config propagation (a settings reload). Registration only:
-        the :mod:`apps.shared.events.listener` reads the persisted fact off the trail and runs these
-        handlers **per instance** (no claim, no dispatch mark), so every process applies the change.
-        Handlers are idempotent (a reload is a plain assignment), so re-delivery is harmless.
-        """
-        self._spread_subs[event_type].append(handler)
-
-    def _handlers_for(
-        self,
-        event: BusinessEvent,
-        subs: dict[type, list[Callable[[Any], Awaitable[object]]]],
-        seen: set[int],
-    ) -> Iterator[Callable[[Any], Awaitable[object]]]:
-        """Handlers subscribed to the event's runtime type or any base, most-specific first, each
-        once. Read by the listener to dispatch ``spread`` handlers off a persisted fact."""
-        for klass in type(event).__mro__:
-            for handler in subs.get(klass, ()):
-                if id(handler) not in seen:
-                    seen.add(id(handler))
-                    yield handler
-
-
-# Process-wide singleton. Runtime code emits on this directly; the production Host
-# is built with ``events=events`` so its mount-time ``.on(...)`` registrations land here too.
-events = EventBus()
+# Process-wide singleton, on the process-wide registry. Runtime code emits on this directly; the
+# production Host is built with ``events=events`` so its mount-time ``.on(...)`` registrations and
+# the singleton's ``emit`` share one registry.
+events = EventBus(registry)

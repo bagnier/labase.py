@@ -13,8 +13,8 @@ from apps.shared import clock
 from apps.shared.events import BusinessEvent
 from apps.shared.events.repository import BusinessEventRow
 from apps.shared.events.store import (
-    _ago,
     activity_entries,
+    ago,
     insert_business_event,
     persist_fact,
 )
@@ -112,7 +112,7 @@ def test_activity_entries_take_an_href_from_the_surface_link():
 )
 def test_ago_is_a_compact_relative_moment(delta, expected):
     now = clock.now()
-    assert _ago(now - delta, now) == expected
+    assert ago(now - delta, now) == expected
 
 
 @pytest.mark.asyncio
@@ -193,14 +193,14 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
 
 @pytest.mark.asyncio
 async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean_p1):
-    from apps.shared.events.bus import EventBus
+    from apps.shared.events.bus import events
 
     committed, rolled = str(uuid.uuid4()), str(uuid.uuid4())
     async with db.admin_session_factory()() as session:
-        await EventBus().emit(_P1Event(actor_id=committed), session=session)
+        await events.emit(_P1Event(actor_id=committed), session=session)
         await session.commit()
     async with db.admin_session_factory()() as session:
-        await EventBus().emit(_P1Event(actor_id=rolled), session=session)
+        await events.emit(_P1Event(actor_id=rolled), session=session)
         await session.rollback()
     assert await _count_p1(committed) == 1
     assert await _count_p1(rolled) == 0

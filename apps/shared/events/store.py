@@ -1,7 +1,7 @@
 """The business-events write path (``emit``) and the timeline projection.
 
 ``emit`` records every emitted ``BusinessEvent`` to the append-only trail: this module maps an event
-onto row columns (:func:`_event_columns`) and persists it via the
+onto row columns (:func:`event_columns`) and persists it via the
 :class:`~apps.shared.events.repository.EventRepository` — on the request's own unit of work
 (:func:`persist_fact`), so the fact commits iff the action commits (atomic). Only the fallback path
 (no ambient session: auth signals, seeders) stays best-effort on a detached admin session.
@@ -98,7 +98,7 @@ def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
     return payload
 
 
-def _event_columns(event: BusinessEvent) -> dict[str, Any]:
+def event_columns(event: BusinessEvent) -> dict[str, Any]:
     """Map a ``BusinessEvent`` onto the ``business_events`` row fields — scoping lifted to their own
     columns, the rest to ``payload``, ``ip``/``request_id`` read from the request contextvars."""
     ctx = get_contextvars()
@@ -126,7 +126,7 @@ async def persist_fact(event: BusinessEvent, session: AsyncSession | None) -> No
     iff the mutation commits). With none (auth signals, non-request contexts) there is no
     transaction to join, so it is a best-effort detached write off the critical path — never
     blocking or failing the caller."""
-    columns = _event_columns(event)
+    columns = event_columns(event)
     if session is not None:
         await insert_business_event(session=session, **columns)
     else:
@@ -144,7 +144,7 @@ def _activity_label(kind: str) -> str:
     return kind.split(".", 1)[-1].replace("_", " ").capitalize()
 
 
-def _ago(ts: datetime, now: datetime) -> str:
+def ago(ts: datetime, now: datetime) -> str:
     """A compact relative moment (`3h ago`, `2d ago`, `Mar 4`) — an activity feed reads better in
     elapsed time than in wall-clock; the exact instant stays on the row's ``title``/``datetime``."""
     secs = max(0.0, (now - ts).total_seconds())
@@ -190,7 +190,7 @@ def activity_entries(
                 "icon": r.icon or _FALLBACK_ICON,
                 "level": r.level,
                 "ts": r.ts,
-                "ago": _ago(r.ts, now),
+                "ago": ago(r.ts, now),
                 "href": link(r) if link else None,
             }
         )

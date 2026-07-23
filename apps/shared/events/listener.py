@@ -7,13 +7,13 @@ longer does — so it never knows its consumers nor waits for them:
 
 - **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched rows with
   ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one task-queue row per
-  registered ``bus.on`` consumer (read via :meth:`~apps.shared.events.bus.EventBus.subscribers_for`)
-  and stamps ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a row.
+  registered ``bus.on`` consumer (read from the registry via ``subscribers_for``) and stamps
+  ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a row.
 - **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
   each tick reads facts newer than this process's in-memory cursor whose kind has a ``spread``
   subscriber and runs those handlers in-process (idempotent, so a replay is harmless).
 - **Reconstruct from the row.** Both paths rebuild the typed event from the row's ``kind`` via the
-  :func:`~apps.shared.events.types.event_class_for` registry; the async dedup key is the row id.
+  registry's ``event_class_for`` catalog; the async dedup key is the row id.
 """
 
 import asyncio
@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
 from apps.shared.events.repository import EventRepository
-from apps.shared.events.types import BusinessEvent, event_class_for, reconstruct
+from apps.shared.events.types import BusinessEvent, reconstruct
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 
@@ -98,7 +98,7 @@ class EventListener:
 
     async def _read_spread(self, repo: EventRepository) -> list[dict[str, Any]]:
         """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
-        kinds = [k for t in self._bus._spread_subs if (k := getattr(t, "kind", ""))]
+        kinds = self._bus.registry.spread_kinds()
         if not kinds:
             return []
         cursor = self._spread_cursor if self._spread_cursor is not None else 0
@@ -110,7 +110,7 @@ class EventListener:
         skipped rather than blocking the cursor."""
         event = self._reconstruct(row)
         if event is not None:
-            for handler in self._bus._handlers_for(event, self._bus._spread_subs, set()):
+            for handler in self._bus.registry.spread_handlers_for(event):
                 try:
                     await handler(event)
                 except Exception:
@@ -119,16 +119,16 @@ class EventListener:
 
     def _reconstruct(self, row: dict[str, Any]) -> BusinessEvent | None:
         """Rebuild the typed event from a business_events row (its own fields + scoping columns)."""
-        event_type = event_class_for(row["kind"])
+        event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return None
         return reconstruct(event_type, _task_payload(row))
 
     async def _fan_out(self, session: AsyncSession, row: dict[str, Any]) -> None:
-        event_type = event_class_for(row["kind"])
+        event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return  # unknown kind (e.g. a legacy row) — nothing to deliver; still marked dispatched
-        subs = self._bus.subscribers_for(event_type)
+        subs = self._bus.registry.subscribers_for(event_type)
         if not subs:
             return
         payload = _task_payload(row)
