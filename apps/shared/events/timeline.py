@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventRow
+from apps.shared.events.models import BusinessEventLog
 
 # ── Activity feed — humanize rows for the profile/dashboard timeline ──────────────────────────
 
@@ -39,10 +39,10 @@ def ago(ts: datetime, now: datetime) -> str:
 
 
 def activity_entries(
-    rows: list[BusinessEventRow],
+    rows: list[BusinessEventLog],
     *,
     show_actor: bool = True,
-    link: Callable[[BusinessEventRow], str | None] | None = None,
+    link: Callable[[BusinessEventLog], str | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Project rows to *who did what to which, when* — only safe fields, never the raw ``kind`` or
     the rest of the payload. ``show_actor`` drops *who* on the profile's own trail (always the
@@ -59,8 +59,8 @@ def activity_entries(
                 "app": r.kind.split(".", 1)[0],
                 "icon": r.icon or _FALLBACK_ICON,
                 "level": r.level,
-                "ts": r.ts,
-                "ago": ago(r.ts, now),
+                "ts": r.created_at,
+                "ago": ago(r.created_at, now),
                 "href": link(r) if link else None,
             }
         )

@@ -85,12 +85,12 @@ async def test_emit_does_not_run_handlers_in_process():
 def test_event_to_log_lifts_scoping_and_carries_metadata():
     # emit maps a BusinessEvent straight onto a business_events row: scoping to columns, rest to
     # payload — a single event → row hop, no intermediate column dict.
-    actor, org = str(uuid.uuid4()), str(uuid.uuid4())
+    actor, org = uuid.uuid4(), uuid.uuid4()
     row = event_to_log(WidgetCreated(actor_id=actor, org_id=org, entity_id="w", label="Gizmo"))
     assert row.kind == "widget.created"
     assert row.icon == "cube"
-    assert str(row.user_id) == actor
-    assert str(row.org_id) == org
+    assert row.user_id == actor
+    assert row.org_id == org
     assert row.entity_id == "w"  # the concerned entity, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
     payload = row.payload

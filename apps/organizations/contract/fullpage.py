@@ -63,7 +63,7 @@ async def provide_org_nav(query: FullpageQuery) -> dict:
     if query.user is None:
         return {"nav": []}
     try:
-        orgs = await get_user_orgs(query.session, uuid.UUID(query.user.id))
+        orgs = await get_user_orgs(query.session, query.user.id)
     except Exception:
         log.exception("organizations.org_nav_load_failed")
         return {"nav": []}

@@ -40,7 +40,7 @@ def _mock_rls_session():
     return _override
 
 
-def _mock_user(user_id: str = "00000000-0000-0000-0000-000000000001"):
+def _mock_user(user_id: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000001")):
     async def _override():
         return AuthenticatedUser(id=user_id, email="test@test.local")
 

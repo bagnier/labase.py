@@ -119,11 +119,12 @@ async def test_refresh_session_none_raises_value_error():
 
 
 def test_user_created_is_a_persisted_business_event():
-    event = UserCreated(actor_id="u1", entity_id="u1", email="a@b.c")
+    actor = uuid4()
+    event = UserCreated(actor_id=actor, entity_id="u1", email="a@b.c")
 
     assert isinstance(event, BusinessEvent)  # persisted on the trail like any fact
     assert event.kind == "auth.user_created"  # distinct from the sign-in (Login) events
-    assert event.actor_id == "u1"  # the new user acts
+    assert event.actor_id == actor  # the new user acts
     assert event.email == "a@b.c"
     assert not hasattr(event, "access_token")  # a token is never persisted
 
@@ -147,7 +148,7 @@ def test_is_first_sign_in_detects_a_brand_new_oauth_user():
 
 
 def test_user_deleted_is_a_persisted_business_event():
-    event = UserDeleted(actor_id="admin1", entity_id="victim1")
+    event = UserDeleted(actor_id=uuid4(), entity_id="victim1")
 
     assert isinstance(event, BusinessEvent)
     assert event.kind == "auth.user_deleted"

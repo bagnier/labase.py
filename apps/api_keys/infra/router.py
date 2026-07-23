@@ -70,16 +70,14 @@ async def create_key(
     key = await repo.save(
         repo.model(
             org_id=org_id,
-            created_by=uuid.UUID(current_user.id),
+            created_by=current_user.id,
             name=name,
             prefix=material.prefix,
             key_hash=material.key_hash,
         )
     )
     await events.emit(
-        ApiKeyIssued(
-            actor_id=current_user.id, org_id=str(org_id), entity_id=str(key.id), label=name
-        )
+        ApiKeyIssued(actor_id=current_user.id, org_id=org_id, entity_id=str(key.id), label=name)
     )
     created = ApiKeyCreated(secret=material.token, **ApiKeyRead.model_validate(key).model_dump())
     if wants_json(request):
@@ -103,7 +101,7 @@ async def revoke_key(
         await events.emit(
             ApiKeyRevoked(
                 actor_id=current_user.id,
-                org_id=str(org_id),
+                org_id=org_id,
                 entity_id=str(key.id),
                 label=key.name,
             )

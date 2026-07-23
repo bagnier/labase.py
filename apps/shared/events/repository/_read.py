@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import Date, Text, cast, func, or_, select
 
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventLog, BusinessEventRow
+from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository._base import _EventSQL
 
 
@@ -15,8 +15,8 @@ class _ReadsEvents(_EventSQL):
         self,
         *,
         level: str | None = None,
-        org_id: str | None = None,
-        user_id: str | None = None,
+        org_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
         entity_id: str | None = None,
         request_id: str | None = None,
         app: str | None = None,
@@ -25,7 +25,7 @@ class _ReadsEvents(_EventSQL):
         to_dt: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[BusinessEventRow]:
+    ) -> list[BusinessEventLog]:
         """Newest-first read under the filters. RLS already scopes rows to the reader (self + orgs);
         the ``user_id``/``org_id`` filters narrow to one feed on top of that. ``app`` matches the
         ``kind`` prefix (``todo`` → ``todo.*``)."""
@@ -38,9 +38,9 @@ class _ReadsEvents(_EventSQL):
         if level:
             query = query.where(BusinessEventLog.level == level)
         if org_id:
-            query = query.where(BusinessEventLog.org_id == uuid.UUID(org_id))
+            query = query.where(BusinessEventLog.org_id == org_id)
         if user_id:
-            query = query.where(BusinessEventLog.user_id == uuid.UUID(user_id))
+            query = query.where(BusinessEventLog.user_id == user_id)
         if entity_id:
             query = query.where(BusinessEventLog.entity_id == entity_id)
         if request_id:
@@ -59,27 +59,13 @@ class _ReadsEvents(_EventSQL):
             query = query.where(BusinessEventLog.created_at >= from_dt)
         if to_dt:
             query = query.where(BusinessEventLog.created_at <= to_dt)
-        rows = await self.session.scalars(query)
-        return [
-            BusinessEventRow(
-                ts=r.created_at,
-                level=r.level,
-                kind=r.kind,
-                icon=r.icon,
-                org_id=str(r.org_id) if r.org_id else None,
-                user_id=str(r.user_id) if r.user_id else None,
-                entity_id=r.entity_id,
-                request_id=r.request_id,
-                payload=r.payload or {},
-            )
-            for r in rows
-        ]
+        return list(await self.session.scalars(query))
 
     async def daily_counts(
         self,
         *,
-        user_id: str | None = None,
-        org_id: str | None = None,
+        user_id: uuid.UUID | None = None,
+        org_id: uuid.UUID | None = None,
         days: int = 366,
     ) -> dict[date, int]:
         """Per-day counts for the contribution calendar. Missing days don't appear — the calendar
@@ -88,8 +74,8 @@ class _ReadsEvents(_EventSQL):
         day = cast(BusinessEventLog.created_at, Date)
         query = select(day, func.count()).where(BusinessEventLog.created_at >= since).group_by(day)
         if user_id:
-            query = query.where(BusinessEventLog.user_id == uuid.UUID(user_id))
+            query = query.where(BusinessEventLog.user_id == user_id)
         if org_id:
-            query = query.where(BusinessEventLog.org_id == uuid.UUID(org_id))
+            query = query.where(BusinessEventLog.org_id == org_id)
         rows = await self.session.execute(query)
         return {d: n for d, n in rows.all()}

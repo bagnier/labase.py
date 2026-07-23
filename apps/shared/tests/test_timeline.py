@@ -5,18 +5,18 @@ from datetime import timedelta
 import pytest
 
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventRow
+from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.timeline import activity_entries, ago
 
 
 def _row(*, kind="todo.created", level="info", icon="clipboard-text", payload=None, ts=None):
-    return BusinessEventRow(
-        ts=ts or clock.now(),
+    return BusinessEventLog(
+        created_at=ts or clock.now(),
         level=level,
         kind=kind,
         icon=icon,
-        org_id=None,
         user_id=None,
+        org_id=None,
         entity_id=None,
         request_id=None,
         payload=payload or {},

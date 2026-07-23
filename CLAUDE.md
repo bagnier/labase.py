@@ -1,6 +1,7 @@
 - read @README.md
 - TDD, red, green, refactor any development.
 - import at top, refactor to make it possible.
+- Unless explicitly asked, the user commits, not the agent.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).
 - /research for codebase, web or documentation digging.
 - /obsidian-markdown for any markdown edition.

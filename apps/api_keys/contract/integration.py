@@ -81,7 +81,7 @@ async def _resolve(query: ApiKeyQuery) -> AuthenticatedUser | None:
     created_by, org_id = key.created_by, key.org_id
     email = (await resolve_user_emails([created_by])).get(created_by, "")
     return AuthenticatedUser(
-        id=str(created_by),
+        id=created_by,
         email=email,
         claims={"sub": str(created_by), "role": "authenticated", "email": email},
         api_key_org_id=org_id,

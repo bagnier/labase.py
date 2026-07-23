@@ -1,5 +1,7 @@
 """The dashboard "Recent activity" timeline — the org's own business events, labels only."""
 
+import uuid
+
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.shared.events.repository import insert_business_event
 
@@ -20,9 +22,9 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
         insert_business_event(
             kind="calendar.event_created",
             level="info",
-            user_id=user_id,
+            user_id=uuid.UUID(user_id),
             ip=None,
-            org_id=org["id"],
+            org_id=uuid.UUID(org["id"]),
             request_id=None,
             payload=None,
         )
@@ -46,9 +48,9 @@ def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
             insert_business_event(
                 kind=kind,
                 level="info",
-                user_id=user_id,
+                user_id=uuid.UUID(user_id),
                 ip=None,
-                org_id=org["id"],
+                org_id=uuid.UUID(org["id"]),
                 request_id=None,
                 payload=None,
             )

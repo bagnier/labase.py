@@ -90,11 +90,9 @@ async def add_todo(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Task limit reached for this organisation")
 
     title = await parse_field(request, "title")
-    todo = await repo.add(uuid.UUID(current_user.id), title)
+    todo = await repo.add(current_user.id, title)
     await events.emit(
-        TodoCreated(
-            actor_id=current_user.id, org_id=str(org_id), entity_id=str(todo.id), label=title
-        )
+        TodoCreated(actor_id=current_user.id, org_id=org_id, entity_id=str(todo.id), label=title)
     )
     return await _render(request, session, current_user, repo, org, settings)
 
@@ -121,7 +119,7 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
-    scope = {"actor_id": current_user.id, "org_id": str(org_id), "entity_id": str(todo_id)}
+    scope = {"actor_id": current_user.id, "org_id": org_id, "entity_id": str(todo_id)}
     if done is not None:
         ticked = TodoTicked if done else TodoUnticked
         await events.emit(ticked(label=todo.title, **scope))
@@ -147,7 +145,7 @@ async def delete_todo(
         await events.emit(
             TodoDeleted(
                 actor_id=current_user.id,
-                org_id=str(org_id),
+                org_id=org_id,
                 entity_id=str(todo_id),
                 label=todo.title,
             )

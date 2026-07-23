@@ -1,14 +1,13 @@
-"""The shapes of a business event on the way in and out of the trail.
+"""The shape of a business event on the trail.
 
-Two data structures, no behaviour: :class:`BusinessEventLog` is the ORM mapping of the append-only
-``business_events`` table (the write shape), :class:`BusinessEventRow` is the flattened DTO the
-:class:`~apps.shared.events.repository.EventRepository` returns from a read (the read shape). Access
-logic — writing and querying them — lives in the repository; humanizing a row for a surface lives in
+One data structure, no behaviour: :class:`BusinessEventLog` is the ORM mapping of the append-only
+``business_events`` table — the single shape written on ``emit`` *and* handed back on a read (the
+session keeps ``expire_on_commit=False``, so a read row stays usable past its session). Access logic
+— writing and querying it — lives in the repository; humanizing a row for a surface lives in
 :mod:`apps.shared.events.timeline`.
 """
 
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -39,18 +38,3 @@ class BusinessEventLog(Base):
     entity_id: Mapped[str | None] = mapped_column(default=None)
     request_id: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
-
-
-@dataclass(frozen=True)
-class BusinessEventRow:
-    """A read of the business-events trail, flattened for the unified timeline."""
-
-    ts: datetime
-    level: str
-    kind: str
-    icon: str | None
-    org_id: str | None
-    user_id: str | None
-    entity_id: str | None
-    request_id: str | None
-    payload: dict[str, Any]

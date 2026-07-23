@@ -38,7 +38,7 @@ def seeding_enabled() -> bool:
 
 async def seed_org_welcome(
     session: AsyncSession,
-    org_id: str | None,
+    org_id: uuid.UUID | None,
     seed: Callable[[AsyncSession, uuid.UUID, uuid.UUID], Awaitable[None]],
 ) -> None:
     """Run a welcome seeder for a newly created org, on the worker's session.
@@ -50,11 +50,10 @@ async def seed_org_welcome(
     writes its own welcome rows. No commit: the worker commits the task."""
     if not seeding_enabled() or not org_id:
         return
-    resolved = uuid.UUID(org_id)
-    owner_id = await get_org_owner_id(session, resolved)
+    owner_id = await get_org_owner_id(session, org_id)
     if owner_id is None:
         return
-    await seed(session, resolved, owner_id)
+    await seed(session, org_id, owner_id)
 
 
 @dataclass

@@ -445,7 +445,7 @@ async def create_org_override(
     await repo.set_org_override(app, key, org_id, stored)
     await session.commit()
     await events.emit(
-        OrgOverrideSet(actor_id=current_user.id, org_id=str(org_id), app=app, key=key, value=stored)
+        OrgOverrideSet(actor_id=current_user.id, org_id=org_id, app=app, key=key, value=stored)
     )
     return await _render_org_overrides(request, session, app, group)
 
@@ -463,9 +463,7 @@ async def delete_org_override(
     repo = AppSettingRepository(session)
     await repo.delete_org_override(app, key, org_id)
     await session.commit()
-    await events.emit(
-        OrgOverrideRemoved(actor_id=current_user.id, org_id=str(org_id), app=app, key=key)
-    )
+    await events.emit(OrgOverrideRemoved(actor_id=current_user.id, org_id=org_id, app=app, key=key))
     return await _render_org_overrides(request, session, app, group)
 
 

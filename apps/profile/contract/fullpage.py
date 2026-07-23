@@ -6,8 +6,6 @@ Registered as a fullpage provider at profile's ``mount()`` and collected by
 "context processor" or middleware would, proscribed by the *Page composition* principle).
 """
 
-import uuid
-
 import structlog
 from sqlalchemy import select
 
@@ -28,7 +26,7 @@ async def provide_profile_handle(query: FullpageQuery) -> dict:
         row = (
             await query.session.execute(
                 select(Profile.handle, Profile.avatar_path).where(
-                    Profile.auth_user_id == uuid.UUID(query.user.id)
+                    Profile.auth_user_id == query.user.id
                 )
             )
         ).first()

@@ -18,7 +18,7 @@ class _WritesEvents(_EventSQL):
         handle = await self.actor_handle(event.actor_id)
         await self.save(event_to_log(event, actor=handle))
 
-    async def actor_handle(self, user_id: str | None) -> str | None:
+    async def actor_handle(self, user_id: uuid.UUID | None) -> str | None:
         """Denormalize *who* at write time: profiles are ``own read`` under RLS, so a member can't
         resolve a co-member's handle at read time — and this pins the handle as it was then."""
         if not user_id:
@@ -26,7 +26,7 @@ class _WritesEvents(_EventSQL):
         try:
             return await self.session.scalar(
                 text("select handle from profiles where auth_user_id = :id"),
-                {"id": uuid.UUID(user_id)},  # bind as uuid, not text, so the column compare holds
+                {"id": user_id},  # already a uuid — the column compare holds
             )
         except Exception:
             return None
@@ -64,9 +64,9 @@ def event_to_log(event: BusinessEvent, *, actor: str | None = None) -> BusinessE
         kind=event.kind,
         level=event.level,
         icon=event.icon,
-        user_id=uuid.UUID(event.actor_id) if event.actor_id else None,
+        user_id=event.actor_id,
         ip=ctx.get("ip"),
-        org_id=uuid.UUID(event.org_id) if event.org_id else None,
+        org_id=event.org_id,
         entity_id=event.entity_id,
         request_id=ctx.get("request_id"),
         payload=payload or None,

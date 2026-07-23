@@ -1,5 +1,6 @@
 import contextlib
 import time
+import uuid
 
 import structlog
 from fastapi import (
@@ -157,10 +158,16 @@ def _client_ip(request: Request) -> str | None:
     return client_ip(request)
 
 
-def _token_sub(token: str) -> str | None:
+def _sub_uuid(sub: object) -> uuid.UUID | None:
+    """The actor uuid from a JWT ``sub`` claim (a string), tolerating an absent/blank one — the one
+    seam that turns the identity provider's string subject into our uuid actor id."""
+    return uuid.UUID(str(sub)) if sub else None
+
+
+def _token_sub(token: str) -> uuid.UUID | None:
     """The ``sub`` (user id) claim of a freshly minted token — the actor of a just-completed auth
     ceremony, for attributing its business event when no request user is in hand yet."""
-    return str(decode_jwt(token).get("sub", "")) or None
+    return _sub_uuid(decode_jwt(token).get("sub"))
 
 
 def _error_response(
@@ -345,7 +352,7 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
         # a failed decode must not turn a logout into a 500; record it with no actor instead.
         actor_id = None
         with contextlib.suppress(Exception):
-            actor_id = str(decode_jwt(access_token).get("sub", "")) or None
+            actor_id = _sub_uuid(decode_jwt(access_token).get("sub"))
         await events.emit(SignedOut(actor_id=actor_id))
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
@@ -391,7 +398,7 @@ async def passkey_verify_endpoint(request: Request, users_settings: UsersSetting
         await events.emit(PasskeyFailed())
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
     claims = decode_jwt(tokens.access_token)
-    await events.emit(PasskeySignedIn(actor_id=str(claims.get("sub", "")) or None))
+    await events.emit(PasskeySignedIn(actor_id=_sub_uuid(claims.get("sub"))))
     resp = JSONResponse(
         {
             "access_token": tokens.access_token,
@@ -477,7 +484,7 @@ async def oauth_callback(
         await events.emit(OAuthFailed())
         return _oauth_failure(request, str(e), users_settings)
     claims = decode_jwt(tokens.access_token)
-    await events.emit(OAuthSignedIn(actor_id=str(claims.get("sub", "")) or None))
+    await events.emit(OAuthSignedIn(actor_id=_sub_uuid(claims.get("sub"))))
     next = oauth_next or ""
     if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
@@ -602,7 +609,7 @@ async def stop_impersonation_endpoint(
         return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     admin_id = None
     try:
-        admin_id = decode_jwt(stash)["sub"]
+        admin_id = _sub_uuid(decode_jwt(stash)["sub"])
     except Exception:  # expired stash: still drop the disguise, record without the id
         log.warning("auth.impersonation_stash_invalid")
     await events.emit(ImpersonationStopped(actor_id=admin_id, target_email=current_user.email))
@@ -713,7 +720,7 @@ async def confirm_email_endpoint(request: Request, token_hash: str = Query(defau
             "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
         )
     claims = decode_jwt(tokens.access_token)
-    await events.emit(EmailChanged(actor_id=str(claims.get("sub", "")) or None))
+    await events.emit(EmailChanged(actor_id=_sub_uuid(claims.get("sub"))))
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     return resp

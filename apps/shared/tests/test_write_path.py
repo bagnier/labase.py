@@ -44,10 +44,10 @@ async def _clean_p1():
     _clear_engine_caches()
 
 
-async def _count_p1(actor: str) -> int:
+async def _count_p1(actor: uuid.UUID) -> int:
     async with db.admin_session_factory()() as s:
         return await s.scalar(
-            text("SELECT count(*) FROM business_events WHERE user_id = :a"), {"a": uuid.UUID(actor)}
+            text("SELECT count(*) FROM business_events WHERE user_id = :a"), {"a": actor}
         )
 
 
@@ -55,6 +55,7 @@ async def _count_p1(actor: str) -> int:
 async def test_failed_write_logs_a_warning_instead_of_raising():
     # Regression: the warning must not pass `event=`/`kind=` under structlog's positional
     # message key, and a lost row must never crash the fire-and-forget write task.
+    uid = uuid.uuid4()
     with (
         patch(
             "apps.shared.events.repository.admin_session_factory",
@@ -65,14 +66,14 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
         await insert_business_event(
             kind="auth.signed_in",
             level="info",
-            user_id="not-a-uuid",
+            user_id=uid,
             ip=None,
             org_id=None,
             request_id=None,
             payload=None,
         )
     log.warning.assert_called_once_with(
-        "business_event.write_failed", kind="auth.signed_in", user_id="not-a-uuid"
+        "business_event.write_failed", kind="auth.signed_in", user_id=uid
     )
 
 
@@ -82,17 +83,17 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
 @pytest.mark.asyncio
 async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
     """emit persists the fact on the caller's session — scoping to columns, the rest in payload."""
-    actor = str(uuid.uuid4())
+    actor = uuid.uuid4()
     async with db.admin_session_factory()() as session:
         await events._persist_fact(
-            _P1Event(actor_id=actor, org_id=str(uuid.uuid4()), entity_id="e1", label="Hi"), session
+            _P1Event(actor_id=actor, org_id=uuid.uuid4(), entity_id="e1", label="Hi"), session
         )
         await session.commit()
     async with db.admin_session_factory()() as session:
         row = (
             await session.execute(
                 text("SELECT kind, entity_id, payload FROM business_events WHERE user_id = :a"),
-                {"a": uuid.UUID(actor)},
+                {"a": actor},
             )
         ).first()
     assert row is not None
@@ -106,7 +107,7 @@ async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
 @pytest.mark.asyncio
 async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
     """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
-    actor = str(uuid.uuid4())
+    actor = uuid.uuid4()
     async with db.admin_session_factory()() as session:
         await events._persist_fact(_P1Event(actor_id=actor), session)
         await session.rollback()
@@ -119,7 +120,7 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     import asyncio
 
     with patch.object(events, "_record_detached", new=AsyncMock()) as detached:
-        await events._persist_fact(_P1Event(actor_id=str(uuid.uuid4()), label="x"), None)
+        await events._persist_fact(_P1Event(actor_id=uuid.uuid4(), label="x"), None)
         detached.assert_not_awaited()  # coroutine scheduled, not yet run
         await asyncio.sleep(0)  # let the created task run
     detached.assert_awaited_once()
@@ -133,7 +134,7 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean
     from apps.shared.events.registry import registry
 
     registry.declare_events("test_p1", _P1Event)  # emit refuses an undeclared event
-    committed, rolled = str(uuid.uuid4()), str(uuid.uuid4())
+    committed, rolled = uuid.uuid4(), uuid.uuid4()
     async with db.admin_session_factory()() as session:
         await events.emit(_P1Event(actor_id=committed), session=session)
         await session.commit()

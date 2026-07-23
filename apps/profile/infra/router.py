@@ -59,7 +59,7 @@ from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.events.bus import events
-from apps.shared.events.models import BusinessEventRow
+from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.timeline import (
     activity_entries,
@@ -151,8 +151,8 @@ def _activity_query(q: str, app: str, from_dt: str, to_dt: str) -> str:
 
 async def _activity_context(
     session: AsyncSession,
-    user_id: str,
-    handles: dict[str, str],
+    user_id: uuid.UUID,
+    handles: dict[uuid.UUID, str],
     *,
     q: str = "",
     app: str = "",
@@ -176,7 +176,7 @@ async def _activity_context(
         limit=limit,
     )
 
-    def link(r: BusinessEventRow) -> str | None:
+    def link(r: BusinessEventLog) -> str | None:
         return entity_url(r.kind, r.entity_id, handles.get(r.org_id))
 
     entries = activity_entries(rows, show_actor=False, link=link)
@@ -219,11 +219,11 @@ async def _profile_context(
     )
     try:
         profile = await repo.get_with_auto_handle(
-            uuid.UUID(current_user.id), current_user.email, profile_settings.handle_enabled
+            current_user.id, current_user.email, profile_settings.handle_enabled
         )
         context = await fullpage_context(session, current_user)
         orgs = context["org_nav"]
-        handles = {str(o.id): o.handle for o in orgs}
+        handles = {o.id: o.handle for o in orgs}
         counts = await EventRepository(session).daily_counts(user_id=current_user.id)
         activity = await _activity_context(session, current_user.id, handles)
     except BaseException:
@@ -290,7 +290,7 @@ async def profile_page(
 ) -> HTMLResponse | JSONResponse | RedirectResponse:
     if wants_json(request):
         profile = await repo.get_with_auto_handle(
-            uuid.UUID(current_user.id), current_user.email, profile_settings.handle_enabled
+            current_user.id, current_user.email, profile_settings.handle_enabled
         )
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
@@ -326,7 +326,7 @@ async def profile_activity(
     Load-older all re-render it. API callers get the same trail as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     context = await fullpage_context(session, current_user)
-    handles = {str(o.id): o.handle for o in context["org_nav"]}
+    handles = {o.id: o.handle for o in context["org_nav"]}
     ctx = await _activity_context(
         session, current_user.id, handles, q=q, app=app, from_dt=from_dt, to_dt=to_dt, limit=limit
     )
@@ -580,10 +580,10 @@ async def account_delete(
     # The UserDeleted fact rides the admin session — it commits iff the deletion does. Its forget
     # consumers (organizations, profile) then run asynchronously off the tailer, by user id.
     await events.emit(
-        UserDeleted(actor_id=current_user.id, entity_id=current_user.id), session=admin_session
+        UserDeleted(actor_id=current_user.id, entity_id=str(current_user.id)), session=admin_session
     )
     # GoTrue last, before commit: if closing access fails, nothing is deleted.
-    await disable_account(current_user.id)
+    await disable_account(str(current_user.id))
     await admin_session.commit()
     if wants_json(request):
         resp: Response = JSONResponse({"message": "Account deleted."})
@@ -624,7 +624,7 @@ async def avatar_upload(
         .from_(bucket())
         .upload(path, content, {"content-type": file.content_type or "", "x-upsert": "true"})
     )
-    profile = await repo.get_or_create(uuid.UUID(current_user.id), current_user.email)
+    profile = await repo.get_or_create(current_user.id, current_user.email)
     profile.avatar_path = path
     await session.flush()
     await events.emit(AvatarUpdated(actor_id=current_user.id))
@@ -665,7 +665,7 @@ async def profile_update(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     body = await parse_body(request)
     handle = str(body.get("handle", ""))
-    profile = await repo.get_or_create(uuid.UUID(current_user.id), current_user.email)
+    profile = await repo.get_or_create(current_user.id, current_user.email)
     handle = handle.strip().lower()
 
     error = validate_handle(handle)

@@ -1,3 +1,4 @@
+import uuid
 from unittest.mock import MagicMock, patch
 
 import jwt
@@ -75,14 +76,17 @@ async def test_expired_token_with_valid_refresh_returns_200_and_sets_new_cookies
     with (
         patch(
             "apps.auth.infra.security.decode_jwt",
-            side_effect=[jwt.ExpiredSignatureError, {"sub": "user-id", "email": email}],
+            side_effect=[
+                jwt.ExpiredSignatureError,
+                {"sub": "00000000-0000-0000-0000-000000000009", "email": email},
+            ],
         ),
         patch("apps.auth.infra.security.refresh_session", return_value=fake_new_tokens),
     ):
         response = await client.get("/me")
 
     assert response.status_code == 200
-    assert response.json()["id"] == "user-id"
+    assert response.json()["id"] == "00000000-0000-0000-0000-000000000009"
     assert "access_token" in response.cookies
     assert "refresh_token" in response.cookies
 
@@ -129,7 +133,10 @@ async def test_refresh_while_impersonating_caps_cookie_to_window(client, test_us
     with (
         patch(
             "apps.auth.infra.security.decode_jwt",
-            side_effect=[jwt.ExpiredSignatureError, {"sub": "user-id", "email": email}],
+            side_effect=[
+                jwt.ExpiredSignatureError,
+                {"sub": "00000000-0000-0000-0000-000000000009", "email": email},
+            ],
         ),
         patch("apps.auth.infra.security.refresh_session", return_value=fake_new_tokens),
     ):
@@ -299,7 +306,9 @@ def test_register_unexpected_exception_returns_400(driver):
 async def test_get_rls_session_sets_context_and_relies_on_commit_to_clear():
     from apps.auth.infra.session import get_rls_session
 
-    fake_user = AuthenticatedUser(id="00000000-0000-0000-0000-000000000001", email="t@test.local")
+    fake_user = AuthenticatedUser(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000001"), email="t@test.local"
+    )
     fake_session = MagicMock()
 
     set_calls = []

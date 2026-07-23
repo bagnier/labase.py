@@ -7,6 +7,7 @@ entry points.
 """
 
 import asyncio
+import uuid
 from typing import Any
 
 import structlog
@@ -99,8 +100,8 @@ async def list_accounts(
     )
 
 
-def _self_guard(current_user_id: str, user_id: str) -> None:
-    if current_user_id == user_id:
+def _self_guard(current_user_id: uuid.UUID, user_id: str) -> None:
+    if str(current_user_id) == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot act on your own account."
         )

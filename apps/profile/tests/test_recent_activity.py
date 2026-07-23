@@ -1,5 +1,7 @@
 """The profile "Recent activity" timeline — the user's own business events, labels only."""
 
+import uuid
+
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.shared.events.repository import insert_business_event
 
@@ -13,7 +15,7 @@ def test_profile_page_lists_the_users_own_recent_actions(driver):
         insert_business_event(
             kind="todo.task_created",
             level="info",
-            user_id=user_id,
+            user_id=uuid.UUID(user_id),
             ip=None,
             org_id=None,
             request_id=None,

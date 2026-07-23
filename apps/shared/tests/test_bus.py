@@ -128,7 +128,12 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
 
     events.on(_Ticked, handler, name="counter", app="test_bus", idempotent=True)
     wrapper = _handlers["evt:test_bus.ticked:counter"]
-    payload = {"actor_id": str(uuid.uuid4()), "org_id": "o", "label": "Buy milk", "event_id": 99}
+    payload = {
+        "actor_id": str(uuid.uuid4()),
+        "org_id": str(uuid.uuid4()),
+        "label": "Buy milk",
+        "event_id": 99,
+    }
     async with db.admin_session_factory()() as session:
         await wrapper(session, payload)  # first delivery
         await wrapper(session, payload)  # at-least-once re-delivery, same event_id

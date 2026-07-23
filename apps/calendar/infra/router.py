@@ -287,7 +287,7 @@ async def create_event(
     except HTTPException as exc:
         return await reject(str(exc.detail))
     event = await repo.add(
-        uuid.UUID(current_user.id),
+        current_user.id,
         title,
         start,
         end,
@@ -296,7 +296,7 @@ async def create_event(
     )
     await events.emit(
         CalendarCreated(
-            actor_id=current_user.id, org_id=str(org_id), entity_id=str(event.id), label=title
+            actor_id=current_user.id, org_id=org_id, entity_id=str(event.id), label=title
         )
     )
     if wants_json(request):
@@ -397,7 +397,7 @@ async def update_event(
     await events.emit(
         CalendarUpdated(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             entity_id=str(event.id),
             label=event.title,
         )
@@ -422,7 +422,7 @@ async def delete_event(
         await events.emit(
             CalendarDeleted(
                 actor_id=current_user.id,
-                org_id=str(org_id),
+                org_id=org_id,
                 entity_id=str(event_id),
                 label=event.title,
             )

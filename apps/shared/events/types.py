@@ -21,10 +21,16 @@ Non-CRUD actions (sign-in, a member joining, a page being published) subclass
 :class:`BusinessEvent` directly and set an explicit ``kind``.
 """
 
+import uuid
 from dataclasses import dataclass, fields
 from typing import Any, ClassVar, Self
 
 from apps.shared.events.registry import registry
+
+# The scoping fields that are real identities (uuid), as opposed to the polymorphic ``entity_id``
+# correlation key (a slug / int / uuid, kept str). ``from_payload`` re-parses these back to uuid
+# after a payload round-trips the task queue as JSON (where a uuid is serialized to a string).
+_UUID_FIELDS = ("actor_id", "org_id")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -32,8 +38,8 @@ class BusinessEvent:
     """Base for every recorded domain event. ``kw_only`` so subclasses may add required payload
     fields without tripping dataclass default-ordering against the base's optional scoping."""
 
-    actor_id: str | None = None
-    org_id: str | None = None
+    actor_id: uuid.UUID | None = None
+    org_id: uuid.UUID | None = None
     entity_id: str | None = None  # the concerned entity's id (todo pk, page slug…), for correlation
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
@@ -58,9 +64,14 @@ class BusinessEvent:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
         """Rebuild the event from a stored row — dropping transport-only keys (``event_id``, the
-        denormalized ``actor`` handle) that aren't event fields. Both delivery paths use this."""
+        denormalized ``actor`` handle) that aren't event fields, and re-parsing the uuid scoping
+        fields the task queue serialized to strings. Both delivery paths use this."""
         names = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in payload.items() if k in names})
+        kept = {k: v for k, v in payload.items() if k in names}
+        for key in _UUID_FIELDS:
+            if isinstance(kept.get(key), str):
+                kept[key] = uuid.UUID(kept[key])
+        return cls(**kept)
 
 
 @dataclass(frozen=True, kw_only=True)

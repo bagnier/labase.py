@@ -137,7 +137,9 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     guard), so a task retry never double-creates."""
     if not get_settings("organizations").auto_create_personal_org:
         return
-    user_id = uuid.UUID(event.actor_id)
+    user_id = event.actor_id
+    if user_id is None:
+        return
     # A business event is an immutable fact, not a saga step: the actor may be gone by the time this
     # durable consumer runs (self-deletion between emit and delivery). Seat off ``auth.users`` — no
     # user, no org — so a vanished subject is a clean no-op, not an FK crash + park.
@@ -157,8 +159,8 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     await session.flush()  # assign org.id; the worker commits the whole unit
     await events.emit(
         OrganizationCreated(
-            actor_id=str(user_id),
-            org_id=str(org.id),
+            actor_id=user_id,
+            org_id=org.id,
             entity_id=str(org.id),
             label=org.name,
         ),

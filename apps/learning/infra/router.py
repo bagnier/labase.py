@@ -1,4 +1,3 @@
-import uuid
 from datetime import date
 from typing import Annotated
 
@@ -40,7 +39,7 @@ async def _get_learning_repo(
     org_id: CurrentOrg,
     current_user: CurrentUser,
 ) -> LearningRepository:
-    return LearningRepository(session, org_id, uuid.UUID(current_user.id))
+    return LearningRepository(session, org_id, current_user.id)
 
 
 LearningRepo = Annotated[LearningRepository, Depends(_get_learning_repo)]
@@ -195,7 +194,7 @@ async def mark_card(
     await events.emit(
         CardReviewed(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             entity_id=str(card.id),
             label=card.question,
             outcome=outcome.value,

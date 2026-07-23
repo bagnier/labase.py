@@ -30,7 +30,7 @@ async def _resolve_current_org(
     session: RlsSession,
 ) -> uuid.UUID:
     """Resolve org from {org_handle} path parameter."""
-    user_uuid = uuid.UUID(current_user.id)
+    user_uuid = current_user.id
     repo = OrganizationRepository(session)
 
     slug = request.path_params.get("org_handle")
@@ -84,7 +84,7 @@ async def get_current_membership(
     session: RlsSession,
     org_id: uuid.UUID = Depends(get_current_org),
 ) -> Membership:
-    user_uuid = uuid.UUID(current_user.id)
+    user_uuid = current_user.id
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, user_uuid)
     if membership is None:
@@ -98,7 +98,7 @@ async def get_membership_by_org_id(
     session: RlsSession,
 ) -> Membership:
     repo = OrganizationRepository(session)
-    membership = await repo.get_membership(org_id, uuid.UUID(current_user.id))
+    membership = await repo.get_membership(org_id, current_user.id)
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return membership
@@ -109,8 +109,8 @@ async def _gate_owner(request: Request, membership: Membership) -> Membership:
         # ip rides in from the request contextvars; the persister enriches it at write time.
         await events.emit(
             OwnershipViolation(
-                actor_id=str(membership.auth_user_id),
-                org_id=str(membership.org_id),
+                actor_id=membership.auth_user_id,
+                org_id=membership.org_id,
                 path=request.url.path,
             )
         )

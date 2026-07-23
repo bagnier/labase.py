@@ -8,6 +8,7 @@ It never touches another context's tables: business events are read through the 
 merged window — the only way to order a file stream and two tables as one timeline.
 """
 
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -18,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventRow
+from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository import EventRepository
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
@@ -88,7 +89,7 @@ class LogReader:
         if flt.wants(LogSource.http):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         if flt.wants(LogSource.business):
-            rows = await EventRepository(self.session).search(**_event_kwargs(flt, limit))
+            rows = await EventRepository(self.session).search(**_business_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
         if flt.wants(LogSource.error) and flt.level in (None, "error"):
@@ -176,6 +177,9 @@ def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
 
 
 def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+    # The shared str base for all three sources: issue occurrences match a JSONB ``context ->>``
+    # (text) and firehose lines match file JSON — both keep the ids as strings. Only the business
+    # trail's uuid columns need parsing, done in ``_business_kwargs``.
     return {
         "level": flt.level,
         "org_id": flt.org_id,
@@ -187,6 +191,15 @@ def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
         "to_dt": flt.to_dt,
         "limit": limit,
     }
+
+
+def _business_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+    # The trail's id columns are uuid; LogFilter carries them as strings from the URL query, so
+    # parse at this boundary (a malformed id raises, as the previous in-repository cast did).
+    kwargs = _event_kwargs(flt, limit)
+    kwargs["org_id"] = uuid.UUID(flt.org_id) if flt.org_id else None
+    kwargs["user_id"] = uuid.UUID(flt.user_id) if flt.user_id else None
+    return kwargs
 
 
 def _issue_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
@@ -217,17 +230,19 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
     )
 
 
-def _from_event(row: BusinessEventRow) -> LogEntry:
+def _from_event(row: BusinessEventLog) -> LogEntry:
+    # LogEntry merges three sources (firehose ids are plain strings from JSON), so its ids stay str:
+    # stringify the trail row's uuids at this boundary.
     return LogEntry(
-        ts=row.ts,
+        ts=row.created_at,
         source=LogSource.business,
         level=row.level,
         event=row.kind,
-        org_id=row.org_id,
-        user_id=row.user_id,
+        org_id=str(row.org_id) if row.org_id else None,
+        user_id=str(row.user_id) if row.user_id else None,
         entity_id=row.entity_id,
         request_id=row.request_id,
-        payload=row.payload,
+        payload=row.payload or {},
     )
 
 

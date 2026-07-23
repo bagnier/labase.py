@@ -6,7 +6,7 @@ from typing import Any
 
 @dataclass
 class AuthenticatedUser:
-    id: str
+    id: uuid.UUID
     email: str
     access_token: str = ""
     is_admin: bool = False

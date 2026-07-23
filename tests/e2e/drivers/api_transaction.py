@@ -81,7 +81,7 @@ async def override_get_rls_session(
     """
     if current_user is not None:
         conn = await session.connection()
-        claims = json.dumps({"sub": current_user.id, "role": "authenticated"})
+        claims = json.dumps({"sub": str(current_user.id), "role": "authenticated"})
         await conn.execute(
             text("SELECT set_config('request.jwt.claims', :claims, true)").bindparams(claims=claims)
         )

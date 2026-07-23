@@ -1,4 +1,5 @@
 import time
+import uuid
 from functools import lru_cache
 
 import jwt
@@ -126,7 +127,7 @@ async def get_current_user(
     # filters the firehose by user_id (request_id is already bound by RequestLogger).
     structlog.contextvars.bind_contextvars(user_id=payload["sub"])
     return AuthenticatedUser(
-        id=payload["sub"],
+        id=uuid.UUID(payload["sub"]),
         email=payload.get("email", ""),
         access_token=access_token,
         is_admin=is_admin,

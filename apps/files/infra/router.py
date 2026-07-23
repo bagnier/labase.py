@@ -156,7 +156,7 @@ async def upload_file(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     org_file = await repo.add(
-        user_id=uuid.UUID(current_user.id),
+        user_id=current_user.id,
         filename=safe_name,
         storage_path=path,
         content_type=content_type,
@@ -166,7 +166,7 @@ async def upload_file(
     await events.emit(
         FileUploaded(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             entity_id=str(org_file.id),
             label=org_file.filename,
         )
@@ -225,7 +225,7 @@ async def delete_file(
     await events.emit(
         FileDeleted(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             entity_id=str(file_id),
             label=org_file.filename,
         )
@@ -272,7 +272,7 @@ async def rename_file(
     await events.emit(
         FileRenamed(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             entity_id=str(file_id),
             label=safe_name,
             old_filename=old_filename,
@@ -297,7 +297,7 @@ async def generate_share_link(
     await events.emit(
         FileShareLinkCreated(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             entity_id=str(file_id),
             token=str(token.token),
         )
@@ -334,9 +334,7 @@ async def public_share_download(
         await reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
 
     await events.emit(
-        FileShareDownloaded(
-            org_id=str(org_file.org_id), entity_id=str(org_file.id), token=str(token)
-        )
+        FileShareDownloaded(org_id=org_file.org_id, entity_id=str(org_file.id), token=str(token))
     )
     # Effective TTL for the file's org — the admin session reads its overrides (no RLS caller
     # here: share downloads are anonymous, the org comes from the file row).

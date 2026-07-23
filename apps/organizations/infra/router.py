@@ -48,7 +48,7 @@ from apps.shared import clock
 from apps.shared.contribs import contribs
 from apps.shared.email import enqueue_email
 from apps.shared.events.bus import events
-from apps.shared.events.models import BusinessEventRow
+from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.timeline import (
     activity_entries,
@@ -132,7 +132,7 @@ async def _emit_last_owner_violation(
     # ip rides in from the request contextvars; the persister enriches it at write time.
     await events.emit(
         LastOwnerViolationBlocked(
-            actor_id=current_user.id, org_id=str(org_id), target_user_id=target_user_id
+            actor_id=current_user.id, org_id=org_id, target_user_id=target_user_id
         )
     )
 
@@ -163,7 +163,7 @@ async def create_organization(
 ) -> Response:
     body = await parse_body(request)
     name = str(body.get("name", "")).strip()
-    user_id = uuid.UUID(current_user.id)
+    user_id = current_user.id
 
     max_orgs = org_settings.max_owned_orgs_per_user
     if max_orgs >= 0 and await repo.count_owned_by(user_id) >= max_orgs:
@@ -182,7 +182,7 @@ async def create_organization(
     await repo.session.commit()
     await events.emit(
         OrganizationCreated(
-            actor_id=current_user.id, org_id=str(org.id), entity_id=str(org.id), label=name
+            actor_id=current_user.id, org_id=org.id, entity_id=str(org.id), label=name
         )
     )
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
@@ -200,7 +200,7 @@ async def list_organizations(
     current_user: CurrentUser,
     repo: OrgRepo,
 ) -> list[OrganizationWithRoleRead]:
-    pairs = await repo.list_with_role_for_user(uuid.UUID(current_user.id))
+    pairs = await repo.list_with_role_for_user(current_user.id)
     return [
         OrganizationWithRoleRead.model_validate({**org.__dict__, "role": role})
         for org, role in pairs
@@ -250,7 +250,7 @@ async def _activity_context(
     keeps its actor (``who did what``, a shared org feed) and deep-links to the concerned entity
     where the app exposes a page. Exposes only humanized labels and moments — never payloads."""
     rows = await EventRepository(session).search(
-        org_id=str(org_id),
+        org_id=org_id,
         app=app or None,
         text=q or None,
         from_dt=_parse_dt(from_dt),
@@ -258,7 +258,7 @@ async def _activity_context(
         limit=limit,
     )
 
-    def link(r: BusinessEventRow) -> str | None:
+    def link(r: BusinessEventLog) -> str | None:
         return entity_url(r.kind, r.entity_id, org_handle)
 
     entries = activity_entries(rows, link=link)
@@ -293,7 +293,7 @@ async def org_dashboard(
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
     ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
-    counts = await EventRepository(session).daily_counts(org_id=str(org_id))
+    counts = await EventRepository(session).daily_counts(org_id=org_id)
     now = clock.now()
     ctx["activity_calendar"] = heatmap_calendar(counts, now=now, since=org.created_at)
     ctx["activity_stats"] = activity_stats(counts, now=now)
@@ -448,7 +448,7 @@ async def rename_organization(
     await repo.rename(org, name)
     await events.emit(
         OrganizationRenamed(
-            actor_id=current_user.id, org_id=str(org_id), entity_id=str(org_id), label=name
+            actor_id=current_user.id, org_id=org_id, entity_id=str(org_id), label=name
         )
     )
     if wants_json(request):
@@ -491,7 +491,7 @@ async def update_org_handle(
     await repo.update_handle(org, handle)
     await events.emit(
         OrgHandleChanged(
-            actor_id=current_user.id, org_id=str(org_id), entity_id=str(org_id), label=handle
+            actor_id=current_user.id, org_id=org_id, entity_id=str(org_id), label=handle
         )
     )
     if wants_json(request):
@@ -540,7 +540,7 @@ async def leave_organization(
     org_id: CurrentOrg,
     membership: CurrentMembership,
 ) -> Response:
-    user_id = uuid.UUID(current_user.id)
+    user_id = current_user.id
     or_404(await repo.get(org_id))
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
@@ -554,7 +554,7 @@ async def leave_organization(
             status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
-    await events.emit(MemberLeft(actor_id=current_user.id, org_id=str(org_id)))
+    await events.emit(MemberLeft(actor_id=current_user.id, org_id=org_id))
     return delete_response(request, htmx_redirect_url="/profile")
 
 
@@ -590,7 +590,7 @@ async def update_member_role(
     await events.emit(
         MemberRoleChanged(
             actor_id=current_user.id,
-            org_id=str(org_id),
+            org_id=org_id,
             target_user_id=str(user_id),
             role=new_role.value,
         )
@@ -640,7 +640,7 @@ async def remove_member(
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await events.emit(
-        MemberRemoved(actor_id=current_user.id, org_id=str(org_id), target_user_id=str(user_id))
+        MemberRemoved(actor_id=current_user.id, org_id=org_id, target_user_id=str(user_id))
     )
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
     # so this only ever uses delete_response's JSON branch.
@@ -693,10 +693,10 @@ async def create_invitation(
                 org_id=org_id,
                 email=email,
                 role=OrgRole.member,
-                invited_by=uuid.UUID(current_user.id),
+                invited_by=current_user.id,
             )
             await events.emit(
-                InvitationSent(actor_id=current_user.id, org_id=str(org_id), target_email=email)
+                InvitationSent(actor_id=current_user.id, org_id=org_id, target_email=email)
             )
 
     link = ""
@@ -759,9 +759,7 @@ async def revoke_invitation(
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
     await events.emit(
-        InvitationRevoked(
-            actor_id=current_user.id, org_id=str(org_id), invitation_id=str(invitation_id)
-        )
+        InvitationRevoked(actor_id=current_user.id, org_id=org_id, invitation_id=str(invitation_id))
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,
     # so this only ever uses delete_response's JSON branch.
