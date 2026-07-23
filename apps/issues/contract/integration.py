@@ -80,7 +80,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _record(event: ExceptionCaptured) -> None:
-    """Fold a captured exception into its group; runs under collect(): best-effort."""
+    """Fold a captured exception into its group, emitting the trail fact on the same transaction
+    (atomic with the recording); runs under collect(): best-effort."""
     version = get_technical_settings().app_version
     context = {
         **event.context,
@@ -95,27 +96,24 @@ async def _record(event: ExceptionCaptured) -> None:
             version=version,
             context=context,
         )
-        group_id, title, resolved_in = (
-            recorded.group.id,
-            recorded.group.title,
-            recorded.group.resolved_in_version,
-        )
-        await session.commit()
-    log.info("issue.recorded", group_id=group_id, opened=recorded.opened)
-    # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
-    # bus here is unconditional — no mount-state guard needed.
-    if recorded.opened:
-        await events.emit(IssueOpened(group_id=group_id, entity_id=str(group_id), title=title))
-    if recorded.regressed:
-        await events.emit(
-            IssueRegressed(
+        group_id, title = recorded.group.id, recorded.group.title
+        # Emit on the recording session — IssueOpened/Regressed lands iff the group commits.
+        # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
+        # bus here is unconditional — no mount-state guard needed.
+        if recorded.opened:
+            opened = IssueOpened(group_id=group_id, entity_id=str(group_id), title=title)
+            await events.emit(opened, session)
+        if recorded.regressed:
+            regressed = IssueRegressed(
                 group_id=group_id,
                 entity_id=str(group_id),
                 title=title,
-                resolved_in_version=resolved_in,
+                resolved_in_version=recorded.group.resolved_in_version,
                 seen_version=version,
             )
-        )
+            await events.emit(regressed, session)
+        await session.commit()
+    log.info("issue.recorded", group_id=group_id, opened=recorded.opened)
 
 
 async def _alert_opened(session: AsyncSession, event: IssueOpened) -> None:

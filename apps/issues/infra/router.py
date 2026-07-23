@@ -108,14 +108,16 @@ async def set_issue_status(
     repo = ErrorGroupRepository(session)
     group = await _group_or_404(repo, group_id)
     await repo.set_status(group, new_status, get_technical_settings().app_version)
-    await session.commit()
+    # Emit on the request session: the status-change fact commits iff the status does (auto-commit
+    # at request teardown, like every other business route — no explicit commit here).
     await events.emit(
         IssueStatusChanged(
             actor_id=current_user.id,
             entity_id=str(group_id),
             label=group.title,
             status=new_status.value,
-        )
+        ),
+        session,
     )
     group_read = ErrorGroupRead.model_validate(group)
     if wants_json(request):
