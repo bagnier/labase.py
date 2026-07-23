@@ -40,8 +40,7 @@ contexts): each owns its domain logic, routes, templates, tests and migrations, 
 be added, disabled, or deleted without touching the others. Boundaries are hard —
 domain code never imports infrastructure; apps never import each other. The only
 inter-app surfaces are each app's public contract and the event bus. These boundaries
-are enforced by import-linter contracts (`[tool.importlinter]` in `pyproject.toml`),
-checked by `make lint`.
+are enforced by import-linter contracts.
 
 **Every business endpoint has two faces.** The same handler serves the JSON API and the
 HTML UI — a full page, or an HTMX fragment for in-page updates — through content
@@ -53,6 +52,13 @@ mount call: its routes, sidebar entry, dashboard card, admin-console stats, tuna
 settings, on/off switch, and starter data for new organizations. Reactions to other
 apps' flows travel through typed events — the emitter never knows its subscribers, and
 deleting an app removes every trace of it.
+
+**Business events are facts, not sagas.** A sensitive domain action is emitted as a typed,
+immutable `BusinessEvent` and persisted to an append-only trail _transactionally_ with the
+action — the fact commits iff the mutation does. Each app declares the events it owns, and
+`emit` refuses an unowned one. Reactions are durable and run off the trail _after_ commit, so a
+producer never waits on — or fails from — a consumer; a reaction that finds its subject already
+gone is a clean no-op, never a compensation. The emitter never names its subscribers.
 
 **The admin console sees every app.** Each app reports server-wide stats to the SaaS
 console, declares its admin-tunable settings there, and can be switched on or off
@@ -66,11 +72,9 @@ logs viewer, error issues, load metrics, and runtime log level.
 migrations, is the single source of truth for who sees what. Python never re-implements
 isolation for authenticated access.
 
-**Observability is built in.** Structured, machine-readable logs correlated per
-request; every domain event on the bus is logged; sensitive business actions are
-recorded as typed events to an append-only trail, browsable in the admin console. Technical
-logs are best-effort (never block a mutation); a business event is written transactionally
-with its action, and its async delivery to consumers rides an event tailer off the trail.
+**Observability is built in.** Structured, machine-readable logs, correlated per request and
+merged in the admin console with the business-events trail into one timeline. Technical logs are
+best-effort — they never block, slow, or fail the action they observe.
 
 **Tests are sincere.** The same plain-language scenarios run twice — over real HTTP and
 through a real browser — against a real database. Nothing business-critical is mocked;
@@ -174,13 +178,14 @@ to this?) are different animals, so they are different objects — `host.events`
 `EventBus`) and `host.contribs` (the `Contribs` registry). Both key handlers by the Python
 type they carry, so there are no magic strings and no shared imports.
 
-**`host.events` — push.** `emit(event)` first **persists** a `BusinessEvent` to the trail on the
+**`host.events` — push.** `emit(event)` **persists** the `BusinessEvent` to the trail on the
 caller's own transaction — atomic with the action, so the fact commits iff the mutation commits —
-then runs the event's *synchronous* `on` handlers, propagating the first exception so the caller
-can compensate (`UserCreated`, `OrgCreated`, `SettingsChanged`). Durable **async** consumers are
-not run here: the event tailer reads the persisted log and fans each fact out to its `on_async`
-subscribers after commit (see Observability), so a producer never waits on — or fails from — a
-consumer.
+and does *only* that. It refuses an event no app declared (each app `declare`s the events it owns
+at mount, so an emitted fact is always owned); no reaction runs in-process. Durable **async**
+consumers registered with `on(...)` and run-everywhere handlers registered with `spread(...)` are
+delivered by the event listener off the persisted log after commit (see Observability), so a
+producer never waits on — or fails from — a consumer. Reactions treat the fact as immutable
+history: one that finds its subject already gone is a clean no-op, never a compensation.
 
 Technical error capture is *not* on the bus: an `ExceptionCaptured` (not a business fact) is fanned
 out to its trackers by the capture drain with log-and-skip isolation, directly between the
@@ -196,14 +201,16 @@ declared at mount and read synchronously on the request path — *not* events:
 | **On failure** | —                                                   | logs & skips the failing provider (a down app can't break the page)   |
 | **Used for**   | dashboard/console cards, org nav, settings sections | `OverviewQuery`, `ConsoleOverviewQuery`, `OrgNavQuery`, `ApiKeyQuery` |
 
-**Sign-up event chain:** `UserCreated` runs a sync handler that creates the org and persists
-`OrgCreated`; the welcome seeders are **durable async consumers** of `OrgCreated`, delivered by the
-event tailer (retried and parked on failure, never on the signup's critical path).
+**Sign-up event chain:** the signup trigger records `UserCreated` on GoTrue's own transaction
+(atomic with the account); a **durable async consumer** then creates the user's personal org and
+persists `OrgCreated`, whose welcome seeders are themselves durable async consumers — every reaction
+delivered by the event listener off the trail (retried and parked on failure, never on the signup's
+critical path).
 
 ```
-signup → emit(UserCreated) → organizations: creates personal org → emit(OrgCreated) ─┐
+signup → trigger records UserCreated → organizations: creates personal org → emit(OrgCreated) ─┐
                                                                                       │  (persisted)
-  event tailer reads the log, fans OrgCreated out to each seeder ─────────────────────┘
+  event listener reads the log, fans OrgCreated out to each seeder ─────────────────────┘
       → files:    seeds welcome.txt          → todo:     seeds 3 welcome todos
       → learning: seeds Welcome deck         → calendar: seeds a welcome event
       → pages:    seeds a public Welcome page (the base's own pitch, in the public nav)
@@ -265,7 +272,7 @@ disk); error capture enqueues to a bounded deque drained by a background task; l
 accumulate in memory and flush on a timer. A lost or failed technical write never blocks, fails, or
 slows the action it observes. _Business_ events are the deliberate exception: the fact is written
 **transactionally** with the action (it commits iff the mutation does, so the trail can't diverge
-from what happened), while its async _delivery_ to consumers rides the event tailer off the log —
+from what happened), while its async _delivery_ to consumers rides the event listener off the log —
 so the producer still never waits on a reaction.
 
 **Qualified events.** Both systems tag every record with the correlation keys that make the
@@ -307,9 +314,9 @@ exists iff the business transaction commits (outbox semantics); a per-process
 backoff, then parks failures for inspection. Recurring jobs (purges, rollups) re-enqueue
 themselves on completion. Transactional email goes the same way: `enqueue_email()`
 behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in dev).
-Durable async event delivery rides the same queue: the event tailer (`apps/shared/events/tailer.py`,
+Durable async event delivery rides the same queue: the event listener (`apps/shared/events/listener.py`,
 NOTIFY-woken, polling as a net) reads the `business_events` log and enqueues one task per
-`on_async` consumer, so a fact's reactions get the queue's retry, parking and at-least-once safety.
+`on` consumer, so a fact's reactions get the queue's retry, parking and at-least-once safety.
 
 **HTTP security.** Cross-site mutations are rejected by a `Sec-Fetch-Site` middleware
 (CSRF protection without tokens); rate limiting counts against a shared Postgres store
@@ -358,7 +365,7 @@ allowed to know several contexts at once: `main.py`.
 labase.py/
 ├── apps/
 │   ├── main.py            # FastAPI app, mounts every context in phase order (catch-alls last)
-│   ├── shared/            # Cross-context infra: events/ (types, store, bus, outbox, tailer),
+│   ├── shared/            # Cross-context infra: events/ (types, store, bus, registry, repository, listener),
 │   │                      #   Contribs (contribs.py), Host (host.py), task queue (queue.py),
 │   │                      #   Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),

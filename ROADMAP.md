@@ -14,6 +14,12 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 ## issues
 
+- [ ] jinja_globals should live in host ??
+- [ ] id as uuid, not str
+- [ ] 7 skipped
+- [ ] réduire les "| None = None"
+- [ ] moins de str, plus de types
+- [ ] chasse aux N+1
 - [ ] no more "audit event" > BusinessEvent, Issue or Log
 - [ ] no more todo_completion_stats > real time count (to generalyze to all apps)
 - [ ] split SQLAlchemy models in domain & Pydantic models in contract (all apps)
