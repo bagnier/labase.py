@@ -1,151 +1,32 @@
-"""The business-events store — the append-only trail every domain event is persisted to.
+"""The business-events write path (``emit``) and the timeline projection.
 
-The producer is the typed event bus (:mod:`apps.shared.events`):
-:func:`~apps.shared.events.bus.EventBus` ``emit`` records every emitted ``BusinessEvent`` here.
-The store is member-readable (RLS scopes rows
-to the reader), so the profile and org-dashboard timelines read it on the user's own session; the
-admin console reads it all through the BYPASSRLS session.
+``emit`` records every emitted ``BusinessEvent`` to the append-only trail: this module maps an event
+onto row columns (:func:`_event_columns`) and persists it via the
+:class:`~apps.shared.events.repository.EventRepository` — on the request's own unit of work
+(:func:`persist_fact`), so the fact commits iff the action commits (atomic). Only the fallback path
+(no ambient session: auth signals, seeders) stays best-effort on a detached admin session.
 
-Transactional by doctrine: the fact is written on the request's own unit of work
-(:func:`persist_fact`), so it commits iff the action commits (atomic) — a failed write rolls the
-mutation back. Only the fallback path (no ambient session: auth signals, seeders) stays best-effort.
-Presentation helpers (:func:`activity_entries`) render a scoped, payload-free timeline; the raw
+The rest of the module is pure presentation: :func:`activity_entries` and the contribution-calendar
+helpers render a scoped, payload-free timeline from rows the repository reads — the raw
 ``kind``/payload never reach a member.
 """
 
 import asyncio
-import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import BigInteger, Date, DateTime, Text, cast, func, or_, select, text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
 from structlog.contextvars import get_contextvars
 
 from apps.shared import clock
+from apps.shared.events.repository import BusinessEventRow, EventRepository
 from apps.shared.events.types import BusinessEvent
-from apps.shared.persistence.base import Base
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger("labase.business_events")
-
-
-class BusinessEventLog(Base):
-    """The append-only business-event row. Members read their own/their orgs' rows via RLS;
-    only the persister's BYPASSRLS admin session writes (no insert grant to authenticated)."""
-
-    __tablename__ = "business_events"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
-    level: Mapped[str]
-    kind: Mapped[str]
-    icon: Mapped[str | None] = mapped_column(default=None)
-    user_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    ip: Mapped[str | None] = mapped_column(default=None)
-    org_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    entity_id: Mapped[str | None] = mapped_column(default=None)
-    request_id: Mapped[str | None] = mapped_column(default=None)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
-
-
-@dataclass(frozen=True)
-class BusinessEventRow:
-    """A read of the business-events trail, flattened for the unified timeline."""
-
-    ts: datetime
-    level: str
-    kind: str
-    icon: str | None
-    org_id: str | None
-    user_id: str | None
-    entity_id: str | None
-    request_id: str | None
-    payload: dict[str, Any]
-
-
-async def search_business_events(
-    session: AsyncSession,
-    *,
-    level: str | None = None,
-    org_id: str | None = None,
-    user_id: str | None = None,
-    entity_id: str | None = None,
-    request_id: str | None = None,
-    app: str | None = None,
-    text: str | None = None,
-    from_dt: datetime | None = None,
-    to_dt: datetime | None = None,
-    limit: int = 100,
-    offset: int = 0,
-) -> list[BusinessEventRow]:
-    """Newest-first, bounded read of the trail under the given filters.
-
-    RLS scopes the rows to the session's reader (self + org memberships); admin sessions see
-    all. Callers still pass ``user_id=`` / ``org_id=`` to narrow to one feed. ``app`` matches the
-    ``kind`` prefix (``"todo"`` → ``todo.*``); ``offset`` pages a fixed ``limit`` window."""
-    query = (
-        select(BusinessEventLog).order_by(BusinessEventLog.id.desc()).limit(limit).offset(offset)
-    )
-    if level:
-        query = query.where(BusinessEventLog.level == level)
-    if org_id:
-        query = query.where(BusinessEventLog.org_id == uuid.UUID(org_id))
-    if user_id:
-        query = query.where(BusinessEventLog.user_id == uuid.UUID(user_id))
-    if entity_id:
-        query = query.where(BusinessEventLog.entity_id == entity_id)
-    if request_id:
-        query = query.where(BusinessEventLog.request_id == request_id)
-    if app:
-        query = query.where(BusinessEventLog.kind.like(f"{app}.%"))
-    if text:
-        like = f"%{text}%"
-        query = query.where(
-            or_(BusinessEventLog.kind.ilike(like), cast(BusinessEventLog.payload, Text).ilike(like))
-        )
-    if from_dt:
-        query = query.where(BusinessEventLog.created_at >= from_dt)
-    if to_dt:
-        query = query.where(BusinessEventLog.created_at <= to_dt)
-    rows = await session.scalars(query)
-    return [
-        BusinessEventRow(
-            ts=r.created_at,
-            level=r.level,
-            kind=r.kind,
-            icon=r.icon,
-            org_id=str(r.org_id) if r.org_id else None,
-            user_id=str(r.user_id) if r.user_id else None,
-            entity_id=r.entity_id,
-            request_id=r.request_id,
-            payload=r.payload or {},
-        )
-        for r in rows
-    ]
-
-
-async def _actor_handle(session: AsyncSession, user_id: str | None) -> str | None:
-    """Resolve the actor's handle, to denormalize into the event so the feed can show *who* acted.
-    Runs on the persister's admin session: profiles are ``own read`` under RLS, so a member could
-    never resolve a co-member at read time — storing it at write time keeps 'who' visible to every
-    viewer, and pins the handle the actor bore at the moment of the action."""
-    if not user_id:
-        return None
-    try:
-        return await session.scalar(
-            text("select handle from profiles where auth_user_id = :id"),
-            {"id": uuid.UUID(user_id)},  # bind as uuid, not text, so the column compare holds
-        )
-    except Exception:
-        return None
 
 
 async def insert_business_event(
@@ -168,25 +49,23 @@ async def insert_business_event(
     a fresh session that swallows failures (auth signals, seeders, non-request contexts)."""
 
     async def write(s: AsyncSession) -> None:
-        """Add + flush the row on ``s`` with the actor handle denormalized; the caller commits."""
+        """Persist the row on ``s`` with the actor handle denormalized; the caller commits."""
+        repo = EventRepository(s)
         stored = dict(payload) if payload else {}
-        handle = await _actor_handle(s, user_id)
+        handle = await repo.actor_handle(user_id)
         if handle:
             stored["actor"] = handle  # denormalized 'who' — RLS hides co-members' profiles
-        s.add(
-            BusinessEventLog(
-                kind=kind,
-                level=level,
-                icon=icon,
-                user_id=uuid.UUID(user_id) if user_id else None,
-                ip=ip,
-                org_id=uuid.UUID(org_id) if org_id else None,
-                entity_id=entity_id,
-                request_id=request_id,
-                payload=stored or None,
-            )
+        await repo.save(
+            kind=kind,
+            level=level,
+            icon=icon,
+            user_id=user_id,
+            ip=ip,
+            org_id=org_id,
+            entity_id=entity_id,
+            request_id=request_id,
+            payload=stored or None,
         )
-        await s.flush()  # surface RLS/constraint errors now, within the caller's transaction
 
     if session is not None:
         await write(session)
@@ -342,29 +221,6 @@ def group_activity_by_day(entries: list[dict[str, Any]], *, now: datetime) -> li
 
 
 # ── Contribution calendar & headline stats ──────────────────────────────────────────────────
-
-
-async def daily_activity_counts(
-    session: AsyncSession,
-    *,
-    user_id: str | None = None,
-    org_id: str | None = None,
-    days: int = 366,
-) -> dict[date, int]:
-    """Per-day counts of the trail over a trailing window, for the contribution calendar.
-
-    RLS-scoped like :func:`search_business_events`; callers narrow to one feed with
-    ``user_id`` / ``org_id``. Grouped by calendar day (DB timezone). Missing days simply don't
-    appear — the calendar builder fills the gaps."""
-    since = clock.now() - timedelta(days=days)
-    day = cast(BusinessEventLog.created_at, Date)
-    query = select(day, func.count()).where(BusinessEventLog.created_at >= since).group_by(day)
-    if user_id:
-        query = query.where(BusinessEventLog.user_id == uuid.UUID(user_id))
-    if org_id:
-        query = query.where(BusinessEventLog.org_id == uuid.UUID(org_id))
-    rows = await session.execute(query)
-    return {d: n for d, n in rows.all()}
 
 
 def activity_stats(counts: dict[date, int], *, now: datetime) -> dict[str, int]:

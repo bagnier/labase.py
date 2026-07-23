@@ -48,14 +48,12 @@ from apps.shared import clock
 from apps.shared.contribs import contribs
 from apps.shared.email import enqueue_email
 from apps.shared.events.bus import events
+from apps.shared.events.repository import BusinessEventRow, EventRepository
 from apps.shared.events.store import (
-    BusinessEventRow,
     activity_entries,
     activity_stats,
-    daily_activity_counts,
     group_activity_by_day,
     heatmap_calendar,
-    search_business_events,
 )
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -250,8 +248,7 @@ async def _activity_context(
     every event of any org they belong to, so ``org_id`` narrows to this org's trail. Each entry
     keeps its actor (``who did what``, a shared org feed) and deep-links to the concerned entity
     where the app exposes a page. Exposes only humanized labels and moments — never payloads."""
-    rows = await search_business_events(
-        session,
+    rows = await EventRepository(session).search(
         org_id=str(org_id),
         app=app or None,
         text=q or None,
@@ -295,7 +292,7 @@ async def org_dashboard(
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
     ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
-    counts = await daily_activity_counts(session, org_id=str(org_id))
+    counts = await EventRepository(session).daily_counts(org_id=str(org_id))
     now = clock.now()
     ctx["activity_calendar"] = heatmap_calendar(counts, now=now, since=org.created_at)
     ctx["activity_stats"] = activity_stats(counts, now=now)

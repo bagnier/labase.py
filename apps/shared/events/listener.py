@@ -23,11 +23,11 @@ from dataclasses import fields
 from typing import Any
 
 import structlog
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
 from apps.shared.events.outbox import subscribers_for
+from apps.shared.events.repository import EventRepository
 from apps.shared.events.types import BusinessEvent, event_class_for
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
@@ -35,26 +35,6 @@ from apps.shared.queue import enqueue
 log = structlog.get_logger("labase.shared.listener")
 
 NOTIFY_CHANNEL = "business_event"
-
-# Claim a batch of never-dispatched facts, oldest first, skipping rows another tailer holds.
-_CLAIM = text(
-    "SELECT id, kind, level, icon, user_id, org_id, entity_id, payload "
-    "FROM business_events "
-    "WHERE dispatched_at IS NULL "
-    "ORDER BY id "
-    "FOR UPDATE SKIP LOCKED "
-    "LIMIT :batch"
-)
-
-# Read facts newer than this process's spread cursor whose kind has a ``spread`` subscriber.
-# Unlike the claim above there is NO lock and NO ``dispatched_at`` — a ``spread`` handler must run
-# on *every* instance (config reload), so each process keeps its own in-memory cursor.
-_SPREAD_SCAN = text(
-    "SELECT id, kind, user_id, org_id, entity_id, payload "
-    "FROM business_events "
-    "WHERE id > :cursor AND kind = ANY(:kinds) "
-    "ORDER BY id"
-)
 
 
 def _task_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -104,16 +84,13 @@ class EventListener:
           mark: every instance replays them.
         """
         async with self._session() as session:
-            claimed = await session.execute(_CLAIM, {"batch": self._batch})
-            rows = [dict(r) for r in claimed.mappings()]
+            repo = EventRepository(session)
+            rows = await repo.claim_undispatched(self._batch)
             for row in rows:
                 await self._fan_out(session, row)
             if rows:
-                await session.execute(
-                    text("UPDATE business_events SET dispatched_at = now() WHERE id = ANY(:ids)"),
-                    {"ids": [r["id"] for r in rows]},
-                )
-            spread_rows = await self._read_spread(session)
+                await repo.mark_dispatched([r["id"] for r in rows])
+            spread_rows = await self._read_spread(repo)
             await session.commit()
         for row in spread_rows:
             await self._apply_spread(row)
@@ -121,14 +98,13 @@ class EventListener:
         # LIMIT — a single tick applies all of it — so it never needs another pass.
         return len(rows)
 
-    async def _read_spread(self, session: AsyncSession) -> list[dict[str, Any]]:
+    async def _read_spread(self, repo: EventRepository) -> list[dict[str, Any]]:
         """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
         kinds = [k for t in self._bus._spread_subs if (k := getattr(t, "kind", ""))]
         if not kinds:
             return []
         cursor = self._spread_cursor if self._spread_cursor is not None else 0
-        result = await session.execute(_SPREAD_SCAN, {"cursor": cursor, "kinds": kinds})
-        return [dict(r) for r in result.mappings()]
+        return await repo.scan_spread(cursor, kinds)
 
     async def _apply_spread(self, row: dict[str, Any]) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the

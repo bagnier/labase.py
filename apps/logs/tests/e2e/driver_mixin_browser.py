@@ -3,7 +3,7 @@ from datetime import datetime
 
 from apps.logs.tests.e2e import seed_data
 from apps.logs.tests.e2e.seed_data import logs_org_id, logs_user_id
-from apps.shared.events.store import BusinessEventLog
+from apps.shared.events.repository import BusinessEventLog
 from apps.shared.observability.firehose import append_firehose
 from apps.shared.observability.logging import apply_log_level
 from tests.e2e.drivers.browser_base import BrowserBase

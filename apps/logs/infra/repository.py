@@ -2,8 +2,8 @@
 occurrences) and (added in a later step) the firehose file into one timeline, applies sorting,
 and paginates over a bounded recent window.
 
-It never touches another context's tables: business events are read through
-``shared.observability.search_business_events`` (shared infra), issues through
+It never touches another context's tables: business events are read through the shared
+``events.EventRepository`` (shared infra), issues through
 ``issues.contract.queries.search_issue_events``. Sorting/pagination happen in memory over the
 merged window — the only way to order a file stream and two tables as one timeline.
 """
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared import clock
-from apps.shared.events.store import BusinessEventRow, search_business_events
+from apps.shared.events.repository import BusinessEventRow, EventRepository
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
@@ -87,7 +87,7 @@ class LogReader:
         if flt.wants(LogSource.http):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         if flt.wants(LogSource.business):
-            rows = await search_business_events(self.session, **_event_kwargs(flt, limit))
+            rows = await EventRepository(self.session).search(**_event_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
         if flt.wants(LogSource.error) and flt.level in (None, "error"):

@@ -11,8 +11,8 @@ from sqlalchemy import text
 
 from apps.shared import clock
 from apps.shared.events import BusinessEvent
+from apps.shared.events.repository import BusinessEventRow
 from apps.shared.events.store import (
-    BusinessEventRow,
     _ago,
     activity_entries,
     insert_business_event,

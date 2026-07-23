@@ -59,14 +59,12 @@ from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.events.bus import events
+from apps.shared.events.repository import BusinessEventRow, EventRepository
 from apps.shared.events.store import (
-    BusinessEventRow,
     activity_entries,
     activity_stats,
-    daily_activity_counts,
     group_activity_by_day,
     heatmap_calendar,
-    search_business_events,
 )
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -168,8 +166,7 @@ async def _activity_context(
     reader (own actions + their orgs), so ``user_id`` narrows to the user's own trail. Each entry
     deep-links to the concerned entity, resolving the row's org to a handle from the user's own
     orgs (``handles``). ``who`` is dropped — every row is the viewer."""
-    rows = await search_business_events(
-        session,
+    rows = await EventRepository(session).search(
         user_id=user_id,
         app=app or None,
         text=q or None,
@@ -226,7 +223,7 @@ async def _profile_context(
         context = await fullpage_context(session, current_user)
         orgs = context["org_nav"]
         handles = {str(o.id): o.handle for o in orgs}
-        counts = await daily_activity_counts(session, user_id=current_user.id)
+        counts = await EventRepository(session).daily_counts(user_id=current_user.id)
         activity = await _activity_context(session, current_user.id, handles)
     except BaseException:
         # Don't leave the in-flight GoTrue calls dangling if the DB work fails.
