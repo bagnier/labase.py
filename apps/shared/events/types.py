@@ -20,8 +20,8 @@ Non-CRUD actions (sign-in, a member joining, a page being published) subclass
 :class:`BusinessEvent` directly and set an explicit ``kind``.
 """
 
-from dataclasses import dataclass
-from typing import ClassVar
+from dataclasses import dataclass, fields
+from typing import Any, ClassVar
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,3 +87,12 @@ _event_classes: dict[str, type[BusinessEvent]] = {}
 def event_class_for(kind: str) -> type[BusinessEvent] | None:
     """The concrete ``BusinessEvent`` subclass for a dotted ``kind``, or ``None`` if unknown."""
     return _event_classes.get(kind)
+
+
+def reconstruct(event_type: type[BusinessEvent], payload: dict[str, Any]) -> BusinessEvent:
+    """Rebuild a frozen event from a stored payload/row, keeping only keys that are event fields.
+
+    Both delivery paths off the trail reconstruct the typed event this way: transport-only keys
+    (the row id ``event_id``, the denormalized ``actor`` handle) are simply dropped."""
+    names = {f.name for f in fields(event_type)}
+    return event_type(**{k: v for k, v in payload.items() if k in names})

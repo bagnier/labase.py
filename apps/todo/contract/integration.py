@@ -14,7 +14,6 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
-from apps.shared.events.outbox import on_async
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.contract.events import TodoTicked
@@ -47,10 +46,10 @@ def mount(host: Host) -> None:
     )
     if not settings.enabled:
         return
-    # Durable async consumer: every `emit(TodoTicked)` fans out here through the outbox and bumps
-    # the org's cumulative completion counter — the producer's emit site never changed. Runs on the
+    # Durable async consumer: every `emit(TodoTicked)` fans out here off the trail and bumps the
+    # org's cumulative completion counter — the producer's emit site never changed. Runs on the
     # admin session (server-owned aggregate) and is idempotent (at-least-once delivery may repeat).
-    on_async(TodoTicked, "completion_counter", _bump_completed, as_actor=False, idempotent=True)
+    host.events.on(TodoTicked, _bump_completed, name="completion_counter")
 
 
 def _declare_settings() -> SettingsDeclaration:

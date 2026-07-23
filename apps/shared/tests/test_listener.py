@@ -7,8 +7,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from apps.shared.events import BusinessEvent, outbox
-from apps.shared.events.bus import EventBus
+from apps.shared.events import BusinessEvent
+from apps.shared.events.bus import EventBus, events
 from apps.shared.events.listener import EventListener
 from apps.shared.events.store import insert_business_event
 from apps.shared.persistence import database as db
@@ -38,7 +38,7 @@ async def iso():
     # Isolate the tailer's global view: mark every pre-existing fact dispatched so tick() sees only
     # rows this test inserts. Restore the process-wide sub/handler registries afterwards.
     _clear_engine_caches()
-    saved_subs = {k: list(v) for k, v in outbox._async_subs.items()}
+    saved_subs = {k: list(v) for k, v in events._async_subs.items()}
     saved_handlers = dict(_handlers)
     async with db.admin_session_factory()() as s:
         await s.execute(
@@ -55,8 +55,8 @@ async def iso():
         await s.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
-    outbox._async_subs.clear()
-    outbox._async_subs.update(saved_subs)
+    events._async_subs.clear()
+    events._async_subs.update(saved_subs)
     await db._admin_engine().dispose()
     _clear_engine_caches()
 
@@ -96,8 +96,8 @@ async def _undispatched(kind: str) -> int:
 
 @pytest.mark.asyncio
 async def test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched(iso):
-    outbox.on_async(_TailEvent, "counter", _noop, as_actor=False)
-    outbox.on_async(_TailEvent, "search", _noop, as_actor=False)
+    events.on(_TailEvent, _noop, name="counter", as_actor=False)
+    events.on(_TailEvent, _noop, name="search", as_actor=False)
     await _seed(str(uuid.uuid4()))
 
     dispatched = await EventListener(0).tick()
@@ -117,7 +117,7 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
     async def handler(session, event) -> None:
         seen.append(event)
 
-    outbox.on_async(_TailEvent, "counter", handler, as_actor=False)
+    events.on(_TailEvent, handler, name="counter", as_actor=False)
     actor = str(uuid.uuid4())
     await _seed(actor, label="Ship it", entity_id="e7")
 
@@ -204,7 +204,7 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
 
 @pytest.mark.asyncio
 async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
-    outbox.on_async(_TailEvent, "counter", _noop, as_actor=False)
+    events.on(_TailEvent, _noop, name="counter", as_actor=False)
     await _seed(str(uuid.uuid4()))
 
     assert await EventListener(0).tick() == 1

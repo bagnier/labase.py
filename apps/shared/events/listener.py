@@ -7,8 +7,8 @@ longer does — so it never knows its consumers nor waits for them:
 
 - **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched rows with
   ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one task-queue row per
-  registered consumer (:func:`~apps.shared.events.outbox` ``on_async``) and stamps
-  ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a row.
+  registered ``bus.on`` consumer (read via :meth:`~apps.shared.events.bus.EventBus.subscribers_for`)
+  and stamps ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a row.
 - **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
   each tick reads facts newer than this process's in-memory cursor whose kind has a ``spread``
   subscriber and runs those handlers in-process (idempotent, so a replay is harmless).
@@ -19,16 +19,14 @@ longer does — so it never knows its consumers nor waits for them:
 import asyncio
 import contextlib
 from collections.abc import Callable
-from dataclasses import fields
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
-from apps.shared.events.outbox import subscribers_for
 from apps.shared.events.repository import EventRepository
-from apps.shared.events.types import BusinessEvent, event_class_for
+from apps.shared.events.types import BusinessEvent, event_class_for, reconstruct
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 
@@ -124,15 +122,13 @@ class EventListener:
         event_type = event_class_for(row["kind"])
         if event_type is None:
             return None
-        payload = _task_payload(row)
-        names = {f.name for f in fields(event_type)}
-        return event_type(**{k: v for k, v in payload.items() if k in names})
+        return reconstruct(event_type, _task_payload(row))
 
     async def _fan_out(self, session: AsyncSession, row: dict[str, Any]) -> None:
         event_type = event_class_for(row["kind"])
         if event_type is None:
             return  # unknown kind (e.g. a legacy row) — nothing to deliver; still marked dispatched
-        subs = subscribers_for(event_type)
+        subs = self._bus.subscribers_for(event_type)
         if not subs:
             return
         payload = _task_payload(row)

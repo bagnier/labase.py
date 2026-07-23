@@ -158,6 +158,22 @@ class EventRepository:
         result = await self._session.execute(_SPREAD_SCAN, {"cursor": cursor, "kinds": kinds})
         return [dict(r) for r in result.mappings()]
 
+    async def already_consumed(self, topic: str, event_id: int) -> bool:
+        """Mark ``(topic, event_id)`` consumed; return whether it was **already** there.
+
+        Insert-or-nothing against the ``consumed`` ledger: ``False`` the first time (freshly
+        marked), ``True`` on a re-delivery. Runs on the handler's session, so it commits/rolls back
+        atomically with the handler's own writes. ``event_id`` is the business_events row id — the
+        idempotency substrate for at-least-once durable consumers (``bus.on``)."""
+        result = await self._session.execute(
+            text(
+                "INSERT INTO consumed (topic, event_id) VALUES (:topic, CAST(:event_id AS bigint)) "
+                "ON CONFLICT DO NOTHING RETURNING topic"
+            ),
+            {"topic": topic, "event_id": event_id},
+        )
+        return result.first() is None
+
     # ── Read path (observability timeline, dashboards) ───────────────────────────────────────
 
     async def search(

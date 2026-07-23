@@ -11,7 +11,6 @@ from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
-from apps.shared.events.outbox import on_async
 from apps.shared.host import Host, MountPhase
 from apps.shared.persistence.repository import count_created_per_day
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
@@ -27,7 +26,7 @@ def mount(host: Host) -> None:
     host.register_fullpage_provider("profile", provide_profile_handle)
     # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
     host.register_settings(_declare_settings())
-    on_async(UserDeleted, "profile_forget", _forget_user, as_actor=False, idempotent=True)
+    host.events.on(UserDeleted, _forget_user, name="profile_forget")
     host.reserve("profile")
     host.register_open_list("profiles", profile_handle_taken)
 

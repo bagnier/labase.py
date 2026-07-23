@@ -36,7 +36,7 @@ def _clear_engine_caches() -> None:
 @pytest_asyncio.fixture
 async def _clean_p1():
     # Bypass the ApiDriver's shared test connection (its background loop) with a fresh engine on
-    # this test's loop, and clean up our own committed rows — the pattern test_outbox established.
+    # this test's loop, and clean up our own committed rows — the pattern test_bus established.
     _clear_engine_caches()
 
     async def _wipe():

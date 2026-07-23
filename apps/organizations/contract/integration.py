@@ -23,7 +23,6 @@ from apps.organizations.infra.invitation_router import router as invitation_rout
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.shared.events.bus import events
-from apps.shared.events.outbox import on_async
 from apps.shared.host import Host, MountPhase, NavItem
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize
@@ -43,7 +42,7 @@ def mount(host: Host) -> None:
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.on(UserCreated, _create_org, name="create_personal_org")
-    on_async(UserDeleted, "organizations_forget", _forget_user, as_actor=False, idempotent=True)
+    host.events.on(UserDeleted, _forget_user, name="organizations_forget")
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
     host.register_nav(

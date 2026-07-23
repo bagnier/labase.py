@@ -16,7 +16,6 @@ from fastapi import FastAPI
 from apps.shared.contribs import Contribs, contribs
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
-from apps.shared.events.outbox import on_async
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,
@@ -30,8 +29,8 @@ from apps.shared.slug_registry import reserve as _reserve_slugs
 if TYPE_CHECKING:
     from apps.shared.page import FullpageQuery
 
-# A sequence of ``(type, async handler)`` pairs — event subscriptions (``on``/``when_enabled``)
-# or contribution providers (``provides``/``provides_when_enabled``) an app declares at mount.
+# A sequence of ``(query type, provider)`` pairs — contribution providers
+# (``provides``/``provides_when_enabled``) an app declares at mount.
 _Registrations = Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]]
 
 
@@ -55,18 +54,16 @@ class AppManifest:
     :meth:`Host.register_app` walks it in the one correct order, so each app stops
     re-spelling the mount ceremony — including the trap that the console tile must
     register *before* the enabled gate (a disabled app still shows its tile, which is
-    how an admin re-enables it). ``on`` event handlers and ``provides`` contributions live
-    even when the app is disabled (the console tile is such a contribution); everything else
-    only exists when it is enabled. Apps with needs beyond this shape
+    how an admin re-enables it). ``provides`` contributions live even when the app is
+    disabled (the console tile is such a contribution); everything else only exists when
+    it is enabled. Apps with needs beyond this shape
     (startup hooks, fullpage providers, open lists) keep an explicit ``mount()``.
     """
 
     settings: SettingsDeclaration
-    on: _Registrations = ()  # event handlers, alive even when the app is disabled
     provides: _Registrations = ()  # contribution providers, alive even when the app is disabled
     routers: Sequence[tuple[Any, str]] = ()  # (APIRouter, prefix)
     nav: Sequence[NavItem] = ()
-    when_enabled: _Registrations = ()  # event handlers, registered only when the app is enabled
     provides_when_enabled: _Registrations = ()  # contribution providers, only when enabled
     # Durable async consumers (event_type, name, handler), registered only when enabled. Run off
     # the tailer on the admin session, idempotent — for server-owned reactions (welcome seeding)
@@ -149,7 +146,7 @@ class Host:
         for item in manifest.nav:
             self.register_nav(item)
         for event_type, name, consumer in manifest.consumes_when_enabled:
-            on_async(event_type, name, consumer, as_actor=False, idempotent=True)
+            self.events.on(event_type, consumer, name=name, as_actor=False, idempotent=True)
         for query_type, provider in manifest.provides_when_enabled:
             self.contribs.provide(query_type, provider)
         return settings
