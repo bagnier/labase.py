@@ -1,16 +1,21 @@
 """The dashboard "Recent activity" timeline — the org's own business events, labels only."""
 
 from apps.auth.tests.given_helpers import user_id_for_email
-from apps.organizations.tests.given_helpers import orgs_for_user
 from apps.shared.events.store import insert_business_event
 
 _EMAIL = "dashboard-activity@example.com"
 
 
+def _personal_org(client) -> dict:
+    """The signup-provisioned personal org, read over HTTP so it comes from the driver's own
+    (rolled-back) transaction — a direct SQL helper on a separate connection could not see it."""
+    return client.get("/organizations").json()[0]
+
+
 def test_dashboard_lists_the_orgs_recent_business_events(driver):
     client = driver.client_for(_EMAIL)
     user_id = user_id_for_email(_EMAIL)
-    org = orgs_for_user(user_id)[0]
+    org = _personal_org(client)
     driver.run(
         insert_business_event(
             kind="calendar.event_created",
@@ -35,7 +40,7 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
 def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
     client = driver.client_for(_EMAIL)
     user_id = user_id_for_email(_EMAIL)
-    org = orgs_for_user(user_id)[0]
+    org = _personal_org(client)
     for kind in ("calendar.event_created", "todo.created"):
         driver.run(
             insert_business_event(

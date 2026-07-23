@@ -25,6 +25,13 @@ _test_connection: AsyncConnection | None = None
 async def begin_test_transaction(engine) -> AsyncConnection:
     conn = await engine.connect()
     await conn.begin()
+    # This transaction wraps a whole scenario and is rolled back, never committed. An app→auth.users
+    # FK would otherwise hold a FOR KEY SHARE lock on the referenced auth.users row for the whole
+    # test; a later GoTrue mutation of that user (sign-in, delete) — on its own connection — would
+    # then block on this never-committing transaction and self-deadlock. Deferring the deferrable
+    # constraints (the app→auth.users FKs, see 20260723000001) moves their check to a commit that
+    # never runs, so no lock is taken. App-internal FKs stay NOT DEFERRABLE, checked immediately.
+    await conn.execute(text("SET CONSTRAINTS ALL DEFERRED"))
     return conn
 
 

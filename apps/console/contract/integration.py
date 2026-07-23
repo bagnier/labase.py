@@ -1,12 +1,18 @@
 """How the console context plugs into the running app: mounts the admin router, claims slugs.
 
 Also owns the *bootstrap policy*: the first registered user becomes a server admin. It reacts
-to auth's ``UserCreated`` and promotes the user iff the server has no admin yet. The claim lands
-in GoTrue before registration redirects to sign-in, so the user's first session carries it.
+to auth's ``UserCreated`` (a durable consumer, run off the trail after commit) and promotes the
+user iff the server has no admin yet. The claim lands in GoTrue shortly after registration; a
+signed-in session picks it up on its next token mint (tests drive the listener to make this
+deterministic).
 """
 
 import uuid
 from typing import cast
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.admin import count_server_admins, set_server_admin
 from apps.auth.contract.events import UserCreated
@@ -29,11 +35,13 @@ from apps.shared.settings import SettingDef, SettingsDeclaration
 
 PHASE = MountPhase.CONSOLE
 
+log = structlog.get_logger("labase.console.integration")
+
 
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console")
     host.reserve("console", "admin", "logs", "settings")
-    host.events.on(UserCreated, _bootstrap_first_admin)
+    host.events.on(UserCreated, _bootstrap_first_admin, name="bootstrap_first_admin")
 
     host.register_settings(_declare_appearance_settings())
     host.contribs.provide(ConsoleOverviewQuery, appearance_overview)
@@ -64,6 +72,13 @@ def _declare_appearance_settings() -> SettingsDeclaration:
     )
 
 
-async def _bootstrap_first_admin(event: UserCreated) -> None:
-    if await count_server_admins() == 0:
+async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> None:
+    # Durable consumer of UserCreated; runs on the GoTrue admin API, not ``session``.
+    # UserCreated is an immutable fact: the actor may have self-deleted between emit and this
+    # delivery, so promoting a vanished user is a clean no-op (GoTrue 404), not a parked failure.
+    if await count_server_admins() != 0:
+        return
+    try:
         await set_server_admin(uuid.UUID(event.actor_id), True)
+    except AuthApiError:
+        log.info("bootstrap_first_admin.actor_gone", user_id=event.actor_id)

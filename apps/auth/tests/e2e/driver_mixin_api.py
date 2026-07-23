@@ -56,6 +56,7 @@ class AuthApiMixin(ApiBase):
     def ensure_registered(self, email: str, password: str) -> None:
         self.client().post("/auth/register", json={"email": email, "password": password})
         self._track_auth_email(email)
+        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
 
     def register(self, email: str, password: str) -> None:
         self.last_registered_email = email
@@ -63,6 +64,7 @@ class AuthApiMixin(ApiBase):
             "/auth/register", json={"email": email, "password": password}
         )
         self._track_auth_email(email)
+        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
 
     def register_fresh(self, password: str) -> None:
         self.register(f"{uuid4()}@test.local", password)

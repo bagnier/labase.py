@@ -14,7 +14,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
 
-from apps.auth.application import confirm_user, register_user
+from apps.auth.application import register_user
 from apps.auth.contract.current import CurrentAdmin, CurrentUser, OptionalCurrentUser
 from apps.auth.contract.events import (
     ConfirmationResent,
@@ -470,12 +470,12 @@ async def oauth_callback(
             users_settings,
         )
     try:
-        tokens, is_new = await exchange_oauth_code(code, oauth_code_verifier)
+        # The org and admin bootstrap are provisioned by the signup trigger the moment GoTrue
+        # creates the account, so a first-visit ``is_new`` no longer needs an app-side hook here.
+        tokens, _is_new = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
         await events.emit(OAuthFailed())
         return _oauth_failure(request, str(e), users_settings)
-    if is_new:
-        await confirm_user(tokens.access_token)  # first visit only: provision the personal org
     claims = decode_jwt(tokens.access_token)
     await events.emit(OAuthSignedIn(actor_id=str(claims.get("sub", "")) or None))
     next = oauth_next or ""
@@ -729,8 +729,9 @@ async def confirm_endpoint(
 ) -> Response:
     """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
     try:
+        # UserCreated (and thus the personal org) was recorded by the signup trigger when the
+        # account row was first created; confirming an email adds no new provisioning here.
         tokens = await confirm_signup(token_hash, type)
-        await confirm_user(tokens.access_token)
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp

@@ -1,19 +1,20 @@
-"""Type-keyed event bus — synchronous, in-process pub/sub, plus the persist step for facts.
+"""The event bus — the one registration + emit surface every app uses.
 
-``emit(event)`` is push/command: it first persists a ``BusinessEvent`` to the trail (atomic with
-the action), then runs every sync ``on`` handler, propagating the first exception so the caller can
-compensate.
+Three methods, nothing else:
 
-Durable **async** consumers are *not* run here: a ``BusinessEvent`` persisted by ``emit`` is read
-back from the log by the :mod:`apps.shared.events.listener`, which fans it out to
-:func:`~apps.shared.events.outbox.on_async` subscribers after commit — so the producer never
-waits on, or fails from, a consumer. The *pull* half of collaboration (``collect`` a query's
-contributions) lives in :mod:`apps.shared.contribs` — a provider registry, not events.
+- ``emit(event, session)`` — **persist the fact** to the ``business_events`` trail on the caller's
+  transaction (atomic with the action). That is *all* it does: no handler runs here. The
+  :mod:`apps.shared.events.listener` reads the persisted log after commit and runs the reactions, so
+  a producer never waits on, or fails from, a consumer.
+- ``on(event_type, handler)`` — register a **durable, exactly-once** consumer, run by the listener
+  off the trail (one task-queue row per consumer, retried then parked). Handler signature is
+  ``(session, event)``.
+- ``spread(event_type, handler)`` — register a **run-everywhere** handler (config reload), replayed
+  by the listener **per instance** off the trail.
 
-Runtime publishers import the process-wide :data:`events` singleton directly — a focused
-collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires handlers onto
-``host.events``, which *is* this same ``events`` in production (``host = Host(events=events)``),
-so registration and dispatch share one registry.
+Runtime publishers import the process-wide :data:`events` singleton directly. Mount wires handlers
+onto ``host.events`` — the same ``events`` in production (``host = Host(events=events)``) — so
+registration and emit share one registry.
 """
 
 from collections import defaultdict
@@ -22,6 +23,7 @@ from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.events.outbox import AsyncEventHandler, on_async
 from apps.shared.events.store import persist_fact
 from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.uow import current_session
@@ -30,14 +32,41 @@ E = TypeVar("E")
 
 
 class EventBus:
-    """Type-keyed async pub/sub. Handlers are dispatched by the event's runtime type."""
+    """Registration + emit. Reactions run in the listener, off the persisted trail — never here."""
 
     def __init__(self) -> None:
-        self._subs: dict[type, list[Callable[[Any], Awaitable[object]]]] = defaultdict(list)
+        # Only ``spread`` keeps an in-process registry (the listener reads it to replay per
+        # instance). ``on`` consumers live in the durable outbox registry; ``emit`` just persists.
         self._spread_subs: dict[type, list[Callable[[Any], Awaitable[object]]]] = defaultdict(list)
 
-    def on(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
-        self._subs[event_type].append(handler)
+    async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
+        """Persist the fact — and only that.
+
+        Recorded to the ``business_events`` trail on ``session`` (or the ambient request unit of
+        work), atomic with the action, so the fact commits iff the mutation commits. Every reaction
+        (``on`` consumers, ``spread`` handlers) runs in the listener off the persisted log after
+        commit — so ``emit`` never runs a handler, waits on one, or fails from one.
+        """
+        await persist_fact(event, session or current_session())
+
+    def on(
+        self,
+        event_type: type[BusinessEvent],
+        handler: AsyncEventHandler,
+        *,
+        name: str,
+        as_actor: bool = False,
+        idempotent: bool = True,
+    ) -> None:
+        """Register a durable, exactly-once consumer of ``event_type`` (and its subclasses).
+
+        Run by the :mod:`apps.shared.events.listener` off the trail **after commit**, never in
+        :meth:`emit`: one task-queue row per consumer, with retry/park. ``name`` disambiguates this
+        consumer among the event's consumers (topic ``evt:<kind>:<name>``). ``as_actor`` runs the
+        handler under the event actor's RLS claims (else on the admin session); ``idempotent``
+        guards re-delivery via the ``consumed`` ledger.
+        """
+        on_async(event_type, name, handler, as_actor=as_actor, idempotent=idempotent)
 
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         """Register a handler that must run on **every** process when the event is emitted.
@@ -51,39 +80,17 @@ class EventBus:
 
     def _handlers_for(
         self,
-        event: object,
+        event: BusinessEvent,
         subs: dict[type, list[Callable[[Any], Awaitable[object]]]],
         seen: set[int],
     ) -> Iterator[Callable[[Any], Awaitable[object]]]:
         """Handlers subscribed to the event's runtime type or any base, most-specific first, each
-        once. ``seen`` is threaded across calls so a handler registered on several MRO classes — or
-        on both ``_subs`` and ``_spread_subs`` — runs a single time per dispatch."""
+        once. Read by the listener to dispatch ``spread`` handlers off a persisted fact."""
         for klass in type(event).__mro__:
             for handler in subs.get(klass, ()):
                 if id(handler) not in seen:
                     seen.add(id(handler))
                     yield handler
-
-    async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
-        """Persist the fact, then run every sync ``on`` handler.
-
-        The event — always a ``BusinessEvent`` — is first recorded to the ``business_events`` trail
-        on ``session`` (or the ambient request unit of work), atomic with the action, so the fact
-        commits iff the mutation commits. Two deliveries then ride the persisted log, off this call:
-        the :mod:`apps.shared.events.listener` fans each fact out to its
-        :func:`~apps.shared.events.outbox.on_async` consumers (durable, exactly-once) and runs any
-        ``spread`` handlers per instance — so the producer never waits on, or fails from, a
-        consumer.
-
-        ``on`` dispatch walks the event's MRO — handlers on the concrete type fire first (most
-        specific), then any base class; a handler on several MRO classes runs once.
-        """
-        # The fact first: persisted on the request's own transaction (atomic with the action; a
-        # best-effort admin write when no ambient session is in scope).
-        await persist_fact(event, session or current_session())
-        seen: set[int] = set()
-        for handler in self._handlers_for(event, self._subs, seen):
-            await handler(event)
 
 
 # Process-wide singleton. Runtime code emits on this directly; the production Host

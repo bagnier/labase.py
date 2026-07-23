@@ -10,6 +10,7 @@ ahead of the console's /console/{app} catch-all.
 """
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.issues.contract.events import IssueOpened, IssueRegressed
@@ -54,8 +55,8 @@ def mount(host: Host) -> None:
         return
     host.app.include_router(router, prefix="/console/issues")
     on_captured(_record)  # error capture is delivered off the bus, observability → issues
-    host.events.on(IssueOpened, _alert_opened)
-    host.events.on(IssueRegressed, _alert_regressed)
+    host.events.on(IssueOpened, _alert_opened, name="alert_opened")
+    host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed")
     register_task_handler(PURGE_TOPIC, _purge)
     host.on_startup(_plant_purge)
     # Every ``log.exception`` is queued by the capture processor; this drains it into groups.
@@ -116,24 +117,23 @@ async def _record(event: ExceptionCaptured) -> None:
         )
 
 
-async def _alert_opened(event: IssueOpened) -> None:
-    await _send_alert(f"New issue: {event.title}", event.group_id)
+async def _alert_opened(session: AsyncSession, event: IssueOpened) -> None:
+    await _send_alert(session, f"New issue: {event.title}", event.group_id)
 
 
-async def _alert_regressed(event: IssueRegressed) -> None:
-    await _send_alert(f"Regressed issue: {event.title}", event.group_id)
+async def _alert_regressed(session: AsyncSession, event: IssueRegressed) -> None:
+    await _send_alert(session, f"Regressed issue: {event.title}", event.group_id)
 
 
-async def _send_alert(subject: str, group_id: int) -> None:
+async def _send_alert(session: AsyncSession, subject: str, group_id: int) -> None:
+    # Durable consumer: the alert email is enqueued on the worker's session (it commits).
     settings = get_settings("issues")
     if not settings.alerting_enabled or not settings.alert_email:
         return
     text = f"{subject}\n\nSee /console/issues/{group_id} for the stack and context."
     email = Email(to=str(settings.alert_email), subject=subject, text=text)
     try:  # alerting is best-effort: a failing enqueue never worsens the tracked failure
-        async with admin_session_factory()() as session:
-            await enqueue_email(session, email)
-            await session.commit()
+        await enqueue_email(session, email)
     except Exception:
         log.warning("issues.alert_enqueue_failed", group_id=group_id)
 

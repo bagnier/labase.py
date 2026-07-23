@@ -8,7 +8,8 @@ auth's ``UserCreated`` by creating the user's personal org then emitting ``Organ
 
 import uuid
 
-from sqlalchemy import func, select
+import structlog
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.events import UserCreated, UserDeleted
@@ -24,11 +25,12 @@ from apps.organizations.infra.router import org_router, router
 from apps.shared.events.bus import events
 from apps.shared.events.outbox import on_async
 from apps.shared.host import Host, MountPhase, NavItem
-from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize
 
 PHASE = MountPhase.ORG
+
+log = structlog.get_logger("labase.organizations.integration")
 
 # Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
 # contexts last (see apps.main) so fixed-prefix routers (e.g. /console) are never shadowed.
@@ -40,7 +42,7 @@ def mount(host: Host) -> None:
     host.app.include_router(invitation_router)
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
-    host.events.on(UserCreated, _create_org)
+    host.events.on(UserCreated, _create_org, name="create_personal_org")
     on_async(UserDeleted, "organizations_forget", _forget_user, as_actor=False, idempotent=True)
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("org", provide_org_nav)
@@ -100,29 +102,40 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     )
 
 
-async def _create_org(event: UserCreated) -> None:
+async def _create_org(session: AsyncSession, event: UserCreated) -> None:
+    """Durable consumer of ``UserCreated``: create the user's personal org, then emit
+    ``OrganizationCreated`` (the fact the welcome seeders react to). Runs off the trail on the
+    worker's session — the worker commits the org and the emitted fact together, so the seeders
+    (delivered after that commit) always read the org back. Idempotent (the ``already_member``
+    guard), so a task retry never double-creates."""
     if not get_settings("organizations").auto_create_personal_org:
         return
     user_id = uuid.UUID(event.actor_id)
-    async with admin_session_factory()() as session:
-        already_member = await session.scalar(
-            select(func.count()).select_from(Membership).where(Membership.auth_user_id == user_id)
-        )
-        if already_member:
-            return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
-        org = await OrganizationRepository(session).create_with_owner(
-            name=event.email,
-            auth_user_id=user_id,
-        )
-        await session.commit()
-    # Committed above so the seeders (each on its own admin session) can read the org back.
+    # A business event is an immutable fact, not a saga step: the actor may be gone by the time this
+    # durable consumer runs (self-deletion between emit and delivery). Seat off ``auth.users`` — no
+    # user, no org — so a vanished subject is a clean no-op, not an FK crash + park.
+    exists = await session.scalar(text("SELECT 1 FROM auth.users WHERE id = :id"), {"id": user_id})
+    if not exists:
+        log.info("create_personal_org.actor_gone", user_id=str(user_id))
+        return
+    already_member = await session.scalar(
+        select(func.count()).select_from(Membership).where(Membership.auth_user_id == user_id)
+    )
+    if already_member:
+        return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
+    org = await OrganizationRepository(session).create_with_owner(
+        name=event.email,
+        auth_user_id=user_id,
+    )
+    await session.flush()  # assign org.id; the worker commits the whole unit
     await events.emit(
         OrganizationCreated(
             actor_id=str(user_id),
             org_id=str(org.id),
             entity_id=str(org.id),
             label=org.name,
-        )
+        ),
+        session=session,
     )
 
 

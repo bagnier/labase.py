@@ -66,6 +66,7 @@ class AuthBrowserMixin(BrowserBase):
         page.get_by_role("button", name="Create my account").click()
         page.wait_for_load_state("domcontentloaded")
         page.close()
+        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
 
     def register(self, email: str, password: str) -> None:
         self.last_registered_email = email
@@ -78,6 +79,7 @@ class AuthBrowserMixin(BrowserBase):
             path_token="/auth/register",
         )
         self.page.wait_for_load_state("domcontentloaded")
+        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
 
     def register_fresh(self, password: str) -> None:
         self.register(f"{uuid4()}@test.local", password)

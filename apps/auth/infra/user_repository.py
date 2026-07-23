@@ -22,11 +22,16 @@ def _is_admin(app_metadata: dict | None) -> bool:
 
 
 async def _iter_all_users():
+    """Every *live* auth user. Soft-deleted tombstones are skipped: they can't sign in, their
+    email/identities are anonymized, and counting a soft-deleted admin would wrongly report the
+    server as still having an owner (blocking the first-user bootstrap)."""
     admin = get_admin_supabase().auth.admin
     page = 1
     while True:
         users = await asyncio.to_thread(admin.list_users, page=page, per_page=_PAGE_SIZE)
         for u in users:
+            if getattr(u, "deleted_at", None):
+                continue
             yield u
         if len(users) < _PAGE_SIZE:
             return

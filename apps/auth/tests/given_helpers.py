@@ -62,6 +62,9 @@ def clear_all_admin_roles() -> None:
     while True:
         users = admin.list_users(page=page, per_page=1000)
         for u in users:
+            if u.deleted_at:
+                continue  # a soft-deleted tombstone can't be signed into and its anonymized
+                # identities don't round-trip through the admin API — leave it untouched
             if (u.app_metadata or {}).get("role"):
                 admin.update_user_by_id(u.id, {"app_metadata": {"role": None}})
         if len(users) < 1000:

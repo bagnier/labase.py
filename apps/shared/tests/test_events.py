@@ -62,28 +62,9 @@ def test_concrete_events_register_by_kind_for_reconstruction():
 
 
 @pytest.mark.asyncio
-async def test_base_subscriber_receives_every_subclass_once():
-    bus = EventBus()
-    seen: list[BusinessEvent] = []
-
-    async def record(event: BusinessEvent) -> None:
-        seen.append(event)
-
-    # Registered on the base and on the concrete type — MRO dispatch must still run it once.
-    bus.on(BusinessEvent, record)
-    bus.on(WidgetCreated, record)
-
-    event = WidgetCreated(actor_id="u", org_id="o", entity_id="w", label="Gizmo")
-    await bus.emit(event)
-
-    assert seen == [event]
-
-
-@pytest.mark.asyncio
-async def test_emit_does_not_run_spread_handlers_in_process():
-    # A spread handler is "run everywhere" config propagation, applied by the tailer off the trail
-    # (see test_tailer) — never by emit. emit only persists the fact and runs `on` handlers, so a
-    # spread-only event stays inert here.
+async def test_emit_does_not_run_handlers_in_process():
+    # emit only persists the fact — every reaction (`on` consumers, `spread` handlers) runs in the
+    # listener off the trail, never here. A spread handler registered on this bus stays inert.
     bus = EventBus()
     seen: list[object] = []
 

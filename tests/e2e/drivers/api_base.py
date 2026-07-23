@@ -9,7 +9,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.infra.session import get_rls_session
-from apps.auth.tests.given_helpers import delete_user_if_exists
+from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
 from apps.main import host
 from apps.shared.events.listener import EventListener
 from apps.shared.persistence.database import (
@@ -21,6 +21,7 @@ from apps.shared.queue import TaskWorker
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.async_runner import AsyncRunner
 from tests.e2e.drivers.transport import ASGISyncTransport
+from tests.e2e.sql_setup import run_sql
 
 app = host.app
 
@@ -136,7 +137,13 @@ class ApiBase:
             self._test_auth_emails.append(email)
 
     def _cleanup_auth_users(self) -> None:
+        # The signup trigger records ``UserCreated`` on the trail inside GoTrue's own committed
+        # transaction, so it escapes this driver's rollback. The trail deliberately has no FK to
+        # auth.users (it must outlive the user), so nothing cascades it — sweep this user's events
+        # by id. Everything else the trigger wrote (the profile) cascades when the GoTrue user goes.
         for email in self._test_auth_emails:
+            for user in find_users(email):
+                run_sql("DELETE FROM business_events WHERE user_id = :uid", {"uid": user.id})
             delete_user_if_exists(email)
         self._test_auth_emails.clear()
 
@@ -147,6 +154,9 @@ class ApiBase:
             if email != VISITOR:
                 creds = {"email": email, "password": _PASSWORD}
                 client.post("/auth/register", json=creds)
+                # Run UserCreated's reactions (personal org, admin bootstrap) before login, so the
+                # org exists and the JWT carries the admin claim — the reactions are async now.
+                self.drain_task_queue()
                 client.post("/auth/login", json=creds)
                 self._track_auth_email(email)
             self._clients[email] = client

@@ -1,43 +1,15 @@
 """Auth application services — registration use-case.
 
-Orchestrates sign-up: calls the auth domain service, emits ``UserCreated`` so the org
-context takes over, and compensates (deletes the orphan auth user) if org creation fails.
-HTTP routers call into here and only map results/errors to responses.
+Sign-up creates the auth user in GoTrue; the ``UserCreated`` fact is recorded at the source by the
+``on_auth_user_created`` trigger (``handle_new_user``), atomic with the user row in GoTrue's own
+transaction — see migration ``20260723000002``. Its reactions (personal org, admin bootstrap,
+welcome seeders) are durable consumers run off the trail. HTTP routers call into here and only map
+results/errors to responses.
 """
 
-import asyncio
-
-import structlog
-
-from apps.auth.contract.events import UserCreated
 from apps.auth.domain.service import RegisterResult, register
-from apps.auth.infra.security import decode_jwt
-from apps.shared.events.bus import events
-from apps.shared.persistence.supabase import get_admin_supabase
-
-log = structlog.get_logger("labase.auth.application")
 
 
 async def register_user(email: str, password: str) -> RegisterResult:
-    """Create the auth user and, if no email confirmation is required, bootstrap their org."""
-    result = await register(email, password)
-    if result.access_token is None:
-        return result
-    try:
-        await events.emit(
-            UserCreated(actor_id=result.user_id, entity_id=result.user_id, email=email)
-        )
-    except Exception:
-        log.exception("registration.org_creation_failed_compensating", user_id=result.user_id)
-        supabase = get_admin_supabase()
-        await asyncio.to_thread(supabase.auth.admin.delete_user, result.user_id)
-        raise
-    return result
-
-
-async def confirm_user(access_token: str) -> None:
-    """Bootstrap the org for a user whose email was just confirmed."""
-    claims = decode_jwt(access_token)
-    await events.emit(
-        UserCreated(actor_id=claims["sub"], entity_id=claims["sub"], email=claims.get("email", ""))
-    )
+    """Create the auth user. ``UserCreated`` is recorded by the signup trigger, not here."""
+    return await register(email, password)

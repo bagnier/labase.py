@@ -148,13 +148,16 @@ class ConsoleApiMixin(ApiBase):
     def _register_and_login(self, email: str, password: str) -> None:
         client = self._make_client()
         client.post("/auth/register", json={"email": email, "password": password})
+        # Drain UserCreated's reactions (admin bootstrap, personal org) BEFORE login, so the issued
+        # JWT already carries the admin claim where applicable — the reactions are async now.
+        self.drain_task_queue()
         client.post("/auth/login", json={"email": email, "password": password})
         self._clients[email] = client
         self._track_auth_email(email)
 
     def register_and_sign_in(self, email: str) -> None:
-        # Registration fires the bootstrap (promotes the first user) *before* this login,
-        # so the issued JWT already carries the admin claim where applicable.
+        # Registration fires the bootstrap (promotes the first user); the drain in
+        # _register_and_login runs it *before* the login, so the JWT carries the admin claim.
         delete_user_if_exists(email)
         self._register_and_login(email, _USER_PASSWORD)
         self.set_acting_email(email)

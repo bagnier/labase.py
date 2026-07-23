@@ -145,6 +145,9 @@ class BrowserBase:
         page.fill("input[name=password]", _PASSWORD)
         page.click("button[type=submit]")
         page.wait_for_load_state("domcontentloaded")
+        # Run UserCreated's reactions (admin bootstrap, personal org) before login, so the JWT
+        # carries the admin claim and the org exists — the reactions are async off the trail now.
+        self.drain_task_queue()
         page.goto(f"{self.base_url}/auth/login")
         page.fill("input[name=email]", email)
         page.fill("input[name=password]", _PASSWORD)

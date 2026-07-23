@@ -4,10 +4,8 @@ from uuid import uuid4
 import pytest
 from supabase_auth.errors import AuthApiError
 
-from apps.auth.application import register_user
 from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.auth.domain.service import (
-    RegisterResult,
     _is_first_sign_in,
     login,
     logout,
@@ -155,26 +153,3 @@ def test_user_deleted_is_a_persisted_business_event():
     assert event.kind == "auth.user_deleted"
     assert event.entity_id == "victim1"  # the removed user — forget consumers key on it
     assert not hasattr(event, "session")  # no live session travels on a frozen fact
-
-
-@pytest.mark.asyncio
-async def test_register_user_compensates_when_org_creation_fails():
-    fake_user_id = str(uuid4())
-    fake_result = RegisterResult(user_id=fake_user_id, access_token="tok")
-    fake_admin = MagicMock()
-    fake_admin.auth.admin.delete_user = MagicMock()
-
-    # Org creation is the org context reacting to UserCreated on the bus; a failure there
-    # must delete the just-created auth user so no orphan account survives.
-    with (
-        patch("apps.auth.application.register", AsyncMock(return_value=fake_result)),
-        patch(
-            "apps.auth.application.events.emit",
-            AsyncMock(side_effect=RuntimeError("db down")),
-        ),
-        patch("apps.auth.application.get_admin_supabase", return_value=fake_admin),
-        pytest.raises(RuntimeError),
-    ):
-        await register_user("x@test.local", "pw")
-
-    fake_admin.auth.admin.delete_user.assert_called_once_with(fake_user_id)

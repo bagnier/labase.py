@@ -138,8 +138,6 @@ class Host:
         disabled-safe subscriptions first (console tile), then settings + the enabled
         gate, then routers, nav and enabled-only subscriptions. Returns the live
         settings handle, like :meth:`register_settings`."""
-        for event_type, handler in manifest.on:
-            self.events.on(event_type, handler)
         for query_type, provider in manifest.provides:
             self.contribs.provide(query_type, provider)
         settings = self.register_settings(manifest.settings)
@@ -150,8 +148,6 @@ class Host:
             self.app.include_router(router, prefix=prefix)
         for item in manifest.nav:
             self.register_nav(item)
-        for event_type, handler in manifest.when_enabled:
-            self.events.on(event_type, handler)
         for event_type, name, consumer in manifest.consumes_when_enabled:
             on_async(event_type, name, consumer, as_actor=False, idempotent=True)
         for query_type, provider in manifest.provides_when_enabled:
