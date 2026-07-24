@@ -161,7 +161,7 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
         OrganizationCreated(
             actor_id=user_id,
             org_id=org.id,
-            entity_id=str(org.id),
+            entity_id=org.id,
             label=org.name,
         ),
         session=session,
@@ -179,7 +179,10 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     reap the whole org instead (SQL cascade takes its memberships and org-scoped rows, and the
     cascade's own membership deletes are exempt from the guard because the org is already gone).
     """
-    user_id = uuid.UUID(event.entity_id)
+    # from_payload already re-parsed the polymorphic entity_id to a uuid (the removed user's pk);
+    # narrow the union, re-parsing only as a defensive fallback.
+    entity_id = event.entity_id
+    user_id = entity_id if isinstance(entity_id, uuid.UUID) else uuid.UUID(entity_id)
     memberships = list(
         await session.scalars(select(Membership).where(Membership.auth_user_id == user_id))
     )

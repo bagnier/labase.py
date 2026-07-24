@@ -9,6 +9,7 @@ subscribe to it directly, so emitting it dispatches to them (by concrete type) a
 the persister (by base type). One event, one business meaning — no separate seeding signal.
 """
 
+import uuid
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -54,14 +55,14 @@ class MemberLeft(OrgEvent):
 @dataclass(frozen=True, kw_only=True)
 class MemberRoleChanged(OrgEvent):
     kind: ClassVar[str] = "organizations.member_role_changed"
-    target_user_id: str | None = None
+    target_user_id: uuid.UUID | None = None
     role: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class MemberRemoved(OrgEvent):
     kind: ClassVar[str] = "organizations.member_removed"
-    target_user_id: str | None = None
+    target_user_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -73,7 +74,7 @@ class InvitationSent(OrgEvent):
 @dataclass(frozen=True, kw_only=True)
 class InvitationRevoked(OrgEvent):
     kind: ClassVar[str] = "organizations.invitation_revoked"
-    invitation_id: str | None = None
+    invitation_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,7 +88,7 @@ class InvitationEmailMismatch(OrgEvent):
 class LastOwnerViolationBlocked(OrgEvent):
     kind: ClassVar[str] = "organizations.last_owner_violation"
     level: ClassVar[str] = "warning"
-    target_user_id: str | None = None
+    target_user_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

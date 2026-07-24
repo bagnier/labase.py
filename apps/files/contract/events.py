@@ -6,6 +6,7 @@ a rejected link is ``warning``), so they subclass :class:`~apps.shared.events.Bu
 directly with an explicit ``kind``. Share tokens are redacted by name in the stored payload.
 """
 
+import uuid
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -37,18 +38,18 @@ class FileRenamed(FileEvent, EntityUpdated):
 @dataclass(frozen=True, kw_only=True)
 class FileShareLinkCreated(FileEvent):
     kind: ClassVar[str] = "files.share_link_created"
-    token: str | None = None
+    token: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class FileShareLinkRejected(FileEvent):
     kind: ClassVar[str] = "files.share_link_rejected"
     level: ClassVar[str] = "warning"
-    token: str | None = None
+    token: uuid.UUID | None = None
     reason: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class FileShareDownloaded(FileEvent):
     kind: ClassVar[str] = "files.share_downloaded"
-    token: str | None = None
+    token: uuid.UUID | None = None

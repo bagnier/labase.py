@@ -69,9 +69,11 @@ def _declare_settings() -> SettingsDeclaration:
 async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     """Account deletion: drop the profile row. A durable async consumer of ``UserDeleted`` (admin
     session, off the tailer), keyed on the removed user's ``entity_id``."""
-    profile = await session.scalar(
-        select(Profile).where(Profile.auth_user_id == uuid.UUID(event.entity_id))
-    )
+    # from_payload already re-parsed the polymorphic entity_id to a uuid (the removed user's pk);
+    # narrow the union, re-parsing only as a defensive fallback.
+    entity_id = event.entity_id
+    auth_user_id = entity_id if isinstance(entity_id, uuid.UUID) else uuid.UUID(entity_id)
+    profile = await session.scalar(select(Profile).where(Profile.auth_user_id == auth_user_id))
     if profile is not None:
         await session.delete(profile)
         await session.flush()

@@ -195,7 +195,7 @@ async def mark_card(
         CardReviewed(
             actor_id=current_user.id,
             org_id=org_id,
-            entity_id=str(card.id),
+            entity_id=card.id,
             label=card.question,
             outcome=outcome.value,
         )

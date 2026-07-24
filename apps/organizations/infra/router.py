@@ -127,7 +127,7 @@ async def _pending_invitations_html(request, repo, org_id, caller_role: str) -> 
 async def _emit_last_owner_violation(
     current_user: CurrentUser,
     org_id: uuid.UUID,
-    target_user_id: str | None = None,
+    target_user_id: uuid.UUID | None = None,
 ) -> None:
     # ip rides in from the request contextvars; the persister enriches it at write time.
     await events.emit(
@@ -181,9 +181,7 @@ async def create_organization(
     # expire_on_commit=False, so `org` stays usable for the response below).
     await repo.session.commit()
     await events.emit(
-        OrganizationCreated(
-            actor_id=current_user.id, org_id=org.id, entity_id=str(org.id), label=name
-        )
+        OrganizationCreated(actor_id=current_user.id, org_id=org.id, entity_id=org.id, label=name)
     )
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
     return mutation_response(
@@ -447,9 +445,7 @@ async def rename_organization(
         )
     await repo.rename(org, name)
     await events.emit(
-        OrganizationRenamed(
-            actor_id=current_user.id, org_id=org_id, entity_id=str(org_id), label=name
-        )
+        OrganizationRenamed(actor_id=current_user.id, org_id=org_id, entity_id=org_id, label=name)
     )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
@@ -490,9 +486,7 @@ async def update_org_handle(
         return response
     await repo.update_handle(org, handle)
     await events.emit(
-        OrgHandleChanged(
-            actor_id=current_user.id, org_id=org_id, entity_id=str(org_id), label=handle
-        )
+        OrgHandleChanged(actor_id=current_user.id, org_id=org_id, entity_id=org_id, label=handle)
     )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
@@ -578,7 +572,7 @@ async def update_member_role(
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
         except LastOwnerViolation as exc:
-            await _emit_last_owner_violation(current_user, org_id, target_user_id=str(user_id))
+            await _emit_last_owner_violation(current_user, org_id, target_user_id=user_id)
             if wants_json(request):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
             return HTMLResponse(
@@ -591,7 +585,7 @@ async def update_member_role(
         MemberRoleChanged(
             actor_id=current_user.id,
             org_id=org_id,
-            target_user_id=str(user_id),
+            target_user_id=user_id,
             role=new_role.value,
         )
     )
@@ -630,7 +624,7 @@ async def remove_member(
     try:
         await ensure_not_last_owner(repo, org_id, user_id)
     except LastOwnerViolation as exc:
-        await _emit_last_owner_violation(current_user, org_id, target_user_id=str(user_id))
+        await _emit_last_owner_violation(current_user, org_id, target_user_id=user_id)
         if wants_json(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         return HTMLResponse(
@@ -640,7 +634,7 @@ async def remove_member(
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await events.emit(
-        MemberRemoved(actor_id=current_user.id, org_id=org_id, target_user_id=str(user_id))
+        MemberRemoved(actor_id=current_user.id, org_id=org_id, target_user_id=user_id)
     )
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
     # so this only ever uses delete_response's JSON branch.
@@ -759,7 +753,7 @@ async def revoke_invitation(
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
     await events.emit(
-        InvitationRevoked(actor_id=current_user.id, org_id=org_id, invitation_id=str(invitation_id))
+        InvitationRevoked(actor_id=current_user.id, org_id=org_id, invitation_id=invitation_id)
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,
     # so this only ever uses delete_response's JSON branch.

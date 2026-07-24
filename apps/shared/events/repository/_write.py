@@ -44,6 +44,8 @@ def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
         value = getattr(event, f.name)
         if any(s in f.name.lower() for s in _REDACT_SUBSTRINGS):
             payload[f.name] = "***" if value is not None else None
+        elif isinstance(value, uuid.UUID):
+            payload[f.name] = str(value)  # json-safe: stdlib json can't serialize a uuid.UUID
         else:
             payload[f.name] = value
     return payload
@@ -67,7 +69,9 @@ def event_to_log(event: BusinessEvent, *, actor: str | None = None) -> BusinessE
         user_id=event.actor_id,
         ip=ctx.get("ip"),
         org_id=event.org_id,
-        entity_id=event.entity_id,
+        # entity_id is polymorphic (uuid pk / slug / int) and lands in a text column — the one place
+        # a uuid concerned-entity id is stringified, so emit sites pass it raw.
+        entity_id=str(event.entity_id) if event.entity_id is not None else None,
         request_id=ctx.get("request_id"),
         payload=payload or None,
     )

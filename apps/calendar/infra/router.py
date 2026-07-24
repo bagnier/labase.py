@@ -295,9 +295,7 @@ async def create_event(
         description=str(body.get("description", "")),
     )
     await events.emit(
-        CalendarCreated(
-            actor_id=current_user.id, org_id=org_id, entity_id=str(event.id), label=title
-        )
+        CalendarCreated(actor_id=current_user.id, org_id=org_id, entity_id=event.id, label=title)
     )
     if wants_json(request):
         return JSONResponse(
@@ -398,7 +396,7 @@ async def update_event(
         CalendarUpdated(
             actor_id=current_user.id,
             org_id=org_id,
-            entity_id=str(event.id),
+            entity_id=event.id,
             label=event.title,
         )
     )
@@ -423,7 +421,7 @@ async def delete_event(
             CalendarDeleted(
                 actor_id=current_user.id,
                 org_id=org_id,
-                entity_id=str(event_id),
+                entity_id=event_id,
                 label=event.title,
             )
         )

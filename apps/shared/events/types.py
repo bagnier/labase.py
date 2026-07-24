@@ -21,16 +21,28 @@ Non-CRUD actions (sign-in, a member joining, a page being published) subclass
 :class:`BusinessEvent` directly and set an explicit ``kind``.
 """
 
+import contextlib
+import typing
 import uuid
 from dataclasses import dataclass, fields
+from functools import cache
 from typing import Any, ClassVar, Self
 
 from apps.shared.events.registry import registry
 
-# The scoping fields that are real identities (uuid), as opposed to the polymorphic ``entity_id``
-# correlation key (a slug / int / uuid, kept str). ``from_payload`` re-parses these back to uuid
-# after a payload round-trips the task queue as JSON (where a uuid is serialized to a string).
-_UUID_FIELDS = ("actor_id", "org_id")
+
+def _wants_uuid(hint: Any) -> bool:
+    """A field is a uuid carrier if its annotation is ``uuid.UUID`` or a union that includes it
+    (``uuid.UUID | None``, or the polymorphic ``uuid.UUID | str | None``)."""
+    return hint is uuid.UUID or uuid.UUID in typing.get_args(hint)
+
+
+@cache
+def _uuid_fields(cls: type) -> frozenset[str]:
+    """The dataclass fields whose type carries a ``uuid.UUID`` — resolved once per class. Drives the
+    generic re-parse so any DTO can carry uuids without a hand-maintained field list."""
+    hints = typing.get_type_hints(cls)
+    return frozenset(f.name for f in fields(cls) if _wants_uuid(hints.get(f.name)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,7 +52,8 @@ class BusinessEvent:
 
     actor_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
-    entity_id: str | None = None  # the concerned entity's id (todo pk, page slug…), for correlation
+    # the concerned entity's id, for correlation — polymorphic: a uuid pk, a page slug, or an int.
+    entity_id: uuid.UUID | str | None = None
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
     kind: ClassVar[str] = ""  # dotted "<app>.<subject>"; derived for CRUD, explicit otherwise
@@ -64,13 +77,17 @@ class BusinessEvent:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
         """Rebuild the event from a stored row — dropping transport-only keys (``event_id``, the
-        denormalized ``actor`` handle) that aren't event fields, and re-parsing the uuid scoping
-        fields the task queue serialized to strings. Both delivery paths use this."""
+        denormalized ``actor`` handle) that aren't event fields, and re-parsing every uuid-typed
+        field the task queue serialized to a string. The re-parse is generic (driven by the field
+        annotations) and defensive: a value that isn't a valid uuid — a page slug in the polymorphic
+        ``entity_id``, a redacted ``"***"`` token — is left as-is rather than crashing the rebuild.
+        Both delivery paths use this."""
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names}
-        for key in _UUID_FIELDS:
+        for key in _uuid_fields(cls):
             if isinstance(kept.get(key), str):
-                kept[key] = uuid.UUID(kept[key])
+                with contextlib.suppress(ValueError):
+                    kept[key] = uuid.UUID(kept[key])
         return cls(**kept)
 
 

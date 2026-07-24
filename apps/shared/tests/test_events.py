@@ -99,3 +99,59 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
     assert "actor_id" not in payload
     assert "org_id" not in payload
     assert "entity_id" not in payload
+
+
+# ── The UUID-aware serializer socle: DTOs carry uuid.UUID, the edge stringifies/re-parses ──────
+
+
+@dataclass(frozen=True, kw_only=True)
+class _RefEvent(BusinessEvent):
+    kind = "test_ref.happened"
+    ref_id: uuid.UUID | None = None  # a plain FK carried as uuid on the DTO
+    token: uuid.UUID | None = None  # name triggers redaction — never reaches json.dumps
+
+
+def test_event_to_log_stringifies_uuid_payload_fields():
+    # A uuid.UUID payload field must reach the JSONB column json-safe (stdlib json can't dump UUID).
+    ref = uuid.uuid4()
+    row = event_to_log(_RefEvent(actor_id=uuid.uuid4(), ref_id=ref))
+    assert row.payload is not None
+    assert row.payload["ref_id"] == str(ref)  # stringified at the one serialization edge
+    assert row.payload["token"] is None  # None stays None (redaction only masks a set value)
+
+
+def test_event_to_log_stringifies_a_uuid_entity_id():
+    # entity_id is polymorphic (uuid.UUID | str | None); a uuid value is stringified into its own
+    # text column — a single central conversion, not one str() per emit site.
+    eid = uuid.uuid4()
+    row = event_to_log(WidgetCreated(entity_id=eid, label="Gizmo"))
+    assert row.entity_id == str(eid)
+
+
+def test_event_to_log_leaves_a_slug_entity_id_untouched():
+    row = event_to_log(WidgetCreated(entity_id="welcome-page", label="Welcome"))
+    assert row.entity_id == "welcome-page"
+
+
+def test_from_payload_reparses_every_uuid_field_by_type():
+    # The round-trip through the queue serializes every uuid to a string; from_payload re-parses any
+    # field annotated uuid.UUID back — generically, not from a hardcoded list.
+    ref, actor = uuid.uuid4(), uuid.uuid4()
+    event = _RefEvent.from_payload({"ref_id": str(ref), "actor_id": str(actor)})
+    assert event.ref_id == ref
+    assert event.actor_id == actor
+
+
+def test_from_payload_is_defensive_on_unparseable_strings():
+    # A redacted token ("***") is annotated uuid.UUID but not a valid uuid — leave it untouched
+    # rather than crash the reconstruction.
+    event = _RefEvent.from_payload({"token": "***"})
+    assert event.token == "***"
+
+
+def test_from_payload_keeps_a_slug_entity_id_as_str_but_parses_a_uuid_one():
+    slug_event = _RefEvent.from_payload({"entity_id": "welcome-page"})
+    assert slug_event.entity_id == "welcome-page"
+    eid = uuid.uuid4()
+    uuid_event = _RefEvent.from_payload({"entity_id": str(eid)})
+    assert uuid_event.entity_id == eid

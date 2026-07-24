@@ -92,7 +92,7 @@ async def add_todo(
     title = await parse_field(request, "title")
     todo = await repo.add(current_user.id, title)
     await events.emit(
-        TodoCreated(actor_id=current_user.id, org_id=org_id, entity_id=str(todo.id), label=title)
+        TodoCreated(actor_id=current_user.id, org_id=org_id, entity_id=todo.id, label=title)
     )
     return await _render(request, session, current_user, repo, org, settings)
 
@@ -146,7 +146,7 @@ async def delete_todo(
             TodoDeleted(
                 actor_id=current_user.id,
                 org_id=org_id,
-                entity_id=str(todo_id),
+                entity_id=todo_id,
                 label=todo.title,
             )
         )

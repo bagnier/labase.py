@@ -167,7 +167,7 @@ async def upload_file(
         FileUploaded(
             actor_id=current_user.id,
             org_id=org_id,
-            entity_id=str(org_file.id),
+            entity_id=org_file.id,
             label=org_file.filename,
         )
     )
@@ -226,7 +226,7 @@ async def delete_file(
         FileDeleted(
             actor_id=current_user.id,
             org_id=org_id,
-            entity_id=str(file_id),
+            entity_id=file_id,
             label=org_file.filename,
         )
     )
@@ -273,7 +273,7 @@ async def rename_file(
         FileRenamed(
             actor_id=current_user.id,
             org_id=org_id,
-            entity_id=str(file_id),
+            entity_id=file_id,
             label=safe_name,
             old_filename=old_filename,
             new_filename=safe_name,
@@ -298,8 +298,8 @@ async def generate_share_link(
         FileShareLinkCreated(
             actor_id=current_user.id,
             org_id=org_id,
-            entity_id=str(file_id),
-            token=str(token.token),
+            entity_id=file_id,
+            token=token.token,
         )
     )
     url = str(request.base_url) + f"files/share/{token.token}"
@@ -319,7 +319,7 @@ async def public_share_download(
 ):
     async def reject(reason: str, code: int, detail: str) -> NoReturn:
         # Anonymous attempt: no actor/org, ip rides in from the request contextvars.
-        await events.emit(FileShareLinkRejected(token=str(token), reason=reason))
+        await events.emit(FileShareLinkRejected(token=token, reason=reason))
         raise HTTPException(code, detail)
 
     repo = FileShareRepository(admin_session)
@@ -334,7 +334,7 @@ async def public_share_download(
         await reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
 
     await events.emit(
-        FileShareDownloaded(org_id=org_file.org_id, entity_id=str(org_file.id), token=str(token))
+        FileShareDownloaded(org_id=org_file.org_id, entity_id=org_file.id, token=token)
     )
     # Effective TTL for the file's org — the admin session reads its overrides (no RLS caller
     # here: share downloads are anonymous, the org comes from the file row).
