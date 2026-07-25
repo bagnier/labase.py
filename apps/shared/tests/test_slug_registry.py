@@ -163,7 +163,7 @@ async def test_unique_handle_skips_reserved_base():
 async def test_exclude_from_skips_own_namespace():
     """exclude_from passes exclude_id only to the named namespace, not others."""
     session = _SESSION
-    own_id = uuid.uuid4()
+    own_id = uuid.uuid7()
     received: dict = {}
 
     async def _profile_checker(sess, handle, exclude_id=None):

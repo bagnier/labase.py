@@ -121,7 +121,11 @@ async def create_page(
     if await repo.slug_taken(slug):
         raise HTTPException(status.HTTP_409_CONFLICT, "A page with this slug already exists")
     page = await repo.add(current_user.id, title, slug, content)
-    await events.emit(PageCreated(actor_id=current_user.id, org_id=org_id, slug=slug, label=title))
+    await events.emit(
+        PageCreated(
+            actor_id=current_user.id, org_id=org_id, entity_id=page.id, slug=slug, label=title
+        )
+    )
     # HTMX form submit navigates via HX-Redirect; plain HTML gets a 303 to the same edit page.
     return mutation_response(
         request,
@@ -214,7 +218,13 @@ async def update_page(
             event_cls = _PUBLISH_EVENT[visibility]
     await repo.save(page)
     await events.emit(
-        event_cls(actor_id=current_user.id, org_id=org_id, slug=page.slug, label=page.title)
+        event_cls(
+            actor_id=current_user.id,
+            org_id=org_id,
+            entity_id=page.id,
+            slug=page.slug,
+            label=page.title,
+        )
     )
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
     # page so the save lands on visible, rendered output instead of a silent swap.
@@ -239,7 +249,9 @@ async def delete_page(
     page = await _editable_page(repo, slug, membership)
     await repo.delete(page)
     await events.emit(
-        PageDeleted(actor_id=current_user.id, org_id=org_id, slug=slug, label=page.title)
+        PageDeleted(
+            actor_id=current_user.id, org_id=org_id, entity_id=page.id, slug=slug, label=page.title
+        )
     )
     # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
     # from a list row (X-Skip-Redirect) stays put and removes just that row client-side.
@@ -275,7 +287,7 @@ async def set_visibility(
     await repo.save(page)
     await events.emit(
         _PUBLISH_EVENT[visibility](
-            actor_id=current_user.id, org_id=org_id, slug=slug, label=page.title
+            actor_id=current_user.id, org_id=org_id, entity_id=page.id, slug=slug, label=page.title
         )
     )
     return mutation_response(
@@ -430,6 +442,24 @@ async def list_pages(
         search_query=query,
     )
     return with_etag(request, templates.TemplateResponse(request, "pages/pages.html", ctx))
+
+
+@public_router.get("/{org_handle}/pages/by-id/{page_id}")
+async def view_page_by_id(
+    org_handle: str,
+    page_id: uuid.UUID,
+    admin: AdminSession,
+    rls: RlsSession,
+    current_user: OptionalCurrentUser,
+) -> RedirectResponse:
+    """Timeline deep link: a page's stable uuid (its ``entity_id`` on the trail) resolves to its
+    *current* slug URL. A temporary redirect on purpose — never 301: the slug can change, so the
+    uuid→slug mapping must not be cached, else an old feed link would 404 after a re-slug."""
+    org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)
+    page = or_404(await PageRepository(session, org.id).by_id(page_id))
+    if not _can_view(page.visibility, role):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
+    return RedirectResponse(f"/{org_handle}/pages/{page.slug}", status_code=307)
 
 
 @public_router.get("/{org_handle}/pages/{slug}", response_class=HTMLResponse)

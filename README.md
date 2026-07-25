@@ -87,8 +87,9 @@ org data lives under `/{org_handle}/…`. Members read, owners write.
 
 **First signed-up user is admin** and can then promote any other user as admin.
 
-**One source of truth for the rest.** Time comes from a single clock; styling from one
-component system (Tailwind + daisyUI); markup is semantic and accessible.
+**One source of truth for the rest.** Time comes from a single clock; identity from a single key
+shape — every primary key is a time-ordered UUIDv7; styling from one component system (Tailwind +
+daisyUI); markup is semantic and accessible.
 
 **Invariants are types, not checks.** A constraint the domain must uphold is expressed as
 a constrained type (Pydantic `Literal`, a value object) wherever it can be, so the type
@@ -332,6 +333,15 @@ keys (collisions rejected at startup); the ownerless collector in `apps/shared/p
 merges them — called explicitly, never injected silently.
 
 **Time.** `clock.now()` is the single source of time. Never call `datetime.now()`.
+
+**Identity.** Every table's primary key is a time-ordered **UUIDv7** — the `UUIDPk` mixin
+(`default=uuid.uuid7`, Python 3.14 stdlib) on the ORM write path, mirrored by a `public.uuidv7()`
+column default in SQL for raw / PostgREST inserts. Globally unique with no shared sequence (safe
+across instances) *and* monotonic, so the append-only trails use a pk as a cursor: the event tailer
+claims/scans `business_events.id`, the issues detail pages `error_events.id`. Because every key is a
+uuid, a business event's `entity_id` correlates entities by their stable pk, never a renameable
+handle. Security tokens are the deliberate exception — they stay random **UUIDv4** (unguessable, no
+embedded timestamp).
 
 **Styling.** daisyUI 5 is the component system (`btn`, `card`, `input`, `alert`,
 `badge`, `stat`, `menu`…). Project-specific component classes live in

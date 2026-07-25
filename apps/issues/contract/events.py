@@ -6,6 +6,7 @@ trail — server-wide, so ``actor_id``/``org_id`` stay ``None`` (console-only ro
 resolving/reopening an issue is ``IssueStatusChanged``, carrying the acting admin as ``actor_id``.
 """
 
+import uuid
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -20,14 +21,14 @@ class IssueEvent(BusinessEvent):
 @dataclass(frozen=True, kw_only=True)
 class IssueOpened(IssueEvent):
     kind: ClassVar[str] = "issues.opened"
-    group_id: int
+    group_id: uuid.UUID
     title: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class IssueRegressed(IssueEvent):
     kind: ClassVar[str] = "issues.regressed"
-    group_id: int
+    group_id: uuid.UUID
     title: str
     resolved_in_version: str | None
     seen_version: str

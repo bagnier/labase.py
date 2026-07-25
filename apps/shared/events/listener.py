@@ -18,6 +18,7 @@ producer no longer does — so it never knows its consumers nor waits for them:
 
 import asyncio
 import contextlib
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -44,7 +45,8 @@ def _task_payload(row: dict[str, Any]) -> dict[str, Any]:
     payload["actor_id"] = str(row["user_id"]) if row["user_id"] else None
     payload["org_id"] = str(row["org_id"]) if row["org_id"] else None
     payload["entity_id"] = row["entity_id"]
-    payload["event_id"] = row["id"]  # the stable dedup key (bigint)
+    # the dedup key (uuid; stringified — the queue json-encodes it)
+    payload["event_id"] = str(row["id"])
     return payload
 
 
@@ -62,7 +64,7 @@ class EventListener:
         self._batch = batch_size
         self._session_factory = session_factory
         self._bus = bus or events  # read spread subscribers from here (a test may inject its own)
-        self._spread_cursor: int | None = None  # per-instance high-water for spread delivery
+        self._spread_cursor: uuid.UUID | None = None  # per-instance high-water (uuid7, ordered)
         self._task: asyncio.Task | None = None
         self._listen_conn: Any | None = None
         self._wake = asyncio.Event()
@@ -101,7 +103,8 @@ class EventListener:
         kinds = self._bus.registry.spread_kinds()
         if not kinds:
             return []
-        cursor = self._spread_cursor if self._spread_cursor is not None else 0
+        # Nil-uuid sentinel on first pass: uuid7 is version-tagged, so it always sorts above nil.
+        cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
         return await repo.scan_spread(cursor, kinds)
 
     async def _apply_spread(self, row: dict[str, Any]) -> None:

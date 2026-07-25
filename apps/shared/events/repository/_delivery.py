@@ -5,6 +5,7 @@ reads best as SQL, and it touches columns/tables kept off the fact model (``disp
 ``consumed`` ledger).
 """
 
+import uuid
 from typing import Any
 
 from sqlalchemy import text
@@ -35,25 +36,27 @@ class _DispatchesEvents(_EventSQL):
         result = await self.session.execute(_CLAIM, {"batch": batch})
         return [dict(r) for r in result.mappings()]
 
-    async def mark_dispatched(self, ids: list[int]) -> None:
+    async def mark_dispatched(self, ids: list[uuid.UUID]) -> None:
         await self.session.execute(
             text("UPDATE business_events SET dispatched_at = now() WHERE id = ANY(:ids)"),
             {"ids": ids},
         )
 
-    async def scan_spread(self, cursor: int, kinds: list[str]) -> list[dict[str, Any]]:
+    async def scan_spread(self, cursor: uuid.UUID, kinds: list[str]) -> list[dict[str, Any]]:
         """No lock, no dispatch mark — a ``spread`` handler runs on *every* instance, each replaying
         off its own cursor."""
         result = await self.session.execute(_SPREAD_SCAN, {"cursor": cursor, "kinds": kinds})
         return [dict(r) for r in result.mappings()]
 
-    async def already_consumed(self, topic: str, event_id: int) -> bool:
+    async def already_consumed(self, topic: str, event_id: uuid.UUID | str) -> bool:
         """Insert-or-nothing against the ``consumed`` ledger — the idempotency substrate for
         at-least-once ``bus.on`` delivery. ``True`` means this pair is a re-delivery. Runs on the
-        handler's session, so it commits/rolls back with the handler's own writes."""
+        handler's session, so it commits/rolls back with the handler's own writes. ``event_id`` is
+        the trail row's uuid — it arrives as a string when replayed off the JSON queue, so the
+        ``CAST(... AS uuid)`` normalizes both forms."""
         result = await self.session.execute(
             text(
-                "INSERT INTO consumed (topic, event_id) VALUES (:topic, CAST(:event_id AS bigint)) "
+                "INSERT INTO consumed (topic, event_id) VALUES (:topic, CAST(:event_id AS uuid)) "
                 "ON CONFLICT DO NOTHING RETURNING topic"
             ),
             {"topic": topic, "event_id": event_id},

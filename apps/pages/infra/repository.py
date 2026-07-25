@@ -18,6 +18,11 @@ class PageRepository(OrgScopedRepository[Page]):
             select(Page).where(Page.org_id == self.org_id, Page.slug == slug)
         )
 
+    async def by_id(self, page_id: uuid.UUID) -> Page | None:
+        return await self.session.scalar(
+            select(Page).where(Page.org_id == self.org_id, Page.id == page_id)
+        )
+
     async def slug_taken(self, slug: str, exclude_id: uuid.UUID | None = None) -> bool:
         q = select(Page.id).where(Page.org_id == self.org_id, Page.slug == slug)
         if exclude_id is not None:

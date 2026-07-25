@@ -17,14 +17,8 @@ create index business_events_undispatched_idx on public.business_events (id)
 
 grant insert on public.business_events to authenticated;
 
--- The id sequence is owned by the (renamed) table under its original name — resolve it robustly.
-do $$
-begin
-  execute format(
-    'grant usage on sequence %s to authenticated',
-    pg_get_serial_sequence('public.business_events', 'id')
-  );
-end $$;
+-- id is a uuid7 (default public.uuidv7(), execute granted in 20260703000000) — no sequence to grant;
+-- a self-attributed PostgREST insert gets its id from the column default.
 
 create policy "business_events: self-attributed insert"
   on public.business_events for insert to authenticated

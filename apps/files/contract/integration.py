@@ -128,7 +128,7 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-    file_id = uuid.uuid4()
+    file_id = uuid.uuid7()
     path = storage_path(org_id, file_id, _WELCOME_FILENAME)
     # Server-side seeding runs without a caller JWT (e.g. an org created via an API key), so the
     # upload goes through the service-role client rather than a user token. Fire-and-forget (off

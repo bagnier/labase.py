@@ -4,7 +4,7 @@
 -- Access: app roles may only enqueue (outbox write inside their own business
 -- transaction); claiming, completing and retrying are admin-connection work.
 create table public.task_queue (
-  id                bigserial   primary key,
+  id                uuid        primary key default public.uuidv7(),
   topic             text        not null,
   payload           jsonb       not null default '{}',
   user_id           uuid,               -- RLS convention: run the handler as this user
@@ -29,6 +29,7 @@ create unique index task_queue_recurring_singleton_idx on public.task_queue (top
 alter table public.task_queue enable row level security;
 
 grant insert on public.task_queue to authenticated;
-grant usage on sequence public.task_queue_id_seq to authenticated;
+-- id is a uuid7 (default public.uuidv7()) — no sequence to grant; an enqueue gets its id from the
+-- column default (execute on uuidv7 granted in 20260703000000).
 create policy task_queue_enqueue on public.task_queue
   for insert to authenticated with check (true);

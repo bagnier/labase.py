@@ -118,7 +118,7 @@ def test_resources_grouped_by_deck_in_order():
 
 # ── review_card (orchestration through the ReviewRepositoryProtocol port) ─────
 
-CARD_ID = uuid.uuid4()
+CARD_ID = uuid.uuid7()
 
 
 class _FakeReviewRepo:

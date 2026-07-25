@@ -3,7 +3,7 @@
 -- with `Authorization: Bearer lbk_...` and run under the creator's RLS context,
 -- pinned to the key's organisation at the HTTP layer.
 create table public.api_keys (
-  id           uuid primary key default gen_random_uuid(),
+  id           uuid primary key default public.uuidv7(),
   org_id       uuid not null references public.organizations(id) on delete cascade,
   created_by   uuid not null references auth.users(id) on delete cascade,
   name         text not null,

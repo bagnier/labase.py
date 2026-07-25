@@ -145,7 +145,7 @@ async def upload_file(
     except ValueError:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid filename") from None
 
-    file_id = uuid.uuid4()
+    file_id = uuid.uuid7()
     path = storage_path(org_id, file_id, safe_name)
     content_type = file.content_type or "application/octet-stream"
 

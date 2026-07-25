@@ -179,10 +179,11 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     reap the whole org instead (SQL cascade takes its memberships and org-scoped rows, and the
     cascade's own membership deletes are exempt from the guard because the org is already gone).
     """
-    # from_payload already re-parsed the polymorphic entity_id to a uuid (the removed user's pk);
-    # narrow the union, re-parsing only as a defensive fallback.
-    entity_id = event.entity_id
-    user_id = entity_id if isinstance(entity_id, uuid.UUID) else uuid.UUID(entity_id)
+    # entity_id is the removed user's pk (a uuid, re-parsed by from_payload). Defensive no-op if a
+    # malformed row ever carries none.
+    user_id = event.entity_id
+    if user_id is None:
+        return
     memberships = list(
         await session.scalars(select(Membership).where(Membership.auth_user_id == user_id))
     )

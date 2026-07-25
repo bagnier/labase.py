@@ -3,7 +3,7 @@
 -- progress (subscriptions/states/reviews) is additionally per-user (auth.uid()).
 
 create table public.decks (
-  id         uuid primary key default gen_random_uuid(),
+  id         uuid primary key default public.uuidv7(),
   org_id     uuid not null references public.organizations(id) on delete cascade,
   name       text not null,
   resource   text,
@@ -19,7 +19,7 @@ create trigger decks_updated_at
   for each row execute procedure public.set_updated_at();
 
 create table public.cards (
-  id          uuid primary key default gen_random_uuid(),
+  id          uuid primary key default public.uuidv7(),
   org_id      uuid not null references public.organizations(id) on delete cascade,
   deck_id     uuid not null references public.decks(id) on delete cascade,
   external_id text not null,
@@ -38,7 +38,7 @@ create trigger cards_updated_at
   for each row execute procedure public.set_updated_at();
 
 create table public.deck_subscriptions (
-  id         uuid primary key default gen_random_uuid(),
+  id         uuid primary key default public.uuidv7(),
   org_id     uuid not null references public.organizations(id) on delete cascade,
   user_id    uuid not null references auth.users(id) on delete cascade,
   deck_id    uuid not null references public.decks(id) on delete cascade,
@@ -48,7 +48,7 @@ create table public.deck_subscriptions (
 );
 
 create table public.card_states (
-  id               uuid primary key default gen_random_uuid(),
+  id               uuid primary key default public.uuidv7(),
   org_id           uuid not null references public.organizations(id) on delete cascade,
   user_id          uuid not null references auth.users(id) on delete cascade,
   card_id          uuid not null references public.cards(id) on delete cascade,

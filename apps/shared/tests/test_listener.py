@@ -99,7 +99,7 @@ async def _undispatched(kind: str) -> int:
 async def test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched(iso):
     events.on(_TailEvent, _noop, name="counter", app="test_tailer", as_actor=False)
     events.on(_TailEvent, _noop, name="search", app="test_tailer", as_actor=False)
-    await _seed(uuid.uuid4())
+    await _seed(uuid.uuid7())
 
     dispatched = await EventListener(0).tick()
 
@@ -119,7 +119,7 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
         seen.append(event)
 
     events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
-    actor = uuid.uuid4()
+    actor = uuid.uuid7()
     await _seed(actor, label="Ship it", entity_id="e7")
 
     factory = db.admin_session_factory()
@@ -207,7 +207,7 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
 @pytest.mark.asyncio
 async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
     events.on(_TailEvent, _noop, name="counter", app="test_tailer", as_actor=False)
-    await _seed(uuid.uuid4())
+    await _seed(uuid.uuid7())
 
     assert await EventListener(0).tick() == 1
     assert await EventListener(0).tick() == 0  # nothing left undispatched

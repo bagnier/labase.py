@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -22,7 +23,7 @@ _TRIAGE_STATUSES = {IssueStatus.resolved, IssueStatus.ignored, IssueStatus.unres
 _SPARK_DAYS = 14
 
 
-async def _group_or_404(repo: ErrorGroupRepository, group_id: int) -> ErrorGroup:
+async def _group_or_404(repo: ErrorGroupRepository, group_id: uuid.UUID) -> ErrorGroup:
     group = await repo.get(group_id)
     if group is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -58,10 +59,10 @@ async def list_issues(
 @router.get("/{group_id}", response_model=None)
 async def issue_detail(
     request: Request,
-    group_id: int,
+    group_id: uuid.UUID,
     current_user: CurrentAdmin,
     session: AdminSession,
-    before_id: int | None = None,
+    before_id: uuid.UUID | None = None,
 ) -> Response:
     repo = ErrorGroupRepository(session)
     group = await _group_or_404(repo, group_id)
@@ -73,7 +74,7 @@ async def issue_detail(
             {
                 "group": group_read.model_dump(mode="json"),
                 "events": [e.model_dump(mode="json") for e in event_reads],
-                "next_before_id": next_before_id,
+                "next_before_id": str(next_before_id) if next_before_id else None,
             }
         )
     is_htmx = request.headers.get("HX-Request") == "true"
@@ -96,7 +97,7 @@ async def issue_detail(
 @router.post("/{group_id}/status", response_model=None)
 async def set_issue_status(
     request: Request,
-    group_id: int,
+    group_id: uuid.UUID,
     current_user: CurrentAdmin,
     session: AdminSession,
 ) -> Response:
@@ -113,7 +114,7 @@ async def set_issue_status(
     await events.emit(
         IssueStatusChanged(
             actor_id=current_user.id,
-            entity_id=str(group_id),
+            entity_id=group_id,
             label=group.title,
             status=new_status.value,
         ),

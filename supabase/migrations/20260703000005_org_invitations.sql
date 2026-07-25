@@ -1,7 +1,7 @@
 create type public.invitation_status as enum ('pending', 'accepted', 'revoked');
 
 create table public.org_invitations (
-  id         uuid primary key default gen_random_uuid(),
+  id         uuid primary key default public.uuidv7(),
   org_id     uuid not null references public.organizations(id) on delete cascade,
   email      text not null,
   role       public.org_role not null default 'member',

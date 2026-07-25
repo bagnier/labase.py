@@ -1,5 +1,5 @@
 create table public.pages (
-  id          uuid primary key default gen_random_uuid(),
+  id          uuid primary key default public.uuidv7(),
   org_id      uuid not null references public.organizations(id) on delete cascade,
   user_id     uuid not null references auth.users(id) on delete cascade,
   title       text not null,
@@ -38,7 +38,7 @@ grant select on public.pages to anon;
 grant select, insert, update, delete on public.pages to service_role;
 
 create table public.page_nav_items (
-  id         uuid primary key default gen_random_uuid(),
+  id         uuid primary key default public.uuidv7(),
   org_id     uuid not null references public.organizations(id) on delete cascade,
   page_id    uuid not null references public.pages(id) on delete cascade,
   position   integer not null default 0,

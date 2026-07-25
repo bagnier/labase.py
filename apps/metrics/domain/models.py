@@ -6,7 +6,7 @@ from sqlalchemy import BigInteger, DateTime, Float, Integer
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.persistence.base import Base
+from apps.shared.persistence.base import Base, UUIDPk
 
 
 class MetricResolution(StrEnum):
@@ -14,7 +14,7 @@ class MetricResolution(StrEnum):
     hour = "hour"
 
 
-class RequestMetric(Base):
+class RequestMetric(Base, UUIDPk):
     """One flushed delta: traffic of one route on one instance in one time bucket.
 
     ``duration_buckets`` is positionally aligned with ``BUCKET_BOUNDS_MS`` (+Inf
@@ -24,7 +24,6 @@ class RequestMetric(Base):
 
     __tablename__ = "request_metrics"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     bucket: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolution: Mapped[str] = mapped_column(default=MetricResolution.minute)
     instance: Mapped[str]

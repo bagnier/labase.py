@@ -75,8 +75,8 @@ def test_get_invitation_unknown_token_json_returns_404(client):
 def test_get_invitation_revoked_json_returns_404(client):
     token = uuid.uuid4()
     fake_row = {
-        "id": uuid.uuid4(),
-        "org_id": uuid.uuid4(),
+        "id": uuid.uuid7(),
+        "org_id": uuid.uuid7(),
         "email": "x@test.local",
         "role": "member",
         "token": token,
@@ -94,9 +94,9 @@ def test_get_invitation_revoked_json_returns_404(client):
 
 def test_get_invitation_valid_json_returns_invitation(client):
     token = uuid.uuid4()
-    org_id = uuid.uuid4()
+    org_id = uuid.uuid7()
     fake_row = {
-        "id": uuid.uuid4(),
+        "id": uuid.uuid7(),
         "org_id": org_id,
         "email": "x@test.local",
         "role": "member",
@@ -117,9 +117,9 @@ def test_get_invitation_valid_json_returns_invitation(client):
 
 def test_get_invitation_already_accepted_html_shows_state(client):
     token = uuid.uuid4()
-    org_id = uuid.uuid4()
+    org_id = uuid.uuid7()
     fake_row = {
-        "id": uuid.uuid4(),
+        "id": uuid.uuid7(),
         "org_id": org_id,
         "email": "x@test.local",
         "role": "member",
@@ -156,9 +156,9 @@ def test_get_invitation_already_accepted_html_shows_state(client):
 
 def test_accept_already_accepted_invitation_is_idempotent(client):
     token = uuid.uuid4()
-    org_id = uuid.uuid4()
+    org_id = uuid.uuid7()
     fake_row = {
-        "id": uuid.uuid4(),
+        "id": uuid.uuid7(),
         "org_id": org_id,
         "email": "test@test.local",
         "role": "member",
@@ -194,8 +194,8 @@ def test_accept_already_accepted_invitation_is_idempotent(client):
 def test_accept_non_pending_invitation_returns_404(client):
     token = uuid.uuid4()
     fake_row = {
-        "id": uuid.uuid4(),
-        "org_id": uuid.uuid4(),
+        "id": uuid.uuid7(),
+        "org_id": uuid.uuid7(),
         "email": "t@test.local",
         "role": "member",
         "token": token,

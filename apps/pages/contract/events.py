@@ -16,16 +16,13 @@ from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, Enti
 class PageEvent(BusinessEvent):
     entity: ClassVar[str] = "pages"
     icon: ClassVar[str] = "file-text"
+    # The page's stable identity is its uuid pk, carried on the base's ``entity_id`` — it survives a
+    # re-slug, so the logs viewer's per-entity filter keeps a renamed page's timeline together.
+    # ``slug`` rides in the payload for display and for resolving the deep link to the current URL.
     slug: str | None = None
     # Every concrete page event is an EntityCreated/Updated/Deleted (all of which carry ``label``);
     # declaring it on the shared base too lets a ``type[PageEvent]`` handler pass the page title.
     label: str | None = None
-
-    def __post_init__(self) -> None:
-        # A page's stable id *is* its slug — mirror it into the systematic entity_id correlation
-        # column so pages join todos/files/… in the logs viewer's per-entity filter.
-        if self.entity_id is None and self.slug is not None:
-            object.__setattr__(self, "entity_id", self.slug)
 
 
 @dataclass(frozen=True, kw_only=True)

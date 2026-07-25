@@ -1,5 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import uuid4, uuid7
 
 import pytest
 from supabase_auth.errors import AuthApiError
@@ -119,8 +119,8 @@ async def test_refresh_session_none_raises_value_error():
 
 
 def test_user_created_is_a_persisted_business_event():
-    actor = uuid4()
-    event = UserCreated(actor_id=actor, entity_id="u1", email="a@b.c")
+    actor = uuid7()
+    event = UserCreated(actor_id=actor, entity_id=actor, email="a@b.c")
 
     assert isinstance(event, BusinessEvent)  # persisted on the trail like any fact
     assert event.kind == "auth.user_created"  # distinct from the sign-in (Login) events
@@ -148,9 +148,10 @@ def test_is_first_sign_in_detects_a_brand_new_oauth_user():
 
 
 def test_user_deleted_is_a_persisted_business_event():
-    event = UserDeleted(actor_id=uuid4(), entity_id="victim1")
+    victim = uuid7()
+    event = UserDeleted(actor_id=uuid7(), entity_id=victim)
 
     assert isinstance(event, BusinessEvent)
     assert event.kind == "auth.user_deleted"
-    assert event.entity_id == "victim1"  # the removed user — forget consumers key on it
+    assert event.entity_id == victim  # the removed user — forget consumers key on it
     assert not hasattr(event, "session")  # no live session travels on a frozen fact

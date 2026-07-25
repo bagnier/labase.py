@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -7,7 +8,7 @@ from sqlalchemy import BigInteger, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.persistence.base import Base, Timestamped, Versioned
+from apps.shared.persistence.base import Base, Timestamped, UUIDPk, Versioned
 
 
 class IssueStatus(StrEnum):
@@ -18,12 +19,11 @@ class IssueStatus(StrEnum):
     regressed = "regressed"
 
 
-class ErrorGroup(Base, Versioned, Timestamped):
+class ErrorGroup(Base, UUIDPk, Versioned, Timestamped):
     """One *issue*: every event sharing a stack fingerprint, with its lifecycle."""
 
     __tablename__ = "error_groups"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     fingerprint: Mapped[str] = mapped_column(Text, unique=True)
     title: Mapped[str]
     status: Mapped[str] = mapped_column(default=IssueStatus.new)
@@ -35,13 +35,15 @@ class ErrorGroup(Base, Versioned, Timestamped):
     resolved_in_version: Mapped[str | None] = mapped_column(default=None)
 
 
-class ErrorEvent(Base):
-    """One occurrence, with the JSONB context that pivots to the structured logs."""
+class ErrorEvent(Base, UUIDPk):
+    """One occurrence, with the JSONB context that pivots to the structured logs.
+
+    ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so the newest-first cursor page
+    (``order_by(id.desc())`` + ``id < before_id``) keeps working without a bigint sequence."""
 
     __tablename__ = "error_events"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    group_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("error_groups.id"))
+    group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("error_groups.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
@@ -49,7 +51,7 @@ class ErrorEvent(Base):
 class ErrorGroupRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: uuid.UUID
     title: str
     status: IssueStatus
     count: int
@@ -63,6 +65,6 @@ class ErrorGroupRead(BaseModel):
 class ErrorEventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: uuid.UUID
     created_at: datetime
     context: dict[str, Any]

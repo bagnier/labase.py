@@ -14,8 +14,9 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 ## issues
 
+- [x] id as uuid, not str or int
+- [ ] _ENTITY_ROUTES in apps/organizations est un couplage
 - [ ] jinja_globals should live in host ??
-- [ ] id as uuid, not str
 - [ ] 7 skipped
 - [ ] réduire les "| None = None"
 - [ ] moins de str, plus de types

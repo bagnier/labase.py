@@ -1,5 +1,5 @@
 create table public.audit_logs (
-  id         bigserial primary key,
+  id         uuid        primary key default public.uuidv7(),
   created_at timestamptz not null default now(),
   level      text        not null,
   event      text        not null,

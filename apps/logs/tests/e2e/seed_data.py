@@ -100,4 +100,4 @@ INSERT_ERROR_EVENT = text(
 
 
 def group_params(title: str, when: datetime | None = None) -> dict[str, Any]:
-    return {"fp": f"{title}:{uuid.uuid4()}", "title": title, "ts": when or clock.now()}
+    return {"fp": f"{title}:{uuid.uuid7()}", "title": title, "ts": when or clock.now()}

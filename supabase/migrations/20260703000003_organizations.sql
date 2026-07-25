@@ -1,7 +1,7 @@
 create type public.org_role as enum ('owner', 'member');
 
 create table public.organizations (
-  id         uuid primary key default gen_random_uuid(),
+  id         uuid primary key default public.uuidv7(),
   name       text not null,
   handle     text not null default '',
   version    integer not null default 1,

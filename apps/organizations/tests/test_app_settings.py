@@ -38,7 +38,7 @@ async def test_anonymous_request_resolves_server_values(demo_settings):
 
 @pytest.mark.asyncio
 async def test_org_route_overlays_that_orgs_overrides(demo_settings, monkeypatch):
-    org_id = uuid.uuid4()
+    org_id = uuid.uuid7()
 
     async def fake_current_org(request, user, session):
         return org_id

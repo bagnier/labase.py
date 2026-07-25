@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -71,7 +72,7 @@ class ErrorGroupRepository:
             query = query.where(ErrorGroup.status == status)
         return list(await self.session.scalars(query))
 
-    async def get(self, group_id: int) -> ErrorGroup | None:
+    async def get(self, group_id: uuid.UUID) -> ErrorGroup | None:
         return await self.session.get(ErrorGroup, group_id)
 
     async def set_status(self, group: ErrorGroup, status: IssueStatus, version: str) -> None:
@@ -80,8 +81,8 @@ class ErrorGroupRepository:
         await self.session.flush()
 
     async def events(
-        self, group_id: int, before_id: int | None = None, limit: int = 20
-    ) -> tuple[list[ErrorEvent], int | None]:
+        self, group_id: uuid.UUID, before_id: uuid.UUID | None = None, limit: int = 20
+    ) -> tuple[list[ErrorEvent], uuid.UUID | None]:
         """Newest-first cursor page of a group's events (log-viewer pattern)."""
         query = (
             select(ErrorEvent)
@@ -95,7 +96,7 @@ class ErrorGroupRepository:
         next_before_id = rows[limit - 1].id if len(rows) > limit else None
         return rows[:limit], next_before_id
 
-    async def daily_counts(self, group_id: int, *, days: int) -> dict[str, int]:
+    async def daily_counts(self, group_id: uuid.UUID, *, days: int) -> dict[str, int]:
         """Occurrences per ISO day over the trailing window — the detail sparkline."""
         since = clock.now() - timedelta(days=days - 1)
         day = func.date(ErrorEvent.created_at)

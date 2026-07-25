@@ -1,5 +1,5 @@
 create table public.profiles (
-  id           uuid primary key default gen_random_uuid(),
+  id           uuid primary key default public.uuidv7(),
   auth_user_id uuid not null unique references auth.users(id) on delete cascade,
   email        text not null,
   handle       text,

@@ -111,7 +111,7 @@ def test_subscribers_for_walks_the_mro_so_a_base_subscription_catches_subclasses
 
 @pytest.mark.asyncio
 async def test_already_consumed_is_false_first_then_true():
-    topic, event_id = "evt:test_bus.ticked:counter", 424242
+    topic, event_id = "evt:test_bus.ticked:counter", uuid.uuid7()
     async with db.admin_session_factory()() as session:
         repo = EventRepository(session)
         assert await repo.already_consumed(topic, event_id) is False
@@ -129,10 +129,10 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
     events.on(_Ticked, handler, name="counter", app="test_bus", idempotent=True)
     wrapper = _handlers["evt:test_bus.ticked:counter"]
     payload = {
-        "actor_id": str(uuid.uuid4()),
-        "org_id": str(uuid.uuid4()),
+        "actor_id": str(uuid.uuid7()),
+        "org_id": str(uuid.uuid7()),
         "label": "Buy milk",
-        "event_id": 99,
+        "event_id": str(uuid.uuid7()),
     }
     async with db.admin_session_factory()() as session:
         await wrapper(session, payload)  # first delivery

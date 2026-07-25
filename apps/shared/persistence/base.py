@@ -14,7 +14,10 @@ class Base(DeclarativeBase):
 
 
 class UUIDPk:
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    # UUIDv7: time-ordered, so a pk doubles as a monotonic cursor (the append-only trails order on
+    # it). Generated Python-side on the ORM write path; the DB column mirrors `default
+    # public.uuidv7()` for raw / PostgREST inserts. Tokens keep uuid4 (unguessable, no timestamp).
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
 
 
 class OrgScoped:

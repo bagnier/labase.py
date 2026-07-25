@@ -33,7 +33,7 @@ from apps.shared.events.registry import registry
 
 def _wants_uuid(hint: Any) -> bool:
     """A field is a uuid carrier if its annotation is ``uuid.UUID`` or a union that includes it
-    (``uuid.UUID | None``, or the polymorphic ``uuid.UUID | str | None``)."""
+    (e.g. ``uuid.UUID | None``)."""
     return hint is uuid.UUID or uuid.UUID in typing.get_args(hint)
 
 
@@ -52,8 +52,9 @@ class BusinessEvent:
 
     actor_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
-    # the concerned entity's id, for correlation — polymorphic: a uuid pk, a page slug, or an int.
-    entity_id: uuid.UUID | str | None = None
+    # the concerned entity's stable id, for correlation — always its uuid pk (pages correlate on
+    # their pk, not their renameable slug; the slug rides in the payload for display).
+    entity_id: uuid.UUID | None = None
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
     kind: ClassVar[str] = ""  # dotted "<app>.<subject>"; derived for CRUD, explicit otherwise
@@ -79,9 +80,8 @@ class BusinessEvent:
         """Rebuild the event from a stored row — dropping transport-only keys (``event_id``, the
         denormalized ``actor`` handle) that aren't event fields, and re-parsing every uuid-typed
         field the task queue serialized to a string. The re-parse is generic (driven by the field
-        annotations) and defensive: a value that isn't a valid uuid — a page slug in the polymorphic
-        ``entity_id``, a redacted ``"***"`` token — is left as-is rather than crashing the rebuild.
-        Both delivery paths use this."""
+        annotations) and defensive: a value that isn't a valid uuid — a redacted ``"***"`` token —
+        is left as-is rather than crashing the rebuild. Both delivery paths use this."""
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names}
         for key in _uuid_fields(cls):

@@ -5,7 +5,7 @@
 -- positionally aligned with BUCKET_BOUNDS_MS in apps/shared/observability/metrics.py.
 -- Server-level admin data: RLS enabled with no policies — same posture as error_groups.
 create table public.request_metrics (
-  id               bigserial primary key,
+  id               uuid primary key default public.uuidv7(),
   bucket           timestamptz not null,
   resolution       text not null default 'minute',
   instance         text not null,

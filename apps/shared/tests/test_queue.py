@@ -131,7 +131,7 @@ async def test_task_without_handler_parks():
 @pytest.mark.asyncio
 async def test_task_with_user_id_runs_under_synthesized_rls_claims():
     topic = f"test.rls_{uuid.uuid4().hex}"
-    user_id = uuid.uuid4()
+    user_id = uuid.uuid7()
     observed: dict = {}
 
     async def handler(session, payload):

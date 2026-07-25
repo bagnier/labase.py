@@ -32,7 +32,7 @@ def _json_request(payload: dict) -> Request:
 
 @pytest.mark.asyncio
 async def test_invite_dedup_uses_lowercased_email():
-    org_id = uuid.uuid4()
+    org_id = uuid.uuid7()
     current_user = AuthenticatedUser(id=uuid.uuid4(), email="owner@test.local")
 
     repo = AsyncMock()

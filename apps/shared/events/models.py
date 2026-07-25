@@ -11,21 +11,23 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime
+from sqlalchemy import DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.shared import clock
-from apps.shared.persistence.base import Base
+from apps.shared.persistence.base import Base, UUIDPk
 
 
-class BusinessEventLog(Base):
+class BusinessEventLog(Base, UUIDPk):
     """The append-only business-event row. Members read their own/their orgs' rows via RLS;
-    only the persister's BYPASSRLS admin session writes (no insert grant to authenticated)."""
+    only the persister's BYPASSRLS admin session writes (no insert grant to authenticated).
+
+    ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so it stays the monotonic cursor the tailer
+    claims/scans on and the newest-first feeds order by — no bigint sequence."""
 
     __tablename__ = "business_events"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
     )

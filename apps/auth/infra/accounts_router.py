@@ -142,8 +142,10 @@ async def delete_user(
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
     await events.emit(AccountDeletedByAdmin(actor_id=current_user.id, target_user_id=user_id))
+    # entity_id is the removed user's pk as a uuid (GoTrue ids are uuids) — matches the profile-side
+    # self-deletion emit, so both UserDeleted paths carry the one shape the forget consumers key on.
     await events.emit(
-        UserDeleted(actor_id=current_user.id, entity_id=user_id), session=admin_session
+        UserDeleted(actor_id=current_user.id, entity_id=uuid.UUID(user_id)), session=admin_session
     )
     await disable_account(user_id)
     await admin_session.commit()

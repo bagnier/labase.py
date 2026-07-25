@@ -9,6 +9,8 @@ NOTE: mounted BEFORE the console context so its /console/issues routes register
 ahead of the console's /console/{app} catch-all.
 """
 
+import uuid
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,12 +103,12 @@ async def _record(event: ExceptionCaptured) -> None:
         # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
         # bus here is unconditional — no mount-state guard needed.
         if recorded.opened:
-            opened = IssueOpened(group_id=group_id, entity_id=str(group_id), title=title)
+            opened = IssueOpened(group_id=group_id, entity_id=group_id, title=title)
             await events.emit(opened, session)
         if recorded.regressed:
             regressed = IssueRegressed(
                 group_id=group_id,
-                entity_id=str(group_id),
+                entity_id=group_id,
                 title=title,
                 resolved_in_version=recorded.group.resolved_in_version,
                 seen_version=version,
@@ -124,7 +126,7 @@ async def _alert_regressed(session: AsyncSession, event: IssueRegressed) -> None
     await _send_alert(session, f"Regressed issue: {event.title}", event.group_id)
 
 
-async def _send_alert(session: AsyncSession, subject: str, group_id: int) -> None:
+async def _send_alert(session: AsyncSession, subject: str, group_id: uuid.UUID) -> None:
     # Durable consumer: the alert email is enqueued on the worker's session (it commits).
     settings = get_settings("issues")
     if not settings.alerting_enabled or not settings.alert_email:
