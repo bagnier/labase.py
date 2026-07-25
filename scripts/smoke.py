@@ -9,6 +9,7 @@ Run via ``make perf-smoke`` (scripts/perf_smoke.py boots the app on the test
 schema and enforces the thresholds below as a blocking CI step).
 """
 
+import time
 import uuid
 
 import httpx
@@ -25,6 +26,26 @@ P95_MS_MAX = 800.0
 _account: dict = {}
 
 
+def _wait_for_personal_org(client: httpx.Client, timeout: float = 10.0) -> str:
+    """Return the handle of the account's personal org, polling until it lands.
+
+    Sign-up creates the personal org in an async consumer off the event trail
+    (see the sign-up event chain), so it isn't there the instant register/login
+    return — same shape as mailbox.wait_for_message. Polls rather than sleeps:
+    settles the moment the fact is delivered, names the failure if it never is.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        orgs = client.get("/organizations").raise_for_status().json()
+        if orgs:
+            return OrganizationWithRoleRead.from_dict(orgs[0]).handle
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"personal org never appeared within {timeout}s — async signup consumer stalled?"
+            )
+        time.sleep(0.2)
+
+
 @events.init.add_listener
 def _create_account(environment, **_kwargs):
     """One real account for the whole swarm — register/login are rate-limited per IP."""
@@ -36,9 +57,8 @@ def _create_account(environment, **_kwargs):
         response = client.post("/auth/login", json={"email": email, "password": _PASSWORD})
         response.raise_for_status()
         cookies = dict(client.cookies)
-        orgs = client.get("/organizations").json()
-    parsed = [OrganizationWithRoleRead.from_dict(o) for o in orgs]
-    _account.update(cookies=cookies, org=parsed[0].handle)
+        org = _wait_for_personal_org(client)
+    _account.update(cookies=cookies, org=org)
 
 
 @events.quitting.add_listener
