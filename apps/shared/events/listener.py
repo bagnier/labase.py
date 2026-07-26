@@ -38,13 +38,13 @@ NOTIFY_CHANNEL = "business_event"
 
 def _task_payload(row: dict[str, Any]) -> dict[str, Any]:
     """Rebuild the async-consumer task payload from a business_events row: the event's own fields
-    plus the row id as the dedup ``event_id``. Drops the denormalized ``actor`` handle (not a
+    plus the row id as the dedup ``event_id``. Drops the denormalized ``actor_name`` handle (not a
     field)."""
     payload = dict(row["payload"] or {})
-    payload.pop("actor", None)
-    payload["actor_id"] = str(row["user_id"]) if row["user_id"] else None
+    payload.pop("actor_name", None)
+    payload["user_id"] = str(row["user_id"]) if row["user_id"] else None
     payload["org_id"] = str(row["org_id"]) if row["org_id"] else None
-    payload["entity_id"] = row["entity_id"]
+    payload["entity_id"] = str(row["entity_id"]) if row["entity_id"] else None
     # the dedup key (uuid; stringified — the queue json-encodes it)
     payload["event_id"] = str(row["id"])
     return payload

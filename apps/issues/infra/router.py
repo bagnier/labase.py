@@ -113,9 +113,9 @@ async def set_issue_status(
     # at request teardown, like every other business route — no explicit commit here).
     await events.emit(
         IssueStatusChanged(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             entity_id=group_id,
-            label=group.title,
+            entity_name=group.title,
             status=new_status.value,
         ),
         session,

@@ -17,7 +17,7 @@ class _ReadsEvents(_EventSQL):
         level: str | None = None,
         org_id: uuid.UUID | None = None,
         user_id: uuid.UUID | None = None,
-        entity_id: str | None = None,
+        entity_id: uuid.UUID | None = None,
         request_id: str | None = None,
         app: str | None = None,
         text: str | None = None,

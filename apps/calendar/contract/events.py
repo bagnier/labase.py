@@ -2,7 +2,7 @@
 
 Plain CRUD: ``kind`` derives to ``"calendar.created"`` / ``"calendar.updated"`` /
 ``"calendar.deleted"`` from the shared abstracts; the persister on the
-:class:`~apps.shared.events.BusinessEvent` base records them, scoped by ``actor_id``/``org_id``.
+:class:`~apps.shared.events.BusinessEvent` base records them, scoped by ``user_id``/``org_id``.
 """
 
 from dataclasses import dataclass

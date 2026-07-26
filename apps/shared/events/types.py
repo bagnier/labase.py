@@ -2,7 +2,7 @@
 
 A business event is a frozen dataclass persisted to the ``business_events`` trail by the bus's
 ``emit`` — no handler runs at emit; the listener dispatches by type off the trail after commit. It
-declares only who acted (``actor_id``) and which org it concerns (``org_id``); the write path
+declares only who acted (``user_id``) and which org it concerns (``org_id``); the write path
 enriches ``ip``/``request_id`` from the request contextvars at write time, while
 ``kind``/``level``/``icon`` are the event's own class metadata.
 
@@ -50,11 +50,15 @@ class BusinessEvent:
     """Base for every recorded domain event. ``kw_only`` so subclasses may add required payload
     fields without tripping dataclass default-ordering against the base's optional scoping."""
 
-    actor_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
     # the concerned entity's stable id, for correlation — always its uuid pk (pages correlate on
     # their pk, not their renameable slug; the slug rides in the payload for display).
     entity_id: uuid.UUID | None = None
+    # the subject's readable name — a todo title, an org name, or (when the subject is an email
+    # target) an invitee's email. Emit-provided; rides in the payload for display (the timeline's
+    # "detail"). A pure-id user subject (account/membership action) carries none — its entity_id is.
+    entity_name: str | None = None
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
     kind: ClassVar[str] = ""  # dotted "<app>.<subject>"; derived for CRUD, explicit otherwise
@@ -78,10 +82,10 @@ class BusinessEvent:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
         """Rebuild the event from a stored row — dropping transport-only keys (``event_id``, the
-        denormalized ``actor`` handle) that aren't event fields, and re-parsing every uuid-typed
-        field the task queue serialized to a string. The re-parse is generic (driven by the field
-        annotations) and defensive: a value that isn't a valid uuid — a redacted ``"***"`` token —
-        is left as-is rather than crashing the rebuild. Both delivery paths use this."""
+        denormalized ``actor_name`` handle) that aren't event fields, and re-parsing every
+        uuid-typed field the task queue serialized to a string. The re-parse is generic (driven by
+        the field annotations) and defensive: a value that isn't a valid uuid — a redacted ``"***"``
+        token — is left as-is rather than crashing the rebuild. Both delivery paths use this."""
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names}
         for key in _uuid_fields(cls):
@@ -94,10 +98,9 @@ class BusinessEvent:
 @dataclass(frozen=True, kw_only=True)
 class EntityCreated(BusinessEvent):
     """An org-scoped entity was created — ``kind`` becomes ``"<entity>.created"``. The created
-    row's id rides on the base's ``entity_id``; ``label`` is its display name."""
+    row's id rides on the base's ``entity_id``, its display name on ``entity_name``."""
 
     verb: ClassVar[str] = "created"
-    label: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -105,7 +108,6 @@ class EntityUpdated(BusinessEvent):
     """An org-scoped entity was updated — ``kind`` becomes ``"<entity>.updated"``."""
 
     verb: ClassVar[str] = "updated"
-    label: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -113,4 +115,3 @@ class EntityDeleted(BusinessEvent):
     """An org-scoped entity was deleted — ``kind`` becomes ``"<entity>.deleted"``."""
 
     verb: ClassVar[str] = "deleted"
-    label: str | None = None

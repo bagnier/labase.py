@@ -109,7 +109,7 @@ async def _gate_owner(request: Request, membership: Membership) -> Membership:
         # ip rides in from the request contextvars; the persister enriches it at write time.
         await events.emit(
             OwnershipViolation(
-                actor_id=membership.auth_user_id,
+                user_id=membership.auth_user_id,
                 org_id=membership.org_id,
                 path=request.url.path,
             )

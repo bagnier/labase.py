@@ -37,6 +37,6 @@ class BusinessEventLog(Base, UUIDPk):
     user_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     ip: Mapped[str | None] = mapped_column(default=None)
     org_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    entity_id: Mapped[str | None] = mapped_column(default=None)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     request_id: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)

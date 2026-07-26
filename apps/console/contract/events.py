@@ -22,21 +22,21 @@ class SettingsEvent(BusinessEvent):
 class AdminGranted(SettingsEvent):
     kind: ClassVar[str] = "settings.admin_granted"
     level: ClassVar[str] = "warning"
-    target_email: str | None = None
+    # the promoted user: entity_id resolved from the email, entity_name = the email
 
 
 @dataclass(frozen=True, kw_only=True)
 class AdminRevoked(SettingsEvent):
     kind: ClassVar[str] = "settings.admin_revoked"
     level: ClassVar[str] = "warning"
-    target_email: str | None = None
+    # the demoted user: entity_id resolved from the email, entity_name = the email
 
 
 @dataclass(frozen=True, kw_only=True)
 class LastAdminViolationBlocked(SettingsEvent):
     kind: ClassVar[str] = "settings.last_admin_violation"
     level: ClassVar[str] = "warning"
-    target_email: str | None = None
+    # the last-admin target: entity_name = the email (may be the admin's own)
 
 
 @dataclass(frozen=True, kw_only=True)

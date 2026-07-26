@@ -55,20 +55,18 @@ class MemberLeft(OrgEvent):
 @dataclass(frozen=True, kw_only=True)
 class MemberRoleChanged(OrgEvent):
     kind: ClassVar[str] = "organizations.member_role_changed"
-    target_user_id: uuid.UUID | None = None
     role: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class MemberRemoved(OrgEvent):
     kind: ClassVar[str] = "organizations.member_removed"
-    target_user_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class InvitationSent(OrgEvent):
     kind: ClassVar[str] = "organizations.invitation_sent"
-    target_email: str | None = None
+    # the invitee — no account yet, so entity_name = their email, entity_id stays None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -81,14 +79,13 @@ class InvitationRevoked(OrgEvent):
 class InvitationEmailMismatch(OrgEvent):
     kind: ClassVar[str] = "organizations.invitation_email_mismatch"
     level: ClassVar[str] = "warning"
-    target_email: str | None = None
+    # the mismatched invitee email rides in entity_name (no account guaranteed)
 
 
 @dataclass(frozen=True, kw_only=True)
 class LastOwnerViolationBlocked(OrgEvent):
     kind: ClassVar[str] = "organizations.last_owner_violation"
     level: ClassVar[str] = "warning"
-    target_user_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

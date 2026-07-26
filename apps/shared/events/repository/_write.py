@@ -15,12 +15,13 @@ from apps.shared.events.types import BusinessEvent
 class _WritesEvents(_EventSQL):
     async def record(self, event: BusinessEvent) -> None:
         """Append a typed event to the trail on the bound session; the caller commits."""
-        handle = await self.actor_handle(event.actor_id)
-        await self.save(event_to_log(event, actor=handle))
+        actor_name = await self.user_handle(event.user_id)
+        await self.save(event_to_log(event, actor_name=actor_name))
 
-    async def actor_handle(self, user_id: uuid.UUID | None) -> str | None:
-        """Denormalize *who* at write time: profiles are ``own read`` under RLS, so a member can't
-        resolve a co-member's handle at read time — and this pins the handle as it was then."""
+    async def user_handle(self, user_id: uuid.UUID | None) -> str | None:
+        """Resolve a user's handle for denormalization (the actor, or a user subject). Profiles are
+        ``own read`` under RLS, so a member can't resolve another user's handle at read time — this
+        pins it as it was then."""
         if not user_id:
             return None
         try:
@@ -51,27 +52,27 @@ def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
     return payload
 
 
-def event_to_log(event: BusinessEvent, *, actor: str | None = None) -> BusinessEventLog:
-    """The one ``event → row`` conversion. Scoping (actor/org/entity) is lifted to its own columns —
+def event_to_log(event: BusinessEvent, *, actor_name: str | None = None) -> BusinessEventLog:
+    """The one ``event → row`` conversion. Scoping (user/org/entity) is lifted to its own columns —
     so RLS and the timeline can filter on them — leaving only the (redacted) rest in ``payload``;
     ``ip``/``request_id`` ride in from the request contextvars."""
     ctx = get_contextvars()
     payload = _loggable_payload(event)
-    payload.pop("actor_id", None)
+    payload.pop("user_id", None)
     payload.pop("org_id", None)
     payload.pop("entity_id", None)
-    if actor:
-        payload["actor"] = actor
+    if actor_name:
+        payload["actor_name"] = actor_name
+    if not payload.get("entity_name"):  # a base field on every event — drop it when unset
+        payload.pop("entity_name", None)
     return BusinessEventLog(
         kind=event.kind,
         level=event.level,
         icon=event.icon,
-        user_id=event.actor_id,
+        user_id=event.user_id,
         ip=ctx.get("ip"),
         org_id=event.org_id,
-        # entity_id is polymorphic (uuid pk / slug / int) and lands in a text column — the one place
-        # a uuid concerned-entity id is stringified, so emit sites pass it raw.
-        entity_id=str(event.entity_id) if event.entity_id is not None else None,
+        entity_id=event.entity_id,  # the concerned entity's uuid pk, lifted to its own uuid column
         request_id=ctx.get("request_id"),
         payload=payload or None,
     )

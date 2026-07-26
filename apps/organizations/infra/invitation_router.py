@@ -136,9 +136,9 @@ async def accept_invitation(
         org_name = org.name if org else ""
         await events.emit(
             InvitationEmailMismatch(
-                actor_id=current_user.id,
+                user_id=current_user.id,
                 org_id=invitation["org_id"],
-                target_email=invitation["email"],
+                entity_name=invitation["email"],
             )
         )
         if wants_json(request):
@@ -177,5 +177,5 @@ async def accept_invitation(
         log.exception("invitation.accept_error")
         raise
 
-    await events.emit(MemberJoined(actor_id=current_user.id, org_id=invitation["org_id"]))
+    await events.emit(MemberJoined(user_id=current_user.id, org_id=invitation["org_id"]))
     return await _dashboard_redirect(request, rls_repo, invitation["org_id"])

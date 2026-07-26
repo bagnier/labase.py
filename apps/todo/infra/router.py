@@ -92,7 +92,7 @@ async def add_todo(
     title = await parse_field(request, "title")
     todo = await repo.add(current_user.id, title)
     await events.emit(
-        TodoCreated(actor_id=current_user.id, org_id=org_id, entity_id=todo.id, label=title)
+        TodoCreated(user_id=current_user.id, org_id=org_id, entity_id=todo.id, entity_name=title)
     )
     return await _render(request, session, current_user, repo, org, settings)
 
@@ -119,12 +119,12 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
-    scope = {"actor_id": current_user.id, "org_id": org_id, "entity_id": todo_id}
+    scope = {"user_id": current_user.id, "org_id": org_id, "entity_id": todo_id}
     if done is not None:
         ticked = TodoTicked if done else TodoUnticked
-        await events.emit(ticked(label=todo.title, **scope))
+        await events.emit(ticked(entity_name=todo.title, **scope))
     if title is not None:
-        await events.emit(TodoEdited(label=title, **scope))
+        await events.emit(TodoEdited(entity_name=title, **scope))
     return await _render(request, session, current_user, repo, org, settings)
 
 
@@ -144,10 +144,10 @@ async def delete_todo(
         await repo.delete(todo)
         await events.emit(
             TodoDeleted(
-                actor_id=current_user.id,
+                user_id=current_user.id,
                 org_id=org_id,
                 entity_id=todo_id,
-                label=todo.title,
+                entity_name=todo.title,
             )
         )
     if wants_json(request):

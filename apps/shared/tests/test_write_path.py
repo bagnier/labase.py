@@ -86,7 +86,7 @@ async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
     actor, eid = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await events._persist_fact(
-            _P1Event(actor_id=actor, org_id=uuid.uuid7(), entity_id=eid, label="Hi"), session
+            _P1Event(user_id=actor, org_id=uuid.uuid7(), entity_id=eid, label="Hi"), session
         )
         await session.commit()
     async with db.admin_session_factory()() as session:
@@ -98,9 +98,9 @@ async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
         ).first()
     assert row is not None
     assert row.kind == "test_p1.happened"
-    assert row.entity_id == str(eid)
+    assert row.entity_id == eid
     assert row.payload["label"] == "Hi"
-    assert "actor_id" not in row.payload  # scoping fields are lifted to their own columns
+    assert "user_id" not in row.payload  # scoping fields are lifted to their own columns
     assert "org_id" not in row.payload
 
 
@@ -109,7 +109,7 @@ async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
     """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
     actor = uuid.uuid7()
     async with db.admin_session_factory()() as session:
-        await events._persist_fact(_P1Event(actor_id=actor), session)
+        await events._persist_fact(_P1Event(user_id=actor), session)
         await session.rollback()
     assert await _count_p1(actor) == 0
 
@@ -120,7 +120,7 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     import asyncio
 
     with patch.object(events, "_record_detached", new=AsyncMock()) as detached:
-        await events._persist_fact(_P1Event(actor_id=uuid.uuid7(), label="x"), None)
+        await events._persist_fact(_P1Event(user_id=uuid.uuid7(), label="x"), None)
         detached.assert_not_awaited()  # coroutine scheduled, not yet run
         await asyncio.sleep(0)  # let the created task run
     detached.assert_awaited_once()
@@ -136,10 +136,10 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean
     registry.declare_events("test_p1", _P1Event)  # emit refuses an undeclared event
     committed, rolled = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
-        await events.emit(_P1Event(actor_id=committed), session=session)
+        await events.emit(_P1Event(user_id=committed), session=session)
         await session.commit()
     async with db.admin_session_factory()() as session:
-        await events.emit(_P1Event(actor_id=rolled), session=session)
+        await events.emit(_P1Event(user_id=rolled), session=session)
         await session.rollback()
     assert await _count_p1(committed) == 1
     assert await _count_p1(rolled) == 0

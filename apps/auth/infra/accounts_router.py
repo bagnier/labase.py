@@ -119,7 +119,7 @@ async def disable_user(request: Request, user_id: str, current_user: CurrentAdmi
     _self_guard(current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
-    await events.emit(AccountDisabled(actor_id=current_user.id, target_user_id=user_id))
+    await events.emit(AccountDisabled(user_id=current_user.id, entity_id=uuid.UUID(user_id)))
     return _done(request, "Account disabled.")
 
 
@@ -128,7 +128,7 @@ async def enable_user(request: Request, user_id: str, current_user: CurrentAdmin
     _ensure_enabled()
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": "none"})
-    await events.emit(AccountEnabled(actor_id=current_user.id, target_user_id=user_id))
+    await events.emit(AccountEnabled(user_id=current_user.id, entity_id=uuid.UUID(user_id)))
     return _done(request, "Account enabled.")
 
 
@@ -141,11 +141,11 @@ async def delete_user(
 ) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
-    await events.emit(AccountDeletedByAdmin(actor_id=current_user.id, target_user_id=user_id))
+    await events.emit(AccountDeletedByAdmin(user_id=current_user.id, entity_id=uuid.UUID(user_id)))
     # entity_id is the removed user's pk as a uuid (GoTrue ids are uuids) — matches the profile-side
     # self-deletion emit, so both UserDeleted paths carry the one shape the forget consumers key on.
     await events.emit(
-        UserDeleted(actor_id=current_user.id, entity_id=uuid.UUID(user_id)), session=admin_session
+        UserDeleted(user_id=current_user.id, entity_id=uuid.UUID(user_id)), session=admin_session
     )
     await disable_account(user_id)
     await admin_session.commit()

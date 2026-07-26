@@ -86,17 +86,17 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
     # emit maps a BusinessEvent straight onto a business_events row: scoping to columns, rest to
     # payload — a single event → row hop, no intermediate column dict.
     actor, org, eid = uuid.uuid7(), uuid.uuid7(), uuid.uuid7()
-    row = event_to_log(WidgetCreated(actor_id=actor, org_id=org, entity_id=eid, label="Gizmo"))
+    row = event_to_log(WidgetCreated(user_id=actor, org_id=org, entity_id=eid, entity_name="Gizmo"))
     assert row.kind == "widget.created"
     assert row.icon == "cube"
     assert row.user_id == actor
     assert row.org_id == org
-    assert row.entity_id == str(eid)  # the concerned entity, lifted to its own (text) column
+    assert row.entity_id == eid  # the concerned entity's uuid, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
     payload = row.payload
     assert payload is not None
-    assert payload["label"] == "Gizmo"
-    assert "actor_id" not in payload
+    assert payload["entity_name"] == "Gizmo"
+    assert "user_id" not in payload
     assert "org_id" not in payload
     assert "entity_id" not in payload
 
@@ -114,27 +114,26 @@ class _RefEvent(BusinessEvent):
 def test_event_to_log_stringifies_uuid_payload_fields():
     # A uuid.UUID payload field must reach the JSONB column json-safe (stdlib json can't dump UUID).
     ref = uuid.uuid7()
-    row = event_to_log(_RefEvent(actor_id=uuid.uuid7(), ref_id=ref))
+    row = event_to_log(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
     assert row.payload is not None
     assert row.payload["ref_id"] == str(ref)  # stringified at the one serialization edge
     assert row.payload["token"] is None  # None stays None (redaction only masks a set value)
 
 
-def test_event_to_log_stringifies_a_uuid_entity_id():
-    # entity_id is the entity's uuid pk; it is stringified into its own text column at this one
-    # central edge — not one str() per emit site.
+def test_event_to_log_lifts_a_uuid_entity_id():
+    # entity_id is the entity's uuid pk, lifted straight to its own uuid column — no str() edge.
     eid = uuid.uuid7()
-    row = event_to_log(WidgetCreated(entity_id=eid, label="Gizmo"))
-    assert row.entity_id == str(eid)
+    row = event_to_log(WidgetCreated(entity_id=eid, entity_name="Gizmo"))
+    assert row.entity_id == eid
 
 
 def test_from_payload_reparses_every_uuid_field_by_type():
     # The round-trip through the queue serializes every uuid to a string; from_payload re-parses any
     # field annotated uuid.UUID back — generically, not from a hardcoded list.
     ref, actor = uuid.uuid7(), uuid.uuid7()
-    event = _RefEvent.from_payload({"ref_id": str(ref), "actor_id": str(actor)})
+    event = _RefEvent.from_payload({"ref_id": str(ref), "user_id": str(actor)})
     assert event.ref_id == ref
-    assert event.actor_id == actor
+    assert event.user_id == actor
 
 
 def test_from_payload_is_defensive_on_unparseable_strings():

@@ -67,6 +67,7 @@ from apps.auth.domain.service import (
 )
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
+from apps.auth.infra.user_repository import find_user_id_by_email
 from apps.shared.config import get_technical_settings
 from apps.shared.events.bus import events
 from apps.shared.http import parse_body, wants_json
@@ -242,7 +243,7 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
                 return await _mfa_challenge_response(request, tokens, factor_id, next)
         # Past the 2FA gate: this is a completed password sign-in (the 2FA branch is marked by
         # MfaVerified). Record it — the freshly minted token carries the actor.
-        await events.emit(SignedIn(actor_id=_token_sub(tokens.access_token)))
+        await events.emit(SignedIn(user_id=_token_sub(tokens.access_token)))
         if wants_json(request):
             resp = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
             set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -333,7 +334,7 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    await events.emit(MfaVerified(actor_id=_token_sub(tokens.access_token), factor_id=factor_id))
+    await events.emit(MfaVerified(user_id=_token_sub(tokens.access_token), factor_id=factor_id))
     if wants_json(request):
         resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
     else:
@@ -350,10 +351,10 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
         await logout(access_token)
         # Attribute the sign-out to the account holder — but the cookie may be expired by now, so
         # a failed decode must not turn a logout into a 500; record it with no actor instead.
-        actor_id = None
+        user_id = None
         with contextlib.suppress(Exception):
-            actor_id = _sub_uuid(decode_jwt(access_token).get("sub"))
-        await events.emit(SignedOut(actor_id=actor_id))
+            user_id = _sub_uuid(decode_jwt(access_token).get("sub"))
+        await events.emit(SignedOut(user_id=user_id))
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
@@ -398,7 +399,7 @@ async def passkey_verify_endpoint(request: Request, users_settings: UsersSetting
         await events.emit(PasskeyFailed())
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
     claims = decode_jwt(tokens.access_token)
-    await events.emit(PasskeySignedIn(actor_id=_sub_uuid(claims.get("sub"))))
+    await events.emit(PasskeySignedIn(user_id=_sub_uuid(claims.get("sub"))))
     resp = JSONResponse(
         {
             "access_token": tokens.access_token,
@@ -484,7 +485,7 @@ async def oauth_callback(
         await events.emit(OAuthFailed())
         return _oauth_failure(request, str(e), users_settings)
     claims = decode_jwt(tokens.access_token)
-    await events.emit(OAuthSignedIn(actor_id=_sub_uuid(claims.get("sub"))))
+    await events.emit(OAuthSignedIn(user_id=_sub_uuid(claims.get("sub"))))
     next = oauth_next or ""
     if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
@@ -576,7 +577,10 @@ async def impersonate_endpoint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No user with this email."
         ) from None
-    await events.emit(ImpersonationStarted(actor_id=admin.id, target_email=email))
+    target_id = await find_user_id_by_email(email)
+    await events.emit(
+        ImpersonationStarted(user_id=admin.id, entity_id=target_id, entity_name=email)
+    )
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": email})
     else:
@@ -612,7 +616,11 @@ async def stop_impersonation_endpoint(
         admin_id = _sub_uuid(decode_jwt(stash)["sub"])
     except Exception:  # expired stash: still drop the disguise, record without the id
         log.warning("auth.impersonation_stash_invalid")
-    await events.emit(ImpersonationStopped(actor_id=admin_id, target_email=current_user.email))
+    await events.emit(
+        ImpersonationStopped(
+            user_id=admin_id, entity_id=current_user.id, entity_name=current_user.email
+        )
+    )
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": None})
     else:
@@ -696,7 +704,7 @@ async def reset_password_endpoint(request: Request) -> Response:
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the trail attributed to the account holder.
-    await events.emit(PasswordReset(actor_id=_token_sub(tokens.access_token)))
+    await events.emit(PasswordReset(user_id=_token_sub(tokens.access_token)))
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
     return RedirectResponse(
@@ -720,7 +728,7 @@ async def confirm_email_endpoint(request: Request, token_hash: str = Query(defau
             "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
         )
     claims = decode_jwt(tokens.access_token)
-    await events.emit(EmailChanged(actor_id=_sub_uuid(claims.get("sub"))))
+    await events.emit(EmailChanged(user_id=_sub_uuid(claims.get("sub"))))
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     return resp

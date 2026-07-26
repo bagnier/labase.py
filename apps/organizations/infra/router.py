@@ -131,9 +131,7 @@ async def _emit_last_owner_violation(
 ) -> None:
     # ip rides in from the request contextvars; the persister enriches it at write time.
     await events.emit(
-        LastOwnerViolationBlocked(
-            actor_id=current_user.id, org_id=org_id, target_user_id=target_user_id
-        )
+        LastOwnerViolationBlocked(user_id=current_user.id, org_id=org_id, entity_id=target_user_id)
     )
 
 
@@ -181,7 +179,9 @@ async def create_organization(
     # expire_on_commit=False, so `org` stays usable for the response below).
     await repo.session.commit()
     await events.emit(
-        OrganizationCreated(actor_id=current_user.id, org_id=org.id, entity_id=org.id, label=name)
+        OrganizationCreated(
+            user_id=current_user.id, org_id=org.id, entity_id=org.id, entity_name=name
+        )
     )
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
     return mutation_response(
@@ -445,7 +445,9 @@ async def rename_organization(
         )
     await repo.rename(org, name)
     await events.emit(
-        OrganizationRenamed(actor_id=current_user.id, org_id=org_id, entity_id=org_id, label=name)
+        OrganizationRenamed(
+            user_id=current_user.id, org_id=org_id, entity_id=org_id, entity_name=name
+        )
     )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
@@ -486,7 +488,9 @@ async def update_org_handle(
         return response
     await repo.update_handle(org, handle)
     await events.emit(
-        OrgHandleChanged(actor_id=current_user.id, org_id=org_id, entity_id=org_id, label=handle)
+        OrgHandleChanged(
+            user_id=current_user.id, org_id=org_id, entity_id=org_id, entity_name=handle
+        )
     )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
@@ -548,7 +552,7 @@ async def leave_organization(
             status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
-    await events.emit(MemberLeft(actor_id=current_user.id, org_id=org_id))
+    await events.emit(MemberLeft(user_id=current_user.id, org_id=org_id))
     return delete_response(request, htmx_redirect_url="/profile")
 
 
@@ -583,9 +587,9 @@ async def update_member_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await events.emit(
         MemberRoleChanged(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
-            target_user_id=user_id,
+            entity_id=user_id,
             role=new_role.value,
         )
     )
@@ -633,9 +637,7 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    await events.emit(
-        MemberRemoved(actor_id=current_user.id, org_id=org_id, target_user_id=user_id)
-    )
+    await events.emit(MemberRemoved(user_id=current_user.id, org_id=org_id, entity_id=user_id))
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
     # so this only ever uses delete_response's JSON branch.
     if wants_json(request):
@@ -690,7 +692,7 @@ async def create_invitation(
                 invited_by=current_user.id,
             )
             await events.emit(
-                InvitationSent(actor_id=current_user.id, org_id=org_id, target_email=email)
+                InvitationSent(user_id=current_user.id, org_id=org_id, entity_name=email)
             )
 
     link = ""
@@ -753,7 +755,7 @@ async def revoke_invitation(
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
     await events.emit(
-        InvitationRevoked(actor_id=current_user.id, org_id=org_id, invitation_id=invitation_id)
+        InvitationRevoked(user_id=current_user.id, org_id=org_id, invitation_id=invitation_id)
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,
     # so this only ever uses delete_response's JSON branch.

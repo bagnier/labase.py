@@ -193,10 +193,10 @@ async def mark_card(
         ) from None
     await events.emit(
         CardReviewed(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
             entity_id=card.id,
-            label=card.question,
+            entity_name=card.question,
             outcome=outcome.value,
         )
     )

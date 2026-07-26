@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from apps.auth.contract.admin import find_user_id_by_email
 from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract import appearance
 from apps.console.contract.events import (
@@ -269,7 +270,11 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
             error=exc.email,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    await events.emit(AdminGranted(actor_id=current_user.id, target_email=email))
+    await events.emit(
+        AdminGranted(
+            user_id=current_user.id, entity_id=await find_user_id_by_email(email), entity_name=email
+        )
+    )
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -279,17 +284,20 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
 async def update_admin(request: Request, email: str, current_user: CurrentAdmin) -> Response:
     body = await parse_body(request)
     is_admin = service.coerce_bool(body.get("is_admin"))
+    uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
         rows = await admins.set_admin(email, is_admin=is_admin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
-        await events.emit(LastAdminViolationBlocked(actor_id=current_user.id, target_email=email))
+        await events.emit(
+            LastAdminViolationBlocked(user_id=current_user.id, entity_id=uid, entity_name=email)
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     granted: AdminGranted | AdminRevoked = (
-        AdminGranted(actor_id=current_user.id, target_email=email)
+        AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email)
         if is_admin
-        else AdminRevoked(actor_id=current_user.id, target_email=email)
+        else AdminRevoked(user_id=current_user.id, entity_id=uid, entity_name=email)
     )
     await events.emit(granted)
     if wants_json(request):
@@ -445,7 +453,7 @@ async def create_org_override(
     await repo.set_org_override(app, key, org_id, stored)
     await session.commit()
     await events.emit(
-        OrgOverrideSet(actor_id=current_user.id, org_id=org_id, app=app, key=key, value=stored)
+        OrgOverrideSet(user_id=current_user.id, org_id=org_id, app=app, key=key, value=stored)
     )
     return await _render_org_overrides(request, session, app, group)
 
@@ -463,7 +471,7 @@ async def delete_org_override(
     repo = AppSettingRepository(session)
     await repo.delete_org_override(app, key, org_id)
     await session.commit()
-    await events.emit(OrgOverrideRemoved(actor_id=current_user.id, org_id=org_id, app=app, key=key))
+    await events.emit(OrgOverrideRemoved(user_id=current_user.id, org_id=org_id, app=app, key=key))
     return await _render_org_overrides(request, session, app, group)
 
 
@@ -489,7 +497,7 @@ async def update_setting(
     # write, all on this session, committed together.
     await events.emit(
         SettingsChanged(
-            actor_id=current_user.id, app_name=app, key=key, value=stored, values=values
+            user_id=current_user.id, app_name=app, key=key, value=stored, values=values
         ),
         session=session,
     )

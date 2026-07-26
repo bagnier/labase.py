@@ -295,7 +295,9 @@ async def create_event(
         description=str(body.get("description", "")),
     )
     await events.emit(
-        CalendarCreated(actor_id=current_user.id, org_id=org_id, entity_id=event.id, label=title)
+        CalendarCreated(
+            user_id=current_user.id, org_id=org_id, entity_id=event.id, entity_name=title
+        )
     )
     if wants_json(request):
         return JSONResponse(
@@ -394,10 +396,10 @@ async def update_event(
     await repo.save(event)
     await events.emit(
         CalendarUpdated(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
             entity_id=event.id,
-            label=event.title,
+            entity_name=event.title,
         )
     )
     if wants_json(request):
@@ -419,10 +421,10 @@ async def delete_event(
         await repo.delete(event)
         await events.emit(
             CalendarDeleted(
-                actor_id=current_user.id,
+                user_id=current_user.id,
                 org_id=org_id,
                 entity_id=event_id,
-                label=event.title,
+                entity_name=event.title,
             )
         )
     return delete_response(request, htmx_redirect_url=f"/{org.handle}/calendar")

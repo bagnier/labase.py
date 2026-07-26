@@ -38,7 +38,7 @@ async def insert_business_event(
     user_id: uuid.UUID | None,
     ip: str | None,
     org_id: uuid.UUID | None,
-    entity_id: str | None = None,
+    entity_id: uuid.UUID | None = None,
     request_id: str | None,
     payload: dict[str, Any] | None,
 ) -> None:
@@ -49,9 +49,9 @@ async def insert_business_event(
     async def write(s: AsyncSession) -> None:
         repo = EventRepository(s)
         stored = dict(payload) if payload else {}
-        handle = await repo.actor_handle(user_id)
+        handle = await repo.user_handle(user_id)
         if handle:
-            stored["actor"] = handle  # denormalized 'who' — RLS hides co-members' profiles
+            stored["actor_name"] = handle  # denormalized 'who' — RLS hides co-members' profiles
         await repo.save(
             BusinessEventLog(
                 kind=kind,

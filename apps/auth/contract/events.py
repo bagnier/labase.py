@@ -33,7 +33,7 @@ class UserDeleted(BusinessEvent):
 
     Distinct from the audit events (:class:`AccountDeleted` / :class:`AccountDeletedByAdmin`): this
     is the lifecycle trigger the forget consumers key on. The removed user is ``entity_id``;
-    ``actor_id`` is whoever triggered it (the user themselves, or an admin). No live session — the
+    ``user_id`` is whoever triggered it (the user themselves, or an admin). No live session — the
     user is gone, so cleanup runs asynchronously on the admin session, by user id (RLS-as-user is
     impossible)."""
 
@@ -167,14 +167,14 @@ class TwoFactorEnabled(AuthEvent):
 class ImpersonationStarted(AuthEvent):
     kind: ClassVar[str] = "auth.impersonation_started"
     level: ClassVar[str] = "warning"
-    target_email: str | None = None
+    # the impersonated user: entity_id resolved from the email, entity_name = the email
 
 
 @dataclass(frozen=True, kw_only=True)
 class ImpersonationStopped(AuthEvent):
     kind: ClassVar[str] = "auth.impersonation_stopped"
     level: ClassVar[str] = "warning"
-    target_email: str | None = None
+    # the impersonated user: entity_id = their id, entity_name = the email
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -199,18 +199,15 @@ class AccountsEvent(BusinessEvent):
 class AccountDisabled(AccountsEvent):
     kind: ClassVar[str] = "accounts.disabled"
     level: ClassVar[str] = "warning"
-    target_user_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class AccountEnabled(AccountsEvent):
     kind: ClassVar[str] = "accounts.enabled"
     level: ClassVar[str] = "warning"
-    target_user_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class AccountDeletedByAdmin(AccountsEvent):
     kind: ClassVar[str] = "accounts.deleted"
     level: ClassVar[str] = "warning"
-    target_user_id: str | None = None

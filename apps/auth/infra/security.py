@@ -161,7 +161,7 @@ async def get_current_admin(
     plain 404 — a 403 would confirm the protected surface exists.
     """
     if not user.is_admin:
-        await events.emit(ForbiddenAdminAccess(actor_id=user.id, path=request.url.path))
+        await events.emit(ForbiddenAdminAccess(user_id=user.id, path=request.url.path))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return user
 

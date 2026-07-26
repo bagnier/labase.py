@@ -53,9 +53,9 @@ def activity_entries(
         payload = r.payload or {}
         entries.append(
             {
-                "who": payload.get("actor") if show_actor else None,
+                "who": payload.get("actor_name") if show_actor else None,
                 "label": _activity_label(r.kind),
-                "detail": payload.get("label"),
+                "detail": payload.get("entity_name"),
                 "app": r.kind.split(".", 1)[0],
                 "icon": r.icon or _FALLBACK_ICON,
                 "level": r.level,

@@ -1,11 +1,13 @@
 """Correlating the unified log by the concerned entity — every event of one todo/page/file."""
 
+import uuid
+
 from apps.shared.events.repository import insert_business_event
 
 _ADMIN = "entity-corr@example.com"
 
 
-def _seed(kind: str, entity_id: str):
+def _seed(kind: str, entity_id: uuid.UUID):
     return insert_business_event(
         kind=kind,
         level="info",
@@ -20,12 +22,13 @@ def _seed(kind: str, entity_id: str):
 
 def test_logs_filter_by_entity_keeps_only_that_entitys_events(driver):
     driver.sign_in_as_admin(_ADMIN)
-    driver.run(_seed("todo.created", "todo-1"))
-    driver.run(_seed("todo.ticked", "todo-1"))
-    driver.run(_seed("calendar.event_created", "cal-9"))
+    todo, other = uuid.uuid7(), uuid.uuid7()  # entity_id is a uuid pk (weak, table-agnostic FK)
+    driver.run(_seed("todo.created", todo))
+    driver.run(_seed("todo.ticked", todo))
+    driver.run(_seed("calendar.event_created", other))
 
     body = (
-        driver.client().get("/console/logs?entity_id=todo-1", headers={"accept": "text/html"}).text
+        driver.client().get(f"/console/logs?entity_id={todo}", headers={"accept": "text/html"}).text
     )
 
     assert "todo.created" in body  # the concerned entity's events…

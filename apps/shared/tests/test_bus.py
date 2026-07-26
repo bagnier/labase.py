@@ -129,7 +129,7 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
     events.on(_Ticked, handler, name="counter", app="test_bus", idempotent=True)
     wrapper = _handlers["evt:test_bus.ticked:counter"]
     payload = {
-        "actor_id": str(uuid.uuid7()),
+        "user_id": str(uuid.uuid7()),
         "org_id": str(uuid.uuid7()),
         "label": "Buy milk",
         "event_id": str(uuid.uuid7()),

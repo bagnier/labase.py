@@ -85,7 +85,7 @@ class EventBus:
                 await EventRepository(own).record(event)
                 await own.commit()
         except Exception:
-            log.warning("business_event.write_failed", kind=event.kind, user_id=event.actor_id)
+            log.warning("business_event.write_failed", kind=event.kind, user_id=event.user_id)
 
     def on(
         self,

@@ -199,6 +199,7 @@ def _business_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     kwargs = _event_kwargs(flt, limit)
     kwargs["org_id"] = uuid.UUID(flt.org_id) if flt.org_id else None
     kwargs["user_id"] = uuid.UUID(flt.user_id) if flt.user_id else None
+    kwargs["entity_id"] = uuid.UUID(flt.entity_id) if flt.entity_id else None
     return kwargs
 
 
@@ -240,7 +241,7 @@ def _from_event(row: BusinessEventLog) -> LogEntry:
         event=row.kind,
         org_id=str(row.org_id) if row.org_id else None,
         user_id=str(row.user_id) if row.user_id else None,
-        entity_id=row.entity_id,
+        entity_id=str(row.entity_id) if row.entity_id else None,
         request_id=row.request_id,
         payload=row.payload or {},
     )

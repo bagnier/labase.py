@@ -20,9 +20,6 @@ class PageEvent(BusinessEvent):
     # re-slug, so the logs viewer's per-entity filter keeps a renamed page's timeline together.
     # ``slug`` rides in the payload for display and for resolving the deep link to the current URL.
     slug: str | None = None
-    # Every concrete page event is an EntityCreated/Updated/Deleted (all of which carry ``label``);
-    # declaring it on the shared base too lets a ``type[PageEvent]`` handler pass the page title.
-    label: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

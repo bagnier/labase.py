@@ -171,7 +171,7 @@ class SettingsChanged(BusinessEvent):
     """A server-wide setting of ``app_name`` was edited in the console.
 
     One fact, two faces: it is **persisted** on the trail as the audit record of who changed what
-    (``actor_id`` + ``key``/``value``, the platform peer of the per-org override events), *and*
+    (``user_id`` + ``key``/``value``, the platform peer of the per-org override events), *and*
     it drives cross-instance **propagation** — it carries the full fresh ``values`` so each app's
     :meth:`AppSettings.reload` (subscribed via ``spread``) re-points its in-memory handle. Generic:
     the console emits it knowing nothing of what the keys mean; each app filters on its own id.

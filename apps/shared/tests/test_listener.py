@@ -66,7 +66,7 @@ async def _noop(session, event) -> None:
     return None
 
 
-async def _seed(actor: uuid.UUID, *, label: str = "Hi", entity_id: str = "e1") -> None:
+async def _seed(actor: uuid.UUID, *, label: str = "Hi", entity_id: uuid.UUID | None = None) -> None:
     await insert_business_event(
         kind="test_tailer.happened",
         level="info",
@@ -119,8 +119,8 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
         seen.append(event)
 
     events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
-    actor = uuid.uuid7()
-    await _seed(actor, label="Ship it", entity_id="e7")
+    actor, eid = uuid.uuid7(), uuid.uuid7()
+    await _seed(actor, label="Ship it", entity_id=eid)
 
     factory = db.admin_session_factory()
     await EventListener(0, session_factory=factory).tick()
@@ -131,8 +131,8 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
     assert len(seen) == 1
     event = seen[0]
     assert isinstance(event, _TailEvent)
-    assert event.actor_id == actor
-    assert event.entity_id == "e7"
+    assert event.user_id == actor
+    assert event.entity_id == eid
     assert event.label == "Ship it"
 
 

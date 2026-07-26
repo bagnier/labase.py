@@ -2,8 +2,8 @@
 
 ``IssueOpened``/``IssueRegressed`` are the alerting signals (subscribers react without knowing the
 emitter); as :class:`~apps.shared.events.BusinessEvent` subclasses they also land on the shared
-trail — server-wide, so ``actor_id``/``org_id`` stay ``None`` (console-only rows). A human
-resolving/reopening an issue is ``IssueStatusChanged``, carrying the acting admin as ``actor_id``.
+trail — server-wide, so ``user_id``/``org_id`` stay ``None`` (console-only rows). A human
+resolving/reopening an issue is ``IssueStatusChanged``, carrying the acting admin as ``user_id``.
 """
 
 import uuid

@@ -113,9 +113,9 @@ async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> N
     # Durable consumer of UserCreated; runs on the GoTrue admin API, not ``session``.
     # UserCreated is an immutable fact: the actor may have self-deleted between emit and this
     # delivery, so promoting a vanished user is a clean no-op (GoTrue 404), not a parked failure.
-    if await count_server_admins() != 0 or event.actor_id is None:
+    if await count_server_admins() != 0 or event.user_id is None:
         return
     try:
-        await set_server_admin(event.actor_id, True)
+        await set_server_admin(event.user_id, True)
     except AuthApiError:
-        log.info("bootstrap_first_admin.actor_gone", user_id=event.actor_id)
+        log.info("bootstrap_first_admin.actor_gone", user_id=event.user_id)

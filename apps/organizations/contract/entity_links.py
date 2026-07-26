@@ -7,6 +7,7 @@ Owned here because ``organizations`` owns the org-handle route namespace (:data:
 templates are data, so this pulls in no cross-app imports.
 """
 
+import uuid
 from urllib.parse import quote
 
 # app segment → org-scoped route template ({handle}, {id} = entity_id, always a uuid pk). Extend
@@ -22,7 +23,7 @@ _ENTITY_ROUTES = {
 }
 
 
-def entity_url(kind: str, entity_id: str | None, org_handle: str | None) -> str | None:
+def entity_url(kind: str, entity_id: uuid.UUID | None, org_handle: str | None) -> str | None:
     """The member page for a business event's entity, or ``None`` when the app has no detail route
     (or the row lacks the entity/handle needed to build one)."""
     if not entity_id or not org_handle:
@@ -30,4 +31,4 @@ def entity_url(kind: str, entity_id: str | None, org_handle: str | None) -> str 
     template = _ENTITY_ROUTES.get(kind.split(".", 1)[0])
     if not template:
         return None
-    return template.format(handle=org_handle, id=quote(entity_id, safe=""))
+    return template.format(handle=org_handle, id=quote(str(entity_id), safe=""))

@@ -165,10 +165,10 @@ async def upload_file(
     )
     await events.emit(
         FileUploaded(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
             entity_id=org_file.id,
-            label=org_file.filename,
+            entity_name=org_file.filename,
         )
     )
 
@@ -224,10 +224,10 @@ async def delete_file(
     await repo.delete(org_file)
     await events.emit(
         FileDeleted(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
             entity_id=file_id,
-            label=org_file.filename,
+            entity_name=org_file.filename,
         )
     )
 
@@ -271,10 +271,10 @@ async def rename_file(
     await repo.rename(org_file, safe_name, new_path)
     await events.emit(
         FileRenamed(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
             entity_id=file_id,
-            label=safe_name,
+            entity_name=safe_name,
             old_filename=old_filename,
             new_filename=safe_name,
         )
@@ -296,7 +296,7 @@ async def generate_share_link(
     token = await repo.add_share_token(file_id)
     await events.emit(
         FileShareLinkCreated(
-            actor_id=current_user.id,
+            user_id=current_user.id,
             org_id=org_id,
             entity_id=file_id,
             token=token.token,
