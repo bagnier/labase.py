@@ -23,7 +23,7 @@ import contextlib
 import json
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, TypedDict, cast
 
 import structlog
 from sqlalchemy import text
@@ -40,6 +40,20 @@ _handlers: dict[str, TaskHandler] = {}
 
 _RETRY_BACKOFF_SECONDS = 60
 _VISIBILITY_TIMEOUT_SECONDS = 300  # a crashed worker's claim expires after this
+
+
+class ClaimedTask(TypedDict):
+    """A claimed ``task_queue`` row — exactly ``_CLAIM``'s ``RETURNING`` columns. ``payload`` is
+    left ``Any``: the jsonb decodes to a dict, but a replayed row can arrive as its JSON string,
+    which ``_payload_dict`` normalizes."""
+
+    id: uuid.UUID
+    topic: str
+    payload: Any
+    user_id: uuid.UUID | None
+    recurring_seconds: int | None
+    attempts: int
+    max_attempts: int
 
 
 def register_task_handler(topic: str, handler: TaskHandler) -> None:
@@ -89,7 +103,7 @@ async def ensure_scheduled(topic: str, every_seconds: int) -> None:
         await session.commit()
 
 
-def _payload_dict(task: dict[str, Any]) -> dict[str, Any]:
+def _payload_dict(task: ClaimedTask) -> dict[str, Any]:
     payload = task["payload"]
     return payload if isinstance(payload, dict) else json.loads(payload)
 
@@ -162,10 +176,10 @@ class TaskWorker:
             rows = (await session.execute(_CLAIM, {"batch": self._batch})).mappings().all()
             await session.commit()
         for row in rows:
-            await self._process(dict(row))
+            await self._process(cast(ClaimedTask, dict(row)))
         return len(rows)
 
-    async def _process(self, task: dict[str, Any]) -> None:
+    async def _process(self, task: ClaimedTask) -> None:
         handler = _handlers.get(task["topic"])
         if handler is None:
             await self._fail(task, "no handler registered")
@@ -184,7 +198,7 @@ class TaskWorker:
             log.info("queue.task_done", topic=task["topic"], task_id=task["id"])
 
     async def _run_handler(
-        self, handler: TaskHandler, payload: dict[str, Any], user_id: Any
+        self, handler: TaskHandler, payload: dict[str, Any], user_id: uuid.UUID | None
     ) -> None:
         if user_id is None:
             async with self._admin_session() as session:
@@ -200,8 +214,8 @@ class TaskWorker:
             finally:
                 await clear_rls_context(session)
 
-    async def _complete(self, task: dict[str, Any]) -> None:
-        statements = [
+    async def _complete(self, task: ClaimedTask) -> None:
+        statements: list[tuple[Any, dict[str, Any]]] = [
             (
                 text("UPDATE task_queue SET done_at = now(), locked_at = NULL WHERE id = :id"),
                 {"id": task["id"]},
@@ -228,7 +242,7 @@ class TaskWorker:
             )
         await self._admin_exec(*statements)
 
-    async def _retry(self, task: dict[str, Any], error: str) -> None:
+    async def _retry(self, task: ClaimedTask, error: str) -> None:
         await self._admin_exec(
             (
                 text(
@@ -239,7 +253,7 @@ class TaskWorker:
             )
         )
 
-    async def _fail(self, task: dict[str, Any], error: str) -> None:
+    async def _fail(self, task: ClaimedTask, error: str) -> None:
         log.error("queue.task_parked", topic=task["topic"], task_id=task["id"], error=error)
         await self._admin_exec(
             (

@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
-from apps.shared.events.repository import EventRepository
+from apps.shared.events.repository import EventRepository, TrailRow
 from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
@@ -36,7 +36,7 @@ log = structlog.get_logger("labase.shared.listener")
 NOTIFY_CHANNEL = "business_event"
 
 
-def _task_payload(row: dict[str, Any]) -> dict[str, Any]:
+def _task_payload(row: TrailRow) -> dict[str, Any]:
     """Rebuild the async-consumer task payload from a business_events row: the event's own fields
     plus the row id as the dedup ``event_id``. Drops the denormalized ``actor_name`` handle (not a
     field)."""
@@ -98,7 +98,7 @@ class EventListener:
         # LIMIT — a single tick applies all of it — so it never needs another pass.
         return len(rows)
 
-    async def _read_spread(self, repo: EventRepository) -> list[dict[str, Any]]:
+    async def _read_spread(self, repo: EventRepository) -> list[TrailRow]:
         """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
         kinds = self._bus.registry.spread_kinds()
         if not kinds:
@@ -107,7 +107,7 @@ class EventListener:
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
         return await repo.scan_spread(cursor, kinds)
 
-    async def _apply_spread(self, row: dict[str, Any]) -> None:
+    async def _apply_spread(self, row: TrailRow) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
         cursor. Handlers are idempotent (a reload is a plain assignment), so a failure is logged and
         skipped rather than blocking the cursor."""
@@ -120,14 +120,14 @@ class EventListener:
                     log.warning("tailer.spread_handler_failed", kind=row["kind"])
         self._spread_cursor = row["id"]
 
-    def _reconstruct(self, row: dict[str, Any]) -> BusinessEvent | None:
+    def _reconstruct(self, row: TrailRow) -> BusinessEvent | None:
         """Rebuild the typed event from a business_events row (its own fields + scoping columns)."""
         event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return None
         return event_type.from_payload(_task_payload(row))
 
-    async def _fan_out(self, session: AsyncSession, row: dict[str, Any]) -> None:
+    async def _fan_out(self, session: AsyncSession, row: TrailRow) -> None:
         event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return  # unknown kind (e.g. a legacy row) — nothing to deliver; still marked dispatched

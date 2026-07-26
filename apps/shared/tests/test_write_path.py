@@ -58,10 +58,10 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
     uid = uuid.uuid7()
     with (
         patch(
-            "apps.shared.events.repository.admin_session_factory",
+            "apps.shared.events.repository._write.admin_session_factory",
             side_effect=RuntimeError("db down"),
         ),
-        patch("apps.shared.events.repository.log") as log,
+        patch("apps.shared.events.repository._write.log") as log,
     ):
         await insert_business_event(
             kind="auth.signed_in",

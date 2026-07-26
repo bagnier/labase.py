@@ -6,14 +6,30 @@ reads best as SQL, and it touches columns/tables kept off the fact model (``disp
 """
 
 import uuid
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from sqlalchemy import text
 
 from apps.shared.events.repository._base import _EventSQL
 
+
+class TrailRow(TypedDict):
+    """The subset of a ``business_events`` row the delivery path reads — exactly what ``_CLAIM``
+    and ``_SPREAD_SCAN`` both select. The listener rebuilds the typed event from it (``kind`` +
+    scoping columns + the JSON ``payload``); ``id`` doubles as the dispatch cursor and dedup key."""
+
+    id: uuid.UUID
+    kind: str
+    user_id: uuid.UUID | None
+    org_id: uuid.UUID | None
+    entity_id: uuid.UUID | None
+    payload: dict[str, Any] | None
+
+
+# Both scans select exactly TrailRow's columns — the listener never reads level/icon off a claimed
+# row (they live on the reconstructed event), so they stay out of the fetch.
 _CLAIM = text(
-    "SELECT id, kind, level, icon, user_id, org_id, entity_id, payload "
+    "SELECT id, kind, user_id, org_id, entity_id, payload "
     "FROM business_events "
     "WHERE dispatched_at IS NULL "
     "ORDER BY id "
@@ -30,11 +46,11 @@ _SPREAD_SCAN = text(
 
 
 class _DispatchesEvents(_EventSQL):
-    async def claim_undispatched(self, batch: int) -> list[dict[str, Any]]:
+    async def claim_undispatched(self, batch: int) -> list[TrailRow]:
         """``SKIP LOCKED`` so N instances never double-claim; the caller marks them dispatched in
         the same transaction."""
         result = await self.session.execute(_CLAIM, {"batch": batch})
-        return [dict(r) for r in result.mappings()]
+        return [cast(TrailRow, dict(r)) for r in result.mappings()]
 
     async def mark_dispatched(self, ids: list[uuid.UUID]) -> None:
         await self.session.execute(
@@ -42,11 +58,11 @@ class _DispatchesEvents(_EventSQL):
             {"ids": ids},
         )
 
-    async def scan_spread(self, cursor: uuid.UUID, kinds: list[str]) -> list[dict[str, Any]]:
+    async def scan_spread(self, cursor: uuid.UUID, kinds: list[str]) -> list[TrailRow]:
         """No lock, no dispatch mark — a ``spread`` handler runs on *every* instance, each replaying
         off its own cursor."""
         result = await self.session.execute(_SPREAD_SCAN, {"cursor": cursor, "kinds": kinds})
-        return [dict(r) for r in result.mappings()]
+        return [cast(TrailRow, dict(r)) for r in result.mappings()]
 
     async def already_consumed(self, topic: str, event_id: uuid.UUID | str) -> bool:
         """Insert-or-nothing against the ``consumed`` ledger — the idempotency substrate for

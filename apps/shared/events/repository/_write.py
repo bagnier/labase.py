@@ -1,15 +1,21 @@
-"""Write path — append a fact, and the single ``event → row`` mapping (no column dict between)."""
+"""Write path — append a fact (typed, or from explicit columns) and the single ``event → row``
+mapping (no column dict between)."""
 
 import uuid
 from dataclasses import fields, is_dataclass
 from typing import Any
 
+import structlog
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.contextvars import get_contextvars
 
 from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository._base import _EventSQL
 from apps.shared.events.types import BusinessEvent
+from apps.shared.persistence.database import admin_session_factory
+
+log = structlog.get_logger("labase.business_events")
 
 
 class _WritesEvents(_EventSQL):
@@ -76,3 +82,52 @@ def event_to_log(event: BusinessEvent, *, actor_name: str | None = None) -> Busi
         request_id=ctx.get("request_id"),
         payload=payload or None,
     )
+
+
+async def insert_business_event(
+    *,
+    session: AsyncSession | None = None,
+    kind: str,
+    level: str,
+    icon: str | None = None,
+    user_id: uuid.UUID | None,
+    ip: str | None,
+    org_id: uuid.UUID | None,
+    entity_id: uuid.UUID | None = None,
+    request_id: str | None,
+    payload: dict[str, Any] | None,
+) -> None:
+    """Write a row from explicit columns — the seeding / non-event writer. With a ``session`` the
+    row rides that transaction (atomic); without one, a best-effort admin write that swallows
+    failures (seeders, tests). Only the write mixin is needed, so it binds ``_WritesEvents``
+    directly rather than the fully composed repository."""
+
+    async def write(s: AsyncSession) -> None:
+        repo = _WritesEvents(s)
+        stored = dict(payload) if payload else {}
+        handle = await repo.user_handle(user_id)
+        if handle:
+            stored["actor_name"] = handle  # denormalized 'who' — RLS hides co-members' profiles
+        await repo.save(
+            BusinessEventLog(
+                kind=kind,
+                level=level,
+                icon=icon,
+                user_id=user_id,
+                ip=ip,
+                org_id=org_id,
+                entity_id=entity_id,
+                request_id=request_id,
+                payload=stored or None,
+            )
+        )
+
+    if session is not None:
+        await write(session)
+        return
+    try:
+        async with admin_session_factory()() as own:
+            await write(own)
+            await own.commit()
+    except Exception:
+        log.warning("business_event.write_failed", kind=kind, user_id=user_id)
