@@ -6,15 +6,44 @@ the raw ``kind``/payload never reach a member; only projected, safe fields do.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any
+from itertools import groupby
 
-from apps.shared import clock
 from apps.shared.events.models import BusinessEventLog
 
 # ── Activity feed — humanize rows for the profile/dashboard timeline ──────────────────────────
 
 _FALLBACK_ICON = "circle"  # for legacy rows written before events carried an icon
+
+
+@dataclass(frozen=True, slots=True)
+class ActivityEntry:
+    """One humanized trail row for the timeline — *who did what to which, when*. Only safe,
+    projected fields; the raw ``kind`` and the rest of the payload never reach here. Templates
+    read it by attribute (``e.who``, ``e.icon``)."""
+
+    who: str | None  # the actor's handle, or None on the viewer's own trail
+    label: str  # the humanized verb (``Created``), never the dotted kind
+    detail: str | None  # the subject's own name (a todo title, a page slug)
+    app: str  # the owning app prefix, for a subtle source line
+    icon: str  # the phosphor name the event owns
+    level: str  # ``info`` / ``warning`` / ``error`` — tints the timeline node
+    ts: datetime  # the exact instant, shown as clock time under the day header
+    href: str | None  # a deep link to the concerned entity, when the surface supplies one
+
+
+@dataclass(frozen=True, slots=True)
+class DaySection:
+    """A day's worth of feed entries under a ``Today`` / ``Yesterday`` / ``Mon, Jul 13`` header."""
+
+    date: date
+    label: str
+    entries: list[ActivityEntry]
+
+    @property
+    def count(self) -> int:
+        return len(self.entries)
 
 
 def _activity_label(kind: str) -> str:
@@ -23,77 +52,105 @@ def _activity_label(kind: str) -> str:
     return kind.split(".", 1)[-1].replace("_", " ").capitalize()
 
 
-def ago(ts: datetime, now: datetime) -> str:
-    """A compact relative moment (`3h ago`, `Mar 4`) — a feed reads better in elapsed time; the
-    exact instant stays on the row's ``title``/``datetime``."""
-    secs = max(0.0, (now - ts).total_seconds())
-    if secs < 60:
-        return "just now"
-    if secs < 3600:
-        return f"{int(secs // 60)}m ago"
-    if secs < 86400:
-        return f"{int(secs // 3600)}h ago"
-    if secs < 604800:
-        return f"{int(secs // 86400)}d ago"
-    return ts.strftime("%b %-d")
-
-
 def activity_entries(
     rows: list[BusinessEventLog],
     *,
     show_actor: bool = True,
     link: Callable[[BusinessEventLog], str | None] | None = None,
-) -> list[dict[str, Any]]:
+) -> list[ActivityEntry]:
     """Project rows to *who did what to which, when* — only safe fields, never the raw ``kind`` or
     the rest of the payload. ``show_actor`` drops *who* on the profile's own trail (always the
     viewer); ``link`` lets the surface supply a deep link."""
-    now = clock.now()
     entries = []
     for r in rows:
         payload = r.payload or {}
         entries.append(
-            {
-                "who": payload.get("actor_name") if show_actor else None,
-                "label": _activity_label(r.kind),
-                "detail": payload.get("entity_name"),
-                "app": r.kind.split(".", 1)[0],
-                "icon": r.icon or _FALLBACK_ICON,
-                "level": r.level,
-                "ts": r.created_at,
-                "ago": ago(r.created_at, now),
-                "href": link(r) if link else None,
-            }
+            ActivityEntry(
+                who=payload.get("actor_name") if show_actor else None,
+                label=_activity_label(r.kind),
+                detail=payload.get("entity_name"),
+                app=r.kind.split(".", 1)[0],
+                icon=r.icon or _FALLBACK_ICON,
+                level=r.level,
+                ts=r.created_at,
+                href=link(r) if link else None,
+            )
         )
     return entries
 
 
-def group_activity_by_day(entries: list[dict[str, Any]], *, now: datetime) -> list[dict[str, Any]]:
+def _day_label(d: date, today: date) -> str:
+    if d == today:
+        return "Today"
+    if d == today - timedelta(days=1):
+        return "Yesterday"
+    return d.strftime("%a, %b %-d")
+
+
+def group_activity_by_day(entries: list[ActivityEntry], *, now: datetime) -> list[DaySection]:
     """Group humanized entries (newest-first) into ``Today`` / ``Yesterday`` / ``Mon, Jul 13``
-    day sections, each with its count."""
+    day sections, each carrying its count."""
     today = now.date()
-    groups: list[dict[str, Any]] = []
-    current: dict[str, Any] | None = None
-    for e in entries:
-        d = e["ts"].date()
-        if current is None or current["date"] != d:
-            if d == today:
-                label = "Today"
-            elif d == today - timedelta(days=1):
-                label = "Yesterday"
-            else:
-                label = e["ts"].strftime("%a, %b %-d")
-            current = {"date": d, "label": label, "entries": []}
-            groups.append(current)
-        current["entries"].append(e)
-    for g in groups:
-        g["count"] = len(g["entries"])
-    return groups
+    sections: list[DaySection] = []
+    for entry in entries:
+        d = entry.ts.date()
+        if not sections or sections[-1].date != d:
+            sections.append(DaySection(date=d, label=_day_label(d, today), entries=[]))
+        sections[-1].entries.append(entry)
+    return sections
 
 
 # ── Contribution calendar & headline stats ──────────────────────────────────────────────────
 
 
-def activity_stats(counts: dict[date, int], *, now: datetime) -> dict[str, int]:
+@dataclass(frozen=True, slots=True)
+class ActivityStats:
+    """Headline numbers for the activity view, computed from per-day counts."""
+
+    total: int
+    active_days: int
+    longest_streak: int  # longest run of consecutive active days
+    this_week: int
+    week_delta: int  # this week minus the one before
+
+
+@dataclass(frozen=True, slots=True)
+class HeatmapDay:
+    """One cell in the contribution grid — a real day (its ``level``/``count``/``title``) or an
+    out-of-range filler (``empty``) that renders as a blank cell."""
+
+    empty: bool = False
+    level: int = 0  # 0–4 intensity, from quartiles of the non-zero days
+    title: str = ""  # the cell's accessible label / tooltip (carries the day's count)
+
+
+@dataclass(frozen=True, slots=True)
+class HeatmapWeek:
+    """A column of the grid — seven ``HeatmapDay`` cells, Mon→Sun."""
+
+    days: list[HeatmapDay]
+
+
+@dataclass(frozen=True, slots=True)
+class MonthHeader:
+    """A colspan segment over the week-columns of one month; ``label`` is blank for a short run
+    (fewer than three weeks) so it never widens a cell."""
+
+    label: str
+    span: int
+
+
+@dataclass(frozen=True, slots=True)
+class HeatmapCalendar:
+    """A GitHub-style contribution grid, fully computed for the macro to iterate."""
+
+    weeks: list[HeatmapWeek]
+    weekday_labels: list[str]
+    month_headers: list[MonthHeader]
+    range_label: str
+
+
+def activity_stats(counts: dict[date, int], *, now: datetime) -> ActivityStats:
     """Headline numbers for the activity view, from per-day counts — totals, active days, the
     longest consecutive-day streak, and this week vs the one before."""
     today = now.date()
@@ -108,13 +165,13 @@ def activity_stats(counts: dict[date, int], *, now: datetime) -> dict[str, int]:
         prev = d
     this_week = sum(counts.get(today - timedelta(days=i), 0) for i in range(7))
     last_week = sum(counts.get(today - timedelta(days=i), 0) for i in range(7, 14))
-    return {
-        "total": total,
-        "active_days": active_days,
-        "longest_streak": longest,
-        "this_week": this_week,
-        "week_delta": this_week - last_week,
-    }
+    return ActivityStats(
+        total=total,
+        active_days=active_days,
+        longest_streak=longest,
+        this_week=this_week,
+        week_delta=this_week - last_week,
+    )
 
 
 def heatmap_calendar(
@@ -124,7 +181,7 @@ def heatmap_calendar(
     since: date | datetime | None = None,
     min_weeks: int = 5,
     max_weeks: int = 53,
-) -> dict[str, Any]:
+) -> HeatmapCalendar:
     """A GitHub-style contribution grid, fully computed for the macro to iterate.
 
     Intensity is a 0–4 ``level`` from quartiles of the non-zero days, so the ramp adapts to each
@@ -158,14 +215,14 @@ def heatmap_calendar(
         t1, t2, t3 = thresholds
         return 1 if n <= t1 else 2 if n <= t2 else 3 if n <= t3 else 4
 
-    weeks_out: list[dict[str, Any]] = []
     week_starts = [start + timedelta(weeks=w) for w in range(weeks)]
+    weeks_out: list[HeatmapWeek] = []
     for week_start in week_starts:
-        days: list[dict[str, Any]] = []
+        days: list[HeatmapDay] = []
         for i in range(7):
             d = week_start + timedelta(days=i)
             if d > today:
-                days.append({"empty": True})
+                days.append(HeatmapDay(empty=True))
                 continue
             n = counts.get(d, 0)
             moment = d.strftime("%b %-d, %Y")
@@ -174,26 +231,23 @@ def heatmap_calendar(
                 if n
                 else f"No activity on {moment}"
             )
-            days.append({"level": level(n), "count": n, "title": title})
-        weeks_out.append({"days": days})
+            days.append(HeatmapDay(level=level(n), title=title))
+        weeks_out.append(HeatmapWeek(days=days))
 
-    # Month headers as colspan segments (grouped consecutive week-columns sharing a month), so
-    # the label never widens a cell. A segment narrower than 3 weeks stays blank to avoid clutter.
-    headers: list[dict[str, Any]] = []
-    for week_start in week_starts:
-        key = (week_start.year, week_start.month)
-        if headers and headers[-1]["key"] == key:
-            headers[-1]["span"] += 1
-        else:
-            headers.append({"key": key, "span": 1, "abbr": week_start.strftime("%b")})
-    month_headers = [
-        {"label": h["abbr"] if h["span"] >= 3 else "", "span": h["span"]} for h in headers
-    ]
+    # Month headers as colspan segments (consecutive week-columns sharing a month), so the label
+    # never widens a cell. A segment narrower than 3 weeks stays blank to avoid clutter.
+    month_headers: list[MonthHeader] = []
+    for _key, run in groupby(week_starts, key=lambda ws: (ws.year, ws.month)):
+        cols = list(run)
+        span = len(cols)
+        month_headers.append(
+            MonthHeader(label=cols[0].strftime("%b") if span >= 3 else "", span=span)
+        )
 
     # rows are Mon→Sun (week_start is a Monday); every weekday labelled.
-    return {
-        "weeks": weeks_out,
-        "weekday_labels": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        "month_headers": month_headers,
-        "range_label": range_label,
-    }
+    return HeatmapCalendar(
+        weeks=weeks_out,
+        weekday_labels=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        month_headers=month_headers,
+        range_label=range_label,
+    )
