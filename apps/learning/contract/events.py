@@ -19,4 +19,4 @@ class LearningEvent(BusinessEvent):
 @dataclass(frozen=True, kw_only=True)
 class CardReviewed(LearningEvent, EntityUpdated):
     verb: ClassVar[str] = "reviewed"
-    outcome: str | None = None
+    outcome: str

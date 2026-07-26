@@ -80,7 +80,7 @@ def event_to_log(event: BusinessEvent, *, actor_name: str | None = None) -> Busi
         org_id=event.org_id,
         entity_id=event.entity_id,  # the concerned entity's uuid pk, lifted to its own uuid column
         request_id=ctx.get("request_id"),
-        payload=payload or None,
+        payload=payload,
     )
 
 
@@ -89,7 +89,7 @@ async def insert_business_event(
     session: AsyncSession | None = None,
     kind: str,
     level: str,
-    icon: str | None = None,
+    icon: str = "circle",  # the BusinessEvent base default — the trail always shows something
     user_id: uuid.UUID | None,
     ip: str | None,
     org_id: uuid.UUID | None,
@@ -118,7 +118,7 @@ async def insert_business_event(
                 org_id=org_id,
                 entity_id=entity_id,
                 request_id=request_id,
-                payload=stored or None,
+                payload=stored,
             )
         )
 

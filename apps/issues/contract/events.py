@@ -37,4 +37,4 @@ class IssueRegressed(IssueEvent):
 @dataclass(frozen=True, kw_only=True)
 class IssueStatusChanged(IssueEvent, EntityUpdated):
     verb: ClassVar[str] = "status_changed"
-    status: str | None = None
+    status: str

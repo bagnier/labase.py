@@ -19,7 +19,7 @@ class PageEvent(BusinessEvent):
     # The page's stable identity is its uuid pk, carried on the base's ``entity_id`` — it survives a
     # re-slug, so the logs viewer's per-entity filter keeps a renamed page's timeline together.
     # ``slug`` rides in the payload for display and for resolving the deep link to the current URL.
-    slug: str | None = None
+    slug: str
 
 
 @dataclass(frozen=True, kw_only=True)

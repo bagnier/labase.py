@@ -34,14 +34,15 @@ class Page(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
     slug: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(String, default="")
     visibility: Mapped[PageVisibility] = mapped_column(String, default=PageVisibility.draft)
-    # Generated in the DB (see the pages_fulltext migration); read-only for the ORM.
-    search_vector: Mapped[str | None] = mapped_column(
+    # Generated in the DB (see the pages_fulltext migration); read-only for the ORM. Never null:
+    # the expression coalesces both inputs, so an empty page still yields an empty tsvector.
+    search_vector: Mapped[str] = mapped_column(
         TSVECTOR,
         Computed(
             "to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))",
             persisted=True,
         ),
-        nullable=True,
+        nullable=False,
     )
 
 

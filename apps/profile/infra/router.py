@@ -8,7 +8,6 @@ from urllib.parse import urlencode
 
 from fastapi import (
     APIRouter,
-    Cookie,
     Depends,
     HTTPException,
     Request,
@@ -18,7 +17,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.auth.contract.current import CurrentUser, RlsSession
+from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
 from apps.auth.contract.events import (
@@ -410,24 +409,35 @@ async def email_change(
 # the two calls; deletion is a plain form for the no-JS path.
 
 
-def _ensure_passkeys(users_settings: SettingsView, access_token: str | None) -> None:
-    if not users_settings.passkeys_enabled or not access_token:
+def _session_token(current_user: AuthenticatedUser) -> str:
+    """The caller's live GoTrue token — the one `CurrentUser` resolved, refreshed included.
+
+    A principal authenticated by an org API key holds no GoTrue session (`access_token` is empty),
+    and GoTrue's user-scoped endpoints below are meaningless for it: these surfaces answer 404, as
+    they do when the feature is switched off."""
+    if not current_user.access_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return current_user.access_token
 
 
-def _ensure_two_factor(users_settings: SettingsView, access_token: str | None) -> None:
-    if not users_settings.two_factor_enabled or not access_token:
+def _ensure_passkeys(users_settings: SettingsView, current_user: AuthenticatedUser) -> str:
+    if not users_settings.passkeys_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return _session_token(current_user)
+
+
+def _ensure_two_factor(users_settings: SettingsView, current_user: AuthenticatedUser) -> str:
+    if not users_settings.two_factor_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return _session_token(current_user)
 
 
 @router.post("/profile/passkeys/options", response_model=None)
 async def passkey_options(
     current_user: CurrentUser,
     users_settings: UsersSettings,
-    access_token: str | None = Cookie(default=None),
 ) -> JSONResponse:
-    _ensure_passkeys(users_settings, access_token)
-    assert access_token is not None
+    access_token = _ensure_passkeys(users_settings, current_user)
     try:
         return JSONResponse(await passkey_registration_options(access_token))
     except PasskeyError as e:
@@ -439,10 +449,8 @@ async def passkey_verify(
     request: Request,
     current_user: CurrentUser,
     users_settings: UsersSettings,
-    access_token: str | None = Cookie(default=None),
 ) -> JSONResponse:
-    _ensure_passkeys(users_settings, access_token)
-    assert access_token is not None
+    access_token = _ensure_passkeys(users_settings, current_user)
     body = await parse_body(request)
     challenge_id = str(body.get("challenge_id", ""))
     credential = body.get("credential")
@@ -466,10 +474,8 @@ async def passkey_delete(
     session: RlsSession,
     repo: ProfileRepo,
     users_settings: UsersSettings,
-    access_token: str | None = Cookie(default=None),
 ) -> HTMLResponse | JSONResponse | Response:
-    _ensure_passkeys(users_settings, access_token)
-    assert access_token is not None
+    access_token = _ensure_passkeys(users_settings, current_user)
     try:
         await delete_passkey(access_token, passkey_id)
     except PasskeyError as e:
@@ -489,10 +495,8 @@ async def twofa_enroll(
     session: RlsSession,
     repo: ProfileRepo,
     users_settings: UsersSettings,
-    access_token: str | None = Cookie(default=None),
 ) -> HTMLResponse | JSONResponse | RedirectResponse:
-    _ensure_two_factor(users_settings, access_token)
-    assert access_token is not None
+    access_token = _ensure_two_factor(users_settings, current_user)
     try:
         enrollment = await enroll_totp(access_token)
     except TotpError as e:
@@ -527,10 +531,8 @@ async def twofa_verify(
     session: RlsSession,
     repo: ProfileRepo,
     users_settings: UsersSettings,
-    access_token: str | None = Cookie(default=None),
 ) -> HTMLResponse | JSONResponse | RedirectResponse:
-    _ensure_two_factor(users_settings, access_token)
-    assert access_token is not None
+    access_token = _ensure_two_factor(users_settings, current_user)
     body = await parse_body(request)
     factor_id = str(body.get("factor_id", ""))
     code = str(body.get("code", "")).strip()

@@ -110,8 +110,11 @@ class EventListener:
     async def _apply_spread(self, row: TrailRow) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
         cursor. Handlers are idempotent (a reload is a plain assignment), so a failure is logged and
-        skipped rather than blocking the cursor."""
-        event = self._reconstruct(row)
+        skipped rather than blocking the cursor — and so is a row that cannot be rebuilt at all
+        (a field added to the event class after the row was written, a hand-inserted payload).
+        The cursor advances either way: it is a high-water mark, so leaving it on a row we can
+        never process would replay that same row forever and freeze propagation for good."""
+        event = self._reconstruct_safely(row)
         if event is not None:
             for handler in self._bus.registry.spread_handlers_for(event):
                 try:
@@ -126,6 +129,15 @@ class EventListener:
         if event_type is None:
             return None
         return event_type.from_payload(_task_payload(row))
+
+    def _reconstruct_safely(self, row: TrailRow) -> BusinessEvent | None:
+        """:meth:`_reconstruct`, but a payload that no longer fits its event class yields ``None``
+        instead of raising — the caller skips the row rather than stalling on it."""
+        try:
+            return self._reconstruct(row)
+        except Exception:
+            log.warning("tailer.reconstruct_failed", kind=row["kind"], event_id=str(row["id"]))
+            return None
 
     async def _fan_out(self, session: AsyncSession, row: TrailRow) -> None:
         event_type = self._bus.registry.event_class_for(row["kind"])

@@ -48,7 +48,7 @@ class OrgInvitation(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
     token: Mapped[uuid.UUID] = mapped_column(default=uuid.uuid4, unique=True)
-    invited_by: Mapped[uuid.UUID | None]
+    invited_by: Mapped[uuid.UUID]
     status: Mapped[InvitationStatus] = mapped_column(
         SAEnum(InvitationStatus, name="invitation_status", create_type=False),
         nullable=False,

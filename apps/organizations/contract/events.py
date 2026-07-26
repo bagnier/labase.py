@@ -55,7 +55,7 @@ class MemberLeft(OrgEvent):
 @dataclass(frozen=True, kw_only=True)
 class MemberRoleChanged(OrgEvent):
     kind: ClassVar[str] = "organizations.member_role_changed"
-    role: str | None = None
+    role: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -72,7 +72,7 @@ class InvitationSent(OrgEvent):
 @dataclass(frozen=True, kw_only=True)
 class InvitationRevoked(OrgEvent):
     kind: ClassVar[str] = "organizations.invitation_revoked"
-    invitation_id: uuid.UUID | None = None
+    invitation_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -92,4 +92,4 @@ class LastOwnerViolationBlocked(OrgEvent):
 class OwnershipViolation(OrgEvent):
     kind: ClassVar[str] = "organizations.ownership_violation"
     level: ClassVar[str] = "warning"
-    path: str | None = None
+    path: str

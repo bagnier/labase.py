@@ -31,4 +31,4 @@ class AvatarUpdated(ProfileEvent):
 @dataclass(frozen=True, kw_only=True)
 class HandleChanged(ProfileEvent):
     kind: ClassVar[str] = "profile.handle_changed"
-    new_handle: str | None = None
+    new_handle: str

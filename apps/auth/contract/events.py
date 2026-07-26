@@ -53,27 +53,27 @@ class AuthEvent(BusinessEvent):
 class LoginFailed(AuthEvent):
     kind: ClassVar[str] = "auth.login_failed"
     level: ClassVar[str] = "warning"
-    email: str | None = None
+    email: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class RegisterFailed(AuthEvent):
     kind: ClassVar[str] = "auth.register_failed"
     level: ClassVar[str] = "warning"
-    email: str | None = None
+    email: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class MfaFailed(AuthEvent):
     kind: ClassVar[str] = "auth.mfa_failed"
     level: ClassVar[str] = "warning"
-    factor_id: str | None = None
+    factor_id: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class MfaVerified(AuthEvent):
     kind: ClassVar[str] = "auth.mfa_verified"
-    factor_id: str | None = None
+    factor_id: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -101,7 +101,7 @@ class OAuthSignedIn(AuthEvent):
 @dataclass(frozen=True, kw_only=True)
 class ConfirmationResent(AuthEvent):
     kind: ClassVar[str] = "auth.confirmation_resent"
-    email: str | None = None
+    email: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,7 +136,7 @@ class PasswordChanged(AuthEvent):
 @dataclass(frozen=True, kw_only=True)
 class EmailChangeRequested(AuthEvent):
     kind: ClassVar[str] = "auth.email_change_requested"
-    new_email: str | None = None
+    new_email: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -152,7 +152,7 @@ class PasskeyAdded(AuthEvent):
 @dataclass(frozen=True, kw_only=True)
 class PasskeyRemoved(AuthEvent):
     kind: ClassVar[str] = "auth.passkey_removed"
-    passkey_id: str | None = None
+    passkey_id: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -184,7 +184,7 @@ class ForbiddenAdminAccess(AuthEvent):
 
     kind: ClassVar[str] = "auth.forbidden_admin_access"
     level: ClassVar[str] = "warning"
-    path: str | None = None
+    path: str
 
 
 # ── Admin account gating (accounts.*) ────────────────────────────────────────────

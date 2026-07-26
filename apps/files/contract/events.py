@@ -31,8 +31,8 @@ class FileDeleted(FileEvent, EntityDeleted):
 @dataclass(frozen=True, kw_only=True)
 class FileRenamed(FileEvent, EntityUpdated):
     verb: ClassVar[str] = "renamed"
-    old_filename: str | None = None
-    new_filename: str | None = None
+    old_filename: str
+    new_filename: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,7 +46,7 @@ class FileShareLinkRejected(FileEvent):
     kind: ClassVar[str] = "files.share_link_rejected"
     level: ClassVar[str] = "warning"
     token: uuid.UUID | None = None
-    reason: str | None = None
+    reason: str
 
 
 @dataclass(frozen=True, kw_only=True)

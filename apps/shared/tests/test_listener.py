@@ -28,6 +28,14 @@ class _SpreadEvent(BusinessEvent):
     value: str | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class _StrictSpreadEvent(BusinessEvent):
+    """A spread event with a *required* payload field: a stored row missing it cannot be rebuilt."""
+
+    kind = "test_tailer.strict_spread"
+    value: str
+
+
 def _clear_engine_caches() -> None:
     db._user_engine.cache_clear()
     db._admin_engine.cache_clear()
@@ -202,6 +210,39 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
     assert len(seen) == 1
     assert isinstance(seen[0], _SpreadEvent)
     assert seen[0].value == "on"
+
+
+@pytest.mark.asyncio
+async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_advances(iso):
+    # A row whose payload can't rebuild its typed event (a field added to the class after the row
+    # was written, a hand-inserted row) must not wedge the spread path: without advancing the
+    # cursor, every later tick would replay the same poison row and no fact would ever propagate
+    # again. It is logged, skipped, and the healthy fact behind it still runs.
+    bus = EventBus(EventRegistry())
+    seen: list[_StrictSpreadEvent] = []
+
+    async def apply(event: _StrictSpreadEvent) -> None:
+        seen.append(event)
+
+    bus.spread(_StrictSpreadEvent, apply)
+    for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy row behind it
+        await insert_business_event(
+            kind="test_tailer.strict_spread",
+            level="info",
+            user_id=None,
+            ip=None,
+            org_id=None,
+            entity_id=None,
+            request_id=None,
+            payload=payload,
+        )
+
+    listener = EventListener(0, bus=bus)
+    await listener.tick()
+
+    assert [e.value for e in seen] == ["on"]
+    await listener.tick()  # cursor moved past both rows: nothing replays
+    assert [e.value for e in seen] == ["on"]
 
 
 @pytest.mark.asyncio

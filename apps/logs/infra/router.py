@@ -3,11 +3,12 @@ import io
 import json
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any, ClassVar
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.admin import resolve_user_emails
@@ -107,41 +108,72 @@ def _activity_chart(
     )
 
 
-def _bound(value: str | None) -> datetime | None:
-    """Parse a ``<input type="datetime-local">`` value (or a bare date), treated as UTC."""
+def _bound(value: str) -> datetime | None:
+    """Parse a ``<input type="datetime-local">`` value (or a bare date), treated as UTC. An empty
+    field is no bound at all — the one thing a form can say for "I left this alone"."""
     if not value:
         return None
     return datetime.fromisoformat(value).replace(tzinfo=UTC)
 
 
-def _filter(
-    source: str | None,
-    app: str | None,
-    level: str | None,
-    org_id: str | None,
-    user_id: str | None,
-    entity_id: str | None,
-    request_id: str | None,
-    q: str | None,
-    from_dt: str | None,
-    to_dt: str | None,
-    sort: str,
-    dir: str,
-) -> LogFilter:
-    return LogFilter(
-        source=source or None,
-        app=app or None,
-        level=level or None,
-        org_id=org_id or None,
-        user_id=user_id or None,
-        entity_id=entity_id or None,
-        request_id=request_id or None,
-        text=q or None,
-        from_dt=_bound(from_dt),
-        to_dt=_bound(to_dt),
-        sort=sort or "ts",
-        descending=(dir != "asc"),
-    )
+@dataclass(frozen=True)
+class LogQuery:
+    """The logs screen's filter *as the query string carries it* — every field a plain string,
+    where empty means "not filtered".
+
+    This is deliberately a different shape from the reader's :class:`LogFilter`, which says absence
+    with ``None``. A form field can only ever be present-and-empty, so modelling these as optional
+    strings gave three states (absent / ``""`` / value) for two meanings, and every caller had to
+    collapse them. Here the HTML shape stays total, :meth:`to_filter` is the single place it becomes
+    the domain shape, and the screen, the export and the template all read one object.
+    """
+
+    source: str = ""
+    app: str = ""
+    level: str = ""
+    org_id: str = ""
+    user_id: str = ""
+    entity_id: str = ""
+    request_id: str = ""
+    q: str = ""
+    from_dt: str = ""
+    to_dt: str = ""
+    sort: str = "ts"
+    dir: str = "desc"
+
+    # sort/dir are the view's own state, not a filter: they ride their own params on a link.
+    _ORDERING: ClassVar[tuple[str, ...]] = ("sort", "dir")
+
+    def to_filter(self) -> LogFilter:
+        """The reader's contract, where "no filter" is ``None`` — the one boundary conversion."""
+        return LogFilter(
+            source=self.source or None,
+            app=self.app or None,
+            level=self.level or None,
+            org_id=self.org_id or None,
+            user_id=self.user_id or None,
+            entity_id=self.entity_id or None,
+            request_id=self.request_id or None,
+            text=self.q or None,
+            from_dt=_bound(self.from_dt),
+            to_dt=_bound(self.to_dt),
+            sort=self.sort or "ts",
+            descending=(self.dir != "asc"),
+        )
+
+    def active(self) -> dict[str, str]:
+        """The filters actually set — what a sort/grain/export link must carry along."""
+        return {
+            f.name: value
+            for f in fields(self)
+            if f.name not in self._ORDERING and (value := getattr(self, f.name))
+        }
+
+    def query_string(self) -> str:
+        return urlencode(self.active())
+
+
+LogQueryParams = Annotated[LogQuery, Depends()]
 
 
 def _short(value: str) -> str:
@@ -209,23 +241,11 @@ async def logs_screen(
     request: Request,
     current_user: CurrentAdmin,
     session: AdminSession,
-    source: str | None = None,
-    app: str | None = None,
-    level: str | None = None,
-    org_id: str | None = None,
-    user_id: str | None = None,
-    entity_id: str | None = None,
-    request_id: str | None = None,
-    q: str | None = None,
-    from_dt: str | None = None,
-    to_dt: str | None = None,
-    sort: str = "ts",
-    dir: str = "desc",
+    filters: LogQueryParams,
     bucket: str = "day",
 ) -> Response:
-    flt = _filter(
-        source, app, level, org_id, user_id, entity_id, request_id, q, from_dt, to_dt, sort, dir
-    )
+    flt = filters.to_filter()
+    org_id, user_id, request_id = filters.org_id, filters.user_id, filters.request_id
     grain = bucket if bucket in _GRAINS else "day"
     reader = LogReader(session)
     entries = await reader.search(flt)
@@ -265,18 +285,6 @@ async def logs_screen(
                 "settings": settings,
             }
         )
-    filters = {
-        "source": source or "",
-        "app": app or "",
-        "level": level or "",
-        "org_id": org_id or "",
-        "user_id": user_id or "",
-        "entity_id": entity_id or "",
-        "request_id": request_id or "",
-        "q": q or "",
-        "from_dt": from_dt or "",
-        "to_dt": to_dt or "",
-    }
     return templates.TemplateResponse(
         request,
         "logs/index.html",
@@ -298,7 +306,7 @@ async def logs_screen(
             "filters": filters,
             "sort": flt.sort,
             "dir": "desc" if flt.descending else "asc",
-            "export_qs": urlencode({k: v for k, v in filters.items() if v}),
+            "export_qs": filters.query_string(),
             **await fullpage_context(session, current_user),
         },
     )
@@ -324,27 +332,13 @@ def _csv(rows: list[dict[str, Any]]) -> str:
 async def export_logs(
     current_user: CurrentAdmin,
     session: AdminSession,
+    filters: LogQueryParams,
     format: str = "ndjson",
-    source: str | None = None,
-    app: str | None = None,
-    level: str | None = None,
-    org_id: str | None = None,
-    user_id: str | None = None,
-    entity_id: str | None = None,
-    request_id: str | None = None,
-    q: str | None = None,
-    from_dt: str | None = None,
-    to_dt: str | None = None,
-    sort: str = "ts",
-    dir: str = "desc",
 ) -> Response:
     """Structured export of the *current filter's* window — the same LogFilter the timeline uses,
     so what you see is what you download. NDJSON keeps the nested payload; CSV flattens the core
     columns for a spreadsheet."""
-    flt = _filter(
-        source, app, level, org_id, user_id, entity_id, request_id, q, from_dt, to_dt, sort, dir
-    )
-    entries = await LogReader(session).search(flt, limit=_EXPORT_LIMIT)
+    entries = await LogReader(session).search(filters.to_filter(), limit=_EXPORT_LIMIT)
     rows = [e.model_dump(mode="json") for e in entries]
     if format == "csv":
         return Response(

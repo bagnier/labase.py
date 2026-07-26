@@ -42,13 +42,13 @@ class LastAdminViolationBlocked(SettingsEvent):
 @dataclass(frozen=True, kw_only=True)
 class OrgOverrideSet(SettingsEvent):
     kind: ClassVar[str] = "settings.org_override_set"
-    app: str | None = None
-    key: str | None = None
-    value: str | None = None
+    app: str
+    key: str
+    value: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrgOverrideRemoved(SettingsEvent):
     kind: ClassVar[str] = "settings.org_override_removed"
-    app: str | None = None
-    key: str | None = None
+    app: str
+    key: str
