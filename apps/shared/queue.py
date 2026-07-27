@@ -202,6 +202,13 @@ class TaskWorker:
     ) -> None:
         if user_id is None:
             async with self._admin_session() as session:
+                # An admin task runs with admin authority, never a leaked tenant identity. Clear any
+                # RLS context the connection may still carry before the handler: the e2e harness
+                # shares one connection between a request and the worker, so a request's
+                # transaction-local `role`/`jwt.claims` would otherwise bleed into an admin handler
+                # (e.g. the business-event writer function's self-attribution check would read the
+                # wrong `auth.uid()`). A no-op on a fresh prod admin connection.
+                await clear_rls_context(session)
                 await handler(session, payload)
                 await session.commit()
             return
