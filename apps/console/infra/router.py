@@ -453,7 +453,14 @@ async def create_org_override(
     await repo.set_org_override(app, key, org_id, stored)
     await session.commit()
     await events.emit(
-        OrgOverrideSet(user_id=current_user.id, org_id=org_id, app=app, key=key, value=stored)
+        OrgOverrideSet(
+            user_id=current_user.id,
+            org_id=org_id,
+            app=app,
+            key=key,
+            value=stored,
+            entity_name=f"{app}.{key}",  # the setting is the subject: name it for the timeline
+        )
     )
     return await _render_org_overrides(request, session, app, group)
 
@@ -471,7 +478,11 @@ async def delete_org_override(
     repo = AppSettingRepository(session)
     await repo.delete_org_override(app, key, org_id)
     await session.commit()
-    await events.emit(OrgOverrideRemoved(user_id=current_user.id, org_id=org_id, app=app, key=key))
+    await events.emit(
+        OrgOverrideRemoved(
+            user_id=current_user.id, org_id=org_id, app=app, key=key, entity_name=f"{app}.{key}"
+        )
+    )
     return await _render_org_overrides(request, session, app, group)
 
 
@@ -497,7 +508,13 @@ async def update_setting(
     # write, all on this session, committed together.
     await events.emit(
         SettingsChanged(
-            user_id=current_user.id, app_name=app, key=key, value=stored, values=values
+            user_id=current_user.id,
+            target_app=app,
+            key=key,
+            value=stored,
+            values=values,
+            # `target_app` routes the reload; `entity_name` is what a human reads in the timeline.
+            entity_name=f"{app}.{key}",
         ),
         session=session,
     )

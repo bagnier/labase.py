@@ -168,7 +168,7 @@ class SettingsView:
 
 @dataclass(frozen=True, kw_only=True)
 class SettingsChanged(BusinessEvent):
-    """A server-wide setting of ``app_name`` was edited in the console.
+    """A server-wide setting of ``target_app`` was edited in the console.
 
     One fact, two faces: it is **persisted** on the trail as the audit record of who changed what
     (``user_id`` + ``key``/``value``, the platform peer of the per-org override events), *and*
@@ -178,11 +178,13 @@ class SettingsChanged(BusinessEvent):
     Server-wide, so ``org_id`` stays ``None``.
     """
 
-    kind: ClassVar[str] = "settings.server_changed"
-    entity: ClassVar[str] = "settings"
+    verb: ClassVar[str] = "server_changed"
+    app_name: ClassVar[str] = "settings"
     icon: ClassVar[str] = "gear"
 
-    app_name: str
+    # The app whose setting changed — distinct from the class-level `app_name`, which says which
+    # app owns this *kind*. This event is owned by "settings" and speaks about another app.
+    target_app: str
     key: str | None = None
     value: str | None = None
     values: dict[str, str] = field(default_factory=dict)
@@ -270,7 +272,7 @@ class AppSettings:
 
     async def reload(self, event: SettingsChanged) -> None:
         """Console event handler: adopt the fresh values when they're for this app."""
-        if self._declaration is not None and event.app_name == self._declaration.app_name:
+        if self._declaration is not None and event.target_app == self._declaration.app_name:
             self._raw = event.values
 
     def merged_for_org(self, overrides: dict[str, str]) -> SettingsView:

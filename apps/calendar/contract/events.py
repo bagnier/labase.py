@@ -8,11 +8,11 @@ Plain CRUD: ``kind`` derives to ``"calendar.created"`` / ``"calendar.updated"`` 
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
+from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 
 
-class CalendarEvent(BusinessEvent):
-    entity: ClassVar[str] = "calendar"
+class CalendarEvent(OrgScoped, BusinessEvent):
+    app_name: ClassVar[str] = "calendar"
     icon: ClassVar[str] = "calendar-dots"
 
 

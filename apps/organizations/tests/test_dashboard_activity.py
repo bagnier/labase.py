@@ -21,7 +21,6 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
     driver.run(
         insert_business_event(
             kind="calendar.event_created",
-            level="info",
             user_id=uuid.UUID(user_id),
             ip=None,
             org_id=uuid.UUID(org["id"]),
@@ -47,7 +46,6 @@ def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
         driver.run(
             insert_business_event(
                 kind=kind,
-                level="info",
                 user_id=uuid.UUID(user_id),
                 ip=None,
                 org_id=uuid.UUID(org["id"]),

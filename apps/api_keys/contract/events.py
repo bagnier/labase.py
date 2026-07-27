@@ -9,11 +9,11 @@ actor/org. The secret is never carried — only the key id and its name.
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted
+from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, OrgScoped
 
 
-class ApiKeyEvent(BusinessEvent):
-    entity: ClassVar[str] = "api_keys"
+class ApiKeyEvent(OrgScoped, BusinessEvent):
+    app_name: ClassVar[str] = "api_keys"
     icon: ClassVar[str] = "key"
 
 

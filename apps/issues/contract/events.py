@@ -14,22 +14,25 @@ from apps.shared.events import BusinessEvent, EntityUpdated
 
 
 class IssueEvent(BusinessEvent):
-    entity: ClassVar[str] = "issues"
+    app_name: ClassVar[str] = "issues"
     icon: ClassVar[str] = "bug-beetle"
 
 
 @dataclass(frozen=True, kw_only=True)
 class IssueOpened(IssueEvent):
-    kind: ClassVar[str] = "issues.opened"
-    group_id: uuid.UUID
-    title: str
+    """A new error group appeared. The group *is* the subject: its id and title are the base's
+    entity slots, narrowed to required here — an alert with no issue to point at is meaningless."""
+
+    verb: ClassVar[str] = "opened"
+    entity_id: uuid.UUID
+    entity_name: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class IssueRegressed(IssueEvent):
-    kind: ClassVar[str] = "issues.regressed"
-    group_id: uuid.UUID
-    title: str
+    verb: ClassVar[str] = "regressed"
+    entity_id: uuid.UUID
+    entity_name: str
     resolved_in_version: str | None
     seen_version: str
 

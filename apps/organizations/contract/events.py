@@ -9,15 +9,14 @@ subscribe to it directly, so emitting it dispatches to them (by concrete type) a
 the persister (by base type). One event, one business meaning — no separate seeding signal.
 """
 
-import uuid
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityCreated, EntityUpdated
+from apps.shared.events import BusinessEvent, EntityCreated, EntityUpdated, OrgScoped
 
 
-class OrgEvent(BusinessEvent):
-    entity: ClassVar[str] = "organizations"
+class OrgEvent(OrgScoped, BusinessEvent):
+    app_name: ClassVar[str] = "organizations"
     icon: ClassVar[str] = "buildings"
 
 
@@ -44,52 +43,49 @@ class OrgHandleChanged(OrgEvent, EntityUpdated):
 
 @dataclass(frozen=True, kw_only=True)
 class MemberJoined(OrgEvent):
-    kind: ClassVar[str] = "organizations.member_joined"
+    verb: ClassVar[str] = "member_joined"
 
 
 @dataclass(frozen=True, kw_only=True)
 class MemberLeft(OrgEvent):
-    kind: ClassVar[str] = "organizations.member_left"
+    verb: ClassVar[str] = "member_left"
 
 
 @dataclass(frozen=True, kw_only=True)
 class MemberRoleChanged(OrgEvent):
-    kind: ClassVar[str] = "organizations.member_role_changed"
+    verb: ClassVar[str] = "member_role_changed"
     role: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class MemberRemoved(OrgEvent):
-    kind: ClassVar[str] = "organizations.member_removed"
+    verb: ClassVar[str] = "member_removed"
 
 
 @dataclass(frozen=True, kw_only=True)
 class InvitationSent(OrgEvent):
-    kind: ClassVar[str] = "organizations.invitation_sent"
+    verb: ClassVar[str] = "invitation_sent"
     # the invitee — no account yet, so entity_name = their email, entity_id stays None
 
 
 @dataclass(frozen=True, kw_only=True)
 class InvitationRevoked(OrgEvent):
-    kind: ClassVar[str] = "organizations.invitation_revoked"
-    invitation_id: uuid.UUID
+    verb: ClassVar[str] = "invitation_revoked"
+    # the revoked invitation is the subject: its id rides on entity_id
 
 
 @dataclass(frozen=True, kw_only=True)
 class InvitationEmailMismatch(OrgEvent):
-    kind: ClassVar[str] = "organizations.invitation_email_mismatch"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "invitation_email_mismatch"
     # the mismatched invitee email rides in entity_name (no account guaranteed)
 
 
 @dataclass(frozen=True, kw_only=True)
 class LastOwnerViolationBlocked(OrgEvent):
-    kind: ClassVar[str] = "organizations.last_owner_violation"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "last_owner_violation"
 
 
 @dataclass(frozen=True, kw_only=True)
 class OwnershipViolation(OrgEvent):
-    kind: ClassVar[str] = "organizations.ownership_violation"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "ownership_violation"
     path: str

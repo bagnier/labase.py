@@ -31,4 +31,5 @@ class LogEntry(BaseModel):
     user_id: str | None = None
     entity_id: str | None = None
     request_id: str | None = None
+    request_name: str | None = None  # "GET /profile" — carried by the row, not resolved at read
     payload: dict[str, Any] = Field(default_factory=dict)

@@ -755,7 +755,7 @@ async def revoke_invitation(
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
     await events.emit(
-        InvitationRevoked(user_id=current_user.id, org_id=org_id, invitation_id=invitation_id)
+        InvitationRevoked(user_id=current_user.id, org_id=org_id, entity_id=invitation_id)
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,
     # so this only ever uses delete_response's JSON branch.

@@ -14,11 +14,10 @@ class _ReadsEvents(_EventSQL):
     async def search(
         self,
         *,
-        level: str | None = None,
         org_id: uuid.UUID | None = None,
         user_id: uuid.UUID | None = None,
         entity_id: uuid.UUID | None = None,
-        request_id: str | None = None,
+        request_id: uuid.UUID | None = None,
         app: str | None = None,
         text: str | None = None,
         from_dt: datetime | None = None,
@@ -35,8 +34,6 @@ class _ReadsEvents(_EventSQL):
             .limit(limit)
             .offset(offset)
         )
-        if level:
-            query = query.where(BusinessEventLog.level == level)
         if org_id:
             query = query.where(BusinessEventLog.org_id == org_id)
         if user_id:

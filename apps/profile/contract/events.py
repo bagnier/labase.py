@@ -13,22 +13,21 @@ from apps.shared.events import BusinessEvent
 
 
 class ProfileEvent(BusinessEvent):
-    entity: ClassVar[str] = "profile"
+    app_name: ClassVar[str] = "profile"
     icon: ClassVar[str] = "user-circle"
 
 
 @dataclass(frozen=True, kw_only=True)
 class AccountDeleted(ProfileEvent):
-    kind: ClassVar[str] = "profile.account_deleted"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "account_deleted"
 
 
 @dataclass(frozen=True, kw_only=True)
 class AvatarUpdated(ProfileEvent):
-    kind: ClassVar[str] = "profile.avatar_updated"
+    verb: ClassVar[str] = "avatar_updated"
 
 
 @dataclass(frozen=True, kw_only=True)
 class HandleChanged(ProfileEvent):
-    kind: ClassVar[str] = "profile.handle_changed"
+    verb: ClassVar[str] = "handle_changed"
     new_handle: str

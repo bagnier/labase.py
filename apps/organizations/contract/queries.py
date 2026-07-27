@@ -38,7 +38,7 @@ def seeding_enabled() -> bool:
 
 async def seed_org_welcome(
     session: AsyncSession,
-    org_id: uuid.UUID | None,
+    org_id: uuid.UUID,
     seed: Callable[[AsyncSession, uuid.UUID, uuid.UUID], Awaitable[None]],
 ) -> None:
     """Run a welcome seeder for a newly created org, on the worker's session.
@@ -48,7 +48,7 @@ async def seed_org_welcome(
     retry, parking and idempotency. This helper spells the shared boilerplate — resolve the org's
     owner (bail if there isn't one yet), honor the test-schema suppression — so each seeder only
     writes its own welcome rows. No commit: the worker commits the task."""
-    if not seeding_enabled() or not org_id:
+    if not seeding_enabled():
         return
     owner_id = await get_org_owner_id(session, org_id)
     if owner_id is None:

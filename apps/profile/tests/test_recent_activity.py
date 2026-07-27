@@ -14,7 +14,6 @@ def test_profile_page_lists_the_users_own_recent_actions(driver):
     driver.run(
         insert_business_event(
             kind="todo.task_created",
-            level="info",
             user_id=uuid.UUID(user_id),
             ip=None,
             org_id=None,

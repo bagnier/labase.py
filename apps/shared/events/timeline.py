@@ -28,7 +28,6 @@ class ActivityEntry:
     detail: str | None  # the subject's own name (a todo title, a page slug)
     app: str  # the owning app prefix, for a subtle source line
     icon: str  # the phosphor name the event owns
-    level: str  # ``info`` / ``warning`` / ``error`` — tints the timeline node
     ts: datetime  # the exact instant, shown as clock time under the day header
     href: str | None  # a deep link to the concerned entity, when the surface supplies one
 
@@ -63,15 +62,13 @@ def activity_entries(
     viewer); ``link`` lets the surface supply a deep link."""
     entries = []
     for r in rows:
-        payload = r.payload or {}
         entries.append(
             ActivityEntry(
-                who=payload.get("actor_name") if show_actor else None,
+                who=r.user_name if show_actor else None,
                 label=_activity_label(r.kind),
-                detail=payload.get("entity_name"),
+                detail=r.entity_name,
                 app=r.kind.split(".", 1)[0],
                 icon=r.icon or _FALLBACK_ICON,
-                level=r.level,
                 ts=r.created_at,
                 href=link(r) if link else None,
             )

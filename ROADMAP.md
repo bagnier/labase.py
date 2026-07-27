@@ -15,6 +15,7 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 ## issues
 
 - [x] id as uuid, not str or int
+- [ ] aire passer le chemin clé d'API par les identifiants Storage de l'app, en gardant l'épinglage d'org comme source unique du chemin. Le précédent existe déjà dans la base : l'upload d'avatar utilise admin_storage() pour un utilisateur authentifié.
 - [ ] _ENTITY_ROUTES in apps/organizations est un couplage
 - [ ] jinja_globals should live in host ??
 - [ ] 7 skipped

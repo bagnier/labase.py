@@ -8,14 +8,14 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from apps.shared.events import BusinessEvent
+from apps.shared.events import BusinessEvent, OrgScoped
 from apps.shared.events.bus import events
 from apps.shared.events.repository import insert_business_event
 from apps.shared.persistence import database as db
 
 
 @dataclass(frozen=True, kw_only=True)
-class _P1Event(BusinessEvent):
+class _P1Event(OrgScoped, BusinessEvent):
     kind = "test_p1.happened"
     label: str | None = None
 
@@ -65,7 +65,6 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
     ):
         await insert_business_event(
             kind="auth.signed_in",
-            level="info",
             user_id=uid,
             ip=None,
             org_id=None,
@@ -109,7 +108,7 @@ async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
     """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
     actor = uuid.uuid7()
     async with db.admin_session_factory()() as session:
-        await events._persist_fact(_P1Event(user_id=actor), session)
+        await events._persist_fact(_P1Event(user_id=actor, org_id=uuid.uuid7()), session)
         await session.rollback()
     assert await _count_p1(actor) == 0
 
@@ -120,7 +119,9 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     import asyncio
 
     with patch.object(events, "_record_detached", new=AsyncMock()) as detached:
-        await events._persist_fact(_P1Event(user_id=uuid.uuid7(), label="x"), None)
+        await events._persist_fact(
+            _P1Event(user_id=uuid.uuid7(), org_id=uuid.uuid7(), label="x"), None
+        )
         detached.assert_not_awaited()  # coroutine scheduled, not yet run
         await asyncio.sleep(0)  # let the created task run
     detached.assert_awaited_once()
@@ -136,10 +137,44 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean
     registry.declare_events("test_p1", _P1Event)  # emit refuses an undeclared event
     committed, rolled = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
-        await events.emit(_P1Event(user_id=committed), session=session)
+        await events.emit(_P1Event(user_id=committed, org_id=uuid.uuid7()), session=session)
         await session.commit()
     async with db.admin_session_factory()() as session:
-        await events.emit(_P1Event(user_id=rolled), session=session)
+        await events.emit(_P1Event(user_id=rolled, org_id=uuid.uuid7()), session=session)
         await session.rollback()
     assert await _count_p1(committed) == 1
     assert await _count_p1(rolled) == 0
+
+
+@pytest.mark.asyncio
+async def test_the_row_keeps_the_org_name_after_the_org_is_gone(_clean_p1):
+    """The trail is history: it has to stay readable once its subjects are deleted.
+
+    Resolving an org's name at read time works only while the org exists — and deleting an org is a
+    product feature, so the audit trail would lose the *where* exactly when it matters. The name is
+    therefore pinned onto the row as it was then (the same reason ``user_name`` is denormalized:
+    RLS can't resolve a co-member's handle later either).
+    """
+    actor, org = uuid.uuid7(), uuid.uuid7()
+    async with db.admin_session_factory()() as session:
+        await session.execute(
+            text("INSERT INTO organizations (id, name, handle) VALUES (:i, :n, :h)"),
+            {"i": org, "n": "Acme Corp", "h": f"acme-{org.hex[:8]}"},
+        )
+        await session.commit()
+    try:
+        async with db.admin_session_factory()() as session:
+            await events._persist_fact(_P1Event(user_id=actor, org_id=org, label="Hi"), session)
+            await session.commit()
+        async with db.admin_session_factory()() as session:
+            await session.execute(text("DELETE FROM organizations WHERE id = :i"), {"i": org})
+            await session.commit()
+        async with db.admin_session_factory()() as session:
+            name = await session.scalar(
+                text("SELECT org_name FROM business_events WHERE user_id = :a"), {"a": actor}
+            )
+        assert name == "Acme Corp"
+    finally:
+        async with db.admin_session_factory()() as session:
+            await session.execute(text("DELETE FROM organizations WHERE id = :i"), {"i": org})
+            await session.commit()

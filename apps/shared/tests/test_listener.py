@@ -77,7 +77,6 @@ async def _noop(session, event) -> None:
 async def _seed(actor: uuid.UUID, *, label: str = "Hi", entity_id: uuid.UUID | None = None) -> None:
     await insert_business_event(
         kind="test_tailer.happened",
-        level="info",
         user_id=actor,
         ip=None,
         org_id=None,
@@ -148,10 +147,7 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
 async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
     async with db.admin_session_factory()() as s:
         await s.execute(
-            text(
-                "INSERT INTO business_events (kind, level, user_id) "
-                "VALUES ('test_tailer.legacy', 'info', NULL)"
-            )
+            text("INSERT INTO business_events (kind, user_id) VALUES ('test_tailer.legacy', NULL)")
         )
         await s.commit()
 
@@ -196,7 +192,6 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
     bus.spread(_SpreadEvent, apply)
     await insert_business_event(
         kind="test_tailer.spread",
-        level="info",
         user_id=None,
         ip=None,
         org_id=None,
@@ -228,7 +223,6 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
     for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy row behind it
         await insert_business_event(
             kind="test_tailer.strict_spread",
-            level="info",
             user_id=None,
             ip=None,
             org_id=None,

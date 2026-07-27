@@ -9,12 +9,12 @@ event carries its ``slug``; the persister on the ``BusinessEvent`` base records 
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
+from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 
 
 @dataclass(frozen=True, kw_only=True)
-class PageEvent(BusinessEvent):
-    entity: ClassVar[str] = "pages"
+class PageEvent(OrgScoped, BusinessEvent):
+    app_name: ClassVar[str] = "pages"
     icon: ClassVar[str] = "file-text"
     # The page's stable identity is its uuid pk, carried on the base's ``entity_id`` — it survives a
     # re-slug, so the logs viewer's per-entity filter keeps a renamed page's timeline together.

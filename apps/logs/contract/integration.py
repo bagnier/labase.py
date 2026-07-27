@@ -53,7 +53,7 @@ def mount(host: Host) -> None:
 async def _reload_level(event: SettingsChanged) -> None:
     """Re-point the live loggers when the logs app's level is edited (self-contained: reads the
     event's own values, independent of registry-reload ordering on the bus)."""
-    if event.app_name == LOGS_APP:
+    if event.target_app == LOGS_APP:
         apply_log_level(str(event.values.get(LOG_LEVEL_KEY) or DEFAULT_LOG_LEVEL))
 
 

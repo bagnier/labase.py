@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 from apps.logs.tests.e2e import seed_data
-from apps.logs.tests.e2e.seed_data import logs_org_id, logs_user_id
+from apps.logs.tests.e2e.seed_data import logs_org_id, logs_request_id, logs_user_id
 from apps.shared.events.models import BusinessEventLog
 from apps.shared.observability.firehose import append_firehose
 from apps.shared.observability.logging import apply_log_level
@@ -66,7 +66,9 @@ class LogsBrowserMixin(BrowserBase):
         apply_log_level(level)
 
     def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
-        oid = logs_org_id(org)
+        # All three sources must key on the same value to correlate; the trail's column is a uuid,
+        # so the scenario's readable token maps to one here.
+        oid, request_id = logs_org_id(org), logs_request_id(request_id)
         append_firehose(
             seed_data.firehose_record("request.finished", org=oid, request_id=request_id)
         )
@@ -124,7 +126,7 @@ class LogsBrowserMixin(BrowserBase):
         self._pick_combobox("level", level)
 
     def filter_logs_by_request(self, request_id: str) -> None:
-        self._pick_combobox("request_id", request_id)
+        self._pick_combobox("request_id", logs_request_id(request_id))
 
     def search_logs(self, text: str) -> None:
         self._submit_filter(q=text)

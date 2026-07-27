@@ -28,7 +28,9 @@ async def test_reload_and_coerce_to_declared_type() -> None:
     # ``settings.reload`` is the ``spread`` handler the tailer replays off the trail; applying it
     # adopts the fresh values, coerced to their declared types on the next read.
     await settings.reload(
-        SettingsChanged(app_name="files", values={"max_upload_mb": "1", "uploads_enabled": "false"})
+        SettingsChanged(
+            target_app="files", values={"max_upload_mb": "1", "uploads_enabled": "false"}
+        )
     )
 
     assert settings.max_upload_mb == 1  # int, not "1"
@@ -39,7 +41,7 @@ async def test_reload_and_coerce_to_declared_type() -> None:
 async def test_ignores_changes_for_other_apps() -> None:
     settings = _settings()
 
-    await settings.reload(SettingsChanged(app_name="todo", values={"max_upload_mb": "1"}))
+    await settings.reload(SettingsChanged(target_app="todo", values={"max_upload_mb": "1"}))
 
     assert settings.max_upload_mb == 25  # declared default, untouched
 

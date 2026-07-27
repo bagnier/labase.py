@@ -31,12 +31,22 @@ class BusinessEventLog(Base, UUIDPk):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
     )
-    level: Mapped[str]
     kind: Mapped[str]
     icon: Mapped[str] = mapped_column(default="circle")
+    # Each correlation key is paired with the readable name it had *then*: the trail outlives its
+    # subjects (a closed account, a deleted or renamed org) and RLS hides a co-member's handle at
+    # read time. Every name is nullable — a system fact has no actor, a server-wide one no org, a
+    # pure-id subject no name, and work outside a request no request.
     user_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    ip: Mapped[str | None] = mapped_column(default=None)
+    user_name: Mapped[str | None] = mapped_column(default=None)
     org_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
+    org_name: Mapped[str | None] = mapped_column(default=None)
     entity_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
-    request_id: Mapped[str | None] = mapped_column(default=None)
+    entity_name: Mapped[str | None] = mapped_column(default=None)
+    ip: Mapped[str | None] = mapped_column(default=None)
+    request_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
+    # "GET /profile" — the request's own readable name, bound at request time. Without it the id
+    # is only resolvable while the firehose still holds that request's lines; the firehose is a
+    # recent window of files, so past its retention the id would be opaque for good.
+    request_name: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

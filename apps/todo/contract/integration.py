@@ -101,8 +101,7 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 async def _bump_completed(session: AsyncSession, event: TodoTicked) -> None:
     """Durable consumer of ``todo.ticked``: keep the org's cumulative completion counter."""
-    if event.org_id is not None:
-        await bump_completion(session, event.org_id)
+    await bump_completion(session, event.org_id)
 
 
 async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:

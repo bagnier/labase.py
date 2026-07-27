@@ -2,14 +2,13 @@
    (e.g. "Ticked Write the changelog   ●   14:32"). Takes the day sections
    `group_activity_by_day()` returns; each row is an `activity_entries` dict
    {who, label, detail, app, icon, level, ts, href}. A row with an `href` links the whole
-   content block to the entity it concerns (todo, file, page, calendar event). The node tint
-   follows severity so a security event stands out; the rail (`.activity-timeline`) is a single
-   centered spine. The day header carries the date, so each row shows the clock time. #}
+   content block to the entity it concerns (todo, file, page, calendar event). The rail
+   (`.activity-timeline`) is a single centered spine. The day header carries the date, so each row
+   shows the clock time. #}
 {% from "macros/empty_state.html" import empty_state %}
 {% macro _row(e) %}
-  {% set tone = 'bg-warning/15 text-warning' if e.level == 'warning'
-      else 'bg-error/15 text-error' if e.level == 'error'
-    else 'bg-primary/10 text-primary' %}
+  {# One tone for every fact: a business event has no severity — that is a logging notion. #}
+  {% set tone = "bg-primary/10 text-primary" %}
   {% set content %}
     <span class="text-sm leading-snug">
       {% if e.who %}

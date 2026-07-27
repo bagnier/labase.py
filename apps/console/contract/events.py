@@ -10,45 +10,42 @@ the override events carry the target org.
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent
+from apps.shared.events import BusinessEvent, OrgScoped
 
 
 class SettingsEvent(BusinessEvent):
-    entity: ClassVar[str] = "settings"
+    app_name: ClassVar[str] = "settings"
     icon: ClassVar[str] = "gear"
 
 
 @dataclass(frozen=True, kw_only=True)
 class AdminGranted(SettingsEvent):
-    kind: ClassVar[str] = "settings.admin_granted"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "admin_granted"
     # the promoted user: entity_id resolved from the email, entity_name = the email
 
 
 @dataclass(frozen=True, kw_only=True)
 class AdminRevoked(SettingsEvent):
-    kind: ClassVar[str] = "settings.admin_revoked"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "admin_revoked"
     # the demoted user: entity_id resolved from the email, entity_name = the email
 
 
 @dataclass(frozen=True, kw_only=True)
 class LastAdminViolationBlocked(SettingsEvent):
-    kind: ClassVar[str] = "settings.last_admin_violation"
-    level: ClassVar[str] = "warning"
+    verb: ClassVar[str] = "last_admin_violation"
     # the last-admin target: entity_name = the email (may be the admin's own)
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrgOverrideSet(SettingsEvent):
-    kind: ClassVar[str] = "settings.org_override_set"
+class OrgOverrideSet(OrgScoped, SettingsEvent):
+    verb: ClassVar[str] = "org_override_set"
     app: str
     key: str
     value: str
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrgOverrideRemoved(SettingsEvent):
-    kind: ClassVar[str] = "settings.org_override_removed"
+class OrgOverrideRemoved(OrgScoped, SettingsEvent):
+    verb: ClassVar[str] = "org_override_removed"
     app: str
     key: str

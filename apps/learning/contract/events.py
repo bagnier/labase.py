@@ -8,11 +8,11 @@ review outcome; the persister on the ``BusinessEvent`` base records it, scoped b
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityUpdated
+from apps.shared.events import BusinessEvent, EntityUpdated, OrgScoped
 
 
-class LearningEvent(BusinessEvent):
-    entity: ClassVar[str] = "learning"
+class LearningEvent(OrgScoped, BusinessEvent):
+    app_name: ClassVar[str] = "learning"
     icon: ClassVar[str] = "book-open"
 
 

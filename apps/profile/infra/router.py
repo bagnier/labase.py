@@ -469,7 +469,7 @@ async def passkey_verify(
 @router.post("/profile/passkeys/{passkey_id}/delete", response_model=None)
 async def passkey_delete(
     request: Request,
-    passkey_id: str,
+    passkey_id: uuid.UUID,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
@@ -477,12 +477,12 @@ async def passkey_delete(
 ) -> HTMLResponse | JSONResponse | Response:
     access_token = _ensure_passkeys(users_settings, current_user)
     try:
-        await delete_passkey(access_token, passkey_id)
+        await delete_passkey(access_token, str(passkey_id))
     except PasskeyError as e:
         return await _profile_error(
             request, session, current_user, repo, key="passkey_error", message=str(e)
         )
-    await events.emit(PasskeyRemoved(user_id=current_user.id, passkey_id=passkey_id))
+    await events.emit(PasskeyRemoved(user_id=current_user.id, entity_id=passkey_id))
     if wants_json(request):
         return JSONResponse({"message": "Passkey removed."})
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -578,7 +578,7 @@ async def account_delete(
             request, session, current_user, repo, key="deletion_error", message=error
         )
 
-    await events.emit(AccountDeleted(user_id=current_user.id))
+    await events.emit(AccountDeleted(user_id=current_user.id, entity_id=current_user.id))
     # The UserDeleted fact rides the admin session — it commits iff the deletion does. Its forget
     # consumers (organizations, profile) then run asynchronously off the tailer, by user id.
     await events.emit(

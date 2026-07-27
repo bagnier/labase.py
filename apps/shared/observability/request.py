@@ -72,6 +72,19 @@ def _feeds_load_metrics(request: Request, status: int) -> bool:
     return status < 400 or status >= 500 or _is_internal_dead_link(request, status)
 
 
+def new_request_id() -> str:
+    """A whole UUIDv7 for the request — the base's one key shape (the v4 carve-out is for security
+    tokens, and this is not one: it is echoed back in ``X-Request-ID``).
+
+    Whole, because truncating to 8 hex chars at the source cost 32 bits: a birthday collision lands
+    around 77k requests, and the Logs screen correlates on this exact value — two unrelated requests
+    would merge under one filter. ``_short`` shortens it for display, which is where that helps.
+
+    Time-ordered, because an id read off a log line then tells you *when*, and its index grows by
+    append instead of splitting pages at random — the same reason every pk here is a v7."""
+    return str(uuid.uuid7())
+
+
 class RequestLogger(BaseHTTPMiddleware):
     """Per-request correlation and telemetry (README: observability is built in).
 
@@ -87,10 +100,18 @@ class RequestLogger(BaseHTTPMiddleware):
         if request.url.path in _SKIP_PATHS:
             return await call_next(request)
 
-        request_id = str(uuid.uuid4())[:8]
+        request_id = new_request_id()
         ip = request.client.host if request.client else None
         structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id, ip=ip)
+        # Both ride every log line *and* every business event of this request (the trail's write
+        # path reads them off these contextvars). The name is bound here, before call_next, because
+        # a fact emitted mid-request must already carry it — the matched route template is only
+        # readable afterwards, and the raw path is what a reader wants anyway.
+        structlog.contextvars.bind_contextvars(
+            request_id=request_id,
+            ip=ip,
+            request_name=f"{request.method} {request.url.path}",
+        )
         start_request_stats()
 
         start = time.perf_counter()

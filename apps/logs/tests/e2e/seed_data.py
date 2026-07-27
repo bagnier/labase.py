@@ -34,6 +34,12 @@ def logs_user_id(email: str) -> str:
     return str(uuid.uuid5(_NS, f"user:{email}"))
 
 
+def logs_request_id(token: str) -> str:
+    """A scenario names a request "r-100"; the trail stores a uuid. Same trick as orgs and users:
+    map the readable token to a stable uuid5 so the Gherkin stays plain language."""
+    return str(uuid.uuid5(_NS, f"request:{token}"))
+
+
 def _uuid(value: str | None) -> uuid.UUID | None:
     return uuid.UUID(value) if value else None
 
@@ -43,19 +49,19 @@ def event_model(
     *,
     org: str | None = None,
     user: str | None = None,
-    level: str = "info",
     when: datetime | None = None,
     request_id: str | None = None,
+    request_name: str | None = None,
 ) -> BusinessEventLog:
     """A ready-to-``add`` business-event row — the same model the persister writes, with an
     explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate)."""
     return BusinessEventLog(
         created_at=when or clock.now(),
-        level=level,
         kind=event,
         user_id=_uuid(user),
         org_id=_uuid(org),
-        request_id=request_id,
+        request_id=_uuid(request_id),
+        request_name=request_name,
     )
 
 

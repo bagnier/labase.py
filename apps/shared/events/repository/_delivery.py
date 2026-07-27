@@ -23,13 +23,15 @@ class TrailRow(TypedDict):
     user_id: uuid.UUID | None
     org_id: uuid.UUID | None
     entity_id: uuid.UUID | None
+    entity_name: str | None  # a base field of every event, lifted to its own column
     payload: dict[str, Any] | None
 
 
 # Both scans select exactly TrailRow's columns — the listener never reads level/icon off a claimed
-# row (they live on the reconstructed event), so they stay out of the fetch.
+# row (they live on the reconstructed event), nor user_name/org_name (denormalized for display,
+# not event fields), so those stay out of the fetch.
 _CLAIM = text(
-    "SELECT id, kind, user_id, org_id, entity_id, payload "
+    "SELECT id, kind, user_id, org_id, entity_id, entity_name, payload "
     "FROM business_events "
     "WHERE dispatched_at IS NULL "
     "ORDER BY id "
@@ -38,7 +40,7 @@ _CLAIM = text(
 )
 
 _SPREAD_SCAN = text(
-    "SELECT id, kind, user_id, org_id, entity_id, payload "
+    "SELECT id, kind, user_id, org_id, entity_id, entity_name, payload "
     "FROM business_events "
     "WHERE id > :cursor AND kind = ANY(:kinds) "
     "ORDER BY id"

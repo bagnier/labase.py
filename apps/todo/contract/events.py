@@ -11,13 +11,13 @@ profile/dashboard timeline reads "Ticked", not a flat "Updated". ``kind`` is der
 from dataclasses import dataclass
 from typing import ClassVar
 
-from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
+from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 
 
-class TodoEvent(BusinessEvent):
+class TodoEvent(OrgScoped, BusinessEvent):
     """Per-app mixin: fixes the entity prefix and the icon every to-do event carries."""
 
-    entity: ClassVar[str] = "todo"
+    app_name: ClassVar[str] = "todo"
     icon: ClassVar[str] = "clipboard-text"
 
 

@@ -10,7 +10,6 @@ _ADMIN = "entity-corr@example.com"
 def _seed(kind: str, entity_id: uuid.UUID):
     return insert_business_event(
         kind=kind,
-        level="info",
         user_id=None,
         ip=None,
         org_id=None,

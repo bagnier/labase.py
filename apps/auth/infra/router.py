@@ -252,7 +252,7 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        await events.emit(LoginFailed(email=email))
+        await events.emit(LoginFailed(entity_name=email))
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -322,7 +322,7 @@ async def mfa_verify_endpoint(
     try:
         tokens = await verify_totp(mfa_access_token, factor_id, challenge_id, code)
     except TotpError:
-        await events.emit(MfaFailed(factor_id=factor_id))
+        await events.emit(MfaFailed(user_id=_token_sub(mfa_access_token)))
         error = "That code did not work. Try the next one from your app."
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
@@ -334,7 +334,7 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    await events.emit(MfaVerified(user_id=_token_sub(tokens.access_token), factor_id=factor_id))
+    await events.emit(MfaVerified(user_id=_token_sub(tokens.access_token)))
     if wants_json(request):
         resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
     else:
@@ -549,7 +549,7 @@ async def register_endpoint(request: Request) -> Response:
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
-        await events.emit(RegisterFailed(email=email))
+        await events.emit(RegisterFailed(entity_name=email))
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."
@@ -669,7 +669,7 @@ async def resend_confirmation_endpoint(request: Request, users_settings: UsersSe
     if email:
         try:
             await resend_confirmation(email)
-            await events.emit(ConfirmationResent(email=email))
+            await events.emit(ConfirmationResent(entity_name=email))
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
     if wants_json(request):

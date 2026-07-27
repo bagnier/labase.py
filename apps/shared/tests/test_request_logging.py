@@ -5,6 +5,8 @@ non-asset path). Successful requests, bot scans and the browser's favicon probe 
 Pure middleware logic — no DB, no running app: the decision is exercised through fake requests.
 """
 
+import uuid
+
 from starlette.requests import Request
 
 from apps.shared.observability import request as R
@@ -101,3 +103,16 @@ def test_well_known_probe_stays_silent_even_from_our_page(monkeypatch):
     path = "/.well-known/appspecific/com.chrome.devtools.json"
     assert _decision(monkeypatch, path, 404, "https://example.com/home") == "none"
     assert not R._feeds_load_metrics(_req(path, referer="https://example.com/home"), 404)
+
+
+def test_the_request_id_is_a_whole_uuid_not_a_prefix():
+    """The correlation key is stored whole; only the screen shortens it.
+
+    It used to be truncated to 8 hex chars at the source — 32 bits, so a birthday collision lands
+    around 77k requests and two unrelated requests would merge under one filter in the Logs viewer.
+    The trail keeps the full uuid (its column is typed for it) and `_short` shortens it for
+    display, which is where a shortened id is actually useful.
+    """
+    rid = R.new_request_id()
+    assert uuid.UUID(rid)  # parses whole — not a prefix
+    assert len(rid) == 36

@@ -10,14 +10,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated
+from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 from apps.shared.events.bus import EventBus
 from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import event_to_log
 
 
-class WidgetEvent(BusinessEvent):
-    entity = "widget"
+class WidgetEvent(OrgScoped, BusinessEvent):
+    app_name = "widget"
     icon = "cube"
 
 
@@ -40,17 +40,18 @@ def test_crud_kind_is_derived_from_entity_and_verb():
     assert WidgetCreated.kind == "widget.created"
     assert WidgetUpdated.kind == "widget.updated"
     assert WidgetDeleted.kind == "widget.deleted"
-    # The per-app mixin's icon rides on every concrete event; level defaults to info.
+    # The per-app mixin's icon rides on every concrete event.
     assert WidgetCreated.icon == "cube"
-    assert WidgetCreated.level == "info"
 
 
 def test_explicit_kind_wins_over_derivation():
+    # A fixture must not borrow a shipped kind: the catalog is keyed by kind and last-write-wins,
+    # so declaring "auth.signed_in" here would replace the real event class process-wide.
     @dataclass(frozen=True, kw_only=True)
     class SignedIn(BusinessEvent):
-        kind = "auth.signed_in"
+        kind = "test_explicit.signed_in"
 
-    assert SignedIn.kind == "auth.signed_in"
+    assert SignedIn.kind == "test_explicit.signed_in"
 
 
 def test_concrete_events_register_in_the_catalog_for_reconstruction():
@@ -93,9 +94,10 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
     assert row.org_id == org
     assert row.entity_id == eid  # the concerned entity's uuid, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
+    assert row.entity_name == "Gizmo"  # the subject's name: its own column, pinned at write time
     payload = row.payload
     assert payload is not None
-    assert payload["entity_name"] == "Gizmo"
+    assert "entity_name" not in payload
     assert "user_id" not in payload
     assert "org_id" not in payload
     assert "entity_id" not in payload
@@ -123,7 +125,7 @@ def test_event_to_log_stringifies_uuid_payload_fields():
 def test_event_to_log_lifts_a_uuid_entity_id():
     # entity_id is the entity's uuid pk, lifted straight to its own uuid column — no str() edge.
     eid = uuid.uuid7()
-    row = event_to_log(WidgetCreated(entity_id=eid, entity_name="Gizmo"))
+    row = event_to_log(WidgetCreated(org_id=uuid.uuid7(), entity_id=eid, entity_name="Gizmo"))
     assert row.entity_id == eid
 
 
@@ -141,6 +143,22 @@ def test_from_payload_is_defensive_on_unparseable_strings():
     # rather than crash the reconstruction.
     event = _RefEvent.from_payload({"token": "***"})
     assert event.token == "***"
+
+
+def test_from_payload_refuses_a_stored_null_for_a_required_field():
+    # A trail row whose org column is NULL cannot rebuild an org-scoped fact. Dataclasses don't
+    # validate at runtime, so without this the event would come back claiming `org_id=None` while
+    # its type promises a uuid — a lie handed to a consumer. Refusing is what makes the listener's
+    # guard skip the row (and log it) instead of acting on it.
+    with pytest.raises(TypeError):
+        WidgetCreated.from_payload({"org_id": None, "entity_id": str(uuid.uuid7())})
+
+
+def test_from_payload_still_accepts_a_stored_null_for_an_optional_field():
+    # The converse: absence is legitimate where the type allows it — a server-wide fact has no
+    # actor, and that must keep rebuilding fine.
+    event = _RefEvent.from_payload({"user_id": None, "ref_id": None})
+    assert event.user_id is None
 
 
 def test_from_payload_reparses_a_uuid_entity_id():

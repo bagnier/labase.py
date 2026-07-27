@@ -38,10 +38,10 @@ NOTIFY_CHANNEL = "business_event"
 
 def _task_payload(row: TrailRow) -> dict[str, Any]:
     """Rebuild the async-consumer task payload from a business_events row: the event's own fields
-    plus the row id as the dedup ``event_id``. Drops the denormalized ``actor_name`` handle (not a
-    field)."""
+    plus the row id as the dedup ``event_id``. The fields lifted to columns (the scoping ids and
+    ``entity_name``) are folded back in, since the event declares them."""
     payload = dict(row["payload"] or {})
-    payload.pop("actor_name", None)
+    payload["entity_name"] = row["entity_name"]
     payload["user_id"] = str(row["user_id"]) if row["user_id"] else None
     payload["org_id"] = str(row["org_id"]) if row["org_id"] else None
     payload["entity_id"] = str(row["entity_id"]) if row["entity_id"] else None

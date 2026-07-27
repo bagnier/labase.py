@@ -25,6 +25,10 @@ from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
 
+# The display level the viewer gives every business fact. Business events have no severity of
+# their own (that is a logging notion); this is the merged timeline's axis, not the trail's.
+BUSINESS_LEVEL = "info"
+
 # The activity chart's own lookback per grain — wider than the paginated table, so the graph can
 # zoom out to a month without the timeline pulling a year of rows. Bounds match the fixed x-axis
 # spans in ``router._GRAIN_SPAN``. Skipped when the caller already set a date bound (filter wins).
@@ -88,7 +92,10 @@ class LogReader:
         # (request.failed), level-gated at write time; the durable sources below carry full history.
         if flt.wants(LogSource.http):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
-        if flt.wants(LogSource.business):
+        # A business fact has no severity of its own — it is a domain event, not a log line. The
+        # viewer needs one axis across its three sources, so it reads them all at BUSINESS_LEVEL;
+        # a filter on any other level excludes the trail wholesale, as it does for issues.
+        if flt.wants(LogSource.business) and flt.level in (None, BUSINESS_LEVEL):
             rows = await EventRepository(self.session).search(**_business_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
@@ -152,9 +159,13 @@ def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> l
 
 
 def request_desc(entry: LogEntry) -> str | None:
-    """The human label for a request: its ``METHOD /path`` — the request source binds both onto
-    every ``request.started/finished`` line's payload. Correlated event/issue rows carry neither,
-    so a request only gets a label once one of its firehose lines is in the window."""
+    """The human label for a request: its ``METHOD /path``.
+
+    A business row carries it on its own ``request_name`` column, pinned when the request ran — so
+    it stays legible long after the firehose window that produced the request has rolled over. A
+    firehose line still derives it from its payload, where the request source binds both."""
+    if entry.request_name:
+        return entry.request_name
     method, path = entry.payload.get("method"), entry.payload.get("path")
     return f"{method} {path}" if method and path else None
 
@@ -197,9 +208,11 @@ def _business_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     # The trail's id columns are uuid; LogFilter carries them as strings from the URL query, so
     # parse at this boundary (a malformed id raises, as the previous in-repository cast did).
     kwargs = _event_kwargs(flt, limit)
+    del kwargs["level"]  # the trail carries no level column — see BUSINESS_LEVEL
     kwargs["org_id"] = uuid.UUID(flt.org_id) if flt.org_id else None
     kwargs["user_id"] = uuid.UUID(flt.user_id) if flt.user_id else None
     kwargs["entity_id"] = uuid.UUID(flt.entity_id) if flt.entity_id else None
+    kwargs["request_id"] = uuid.UUID(flt.request_id) if flt.request_id else None
     return kwargs
 
 
@@ -237,12 +250,13 @@ def _from_event(row: BusinessEventLog) -> LogEntry:
     return LogEntry(
         ts=row.created_at,
         source=LogSource.business,
-        level=row.level,
+        level=BUSINESS_LEVEL,
         event=row.kind,
         org_id=str(row.org_id) if row.org_id else None,
         user_id=str(row.user_id) if row.user_id else None,
         entity_id=str(row.entity_id) if row.entity_id else None,
-        request_id=row.request_id,
+        request_id=str(row.request_id) if row.request_id else None,
+        request_name=row.request_name,
         payload=row.payload or {},
     )
 
