@@ -5,6 +5,13 @@ One data structure, no behaviour: :class:`BusinessEventLog` is the ORM mapping o
 session keeps ``expire_on_commit=False``, so a read row stays usable past its session). Access logic
 — writing and querying it — lives in the repository; humanizing a row for a surface lives in
 :mod:`apps.shared.events.timeline`.
+
+This model maps only the columns that *are the fact* — the ones a reader projects and a consumer
+rebuilds. The delivery-plumbing column ``dispatched_at`` (the async tailer's claim cursor) is
+deliberately **not** mapped here: it is queue mechanics, not part of what happened, and the listener
+touches it through raw SQL in :mod:`apps.shared.events.repository._delivery` (alongside the
+``consumed`` ledger). Keeping it off the model is what lets this class stay "the fact, and only the
+fact"; the choice lives here so the absence reads as intent, not oversight.
 """
 
 import uuid

@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
-from apps.shared.events.repository import EventRepository, TrailRow
+from apps.shared.events.repository import EventRepository, TrailRow, task_payload
 from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
@@ -34,20 +34,6 @@ from apps.shared.queue import enqueue
 log = structlog.get_logger("labase.shared.listener")
 
 NOTIFY_CHANNEL = "business_event"
-
-
-def _task_payload(row: TrailRow) -> dict[str, Any]:
-    """Rebuild the async-consumer task payload from a business_events row: the event's own fields
-    plus the row id as the dedup ``event_id``. The fields lifted to columns (the scoping ids and
-    ``entity_name``) are folded back in, since the event declares them."""
-    payload = dict(row["payload"] or {})
-    payload["entity_name"] = row["entity_name"]
-    payload["user_id"] = str(row["user_id"]) if row["user_id"] else None
-    payload["org_id"] = str(row["org_id"]) if row["org_id"] else None
-    payload["entity_id"] = str(row["entity_id"]) if row["entity_id"] else None
-    # the dedup key (uuid; stringified — the queue json-encodes it)
-    payload["event_id"] = str(row["id"])
-    return payload
 
 
 class EventListener:
@@ -128,7 +114,7 @@ class EventListener:
         event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return None
-        return event_type.from_payload(_task_payload(row))
+        return event_type.from_payload(task_payload(row))
 
     def _reconstruct_safely(self, row: TrailRow) -> BusinessEvent | None:
         """:meth:`_reconstruct`, but a payload that no longer fits its event class yields ``None``
@@ -146,7 +132,7 @@ class EventListener:
         subs = self._bus.registry.subscribers_for(event_type)
         if not subs:
             return
-        payload = _task_payload(row)
+        payload = task_payload(row)
         actor = row["user_id"]
         for sub in subs:
             await enqueue(session, sub.topic, payload, user_id=actor if sub.as_actor else None)

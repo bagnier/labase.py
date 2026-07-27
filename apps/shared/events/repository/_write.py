@@ -12,6 +12,7 @@ from structlog.contextvars import get_contextvars
 
 from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository._base import _EventSQL
+from apps.shared.events.repository._delivery import LIFTED_COLUMNS
 from apps.shared.events.types import BusinessEvent, OrgScoped
 from apps.shared.persistence.database import admin_session_factory
 
@@ -83,7 +84,7 @@ def event_to_log(
     ctx = get_contextvars()
     request_id = ctx.get("request_id")
     payload = _loggable_payload(event)
-    for lifted in ("user_id", "org_id", "entity_id", "entity_name"):
+    for lifted in LIFTED_COLUMNS:  # the lifted fields get their own columns, not a payload key
         payload.pop(lifted, None)
     return BusinessEventLog(
         # The two halves the event declares; the row's ``kind`` is generated from them (a writer

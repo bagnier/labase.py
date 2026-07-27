@@ -7,6 +7,7 @@ non-blocking persist contract (``emit`` never waits on — or fails from — the
 
 import uuid
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 
@@ -116,6 +117,77 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
     assert "user_id" not in payload
     assert "org_id" not in payload
     assert "entity_id" not in payload
+
+
+# ── One serialized shape, closed by a round-trip ───────────────────────────────────────────────
+#
+# A fact crosses the persistence/delivery boundary through four field lists that must agree: the
+# columns `event_to_log` lifts out of the payload, the columns the delivery scans SELECT, the
+# `TrailRow` they land in, and the keys `task_payload` folds back before `from_payload` rebuilds
+# the event. These tests fix that agreement, so a base field added to `BusinessEvent` without
+# threading it through the whole chain fails here, loudly, not by vanishing between write and read.
+
+
+@dataclass(frozen=True, kw_only=True)
+class _NoteEvent(BusinessEvent):
+    app_name = "test_note"
+    verb = "noted"
+    note: str | None = None  # a plain string riding in the payload
+    ref_id: uuid.UUID | None = None  # a uuid FK riding in the payload (stringified at the edge)
+
+
+def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
+    """Drive an event through the real serialized chain without a DB: `event_to_log` builds the row,
+    we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it — computing the
+    generated `kind`, which a SELECT returns but an unflushed ORM row leaves unset — then
+    `task_payload` + `from_payload` rebuild it, exactly as the listener does off a claimed row."""
+    from apps.shared.events.repository import TRAIL_COLUMNS, TrailRow, task_payload
+
+    row = event_to_log(event)
+    projected = {c: getattr(row, c) for c in TRAIL_COLUMNS}
+    projected["kind"] = f"{row.app_name}.{row.verb}"  # the generated column, unset pre-flush
+    trail = cast(TrailRow, projected)
+    return type(event).from_payload(task_payload(trail))
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        pytest.param(
+            WidgetCreated(
+                user_id=uuid.uuid7(),
+                org_id=uuid.uuid7(),
+                entity_id=uuid.uuid7(),
+                entity_name="Gizmo",
+            ),
+            id="org-scoped-named",
+        ),
+        pytest.param(_NoteEvent(user_id=uuid.uuid7()), id="server-wide-actor-only"),
+        pytest.param(
+            _NoteEvent(user_id=uuid.uuid7(), ref_id=uuid.uuid7()), id="uuid-payload-field"
+        ),
+        pytest.param(
+            _NoteEvent(
+                user_id=uuid.uuid7(), entity_id=uuid.uuid7(), entity_name="Report", note="hi"
+            ),
+            id="named-subject-with-payload",
+        ),
+    ],
+)
+def test_a_fact_round_trips_identically_through_the_serialized_chain(event: BusinessEvent):
+    # event → row → TrailRow → payload → event returns something equal to what went in. Frozen
+    # dataclass equality compares every instance field, so this asserts the whole event survives.
+    assert _reconstruct_through_delivery(event) == event
+
+
+def test_the_delivery_column_lists_derive_from_one_source():
+    # The lifted columns, the SELECT columns and the TrailRow that receives them are three views of
+    # one tuple — not three hand-kept lists that must be edited in lockstep. Pin them to it so a
+    # drift (a column added to one but not the others) fails at import of this test, not in prod.
+    from apps.shared.events.repository import LIFTED_COLUMNS, TRAIL_COLUMNS, TrailRow
+
+    assert set(TRAIL_COLUMNS) == {"id", "kind", "payload"} | set(LIFTED_COLUMNS)
+    assert set(TrailRow.__annotations__) == set(TRAIL_COLUMNS)
 
 
 # ── The UUID-aware serializer socle: DTOs carry uuid.UUID, the edge stringifies/re-parses ──────
