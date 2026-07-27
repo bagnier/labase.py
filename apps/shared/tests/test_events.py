@@ -44,14 +44,26 @@ def test_crud_kind_is_derived_from_entity_and_verb():
     assert WidgetCreated.icon == "cube"
 
 
-def test_explicit_kind_wins_over_derivation():
-    # A fixture must not borrow a shipped kind: the catalog is keyed by kind and last-write-wins,
-    # so declaring "auth.signed_in" here would replace the real event class process-wide.
+def test_a_non_crud_event_still_derives_its_kind_from_its_own_verb():
+    # Non-CRUD actions spell out a verb of their own rather than a dotted string: the derivation is
+    # unconditional, because the trail composes kind the very same way (a generated column). A
+    # hand-written kind could only make the class disagree with the rows it is meant to rebuild.
     @dataclass(frozen=True, kw_only=True)
     class SignedIn(BusinessEvent):
-        kind = "test_explicit.signed_in"
+        app_name = "test_explicit"
+        verb = "signed_in"
 
     assert SignedIn.kind == "test_explicit.signed_in"
+
+
+def test_an_event_naming_only_one_half_has_no_kind_and_stays_out_of_the_catalog():
+    # Both halves or nothing: an abstract base (an app mixin with no verb) is not a fact, so it
+    # never claims a kind and never enters the catalog the listener rebuilds from.
+    class HalfNamed(BusinessEvent):
+        app_name = "test_half"
+
+    assert HalfNamed.kind == ""
+    assert registry.event_class_for("") is None
 
 
 def test_concrete_events_register_in_the_catalog_for_reconstruction():
@@ -71,12 +83,13 @@ async def test_emit_does_not_run_handlers_in_process():
 
     @dataclass(frozen=True, kw_only=True)
     class ConfigChanged(BusinessEvent):
-        kind = "config.changed"
+        app_name = "config"
+        verb = "changed"
 
     async def reload(event: ConfigChanged) -> None:
         seen.append(event)
 
-    bus.registry.declare_events("config", ConfigChanged)  # emit refuses an undeclared event
+    bus.registry.declare_events(ConfigChanged)  # emit refuses an undeclared event
     bus.spread(ConfigChanged, reload)
 
     await bus.emit(ConfigChanged())
@@ -88,7 +101,9 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
     # payload — a single event → row hop, no intermediate column dict.
     actor, org, eid = uuid.uuid7(), uuid.uuid7(), uuid.uuid7()
     row = event_to_log(WidgetCreated(user_id=actor, org_id=org, entity_id=eid, entity_name="Gizmo"))
-    assert row.kind == "widget.created"
+    # The row carries the two halves; `kind` is generated from them in the DB, so it has no value
+    # on a row that hasn't been written yet — the composition lives there, not here.
+    assert (row.app_name, row.verb) == ("widget", "created")
     assert row.icon == "cube"
     assert row.user_id == actor
     assert row.org_id == org
@@ -108,7 +123,8 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
 
 @dataclass(frozen=True, kw_only=True)
 class _RefEvent(BusinessEvent):
-    kind = "test_ref.happened"
+    app_name = "test_ref"
+    verb = "happened"
     ref_id: uuid.UUID | None = None  # a plain FK carried as uuid on the DTO
     token: uuid.UUID | None = None  # name triggers redaction — never reaches json.dumps
 
@@ -166,3 +182,41 @@ def test_from_payload_reparses_a_uuid_entity_id():
     eid = uuid.uuid7()
     event = _RefEvent.from_payload({"entity_id": str(eid)})
     assert event.entity_id == eid
+
+
+def test_two_classes_cannot_claim_the_same_kind():
+    """A kind is the trail's stored identity, so it must map back to exactly one class.
+
+    The catalog is keyed by kind and was last-write-wins: a second claimant silently replaced the
+    first, and the listener then handed the *wrong* type to that kind's durable consumers. This bit
+    us for real — a fixture declaring "auth.signed_in" displaced the shipped event process-wide.
+    """
+
+    @dataclass(frozen=True, kw_only=True)
+    class First(BusinessEvent):
+        app_name = "test_dup"
+        verb = "happened"
+
+    with pytest.raises(ValueError, match="test_dup.happened"):
+
+        @dataclass(frozen=True, kw_only=True)
+        class Second(BusinessEvent):
+            app_name = "test_dup"
+            verb = "happened"
+
+
+def test_redeclaring_the_same_class_stays_idempotent():
+    """A module reimported — or a class defined in a test body that runs twice — re-creates the
+    same declaration. That must not trip the guard, so it compares where a class is declared
+    rather than object identity."""
+
+    def declare() -> type[BusinessEvent]:
+        @dataclass(frozen=True, kw_only=True)
+        class Same(BusinessEvent):
+            app_name = "test_dup"
+            verb = "redeclared"
+
+        return Same
+
+    declare()
+    declare()  # same module and qualname: allowed

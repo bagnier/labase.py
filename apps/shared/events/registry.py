@@ -7,10 +7,9 @@ Three kinds of knowledge, gathered as apps are imported and mounted:
   by nature — a class is defined exactly once at import — so the catalog is shared by every registry
   instance. It powers reconstruction from a stored row (:meth:`event_class_for`).
 - **The ownership.** At mount, an app *declares* the events it emits (:meth:`declare`), recording
-  the **owner app** per event. ``emit`` refuses an undeclared event (a mounted app only emits what
-  it declared), and the console reads ownership as the per-app catalogue (:meth:`events_by_app`).
-  The declared namespace must match the kind prefix (``settings.*`` → the ``settings`` owner), so an
-  app cannot claim another's events.
+  the **owner app** per event — read off the event's own ``app_name``, since a fact already names
+  the app it belongs to. ``emit`` refuses an undeclared event (a mounted app only emits what it
+  declared), and the console reads ownership as the per-app catalogue (:meth:`events_by_app`).
 - **The subscriptions.** ``bus.on`` durable consumers (each tagged with the **listening app**) and
   ``bus.spread`` run-everywhere handlers register here too.
 
@@ -38,6 +37,16 @@ if TYPE_CHECKING:
 _catalog_by_kind: dict[str, type[BusinessEvent]] = {}
 
 
+def _declared_at(cls: type) -> tuple[str, str]:
+    """Where a class is written — the identity the catalog dedupes on, so re-importing a module
+    (or re-running a test that declares a class inline) is not mistaken for a second claimant."""
+    return cls.__module__, cls.__qualname__
+
+
+def _qualified(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
 @dataclass(frozen=True)
 class Sub:
     """A durable ``bus.on`` consumer of an event type: its ``name`` (the reaction), the queue
@@ -62,7 +71,23 @@ class EventRegistry:
 
     def register_event(self, event_type: type[BusinessEvent]) -> None:
         """Record a concrete event class under its ``kind`` — called once per class from
-        :meth:`~apps.shared.events.types.BusinessEvent.__init_subclass__`, for reconstruction."""
+        :meth:`~apps.shared.events.types.BusinessEvent.__init_subclass__`, for reconstruction.
+
+        A kind is the trail's *stored* identity: it is what :meth:`event_class_for` maps back to a
+        class when the listener rebuilds a persisted fact. Two classes claiming one kind would
+        therefore replace each other by import order, and a durable consumer would be handed the
+        wrong type — so a duplicate is refused here, at import, rather than found in production.
+
+        Duplicate means *a different declaration*, compared by where the class is written, not by
+        object identity: a reimported module, or a class defined inside a test body that runs
+        twice, re-creates the same declaration and must stay idempotent."""
+        claimed = _catalog_by_kind.get(event_type.kind)
+        if claimed is not None and _declared_at(claimed) != _declared_at(event_type):
+            raise ValueError(
+                f"event kind {event_type.kind!r} is already registered by "
+                f"{_qualified(claimed)}; {_qualified(event_type)} cannot claim it too — "
+                "a kind must map back to exactly one class for the trail to be reconstructable"
+            )
         _catalog_by_kind[event_type.kind] = event_type
 
     def event_class_for(self, kind: str) -> type[BusinessEvent] | None:
@@ -72,21 +97,22 @@ class EventRegistry:
 
     # ── Ownership (declared at mount, per instance) ──────────────────────────────────────────
 
-    def declare_events(self, app: str, *event_types: type[BusinessEvent]) -> None:
-        """Record that ``app`` owns (emits) each of ``event_types``. The event's kind prefix must be
-        ``app`` (``todo.*`` → ``todo``), so an app cannot claim another's events; re-declaring the
-        same event for the same app is idempotent, for a different app is an error."""
+    def declare_events(self, *event_types: type[BusinessEvent]) -> None:
+        """Record that each of ``event_types`` is emitted by the app it names — ``app_name``, read
+        off the class. Declaring is therefore only *activation* (this mounted app emits these
+        facts), never an attribution: an app cannot claim another's events because it never says
+        whose they are. Re-declaring is idempotent.
+
+        An event with no ``app_name``/``verb`` has no kind at all — it never entered the catalog, so
+        the listener could not rebuild it from a row. Declaring one is a mistake worth naming
+        (typically an abstract base passed by hand instead of its concrete subclasses)."""
         for event_type in event_types:
-            prefix = event_type.kind.split(".", 1)[0]
-            if prefix != app:
+            if not event_type.kind:
                 raise ValueError(
-                    f"{app!r} cannot declare {event_type.__name__}: "
-                    f"kind {event_type.kind!r} is owned by {prefix!r}"
+                    f"{event_type.__name__} declares no app_name/verb, so it has no kind — "
+                    "an unnamed fact cannot be persisted or rebuilt"
                 )
-            owner = self._owner_by_type.get(event_type)
-            if owner is not None and owner != app:
-                raise ValueError(f"{event_type.__name__} already declared by {owner!r}")
-            self._owner_by_type[event_type] = app
+            self._owner_by_type[event_type] = event_type.app_name
 
     def is_declared(self, event_type: type[BusinessEvent]) -> bool:
         """Whether some app declared it — the gate ``emit`` checks before persisting a fact."""

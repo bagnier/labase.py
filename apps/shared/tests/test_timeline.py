@@ -7,7 +7,8 @@ from apps.shared.events.timeline import activity_entries
 
 def _row(
     *,
-    kind="todo.created",
+    app_name="todo",
+    verb="created",
     icon="clipboard-text",
     user_name=None,
     entity_name=None,
@@ -17,7 +18,8 @@ def _row(
     # stays legible once the actor or the org they name is gone.
     return BusinessEventLog(
         created_at=ts or clock.now(),
-        kind=kind,
+        app_name=app_name,
+        verb=verb,
         icon=icon,
         user_id=None,
         org_id=None,
@@ -46,8 +48,8 @@ def test_activity_entries_drop_the_actor_on_the_users_own_trail():
 
 def test_activity_entries_take_an_href_from_the_surface_link():
     """Each surface supplies its own deep link (entity page, filtered logs…) via ``link``."""
-    row = _row(kind="pages.created")
-    [entry] = activity_entries([row], link=lambda r: f"/go/{r.kind}")
-    assert entry.href == "/go/pages.created"
+    row = _row(app_name="pages")
+    [entry] = activity_entries([row], link=lambda r: f"/go/{r.app_name}")
+    assert entry.href == "/go/pages"
     [plain] = activity_entries([row])  # no link → no href, rendered as text
     assert plain.href is None

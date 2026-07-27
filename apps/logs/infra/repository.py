@@ -75,11 +75,12 @@ class LogFilter:
         return self.source is None or self.source == source
 
 
-def entry_app(entry: LogEntry) -> str:
-    """The owning app of an entry — the first dotted segment of its event key (``todo.created``
-    → ``todo``, ``request.failed`` → ``request``). Business events are ``<app>.<verb>``, so this
-    is the per-app axis the console browses by; issues (bare titles) collapse to their full name."""
-    return entry.event.split(".", 1)[0]
+def _key_app(event: str) -> str:
+    """The owning app of a *keyed* source — the first dotted segment of its event name
+    (``request.failed`` → ``request``). Only the firehose and issue occurrences need this: a
+    business row states its app on its own column. Issues carry a bare title, which collapses to
+    its full name."""
+    return event.split(".", 1)[0]
 
 
 class LogReader:
@@ -105,7 +106,7 @@ class LogReader:
         # The app filter narrows the merged timeline to one app's event key prefix — applied in
         # memory over every source at once, the same seam sort/pagination already live in.
         if flt.app:
-            entries = [e for e in entries if entry_app(e) == flt.app]
+            entries = [e for e in entries if e.app == flt.app]
         # Correlating by the concerned entity keeps only its rows — which excludes the firehose and
         # issue sources outright, since neither carries an entity_id (only business events do).
         if flt.entity_id:
@@ -140,7 +141,7 @@ class LogReader:
         return {
             "source": _tally(entries, lambda e: e.source.value),
             # The app axis is a business notion (``<app>.<verb>``); only business rows have one.
-            "app": _tally([e for e in entries if e.source == LogSource.business], entry_app),
+            "app": _tally([e for e in entries if e.source == LogSource.business], lambda e: e.app),
             "level": _tally(entries, lambda e: e.level),
             "org": _tally(entries, lambda e: e.org_id),
             "user": _tally(entries, lambda e: e.user_id),
@@ -237,6 +238,7 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
         source=LogSource.http,
         level=row.level,
         event=row.event,
+        app=_key_app(row.event),
         org_id=row.org_id,
         user_id=row.user_id,
         request_id=row.request_id,
@@ -252,6 +254,7 @@ def _from_event(row: BusinessEventLog) -> LogEntry:
         source=LogSource.business,
         level=BUSINESS_LEVEL,
         event=row.kind,
+        app=row.app_name,  # the row's own column — never re-split out of the composed kind
         org_id=str(row.org_id) if row.org_id else None,
         user_id=str(row.user_id) if row.user_id else None,
         entity_id=str(row.entity_id) if row.entity_id else None,
@@ -268,6 +271,7 @@ def _from_issue(row: IssueEventRow) -> LogEntry:
         source=LogSource.error,
         level="error",
         event=row.title,
+        app=_key_app(row.title),
         org_id=ctx.get("org_id"),
         user_id=ctx.get("user_id"),
         request_id=ctx.get("request_id"),

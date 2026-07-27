@@ -122,15 +122,16 @@ def test_the_stored_vocabulary_is_exactly_what_history_expects():
     assert set(_shipped_events()) == _KINDS
 
 
-def test_every_kind_is_exactly_its_app_and_verb():
-    # `kind` is one concept spelled in two halves: the app the family declares, and the event's
-    # own verb. Nothing may drift between them — a hand-written dotted string that disagrees with
-    # its own parts would still be accepted by the mount-time check, which only compares the
-    # prefix against the owning app.
-    inconsistent = {
-        kind for kind, cls in _shipped_events().items() if kind != f"{cls.app_name}.{cls.verb}"
+def test_every_event_names_both_of_its_halves():
+    # An event's identity *is* its two halves — the composition into `kind` happens by construction
+    # here (BusinessEvent.__init_subclass__) and in the database (a generated column), so there is
+    # nothing left to drift. What can still go wrong is a half left unsaid: a family mixin gives
+    # `app_name` for free, so a concrete event that forgets its `verb` silently gets no kind at all
+    # and never enters the catalog the listener rebuilds from.
+    unnamed = {
+        cls.__name__ for cls in _shipped_events().values() if not (cls.app_name and cls.verb)
     }
-    assert inconsistent == set()
+    assert unnamed == set()
 
 
 def test_no_event_names_an_identity_outside_the_bases_slots():

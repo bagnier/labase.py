@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime
+from sqlalchemy import Computed, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,7 +31,14 @@ class BusinessEventLog(Base, UUIDPk):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
     )
-    kind: Mapped[str]
+    # An event names itself in two halves: the app it belongs to and the verb it performs. They are
+    # what a writer supplies; ``kind`` is their view — generated in the DB (see the migration), so
+    # it is read-only here and no writer can make the whole disagree with its parts.
+    app_name: Mapped[str]
+    verb: Mapped[str]
+    kind: Mapped[str] = mapped_column(
+        Computed("app_name || '.' || verb", persisted=True), nullable=False
+    )
     icon: Mapped[str] = mapped_column(default="circle")
     # Each correlation key is paired with the readable name it had *then*: the trail outlives its
     # subjects (a closed account, a deleted or renamed org) and RLS hides a co-member's handle at
@@ -43,10 +50,10 @@ class BusinessEventLog(Base, UUIDPk):
     org_name: Mapped[str | None] = mapped_column(default=None)
     entity_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     entity_name: Mapped[str | None] = mapped_column(default=None)
-    ip: Mapped[str | None] = mapped_column(default=None)
     request_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     # "GET /profile" — the request's own readable name, bound at request time. Without it the id
     # is only resolvable while the firehose still holds that request's lines; the firehose is a
     # recent window of files, so past its retention the id would be opaque for good.
     request_name: Mapped[str | None] = mapped_column(default=None)
+    ip: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

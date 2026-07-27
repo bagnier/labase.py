@@ -55,7 +55,6 @@ def mount(host: Host) -> None:
     host.app.include_router(router)  # /organizations collection
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.declare(
-        "organizations",
         OrganizationCreated,
         OrganizationRenamed,
         OrgHandleChanged,

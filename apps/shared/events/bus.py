@@ -52,10 +52,12 @@ class EventBus:
         # classes register once at import).
         self.registry = registry
 
-    def declare(self, app: str, *event_types: type[BusinessEvent]) -> None:
-        """Record, at mount, the events ``app`` owns. The kind prefix must be ``app`` (so an app
-        can't claim another's events); :meth:`emit` then refuses any undeclared event."""
-        self.registry.declare_events(app, *event_types)
+    def declare(self, *event_types: type[BusinessEvent]) -> None:
+        """Record, at mount, the events this app emits — each names its own owner (``app_name``),
+        so declaring says *these facts are live in this process*, nothing more. :meth:`emit` then
+        refuses any undeclared event (a disabled app never declares, so its facts can't be
+        emitted)."""
+        self.registry.declare_events(*event_types)
 
     async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
         """Persist the fact — and only that. Refuses an undeclared event (a fact must be owned).

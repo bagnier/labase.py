@@ -13,7 +13,8 @@ def test_profile_page_lists_the_users_own_recent_actions(driver):
     user_id = user_id_for_email(_EMAIL)
     driver.run(
         insert_business_event(
-            kind="todo.task_created",
+            app_name="todo",
+            verb="task_created",
             user_id=uuid.UUID(user_id),
             ip=None,
             org_id=None,

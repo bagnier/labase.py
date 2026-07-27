@@ -54,10 +54,15 @@ def event_model(
     request_name: str | None = None,
 ) -> BusinessEventLog:
     """A ready-to-``add`` business-event row — the same model the persister writes, with an
-    explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate)."""
+    explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate).
+
+    The scenarios name an event the way it reads on screen (``"todo.created"``), so this is where
+    that sentence becomes the two columns a row stores — ``kind`` itself is generated from them."""
+    app_name, _, verb = event.partition(".")
     return BusinessEventLog(
         created_at=when or clock.now(),
-        kind=event,
+        app_name=app_name,
+        verb=verb,
         user_id=_uuid(user),
         org_id=_uuid(org),
         request_id=_uuid(request_id),

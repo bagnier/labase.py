@@ -20,7 +20,8 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
     org = _personal_org(client)
     driver.run(
         insert_business_event(
-            kind="calendar.event_created",
+            app_name="calendar",
+            verb="event_created",
             user_id=uuid.UUID(user_id),
             ip=None,
             org_id=uuid.UUID(org["id"]),
@@ -42,10 +43,11 @@ def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
     client = driver.client_for(_EMAIL)
     user_id = user_id_for_email(_EMAIL)
     org = _personal_org(client)
-    for kind in ("calendar.event_created", "todo.created"):
+    for app_name, verb in (("calendar", "event_created"), ("todo", "created")):
         driver.run(
             insert_business_event(
-                kind=kind,
+                app_name=app_name,
+                verb=verb,
                 user_id=uuid.UUID(user_id),
                 ip=None,
                 org_id=uuid.UUID(org["id"]),

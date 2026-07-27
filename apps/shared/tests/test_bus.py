@@ -21,12 +21,13 @@ from apps.shared.queue import _handlers
 
 @dataclass(frozen=True, kw_only=True)
 class _Ticked(BusinessEvent):
-    kind = "test_bus.ticked"
+    app_name = "test_bus"
+    verb = "ticked"
     label: str | None = None
 
 
 class _TickedSub(_Ticked):
-    kind = "test_bus.ticked_sub"
+    verb = "ticked_sub"
 
 
 def _clear_engine_caches() -> None:
@@ -67,18 +68,25 @@ async def _noop(session, event) -> None:
 
 
 def test_declare_records_the_owner_app_and_gates_emit():
+    # Declaring activates a fact; it never attributes one. The owner is the app the event itself
+    # names, so a mount cannot spell it differently from the class.
     reg = EventRegistry()
     assert reg.is_declared(_Ticked) is False
-    reg.declare_events("test_bus", _Ticked)
+    reg.declare_events(_Ticked)
     assert reg.is_declared(_Ticked) is True
     assert reg.owner_of(_Ticked) == "test_bus"
     assert reg.events_by_app() == {"test_bus": [_Ticked]}
 
 
-def test_declare_rejects_an_event_whose_kind_prefix_is_another_app():
+def test_declare_rejects_an_event_that_names_no_app_and_verb():
+    # Without both halves an event has no kind: it never entered the catalog, so a persisted row
+    # could not be rebuilt from it. Usually an abstract base handed over instead of its subclasses.
+    class _Abstract(BusinessEvent):
+        pass
+
     reg = EventRegistry()
-    with pytest.raises(ValueError):
-        reg.declare_events("todo", _Ticked)  # kind is test_bus.*, not todo.*
+    with pytest.raises(ValueError, match="_Abstract"):
+        reg.declare_events(_Abstract)
 
 
 @pytest.mark.asyncio

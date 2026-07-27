@@ -18,7 +18,8 @@ mixin — no ``kind`` string is hand-written::
         title: str
 
 Non-CRUD actions (sign-in, a member joining, a page being published) subclass
-:class:`BusinessEvent` directly and set an explicit ``kind``.
+:class:`BusinessEvent` directly and spell out their own ``verb`` — never a dotted ``kind``, which is
+always the composition of the two halves, here and on the trail alike (a generated column).
 """
 
 import contextlib
@@ -61,19 +62,21 @@ class BusinessEvent:
     entity_name: str | None = None
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
-    kind: ClassVar[str] = ""  # dotted "<app>.<subject>"; derived for CRUD, explicit otherwise
-    icon: ClassVar[str] = "circle"  # phosphor name the event OWNS, so shared never maps apps→icons
-    # The app a CRUD event belongs to ("todo", "files") — the first half of its dotted kind. Set
-    # once by the per-app mixin; declared here so every event has it and the derivation below can
-    # read it straight off the class rather than guessing whether it exists.
+    # The app the event belongs to ("todo", "files"), usually set once by the per-app mixin, and
+    # the verb it performs ("created", "signed_in"). Together they *are* the event's identity;
+    # ``kind`` below is only their composition.
     app_name: ClassVar[str] = ""
-    verb: ClassVar[str] = ""  # the CRUD half ("created"…), set by the abstracts below
+    verb: ClassVar[str] = ""
+    kind: ClassVar[str] = ""  # derived — "<app_name>.<verb>", never written by hand
+    icon: ClassVar[str] = "circle"  # phosphor name the event OWNS, so shared never maps apps→icons
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        # A concrete CRUD event has both an app_name (from its app mixin) and a verb (from the
-        # CRUD abstract): derive its kind once. Explicit `kind = "..."` on the class wins.
-        if cls.app_name and cls.verb and "kind" not in cls.__dict__:
+        # A concrete event has both halves (an app_name from its app mixin, a verb of its own):
+        # compose its kind. The derivation is unconditional — the trail derives the very same way
+        # (a generated column), so a hand-written kind would only make the class disagree with the
+        # rows it is meant to rebuild.
+        if cls.app_name and cls.verb:
             cls.kind = f"{cls.app_name}.{cls.verb}"
         # A concrete event (non-empty kind) registers itself in the catalog so the listener can
         # reconstruct it from a stored row. Abstract bases (EntityCreated…, kind still "") never do.

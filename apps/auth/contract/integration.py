@@ -50,9 +50,9 @@ def mount(host: Host) -> None:
     host.register_settings(_declare_settings())
     host.reserve("auth", "login", "logout", "signup")
     # Auth owns two event namespaces: the sign-in/identity ``auth.*`` facts and the admin
-    # ``accounts.*`` actions (both emitted from the auth routers).
+    # ``accounts.*`` actions (both emitted from the auth routers). Each event names its own, so one
+    # declaration covers both.
     host.events.declare(
-        "auth",
         UserCreated,
         UserDeleted,
         SignedIn,
@@ -76,8 +76,10 @@ def mount(host: Host) -> None:
         ImpersonationStarted,
         ImpersonationStopped,
         ForbiddenAdminAccess,
+        AccountDisabled,
+        AccountEnabled,
+        AccountDeletedByAdmin,
     )
-    host.events.declare("accounts", AccountDisabled, AccountEnabled, AccountDeletedByAdmin)
 
 
 def _declare_settings() -> SettingsDeclaration:

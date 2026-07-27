@@ -45,10 +45,10 @@ class DaySection:
         return len(self.entries)
 
 
-def _activity_label(kind: str) -> str:
-    """`auth.oauth_signed_in` → `Oauth signed in` — readable without a per-event table. Purely
-    string-shaping: shared never enumerates the apps, it just humanizes whatever kind it's given."""
-    return kind.split(".", 1)[-1].replace("_", " ").capitalize()
+def _activity_label(verb: str) -> str:
+    """`oauth_signed_in` → `Oauth signed in` — readable without a per-event table. Purely
+    string-shaping: shared never enumerates the apps, it just humanizes the verb the row carries."""
+    return verb.replace("_", " ").capitalize()
 
 
 def activity_entries(
@@ -65,9 +65,9 @@ def activity_entries(
         entries.append(
             ActivityEntry(
                 who=r.user_name if show_actor else None,
-                label=_activity_label(r.kind),
+                label=_activity_label(r.verb),
                 detail=r.entity_name,
-                app=r.kind.split(".", 1)[0],
+                app=r.app_name,
                 icon=r.icon or _FALLBACK_ICON,
                 ts=r.created_at,
                 href=link(r) if link else None,

@@ -57,7 +57,7 @@ def mount(host: Host) -> None:
         return
     host.app.include_router(router, prefix="/console/issues")
     on_captured(_record)  # error capture is delivered off the bus, observability → issues
-    host.events.declare("issues", IssueOpened, IssueRegressed, IssueStatusChanged)
+    host.events.declare(IssueOpened, IssueRegressed, IssueStatusChanged)
     host.events.on(IssueOpened, _alert_opened, name="alert_opened", app="issues")
     host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
     register_task_handler(PURGE_TOPIC, _purge)

@@ -150,7 +150,7 @@ class Host:
             self.app.include_router(router, prefix=prefix)
         for item in manifest.nav:
             self.register_nav(item)
-        self.events.declare(manifest.settings.app_name, *manifest.emits)
+        self.events.declare(*manifest.emits)
         for event_type, name, consumer in manifest.consumes_when_enabled:
             self.events.on(
                 event_type,

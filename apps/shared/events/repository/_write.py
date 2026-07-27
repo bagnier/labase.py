@@ -86,7 +86,10 @@ def event_to_log(
     for lifted in ("user_id", "org_id", "entity_id", "entity_name"):
         payload.pop(lifted, None)
     return BusinessEventLog(
-        kind=event.kind,
+        # The two halves the event declares; the row's ``kind`` is generated from them (a writer
+        # cannot set it), so the trail composes its identity exactly as the class does.
+        app_name=event.app_name,
+        verb=event.verb,
         icon=event.icon,
         user_id=event.user_id,
         ip=ctx.get("ip"),
@@ -107,7 +110,8 @@ def event_to_log(
 async def insert_business_event(
     *,
     session: AsyncSession | None = None,
-    kind: str,
+    app_name: str,
+    verb: str,
     icon: str = "circle",  # the BusinessEvent base default — the trail always shows something
     user_id: uuid.UUID | None,
     ip: str | None,
@@ -129,7 +133,8 @@ async def insert_business_event(
         user_name, org_name = await repo.pinned_names(user_id, org_id)
         await repo.save(
             BusinessEventLog(
-                kind=kind,
+                app_name=app_name,
+                verb=verb,
                 icon=icon,
                 user_id=user_id,
                 ip=ip,
@@ -152,4 +157,4 @@ async def insert_business_event(
             await write(own)
             await own.commit()
     except Exception:
-        log.warning("business_event.write_failed", kind=kind, user_id=user_id)
+        log.warning("business_event.write_failed", kind=f"{app_name}.{verb}", user_id=user_id)

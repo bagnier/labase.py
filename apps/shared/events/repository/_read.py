@@ -27,7 +27,7 @@ class _ReadsEvents(_EventSQL):
     ) -> list[BusinessEventLog]:
         """Newest-first read under the filters. RLS already scopes rows to the reader (self + orgs);
         the ``user_id``/``org_id`` filters narrow to one feed on top of that. ``app`` matches the
-        ``kind`` prefix (``todo`` → ``todo.*``)."""
+        row's own ``app_name`` column — an equality, not a scan of the composed kind's prefix."""
         query = (
             select(BusinessEventLog)
             .order_by(BusinessEventLog.id.desc())
@@ -43,7 +43,7 @@ class _ReadsEvents(_EventSQL):
         if request_id:
             query = query.where(BusinessEventLog.request_id == request_id)
         if app:
-            query = query.where(BusinessEventLog.kind.like(f"{app}.%"))
+            query = query.where(BusinessEventLog.app_name == app)
         if text:
             like = f"%{text}%"
             query = query.where(

@@ -27,6 +27,10 @@ class LogEntry(BaseModel):
     source: LogSource
     level: str
     event: str
+    # The owning app — the per-app axis the console browses by. A business row carries it as its
+    # own column; the other two sources have no such column, so they name themselves from their
+    # dotted event key at the boundary that builds them.
+    app: str = ""
     org_id: str | None = None
     user_id: str | None = None
     entity_id: str | None = None

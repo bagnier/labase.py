@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from apps.shared.events import BusinessEvent, OrgScoped
 from apps.shared.events.bus import events
@@ -16,7 +17,8 @@ from apps.shared.persistence import database as db
 
 @dataclass(frozen=True, kw_only=True)
 class _P1Event(OrgScoped, BusinessEvent):
-    kind = "test_p1.happened"
+    app_name = "test_p1"
+    verb = "happened"
     label: str | None = None
 
 
@@ -64,7 +66,8 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
         patch("apps.shared.events.repository._write.log") as log,
     ):
         await insert_business_event(
-            kind="auth.signed_in",
+            app_name="auth",
+            verb="signed_in",
             user_id=uid,
             ip=None,
             org_id=None,
@@ -104,6 +107,40 @@ async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
 
 
 @pytest.mark.asyncio
+async def test_the_trail_composes_kind_from_the_two_halves_it_stores(_clean_p1):
+    """``kind`` is a view over the row, not a value in it.
+
+    An event names itself in two parts, and the class composes them; the table now does the same —
+    ``kind`` is generated from ``app_name`` and ``verb``. So the two derivations cannot drift: there
+    is no second writer to keep in sync, and no writer at all can put a dotted string in that column
+    (which is what used to let a hand-written kind disagree with the halves it claimed to be)."""
+    actor = uuid.uuid7()
+    async with db.admin_session_factory()() as session:
+        await session.execute(
+            text(
+                "INSERT INTO business_events (app_name, verb, user_id) "
+                "VALUES ('test_p1', 'happened', :a)"
+            ),
+            {"a": actor},
+        )
+        await session.commit()
+    async with db.admin_session_factory()() as session:
+        kind = await session.scalar(
+            text("SELECT kind FROM business_events WHERE user_id = :a"), {"a": actor}
+        )
+    assert kind == "test_p1.happened"
+
+    async with db.admin_session_factory()() as session:
+        with pytest.raises(DBAPIError):
+            await session.execute(
+                text(
+                    "INSERT INTO business_events (app_name, verb, kind) "
+                    "VALUES ('test_p1', 'happened', 'test_p1.lied')"
+                )
+            )
+
+
+@pytest.mark.asyncio
 async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
     """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
     actor = uuid.uuid7()
@@ -134,7 +171,7 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean
     from apps.shared.events.bus import events
     from apps.shared.events.registry import registry
 
-    registry.declare_events("test_p1", _P1Event)  # emit refuses an undeclared event
+    registry.declare_events(_P1Event)  # emit refuses an undeclared event
     committed, rolled = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await events.emit(_P1Event(user_id=committed, org_id=uuid.uuid7()), session=session)
