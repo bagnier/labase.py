@@ -22,6 +22,7 @@ from apps.shared.events.repository import (
     event_to_log,
     task_payload,
 )
+from apps.shared.events.types import _is_secret_field_name
 
 
 class WidgetEvent(OrgScoped, BusinessEvent):
@@ -256,7 +257,6 @@ class _RefEvent(BusinessEvent):
     app_name = "test_ref"
     verb = "happened"
     ref_id: uuid.UUID | None = None  # a plain FK carried as uuid on the DTO
-    token: uuid.UUID | None = None  # name triggers redaction — never reaches json.dumps
 
 
 def test_event_to_log_stringifies_uuid_payload_fields():
@@ -265,7 +265,6 @@ def test_event_to_log_stringifies_uuid_payload_fields():
     row = event_to_log(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
     assert row.payload is not None
     assert row.payload["ref_id"] == str(ref)  # stringified at the one serialization edge
-    assert row.payload["token"] is None  # None stays None (redaction only masks a set value)
 
 
 def test_event_to_log_lifts_a_uuid_entity_id():
@@ -285,10 +284,64 @@ def test_from_payload_reparses_every_uuid_field_by_type():
 
 
 def test_from_payload_is_defensive_on_unparseable_strings():
-    # A redacted token ("***") is annotated uuid.UUID but not a valid uuid — leave it untouched
-    # rather than crash the reconstruction.
-    event = _RefEvent.from_payload({"token": "***"})
-    assert event.token == "***"
+    # A stored value that isn't a valid uuid (a hand-inserted row, a legacy shape) is left untouched
+    # rather than crashing the rebuild — the listener's guard decides what to do with the odd event.
+    event = _RefEvent.from_payload({"ref_id": "not-a-uuid"})
+    assert event.ref_id == "not-a-uuid"
+
+
+# ── C3: a secret cannot enter a fact ───────────────────────────────────────────────────────────
+
+
+def test_a_secret_named_field_is_refused_at_class_definition():
+    # The trail is immutable, kept indefinitely, RLS-readable by an org's members and exportable —
+    # a secret has no business there. Declaring one is refused at class creation (before @dataclass
+    # even applies), and the message names the alternative: carry the subject's id, re-read state.
+    with pytest.raises(TypeError, match="secret material") as exc:
+
+        @dataclass(frozen=True, kw_only=True)
+        class Leaky(BusinessEvent):
+            app_name = "test_secret"
+            verb = "leaked"
+            api_key: str | None = None
+
+    assert "api_key_id" in str(exc.value)  # points to carrying the pk instead
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["access_token", "recovery_code", "otp_secret", "jwt", "credential", "user_password"],
+)
+def test_secret_material_is_refused_whatever_the_spelling(field_name: str):
+    # The denylist is broader than the three old substrings and underscore-insensitive, so no
+    # spelling of a secret slips through as an event field.
+    with pytest.raises(TypeError, match="secret material"):
+        type(
+            "Leaky",
+            (BusinessEvent,),
+            {"__annotations__": {field_name: str}, field_name: None, "app_name": "x", "verb": "y"},
+        )
+
+
+def test_an_id_reference_to_a_secret_bearing_entity_is_allowed():
+    # The recommended alternative must itself be legal: an event may carry the *pk* of a
+    # secret-bearing entity (api_key_id) — that is a correlation id, not the secret.
+    @dataclass(frozen=True, kw_only=True)
+    class Rotated(BusinessEvent):
+        app_name = "test_secret"
+        verb = "rotated"
+        api_key_id: uuid.UUID | None = None
+
+    assert Rotated.kind == "test_secret.rotated"
+
+
+def test_is_secret_field_name_carves_out_id_references():
+    assert _is_secret_field_name("api_key") is True
+    assert _is_secret_field_name("access_token") is True
+    assert _is_secret_field_name("recovery_code") is True
+    assert _is_secret_field_name("api_key_id") is False  # the pk of the secret-bearing entity
+    assert _is_secret_field_name("entity_id") is False
+    assert _is_secret_field_name("title") is False
 
 
 def test_from_payload_refuses_a_stored_null_for_a_required_field():

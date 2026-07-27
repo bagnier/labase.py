@@ -14,7 +14,7 @@ from structlog.contextvars import get_contextvars
 from apps.shared.events.models import BusinessEventLog
 from apps.shared.events.repository._base import _EventSQL
 from apps.shared.events.repository._delivery import LIFTED_COLUMNS
-from apps.shared.events.types import BusinessEvent, OrgScoped
+from apps.shared.events.types import BusinessEvent, OrgScoped, _is_secret_field_name
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger("labase.business_events")
@@ -56,17 +56,18 @@ class _WritesEvents(_EventSQL):
         return (row[0], row[1]) if row else (None, None)
 
 
-# Field-name substrings whose value is masked before it reaches the payload (``access_token`` etc.).
-_REDACT_SUBSTRINGS = ("token", "password", "secret")
-
-
 def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
     if not is_dataclass(event) or isinstance(event, type):
         return {}
     payload: dict[str, Any] = {}
     for f in fields(event):
         value = getattr(event, f.name)
-        if any(s in f.name.lower() for s in _REDACT_SUBSTRINGS):
+        if _is_secret_field_name(f.name):
+            # Defence in depth: ``__init_subclass__`` already refuses a secret-named event field, so
+            # reaching here means one slipped past (a raw or legacy writer). Mask it *and* shout — a
+            # silent mask is how the leak stayed invisible; an error is what gets it fixed.
+            if value is not None:
+                log.error("business_event.secret_field_masked", field=f.name, kind=event.kind)
             payload[f.name] = "***" if value is not None else None
         elif isinstance(value, uuid.UUID):
             payload[f.name] = str(value)  # json-safe: stdlib json can't serialize a uuid.UUID
