@@ -10,11 +10,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from itertools import groupby
 
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 
 # ── Activity feed — humanize rows for the profile/dashboard timeline ──────────────────────────
-
-_FALLBACK_ICON = "circle"  # for legacy rows written before events carried an icon
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,10 +50,10 @@ def _activity_label(verb: str) -> str:
 
 
 def activity_entries(
-    rows: list[BusinessEventLog],
+    rows: list[BusinessEventRecord],
     *,
     show_actor: bool = True,
-    link: Callable[[BusinessEventLog], str | None] | None = None,
+    link: Callable[[BusinessEventRecord], str | None] | None = None,
 ) -> list[ActivityEntry]:
     """Project rows to *who did what to which, when* — only safe fields, never the raw ``kind`` or
     the rest of the payload. ``show_actor`` drops *who* on the profile's own trail (always the
@@ -68,7 +66,7 @@ def activity_entries(
                 label=_activity_label(r.verb),
                 detail=r.entity_name,
                 app=r.app_name,
-                icon=r.icon or _FALLBACK_ICON,
+                icon=r.icon,  # not-null default 'circle' since 20260726000002 — always set
                 ts=r.created_at,
                 href=link(r) if link else None,
             )

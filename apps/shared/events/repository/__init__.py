@@ -1,7 +1,7 @@
 """The business-events repository — the one owner of ``business_events``.
 
 :class:`EventRepository` is :class:`~apps.shared.persistence.repository.BaseRepository` over
-:class:`BusinessEventLog`, composed from three concern modules: ``_write`` (append a fact + the
+:class:`BusinessEventRecord`, composed from three concern modules: ``_write`` (append a fact + the
 ``event → row`` mapping), ``_delivery`` (the listener's claim/mark/scan + consumed ledger), and
 ``_read`` (``search``/``daily_counts``). Humanizing rows is elsewhere (``timeline``); so is emit's
 session policy (the bus's ``_persist_fact``).

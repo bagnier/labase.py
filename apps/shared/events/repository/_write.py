@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.contextvars import get_contextvars
 
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository._base import _EventSQL
 from apps.shared.events.repository._delivery import LIFTED_COLUMNS
 from apps.shared.events.types import BusinessEvent, OrgScoped, _is_secret_field_name
@@ -80,7 +80,7 @@ def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
 
 def event_to_log(
     event: BusinessEvent, *, user_name: str | None = None, org_name: str | None = None
-) -> BusinessEventLog:
+) -> BusinessEventRecord:
     """The one ``event → row`` conversion. Scoping (user/org/entity) and the readable names are
     lifted to their own columns — so RLS, the timeline and full-text search reach them directly —
     leaving only the (redacted) rest in ``payload``; ``ip``/``request_id`` ride in from the request
@@ -93,7 +93,7 @@ def event_to_log(
     # created_at is the trail's own column, filled by the model default (one clock) — never the
     # emitter's None, which would only shadow it. Drop it: the column is its one home.
     payload.pop("created_at", None)
-    return BusinessEventLog(
+    return BusinessEventRecord(
         # The two halves the event declares; the row's ``kind`` is generated from them (a writer
         # cannot set it), so the trail composes its identity exactly as the class does.
         app_name=event.app_name,
@@ -140,7 +140,7 @@ async def insert_business_event(
         stored = dict(payload) if payload else {}
         user_name, org_name = await repo.pinned_names(user_id, org_id)
         await repo.save(
-            BusinessEventLog(
+            BusinessEventRecord(
                 app_name=app_name,
                 verb=verb,
                 icon=icon,

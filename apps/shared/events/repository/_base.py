@@ -2,9 +2,9 @@
 
 from typing import ClassVar
 
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.persistence.repository import BaseRepository
 
 
-class _EventSQL(BaseRepository[BusinessEventLog]):
-    model: ClassVar[type[BusinessEventLog]] = BusinessEventLog
+class _EventSQL(BaseRepository[BusinessEventRecord]):
+    model: ClassVar[type[BusinessEventRecord]] = BusinessEventRecord

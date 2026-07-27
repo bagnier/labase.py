@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
 from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
 
@@ -246,7 +246,7 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
     )
 
 
-def _from_event(row: BusinessEventLog) -> LogEntry:
+def _from_event(row: BusinessEventRecord) -> LogEntry:
     # LogEntry merges three sources (firehose ids are plain strings from JSON), so its ids stay str:
     # stringify the trail row's uuids at this boundary.
     return LogEntry(

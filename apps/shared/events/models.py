@@ -1,6 +1,6 @@
 """The shape of a business event on the trail.
 
-One data structure, no behaviour: :class:`BusinessEventLog` is the ORM mapping of the append-only
+One data structure, no behaviour: :class:`BusinessEventRecord` is the ORM mapping of the append-only
 ``business_events`` table — the single shape written on ``emit`` *and* handed back on a read (the
 session keeps ``expire_on_commit=False``, so a read row stays usable past its session). Access logic
 — writing and querying it — lives in the repository; humanizing a row for a surface lives in
@@ -26,9 +26,15 @@ from apps.shared import clock
 from apps.shared.persistence.base import Base, UUIDPk
 
 
-class BusinessEventLog(Base, UUIDPk):
-    """The append-only business-event row. Members read their own/their orgs' rows via RLS;
-    only the persister's BYPASSRLS admin session writes (no insert grant to authenticated).
+class BusinessEventRecord(Base, UUIDPk):
+    """The append-only business-event row. Members read their own / their orgs' rows via RLS.
+
+    Two writers, by design. On the **request path** ``emit`` records the fact on the caller's own
+    RLS (``authenticated``) session, so it commits atomically with the mutation — a member may
+    insert only rows attributed to themselves (the ``self-attributed insert`` policy over an
+    ``authenticated`` INSERT grant). Off the request path — the signup trigger (SECURITY DEFINER),
+    the detached best-effort ``emit``, the seeders — the **BYPASSRLS admin** session writes. The
+    tailer's dispatch and every read stay unchanged either way.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so it stays the monotonic cursor the tailer
     claims/scans on and the newest-first feeds order by — no bigint sequence."""

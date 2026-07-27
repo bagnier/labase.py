@@ -2,7 +2,7 @@
 
 Two of the three sources are seeded through their real writers:
 - request lines → the firehose's own writer (``append_firehose``);
-- business events → the shared ``BusinessEventLog`` model.
+- business events → the shared ``BusinessEventRecord`` model.
 
 Issue occurrences are the exception. The production path — emitting ``ExceptionCaptured`` —
 records through the app's *shared* engine (``admin_session_factory``), which asyncpg can't be
@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import text
 
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 
 # Deterministic ids so a seed step and a filter step agree on "Acme" / "alice@…" without needing
 # a real org/user row (the timeline filters by the raw id it stored).
@@ -52,14 +52,14 @@ def event_model(
     when: datetime | None = None,
     request_id: str | None = None,
     request_name: str | None = None,
-) -> BusinessEventLog:
+) -> BusinessEventRecord:
     """A ready-to-``add`` business-event row — the same model the persister writes, with an
     explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate).
 
     The scenarios name an event the way it reads on screen (``"todo.created"``), so this is where
     that sentence becomes the two columns a row stores — ``kind`` itself is generated from them."""
     app_name, _, verb = event.partition(".")
-    return BusinessEventLog(
+    return BusinessEventRecord(
         created_at=when or clock.now(),
         app_name=app_name,
         verb=verb,
