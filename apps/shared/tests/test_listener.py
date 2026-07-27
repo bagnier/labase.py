@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 import structlog
 from sqlalchemy import text
+from structlog.testing import capture_logs
 
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
@@ -210,7 +211,11 @@ async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
+async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispatched(iso):
+    # A kind with no registered class can be routed to no one — a fact we cannot even name. That is
+    # not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
+    # it into a console Issue), so it stops being lost in silence. The cursor still advances — the
+    # row is marked dispatched and nothing is enqueued.
     async with db.admin_session_factory()() as s:
         await s.execute(
             text(
@@ -220,7 +225,12 @@ async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
         )
         await s.commit()
 
-    assert await EventListener(0).tick() == 1
+    with capture_logs() as logs:
+        assert await EventListener(0).tick() == 1
+    surfaced = [entry for entry in logs if entry["event"] == "tailer.unroutable_fact"]
+    assert len(surfaced) == 1
+    assert surfaced[0]["log_level"] == "error"  # exception level → captured as an Issue
+    assert surfaced[0]["kind"] == "test_tailer.legacy"
     assert await _topics() == []
     assert await _undispatched("test_tailer.legacy") == 0
 
@@ -303,9 +313,15 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
         )
 
     listener = EventListener(0, bus=bus)
-    await listener.tick()
+    with capture_logs() as logs:
+        await listener.tick()
 
     assert [e.value for e in seen] == ["on"]
+    # The poison row is not swallowed as a warning: it is logged at exception level, so the capture
+    # seam records a console Issue for a fact that can no longer be rebuilt.
+    failed = [entry for entry in logs if entry["event"] == "tailer.reconstruct_failed"]
+    assert len(failed) == 1
+    assert failed[0]["log_level"] == "error"
     await listener.tick()  # cursor moved past both rows: nothing replays
     assert [e.value for e in seen] == ["on"]
 
