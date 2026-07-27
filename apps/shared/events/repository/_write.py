@@ -1,6 +1,7 @@
 """Write path — append a fact (typed, or from explicit columns) and the single ``event → row``
 mapping (no column dict between)."""
 
+import json
 import uuid
 from dataclasses import fields, is_dataclass
 from datetime import datetime
@@ -19,13 +20,47 @@ from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger("labase.business_events")
 
+# The trail's one writer since C4 retired the raw INSERT grant: a SECURITY DEFINER function that
+# inserts as its owner, so the request's ``authenticated`` session writes the fact atomically with
+# its mutation without a table grant PostgREST would share. ``kind`` is generated and ``id`` /
+# ``created_at`` keep their column defaults, so none of the three is passed.
+_RECORD = text(
+    "SELECT record_business_event("
+    ":app_name, :verb, :icon, :user_id, :user_name, :org_id, :org_name, "
+    ":entity_id, :entity_name, :request_id, :request_name, :ip, CAST(:payload AS jsonb))"
+)
+
+
+async def _record_row(session: AsyncSession, row: BusinessEventRecord) -> None:
+    """Append a fact through the writer function on ``session`` (its transaction). ``row`` is the
+    typed carrier :func:`event_to_log` (or the explicit-column writer) already built — the one
+    ``event → row`` shape — read off as the function's arguments."""
+    await session.execute(
+        _RECORD,
+        {
+            "app_name": row.app_name,
+            "verb": row.verb,
+            "icon": row.icon,
+            "user_id": row.user_id,
+            "user_name": row.user_name,
+            "org_id": row.org_id,
+            "org_name": row.org_name,
+            "entity_id": row.entity_id,
+            "entity_name": row.entity_name,
+            "request_id": row.request_id,
+            "request_name": row.request_name,
+            "ip": row.ip,
+            "payload": json.dumps(row.payload or {}),
+        },
+    )
+
 
 class _WritesEvents(_EventSQL):
     async def record(self, event: BusinessEvent) -> None:
         """Append a typed event to the trail on the bound session; the caller commits."""
         org_id = event.org_id if isinstance(event, OrgScoped) else None
         user_name, org_name = await self.pinned_names(event.user_id, org_id)
-        await self.save(event_to_log(event, user_name=user_name, org_name=org_name))
+        await _record_row(self.session, event_to_log(event, user_name=user_name, org_name=org_name))
 
     async def pinned_names(
         self, user_id: uuid.UUID | None, org_id: uuid.UUID | None
@@ -139,7 +174,8 @@ async def insert_business_event(
         repo = _WritesEvents(s)
         stored = dict(payload) if payload else {}
         user_name, org_name = await repo.pinned_names(user_id, org_id)
-        await repo.save(
+        await _record_row(
+            s,
             BusinessEventRecord(
                 app_name=app_name,
                 verb=verb,
@@ -154,7 +190,7 @@ async def insert_business_event(
                 user_name=user_name,
                 entity_name=entity_name,
                 org_name=org_name,
-            )
+            ),
         )
 
     if session is not None:

@@ -5,6 +5,7 @@ strings) and MRO dispatch (so one subscriber on the base records every subclass)
 non-blocking persist contract (``emit`` never waits on — or fails from — the DB write).
 """
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -193,6 +194,38 @@ def test_the_delivery_column_lists_derive_from_one_source():
     correlation = {"id", "kind", "created_at", "request_id"}  # row identity + delivery context
     assert set(TRAIL_COLUMNS) == correlation | set(LIFTED_COLUMNS) | {"payload"}
     assert set(TrailRow.__annotations__) == set(TRAIL_COLUMNS)
+
+
+# ── C4: the write path goes through the SECURITY DEFINER writer function, not a raw INSERT ──────
+
+
+@pytest.mark.asyncio
+async def test_the_write_path_calls_the_definer_function_with_the_row_columns():
+    # Since C4 revoked the raw INSERT grant, the trail is written only through
+    # record_business_event(...). Assert the write path calls exactly that, with the row's columns
+    # as arguments and the payload json-encoded for the jsonb parameter — no ORM INSERT.
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from apps.shared.events.models import BusinessEventRecord
+    from apps.shared.events.repository._write import _RECORD, _record_row
+
+    captured: dict[str, object] = {}
+
+    class _FakeSession:
+        async def execute(self, statement: object, params: object = None) -> None:
+            captured["statement"] = statement
+            captured["params"] = params
+
+    row = BusinessEventRecord(
+        app_name="todo", verb="created", icon="check", user_id=uuid.uuid7(), payload={"k": "v"}
+    )
+    await _record_row(cast(AsyncSession, _FakeSession()), row)
+
+    assert captured["statement"] is _RECORD  # the writer function, not an ORM INSERT
+    params = cast(dict, captured["params"])
+    assert (params["app_name"], params["verb"], params["icon"]) == ("todo", "created", "check")
+    assert params["user_id"] == row.user_id
+    assert params["payload"] == json.dumps({"k": "v"})  # json-encoded for the jsonb arg
 
 
 # ── C2: a delivered event is self-descriptive (its own instant) and correlated (the request) ───
