@@ -6,10 +6,13 @@ Delivery itself (log → task_queue) is the listener's job; see test_listener.py
 
 import uuid
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 import pytest_asyncio
+import structlog
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
@@ -148,3 +151,27 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
         await session.commit()
     assert len(calls) == 1
     assert isinstance(calls[0], _Ticked)  # reconstructed as the typed event, not a dict
+
+
+@pytest.mark.asyncio
+async def test_a_reaction_runs_with_the_request_and_fact_bound_to_its_log_context():
+    # A reaction runs off the trail on a background task with no request context of its own. The
+    # wrapper binds the originating request_id (correlation) and the fact's event_id (causation)
+    # onto structlog, so the reaction's log lines join the emitting request's timeline — then
+    # restores the context, so nothing leaks into the next task the worker runs.
+    seen: dict[str, object] = {}
+
+    async def handler(session, event) -> None:
+        seen.update(structlog.contextvars.get_contextvars())
+
+    events.on(_Ticked, handler, name="corr", app="test_bus", idempotent=False)
+    wrapper = _handlers["evt:test_bus.ticked:corr"]
+    request_id, event_id = uuid.uuid7(), uuid.uuid7()
+    payload = {"label": "x", "request_id": str(request_id), "event_id": str(event_id)}
+
+    # idempotent=False → the ledger check is skipped, so no DB session is touched by the wrapper.
+    await wrapper(cast(AsyncSession, None), payload)
+
+    assert seen["request_id"] == str(request_id)
+    assert seen["event_id"] == str(event_id)
+    assert "request_id" not in structlog.contextvars.get_contextvars()  # restored after the handler

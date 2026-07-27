@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 import pytest_asyncio
+import structlog
 from sqlalchemy import text
 
 from apps.shared.events import BusinessEvent
@@ -145,6 +146,67 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
     assert event.user_id == actor
     assert event.entity_id == eid
     assert event.label == "Ship it"
+
+
+@pytest.mark.asyncio
+async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(iso):
+    # A durable consumer must reason about *when the fact happened* — the trail's own created_at —
+    # not when a retry/park finally delivered it. The delivered event carries the row's instant.
+    seen: list[BusinessEvent] = []
+
+    async def handler(session, event) -> None:
+        seen.append(event)
+
+    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    await _seed(uuid.uuid7())
+    async with db.admin_session_factory()() as s:
+        stored = await s.scalar(
+            text(
+                "SELECT created_at FROM business_events "
+                "WHERE kind = 'test_tailer.happened' ORDER BY id DESC LIMIT 1"
+            )
+        )
+
+    factory = db.admin_session_factory()
+    await EventListener(0, session_factory=factory).tick()
+    worker = TaskWorker(0, session_factory=factory)
+    while await worker.tick():
+        pass
+
+    assert len(seen) == 1
+    assert seen[0].created_at == stored  # the fact's instant, rebuilt from the row — not delivery's
+
+
+@pytest.mark.asyncio
+async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
+    # The reaction runs off the trail on a background task with no request of its own; the delivery
+    # wrapper binds the fact's originating request_id onto structlog, so the reaction's log lines
+    # join the emitting request's timeline. Assert it is bound while the handler runs.
+    seen: dict[str, object] = {}
+
+    async def handler(session, event) -> None:
+        seen.update(structlog.contextvars.get_contextvars())
+
+    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    request_id = uuid.uuid7()
+    await insert_business_event(
+        app_name="test_tailer",
+        verb="happened",
+        user_id=uuid.uuid7(),
+        ip=None,
+        org_id=None,
+        entity_id=None,
+        request_id=request_id,
+        payload={"label": "x"},
+    )
+
+    factory = db.admin_session_factory()
+    await EventListener(0, session_factory=factory).tick()
+    worker = TaskWorker(0, session_factory=factory)
+    while await worker.tick():
+        pass
+
+    assert seen.get("request_id") == str(request_id)
 
 
 @pytest.mark.asyncio

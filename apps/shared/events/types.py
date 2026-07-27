@@ -26,16 +26,17 @@ import contextlib
 import typing
 import uuid
 from dataclasses import MISSING, dataclass, fields
+from datetime import datetime
 from functools import cache
 from typing import Any, ClassVar, Self
 
 from apps.shared.events.registry import registry
 
 
-def _wants_uuid(hint: Any) -> bool:
-    """A field is a uuid carrier if its annotation is ``uuid.UUID`` or a union that includes it
-    (e.g. ``uuid.UUID | None``)."""
-    return hint is uuid.UUID or uuid.UUID in typing.get_args(hint)
+def _wants(hint: Any, target: type) -> bool:
+    """A field carries ``target`` if its annotation *is* ``target`` or a union that includes it
+    (e.g. ``uuid.UUID | None``, ``datetime | None``)."""
+    return hint is target or target in typing.get_args(hint)
 
 
 @cache
@@ -43,7 +44,16 @@ def _uuid_fields(cls: type) -> frozenset[str]:
     """The dataclass fields whose type carries a ``uuid.UUID`` — resolved once per class. Drives the
     generic re-parse so any DTO can carry uuids without a hand-maintained field list."""
     hints = typing.get_type_hints(cls)
-    return frozenset(f.name for f in fields(cls) if _wants_uuid(hints.get(f.name)))
+    return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), uuid.UUID))
+
+
+@cache
+def _datetime_fields(cls: type) -> frozenset[str]:
+    """The dataclass fields whose type carries a ``datetime`` — the timestamp twin of
+    :func:`_uuid_fields`. The queue serializes a datetime to an ISO string, so reconstruction
+    re-parses these back, driven by the annotation rather than a hand-kept list."""
+    hints = typing.get_type_hints(cls)
+    return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), datetime))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,6 +70,12 @@ class BusinessEvent:
     # target) an invitee's email. Emit-provided; rides in the payload for display (the timeline's
     # "detail"). A pure-id user subject (account/membership action) carries none — its entity_id is.
     entity_name: str | None = None
+    # the instant the fact happened — the trail's own column, *not* an emit-provided value: the
+    # emitter never sets it (the trail is the clock, one source), so it is None on the event that
+    # is emitted and populated only on the event a durable consumer receives, rebuilt from the row.
+    # That is what lets a reaction reason about *when the fact happened*, not when it was delivered
+    # (which a retry or a parked-then-resumed task pushes minutes — or days — later).
+    created_at: datetime | None = None
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
     # The app the event belongs to ("todo", "files"), usually set once by the per-app mixin, and
@@ -101,6 +117,10 @@ class BusinessEvent:
             if isinstance(kept.get(key), str):
                 with contextlib.suppress(ValueError):
                     kept[key] = uuid.UUID(kept[key])
+        for key in _datetime_fields(cls):
+            if isinstance(kept.get(key), str):
+                with contextlib.suppress(ValueError):
+                    kept[key] = datetime.fromisoformat(kept[key])
         return cls(**kept)
 
 

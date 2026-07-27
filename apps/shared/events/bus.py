@@ -41,6 +41,18 @@ E = TypeVar("E")
 AsyncEventHandler = Callable[[AsyncSession, Any], Awaitable[None]]
 
 
+def _delivery_context(payload: dict[str, Any]) -> dict[str, str]:
+    """The correlation keys to bind on a reaction's log context, read off the task payload — the
+    originating ``request_id`` and the fact's own ``event_id`` (its causation). Only present keys
+    are bound: a fact emitted outside a request (an auth signal, a background job) has no
+    ``request_id``, and binding a ``None`` would only add a null column to every reaction's logs."""
+    return {
+        key: str(payload[key])
+        for key in ("request_id", "event_id")
+        if payload.get(key) is not None
+    }
+
+
 class EventBus:
     """Registration + emit. The collected knowledge (catalog, subscriptions) lives in the
     :class:`~apps.shared.events.registry.EventRegistry`; reactions run in the listener off the
@@ -125,7 +137,12 @@ class EventBus:
                 topic, payload["event_id"]
             ):
                 return  # a re-delivery — the ledger row (from the first run) makes this a no-op
-            await handler(session, event_type.from_payload(payload))
+            # Correlate the reaction's logs with the fact that triggered it: request_id is the
+            # originating stimulus (so a reaction joins the emitting request's timeline), event_id
+            # the immediate cause. The reaction runs off the trail, minutes-to-days after the
+            # request, on a background task with no request context of its own — so bind them here.
+            with structlog.contextvars.bound_contextvars(**_delivery_context(payload)):
+                await handler(session, event_type.from_payload(payload))
 
         return wrapper
 

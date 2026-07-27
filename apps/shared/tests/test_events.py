@@ -7,6 +7,7 @@ non-blocking persist contract (``emit`` never waits on — or fails from — the
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import cast
 
 import pytest
@@ -14,7 +15,13 @@ import pytest
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 from apps.shared.events.bus import EventBus
 from apps.shared.events.registry import EventRegistry, registry
-from apps.shared.events.repository import event_to_log
+from apps.shared.events.repository import (
+    LIFTED_COLUMNS,
+    TRAIL_COLUMNS,
+    TrailRow,
+    event_to_log,
+    task_payload,
+)
 
 
 class WidgetEvent(OrgScoped, BusinessEvent):
@@ -141,8 +148,6 @@ def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
     we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it — computing the
     generated `kind`, which a SELECT returns but an unflushed ORM row leaves unset — then
     `task_payload` + `from_payload` rebuild it, exactly as the listener does off a claimed row."""
-    from apps.shared.events.repository import TRAIL_COLUMNS, TrailRow, task_payload
-
     row = event_to_log(event)
     projected = {c: getattr(row, c) for c in TRAIL_COLUMNS}
     projected["kind"] = f"{row.app_name}.{row.verb}"  # the generated column, unset pre-flush
@@ -184,10 +189,63 @@ def test_the_delivery_column_lists_derive_from_one_source():
     # The lifted columns, the SELECT columns and the TrailRow that receives them are three views of
     # one tuple — not three hand-kept lists that must be edited in lockstep. Pin them to it so a
     # drift (a column added to one but not the others) fails at import of this test, not in prod.
-    from apps.shared.events.repository import LIFTED_COLUMNS, TRAIL_COLUMNS, TrailRow
-
-    assert set(TRAIL_COLUMNS) == {"id", "kind", "payload"} | set(LIFTED_COLUMNS)
+    correlation = {"id", "kind", "created_at", "request_id"}  # row identity + delivery context
+    assert set(TRAIL_COLUMNS) == correlation | set(LIFTED_COLUMNS) | {"payload"}
     assert set(TrailRow.__annotations__) == set(TRAIL_COLUMNS)
+
+
+# ── C2: a delivered event is self-descriptive (its own instant) and correlated (the request) ───
+
+
+def _trail_row(**over: object) -> TrailRow:
+    """A TrailRow with every column present, overridable — the shape a delivery scan returns."""
+    row: dict[str, object] = {
+        "id": uuid.uuid7(),
+        "kind": "test_note.noted",
+        "created_at": None,
+        "request_id": None,
+        "user_id": None,
+        "org_id": None,
+        "entity_id": None,
+        "entity_name": None,
+        "payload": {},
+    }
+    row.update(over)
+    return cast(TrailRow, row)
+
+
+def test_task_payload_folds_the_fact_instant_and_the_originating_request():
+    # created_at and request_id live in their own columns; delivery folds them into the payload as
+    # json-safe strings (iso / str) so they survive the queue, alongside the dedup event_id.
+    fid, rid = uuid.uuid7(), uuid.uuid7()
+    instant = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
+    row = _trail_row(id=fid, created_at=instant, request_id=rid, payload={"note": "hi"})
+    payload = task_payload(row)
+    assert payload["created_at"] == instant.isoformat()
+    assert payload["request_id"] == str(rid)
+    assert payload["event_id"] == str(fid)
+    assert payload["note"] == "hi"
+
+
+def test_a_delivered_event_carries_the_facts_instant_rebuilt_from_the_row():
+    # The plan's promise: a durable consumer receives an event whose instant is the fact's, so it
+    # reasons about when the fact happened — not when a retry/park finally delivered it.
+    instant = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
+    event = _NoteEvent.from_payload({"note": "hi", "created_at": instant.isoformat()})
+    assert event.created_at == instant
+
+
+def test_the_emitted_event_has_no_instant_because_the_trail_is_the_clock():
+    # The emitter never stamps created_at (one clock: the trail's own column assigns it). It is None
+    # on the emitted event and populated only on the reconstructed one a consumer receives.
+    assert _NoteEvent(user_id=uuid.uuid7()).created_at is None
+
+
+def test_request_id_rides_to_the_log_context_not_onto_the_event():
+    # request_id correlates the reaction's *logs* with the emitting request; it is not an event
+    # field, so from_payload drops it rather than turning it into event state.
+    event = _NoteEvent.from_payload({"request_id": str(uuid.uuid7()), "note": "x"})
+    assert not hasattr(event, "request_id")
 
 
 # ── The UUID-aware serializer socle: DTOs carry uuid.UUID, the edge stringifies/re-parses ──────

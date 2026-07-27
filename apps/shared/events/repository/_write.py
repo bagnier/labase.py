@@ -3,6 +3,7 @@ mapping (no column dict between)."""
 
 import uuid
 from dataclasses import fields, is_dataclass
+from datetime import datetime
 from typing import Any
 
 import structlog
@@ -69,6 +70,8 @@ def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
             payload[f.name] = "***" if value is not None else None
         elif isinstance(value, uuid.UUID):
             payload[f.name] = str(value)  # json-safe: stdlib json can't serialize a uuid.UUID
+        elif isinstance(value, datetime):
+            payload[f.name] = value.isoformat()  # json-safe; from_payload re-parses it back
         else:
             payload[f.name] = value
     return payload
@@ -86,6 +89,9 @@ def event_to_log(
     payload = _loggable_payload(event)
     for lifted in LIFTED_COLUMNS:  # the lifted fields get their own columns, not a payload key
         payload.pop(lifted, None)
+    # created_at is the trail's own column, filled by the model default (one clock) — never the
+    # emitter's None, which would only shadow it. Drop it: the column is its one home.
+    payload.pop("created_at", None)
     return BusinessEventLog(
         # The two halves the event declares; the row's ``kind`` is generated from them (a writer
         # cannot set it), so the trail composes its identity exactly as the class does.
