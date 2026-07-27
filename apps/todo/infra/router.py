@@ -119,12 +119,19 @@ async def patch_todo(
     if title is not None:
         todo.title = title
     await repo.save(todo)
-    scope = {"user_id": current_user.id, "org_id": org_id, "entity_id": todo_id}
     if done is not None:
         ticked = TodoTicked if done else TodoUnticked
-        await events.emit(ticked(entity_name=todo.title, **scope))
+        await events.emit(
+            ticked(
+                user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=todo.title
+            )
+        )
     if title is not None:
-        await events.emit(TodoEdited(entity_name=title, **scope))
+        await events.emit(
+            TodoEdited(
+                user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=title
+            )
+        )
     return await _render(request, session, current_user, repo, org, settings)
 
 
