@@ -5,20 +5,28 @@
 -- but resting on `grant insert ... to authenticated` + a `self-attributed insert` policy. A
 -- PostgREST client, being the same `authenticated` role, could drive that INSERT just as well:
 -- forge a `todo.created` with any payload and any scoping, and the tailer would deliver that
--- fabricated fact to the real consumers. The type system already refuses a malformed or
--- secret-bearing event (C3); this closes the door the same fact could still walk through at the
--- SQL edge — WITHOUT breaking atomic request-path emit.
+-- fabricated fact to the real consumers.
 --
---   1. `record_business_event(...)` (SECURITY DEFINER) inserts the row as its owner, so a caller
---      needs no table INSERT grant. The request session still calls it inside its own
---      transaction, so the fact still commits iff the mutation does — atomicity is untouched.
---   2. It enforces self-attribution itself — a caller acting as a user (a JWT is present) may only
---      record its own `user_id` — so the guarantee the dropped policy carried lives on, in one
---      validated place. The admin/background path runs with no JWT (`auth.uid()` is null) and
---      attributes freely, exactly as the BYPASSRLS session did before.
---   3. The raw `grant insert` + the `self-attributed insert` policy are dropped: `authenticated`
---      can no longer POST /rest/v1/business_events at all. The admin path (signup trigger,
---      detached emit, test seeders) never leaned on that grant and is unaffected.
+-- Route every write through one SECURITY DEFINER function and retire the raw grant, WITHOUT
+-- breaking atomic request-path emit:
+--
+--   1. `record_business_event(...)` inserts the row as its owner, so a caller needs no table
+--      INSERT grant. The request session still calls it inside its own transaction, so the fact
+--      still commits iff the mutation does — atomicity is untouched.
+--   2. The raw `grant insert` + the `self-attributed insert` policy are dropped: `authenticated`
+--      can no longer POST /rest/v1/business_events at all — the arbitrary-row capability the plan
+--      set out to remove is gone. The admin path (signup trigger, detached emit, test seeders)
+--      never leaned on that grant and is unaffected.
+--
+-- The function does NOT re-check `user_id = auth.uid()`. That invariant cannot live here: a
+-- business event is a durable fact, and its legitimate emitters routinely attribute it to someone
+-- other than the calling session's identity — a durable consumer re-emits on behalf of the
+-- original actor (organizations' create-personal-org attributes OrganizationCreated to the new
+-- user while running as no one, todo's completion counter reacts to one user's tick), a detached
+-- emit runs with no session at all, seeders attribute to an org's members. The session identity
+-- and the fact's actor are decoupled by design, so the DB can't equate them. Attribution is the
+-- application's to get right (each `emit` names the actor); the DB's job here is to be the single
+-- writer, which retiring the raw grant achieves.
 --
 -- `kind` stays generated and `id`/`created_at` keep their column defaults — the function passes
 -- none of them, so the trail composes its identity and stamps its clock exactly as before.
@@ -49,14 +57,6 @@ as $$
 declare
   new_id uuid;
 begin
-  -- Self-attribution, mirroring the dropped `self-attributed insert` policy: a caller acting as a
-  -- user may only record a fact attributed to itself. `auth.uid()` is null on the admin/background
-  -- path (no JWT), which is trusted to attribute freely — the signup fact is the user's own, a
-  -- seeder attributes to the org's members.
-  if auth.uid() is not null and p_user_id is distinct from auth.uid() then
-    raise exception 'business event actor % is not the caller %', p_user_id, auth.uid()
-      using errcode = 'check_violation';
-  end if;
   insert into public.business_events (
     app_name, verb, icon, user_id, user_name, org_id, org_name,
     entity_id, entity_name, request_id, request_name, ip, payload

@@ -31,12 +31,14 @@ class BusinessEventRecord(Base, UUIDPk):
 
     One writer: the ``record_business_event`` SECURITY DEFINER function (C4). On the **request
     path** ``emit`` calls it on the caller's own RLS (``authenticated``) session, so the fact
-    commits atomically with the mutation; the function inserts as its owner and enforces
-    self-attribution, so no raw table INSERT grant is exposed — a member (or a PostgREST client on
-    the same role) can no longer write the trail directly. Off the request path the **BYPASSRLS
-    admin** session calls the same function with no JWT (the detached best-effort ``emit``, the
-    seeders); the signup trigger inserts directly, itself SECURITY DEFINER. The tailer's dispatch
-    (admin session) and every read are unchanged.
+    commits atomically with the mutation; the function inserts as its owner, so no raw table INSERT
+    grant is exposed — a member (or a PostgREST client on the same role) can no longer POST the
+    trail table directly. Off the request path the **BYPASSRLS admin** session calls the same
+    function (the detached best-effort ``emit``, the seeders); the signup trigger inserts directly,
+    itself SECURITY DEFINER. Attribution is the emitter's to get right — a durable consumer
+    legitimately records a fact for an actor that isn't its session's identity — so the function
+    trusts the supplied ``user_id`` rather than re-checking it. The tailer's dispatch (admin
+    session) and every read are unchanged.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so it stays the monotonic cursor the tailer
     claims/scans on and the newest-first feeds order by — no bigint sequence."""
