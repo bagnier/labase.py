@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
+.PHONY: dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -17,6 +17,16 @@ install: db-start
 js-build:
 	mkdir --parents static/css static/fonts static/js
 	npm run build
+
+# cloud-setup: provisioning for a remote "Claude Code on the web" VM.
+# No local Supabase (DB via injected environment variables, see docs/REMOTE.md)
+# — lighter than `install`. Paste as the setup script in the web UI:
+# `make cloud-setup`.
+cloud-setup:
+	uv sync --all-groups
+	npm install
+	$(MAKE) js-build
+	uv run playwright install --with-deps chromium
 
 # Exports under ENV_FILE=.env.test: TechnicalSettings has required fields with
 # no defaults, so importing the app needs a complete env — .env.test is the one
