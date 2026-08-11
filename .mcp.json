@@ -1,19 +1,25 @@
 {
   "mcpServers": {
     "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
     },
     "playwright": {
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@latest",
+        "@playwright/mcp@0.0.79",
+        "--headless",
+        "--isolated",
         "--browser",
         "chromium",
         "--output-dir",
         ".cache/playwright-mcp"
       ]
+    },
+    "safari": {
+      "command": "npx",
+      "args": ["-y", "safari-mcp@2.15.12"]
     }
   }
 }

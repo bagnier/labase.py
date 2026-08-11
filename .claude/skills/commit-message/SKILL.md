@@ -1,13 +1,12 @@
 ---
 name: commit-message
 description: >
-  Analyse staged changes and propose a commit message.
-  TRIGGER when: user asks for a commit message, says "commit message", "/commit-message",
-  or asks "what should I put in the commit", "quel message de commit".
-  Do NOT use for: actually creating the commit.
+  Analyse staged changes and draft a commit message: Conventional Commits format,
+  why-not-what focus.
+when_to_use: >
+  User asks for a commit message, or asks to commit / create a commit — always draft it
+  with these rules first.
 ---
-
-# Commit message skill
 
 ## Process
 

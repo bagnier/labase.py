@@ -1,0 +1,30 @@
+{
+  "model": "opus[1m]",
+  "effortLevel": "high",
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(uv run *)",
+      "Bash(uv sync *)",
+      "Bash(uvx:*)",
+      "Bash(make *)",
+      "Bash(docker compose *)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "mcp__playwright__browser_take_screenshot"
+    ],
+    "deny": [
+      "Bash(make db-reset*)",
+      "Bash(supabase db reset*)",
+      "Bash(*seed.py --reset*)",
+      "Bash(*provision_schema.py --reset*)"
+    ]
+  }
+}

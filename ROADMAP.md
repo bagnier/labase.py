@@ -47,6 +47,7 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 ### technical
 
 - [ ] squash migrations
+- [ ] Role-Based Access Control
 - [ ] dataclass or pydantic ?
 - [ ] multi processes ?
 - [ ] better styleguide inspired by my apps and daisyui templates
