@@ -1,6 +1,4 @@
 {
-  "model": "opus[1m]",
-  "effortLevel": "high",
   "permissions": {
     "allow": [
       "Bash(uv:*)",
@@ -24,7 +22,31 @@
       "Bash(make db-reset*)",
       "Bash(supabase db reset*)",
       "Bash(*seed.py --reset*)",
-      "Bash(*provision_schema.py --reset*)"
+      "Bash(*provision_schema.py --reset*)",
+      "Task(general-purpose)",
+      "Task(Explore)",
+      "Task(claude)",
+      "Task(Plan)",
+      "WebFetch"
     ]
-  }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "in=$(cat); [ \"$(jq -r '.agent_id // \"null\"' <<<\"$in\")\" = null ] || { echo 'a sub-agent may not spawn a sub-agent' >&2; exit 2; }",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "model": "opus",
+  "effortLevel": "high"
 }

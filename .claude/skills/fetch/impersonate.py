@@ -10,6 +10,7 @@ the pin above; `typing_extensions` is listed because curl-cffi 0.16.0 fails to.
 """
 
 import argparse
+import os
 import sys
 import typing
 from pathlib import Path
@@ -18,6 +19,17 @@ from curl_cffi import requests
 from curl_cffi.requests.impersonate import BrowserTypeLiteral
 
 DEFAULT_TARGET = "safari"  # Alias: tracks the newest Safari in the build.
+
+
+def resolve_output(out: str) -> Path:
+    """Same rule as `curl-verdict.sh`: `--output` is a *name*, and whatever directory it carries
+    is dropped. The cwd is whatever the session is rooted at and never a scratch space, so the
+    directory is not the caller's to choose — `FETCH_DIR` moves every download at once."""
+    session = os.environ.get("CLAUDE_CODE_SESSION_ID", "shared")
+    # A predictable /tmp path is the point — the alternative is the cwd, i.e. the project.
+    fetch_dir = Path(os.environ.get("FETCH_DIR", f"/tmp/fetch/{session}"))  # noqa: S108
+    fetch_dir.mkdir(parents=True, exist_ok=True)
+    return fetch_dir / Path(out).name
 
 
 def main() -> int:
@@ -62,13 +74,14 @@ def main() -> int:
         print(f"http=000 0b - ERROR {type(e).__name__}: {e}", file=sys.stderr)
         return 35
 
-    Path(a.output).write_bytes(r.content)
+    out = resolve_output(a.output)
+    out.write_bytes(r.content)
 
     # Decoded body, not curl's wire-byte `%{size_download}` — hence the suffix.
     print(
         f"http={r.status_code} {len(r.content)}b(decoded) "
         f"{r.headers.get('content-type', '-')} "
-        f"redir={len(r.history)} as={a.impersonate} {r.url}"
+        f"redir={len(r.history)} as={a.impersonate} file={out} {r.url}"
     )
     return 0
 

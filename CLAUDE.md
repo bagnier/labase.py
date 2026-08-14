@@ -7,16 +7,12 @@ Read `README.md` first.
 <!-- charm:general-guidance -->
 ## General guidance
 
-- Be concise in output, thorough in reasoning. Keep it short by default (commits, agent reports, docs) — this is the most frequently missed.
-- No sycophantic openers or closing fluff.
-- No explicit action request (a question, a doubt, a pasted plan, "wait/sleep") means: run NO tool — discuss or wait. ("discutons" / "let's talk" is the named case.)
-- Read the right sources before concluding: the relevant files/generators, never from memory.
-- Before declaring done: run it for real (the touched command/route/page) — green CI/tests are not enough.
+- Be concise in output, no sycophantic openers or closing fluff.
+- Keep it short by default (commits, agent reports, docs) — this is the most frequently missed.
 - Plan = short, the goals aimed at (not a change inventory or history), offered right away.
-- Never change scope without validation (no code when the request is about docs; no removal during a simplification) — announce first.
 - Command slower than 1s: never `| tail`, always `> /tmp/<file>`.
 - Skip files over 100KB unless explicitly required.
-- User instructions may override this file.
+- User instructions may override this general guidance.
 <!-- /charm:general-guidance -->
 
 ## labase
@@ -31,3 +27,9 @@ Read `README.md` first.
 - render any UI change and look at a screenshot (Playwright or /run).
 - Docs by audience: README = functional/CLI, DEV.md = development, INSTALL.md = deployment. 
 - Describe the CURRENT state, never the history; prune, dense and short.
+
+<!-- charm:no-autocommit -->
+## Git is mine
+
+Without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command.
+<!-- /charm:no-autocommit -->

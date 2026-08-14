@@ -1,196 +1,226 @@
 ---
 name: refactor-code
 description: >
-  Six-axis hygiene sweep over existing code, each axis driven by a finder rather than by
-  eye: formatters and linters, dead code, code smells, naming, comments, dependencies.
+  Reads existing code for what no linter reports — design smells, dead abstractions, weak
+  types, deprecated calls — and returns each finding with its evidence and a verdict.
 
-  Do NOT use for: reshaping vault notes (/refactor-notes).
+  Do NOT use for: reshaping vault notes (/refactor-notes), or re-running the project's own
+  formatter, linter and type checker, which its gate already does.
 when_to_use: >
-  The user says "refactor", "refactoring discipliné", "nettoie ce code", "clean up",
-  "code smells", "code mort", "dead code", "renommage", "audit des dépendances",
+  The user says "refactor", "nettoie ce code", "clean up", "code smells", "code mort",
   "/refactor-code" — or asks for a hygiene pass over a file, a module or a repo.
 ---
 
-Run all six axes, not the one that looks most promising. Each is tool-driven: run the
-finder, then judge its output — never scan by eye and call it exhaustive.
+**You are not a linter. You are the developer who inherits this code and has to change it.**
+A linter is already installed, runs in a second, and never needed a model to run it. What it
+cannot do is read a file and understand what it *means* — that these three parameters are an
+address, that this class knows too much about that one, that this hook was built for a caller
+nobody ever wrote. That reading is the whole of this skill, and it is judgment: which is why
+every finding below carries its evidence and its cost rather than a rule number.
 
-Pin every finder to the project's own runtime (`uvx --python 3.14 vulture …`): on a version
-it cannot parse, a finder drops the file **silently** and still exits with a normal-looking
-list. Read its stderr and its file count before believing it.
+Run the project's gate once (`make check`, `just lint`, `npm run lint`, the pre-commit
+config). What it reports is its job, not yours: give it one line and move on. **This skill is
+what green misses** — the smells no rule encodes, read by a model that understands what the
+code means.
 
-A path argument scopes what you change — never the greps that verify a finding, which stay
-repo-wide.
+**Install nothing.** The sweep's only commands are that gate, `git` and `grep`. A finder you
+had to add is a finder nobody runs again next month, and a second complexity meter beside the
+project's own buys nothing but an argument over whose threshold is right.
 
-## 0. Read the gate before running anything
+Which is why the lint config is read before the code — `[tool.ruff.lint]`, the `eslintrc`,
+whatever the project keeps. It answers two questions at once:
 
-Open whatever the project runs as its gate — a `make`/`just` target, `.pre-commit-config.yaml`,
-a CI workflow, a `package.json` script — and list the tools already in it. Those axes are
-*already ratcheted*: run them once to confirm they still pass, give them one line, and spend
-the sweep's attention on the axes nobody guards. A repo with a formatter, a linter and a type
-checker in its gate returns nothing on axes 1, 2 and 5 every single time; rediscovering that
-is not a finding, it is five-sixths of the run.
+- **which smells are already ruled**, and are therefore not findings. A private-access rule
+  selected and the gate green means nobody reaches into another object's internals; going to
+  look anyway is the whole failure this skill exists to avoid.
+- **where the ceilings sit** — and that is where the eye earns its keep. `max-args = 6` makes
+  a five-argument signature invisible; `max-complexity = 11` keeps a ten-branch knot green. A
+  ceiling is not a verdict, it is the line under which only reading finds anything.
 
-Which reframes what the sweep is *for*. Its product is not the diff — it is the answer to
-*which finder should join the gate*. Sort them by what they return:
+Three things hold that reading honest, and they replace the linter's rigour:
 
-- **verdicts** — `deptry`, `pip-audit`, `cargo audit`, `npm audit`. Binary, near-zero false
-  positives, no judgment per hit. Propose these for the gate. A network-bound one (any
-  advisory scanner) gets its own target, so the gate stays offline and fast.
-- **advisories** — `vulture`, `lizard`, `jscpd`, `knip`. Every hit needs a human. These stay
-  sweep-only: in a gate they either fail the build on noise, or grow a whitelist file, which
-  is a second codebase that rots.
+- **A declared perimeter.** Name the files you will read, read them whole, and say so in the
+  report. You cannot claim exhaustiveness by tool any more; you claim coverage by perimeter.
+  A repo too big to read is a perimeter to negotiate, not a sweep to fake.
+- **Evidence, never the label.** "These three parameters travel together through four
+  signatures" is a finding; "Data Clumps" is a catalogue entry. The label files it, the
+  observation proves it. No observation, no finding.
+- **A verdict per finding**, one of three:
+  - **fix** — local, reversible, no surface moves. Apply it.
+  - **propose** — changes a design, a public API, a stored format. Write it up, do not apply.
+  - **leave** — the smell is real and the cure costs more. Say why; a named non-finding is
+    worth more than a silent one.
 
-Pin an advisory you keep as a dev dependency anyway — a finder that silently resolves to a
-new version between sweeps has no baseline, and its heuristics move.
+And one filter over all of it: **name what the smell costs** — the change it makes expensive,
+the bug it invites. A smell whose cost you cannot name is a taste, and taste does not go in
+the report.
 
-## Reporting
+## Sniff code smells
 
-Close with a count per axis, including the axes that found nothing — each **over its
-denominator**: `0 findings / 23 files scanned`, not `0 findings`. A finder that found nothing
-and a finder that scanned nothing print the same `0`, and mistaking the second for the first
-is the exact failure this skill exists to prevent. Say which axes were already gated.
+The families are from [refactoring.guru](https://refactoring.guru/refactoring/smells); what
+follows is not their definition but the *tell* — what it looks like in real code — and the
+verdict it usually earns.
 
-## 1. Formatters & linters
+### Bloaters
 
-Run what the project already configures — `pyproject` `[tool.*]`, `package.json` scripts,
-`.pre-commit-config.yaml`. The type checker (`ty`, `mypy`, `tsc`) is part of this axis — it is
-often the only one of the three with anything to say. Auto-fix, then read the diff:
-`ruff --fix` and `eslint --fix` occasionally rewrite semantics.
+- **Long Method** — the body needs a comment to introduce each paragraph, or the name carries
+  an "and". → *fix* when a paragraph extracts as a pure move (one output, no re-entry into
+  the locals); *propose* when the extraction needs new state.
+- **Large Class** — two groups of fields with no method touching both. → *propose*.
+- **Primitive Obsession** — the same validation on a `str` in three places; a `dict[str, Any]`
+  whose keys are known and fixed; constants standing in for a closed set. → *propose*.
+- **Long Parameter List** — the signatures sitting just under the config's ceiling, and any
+  boolean parameter at all: a flag that splits the body in two is two functions. → *fix* the
+  flag split, *propose* the parameter object.
+- **Data Clumps** — the same two or three names, in the same order, across several signatures,
+  or always assigned together. → *propose*.
+- **Complexity** — the number is a map, not a verdict, and the functions worth reading are the
+  ones just under the ceiling. The tell is nesting that mixes levels — a business rule wrapped
+  around an I/O retry. → *fix* the flattening (guard clauses, early returns); *propose* the
+  rest.
 
-Check what the formatter's file count actually *covers*, and compare it against the linter's —
-a gap between them is real. Modern formatters reach past source files (ruff formats Python
-blocks inside Markdown). A formatter with write access to generated output, fixtures, or a
-catalogue that gets distributed elsewhere is a supply-chain path, not a style preference:
-scope it, and prefer a format-only exclusion so the linter keeps read access.
+### Object-Orientation Abusers
 
-Adding a tool or enabling new rules is a config change, not part of the sweep. One exception:
-a **ceiling the config itself declares provisional** (`max-complexity`, a coverage floor)
-should be ratcheted down once the sweep removes what held it up — and its comment updated to
-name the new holder, or it becomes a lie.
+- **Alternative Classes with Different Interfaces** — two classes the caller switches on,
+  whose methods do the same thing under different names. → *propose*; align the names first,
+  that part is cheap and reversible.
+- **Refused Bequest** — an override that raises `NotImplementedError`, returns `None`, or is
+  empty; a subclass using a tenth of its base. → *propose* composition.
+- **Switch Statements** — a single exhaustive match on a closed enum is good code, not a
+  smell. The tell is *repetition*: the same dispatch on the same type in three places. →
+  *propose* polymorphism at the third occurrence, not the first.
+- **Temporary Field** — a field written by one method, read by one other, null the rest of the
+  time. → *fix* into a parameter or a local when both live in the same class; *propose* when
+  it crosses a boundary.
 
-Never silence a finding with a bare `# noqa` / `eslint-disable` / `# type: ignore`; a
-suppression that is genuinely right carries its reason on the same line.
+### Change Preventers
 
-If the formatting diff is non-empty, keep it in its own commit and add its SHA to
-`.git-blame-ignore-revs` so blame survives the churn.
+These two are read in the history, not in the file:
 
-## 2. Dead code
+- **Divergent Change** — `git log --format=%s -- <file>` and read the verbs: two unrelated
+  reasons to change the same file. → *propose* the split.
+- **Shotgun Surgery** — the inverse. `git log --name-only -20` and look for the file cluster
+  that keeps recurring under one intent. → *propose*.
+- **Parallel Inheritance Hierarchies** — adding a class on one side forces one on the other;
+  the two sets of names mirror each other. → *propose*.
 
-Finders: `vulture` and `ruff check --select F401,F841,ERA001` (Python), `knip` / `ts-prune`
-(TS/JS), `cargo-udeps` (Rust), `deadcode` (Go), plus the coverage report in any language. On
-a decorator-heavy codebase (CLI commands, ORM models, framework hooks), start vulture at
-`--min-confidence 100` — lower, it reports the whole registry.
+### Dispensables
 
-Before deleting a candidate, grep the whole repo for its name **including non-code files**
-(templates, YAML/JSON configs, CI, docs) and **excluding worktrees and vendored copies**,
-whose duplicate hits make a dead symbol look alive. Finders miss everything reached by name
-rather than by call: `getattr`/`importlib`, string dispatch tables, plugin and entry-point
-registries, DI containers, framework hooks (fixtures, lifecycle methods, signal receivers),
-`__all__` re-exports, a class path in a config, a CLI subcommand.
+- **Comments** — per comment: would it still be true after the block below is rewritten? Then
+  it is intent, keep it. Does it narrate the lines? → *fix*: cut it, or make the code say it.
+  What survives is the *why* — the alternative rejected, the source of a magic value, an
+  ordering constraint the caller cannot see. Never touch licence headers, shebangs, tool
+  directives carrying their reason, or docstrings that generate published output.
+- **Duplicate Code** — rule of three, and never unify two blocks that merely look alike: if
+  they change for different reasons, duplication is cheaper than the wrong abstraction →
+  *leave*, and say so. Two exceptions worth taking at the second occurrence: byte-identical
+  bodies in sibling classes under an existing base (a hoist, not an abstraction), and an
+  inverse pair (`encode`/`decode`, `merge`/`remove`) sharing a *classification* — extract the
+  table, leave the leaves. → *fix*.
+- **Data Class** — a record type is fine; the tell is that every caller runs the same
+  computation over its fields. → *propose* moving the behaviour in.
+- **Dead Code** — before deleting, grep the whole repo for the name **including non-code
+  files** (templates, YAML, CI, docs) and excluding vendored copies. Nothing is dead if it is
+  reached by name rather than by call: `getattr`/`importlib`, string dispatch, entry points,
+  framework hooks, `__all__` re-exports, a class path in a config, a CLI subcommand. A
+  library's public API unused *in this repo* proves nothing → *leave*. Otherwise → *fix*,
+  git is the archive. Commented-out code is dead code.
+- **Lazy Class** — one field and one method, or a wrapper that adds nothing. → *fix*: inline.
+- **Speculative Generality** — one implementation of an interface, one caller of a hook, a
+  parameter always passed the same value, anything justified by "for when we need to". →
+  *fix*: delete.
 
-For a library's public API, "unused in this repo" proves nothing — leave it. Same for a
-config file whose only consumer is an external tool (an editor, a CI runner): its caller is
-outside the repo by design, so silence here is not evidence.
+### Couplers
 
-A run of members from one ordered set flagged together (three of five enum values, say) is
-almost never dead — it is a scale with unused rungs, and usually a **documentation** finding:
-the option exists in code and is missing from the manifest/API the docs publish. Route it to
-axis 4, do not delete.
+- **Feature Envy** — a method whose body names another object's fields more often than its
+  own. → *fix* when it is a private helper, *propose* the move otherwise.
+- **Inappropriate Intimacy** — the per-object half is ruled wherever a private-access rule is
+  selected; what stays yours is the module-level version, two modules reaching into each
+  other's internals with nothing private in sight. → *propose*.
+- **Incomplete Library Class** — a local `utils` whose whole body works around a library's
+  API. → *leave*, and report it: it is often a version behind, so route it to the next
+  section.
+- **Message Chains** — `a.b().c().d()`. Fluent and builder APIs are chains by design, not
+  smells → *leave* those. The tell is a chain across *ownership* boundaries. → *propose*.
+- **Circular imports** — the workaround is the evidence: an import inside a function body, or
+  a `TYPE_CHECKING` guard whose only purpose is to break the cycle. A config that ignores the
+  deferred-import rule has traded the cycle for silence — read what that ignore covers. A
+  cycle is a layering error. → *propose*.
 
-An abstraction, hook or config option with a single caller and no second one in sight belongs
-to this axis: it is a deletion, not a refactor.
+## Hunt deprecations
 
-Commented-out code is dead code: delete it, git is the archive.
+The dependency audit is not yours: `deptry`, `pip-audit` and their equivalents are verdict
+machines — binary, nothing to judge per hit — and they belong in the gate, where this project
+already keeps them. If a version gap surfaces anyway, weigh its *cost* (a major behind is a
+migration to schedule, a patch behind is noise) and report the bump, never apply it: an
+upgrade changes behaviour, the rest of this pass does not.
 
-## 3. Code smells
+What the auditors cannot see:
 
-Finders: one complexity meter — `ruff check --select C901,B,SIM` (Python) or `lizard` (any
-language) — plus `jscpd` for copy-paste. Do not stack several: they disagree on the metric
-*and* on the threshold, and arbitrating between them produces nothing. If the project already
-configures one, that is the meter; a second one only buys an argument you cannot win.
+- **Deprecated API calls** — the tell is a warning the suite already emits and swallows. Run
+  it once with deprecations promoted to errors (`-W error::DeprecationWarning`). A deprecated
+  call behind one abstraction is a contained → *fix*; the same call spread across the
+  codebase is a → *propose*.
+- **The project's own deprecations** — a `@deprecated` marker or a "legacy" comment with live
+  callers is a migration nobody finished. Name the callers; that count is the finding.
 
-Duplication is what they over-report: rule of three, and never unify two blocks that merely
-*look* alike — if they change for different reasons, duplication is cheaper than the wrong
-abstraction. Two exceptions worth taking at two occurrences, not three:
+## Track types
 
-- byte-identical method bodies in sibling classes under a common base — that is a hoist, not
-  an abstraction, and the base already exists;
-- an inverse pair (`merge`/`remove`, `encode`/`decode`) that share a *classification* — the
-  table of which key is a set, a map, a scalar. The leaves differ; the table must not drift
-  between them, so extract the table and leave the leaves alone.
+Type coverage is mechanical, but what it hides is not.
 
-If the report is dominated by test fixtures, say so and leave them: collapsing them into a
-`conftest.py` is a test refactor, not a hygiene pass.
+- **Lack of types** — where the annotations stop matters more than how many are missing:
+  untyped boundaries (public API, I/O, deserialisation) with a typed interior means the types
+  guard nothing. → *fix* the boundary first.
+- **Weak types** — `Any`, `object`, `dict[str, Any]`, and `| None` that spreads. A `| None`
+  forcing a check at every call site is a design finding, not a typing one — the null is the
+  smell. A `dict[str, Any]` crossing three functions is a Data Clump: route it above.
+- **Silenced violations** — `# noqa`, `# type: ignore`, `eslint-disable` with no code and no
+  reason. → *fix*: narrow it to the specific rule and give it its reason on the same line, or
+  remove it and see what it was hiding — often enough, a real bug. Never add a bare one.
 
-## 4. Naming
+## Suggest corrections
 
-Two finders, and the second is where the findings are.
+One entry per finding, and nothing in it is optional:
 
-- A verb histogram —
-  `grep -rhoE '^\s*(def|function) _?[a-z_]+' src | sed -E 's/.*(def|function) _?//; s/_.*//' | sort | uniq -c | sort -rn`
-  — surfacing competing families (`fetch`/`get`/`load`, `user`/`account`/`member`). Strip the
-  leading `_` as shown, or every private collapses into one meaningless blank row.
-- The **documented vocabulary against the code's**: the nouns and verbs in the README, the
-  `--help` output and the published API, versus the model fields, enum members and CLI verbs
-  that implement them. A histogram reads signatures only, and the naming that actually carries
-  a project lives in its prose — a manifest field the code has and the docs don't is a naming
-  finding.
+- **where** — `file:line`;
+- **what** — the observation, in the code's own terms;
+- **what it costs** — the change it makes expensive, the bug it invites;
+- **the verdict** — fix, propose, leave.
 
-Converge families before polishing individual names: pick the dominant word, rename all of it.
-A half-done rename is worse than none.
+Then apply the fixes and write up the proposals — **never in the same diff**. A refactor that
+carries a design change is unreviewable, and the design change is the one that needed the
+review.
 
-Rename with a symbol-aware tool (IDE/LSP) when there is one. Without one, a token-exact
-replace is safe exactly when the token is **globally unique** — prove that with a repo-wide
-grep first, then use a word-boundary pattern (`\bold_name\b`, never a bare `sed s/old/new/`)
-and verify with the type checker and the suite. Either way, grep the string form afterwards
-for what neither can see: docs, templates, string literals, CLI flags, serialised keys, and
-**test function names**, where the leading `test_` eats the word boundary and leaves
-`test_old_name_does_x` silently behind.
+Close on the perimeter: which files were read whole, and which were not.
 
-Propose instead of applying when the rename reaches a public API, a CLI surface or a stored
-format (DB column, JSON key) — that one is a migration. Tool availability is not the gate;
-token ambiguity is.
+## Suggest disciplined linting
 
-## 5. Comments
+The run's second product, and the one that outlives it — but always a rule in the config the
+project already runs, never a new tool. Most of what you just read has no rule at all; that is
+why it had to be read. The rest maps onto families the config can simply select:
 
-Grep for the mechanical cases first: commented-out code, `TODO`/`FIXME` with no owner or
-issue, docstrings that repeat the signature (`:param path: the path`). Placeholder text inside
-scaffolding and fixtures will match those greps — check what the hit is *in* before counting
-it.
+| what you found                            | what would have caught it            |
+| ----------------------------------------- | ------------------------------------ |
+| reaching into another object's internals  | `SLF`                                |
+| commented-out code                        | `ERA`                                |
+| an argument nobody reads                  | `ARG`                                |
+| a bare `# noqa` / `# type: ignore`        | `PGH`                                |
+| an import buried in a function body       | `PLC0415`                            |
+| a superseded idiom                        | `UP`                                 |
+| a layer importing upwards                 | `banned-api` (flake8-tidy-imports)   |
+| a knot, a signature, a class too wide     | `C901`, `PLR0913`, `PLR0912`         |
 
-Then, per comment: would it still be true after the block is rewritten? Then it is intent —
-keep it. Does it narrate the lines below? Cut it, or make the code say it. What survives is
-the *why*: the alternative rejected, the source of a magic value, an ordering constraint the
-caller cannot see, the ticket behind a workaround.
+The names are ruff's; every ecosystem carries the same families under other spellings.
 
-A trailing comment enumerating a closed set of string values is a type waiting to happen —
-report it, do not convert it here; that is a design change, not hygiene.
+Two moves, and the second is worth more than the first:
 
-Never touch licence headers, shebangs and encoding lines, tool directives (`# fmt: off`,
-`# noqa: E501 — reason`, `prettier-ignore`, `@ts-expect-error`) with their reason, or
-docstrings that generate `--help` output or published docs.
+- **select a family the config lacks** — but run it once before proposing it. A family that
+  returns forty hits is not a gate, it is a whitelist file waiting to be born, and a whitelist
+  file is a second codebase that rots. Verdict machines only.
+- **ratchet a ceiling down.** A ceiling is set where the code stood, not where it should be.
+  Once the sweep removes what held it up, lower it to just above the worst survivor and update
+  its comment to name the new holder — otherwise the comment is a lie, and the next sweep
+  reads a line nobody chose.
 
-## 6. Dependencies
-
-`deptry` (Python), `depcheck` / `knip` (JS/TS), `cargo-udeps` (Rust) for the two mismatches:
-declared but never imported (remove), imported but never declared (you are riding someone
-else's transitive dependency — declare it). Check the import-name mapping before believing
-either: a package whose module name differs from its distribution name (`pyyaml`→`yaml`,
-`beautifulsoup4`→`bs4`, `Pillow`→`PIL`) gets reported as **both** mismatches at once, and that
-pair is one false positive, not two findings.
-
-Check the finder's root too — these tools scan a package directory, so a `tests/` tree passed
-as a second argument may report `0` because it scanned nothing.
-
-Then `pip-audit` / `npm audit` / `cargo audit` / `osv-scanner` for vulnerable ones. On a uv or
-poetry project the auditor has no environment to read, so feed it the resolved set:
-
-```sh
-uv export --no-hashes --all-groups --no-emit-project | pip-audit --no-deps -r /dev/stdin
-```
-
-Report version **bumps**, do not apply them: an upgrade changes behaviour, the rest of the
-sweep does not. Adding or removing a dependency is the different case — it is the direct fix
-for what the finder just reported, so propose it, and pin it exactly as its neighbours are
-pinned. What stays banned is regenerating the lockfile wholesale; recording one deliberate
-add is not that churn.
+Deprecations promoted to errors in the test config belong here too: no new dependency, and it
+turns the section above into a gate.

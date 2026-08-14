@@ -71,18 +71,22 @@ Before climbing, check the URL is the right one:
 
 ## Rung 1 — curl, with a verdict
 
-Work outside the project: the session scratchpad when one is given, otherwise `mkdir -p /tmp/fetch`.
-
 ```sh
-"${CLAUDE_SKILL_DIR}/curl-verdict.sh" "$URL" page.html            # url, then output file
-"${CLAUDE_SKILL_DIR}/curl-verdict.sh" "$URL" page.html --head     # extra curl options pass through
+"${CLAUDE_SKILL_DIR}/curl-verdict.sh" "$URL" timetable.html         # url, then output name
+"${CLAUDE_SKILL_DIR}/curl-verdict.sh" "$URL" timetable.html --head  # extra curl options pass through
 ```
+
+The second argument is a **name, not a path**: any directory it carries is dropped and the file
+lands under `$FETCH_DIR`, `/tmp/fetch/<session-id>` by default. One flat directory per session,
+so keep names unique — the same name twice overwrites. `FETCH_DIR` moves every download at once.
 
 One file written, one line on stdout — and **the decision table below reads that line**:
 
 ```
-http=200 318b text/html HTTP/2 redir=0 0.17s https://example.com/
+http=200 318b text/html HTTP/2 redir=0 0.17s file=/tmp/fetch/3e1dc534/timetable.html https://example.com/
 ```
+
+`file=` is the path to read afterwards; the cookie jar sits beside it as `<file>.cookies`.
 
 Do not hand-roll a bare `curl` instead. The script bakes in four things the verdict depends on,
 each easy to drop when retyping:
@@ -109,7 +113,7 @@ is Apple's build, which is blocked more often.
 
 | content-type       | do                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `text/html`        | `pandoc --from html --to gfm --wrap=none page.html --output page.md`, then `Read` with `offset`/`limit`; `grep` it |
+| `text/html`        | `pandoc --from html --to gfm --wrap=none timetable.html --output timetable.md`, then `Read` with `offset`/`limit`; `grep` it |
 | `application/pdf`  | **do not convert** — `Read` it with `pages:`                                                                       |
 | `application/json` | `jq` it                                                                                                            |
 
@@ -155,10 +159,10 @@ endpoint with the same rung-1 script — add `--header 'Accept: application/json
 needs the session the page set, point `--cookie`/`--cookie-jar` at the page's own jar.
 
 **No rung crosses a wall, and none is allowed to.** Two limits stack, and either alone is enough
-to stop. *Technically*: rungs 1–4 carry no identity, and rung 5 finds **no usable session** —
+to stop. _Technically_: rungs 1–4 carry no identity, and rung 5 finds **no usable session** —
 this Mac browses private, nothing stays signed in. The one authenticated route is a storage
 state the
-user exported beforehand and you inject at rung 3 or 4. *By authority*: even where the form is
+user exported beforehand and you inject at rung 3 or 4. _By authority_: even where the form is
 fillable, logging in, registering or paying is never yours to do — no credentials typed, no
 terms accepted, no email or phone number submitted, no card. Report what the page gates and let
 them decide.
@@ -172,10 +176,12 @@ It is usually a TLS or HTTP/2 fingerprint check, which no curl flag reaches.
 relative path — under Claudian the working directory is the vault root, not the skill's project.
 
 ```sh
-uv run "${CLAUDE_SKILL_DIR}/impersonate.py" --output page.html "$URL"      # safari by default
-uv run "${CLAUDE_SKILL_DIR}/impersonate.py" --impersonate chrome --output page.html "$URL"
+uv run "${CLAUDE_SKILL_DIR}/impersonate.py" --output timetable.html "$URL"   # safari by default
+uv run "${CLAUDE_SKILL_DIR}/impersonate.py" --impersonate chrome --output timetable.html "$URL"
 uv run "${CLAUDE_SKILL_DIR}/impersonate.py" --list                        # declared targets
 ```
+
+`--output` obeys rung 1's rule: a name, resolved under `$FETCH_DIR`, reported as `file=`.
 
 `--list` prints the _declared_ targets, some of which are not compiled into the free build and
 fail with `ImpersonateError` — the unnumbered aliases (`safari`, `chrome`, `firefox`, `edge`) are
@@ -200,9 +206,12 @@ server, no session, nothing persisted, and it runs wherever Bash does, Claudian 
 PW=$(for d in ~/.npm/_npx/*/; do [ -d "$d/node_modules/@playwright/mcp" ] &&
      echo "$d/node_modules/playwright/cli.js"; done | head -1)
 
-node "$PW" screenshot --browser webkit --full-page --wait-for-selector <sel> "$URL" page.png
-node "$PW" pdf --browser chromium --wait-for-selector <sel> "$URL" page.pdf
+node "$PW" screenshot --browser webkit --full-page --wait-for-selector <sel> "$URL" "$FETCH_DIR/timetable.png"
+node "$PW" pdf --browser chromium --wait-for-selector <sel> "$URL" "$FETCH_DIR/timetable.pdf"
 ```
+
+The Playwright CLI resolves nothing — spell the destination out, with
+`${FETCH_DIR:=/tmp/fetch/$CLAUDE_CODE_SESSION_ID}` when the shell has not set it yet.
 
 If `$PW` comes back empty, the MCP has never run on this machine: trigger any MCP call once to
 populate the npx cache, or go straight through the MCP tools.
@@ -214,10 +223,6 @@ populate the npx cache, or go straight through the MCP tools.
 > **Never a bare `npx playwright`** with no version — it pulls a different Chromium from the
 > MCP's, and you pay for both. The CLI has no version of its own: it borrows the MCP's, so
 > `.mcp.json` is the one thing to update.
->
-> That pin lives in **two** places: the `playwright` charm and each project's `.mcp.json`. Bump
-> them together — a push from an unpinned charm silently unpins every project it reaches, and
-> nothing reports it, mcp drift being invisible to `agents diff`.
 
 Then `Read` the file — pixels for the screenshot, `pages:` for the PDF. `--load-storage <file>`
 injects a saved login without persisting anything; `--device`, `--lang` and `--proxy-server` are
@@ -238,15 +243,15 @@ delivery-slot picker, any multi-step flow the CLI cannot express in one command.
 where you land when the flow itself is unknown, since you can observe between actions instead of
 guessing selectors blind.
 
-The `playwright` charm serves it, configured `--headless --isolated`: nothing on disk, no profile
-survives the session. It is pinned to one engine, so the engine swap stays rung 3's job. Its tool
-surface costs context in every session that loads it — reach for it when the CLI genuinely
-cannot do the job, not by preference.
+The `playwright` MCP is configured `--headless --isolated`: nothing on disk, no profile survives
+the session. It is pinned to one engine, so the engine swap stays rung 3's job. Its tool surface
+costs context in every session that loads it — reach for it when the CLI genuinely cannot do the
+job, not by preference.
 
 Credentials without a fat profile, at either rung: a saved storage state — `--load-storage` on
 the CLI, `browser_set_storage_state` on the MCP. Isolated session **plus** injected state =
-logged in, nothing persisted. That state file is a secret — never in the trove, never in the
-vault.
+logged in, nothing persisted. That state file is a secret — never commit it, never keep it in
+the project.
 
 ## Rung 5 — safari
 
@@ -271,8 +276,8 @@ oddly, `safari_doctor` names the broken link in the permission chain.
 
 ## When a rung is missing
 
-The browser rungs are separate charms — `playwright` for rungs 3–4, `safari` for rung 5 — and
-neither is required for rungs 1–2 to work. If the table says climb and the tool is absent:
+The browser rungs are separate MCP servers — `playwright` for rungs 3–4, `safari` for rung 5 —
+and neither is required for rungs 1–2 to work. If the table says climb and the tool is absent:
 
 - say so plainly — which rung, and what it would have unblocked;
 - stop at the rung reached, and **never present a rung-1 partial as the whole thing**.
@@ -295,5 +300,6 @@ For anything that outlives the turn, record next to the content:
 ## Guardrails
 
 - One request at a time against the same host; `--max-time` always set.
-- Keep the fetched file — re-reading it is free, re-fetching is not.
+- Keep the fetched file — re-reading it is free, re-fetching is not. It survives the whole
+  session under `$FETCH_DIR`.
 - Report the rung that succeeded, and what was left unread.
