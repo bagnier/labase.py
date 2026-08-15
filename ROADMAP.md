@@ -104,7 +104,7 @@ runtime, c'est le **chemin vers la prod et l'exploitation**.
 #### P0 — bloquant pour un premier déploiement client
 
 → implémenté 2026-07-12, runbook complet dans [docs/production.md](docs/production.md).
-Non testé en local (toolchain 3.14 absente du conteneur) : lancer `make finalize` avant deploy.
+Rebasé et vérifié 2026-08-15 : lint vert, `check_production` couvert par `apps/shared/tests/test_preflight.py`.
 
 - [x] **`docker/docker-compose.prod.yml`** — compose de prod : `restart: unless-stopped`,
   `healthcheck` (python, pas curl — l'image slim n'a pas curl) sur `/health/ready`, limites
@@ -126,6 +126,11 @@ Non testé en local (toolchain 3.14 absente du conteneur) : lancer `make finaliz
   compose ; le `TaskWorker` relâchait déjà ses locks proprement sur `stop()`.
 - [x] **Doc secrets prod** — docs/production.md : injection via `env_file`/secret store, table des
   variables minimales (rappel : `.env` n'est **pas** commité, seul `.env.test` l'est).
+- [ ] **Le seuil `len(SUPABASE_SECRET_KEY) < 40` du preflight est une heuristique** — il bloque
+  le boot, sans échappatoire. Les `service_role` hérités sont des JWT très longs et passent ;
+  le format `sb_secret_…` est bien plus court et sa longueur réelle n'est pas vérifiée. Un faux
+  positif verrouille la prod dehors. Trancher : mesurer les deux formats et valider un préfixe
+  plutôt qu'une longueur, ou rétrograder en warning. `apps/shared/preflight.py`.
 
 #### P1 — juste après le premier deploy
 

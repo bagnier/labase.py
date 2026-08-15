@@ -13,7 +13,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class TechnicalSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=os.getenv("ENV_FILE", ".env"), extra="ignore")
+    # populate_by_name: `environment` carries a validation_alias, which would otherwise make it
+    # the one field settable only by its alias and not by its own name.
+    model_config = SettingsConfigDict(
+        env_file=os.getenv("ENV_FILE", ".env"), extra="ignore", populate_by_name=True
+    )
 
     supabase_api_url: str
     supabase_publishable_key: str

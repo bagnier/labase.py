@@ -38,10 +38,12 @@ def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]
         )
     if "*" in settings.cors_origins:
         errors.append("CORS_ORIGINS contains '*' — declare explicit allowed origins.")
-    if any(host in settings.supabase_database_user_url for host in _LOCAL_HOSTS):
-        errors.append(
-            "SUPABASE_DATABASE_USER_URL points at a local host — not a production database."
-        )
+    for name, url in (
+        ("SUPABASE_DATABASE_USER_URL", settings.supabase_database_user_url),
+        ("SUPABASE_DATABASE_ADMIN_URL", settings.supabase_database_admin_url),
+    ):
+        if any(host in url for host in _LOCAL_HOSTS):
+            errors.append(f"{name} points at a local host — not a production database.")
     if len(settings.supabase_secret_key) < 40:
         errors.append("SUPABASE_SECRET_KEY looks unset or too short.")
 

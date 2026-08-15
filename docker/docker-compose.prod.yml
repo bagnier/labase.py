@@ -16,6 +16,9 @@ services:
     environment:
       # Activates the boot-time preflight gate (apps/shared/preflight.py).
       ENVIRONMENT: production
+      # Safe here and only here: the app is `expose`d, not published, so Caddy is the
+      # sole ingress and its X-Forwarded-For can be trusted to key the rate limiter.
+      TRUST_FORWARDED_FOR: "true"
       # Git SHA, so error-tracking regression detection works across deploys.
       APP_VERSION: ${APP_VERSION:-dev}
       # Seconds to drain in-flight requests on SIGTERM (see stop_grace_period).

@@ -41,17 +41,18 @@ them into the image.
 
 Minimum production env:
 
-| Variable | Note |
-| --- | --- |
-| `ENVIRONMENT` | `production` — set by the compose file; activates the preflight gate |
-| `SUPABASE_API_URL` | project API URL |
-| `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` | project keys; keep the secret key server-side only |
-| `SUPABASE_DATABASE_USER_URL` | **via the Supavisor pooler** (see below), asyncpg driver |
-| `SUPABASE_DATABASE_ADMIN_URL` | admin (BYPASSRLS) connection, also pooled |
-| `COOKIES_SECURE` | `true` (the default) — required over HTTPS |
-| `CORS_ORIGINS` | explicit origins, **not** `*` |
-| `SMTP_*` | a real transactional provider (not the local Mailpit catcher) |
-| `FIREHOSE_DIR` | a real log volume path |
+| Variable                                           | Note                                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------- |
+| `ENVIRONMENT`                                      | `production` — set by the compose file; activates the preflight gate  |
+| `SUPABASE_API_URL`                                 | project API URL                                                       |
+| `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` | project keys; keep the secret key server-side only                    |
+| `SUPABASE_DATABASE_USER_URL`                       | **via the Supavisor pooler** (see below), asyncpg driver              |
+| `SUPABASE_DATABASE_ADMIN_URL`                      | admin (BYPASSRLS) connection, also pooled                             |
+| `COOKIES_SECURE`                                   | `true` (the default) — required over HTTPS                            |
+| `CORS_ORIGINS`                                     | explicit origins, **not** `*`                                         |
+| `TRUST_FORWARDED_FOR`                              | `true` — required behind Caddy, see [Behind a proxy](#behind-a-proxy) |
+| `SMTP_*`                                           | a real transactional provider (not the local Mailpit catcher)         |
+| `FIREHOSE_DIR`                                     | a real log volume path                                                |
 
 ## Preflight — config safety gate
 
@@ -62,9 +63,10 @@ before deploying:
 make preflight ENV_FILE=.env.production
 ```
 
-Blocking errors: `COOKIES_SECURE=false`, `CORS_ORIGINS` containing `*`, a database
-URL pointing at localhost, an unset/too-short secret key. Warnings: `APP_VERSION=dev`,
-`LOG_DEBUG=true`, missing admin URL.
+Blocking errors: `COOKIES_SECURE=false`, `CORS_ORIGINS` containing `*`, either the user
+or the admin database URL pointing at a local host, an unset/too-short secret key.
+Warnings: a non-production `ENVIRONMENT`, `APP_VERSION=dev`, `LOG_DEBUG=true`, missing
+admin URL.
 
 The same checks run **at boot** when `ENVIRONMENT=production`
 (`apps/shared/preflight.py::enforce_at_boot`): a blocking error raises and the
@@ -115,10 +117,19 @@ make backup-storage DEST=/backups/storage ENV_FILE=.env.production
 This mirrors the whole bucket to `DEST/<bucket>/…`, recursing into folders. Schedule
 it (cron / a scheduled job) and verify a restore periodically.
 
-## Behind a proxy — known consideration
+## Behind a proxy
 
 The app reads `COOKIES_SECURE` from config (not the request scheme), so TLS
-termination at Caddy needs no scheme detection for auth. However, rate limiting keys
-on the client IP, which behind a proxy is Caddy's address. To key on the real client
-IP, wrap the ASGI app with Hypercorn's `ProxyFixMiddleware` and trust the proxy's
-`X-Forwarded-For` — tracked as a follow-up, not required for a first deploy.
+termination at Caddy needs no scheme detection for auth.
+
+Client IP is the part that does need a setting. Rate limiting keys on the caller's
+address (`apps/shared/http/limiter.py`), and behind a proxy the socket peer is Caddy —
+so every request would share one bucket, letting a single abuser exhaust the limit for
+everyone. Set `TRUST_FORWARDED_FOR=true`: `client_ip` then reads the left-most
+`X-Forwarded-For` entry, the client Caddy observed, instead of the peer
+(`apps/shared/http/addressing.py`).
+
+It is off by default on purpose — trusting that header when nothing upstream strips it
+lets any caller spoof their IP. Turn it on **only** because Caddy sets it and nothing
+reaches the app except through Caddy. If you expose the app port directly (no proxy),
+leave it off.
