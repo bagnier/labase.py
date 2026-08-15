@@ -1,0 +1,11 @@
+# sqlfluff — lint-light for Supabase migrations (see README "Quality tools").
+# We lint, never reformat: migrations are historical, already-applied artifacts.
+#   - layout : every whitespace / indent / long-line rule off (no reformatting).
+#   - RF04/RF05 : keywords (`name`, `type`, `end`…) and special chars used as
+#     identifiers are legitimate in this schema.
+#   - PG01 : CREATE INDEX … CONCURRENTLY cannot run inside Supabase's transactional
+#     migrations, and is unnecessary at table-creation time.
+# Capitalisation, ambiguous-reference, aliasing, structure and convention rules stay on.
+[sqlfluff]
+dialect = postgres
+exclude_rules = layout, RF04, RF05, PG01

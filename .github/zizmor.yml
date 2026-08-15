@@ -1,0 +1,9 @@
+# zizmor — GitHub Actions security lint (see README "Quality tools").
+# Relax the default blanket hash-pin policy to ref-pin: version tags (@v6) are
+# accepted, mutable branch refs (@main) are still flagged. All other audits stay
+# at their defaults (excessive-permissions, injections, artipacked, …).
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": ref-pin
