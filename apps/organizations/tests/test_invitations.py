@@ -14,7 +14,7 @@ from apps.shared.persistence.database import get_admin_session, get_user_session
 app = host.app
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     return TestClient(app, raise_server_exceptions=True)
 

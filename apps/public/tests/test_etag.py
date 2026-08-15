@@ -13,7 +13,8 @@ def test_first_request_gets_etag_and_cache_control():
     response = with_etag(_request(), Response(content=b"<html>hi</html>"))
     assert response.status_code == 200
     etag = response.headers["etag"]
-    assert etag.startswith('"') and etag.endswith('"')
+    assert etag.startswith('"')
+    assert etag.endswith('"')
     assert response.headers["cache-control"] == "private, no-cache"
 
 

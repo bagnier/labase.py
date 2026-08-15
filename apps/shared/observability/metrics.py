@@ -110,11 +110,11 @@ class MetricsAccumulator:
         lines = ["# TYPE http_requests_total counter"]
         items = sorted(self._stats.items())
         for (method, route), stats in items:
-            for status_class in sorted(stats.by_status):
-                lines.append(
-                    f'http_requests_total{{method="{method}",route="{route}",'
-                    f'status="{status_class}"}} {stats.by_status[status_class]}'
-                )
+            lines.extend(
+                f'http_requests_total{{method="{method}",route="{route}",'
+                f'status="{status_class}"}} {stats.by_status[status_class]}'
+                for status_class in sorted(stats.by_status)
+            )
         lines.append("# TYPE http_request_duration_seconds histogram")
         for (method, route), stats in items:
             labels = f'method="{method}",route="{route}"'

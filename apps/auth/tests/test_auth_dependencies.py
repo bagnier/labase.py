@@ -110,9 +110,11 @@ def test_impersonation_remaining_reads_deadline():
     assert _impersonation_remaining("") is None
     assert _impersonation_remaining("not-a-number") is None
     future = _impersonation_remaining(str(int(time.time()) + 100))
-    assert future is not None and future > 0
+    assert future is not None
+    assert future > 0
     past = _impersonation_remaining(str(int(time.time()) - 100))
-    assert past is not None and past < 0
+    assert past is not None
+    assert past < 0
 
 
 @pytest.mark.asyncio

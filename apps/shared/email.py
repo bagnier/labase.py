@@ -45,6 +45,7 @@ class SmtpMailer:
         sender: str,
         username: str = "",
         password: str = "",
+        *,
         start_tls: bool = False,
     ) -> None:
         self.host = host

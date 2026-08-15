@@ -10,6 +10,7 @@ import os
 import platform
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TypedDict
 
 import psutil
@@ -79,7 +80,7 @@ def process_snapshot() -> ProcessSnapshot:
         python_version=sys.version.split()[0],
         executable=sys.executable,
         pid=os.getpid(),
-        cwd=os.getcwd(),
+        cwd=str(Path.cwd()),
         platform=platform.platform(),
         started_at=started_at.isoformat(),
         uptime_seconds=int((clock.now() - started_at).total_seconds()),

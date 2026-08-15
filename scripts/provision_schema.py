@@ -54,6 +54,7 @@ def _psql(container: str, sql: str, *, database: str = "postgres") -> None:
         input=sql,
         capture_output=True,
         text=True,
+        check=False,  # the returncode is read right below, to surface psql's stderr
     )
     if proc.returncode != 0:
         sys.exit(f"psql failed:\n{proc.stderr}")
@@ -114,8 +115,7 @@ def _rewrite(dump: str, schema: str) -> str:
     ]
     dump = "\n".join(lines)
     dump = dump.replace("public.", f"{schema}.")
-    dump = dump.replace("SCHEMA public", f"SCHEMA {schema}")  # CREATE / GRANT ... ON SCHEMA
-    return dump
+    return dump.replace("SCHEMA public", f"SCHEMA {schema}")  # CREATE / GRANT ... ON SCHEMA
 
 
 def _storage_and_trigger_sql(schema: str, bucket: str) -> str:

@@ -413,7 +413,7 @@ def test_two_classes_cannot_claim_the_same_kind():
         app_name = "test_dup"
         verb = "happened"
 
-    with pytest.raises(ValueError, match="test_dup.happened"):
+    with pytest.raises(ValueError, match=r"test_dup\.happened"):
 
         @dataclass(frozen=True, kw_only=True)
         class Second(BusinessEvent):

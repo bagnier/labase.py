@@ -128,23 +128,21 @@ def _month_grid(
             "multi_day": end_date > start_date,
         }
 
-    weeks = []
-    for week in cal.monthdatescalendar(ref.year, ref.month):
-        weeks.append(
-            [
-                {
-                    "day": d.day,
-                    "in_month": d.month == ref.month,
-                    "is_today": d == today,
-                    "events": [
-                        _cell_event(ev, d)
-                        for ev in sorted(by_day.get(d, []), key=lambda x: x.starts_at)
-                    ],
-                }
-                for d in week
-            ]
-        )
-    return weeks
+    return [
+        [
+            {
+                "day": d.day,
+                "in_month": d.month == ref.month,
+                "is_today": d == today,
+                "events": [
+                    _cell_event(ev, d)
+                    for ev in sorted(by_day.get(d, []), key=lambda x: x.starts_at)
+                ],
+            }
+            for d in week
+        ]
+        for week in cal.monthdatescalendar(ref.year, ref.month)
+    ]
 
 
 def _ref_month(request: Request) -> date:

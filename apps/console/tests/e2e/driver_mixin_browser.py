@@ -207,15 +207,13 @@ class ConsoleBrowserMixin(BrowserBase):
 
     def assert_can_open_console(self, email: str) -> None:
         resp = self.page_for(email).goto(f"{self.base_url}/console", wait_until="load")
-        assert resp is not None and resp.status == 200, (
-            f"Expected 200, got {resp.status if resp else None}"
-        )
+        assert resp is not None, "Expected 200, got no response"
+        assert resp.status == 200, f"Expected 200, got {resp.status}"
 
     def assert_refused_console(self, email: str) -> None:
         resp = self.page_for(email).goto(f"{self.base_url}/console", wait_until="load")
-        assert resp is not None and resp.status == 404, (
-            f"Expected 404, got {resp.status if resp else None}"
-        )
+        assert resp is not None, "Expected 404, got no response"
+        assert resp.status == 404, f"Expected 404, got {resp.status}"
 
     def _goto_admins(self):
         self._as_admin()

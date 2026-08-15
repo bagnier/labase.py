@@ -129,8 +129,9 @@ fix:
 	uv run djlint apps --reformat
 
 upgrade:
-	cp uv.lock /tmp/uv.lock.bak
-	cp pyproject.toml /tmp/pyproject.toml.bak
+	mkdir --parents .cache/upgrade
+	cp uv.lock .cache/upgrade/uv.lock.bak
+	cp pyproject.toml .cache/upgrade/pyproject.toml.bak
 	python3 scripts/upgrade.py relax
 	uv lock --upgrade
 	python3 scripts/upgrade.py repin

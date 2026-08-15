@@ -59,7 +59,7 @@ def run_sql(
         asyncio.set_event_loop(loop)
         try:
             out.append(loop.run_until_complete(_exec()))
-        except Exception as e:  # noqa: BLE001 — re-raised on the calling thread below
+        except Exception as e:
             errors.append(e)
         finally:
             loop.close()

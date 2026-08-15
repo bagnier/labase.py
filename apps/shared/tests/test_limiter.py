@@ -23,7 +23,7 @@ async def fresh_admin_engine():
     db.admin_session_factory.cache_clear()
 
 
-@pytest.fixture()
+@pytest.fixture
 def rate_limiting_enabled(monkeypatch):
     monkeypatch.setattr(get_technical_settings(), "rate_limit_enabled", True)
 

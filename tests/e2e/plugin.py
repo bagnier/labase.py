@@ -7,6 +7,7 @@ since ``pytest_addoption`` is only honoured for plugins loaded at startup.
 """
 
 import asyncio
+from collections.abc import Iterator
 
 import pytest
 
@@ -16,17 +17,13 @@ from tests.e2e.drivers.browser import BrowserDriver
 
 
 @pytest.fixture(scope="session")
-def driver(request) -> ApiDriver | BrowserDriver:
+def driver(request) -> Iterator[ApiDriver | BrowserDriver]:
     name = request.config.getoption("--driver")
     d = BrowserDriver() if name == "browser" else ApiDriver()
     d.start()
-
-    def finalize() -> None:
-        d.stop()
-        asyncio.run(cleanup.purge_leftover_test_data())
-
-    request.addfinalizer(finalize)
-    return d
+    yield d
+    d.stop()
+    asyncio.run(cleanup.purge_leftover_test_data())
 
 
 @pytest.fixture(autouse=True)

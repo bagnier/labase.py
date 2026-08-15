@@ -2,23 +2,24 @@
 
 import re
 import sys
+from pathlib import Path
 
-LOCK_BAK = "/tmp/uv.lock.bak"
-TOML_BAK = "/tmp/pyproject.toml.bak"
-LOCK = "uv.lock"
-TOML = "pyproject.toml"
+# Backups live under .cache/ like every other scratch artefact here (pytest, ruff, coverage),
+# not in the world-writable /tmp where a predictable name is anyone's to preempt.
+BAK = Path(".cache/upgrade")
+LOCK_BAK = BAK / "uv.lock.bak"
+TOML_BAK = BAK / "pyproject.toml.bak"
+LOCK = Path("uv.lock")
+TOML = Path("pyproject.toml")
 
 
-def parse_lock(path: str) -> dict[str, str]:
-    with open(path) as f:
-        return {m[1]: m[2] for m in re.finditer(r'name = "(.+?)"\nversion = "(.+?)"', f.read())}
+def parse_lock(path: Path) -> dict[str, str]:
+    text = path.read_text()
+    return {m[1]: m[2] for m in re.finditer(r'name = "(.+?)"\nversion = "(.+?)"', text)}
 
 
 def relax_pins() -> None:
-    with open(TOML) as f:
-        content = f.read()
-    with open(TOML, "w") as f:
-        f.write(re.sub(r'==([\d.]+)"', '"', content))
+    TOML.write_text(re.sub(r'==([\d.]+)"', '"', TOML.read_text()))
 
 
 def repin(content: str, resolved: dict[str, str]) -> str:
@@ -44,10 +45,7 @@ def repin_and_report() -> None:
     else:
         print("  Nothing to upgrade.")
 
-    with open(TOML_BAK) as f:
-        content = f.read()
-    with open(TOML, "w") as f:
-        f.write(repin(content, new))
+    TOML.write_text(repin(TOML_BAK.read_text(), new))
 
 
 if __name__ == "__main__":

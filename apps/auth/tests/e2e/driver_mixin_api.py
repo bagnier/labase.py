@@ -91,7 +91,8 @@ class AuthApiMixin(ApiBase):
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
     def reset_password_via_email(self, new_password: str) -> None:
-        assert self._reset_email and self._reset_requested_at, "no reset requested"
+        assert self._reset_email, "no reset requested"
+        assert self._reset_requested_at, "no reset requested"
         token_hash = mailbox.recovery_token(self._reset_email, since=self._reset_requested_at)
         resp = self.client().post(
             "/auth/reset-password", json={"token_hash": token_hash, "password": new_password}

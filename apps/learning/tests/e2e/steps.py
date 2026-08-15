@@ -5,7 +5,6 @@ from pytest_bdd import given, parsers, then, when
 @pytest.fixture(autouse=True)
 def _reset_learning(driver):
     driver._reset_learning()
-    yield
 
 
 def _iso(fr_date: str) -> str:

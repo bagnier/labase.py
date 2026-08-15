@@ -18,7 +18,7 @@ org_handle_param = {
 for path, path_item in schema.get("paths", {}).items():
     if "{org_handle}" not in path:
         continue
-    for _method, operation in path_item.items():
+    for operation in path_item.values():
         if not isinstance(operation, dict):
             continue
         params = operation.setdefault("parameters", [])

@@ -164,9 +164,8 @@ class PagesApiMixin(ApiBase):
         assert f"/pages/{slug}/edit" not in resp.text, "an edit link is shown but should not be"
 
     def assert_visible_to_members(self, slug: str) -> None:
-        assert self.response is not None and self.response.status_code == 200, (
-            f"publish failed: {self.response.status_code if self.response else 'n/a'}"
-        )
+        assert self.response is not None, "publish failed: no response"
+        assert self.response.status_code == 200, f"publish failed: {self.response.status_code}"
         self.assert_page_visibility(slug, "members")
 
     def assert_visitor_can_view(self, slug: str, _org_name: str) -> None:
@@ -232,7 +231,8 @@ class PagesApiMixin(ApiBase):
     def assert_in_nav(self, title: str) -> None:
         candidates = self._nav_candidates()
         match = next((c for c in candidates if c["title"] == title), None)
-        assert match is not None and match["in_nav"], f"'{title}' not in nav: {candidates}"
+        assert match is not None, f"'{title}' not found: {candidates}"
+        assert match["in_nav"], f"'{title}' not in nav: {candidates}"
 
     def assert_not_in_nav(self, title: str) -> None:
         candidates = self._nav_candidates()

@@ -95,7 +95,7 @@ def test_declare_rejects_an_event_that_names_no_app_and_verb():
 @pytest.mark.asyncio
 async def test_emit_refuses_an_undeclared_event():
     bus = EventBus(EventRegistry())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="declared by no app"):
         await bus.emit(_Ticked())  # no app declared it
 
 
@@ -104,7 +104,7 @@ async def test_emit_refuses_an_undeclared_event():
 
 def test_on_rejects_a_duplicate_consumer_name_for_the_same_event():
     events.on(_Ticked, _noop, name="counter", app="test_bus")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="counter"):
         events.on(_Ticked, _noop, name="counter", app="test_bus")
 
 

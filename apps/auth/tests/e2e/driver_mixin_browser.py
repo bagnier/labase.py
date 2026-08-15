@@ -125,7 +125,8 @@ class AuthBrowserMixin(BrowserBase):
         self.page.wait_for_selector(".alert", timeout=5000)
 
     def reset_password_via_email(self, new_password: str) -> None:
-        assert self._reset_email and self._reset_requested_at, "no reset requested"
+        assert self._reset_email, "no reset requested"
+        assert self._reset_requested_at, "no reset requested"
         # The recovery mail is really fetched from the catcher; the link targets the
         # dev SITE_URL, so we carry its token to this driver's own server port.
         token_hash = mailbox.recovery_token(self._reset_email, since=self._reset_requested_at)

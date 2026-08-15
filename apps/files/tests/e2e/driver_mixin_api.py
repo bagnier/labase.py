@@ -71,7 +71,8 @@ class OrgFileApiMixin(ApiBase):
 
     def _get_primary_org_id(self) -> str:
         resp = self.client().get("/organizations")
-        assert resp.status_code == 200 and resp.json(), "Cannot find primary org"
+        assert resp.status_code == 200, "Cannot find primary org"
+        assert resp.json(), "Cannot find primary org"
         return resp.json()[0]["id"]
 
     # ── sign-in with org naming ───────────────────────────────────────────────

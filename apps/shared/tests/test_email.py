@@ -14,7 +14,7 @@ from apps.shared.email import (
 
 
 class FakeMailer:
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.sent: list[Email] = []
 
@@ -24,7 +24,7 @@ class FakeMailer:
         self.sent.append(email)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_mailer():
     mailer = FakeMailer()
     set_mailer(mailer)

@@ -174,7 +174,8 @@ class LogsApiMixin(ApiBase):
 
     def assert_entry_above(self, a: str, b: str) -> None:
         events = self._events()
-        assert a in events and b in events, f"{a!r}/{b!r} not both listed: {events}"
+        assert a in events, f"{a!r} not listed: {events}"
+        assert b in events, f"{b!r} not listed: {events}"
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
     def assert_activity(self, date: str, business: int, http: int, error: int) -> None:

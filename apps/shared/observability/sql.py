@@ -72,11 +72,11 @@ def instrument_engine(engine: AsyncEngine) -> None:
     _instrumented.add(sync_engine)
 
     @event.listens_for(sync_engine, "before_cursor_execute")
-    def _before(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001, ANN202
+    def _before(conn, cursor, statement, parameters, context, executemany):
         conn.info.setdefault("_labase_query_start", []).append(time.perf_counter())
 
     @event.listens_for(sync_engine, "after_cursor_execute")
-    def _after(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001, ANN202
+    def _after(conn, cursor, statement, parameters, context, executemany):
         starts = conn.info.get("_labase_query_start")
         elapsed_ms = round((time.perf_counter() - starts.pop()) * 1000, 2) if starts else 0.0
         stats = _stats.get()

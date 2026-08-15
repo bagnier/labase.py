@@ -35,7 +35,8 @@ class LearningApiMixin(ApiBase):
             email = f"{key}@example.com"
             client = self.client_for(email)
             resp = client.get("/organizations")
-            assert resp.status_code == 200 and resp.json(), f"no org for {email}: {resp.text}"
+            assert resp.status_code == 200, f"no org for {email}: {resp.text}"
+            assert resp.json(), f"no org for {email}: {resp.text}"
             org = resp.json()[0]
             self._learn_handle[key] = org["handle"]
             self._learn_org[key] = uuid.UUID(org["id"])

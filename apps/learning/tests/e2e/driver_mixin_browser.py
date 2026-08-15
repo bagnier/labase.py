@@ -59,7 +59,7 @@ class LearningBrowserMixin(BrowserBase):
             asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(go())
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
             finally:
                 loop.close()

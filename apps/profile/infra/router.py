@@ -218,7 +218,7 @@ async def _profile_context(
     )
     try:
         profile = await repo.get_with_auto_handle(
-            current_user.id, current_user.email, profile_settings.handle_enabled
+            current_user.id, current_user.email, handle_enabled=profile_settings.handle_enabled
         )
         context = await fullpage_context(session, current_user)
         orgs = context["org_nav"]
@@ -289,7 +289,7 @@ async def profile_page(
 ) -> HTMLResponse | JSONResponse | RedirectResponse:
     if wants_json(request):
         profile = await repo.get_with_auto_handle(
-            current_user.id, current_user.email, profile_settings.handle_enabled
+            current_user.id, current_user.email, handle_enabled=profile_settings.handle_enabled
         )
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})

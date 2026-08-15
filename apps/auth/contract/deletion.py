@@ -7,10 +7,13 @@ substrate can hard-delete cold soft-deleted accounts later.
 """
 
 import asyncio
+import functools
 
 from apps.shared.persistence.supabase import get_admin_supabase
 
 
 async def disable_account(user_id: str) -> None:
     supabase = get_admin_supabase()
-    await asyncio.to_thread(supabase.auth.admin.delete_user, user_id, True)
+    await asyncio.to_thread(
+        functools.partial(supabase.auth.admin.delete_user, user_id, should_soft_delete=True)
+    )

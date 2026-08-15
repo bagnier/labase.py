@@ -164,8 +164,8 @@ def read_firehose(
     needle = text.lower() if text else None
     rows: list[FirehoseRow] = []
     for path in _recent_files(floor):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
             if not line:
                 continue
             try:

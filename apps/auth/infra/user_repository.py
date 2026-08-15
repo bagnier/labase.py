@@ -42,23 +42,21 @@ async def _iter_all_users():
 
 async def list_server_admins() -> list[UserAdminStatus]:
     """Every auth user with their server-admin flag, read from ``app_metadata.role``."""
-    out: list[UserAdminStatus] = []
-    async for u in _iter_all_users():
-        out.append(
-            UserAdminStatus(
-                user_id=uuid.UUID(u.id),
-                email=u.email or "",
-                is_admin=_is_admin(u.app_metadata),
-            )
+    return [
+        UserAdminStatus(
+            user_id=uuid.UUID(u.id),
+            email=u.email or "",
+            is_admin=_is_admin(u.app_metadata),
         )
-    return out
+        async for u in _iter_all_users()
+    ]
 
 
 async def count_server_admins() -> int:
     return sum(1 for u in await list_server_admins() if u.is_admin)
 
 
-async def set_server_admin(user_id: uuid.UUID, is_admin: bool) -> None:
+async def set_server_admin(user_id: uuid.UUID, *, is_admin: bool) -> None:
     """Set or clear the admin-only ``app_metadata.role`` claim. Effective on next sign-in."""
     admin = get_admin_supabase().auth.admin
     role = _ADMIN_ROLE if is_admin else None

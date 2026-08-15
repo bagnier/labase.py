@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import apps.organizations.contract.current as current
 import apps.shared.settings as shared_settings
+from apps.organizations.contract import current
 from apps.organizations.contract.current import app_settings
 from apps.shared.settings import AppSettings, SettingDef, SettingsDeclaration
 

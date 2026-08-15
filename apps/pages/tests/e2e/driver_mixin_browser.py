@@ -206,9 +206,8 @@ class PagesBrowserMixin(BrowserBase):
     def assert_visitor_can_view(self, slug: str, _org_name: str) -> None:
         page = self.page_for(_VISITOR)
         resp = page.goto(self._pages_url(f"/{slug}"), wait_until="load")
-        assert resp is not None and resp.status == 200, (
-            f"visitor view got {resp.status if resp else 'n/a'}"
-        )
+        assert resp is not None, "visitor view got no response"
+        assert resp.status == 200, f"visitor view got {resp.status}"
 
     def assert_visitor_forbidden(self) -> None:
         assert self.last_response is not None
@@ -294,9 +293,9 @@ class PagesBrowserMixin(BrowserBase):
         titles = [r.inner_text().strip() for r in rows]
         a_idx = next((i for i, t in enumerate(titles) if a in t), None)
         b_idx = next((i for i, t in enumerate(titles) if b in t), None)
-        assert a_idx is not None and b_idx is not None and a_idx < b_idx, (
-            f"expected '{a}' before '{b}', got: {titles}"
-        )
+        assert a_idx is not None, f"'{a}' not found, got: {titles}"
+        assert b_idx is not None, f"'{b}' not found, got: {titles}"
+        assert a_idx < b_idx, f"expected '{a}' before '{b}', got: {titles}"
 
     def assert_not_nav_candidate(self, title: str) -> None:
         self._goto_nav_manager()

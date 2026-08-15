@@ -132,9 +132,10 @@ def remove(name: str) -> None:
                 ],
                 cwd=ROOT,
                 env=_py_env(path / env_file),
+                check=False,  # best-effort teardown: a schema already gone is not a failure
             )
     _run(["git", "worktree", "remove", "--force", str(path)], cwd=ROOT)
-    subprocess.run(["git", "branch", "-D", name], cwd=ROOT)
+    subprocess.run(["git", "branch", "-D", name], cwd=ROOT, check=False)  # may not exist
     print(f"Removed worktree '{name}', its schemas and buckets.")
 
 

@@ -248,9 +248,8 @@ class OrgApiMixin(ApiBase):
             f" got {self.response.status_code}: {self.response.text}"
         )
         data = self.response.json()
-        assert "redirect" in data and "/dashboard" in data["redirect"], (
-            f"Expected redirect to dashboard, got: {data}"
-        )
+        assert "redirect" in data, f"Expected a redirect, got: {data}"
+        assert "/dashboard" in data["redirect"], f"Expected redirect to dashboard, got: {data}"
 
     def assert_action_fails_with(self, message: str) -> None:
         assert self.response is not None, "No response stored"

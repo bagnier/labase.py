@@ -54,6 +54,7 @@ async def _count_p1(actor: uuid.UUID) -> int:
         )
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_failed_write_logs_a_warning_instead_of_raising():
     # Regression: the warning must not pass `event=`/`kind=` under structlog's positional
@@ -83,8 +84,9 @@ async def test_failed_write_logs_a_warning_instead_of_raising():
 # ── Transactional persist (Phase 1): the fact commits iff the action commits ──────────────────
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
+async def test_persist_fact_writes_the_row_on_the_given_session():
     """emit persists the fact on the caller's session — scoping to columns, the rest in payload."""
     actor, eid = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
@@ -107,8 +109,9 @@ async def test_persist_fact_writes_the_row_on_the_given_session(_clean_p1):
     assert "org_id" not in row.payload
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_the_trail_composes_kind_from_the_two_halves_it_stores(_clean_p1):
+async def test_the_trail_composes_kind_from_the_two_halves_it_stores():
     """``kind`` is a view over the row, not a value in it.
 
     An event names itself in two parts, and the class composes them; the table now does the same —
@@ -141,8 +144,9 @@ async def test_the_trail_composes_kind_from_the_two_halves_it_stores(_clean_p1):
             )
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
+async def test_persist_fact_rolls_back_with_the_transaction():
     """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
     actor = uuid.uuid7()
     async with db.admin_session_factory()() as session:
@@ -151,6 +155,7 @@ async def test_persist_fact_rolls_back_with_the_transaction(_clean_p1):
     assert await _count_p1(actor) == 0
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     """No ambient session (auth signals) → scheduled off the critical path; emit never awaits it."""
@@ -167,6 +172,7 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     assert detached.await_args.args[0].kind == "test_p1.happened"
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_a_detached_write_is_referenced_while_it_runs():
     """The loop holds tasks weakly: unreferenced, a detached write can be collected mid-flight and
@@ -179,6 +185,7 @@ async def test_a_detached_write_is_referenced_while_it_runs():
         await asyncio.gather(*events._detached)
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_a_finished_detached_write_releases_its_reference():
     with patch.object(events, "_record_detached", new=AsyncMock()):
@@ -188,8 +195,9 @@ async def test_a_finished_detached_write_releases_its_reference():
     assert events._detached == set()
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean_p1):
+async def test_emit_persists_the_business_event_and_rolls_back_atomically():
     from apps.shared.events.bus import events
     from apps.shared.events.registry import registry
 
@@ -205,8 +213,9 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically(_clean
     assert await _count_p1(rolled) == 0
 
 
+@pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_the_row_keeps_the_org_name_after_the_org_is_gone(_clean_p1):
+async def test_the_row_keeps_the_org_name_after_the_org_is_gone():
     """The trail is history: it has to stay readable once its subjects are deleted.
 
     Resolving an org's name at read time works only while the org exists — and deleting an org is a

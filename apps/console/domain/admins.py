@@ -41,7 +41,7 @@ async def grant_admin(email: str) -> list[UserAdminStatus]:
     uid = await find_user_id_by_email(email) if email else None
     if uid is None:
         raise AdminNotFound(email)
-    await set_server_admin(uid, True)
+    await set_server_admin(uid, is_admin=True)
     return await list_admins()
 
 
@@ -60,5 +60,5 @@ async def set_admin(email: str, *, is_admin: bool) -> list[UserAdminStatus]:
     ensure_not_last_admin(
         is_revoke=not is_admin, target_is_admin=target_is_admin, admin_count=admin_count
     )
-    await set_server_admin(uid, is_admin)
+    await set_server_admin(uid, is_admin=is_admin)
     return await list_admins()

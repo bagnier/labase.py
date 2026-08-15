@@ -31,7 +31,7 @@ def _run_blocking(coro_factory):
         asyncio.set_event_loop(loop)
         try:
             result.append(loop.run_until_complete(coro_factory()))
-        except Exception as e:  # noqa: BLE001 — re-raised on the calling thread below
+        except Exception as e:
             errors.append(e)
         finally:
             loop.close()

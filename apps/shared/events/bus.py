@@ -122,7 +122,9 @@ class EventBus:
         reaction graph); ``as_actor`` runs under the actor's RLS claims (else admin); ``idempotent``
         guards re-delivery via the ``consumed`` ledger."""
         topic = self.registry.register_single_action(event_type, name, as_actor=as_actor, app=app)
-        register_task_handler(topic, self._make_wrapper(event_type, handler, topic, idempotent))
+        register_task_handler(
+            topic, self._make_wrapper(event_type, handler, topic, idempotent=idempotent)
+        )
 
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         """Register a run-everywhere handler — for config propagation (a settings reload). The
@@ -132,7 +134,11 @@ class EventBus:
 
     @staticmethod
     def _make_wrapper(
-        event_type: type[BusinessEvent], handler: AsyncEventHandler, topic: str, idempotent: bool
+        event_type: type[BusinessEvent],
+        handler: AsyncEventHandler,
+        topic: str,
+        *,
+        idempotent: bool,
     ) -> Callable[[AsyncSession, dict[str, Any]], Awaitable[None]]:
         """Adapt a typed durable handler to the queue's ``(session, payload)`` task contract, with
         the idempotency guard folded in — one place bridges the durable queue to ``bus.on``."""

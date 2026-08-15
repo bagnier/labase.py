@@ -11,7 +11,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from apps.shared.observability import request as R
+from apps.shared.observability import request
 from apps.shared.observability.metrics import accumulator
 
 
@@ -31,25 +31,25 @@ def _req(path: str, *, referer: str | None = None, host: str = "example.com") ->
 
 def _decision(monkeypatch, path: str, status: int, referer: str | None) -> str:
     calls: dict[str, bool] = {}
-    monkeypatch.setattr(R.log, "warning", lambda *a, **k: calls.setdefault("warning", True))
-    monkeypatch.setattr(R.log, "error", lambda *a, **k: calls.setdefault("error", True))
-    monkeypatch.setattr(R, "read_request_stats", lambda: None)
-    R.RequestLogger._log_if_failed(_req(path, referer=referer), status, 12.3)
+    monkeypatch.setattr(request.log, "warning", lambda *a, **k: calls.setdefault("warning", True))
+    monkeypatch.setattr(request.log, "error", lambda *a, **k: calls.setdefault("error", True))
+    monkeypatch.setattr(request, "read_request_stats", lambda: None)
+    request.RequestLogger._log_if_failed(_req(path, referer=referer), status, 12.3)
     return "error" if "error" in calls else "warning" if "warning" in calls else "none"
 
 
 def test_is_asset_matches_favicon_static_and_extensions():
-    assert R._is_asset("/favicon.ico")
-    assert R._is_asset("/static/app.css")
-    assert R._is_asset("/x/logo.png")
-    assert not R._is_asset("/console/logs")
-    assert not R._is_asset("/acme/missing")
+    assert request._is_asset("/favicon.ico")
+    assert request._is_asset("/static/app.css")
+    assert request._is_asset("/x/logo.png")
+    assert not request._is_asset("/console/logs")
+    assert not request._is_asset("/acme/missing")
 
 
 def test_internal_referer_is_same_host_only():
-    assert R._is_internal_referer(_req("/x", referer="https://example.com/page"))
-    assert not R._is_internal_referer(_req("/x", referer="https://evil.com/page"))
-    assert not R._is_internal_referer(_req("/x", referer=None))
+    assert request._is_internal_referer(_req("/x", referer="https://example.com/page"))
+    assert not request._is_internal_referer(_req("/x", referer="https://evil.com/page"))
+    assert not request._is_internal_referer(_req("/x", referer=None))
 
 
 def test_favicon_404_stays_silent_even_from_our_page(monkeypatch):
@@ -78,19 +78,21 @@ def test_successful_request_leaves_no_row(monkeypatch):
 
 
 def test_load_metrics_count_success_and_server_errors():
-    assert R._feeds_load_metrics(_req("/todo"), 200)
-    assert R._feeds_load_metrics(_req("/todo"), 302)
-    assert R._feeds_load_metrics(_req("/api/x"), 500)
+    assert request._feeds_load_metrics(_req("/todo"), 200)
+    assert request._feeds_load_metrics(_req("/todo"), 302)
+    assert request._feeds_load_metrics(_req("/api/x"), 500)
 
 
 def test_load_metrics_drop_bot_and_favicon_4xx():
-    assert not R._feeds_load_metrics(_req("/wp-login.php"), 404)  # no referer — a scan
-    assert not R._feeds_load_metrics(_req("/x", referer="https://evil.com/"), 404)  # external
-    assert not R._feeds_load_metrics(_req("/favicon.ico", referer="https://example.com/"), 404)
+    assert not request._feeds_load_metrics(_req("/wp-login.php"), 404)  # no referer — a scan
+    assert not request._feeds_load_metrics(_req("/x", referer="https://evil.com/"), 404)  # external
+    favicon = _req("/favicon.ico", referer="https://example.com/")
+    assert not request._feeds_load_metrics(favicon, 404)
 
 
 def test_load_metrics_count_internal_dead_links():
-    assert R._feeds_load_metrics(_req("/acme/missing", referer="https://example.com/acme/"), 404)
+    dead_link = _req("/acme/missing", referer="https://example.com/acme/")
+    assert request._feeds_load_metrics(dead_link, 404)
 
 
 # ``/.well-known/*`` is fetched by the browser/infra itself (Chrome's devtools probe), so even
@@ -98,14 +100,14 @@ def test_load_metrics_count_internal_dead_links():
 
 
 def test_well_known_probe_is_an_infra_probe():
-    assert R._is_infra_probe("/.well-known/appspecific/com.chrome.devtools.json")
-    assert not R._is_infra_probe("/acme/missing")
+    assert request._is_infra_probe("/.well-known/appspecific/com.chrome.devtools.json")
+    assert not request._is_infra_probe("/acme/missing")
 
 
 def test_well_known_probe_stays_silent_even_from_our_page(monkeypatch):
     path = "/.well-known/appspecific/com.chrome.devtools.json"
     assert _decision(monkeypatch, path, 404, "https://example.com/home") == "none"
-    assert not R._feeds_load_metrics(_req(path, referer="https://example.com/home"), 404)
+    assert not request._feeds_load_metrics(_req(path, referer="https://example.com/home"), 404)
 
 
 def test_the_request_id_is_a_whole_uuid_not_a_prefix():
@@ -116,7 +118,7 @@ def test_the_request_id_is_a_whole_uuid_not_a_prefix():
     The trail keeps the full uuid (its column is typed for it) and `_short` shortens it for
     display, which is where a shortened id is actually useful.
     """
-    rid = R.new_request_id()
+    rid = request.new_request_id()
     assert uuid.UUID(rid)  # parses whole — not a prefix
     assert len(rid) == 36
 
@@ -130,10 +132,12 @@ def test_the_request_id_is_a_whole_uuid_not_a_prefix():
 def _label_for(path: str) -> str:
     app = FastAPI()
     router = APIRouter()
+    # `lambda: {}` and not `dict` (what PIE807 proposes): FastAPI introspects the endpoint
+    # signature, and `inspect.signature` has none to give for a builtin type.
     router.get("")(lambda: {})
     router.get("/admins/{email}")(lambda email: {})
     app.include_router(router, prefix="/console")
-    app.add_middleware(R.RequestLogger)
+    app.add_middleware(request.RequestLogger)
     accumulator.reset()
 
     TestClient(app).get(path)

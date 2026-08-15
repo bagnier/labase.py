@@ -211,7 +211,7 @@ class ConsoleApiMixin(ApiBase):
             f"Expected 404 adding {email!r}, got {self.response.status_code}: {self.response.text}"
         )
 
-    def _put_admin(self, email: str, is_admin: bool) -> httpx.Response:
+    def _put_admin(self, email: str, *, is_admin: bool) -> httpx.Response:
         return self.client().put(
             f"/console/admins/{email}",
             json={"is_admin": is_admin},
@@ -220,12 +220,12 @@ class ConsoleApiMixin(ApiBase):
 
     def designate_server_admin(self, email: str) -> None:
         self._as_admin()
-        resp = self._put_admin(email, True)
+        resp = self._put_admin(email, is_admin=True)
         assert resp.status_code == 200, f"designate {email!r}: {resp.status_code} {resp.text}"
 
     def revoke_server_admin(self, email: str) -> None:
         self._as_admin()
-        self.response = self._put_admin(email, False)
+        self.response = self._put_admin(email, is_admin=False)
 
     def try_designate_server_admin(self, email: str) -> None:
         # Acts as the current (non-admin) user — no admin re-targeting.

@@ -74,7 +74,8 @@ def test_callback_with_totp_enrolled_asks_for_the_code_before_any_session(driver
     with _two_factor_enabled():
         response = _callback(driver, verified_totp_factor="factor-1")
     assert response.status_code == 200
-    assert "factor-1" in response.text and "challenge-1" in response.text
+    assert "factor-1" in response.text
+    assert "challenge-1" in response.text
     assert response.cookies.get("mfa_access_token") == _TOKENS.access_token
     assert response.cookies.get("access_token") is None
     set_cookie = ",".join(response.headers.get_list("set-cookie"))

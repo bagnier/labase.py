@@ -413,7 +413,8 @@ class OrgBrowserMixin(BrowserBase):
             status = self.last_response.status
             assert status == 200, f"Expected 200, got {status}"
             data = self.last_response.json()
-            assert "redirect" in data and "/dashboard" in data["redirect"], (
+            assert "redirect" in data, f"Expected a redirect, got: {data}"
+            assert "/dashboard" in data["redirect"], (
                 f"Expected redirect to /<slug>/dashboard, got: {data}"
             )
 

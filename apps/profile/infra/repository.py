@@ -20,7 +20,7 @@ class ProfileRepository(BaseRepository[Profile]):
         return await self.session.scalar(select(Profile).where(Profile.email == email))
 
     async def get_with_auto_handle(
-        self, auth_user_id: uuid.UUID, email: str, handle_enabled: bool
+        self, auth_user_id: uuid.UUID, email: str, *, handle_enabled: bool
     ) -> Profile | None:
         """Load the profile and, if it still lacks a handle, mint one when handles are on."""
         profile = await self.get_by_auth_user_id(auth_user_id)
@@ -42,7 +42,7 @@ class ProfileRepository(BaseRepository[Profile]):
 
     async def auto_handle(self, profile: Profile, email: str) -> Profile:
         """Derive a unique URL-safe handle from the email prefix and persist it."""
-        base = slugify(email.split("@")[0]) or "user"
+        base = slugify(email.split("@", maxsplit=1)[0]) or "user"
         handle = await unique_handle(
             base, self.session, exclude_from="profiles", exclude_id=profile.id
         )

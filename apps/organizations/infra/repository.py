@@ -22,7 +22,7 @@ class OrganizationRepository(BaseRepository[Organization]):
         auth_user_id: uuid.UUID,
         suggested_handle: str | None = None,
     ) -> Organization:
-        base = suggested_handle if suggested_handle else slugify(name)
+        base = suggested_handle or slugify(name)
         if not base:
             base = "org"
         handle = await unique_handle(base, self.session)

@@ -43,7 +43,8 @@ class TodoBrowserMixin(BrowserBase):
     def seed_org_setting_override(self, app: str, key: str, value: str) -> None:
         resolve_org = getattr(self, "_active_org_id", None)  # learning mixin
         seed = getattr(self, "_seed", None)  # learning mixin
-        assert resolve_org is not None and seed is not None
+        assert resolve_org is not None
+        assert seed is not None
         org_id = resolve_org()
         seed(
             lambda s: s.execute(

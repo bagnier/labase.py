@@ -115,6 +115,6 @@ async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> N
     if await count_server_admins() != 0 or event.user_id is None:
         return
     try:
-        await set_server_admin(event.user_id, True)
+        await set_server_admin(event.user_id, is_admin=True)
     except AuthApiError:
         log.info("bootstrap_first_admin.actor_gone", user_id=event.user_id)

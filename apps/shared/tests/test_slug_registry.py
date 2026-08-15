@@ -26,7 +26,7 @@ def _wire_reserved_slugs():
 
 
 @pytest.mark.parametrize(
-    "value, expected",
+    ("value", "expected"),
     [
         ("alice", "alice"),
         ("Alice Wonderland", "alice-wonderland"),
@@ -99,35 +99,35 @@ def _fake_registry(**namespaces):
         _svc._open_lists.update(original)
 
 
-def _checker(taken: bool):
+def _checker(*, taken: bool):
     return AsyncMock(return_value=taken)
 
 
 @pytest.mark.asyncio
 async def test_handle_available_when_both_tables_empty():
     session = _SESSION
-    with _fake_registry(profiles=_checker(False), organizations=_checker(False)):
+    with _fake_registry(profiles=_checker(taken=False), organizations=_checker(taken=False)):
         assert await _svc.handle_is_available("alice", session)
 
 
 @pytest.mark.asyncio
 async def test_handle_unavailable_when_taken_by_profile():
     session = _SESSION
-    with _fake_registry(profiles=_checker(True), organizations=_checker(False)):
+    with _fake_registry(profiles=_checker(taken=True), organizations=_checker(taken=False)):
         assert not await _svc.handle_is_available("alice", session)
 
 
 @pytest.mark.asyncio
 async def test_handle_unavailable_when_taken_by_org():
     session = _SESSION
-    with _fake_registry(profiles=_checker(False), organizations=_checker(True)):
+    with _fake_registry(profiles=_checker(taken=False), organizations=_checker(taken=True)):
         assert not await _svc.handle_is_available("alice", session)
 
 
 @pytest.mark.asyncio
 async def test_handle_unavailable_when_reserved():
     session = _SESSION
-    with _fake_registry(profiles=_checker(False), organizations=_checker(False)):
+    with _fake_registry(profiles=_checker(taken=False), organizations=_checker(taken=False)):
         assert not await _svc.handle_is_available("auth", session)
         assert not await _svc.handle_is_available("admin", session)
 
@@ -135,7 +135,7 @@ async def test_handle_unavailable_when_reserved():
 @pytest.mark.asyncio
 async def test_unique_handle_returns_base_when_free():
     session = _SESSION
-    with _fake_registry(profiles=_checker(False), organizations=_checker(False)):
+    with _fake_registry(profiles=_checker(taken=False), organizations=_checker(taken=False)):
         assert await _svc.unique_handle("alice", session) == "alice"
 
 
@@ -148,14 +148,14 @@ async def test_unique_handle_increments_when_taken():
         calls["n"] += 1
         return calls["n"] <= 2  # "alice" and "alice-2" are taken; "alice-3" is free
 
-    with _fake_registry(profiles=_counting, organizations=_checker(False)):
+    with _fake_registry(profiles=_counting, organizations=_checker(taken=False)):
         assert await _svc.unique_handle("alice", session) == "alice-3"
 
 
 @pytest.mark.asyncio
 async def test_unique_handle_skips_reserved_base():
     session = _SESSION
-    with _fake_registry(profiles=_checker(False), organizations=_checker(False)):
+    with _fake_registry(profiles=_checker(taken=False), organizations=_checker(taken=False)):
         assert await _svc.unique_handle("auth", session) == "auth-2"
 
 

@@ -60,8 +60,10 @@ def scan_colours() -> list[str]:
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), 1):
             for pat, label in ((RAW_PALETTE, "raw palette utility"), (HEX, "hex colour")):
-                for m in pat.finditer(line):
-                    offences.append(f"{rel}:{lineno}: {label} `{m.group()}` — use a daisyUI token")
+                offences.extend(
+                    f"{rel}:{lineno}: {label} `{m.group()}` — use a daisyUI token"
+                    for m in pat.finditer(line)
+                )
     return offences
 
 

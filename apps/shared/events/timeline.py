@@ -58,20 +58,18 @@ def activity_entries(
     """Project rows to *who did what to which, when* — only safe fields, never the raw ``kind`` or
     the rest of the payload. ``show_actor`` drops *who* on the profile's own trail (always the
     viewer); ``link`` lets the surface supply a deep link."""
-    entries = []
-    for r in rows:
-        entries.append(
-            ActivityEntry(
-                who=r.user_name if show_actor else None,
-                label=_activity_label(r.verb),
-                detail=r.entity_name,
-                app=r.app_name,
-                icon=r.icon,  # not-null default 'circle' since 20260726000002 — always set
-                ts=r.created_at,
-                href=link(r) if link else None,
-            )
+    return [
+        ActivityEntry(
+            who=r.user_name if show_actor else None,
+            label=_activity_label(r.verb),
+            detail=r.entity_name,
+            app=r.app_name,
+            icon=r.icon,  # not-null default 'circle' since 20260726000002 — always set
+            ts=r.created_at,
+            href=link(r) if link else None,
         )
-    return entries
+        for r in rows
+    ]
 
 
 def _day_label(d: date, today: date) -> str:

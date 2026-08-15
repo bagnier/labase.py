@@ -63,7 +63,8 @@ async def test_rls_context_does_not_leak_across_pooled_reuse(single_conn_engine)
         await set_rls_context(a, {"sub": _UID, "role": "authenticated"})
         pid_a, role_a, claims_a = await _identity(a)
         assert role_a == "authenticated", "set_rls_context should switch the role"
-        assert claims_a and _UID in claims_a, "set_rls_context should set the JWT claims"
+        assert claims_a, "set_rls_context should set the JWT claims"
+        assert _UID in claims_a, "set_rls_context should set the JWT claims"
         await a.commit()
 
     # Session B: same single pooled connection, no context set of its own.
