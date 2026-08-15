@@ -70,9 +70,7 @@ class _ReadsEvents(_EventSQL):
         since = clock.now() - timedelta(days=days)
         day = cast(BusinessEventRecord.created_at, Date)
         query = (
-            select(day, func.count())
-            .where(BusinessEventRecord.created_at >= since)
-            .group_by(day)
+            select(day, func.count()).where(BusinessEventRecord.created_at >= since).group_by(day)
         )
         if user_id:
             query = query.where(BusinessEventRecord.user_id == user_id)

@@ -128,9 +128,7 @@ async def patch_todo(
         )
     if title is not None:
         await events.emit(
-            TodoEdited(
-                user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=title
-            )
+            TodoEdited(user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=title)
         )
     return await _render(request, session, current_user, repo, org, settings)
 

@@ -131,9 +131,7 @@ class EventListener:
         try:
             return self._reconstruct(row)
         except Exception:
-            log.exception(
-                "tailer.reconstruct_failed", kind=row["kind"], event_id=str(row["id"])
-            )
+            log.exception("tailer.reconstruct_failed", kind=row["kind"], event_id=str(row["id"]))
             return None
 
     async def _fan_out(self, session: AsyncSession, row: TrailRow) -> None:

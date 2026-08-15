@@ -47,9 +47,7 @@ def _delivery_context(payload: dict[str, Any]) -> dict[str, str]:
     are bound: a fact emitted outside a request (an auth signal, a background job) has no
     ``request_id``, and binding a ``None`` would only add a null column to every reaction's logs."""
     return {
-        key: str(payload[key])
-        for key in ("request_id", "event_id")
-        if payload.get(key) is not None
+        key: str(payload[key]) for key in ("request_id", "event_id") if payload.get(key) is not None
     }
 
 
