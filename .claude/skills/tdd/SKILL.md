@@ -3,7 +3,8 @@ name: tdd
 description: >
   Red-green-refactor loop for implementing a feature or fix: one failing test at a time,
   confirmed red for the right reason, minimal implementation to green, then refactor
-  without breaking green — with checks against the model gaming its own tests.
+  without breaking green — with checks against the model gaming its own tests. Governs the
+  loop only; what goes inside the test is write-tests', and the two are used together.
 
   Do NOT use for: exploratory/manual testing of a running app (exploration-testing).
 when_to_use: >
@@ -27,23 +28,15 @@ slice vertically, one behavior end to end.
 
 ## 1. Write the test
 
-Pick the next case with **ZOMBIES** — Zero → One → Many → Boundaries (min/max, off-by-one)
-→ Interfaces (the contract with collaborators) → Exceptions (error paths) → Simple
-(plainest case first, complexity only once that's green). Don't jump ahead to a case the
-seam doesn't need yet.
+What goes *in* the test belongs to `write-tests` — which case comes next, how it is named,
+one equality over the whole expected value, time and env pinned by the test itself. Read it
+before writing: this loop stops at the test's content and picks up again at its result.
 
-Name it scenario → expectation, not a number or the method under test:
-`rejectsDuplicateEmail`, `it('rejects a duplicate email')` — never `test1`/`testFoo`. A
-failing-test list should read like a spec of what's missing.
-
-Keep it hermetic: no unfrozen wall-clock (`Date.now()`/`new Date()`), no ambient env var,
-no assumption about the machine's timezone/locale, no live network/DB. Inject or fake
-whatever varies — a fixed clock, an explicit env map, a local stub — so the test gives the
-same result on any machine, any day, any locale.
-
-Assert on real, observable behavior — never on a mock, and never the same formula the
-implementation will use (`expect(add(a,b)).toBe(a+b)` passes by construction and tests
-nothing).
+One rule of it is repeated here, because the loop is where it gets broken: assert on real,
+observable behavior — never on a mock's own record, and never with the formula the
+implementation will use (`expect(add(a,b)).toBe(a+b)` passes by construction). Either one
+sails through step 2 looking red for the right reason, then goes green in step 3 with nothing
+implemented.
 
 ## 2. Confirm RED — mandatory, never skip
 

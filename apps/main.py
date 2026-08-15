@@ -14,6 +14,7 @@ from apps.profile.contract import integration as profile
 from apps.public.contract import integration as public
 from apps.shared.contract import integration as shared
 from apps.shared.host import host
+from apps.shared.persistence.database import dispose_engines
 from apps.todo.contract import integration as todo
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
@@ -42,6 +43,11 @@ _apps = sorted(
 )
 for _app in _apps:
     _app.mount(host)
+
+# Last hook registered, so last to run: Starlette fires shutdown handlers in registration order,
+# and every context's own hook (task worker, event tailer, metrics flusher, issue drain) still
+# needs the pools while it stops.
+host.on_shutdown(dispose_engines)
 
 # ASGI entrypoint: hypercorn loads ``apps.main:app`` (see docker/docker-compose.yml).
 app = host.app

@@ -23,12 +23,11 @@ config). What it reports is its job, not yours: give it one line and move on. **
 what green misses** — the smells no rule encodes, read by a model that understands what the
 code means.
 
-**Install nothing.** The sweep's only commands are that gate, `git` and `grep`. A finder you
+**Install nothing.** The sweep's only commands are that gate, `git` and `grep`: a finder you
 had to add is a finder nobody runs again next month, and a second complexity meter beside the
-project's own buys nothing but an argument over whose threshold is right.
-
-Which is why the lint config is read before the code — `[tool.ruff.lint]`, the `eslintrc`,
-whatever the project keeps. It answers two questions at once:
+project's own buys nothing but an argument over whose threshold is right. Which makes the
+config the project already runs the first thing you read, before a line of code —
+`[tool.ruff.lint]`, the `eslintrc`, whatever it keeps. It answers two questions at once:
 
 - **which smells are already ruled**, and are therefore not findings. A private-access rule
   selected and the gate green means nobody reaches into another object's internals; going to
@@ -48,8 +47,11 @@ Three things hold that reading honest, and they replace the linter's rigour:
 - **A verdict per finding**, one of three:
   - **fix** — local, reversible, no surface moves. Apply it.
   - **propose** — changes a design, a public API, a stored format. Write it up, do not apply.
-  - **leave** — the smell is real and the cure costs more. Say why; a named non-finding is
-    worth more than a silent one.
+  - **leave** — the smell is real and the cure costs more. Name the cure and what makes it
+    expensive, in the detail a *fix* would carry; a named non-finding is worth more than a
+    silent one. A leave you can argue for without having worked out what the fix would be is a
+    skip wearing a verdict's clothes — and it reads exactly like the real thing, including to
+    you, because it is written in this file's own vocabulary.
 
 And one filter over all of it: **name what the smell costs** — the change it makes expensive,
 the bug it invites. A smell whose cost you cannot name is a taste, and taste does not go in
@@ -101,16 +103,19 @@ These two are read in the history, not in the file:
   reasons to change the same file. → *propose* the split.
 - **Shotgun Surgery** — the inverse. `git log --name-only -20` and look for the file cluster
   that keeps recurring under one intent. → *propose*.
-- **Parallel Inheritance Hierarchies** — adding a class on one side forces one on the other;
-  the two sets of names mirror each other. → *propose*.
 
 ### Dispensables
 
-- **Comments** — per comment: would it still be true after the block below is rewritten? Then
-  it is intent, keep it. Does it narrate the lines? → *fix*: cut it, or make the code say it.
-  What survives is the *why* — the alternative rejected, the source of a magic value, an
-  ordering constraint the caller cannot see. Never touch licence headers, shebangs, tool
-  directives carrying their reason, or docstrings that generate published output.
+- **Comments** — enumerate them with the language's tokenizer, not a `#` grep, which invents
+  them inside strings and misses the trailing ones. Then three questions, and the last two are
+  where the findings are. Does it narrate the lines? → *fix*: cut it. **Is it still true?** —
+  what rots is what points outside its own file, and it rots silently, a dead claim reading
+  exactly like a live one; open what it names, and "probably" is → *fix*: delete. **What would
+  deleting it lose?** — that has to land where it cannot drift: a name, else a type, else a
+  test, an ordering or a cross-file invariant holding in no name and having been prose only
+  for want of a test. What survives is the *why* — the alternative rejected, the source of a
+  magic value. Never touch licence headers, shebangs or tool directives carrying their reason;
+  every docstring that isn't published output is in scope, stale claims hide there too.
 - **Duplicate Code** — rule of three, and never unify two blocks that merely look alike: if
   they change for different reasons, duplication is cheaper than the wrong abstraction →
   *leave*, and say so. Two exceptions worth taking at the second occurrence: byte-identical
@@ -137,9 +142,6 @@ These two are read in the history, not in the file:
 - **Inappropriate Intimacy** — the per-object half is ruled wherever a private-access rule is
   selected; what stays yours is the module-level version, two modules reaching into each
   other's internals with nothing private in sight. → *propose*.
-- **Incomplete Library Class** — a local `utils` whose whole body works around a library's
-  API. → *leave*, and report it: it is often a version behind, so route it to the next
-  section.
 - **Message Chains** — `a.b().c().d()`. Fluent and builder APIs are chains by design, not
   smells → *leave* those. The tell is a chain across *ownership* boundaries. → *propose*.
 - **Circular imports** — the workaround is the evidence: an import inside a function body, or
@@ -163,6 +165,9 @@ What the auditors cannot see:
   codebase is a → *propose*.
 - **The project's own deprecations** — a `@deprecated` marker or a "legacy" comment with live
   callers is a migration nobody finished. Name the callers; that count is the finding.
+- **A wrapper working around a library's API** — a local `utils` whose whole body patches what
+  the library does is usually a version behind, and the bump deletes the wrapper. Read it here
+  rather than as a coupling smell: the finding is the gap, not the indirection.
 
 ## Track types
 
@@ -212,15 +217,31 @@ why it had to be read. The rest maps onto families the config can simply select:
 
 The names are ruff's; every ecosystem carries the same families under other spellings.
 
-Two moves, and the second is worth more than the first:
+Three moves, and the last two are worth more than the first:
 
 - **select a family the config lacks** — but run it once before proposing it. A family that
   returns forty hits is not a gate, it is a whitelist file waiting to be born, and a whitelist
-  file is a second codebase that rots. Verdict machines only.
+  file is a second codebase that rots. Zero hits is not automatically a yes either: a family
+  guarding a dependency the project doesn't have is noise in a config someone has to read.
+  Select it where the project could plausibly grow the mistake. Verdict machines only.
 - **ratchet a ceiling down.** A ceiling is set where the code stood, not where it should be.
   Once the sweep removes what held it up, lower it to just above the worst survivor and update
   its comment to name the new holder — otherwise the comment is a lie, and the next sweep
   reads a line nobody chose.
+- **audit the suppressions.** Every entry in an `ignore` or a `per-file-ignores` list is a
+  claim about the codebase — true the day it was written, re-checked by nobody since. Suspend
+  them and count: `ruff check --config 'lint.per-file-ignores = {}' --select <rule> <path>`,
+  or the equivalent flag elsewhere — but **prove the suspension took, on a rule you know
+  fires, before trusting a zero.** The analogous `--config 'lint.ignore = []'` is silently
+  disregarded (ruff 0.16.3), and answers *no hits* for every entry in the global list: a clean
+  bill of health that retires live suppressions wholesale. `--extend-select <rule>` is what
+  re-arms one there, CLI selection outranking a file's `ignore`. Retire the ones now at zero,
+  and on the survivors read the stated reason against the actual hits — an ignore whose
+  comment no longer describes what it covers is the finding, and it is usually covering
+  something else by now. Cheapest yield of the sweep, and the only move that removes room to
+  drift rather than adding a rule.
 
-Deprecations promoted to errors in the test config belong here too: no new dependency, and it
-turns the section above into a gate.
+The test config belongs here too, for the same reason and at the same price — no new
+dependency, and each line turns a section above into a gate: deprecations promoted to errors,
+strict markers so a typo'd `@mark.xfial` cannot silently do nothing, and `xfail_strict`,
+without which a recorded bug that gets fixed stays green and says nothing.

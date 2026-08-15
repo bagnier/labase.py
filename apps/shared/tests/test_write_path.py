@@ -1,5 +1,6 @@
 """Business-events write path — persists transactionally on emit and degrades safely."""
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
@@ -164,6 +165,27 @@ async def test_persist_fact_without_a_session_is_a_detached_best_effort_write():
     detached.assert_awaited_once()
     assert detached.await_args is not None
     assert detached.await_args.args[0].kind == "test_p1.happened"
+
+
+@pytest.mark.asyncio
+async def test_a_detached_write_is_referenced_while_it_runs():
+    """The loop holds tasks weakly: unreferenced, a detached write can be collected mid-flight and
+    the fact never reaches the trail."""
+    with patch.object(events, "_record_detached", new=AsyncMock()):
+        await events._persist_fact(_P1Event(user_id=uuid.uuid7(), org_id=uuid.uuid7()), None)
+
+        assert len(events._detached) == 1
+
+        await asyncio.gather(*events._detached)
+
+
+@pytest.mark.asyncio
+async def test_a_finished_detached_write_releases_its_reference():
+    with patch.object(events, "_record_detached", new=AsyncMock()):
+        await events._persist_fact(_P1Event(user_id=uuid.uuid7(), org_id=uuid.uuid7()), None)
+        await asyncio.gather(*events._detached)
+
+    assert events._detached == set()
 
 
 @pytest.mark.asyncio

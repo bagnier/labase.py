@@ -61,6 +61,8 @@ class EventBus:
         # a test injects a fresh one to isolate its subscriptions (the catalog stays shared — event
         # classes register once at import).
         self.registry = registry
+        # Strong references to the in-flight detached writes (see _persist_fact).
+        self._detached: set[asyncio.Task] = set()
 
     def declare(self, *event_types: type[BusinessEvent]) -> None:
         """Record, at mount, the events this app emits — each names its own owner (``app_name``),
@@ -87,7 +89,12 @@ class EventBus:
         if session is not None:
             await EventRepository(session).record(event)
         else:
-            asyncio.create_task(self._record_detached(event))
+            # Held until done: the loop only references a task weakly, so an unreferenced detached
+            # write can be collected mid-flight and the fact is lost — the trail is best-effort
+            # here, but silently dropping a write is not the same as failing one.
+            task = asyncio.create_task(self._record_detached(event))
+            self._detached.add(task)
+            task.add_done_callback(self._detached.discard)
 
     async def _record_detached(self, event: BusinessEvent) -> None:
         """The no-ambient-session path: a best-effort admin write off the critical path that
