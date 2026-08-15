@@ -13,9 +13,9 @@
       <form method="post" action="/auth/register" class="space-y-4">
         {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
         {{ input_field("email", "email", type="email", label="Email",
-                placeholder="you@example.com", value=email or "", required=true) }}
+          placeholder="you@example.com", value=email or "", required=true) }}
         {{ input_field("password", "password", type="password", label="Password",
-                placeholder="8 characters minimum", required=true) }}
+          placeholder="8 characters minimum", required=true) }}
         <button type="submit" class="btn btn-primary w-full mt-1">Create my account</button>
       </form>
       {% if oauth_providers %}

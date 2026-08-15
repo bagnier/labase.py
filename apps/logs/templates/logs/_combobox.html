@@ -18,10 +18,10 @@
   {% set opts = [] %}
   {% for o in options %}
     {% set _ = opts.append({
-          "value": o.value,
-          "count": o.count,
-          "label": o.label if o.label is defined else o.value,
-        }) %}
+      "value": o.value,
+      "count": o.count,
+      "label": o.label if o.label is defined else o.value,
+    }) %}
   {% endfor %}
   <span class="relative"
         x-data='{ open: false, q: "", options: {{ opts | tojson }}, toggle() { this.open = !this.open; if (this.open) { this.q = ""; this.$nextTick(() => this.$refs.search && this.$refs.search.focus()); } }, filtered() { const t = this.q.trim().toLowerCase(); return this.options.filter(o => !t || o.label.toLowerCase().includes(t) || String(o.value).toLowerCase().includes(t)); }, apply(v) { this.$refs.hidden.value = v; this.$refs.hidden.form.requestSubmit(); }, clear() { this.apply(""); } }'

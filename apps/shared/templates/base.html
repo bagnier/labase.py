@@ -43,8 +43,7 @@
             </label>
             <nav aria-label="Breadcrumb" class="breadcrumbs text-sm flex-1 min-w-0">
               <ul>
-                {% block breadcrumb %}
-                {% endblock %}
+                {% block breadcrumb %}{% endblock %}
               </ul>
             </nav>
             {% if user and user.is_admin %}

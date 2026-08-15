@@ -31,6 +31,24 @@ _ASSET_SUFFIXES = (
 )
 
 
+def _route_template(request: Request) -> str | None:
+    """The matched route's template with every prefix on it — ``/console/admins/{email}``, the
+    low-cardinality label the metrics count under. ``None`` when nothing matched.
+
+    Since FastAPI 0.137 ``include_router`` keeps the child router instead of cloning its path
+    operations under the prefix, so ``scope["route"]`` is the route *as the child declared it* and
+    its ``.path`` has lost the prefix (``/admins/{email}``, or ``""`` for the prefix itself). The
+    assembled template lives on the effective route context FastAPI stashes in the scope; that
+    context has no public accessor yet, hence the plain dict reads, with the route's own path as
+    the fallback (the two coincide for a route declared straight on the app).
+    """
+    context = request.scope.get("fastapi", {}).get("effective_route_context")
+    template = getattr(context, "path_format", None)
+    if template is not None:
+        return template
+    return getattr(request.scope.get("route"), "path", None)
+
+
 def _is_asset(path: str) -> bool:
     """A browser-fetched asset (favicon, static bundle, image/font) — never an interesting
     'dead link', so its 4xx stays out of the timeline even when the referer is ours."""
@@ -121,9 +139,9 @@ class RequestLogger(BaseHTTPMiddleware):
         # The router mutates the shared scope during matching, so the matched template
         # (low-cardinality label) is only readable after call_next.
         if _feeds_load_metrics(request, response.status_code):
-            route = request.scope.get("route")
+            route = _route_template(request)
             if route is not None:
-                accumulator.observe(request.method, route.path, response.status_code, duration_ms)
+                accumulator.observe(request.method, route, response.status_code, duration_ms)
             else:
                 # No route matched: record the real path (bounded by the accumulator) rather
                 # than an opaque label, so a genuine dead link from ourselves is identifiable.

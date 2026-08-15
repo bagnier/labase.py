@@ -13,3 +13,14 @@ def test_appearance_tab_applies_app_theme(driver):
     driver.sign_in_as_admin("styleguide-admin2@example.com")
     body = driver.client().get("/console/settings", headers={"accept": "text/html"}).text
     assert 'data-theme="labase-light"' in body
+
+
+def test_appearance_tab_loads_the_chart_scripts(driver):
+    """The gallery's charts are markup plus a JSON config — inert until charts.js reads them.
+    A refactor once dropped this page's `scripts` block and the whole Charts tab went blank,
+    silently: every id the tests looked for was still there."""
+    driver.sign_in_as_admin("styleguide-admin3@example.com")
+
+    body = driver.client().get("/console/settings", headers={"accept": "text/html"}).text
+
+    assert ["apexcharts.min.js" in body, "charts.js" in body] == [True, True]

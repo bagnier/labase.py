@@ -7,9 +7,12 @@ Pure middleware logic — no DB, no running app: the decision is exercised throu
 
 import uuid
 
+from fastapi import APIRouter, FastAPI
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from apps.shared.observability import request as R
+from apps.shared.observability.metrics import accumulator
 
 
 def _req(path: str, *, referer: str | None = None, host: str = "example.com") -> Request:
@@ -116,3 +119,31 @@ def test_the_request_id_is_a_whole_uuid_not_a_prefix():
     rid = R.new_request_id()
     assert uuid.UUID(rid)  # parses whole — not a prefix
     assert len(rid) == 36
+
+
+# The metrics label is the *matched template*, prefix included — `/console/admins/{email}`, never
+# the router-relative `/admins/{email}`. Since FastAPI 0.137 `include_router` keeps the child
+# router instead of cloning its routes under the prefix, so `scope["route"].path` is the path as
+# the child declared it; the full template lives on the effective route context.
+
+
+def _label_for(path: str) -> str:
+    app = FastAPI()
+    router = APIRouter()
+    router.get("")(lambda: {})
+    router.get("/admins/{email}")(lambda email: {})
+    app.include_router(router, prefix="/console")
+    app.add_middleware(R.RequestLogger)
+    accumulator.reset()
+
+    TestClient(app).get(path)
+
+    return next(route for _method, route in accumulator.snapshot())
+
+
+def test_the_metric_label_carries_the_router_prefix():
+    assert _label_for("/console/admins/a@b.example") == "/console/admins/{email}"
+
+
+def test_the_metric_label_of_a_prefix_only_route_is_the_prefix():
+    assert _label_for("/console") == "/console"

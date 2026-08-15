@@ -40,7 +40,7 @@ def _wants(hint: Any, target: type) -> bool:
 
 
 @cache
-def _uuid_fields(cls: type) -> frozenset[str]:
+def _uuid_fields(cls: type[BusinessEvent]) -> frozenset[str]:
     """The dataclass fields whose type carries a ``uuid.UUID`` — resolved once per class. Drives the
     generic re-parse so any DTO can carry uuids without a hand-maintained field list."""
     hints = typing.get_type_hints(cls)
@@ -48,7 +48,7 @@ def _uuid_fields(cls: type) -> frozenset[str]:
 
 
 @cache
-def _datetime_fields(cls: type) -> frozenset[str]:
+def _datetime_fields(cls: type[BusinessEvent]) -> frozenset[str]:
     """The dataclass fields whose type carries a ``datetime`` — the timestamp twin of
     :func:`_uuid_fields`. The queue serializes a datetime to an ISO string, so reconstruction
     re-parses these back, driven by the annotation rather than a hand-kept list."""

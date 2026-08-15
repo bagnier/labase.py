@@ -37,7 +37,7 @@ jobs:
       # (external-image `COPY --from`) and DF077 (docker/.dockerignore is not at the
       # build-context root, so Docker never reads it).
       - name: Lint Dockerfiles
-        uses: immanuwell/dockerfile-roast@1.4.7
+        uses: immanuwell/dockerfile-roast@1.5.1
         with:
           files: docker/Dockerfile*
           min-severity: error

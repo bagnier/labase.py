@@ -10,7 +10,7 @@
 {% endblock %}
 {% block content %}
   <div class="max-w-2xl space-y-6">
-    {{ page_header(org.name, subtitle='Your role: ' ~ role_badge(role) ) }}
+    {{ page_header(org.name, subtitle='Your role: ' ~ role_badge(role)) }}
     {% if saved %}
       <div role="status" class="alert alert-success" data-settings-saved>
         <i class="ph ph-check-circle" aria-hidden="true"></i>
@@ -53,7 +53,7 @@
                 </form>
               {% else %}
                 {{ input_field("org-name", "name", label="Organisation name", value=org.name, disabled=true,
-                                label_hidden=true, hint="Only an owner can rename the organisation.") }}
+                  label_hidden=true, hint="Only an owner can rename the organisation.") }}
               {% endif %}
             </div>
           </section>
@@ -82,7 +82,7 @@
                 </form>
               {% else %}
                 {{ input_field("org-handle", "handle", label="Handle", value=org.handle, disabled=true, mono=true,
-                                label_hidden=true, hint="Only an owner can change the handle.") }}
+                  label_hidden=true, hint="Only an owner can change the handle.") }}
               {% endif %}
             </div>
           </section>

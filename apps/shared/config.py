@@ -86,4 +86,4 @@ class TechnicalSettings(BaseSettings):
 
 @lru_cache
 def get_technical_settings() -> TechnicalSettings:
-    return TechnicalSettings()  # ty: ignore[missing-argument]
+    return TechnicalSettings()

@@ -9,8 +9,8 @@
 {% block content %}
   <div class="max-w-2xl space-y-6">
     {{ page_header('Load',
-        'HTTP traffic over the last ' ~ window_hours ~ ' hours, aggregated per route
-        across all instances. Percentiles come from histogram buckets, Prometheus-style.') }}
+      'HTTP traffic over the last ' ~ window_hours ~ ' hours, aggregated per route
+      across all instances. Percentiles come from histogram buckets, Prometheus-style.') }}
     {% if has_traffic %}
       <div class="card-panel">
         <div class="p-4">

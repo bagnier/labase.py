@@ -6,8 +6,8 @@
     data-member-role="{{ m.role.value }}">
   <div class="flex items-center gap-3">
     {{ avatar(m.email,
-        color=('bg-primary/20 text-primary' if m.role == 'owner' else 'bg-base-300 text-base-content/70') ,
-    text_class='text-sm font-bold') }}
+      color=('bg-primary/20 text-primary' if m.role == 'owner' else 'bg-base-300 text-base-content/70') ,
+      text_class='text-sm font-bold') }}
     <div>
       <p class="text-sm font-medium">
         {{ m.email }}

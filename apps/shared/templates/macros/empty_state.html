@@ -17,16 +17,13 @@
   {% elif tag == 'li' %}
     <li class="px-4 py-6 text-sm text-center text-base-content/50"
         data-empty
-        {{ attr }}>{{ message }}
-    </li>
+        {{ attr }}>{{ message }}</li>
   {% elif tag == 'td' %}
     <td colspan="{{ colspan }}"
         class="px-4 py-6 text-sm text-center text-base-content/60"
         data-empty
-        {{ attr }}>{{ message }}
-    </td>
+        {{ attr }}>{{ message }}</td>
   {% else %}
-    <p class="text-sm text-base-content/70" data-empty {{ attr }}>{{ message }}
-    </p>
+    <p class="text-sm text-base-content/70" data-empty {{ attr }}>{{ message }}</p>
   {% endif %}
 {% endmacro %}

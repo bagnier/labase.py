@@ -139,10 +139,10 @@
                 {% else %}
                   <div class="flex-none">
                     {{ avatar(profile_handle or user.email,
-                                        size='w-16 h-16',
-                                        shape='rounded-2xl',
-                                        color='bg-primary/10 text-primary',
-                                        text_class='text-2xl font-bold') }}
+                      size='w-16 h-16',
+                      shape='rounded-2xl',
+                      color='bg-primary/10 text-primary',
+                      text_class='text-2xl font-bold') }}
                   </div>
                 {% endif %}
                 <div>
@@ -265,8 +265,8 @@
             <div class="card-body">
               <h2 class="card-title text-sm font-semibold mb-3">Email</h2>
               {{ input_field("email", "email", label="Email", label_hidden=true,
-                            value=user.email, disabled=true, sm=true,
-                            hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
+                value=user.email, disabled=true, sm=true,
+                hint="Your sign-in email." if email_change_enabled else "Email cannot be changed.") }}
             </div>
           </section>
           {% if email_change_enabled %}
@@ -278,9 +278,9 @@
                 {{ alert('success', email_info) }}
                 <form method="post" action="/profile/email" class="space-y-4 max-w-sm">
                   {{ input_field("new_email", "new_email", type="email",
-                                    label="New email", required=true, sm=true) }}
+                    label="New email", required=true, sm=true) }}
                   {{ input_field("email_current_password", "current_password", type="password",
-                                    label="Confirm with your password", required=true, sm=true) }}
+                    label="Confirm with your password", required=true, sm=true) }}
                   <button type="submit" class="btn btn-primary btn-sm">Send confirmation link</button>
                 </form>
               </div>
@@ -306,9 +306,9 @@
               {{ alert('success', password_info) }}
               <form method="post" action="/profile/password" class="space-y-4 max-w-sm">
                 {{ input_field("current_password", "current_password", type="password",
-                                label="Current password", required=true, sm=true) }}
+                  label="Current password", required=true, sm=true) }}
                 {{ input_field("new_password", "new_password", type="password",
-                                label="New password", required=true, sm=true) }}
+                  label="New password", required=true, sm=true) }}
                 <button type="submit" class="btn btn-primary btn-sm">Change password</button>
               </form>
             </div>
@@ -333,7 +333,7 @@
                            name="factor_id"
                            value="{{ twofa_enrollment.factor_id }}">
                     {{ input_field("twofa_code", "code", label="Authenticator code",
-                                        placeholder="123456", required=true, sm=true) }}
+                      placeholder="123456", required=true, sm=true) }}
                     <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
                   </form>
                 {% elif twofa_active %}
@@ -419,7 +419,7 @@
                 {{ alert('error', deletion_error) }}
                 <form method="post" action="/profile/delete" class="space-y-4 max-w-sm">
                   {{ input_field("deletion_password", "current_password", type="password",
-                                    label="Your password", required=true, sm=true) }}
+                    label="Your password", required=true, sm=true) }}
                   <button type="submit" class="btn btn-error btn-outline btn-sm">Delete my account</button>
                 </form>
               </div>

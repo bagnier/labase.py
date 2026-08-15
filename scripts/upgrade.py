@@ -21,6 +21,20 @@ def relax_pins() -> None:
         f.write(re.sub(r'==([\d.]+)"', '"', content))
 
 
+def repin(content: str, resolved: dict[str, str]) -> str:
+    """Write the resolved versions back onto the original pins, extras included.
+
+    The lock keys names normalized (lowercase, no extras), so `sqlalchemy[asyncio]`
+    is looked up as `sqlalchemy` — miss it and pyproject silently keeps the old pin.
+    """
+
+    def resolve(m: re.Match[str]) -> str:
+        name, extras, pinned = m.group(1), m.group(2) or "", m.group(3)
+        return f'"{name}{extras}=={resolved.get(name.lower(), pinned)}"'
+
+    return re.sub(r'"([A-Za-z0-9_.-]+)(\[[A-Za-z0-9_,.-]+\])?==([\d.]+)"', resolve, content)
+
+
 def repin_and_report() -> None:
     old, new = parse_lock(LOCK_BAK), parse_lock(LOCK)
     changed = [(k, old[k], new[k]) for k in old if k in new and old[k] != new[k]]
@@ -32,13 +46,8 @@ def repin_and_report() -> None:
 
     with open(TOML_BAK) as f:
         content = f.read()
-    updated = re.sub(
-        r'"([A-Za-z0-9_.-]+)==([\d.]+)"',
-        lambda m: f'"{m.group(1)}=={new.get(m.group(1).lower(), m.group(2))}"',
-        content,
-    )
     with open(TOML, "w") as f:
-        f.write(updated)
+        f.write(repin(content, new))
 
 
 if __name__ == "__main__":

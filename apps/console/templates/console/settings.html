@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/chart.html" import chart_scripts %}
 {% from "macros/page_header.html" import page_header %}
 {% block title %}Settings — Console{% endblock %}
 {% block breadcrumb %}
@@ -44,4 +45,9 @@
       {% include "console/_technical_env.html" %}
     </section>
   </div>
+{% endblock %}
+{# The Appearance tab's live preview is where the themed charts are proven, so this page
+   loads the chart scripts like every other chart-bearing page. #}
+{% block scripts %}
+  {{ chart_scripts() }}
 {% endblock %}
