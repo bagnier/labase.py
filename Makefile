@@ -101,6 +101,7 @@ provision-test:
 # and run straight from the project env — no per-invocation resolution.
 lint:
 	uv run ruff check .
+	uv run ruff format --check .
 	uv run lint-imports --cache-dir .cache/import-linter
 	uv run ty check apps/
 	uv run sqlfluff lint --config scripts/.sqlfluff supabase/migrations/

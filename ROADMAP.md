@@ -40,6 +40,7 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 - [x] profile & dashboard should display the recent business events
 - [x] profile, dashboard & console should show a github like activity
 - [ ] console should show a dedicated growth activity report
+- [ ] `home.html` ignore `current_user` : un authentifié voit « Sign in » sur une instance sans org vedette
 - [ ] AARRR metrics
 - [ ] product tour
 - [ ] awareness, @citation, notification
