@@ -61,12 +61,27 @@ pythonpath = ["."]
 # solely through a browser (rendered chrome, DOM placement); such scenarios run
 # under the browser driver and are skipped elsewhere (see pytest_runtest_setup).
 markers = ["web: browser-only scenario — skipped by the api (and future cli) driver"]
-addopts = "-p tests.plugin --cov=apps --cov-report=term-missing --cov-append --junitxml=.cache/cov/junit.xml"
-# Third-party deprecations we cannot fix at the source (no app code passes these args):
-# - supabase-py forwards deprecated timeout/verify to SyncPostgrestClient
+addopts = "-p tests.plugin --strict-config --cov=apps --cov-report=term-missing --cov-append --junitxml=.cache/cov/junit.xml"
+# An `xfail` that starts passing is a fixed bug nobody noticed: the test stays green and the one
+# meant to announce the fix says nothing. Strict by default; a marker that sets `strict=False`
+# explicitly (behaviour still undecided) keeps the last word.
+xfail_strict = true
+# A deprecation the suite swallows is the one nobody ever sees: `pip-audit` reads the lockfile,
+# not the calls. Promoted to an error, the suite becomes the gate — with a named exception per
+# third-party warning we cannot fix at the source (no app code triggers any of them):
+# - supabase-py forwards deprecated timeout/verify to SyncPostgrestClient;
+# - supabase_auth's Timer still calls asyncio.iscoroutinefunction (removed in 3.16);
+# - fastapi's TestClient re-exports starlette's, which wants httpx2;
+# - gherkin (under pytest-bdd) passes `maxsplit` positionally to `re.split`, which 3.14
+#   deprecated and 3.16 removes — fires at collection, on feature files with a `#` in a tag.
 filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
     "ignore:The 'timeout' parameter is deprecated:DeprecationWarning:supabase",
     "ignore:The 'verify' parameter is deprecated:DeprecationWarning:supabase",
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+    "ignore:'maxsplit' is passed as positional argument:DeprecationWarning:gherkin",
 ]
 
 [tool.coverage.run]

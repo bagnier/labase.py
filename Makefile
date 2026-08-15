@@ -1,4 +1,4 @@
-.PHONY: dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
+.PHONY: check flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -170,11 +170,16 @@ backup-storage:
 	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/backup_storage.py --dest $(if $(DEST),$(DEST),backups/storage)
 
 # --- Tests ---
+# The coverage floor lives here, not in pyproject: `--cov-append` is on for every run, so a
+# floor in the shared config makes any partial `pytest <one-file>` fail at 15% with all its
+# tests green. It only means something over the whole suite. Measured at 51% the day it
+# was wired in on an accumulated figure — the honest single-run number is 49.8%, which is
+# what this floor sits under. Raise it when the real number moves up, never lower it to fit.
 # The suite normally runs in ~100s; way beyond that means the environment is
 # degraded (not the tests) — say so instead of letting it pass silently slow.
 test: provision-test
 	@start=$$(date +%s); \
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest; rc=$$?; \
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest --cov-fail-under=48; rc=$$?; \
 	elapsed=$$(( $$(date +%s) - start )); \
 	if [ $$elapsed -gt 240 ]; then \
 		echo "⚠ pytest took $${elapsed}s (~100s expected) — run 'make doctor'"; \
@@ -183,6 +188,13 @@ test: provision-test
 
 test-e2e: provision-test
 	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
+
+# flakehunt: run the browser scenarios N times and aggregate failures per test — an
+# intermittent test fails a few runs out of N, where a single run only says "red" or "green".
+# No rerun plugin on purpose: a rerun hides exactly what this looks for.
+#   make flakehunt N=10 [TARGET=apps/auth/tests/e2e/test_scenarios.py]
+flakehunt:
+	scripts/flakehunt.sh $(if $(N),$(N),10) $(TARGET)
 
 # Perf smoke: boots the app on the test schema, drives it with Locust through
 # the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
@@ -207,13 +219,19 @@ letsencrypt:
 	certbot certonly --standalone --domain $(DOMAIN) --agree-tos --non-interactive
 	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
 
+# check = lint + test, the shared meaning across the three repos: read-only, no heavy lane,
+# and what a pre-commit hook can afford to run. `ci` below adds the heavy lanes.
+check: lint test
+
 # --keep-going: run every step even if one fails, so no failure is hidden
 # behind an earlier one; the sub-make exits non-zero if any step failed.
 ci:
 	$(MAKE) --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-xml
 
-# finalize: js-build + fix (also typechecks + audits) + local tests. Run before committing.
-finalize: js-build fix test
+# finalize: js-build + fix, then the full read-only gate and the suite. Run before committing.
+# Wider than `fix + test` on purpose: the wave that raised ruff shipped two regressions a
+# linter alone called green — one caught by `ty`, one only by the suite.
+finalize: js-build fix check
 
 act:
 	act push --job ci --platform ubuntu-latest=catthehacker/ubuntu:act-24.04 --container-architecture linux/amd64 --network host
