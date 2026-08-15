@@ -31,7 +31,7 @@ update public.business_events
 -- loss this column exists to stop from happening again.
 update public.business_events e
    set org_name = o.name
-  from public.organizations o
+  from public.organizations as o
  where e.org_id = o.id
    and e.org_name is null;
 

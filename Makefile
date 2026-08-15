@@ -87,16 +87,16 @@ provision-test:
 # yamllint (YAML), validate-pyproject (pyproject schema), zizmor (GitHub Actions security),
 # biome (JS/CSS/JSON), gherkin-lint (.feature), djlint (Jinja2). Dockerfiles are linted by
 # droast, which runs as a self-contained GitHub Action in CI (see .github/workflows/ci.yml).
-# The single-file-type linters ride the project env via `uv run --with` (pinned) —
-# keeping the Makefile uniformly on `uv`, and adding no weight to pyproject.toml / uv.lock.
+# All Python linters are pinned dev-deps in pyproject.toml, so they resolve once in uv.lock
+# and run straight from the project env — no per-invocation resolution.
 lint:
 	uv run ruff check .
 	uv run lint-imports --cache-dir .cache/import-linter
 	uv run ty check apps/
-	uv run --with sqlfluff==4.2.2 sqlfluff lint --config scripts/.sqlfluff supabase/migrations/
-	uv run --with yamllint==1.38.0 yamllint -c scripts/.yamllint .github docker scripts
-	uv run --with 'validate-pyproject[all]==0.25' validate-pyproject pyproject.toml
-	uv run --with zizmor==1.28.0 zizmor --offline .github/workflows/
+	uv run sqlfluff lint --config scripts/.sqlfluff supabase/migrations/
+	uv run yamllint -c scripts/.yamllint .github docker scripts
+	uv run validate-pyproject pyproject.toml
+	uv run zizmor --offline .github/workflows/
 	npm run lint
 	npm run lint:gherkin
 	uv run djlint apps --lint
