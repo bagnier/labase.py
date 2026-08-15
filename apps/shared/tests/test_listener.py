@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 import pytest
 import pytest_asyncio
+import structlog
 from sqlalchemy import text
+from structlog.testing import capture_logs
 
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
@@ -148,7 +150,72 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
+async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(iso):
+    # A durable consumer must reason about *when the fact happened* — the trail's own created_at —
+    # not when a retry/park finally delivered it. The delivered event carries the row's instant.
+    seen: list[BusinessEvent] = []
+
+    async def handler(session, event) -> None:
+        seen.append(event)
+
+    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    await _seed(uuid.uuid7())
+    async with db.admin_session_factory()() as s:
+        stored = await s.scalar(
+            text(
+                "SELECT created_at FROM business_events "
+                "WHERE kind = 'test_tailer.happened' ORDER BY id DESC LIMIT 1"
+            )
+        )
+
+    factory = db.admin_session_factory()
+    await EventListener(0, session_factory=factory).tick()
+    worker = TaskWorker(0, session_factory=factory)
+    while await worker.tick():
+        pass
+
+    assert len(seen) == 1
+    assert seen[0].created_at == stored  # the fact's instant, rebuilt from the row — not delivery's
+
+
+@pytest.mark.asyncio
+async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
+    # The reaction runs off the trail on a background task with no request of its own; the delivery
+    # wrapper binds the fact's originating request_id onto structlog, so the reaction's log lines
+    # join the emitting request's timeline. Assert it is bound while the handler runs.
+    seen: dict[str, object] = {}
+
+    async def handler(session, event) -> None:
+        seen.update(structlog.contextvars.get_contextvars())
+
+    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    request_id = uuid.uuid7()
+    await insert_business_event(
+        app_name="test_tailer",
+        verb="happened",
+        user_id=uuid.uuid7(),
+        ip=None,
+        org_id=None,
+        entity_id=None,
+        request_id=request_id,
+        payload={"label": "x"},
+    )
+
+    factory = db.admin_session_factory()
+    await EventListener(0, session_factory=factory).tick()
+    worker = TaskWorker(0, session_factory=factory)
+    while await worker.tick():
+        pass
+
+    assert seen.get("request_id") == str(request_id)
+
+
+@pytest.mark.asyncio
+async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispatched(iso):
+    # A kind with no registered class can be routed to no one — a fact we cannot even name. That is
+    # not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
+    # it into a console Issue), so it stops being lost in silence. The cursor still advances — the
+    # row is marked dispatched and nothing is enqueued.
     async with db.admin_session_factory()() as s:
         await s.execute(
             text(
@@ -158,7 +225,12 @@ async def test_an_unknown_kind_is_marked_dispatched_without_enqueuing(iso):
         )
         await s.commit()
 
-    assert await EventListener(0).tick() == 1
+    with capture_logs() as logs:
+        assert await EventListener(0).tick() == 1
+    surfaced = [entry for entry in logs if entry["event"] == "tailer.unroutable_fact"]
+    assert len(surfaced) == 1
+    assert surfaced[0]["log_level"] == "error"  # exception level → captured as an Issue
+    assert surfaced[0]["kind"] == "test_tailer.legacy"
     assert await _topics() == []
     assert await _undispatched("test_tailer.legacy") == 0
 
@@ -241,9 +313,15 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
         )
 
     listener = EventListener(0, bus=bus)
-    await listener.tick()
+    with capture_logs() as logs:
+        await listener.tick()
 
     assert [e.value for e in seen] == ["on"]
+    # The poison row is not swallowed as a warning: it is logged at exception level, so the capture
+    # seam records a console Issue for a fact that can no longer be rebuilt.
+    failed = [entry for entry in logs if entry["event"] == "tailer.reconstruct_failed"]
+    assert len(failed) == 1
+    assert failed[0]["log_level"] == "error"
     await listener.tick()  # cursor moved past both rows: nothing replays
     assert [e.value for e in seen] == ["on"]
 

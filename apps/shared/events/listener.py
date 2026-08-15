@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.bus import events
-from apps.shared.events.repository import EventRepository, TrailRow
+from apps.shared.events.repository import EventRepository, TrailRow, task_payload
 from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
@@ -36,18 +36,10 @@ log = structlog.get_logger("labase.shared.listener")
 NOTIFY_CHANNEL = "business_event"
 
 
-def _task_payload(row: TrailRow) -> dict[str, Any]:
-    """Rebuild the async-consumer task payload from a business_events row: the event's own fields
-    plus the row id as the dedup ``event_id``. The fields lifted to columns (the scoping ids and
-    ``entity_name``) are folded back in, since the event declares them."""
-    payload = dict(row["payload"] or {})
-    payload["entity_name"] = row["entity_name"]
-    payload["user_id"] = str(row["user_id"]) if row["user_id"] else None
-    payload["org_id"] = str(row["org_id"]) if row["org_id"] else None
-    payload["entity_id"] = str(row["entity_id"]) if row["entity_id"] else None
-    # the dedup key (uuid; stringified — the queue json-encodes it)
-    payload["event_id"] = str(row["id"])
-    return payload
+class UnroutableFact(Exception):
+    """A persisted fact the listener cannot route: its ``kind`` maps to no registered event class,
+    so no consumer could ever be handed it. Raised only to give the capture seam a live exception
+    to fingerprint on — caught immediately, logged, and the row is still marked dispatched."""
 
 
 class EventListener:
@@ -128,28 +120,47 @@ class EventListener:
         event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
             return None
-        return event_type.from_payload(_task_payload(row))
+        return event_type.from_payload(task_payload(row))
 
     def _reconstruct_safely(self, row: TrailRow) -> BusinessEvent | None:
         """:meth:`_reconstruct`, but a payload that no longer fits its event class yields ``None``
-        instead of raising — the caller skips the row rather than stalling on it."""
+        instead of raising — the caller skips the row rather than stalling on it. The skip is not
+        silent: a stored fact that no longer rebuilds (a field made required after the row was
+        written, a hand-inserted payload) is a defect, so it is logged at ``exception`` level — the
+        capture seam folds it into a console Issue — not swallowed as a mere warning."""
         try:
             return self._reconstruct(row)
         except Exception:
-            log.warning("tailer.reconstruct_failed", kind=row["kind"], event_id=str(row["id"]))
+            log.exception("tailer.reconstruct_failed", kind=row["kind"], event_id=str(row["id"]))
             return None
 
     async def _fan_out(self, session: AsyncSession, row: TrailRow) -> None:
         event_type = self._bus.registry.event_class_for(row["kind"])
         if event_type is None:
-            return  # unknown kind (e.g. a legacy row) — nothing to deliver; still marked dispatched
+            # A kind with no registered class: we can route this fact to no one. This is *not* the
+            # benign "known kind, nobody listens" no-op below — it means a fact was persisted that
+            # the running process cannot even name, so surface it as a console Issue (fingerprint-
+            # grouped: one kind is one issue, not one per row). The row is still marked dispatched
+            # by the caller — the cursor must advance, we simply have nothing to deliver.
+            self._capture_unroutable(row)
+            return
         subs = self._bus.registry.subscribers_for(event_type)
         if not subs:
-            return
-        payload = _task_payload(row)
+            return  # known kind, nobody listens — a clean no-op, no fact is lost
+        payload = task_payload(row)
         actor = row["user_id"]
         for sub in subs:
             await enqueue(session, sub.topic, payload, user_id=actor if sub.as_actor else None)
+
+    @staticmethod
+    def _capture_unroutable(row: TrailRow) -> None:
+        """Log an unroutable fact at ``exception`` level so the capture seam records a console
+        Issue. Raised-and-caught to give the capture fingerprint a live traceback; the caller marks
+        the row dispatched regardless, so a fact we cannot route never wedges the cursor."""
+        try:
+            raise UnroutableFact(f"no event class registered for kind {row['kind']!r}")
+        except UnroutableFact:
+            log.exception("tailer.unroutable_fact", kind=row["kind"], event_id=str(row["id"]))
 
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:

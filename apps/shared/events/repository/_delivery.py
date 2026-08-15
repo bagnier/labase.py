@@ -6,20 +6,49 @@ reads best as SQL, and it touches columns/tables kept off the fact model (``disp
 """
 
 import uuid
+from datetime import datetime
 from typing import Any, TypedDict, cast
 
 from sqlalchemy import text
 
 from apps.shared.events.repository._base import _EventSQL
 
+# ── The one serialized shape the whole delivery chain agrees on ────────────────────────────────
+#
+# A base ``BusinessEvent`` field is stored one of two ways: *lifted* to its own indexed column (so
+# RLS, the timeline and full-text search reach it directly), or left in the JSON ``payload``.
+# ``LIFTED_COLUMNS`` is the single list of the lifted ones — the source every other list here (and
+# ``event_to_log``'s pop loop) derives from, so the four views can't drift apart silently. Add a
+# lifted base field here and the SELECTs, the fold-back and the round-trip test all move with it.
+LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_name")
+
+# Row columns the delivery carries that are *not* lifted event fields: the id (dispatch cursor +
+# dedup key + causation), the composed ``kind`` (→ the event class), and the two correlation keys a
+# consumer needs — ``created_at`` (the fact's own instant, so a reaction reasons about when the fact
+# happened, not when it was delivered) and ``request_id`` (the originating request, so the
+# reaction's logs join the same timeline). ``created_at`` rebuilds onto the event; ``request_id``
+# rides only to the handler's log context (it is not an event field).
+_CORRELATION_COLUMNS: tuple[str, ...] = ("id", "kind", "created_at", "request_id")
+
+# What both delivery scans read off a row: the correlation columns + the lifted scoping columns +
+# the residual JSON ``payload``. Not selected: ``icon`` (rides on the reconstructed event) and
+# ``user_name``/``org_name`` (denormalized for display, not event fields) — kept out of the fetch.
+TRAIL_COLUMNS: tuple[str, ...] = (*_CORRELATION_COLUMNS, *LIFTED_COLUMNS, "payload")
+
+_SELECT = f"SELECT {', '.join(TRAIL_COLUMNS)} FROM business_events "
+
 
 class TrailRow(TypedDict):
-    """The subset of a ``business_events`` row the delivery path reads — exactly what ``_CLAIM``
-    and ``_SPREAD_SCAN`` both select. The listener rebuilds the typed event from it (``kind`` +
-    scoping columns + the JSON ``payload``); ``id`` doubles as the dispatch cursor and dedup key."""
+    """The subset of a ``business_events`` row the delivery path reads — exactly the
+    ``TRAIL_COLUMNS`` both ``_CLAIM`` and ``_SPREAD_SCAN`` select. The listener rebuilds the typed
+    event from it (``kind`` + lifted scoping columns + the JSON ``payload``); ``id`` doubles as the
+    dispatch cursor and dedup key. Its keys are pinned to ``TRAIL_COLUMNS`` by a test, so the static
+    type and the runtime column source can't diverge."""
 
     id: uuid.UUID
     kind: str
+    created_at: datetime  # the fact's own instant, rebuilt onto the delivered event
+    request_id: uuid.UUID | None  # the originating request, bound to the reaction's log context
     user_id: uuid.UUID | None
     org_id: uuid.UUID | None
     entity_id: uuid.UUID | None
@@ -27,24 +56,36 @@ class TrailRow(TypedDict):
     payload: dict[str, Any] | None
 
 
-# Both scans select exactly TrailRow's columns — the listener never reads level/icon off a claimed
-# row (they live on the reconstructed event), nor user_name/org_name (denormalized for display,
-# not event fields), so those stay out of the fetch.
 _CLAIM = text(
-    "SELECT id, kind, user_id, org_id, entity_id, entity_name, payload "
-    "FROM business_events "
-    "WHERE dispatched_at IS NULL "
-    "ORDER BY id "
-    "FOR UPDATE SKIP LOCKED "
-    "LIMIT :batch"
+    _SELECT + "WHERE dispatched_at IS NULL ORDER BY id FOR UPDATE SKIP LOCKED LIMIT :batch"
 )
 
-_SPREAD_SCAN = text(
-    "SELECT id, kind, user_id, org_id, entity_id, entity_name, payload "
-    "FROM business_events "
-    "WHERE id > :cursor AND kind = ANY(:kinds) "
-    "ORDER BY id"
-)
+_SPREAD_SCAN = text(_SELECT + "WHERE id > :cursor AND kind = ANY(:kinds) ORDER BY id")
+
+
+def task_payload(row: TrailRow) -> dict[str, Any]:
+    """Rebuild the async-consumer payload from a claimed row: the residual JSON ``payload`` plus the
+    lifted columns folded back in (a uuid column stringified — the queue json-encodes it, and
+    ``from_payload`` re-parses it), the two correlation keys, and the row id as the dedup
+    ``event_id``. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it is
+    one edit away from the SELECTs and the TrailRow it reads. Lives here, beside the columns it
+    mirrors; the listener imports it."""
+    # A plain-mapping view of the row: the fold indexes by a runtime column name, which a TypedDict
+    # (literal keys only) cannot be subscripted with — the row already arrived as a dict off a scan.
+    cells = cast(dict[str, Any], row)
+    payload = dict(cells["payload"] or {})
+    for col in LIFTED_COLUMNS:
+        value = cells[col]
+        payload[col] = str(value) if isinstance(value, uuid.UUID) else value
+    # Correlation keys ride as strings the queue can json-encode. ``created_at`` rebuilds onto the
+    # event (``from_payload`` re-parses it); ``request_id`` is not an event field — the delivery
+    # wrapper reads it here to bind the reaction's log context, then ``from_payload`` drops it.
+    created_at = cells["created_at"]
+    payload["created_at"] = created_at.isoformat() if created_at is not None else None
+    request_id = cells["request_id"]
+    payload["request_id"] = str(request_id) if request_id is not None else None
+    payload["event_id"] = str(cells["id"])  # the dedup key + causation id (uuid; queue-encoded)
+    return payload
 
 
 class _DispatchesEvents(_EventSQL):

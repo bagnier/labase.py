@@ -58,7 +58,7 @@ from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.events.bus import events
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.timeline import (
     activity_entries,
@@ -175,7 +175,7 @@ async def _activity_context(
         limit=limit,
     )
 
-    def link(r: BusinessEventLog) -> str | None:
+    def link(r: BusinessEventRecord) -> str | None:
         return entity_url(r.app_name, r.entity_id, handles.get(r.org_id))
 
     entries = activity_entries(rows, show_actor=False, link=link)

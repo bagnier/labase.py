@@ -26,16 +26,17 @@ import contextlib
 import typing
 import uuid
 from dataclasses import MISSING, dataclass, fields
+from datetime import datetime
 from functools import cache
 from typing import Any, ClassVar, Self
 
 from apps.shared.events.registry import registry
 
 
-def _wants_uuid(hint: Any) -> bool:
-    """A field is a uuid carrier if its annotation is ``uuid.UUID`` or a union that includes it
-    (e.g. ``uuid.UUID | None``)."""
-    return hint is uuid.UUID or uuid.UUID in typing.get_args(hint)
+def _wants(hint: Any, target: type) -> bool:
+    """A field carries ``target`` if its annotation *is* ``target`` or a union that includes it
+    (e.g. ``uuid.UUID | None``, ``datetime | None``)."""
+    return hint is target or target in typing.get_args(hint)
 
 
 @cache
@@ -43,7 +44,56 @@ def _uuid_fields(cls: type) -> frozenset[str]:
     """The dataclass fields whose type carries a ``uuid.UUID`` — resolved once per class. Drives the
     generic re-parse so any DTO can carry uuids without a hand-maintained field list."""
     hints = typing.get_type_hints(cls)
-    return frozenset(f.name for f in fields(cls) if _wants_uuid(hints.get(f.name)))
+    return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), uuid.UUID))
+
+
+@cache
+def _datetime_fields(cls: type) -> frozenset[str]:
+    """The dataclass fields whose type carries a ``datetime`` — the timestamp twin of
+    :func:`_uuid_fields`. The queue serializes a datetime to an ISO string, so reconstruction
+    re-parses these back, driven by the annotation rather than a hand-kept list."""
+    hints = typing.get_type_hints(cls)
+    return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), datetime))
+
+
+# Field-name fragments that mark *secret material*. A business event is persisted to the append-only
+# trail — kept indefinitely, RLS-readable by the org's members, exportable to CSV/NDJSON — the exact
+# inverse of a secret's lifecycle (short-lived, need-to-know, revocable). So a secret may not be an
+# event field at all. Underscores are stripped before the match, so ``api_key`` / ``access_token`` /
+# ``recovery_code`` are all caught by a single fragment.
+_SECRET_FRAGMENTS = (
+    "token",
+    "password",
+    "passphrase",
+    "passcode",
+    "secret",
+    "credential",
+    "apikey",
+    "otp",
+    "recoverycode",
+    "jwt",
+)
+
+
+def _is_secret_field_name(name: str) -> bool:
+    """Whether a field name looks like it carries secret material — as opposed to a mere *id
+    reference* to a secret-bearing entity. ``api_key_id`` (the api key's pk) is precisely the
+    recommended alternative to ``api_key`` (its plaintext), so a name that is ``id`` or ends in
+    ``_id`` is never a violation; everything else is matched against :data:`_SECRET_FRAGMENTS`."""
+    if name == "id" or name.endswith("_id"):
+        return False
+    normalized = name.lower().replace("_", "")
+    return any(fragment in normalized for fragment in _SECRET_FRAGMENTS)
+
+
+def _annotation_names(cls: type) -> set[str]:
+    """Every annotated name on ``cls`` and its bases — read at class-creation time, before the
+    ``@dataclass`` transform runs (so ``fields()`` is not yet available). Only the names matter for
+    the secret check, so string vs. resolved annotations (``from __future__``) is irrelevant."""
+    names: set[str] = set()
+    for klass in cls.__mro__:
+        names.update(getattr(klass, "__annotations__", {}))
+    return names
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,6 +110,12 @@ class BusinessEvent:
     # target) an invitee's email. Emit-provided; rides in the payload for display (the timeline's
     # "detail"). A pure-id user subject (account/membership action) carries none — its entity_id is.
     entity_name: str | None = None
+    # the instant the fact happened — the trail's own column, *not* an emit-provided value: the
+    # emitter never sets it (the trail is the clock, one source), so it is None on the event that
+    # is emitted and populated only on the event a durable consumer receives, rebuilt from the row.
+    # That is what lets a reaction reason about *when the fact happened*, not when it was delivered
+    # (which a retry or a parked-then-resumed task pushes minutes — or days — later).
+    created_at: datetime | None = None
 
     # Class-level identity/metadata — never instance fields, so they stay out of the payload.
     # The app the event belongs to ("todo", "files"), usually set once by the per-app mixin, and
@@ -72,6 +128,19 @@ class BusinessEvent:
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
+        # A secret cannot be an event field: refuse it here, at class definition, so the type system
+        # rejects the violation before a row is ever written (the write-time mask in the repository
+        # is only a last-resort net that should now never fire). The message names the alternative.
+        for name in _annotation_names(cls):
+            if _is_secret_field_name(name):
+                raise TypeError(
+                    f"{cls.__name__} declares field {name!r}, which looks like secret material. "
+                    "A business event is persisted to the append-only trail — kept indefinitely, "
+                    "readable by the org's members under RLS, exportable — the opposite of a "
+                    "secret's lifecycle, so a secret may not be an event field. Carry the "
+                    f"subject's id instead (e.g. {name}_id) and let the durable handler re-read "
+                    "the current state off it."
+                )
         # A concrete event has both halves (an app_name from its app mixin, a verb of its own):
         # compose its kind. The derivation is unconditional — the trail derives the very same way
         # (a generated column), so a hand-written kind would only make the class disagree with the
@@ -101,6 +170,10 @@ class BusinessEvent:
             if isinstance(kept.get(key), str):
                 with contextlib.suppress(ValueError):
                     kept[key] = uuid.UUID(kept[key])
+        for key in _datetime_fields(cls):
+            if isinstance(kept.get(key), str):
+                with contextlib.suppress(ValueError):
+                    kept[key] = datetime.fromisoformat(kept[key])
         return cls(**kept)
 
 

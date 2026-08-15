@@ -1,10 +1,17 @@
 """The shape of a business event on the trail.
 
-One data structure, no behaviour: :class:`BusinessEventLog` is the ORM mapping of the append-only
+One data structure, no behaviour: :class:`BusinessEventRecord` is the ORM mapping of the append-only
 ``business_events`` table — the single shape written on ``emit`` *and* handed back on a read (the
 session keeps ``expire_on_commit=False``, so a read row stays usable past its session). Access logic
 — writing and querying it — lives in the repository; humanizing a row for a surface lives in
 :mod:`apps.shared.events.timeline`.
+
+This model maps only the columns that *are the fact* — the ones a reader projects and a consumer
+rebuilds. The delivery-plumbing column ``dispatched_at`` (the async tailer's claim cursor) is
+deliberately **not** mapped here: it is queue mechanics, not part of what happened, and the listener
+touches it through raw SQL in :mod:`apps.shared.events.repository._delivery` (alongside the
+``consumed`` ledger). Keeping it off the model is what lets this class stay "the fact, and only the
+fact"; the choice lives here so the absence reads as intent, not oversight.
 """
 
 import uuid
@@ -19,9 +26,19 @@ from apps.shared import clock
 from apps.shared.persistence.base import Base, UUIDPk
 
 
-class BusinessEventLog(Base, UUIDPk):
-    """The append-only business-event row. Members read their own/their orgs' rows via RLS;
-    only the persister's BYPASSRLS admin session writes (no insert grant to authenticated).
+class BusinessEventRecord(Base, UUIDPk):
+    """The append-only business-event row. Members read their own / their orgs' rows via RLS.
+
+    One writer: the ``record_business_event`` SECURITY DEFINER function (C4). On the **request
+    path** ``emit`` calls it on the caller's own RLS (``authenticated``) session, so the fact
+    commits atomically with the mutation; the function inserts as its owner, so no raw table INSERT
+    grant is exposed — a member (or a PostgREST client on the same role) can no longer POST the
+    trail table directly. Off the request path the **BYPASSRLS admin** session calls the same
+    function (the detached best-effort ``emit``, the seeders); the signup trigger inserts directly,
+    itself SECURITY DEFINER. Attribution is the emitter's to get right — a durable consumer
+    legitimately records a fact for an actor that isn't its session's identity — so the function
+    trusts the supplied ``user_id`` rather than re-checking it. The tailer's dispatch (admin
+    session) and every read are unchanged.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so it stays the monotonic cursor the tailer
     claims/scans on and the newest-first feeds order by — no bigint sequence."""

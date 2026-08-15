@@ -1,7 +1,7 @@
 """Business-events timeline — the feed projection is rich and never leaks the raw kind/payload."""
 
 from apps.shared import clock
-from apps.shared.events.models import BusinessEventLog
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.timeline import activity_entries
 
 
@@ -16,7 +16,7 @@ def _row(
 ):
     # The readable names are columns, not payload keys: they are pinned at write time so the feed
     # stays legible once the actor or the org they name is gone.
-    return BusinessEventLog(
+    return BusinessEventRecord(
         created_at=ts or clock.now(),
         app_name=app_name,
         verb=verb,
