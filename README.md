@@ -394,7 +394,7 @@ allowed to know several contexts at once: `main.py`.
 labase.py/
 ├── apps/
 │   ├── main.py            # FastAPI app, mounts every context in phase order (catch-alls last)
-│   ├── shared/            # Cross-context infra: events/ (types, store, bus, registry, repository, listener),
+│   ├── shared/            # Cross-context infra: events/ (types, catalog, wiring, bus, repository, listener),
 │   │                      #   Contribs (contribs.py), Host (host.py), task queue (queue.py),
 │   │                      #   Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),

@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 from apps.shared.events.bus import EventBus
-from apps.shared.events.registry import EventRegistry, registry
+from apps.shared.events.catalog import catalog
 from apps.shared.events.repository import (
     LIFTED_COLUMNS,
     TRAIL_COLUMNS,
@@ -30,6 +30,7 @@ from apps.shared.events.repository import (
     task_payload,
 )
 from apps.shared.events.types import _is_secret_field_name
+from apps.shared.events.wiring import EventWiring
 
 
 class WidgetEvent(OrgScoped, BusinessEvent):
@@ -79,22 +80,23 @@ def test_an_event_naming_only_one_half_has_no_kind_and_stays_out_of_the_catalog(
         app_name = "test_half"
 
     assert HalfNamed.kind == ""
-    assert registry.event_class_for("") is None
+    assert catalog.class_for("") is None
 
 
 def test_concrete_events_register_in_the_catalog_for_reconstruction():
     # The listener rebuilds a typed event from a persisted row's `kind`, so every concrete event
-    # registers itself in the registry's catalog. Abstract bases (empty kind) do not.
-    assert registry.event_class_for("widget.created") is WidgetCreated
-    assert registry.event_class_for("widget.deleted") is WidgetDeleted
-    assert registry.event_class_for("no.such_kind") is None
+    # registers itself in the catalog. Abstract bases (empty kind) do not.
+    assert catalog.class_for("widget.created") is WidgetCreated
+    assert catalog.class_for("widget.deleted") is WidgetDeleted
+    assert catalog.class_for("no.such_kind") is None
 
 
 @pytest.mark.asyncio
 async def test_emit_does_not_run_handlers_in_process():
     # emit only persists the fact — every reaction (`on` consumers, `spread` handlers) runs in the
     # listener off the trail, never here. A spread handler registered on this bus stays inert.
-    bus = EventBus(EventRegistry())
+    own = EventWiring()
+    bus = EventBus(own)
     seen: list[object] = []
 
     @dataclass(frozen=True, kw_only=True)
@@ -105,7 +107,7 @@ async def test_emit_does_not_run_handlers_in_process():
     async def reload(event: ConfigChanged) -> None:
         seen.append(event)
 
-    bus.registry.declare_events(ConfigChanged)  # emit refuses an undeclared event
+    own.declare(ConfigChanged)  # emit refuses an undeclared event
     bus.spread(ConfigChanged, reload)
 
     # The write is stubbed: what is under test is that emit runs no handler, not the persistence.

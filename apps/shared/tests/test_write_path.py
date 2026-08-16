@@ -10,7 +10,7 @@ from sqlalchemy.exc import DBAPIError
 
 from apps.shared.events import BusinessEvent, OrgScoped
 from apps.shared.events.bus import events
-from apps.shared.events.registry import registry
+from apps.shared.events.wiring import wiring
 from apps.shared.persistence import database as db
 
 
@@ -32,7 +32,7 @@ async def _clean_p1():
     # Bypass the ApiDriver's shared test connection (its background loop) with a fresh engine on
     # this test's loop, and clean up our own committed rows — the pattern test_bus established.
     _clear_engine_caches()
-    registry.declare_events(_P1Event)  # emit refuses an undeclared event
+    wiring.declare(_P1Event)  # emit refuses an undeclared event
 
     async def _wipe():
         async with db.admin_session_factory()() as s:

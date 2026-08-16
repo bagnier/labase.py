@@ -13,7 +13,7 @@ from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.listener import EventListener
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.events.registry import EventRegistry, registry
+from apps.shared.events.wiring import EventWiring, wiring
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
 from apps.shared.tests.trail_seed import seed_fact
@@ -51,9 +51,9 @@ def _clear_engine_caches() -> None:
 @pytest_asyncio.fixture
 async def iso():
     # Isolate the tailer's global view: mark every pre-existing fact dispatched so tick() sees only
-    # rows this test inserts. Restore the process-wide sub/handler registries afterwards.
+    # rows this test inserts. Restore the process-wide wiring and task handlers afterwards.
     _clear_engine_caches()
-    saved_subs = {k: list(v) for k, v in registry._async_subs.items()}
+    saved_wiring = wiring.snapshot()
     saved_handlers = dict(_handlers)
     async with db.admin_session_factory()() as s:
         await s.execute(
@@ -70,8 +70,7 @@ async def iso():
         await s.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
-    registry._async_subs.clear()
-    registry._async_subs.update(saved_subs)
+    wiring.restore(saved_wiring)
     await db._admin_engine().dispose()
     _clear_engine_caches()
 
@@ -259,20 +258,20 @@ def test_org_seed_apps_register_durable_consumers_of_organization_created():
 @pytest.mark.asyncio
 async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
     # A spread fact is replayed to this process's spread handler off the trail — no claim, no
-    # dispatch mark (every instance applies it). Reconstructed as its typed event. A fresh registry
-    # isolates the spread sub; the catalog stays shared so event_class_for still resolves the kind.
-    bus = EventBus(EventRegistry())
+    # dispatch mark (every instance applies it). Reconstructed as its typed event. Its own wiring
+    # isolates the spread handler; the catalog is process-wide, so class_for resolves the kind.
+    own = EventWiring()
     seen: list[object] = []
 
     async def apply(event: _SpreadEvent) -> None:
         seen.append(event)
 
-    bus.spread(_SpreadEvent, apply)
+    EventBus(own).spread(_SpreadEvent, apply)
     await seed_fact(
         BusinessEventRecord(app_name="test_tailer", verb="spread", payload={"value": "on"})
     )
 
-    await EventListener(0, registry=bus.registry).tick()
+    await EventListener(0, wiring=own).tick()
 
     assert len(seen) == 1
     assert isinstance(seen[0], _SpreadEvent)
@@ -285,19 +284,19 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
     # was written, a hand-inserted row) must not wedge the spread path: without advancing the
     # cursor, every later tick would replay the same poison row and no fact would ever propagate
     # again. It is logged, skipped, and the healthy fact behind it still runs.
-    bus = EventBus(EventRegistry())
+    own = EventWiring()
     seen: list[_StrictSpreadEvent] = []
 
     async def apply(event: _StrictSpreadEvent) -> None:
         seen.append(event)
 
-    bus.spread(_StrictSpreadEvent, apply)
+    EventBus(own).spread(_StrictSpreadEvent, apply)
     for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy row behind it
         await seed_fact(
             BusinessEventRecord(app_name="test_tailer", verb="strict_spread", payload=payload)
         )
 
-    listener = EventListener(0, registry=bus.registry)
+    listener = EventListener(0, wiring=own)
     with capture_logs() as logs:
         await listener.tick()
 

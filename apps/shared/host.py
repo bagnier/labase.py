@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from apps.shared.contribs import Contribs, contribs
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
-from apps.shared.events.registry import EventRegistry
+from apps.shared.events.wiring import EventWiring
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,
@@ -109,9 +109,10 @@ class FullpageProvider:
 @dataclass
 class Host:
     app: FastAPI = field(default_factory=lambda: FastAPI(title="labase"))
-    # A bare Host (a test) gets a bus on its own fresh registry — isolated subscriptions, shared
-    # catalog. Production passes ``events=events`` (the singleton) explicitly.
-    events: EventBus = field(default_factory=lambda: EventBus(EventRegistry()))
+    # A bare Host (a test) gets a bus on a wiring of its own, so what it mounts never lands in the
+    # process's — what events *exist* is process-wide either way (the catalog). Production passes
+    # ``events=events`` (the singleton, writing the process wiring) explicitly.
+    events: EventBus = field(default_factory=lambda: EventBus(EventWiring()))
     contribs: Contribs = field(default_factory=Contribs)
     nav_items: list[NavItem] = field(default_factory=list)
     fullpage_providers: list[FullpageProvider] = field(default_factory=list)

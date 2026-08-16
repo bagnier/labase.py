@@ -22,7 +22,7 @@ from sqlalchemy import text
 
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import events
-from apps.shared.events.registry import registry
+from apps.shared.events.wiring import wiring
 from apps.shared.persistence import database as db
 from apps.shared.persistence.database import AdminSession
 
@@ -66,7 +66,7 @@ async def client():
     # A fresh engine on this test's loop, as the sibling write-path tests do: the ApiDriver's
     # shared connection lives on another loop and would deadlock the commits asserted here.
     _clear_engine_caches()
-    registry.declare_events(_DurabilityEvent)
+    wiring.declare(_DurabilityEvent)
     await _wipe()
     app = FastAPI()
     app.include_router(router)

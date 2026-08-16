@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
-from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
+from apps.shared.events.wiring import EventWiring, wiring
 from apps.shared.persistence import database as db
 from apps.shared.queue import _handlers
 
@@ -41,12 +41,12 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def bus_isolation():
-    # Snapshot the process-wide registries: apps.main (imported by the e2e drivers) registered
-    # real task handlers / durable subs at mount, so we restore rather than clear — a global reset
-    # would silently unregister the app's own consumers for every later test.
+    # Snapshot what the process already wired: apps.main (imported by the e2e drivers) registered
+    # real task handlers / durable consumers at mount, so we restore rather than clear — a global
+    # reset would silently unregister the app's own consumers for every later test.
     _clear_engine_caches()
     saved_handlers = dict(_handlers)
-    saved_subs = {k: list(v) for k, v in registry._async_subs.items()}
+    saved_wiring = wiring.snapshot()
     async with db.admin_session_factory()() as session:
         await session.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_bus%'"))
         await session.commit()
@@ -56,8 +56,7 @@ async def bus_isolation():
         await session.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
-    registry._async_subs.clear()
-    registry._async_subs.update(saved_subs)
+    wiring.restore(saved_wiring)
     await db._user_engine().dispose()
     await db._admin_engine().dispose()
     _clear_engine_caches()
@@ -73,12 +72,12 @@ async def _noop(session, event) -> None:
 def test_declare_records_the_owner_app_and_gates_emit():
     # Declaring activates a fact; it never attributes one. The owner is the app the event itself
     # names, so a mount cannot spell it differently from the class.
-    reg = EventRegistry()
-    assert reg.is_declared(_Ticked) is False
-    reg.declare_events(_Ticked)
-    assert reg.is_declared(_Ticked) is True
-    assert reg.owner_of(_Ticked) == "test_bus"
-    assert reg.events_by_app() == {"test_bus": [_Ticked]}
+    own = EventWiring()
+    assert own.is_declared(_Ticked) is False
+    own.declare(_Ticked)
+    assert own.is_declared(_Ticked) is True
+    assert own.owner_of(_Ticked) == "test_bus"
+    assert own.by_app() == {"test_bus": [_Ticked]}
 
 
 def test_declare_rejects_an_event_that_names_no_app_and_verb():
@@ -87,14 +86,14 @@ def test_declare_rejects_an_event_that_names_no_app_and_verb():
     class _Abstract(BusinessEvent):
         pass
 
-    reg = EventRegistry()
+    own = EventWiring()
     with pytest.raises(ValueError, match="_Abstract"):
-        reg.declare_events(_Abstract)
+        own.declare(_Abstract)
 
 
 @pytest.mark.asyncio
 async def test_emit_refuses_an_undeclared_event():
-    bus = EventBus(EventRegistry())
+    bus = EventBus()
     with pytest.raises(ValueError, match="declared by no app"):
         # The gate runs before the session is ever touched, so a stand-in is enough here.
         await bus.emit(_Ticked(), cast(AsyncSession, None))  # no app declared it
@@ -109,13 +108,51 @@ def test_on_rejects_a_duplicate_consumer_name_for_the_same_event():
         events.on(_Ticked, _noop, name="counter", app="test_bus")
 
 
-def test_subscribers_for_walks_the_mro_so_a_base_subscription_catches_subclasses():
+def test_consumers_of_walks_the_mro_so_a_base_subscription_catches_subclasses():
     events.on(_Ticked, _noop, name="counter", app="test_bus")
     expected = ["evt:test_bus.ticked:counter"]
     # A subscriber on the base type is delivered for a subclass event too.
-    assert [s.topic for s in registry.subscribers_for(_TickedSub)] == expected
+    assert [s.topic for s in wiring.consumers_of(_TickedSub)] == expected
     # And an exact-type event sees its own subscriber.
-    assert [s.topic for s in registry.subscribers_for(_Ticked)] == expected
+    assert [s.topic for s in wiring.consumers_of(_Ticked)] == expected
+
+
+# ── snapshot/restore: what a test registers on the live bus, put back ─────────────────────────
+
+
+def test_restoring_a_snapshot_drops_what_was_registered_after_it():
+    # A test that exercises the *real* fan-out has to register on the process-wide bus, then put
+    # back what it found — otherwise its consumer keeps firing for every later test in the run.
+    # This is the surface that replaced reaching into the wiring's internals to do it.
+    own = EventWiring()
+    own.declare(_Ticked)
+    own.add_consumer(_Ticked, "before", as_actor=False, app="test_bus")
+    saved = own.snapshot()
+
+    own.declare(_TickedSub)
+    own.add_consumer(_Ticked, "after", as_actor=False, app="test_bus")
+    own.restore(saved)
+
+    assert [r.name for r in own.consumers_of(_Ticked)] == ["before"]
+    assert own.is_declared(_TickedSub) is False
+    # And the snapshot is a copy, not a view: mutating after taking it left it untouched, so the
+    # same snapshot restores the same state twice (a fixture reused across tests in one module).
+    own.add_consumer(_Ticked, "after", as_actor=False, app="test_bus")
+    own.restore(saved)
+    assert [r.name for r in own.consumers_of(_Ticked)] == ["before"]
+
+
+def test_a_bus_given_its_own_wiring_stays_out_of_the_processs():
+    # Handing a bus a fresh wiring is how a test keeps its registrations to itself — the default
+    # is the process's, which the live `events` writes. What events *exist* is shared either way:
+    # that is the catalog, filled at import, and there is nothing to isolate about it.
+    own = EventWiring()
+    EventBus(own).on(_Ticked, _noop, name="isolated", app="test_bus")
+
+    events.on(_Ticked, _noop, name="counter", app="test_bus")
+
+    assert [r.name for r in own.consumers_of(_Ticked)] == ["isolated"]
+    assert [r.name for r in wiring.consumers_of(_Ticked)] == ["counter"]
 
 
 # ── already_consumed (idempotency substrate, keyed on the business_events row id) ─────────────

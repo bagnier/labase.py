@@ -15,7 +15,7 @@ from dataclasses import MISSING, fields
 
 import apps.main  # noqa: F401  — mounting every app fills the catalog
 from apps.shared.events import BusinessEvent, OrgScoped
-from apps.shared.events.registry import _catalog_by_kind
+from apps.shared.events.catalog import catalog
 
 # The base's own scoping slots — the only id-shaped fields an event may declare.
 _BASE_SLOTS = {"user_id", "org_id", "entity_id"}
@@ -28,7 +28,7 @@ def _shipped_events() -> dict[str, type[BusinessEvent]]:
     what pytest imported first."""
     return {
         kind: cls
-        for kind, cls in _catalog_by_kind.items()
+        for kind, cls in catalog.kinds().items()
         if cls.__module__.startswith("apps.") and ".tests." not in cls.__module__
     }
 

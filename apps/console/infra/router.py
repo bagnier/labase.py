@@ -24,6 +24,7 @@ from apps.shared.charts import day_buckets_series
 from apps.shared.config import get_technical_settings
 from apps.shared.contribs import contribs
 from apps.shared.events.bus import events
+from apps.shared.events.wiring import wiring
 from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
@@ -137,16 +138,19 @@ def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview
 
 
 def _app_event_wiring(app: str) -> dict:
-    """The events ``app`` emits and the events it reacts to — read from the event registry, so no
-    app has to report its own wiring (the console asks the registry directly)."""
-    reg = events.registry
-    emits = sorted(e.kind for e in reg.events_by_app().get(app, []))
+    """The events ``app`` emits and the events it reacts to — read from the event wiring, so no
+    app has to report its own wiring (the console asks it directly)."""
+    emits = sorted(e.kind for e in wiring.by_app().get(app, []))
     listens = sorted(
         (
-            {"kind": event_type.kind, "owner": reg.owner_of(event_type) or "?", "reaction": s.name}
-            for event_type, subs in reg.reactions().items()
-            for s in subs
-            if s.app == app
+            {
+                "kind": event_type.kind,
+                "owner": wiring.owner_of(event_type) or "?",
+                "reaction": r.name,
+            }
+            for event_type, reactions in wiring.reactions().items()
+            for r in reactions
+            if r.app == app
         ),
         key=lambda row: (row["kind"], row["reaction"]),
     )
@@ -156,17 +160,16 @@ def _app_event_wiring(app: str) -> dict:
 def _event_graph() -> list[dict]:
     """The whole event → reaction graph: every event with a durable consumer, its owner app, and
     each reaction (listening app + name), kind-sorted for a stable console listing."""
-    reg = events.registry
     rows = [
         {
             "kind": event_type.kind,
-            "owner": reg.owner_of(event_type) or "?",
+            "owner": wiring.owner_of(event_type) or "?",
             "reactions": sorted(
-                ({"app": sub.app, "name": sub.name} for sub in subs),
+                ({"app": r.app, "name": r.name} for r in reactions),
                 key=lambda r: (r["app"], r["name"]),
             ),
         }
-        for event_type, subs in reg.reactions().items()
+        for event_type, reactions in wiring.reactions().items()
     ]
     return sorted(rows, key=lambda row: row["kind"])
 

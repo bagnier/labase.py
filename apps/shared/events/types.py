@@ -30,7 +30,7 @@ from datetime import datetime
 from functools import cache
 from typing import Any, ClassVar, Self
 
-from apps.shared.events.registry import registry
+from apps.shared.events.catalog import catalog
 
 
 def _wants(hint: Any, target: type) -> bool:
@@ -150,7 +150,7 @@ class BusinessEvent:
         # A concrete event (non-empty kind) registers itself in the catalog so the listener can
         # reconstruct it from a stored row. Abstract bases (EntityCreated…, kind still "") never do.
         if cls.kind:
-            registry.register_event(cls)
+            catalog.register(cls)
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:

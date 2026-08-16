@@ -1,6 +1,6 @@
 """The console's event catalogue — the per-app Events panel and the global reaction graph.
 
-Both read straight from the event registry (populated at mount), so the assertions are on the
+Both read straight from the event wiring (populated at mount), so the assertions are on the
 real wiring the app declares, not a fixture.
 """
 

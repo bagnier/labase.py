@@ -34,7 +34,7 @@ from apps.console.contract.events import (
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.console.contract.technical import overview as technical_overview
 from apps.console.infra.router import router
-from apps.shared.events.bus import events
+from apps.shared.events.wiring import wiring
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
 from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
@@ -78,10 +78,9 @@ def mount(host: Host) -> None:
 
 async def _events_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     """Console tile → the event → reaction graph: how many events the system emits, and how many
-    durable reactions wire them together. Read straight from the registry (no DB)."""
-    reg = events.registry
-    emitted = sum(len(events_) for events_ in reg.events_by_app().values())
-    reactions = sum(len(subs) for subs in reg.reactions().values())
+    durable reactions wire them together. Read straight from the wiring (no DB)."""
+    emitted = sum(len(declared) for declared in wiring.by_app().values())
+    reactions = sum(len(rs) for rs in wiring.reactions().values())
     return ConsoleOverview(
         key="events",
         title="Events",
