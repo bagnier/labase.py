@@ -3,7 +3,8 @@
 import uuid
 
 from apps.auth.tests.given_helpers import user_id_for_email
-from apps.shared.events.repository import insert_business_event
+from apps.shared.events.models import BusinessEventRecord
+from apps.shared.tests.trail_seed import seed_fact
 
 _EMAIL = "dashboard-activity@example.com"
 
@@ -19,14 +20,13 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
     user_id = user_id_for_email(_EMAIL)
     org = _personal_org(client)
     driver.run(
-        insert_business_event(
-            app_name="calendar",
-            verb="event_created",
-            user_id=uuid.UUID(user_id),
-            ip=None,
-            org_id=uuid.UUID(org["id"]),
-            request_id=None,
-            payload=None,
+        seed_fact(
+            BusinessEventRecord(
+                app_name="calendar",
+                verb="event_created",
+                user_id=uuid.UUID(user_id),
+                org_id=uuid.UUID(org["id"]),
+            )
         )
     )
 
@@ -45,14 +45,13 @@ def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
     org = _personal_org(client)
     for app_name, verb in (("calendar", "event_created"), ("todo", "created")):
         driver.run(
-            insert_business_event(
-                app_name=app_name,
-                verb=verb,
-                user_id=uuid.UUID(user_id),
-                ip=None,
-                org_id=uuid.UUID(org["id"]),
-                request_id=None,
-                payload=None,
+            seed_fact(
+                BusinessEventRecord(
+                    app_name=app_name,
+                    verb=verb,
+                    user_id=uuid.UUID(user_id),
+                    org_id=uuid.UUID(org["id"]),
+                )
             )
         )
 

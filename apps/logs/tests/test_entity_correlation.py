@@ -2,22 +2,14 @@
 
 import uuid
 
-from apps.shared.events.repository import insert_business_event
+from apps.shared.events.models import BusinessEventRecord
+from apps.shared.tests.trail_seed import seed_fact
 
 _ADMIN = "entity-corr@example.com"
 
 
 def _seed(app_name: str, verb: str, entity_id: uuid.UUID):
-    return insert_business_event(
-        app_name=app_name,
-        verb=verb,
-        user_id=None,
-        ip=None,
-        org_id=None,
-        entity_id=entity_id,
-        request_id=None,
-        payload=None,
-    )
+    return seed_fact(BusinessEventRecord(app_name=app_name, verb=verb, entity_id=entity_id))
 
 
 def test_logs_filter_by_entity_keeps_only_that_entitys_events(driver):

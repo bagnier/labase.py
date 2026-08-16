@@ -221,12 +221,12 @@ allowed-confusables = ["×", "–"]
 
 [tool.ruff.lint.pylint]
 # The two argument rules are split on purpose, because only one of them is about readability.
-# `max-positional-args` is the real guard — an unlabelled positional says nothing at the call
-# site — and 7 is today's worst outside the routers, a ceiling to ratchet down.
-# `max-args` counts keyword-only parameters too, where the argument *is* labelled: the holdout
-# is `insert_business_event` (12), a fully keyword-only row constructor naming its columns.
+# `max-positional-args` is the real guard — an unlabelled positional says nothing at the call site.
+# `max-args` counts keyword-only parameters too, where the argument *is* labelled.
+# Both sit on today's worst outside the routers, ceilings to ratchet down: 7 positional; 10 total,
+# held by the metrics and trail queries (a filter per parameter) and `responses.py`'s renderer.
 max-positional-args = 7
-max-args = 12
+max-args = 10
 
 [tool.ruff.lint.mccabe]
 # Ceiling to ratchet down, not a target: `read_firehose` (12) is the one function holding it up,

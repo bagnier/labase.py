@@ -53,7 +53,7 @@ def event_model(
     request_id: str | None = None,
     request_name: str | None = None,
 ) -> BusinessEventRecord:
-    """A ready-to-``add`` business-event row — the same model the persister writes, with an
+    """A ready-to-``add`` business-event row — the same model ``emit`` writes, with an
     explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate).
 
     The scenarios name an event the way it reads on screen (``"todo.created"``), so this is where

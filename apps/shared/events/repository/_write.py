@@ -16,7 +16,6 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository._base import _EventSQL
 from apps.shared.events.repository._delivery import LIFTED_COLUMNS
 from apps.shared.events.types import BusinessEvent, OrgScoped, _is_secret_field_name
-from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger("labase.business_events")
 
@@ -150,60 +149,3 @@ def event_to_record(
         entity_name=event.entity_name,
         org_name=org_name,
     )
-
-
-async def insert_business_event(
-    *,
-    session: AsyncSession | None = None,
-    app_name: str,
-    verb: str,
-    icon: str = "circle",  # the BusinessEvent base default — the trail always shows something
-    user_id: uuid.UUID | None,
-    ip: str | None,
-    org_id: uuid.UUID | None,
-    entity_id: uuid.UUID | None = None,
-    entity_name: str | None = None,
-    request_id: uuid.UUID | None,
-    request_name: str | None = None,
-    payload: dict[str, Any] | None,
-) -> None:
-    """Write a row from explicit columns, bypassing the typed vocabulary — seeding a trail whose
-    kinds a test does not want to declare. Every *production* fact goes through ``emit``, which
-    takes its session and rides the caller's transaction; the whole current call set is tests. With
-    a ``session`` the row rides that transaction; without one it is a best-effort admin write that
-    swallows failures, so an unreachable DB fails the seeding rather than the process. Only the
-    write mixin is needed, so it binds ``_WritesEvents`` directly rather than the full
-    repository."""
-
-    async def write(s: AsyncSession) -> None:
-        repo = _WritesEvents(s)
-        stored = dict(payload) if payload else {}
-        user_name, org_name = await repo.pinned_names(user_id, org_id)
-        await _record_row(
-            s,
-            BusinessEventRecord(
-                app_name=app_name,
-                verb=verb,
-                icon=icon,
-                user_id=user_id,
-                ip=ip,
-                org_id=org_id,
-                entity_id=entity_id,
-                request_id=request_id,
-                request_name=request_name,
-                payload=stored,
-                user_name=user_name,
-                entity_name=entity_name,
-                org_name=org_name,
-            ),
-        )
-
-    if session is not None:
-        await write(session)
-        return
-    try:
-        async with admin_session_factory()() as own:
-            await write(own)
-            await own.commit()
-    except Exception:
-        log.warning("business_event.write_failed", kind=f"{app_name}.{verb}", user_id=user_id)

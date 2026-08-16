@@ -12,10 +12,11 @@ from structlog.testing import capture_logs
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.listener import EventListener
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.registry import EventRegistry, registry
-from apps.shared.events.repository import insert_business_event
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
+from apps.shared.tests.trail_seed import seed_fact
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -80,15 +81,14 @@ async def _noop(session, event) -> None:
 
 
 async def _seed(actor: uuid.UUID, *, label: str = "Hi", entity_id: uuid.UUID | None = None) -> None:
-    await insert_business_event(
-        app_name="test_tailer",
-        verb="happened",
-        user_id=actor,
-        ip=None,
-        org_id=None,
-        entity_id=entity_id,
-        request_id=None,
-        payload={"label": label},
+    await seed_fact(
+        BusinessEventRecord(
+            app_name="test_tailer",
+            verb="happened",
+            user_id=actor,
+            entity_id=entity_id,
+            payload={"label": label},
+        )
     )
 
 
@@ -190,15 +190,14 @@ async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
 
     events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
     request_id = uuid.uuid7()
-    await insert_business_event(
-        app_name="test_tailer",
-        verb="happened",
-        user_id=uuid.uuid7(),
-        ip=None,
-        org_id=None,
-        entity_id=None,
-        request_id=request_id,
-        payload={"label": "x"},
+    await seed_fact(
+        BusinessEventRecord(
+            app_name="test_tailer",
+            verb="happened",
+            user_id=uuid.uuid7(),
+            request_id=request_id,
+            payload={"label": "x"},
+        )
     )
 
     factory = db.admin_session_factory()
@@ -269,18 +268,11 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
         seen.append(event)
 
     bus.spread(_SpreadEvent, apply)
-    await insert_business_event(
-        app_name="test_tailer",
-        verb="spread",
-        user_id=None,
-        ip=None,
-        org_id=None,
-        entity_id=None,
-        request_id=None,
-        payload={"value": "on"},
+    await seed_fact(
+        BusinessEventRecord(app_name="test_tailer", verb="spread", payload={"value": "on"})
     )
 
-    await EventListener(0, bus=bus).tick()
+    await EventListener(0, registry=bus.registry).tick()
 
     assert len(seen) == 1
     assert isinstance(seen[0], _SpreadEvent)
@@ -301,18 +293,11 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
 
     bus.spread(_StrictSpreadEvent, apply)
     for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy row behind it
-        await insert_business_event(
-            app_name="test_tailer",
-            verb="strict_spread",
-            user_id=None,
-            ip=None,
-            org_id=None,
-            entity_id=None,
-            request_id=None,
-            payload=payload,
+        await seed_fact(
+            BusinessEventRecord(app_name="test_tailer", verb="strict_spread", payload=payload)
         )
 
-    listener = EventListener(0, bus=bus)
+    listener = EventListener(0, registry=bus.registry)
     with capture_logs() as logs:
         await listener.tick()
 

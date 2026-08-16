@@ -25,7 +25,8 @@ from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.events.bus import events
+from apps.shared.events.registry import EventRegistry
+from apps.shared.events.registry import registry as process_registry
 from apps.shared.events.repository import EventRepository, TrailRow, task_payload
 from apps.shared.events.types import BusinessEvent
 from apps.shared.persistence.database import _user_engine, admin_session_factory
@@ -48,14 +49,18 @@ class EventListener:
         interval_seconds: float,
         batch_size: int = 50,
         session_factory: Callable[[], AsyncSession] | None = None,
-        bus: Any | None = None,
+        registry: EventRegistry | None = None,
     ) -> None:
         # session_factory overrides the admin session (the API test driver injects its rolled-back
         # test connection, so the tailer sees the same uncommitted facts a request just wrote).
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory
-        self._bus = bus or events  # read spread subscribers from here (a test may inject its own)
+        # The registry, not the bus: delivery reads *what exists and who listens*, and nothing the
+        # bus adds on top. Taking it directly is what lets the type checker follow the four calls
+        # below — through a bus they were `Any`, so a renamed registry method type-checked clean
+        # and failed here at runtime. A test injects its own to isolate its subscriptions.
+        self._registry = registry if registry is not None else process_registry
         self._spread_cursor: uuid.UUID | None = None  # per-instance high-water (uuid7, ordered)
         self._task: asyncio.Task | None = None
         self._listen_conn: Any | None = None
@@ -92,7 +97,7 @@ class EventListener:
 
     async def _read_spread(self, repo: EventRepository) -> list[TrailRow]:
         """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
-        kinds = self._bus.registry.spread_kinds()
+        kinds = self._registry.spread_kinds()
         if not kinds:
             return []
         # Nil-uuid sentinel on first pass: uuid7 is version-tagged, so it always sorts above nil.
@@ -108,7 +113,7 @@ class EventListener:
         never process would replay that same row forever and freeze propagation for good."""
         event = self._reconstruct_safely(row)
         if event is not None:
-            for handler in self._bus.registry.spread_handlers_for(event):
+            for handler in self._registry.spread_handlers_for(event):
                 try:
                     await handler(event)
                 except Exception:
@@ -117,7 +122,7 @@ class EventListener:
 
     def _reconstruct(self, row: TrailRow) -> BusinessEvent | None:
         """Rebuild the typed event from a business_events row (its own fields + scoping columns)."""
-        event_type = self._bus.registry.event_class_for(row["kind"])
+        event_type = self._registry.event_class_for(row["kind"])
         if event_type is None:
             return None
         return event_type.from_payload(task_payload(row))
@@ -135,7 +140,7 @@ class EventListener:
             return None
 
     async def _fan_out(self, session: AsyncSession, row: TrailRow) -> None:
-        event_type = self._bus.registry.event_class_for(row["kind"])
+        event_type = self._registry.event_class_for(row["kind"])
         if event_type is None:
             # A kind with no registered class: we can route this fact to no one. This is *not* the
             # benign "known kind, nobody listens" no-op below — it means a fact was persisted that
@@ -144,7 +149,7 @@ class EventListener:
             # by the caller — the cursor must advance, we simply have nothing to deliver.
             self._capture_unroutable(row)
             return
-        subs = self._bus.registry.subscribers_for(event_type)
+        subs = self._registry.subscribers_for(event_type)
         if not subs:
             return  # known kind, nobody listens — a clean no-op, no fact is lost
         payload = task_payload(row)

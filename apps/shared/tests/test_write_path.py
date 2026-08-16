@@ -2,7 +2,6 @@
 
 import uuid
 from dataclasses import dataclass
-from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -12,7 +11,6 @@ from sqlalchemy.exc import DBAPIError
 from apps.shared.events import BusinessEvent, OrgScoped
 from apps.shared.events.bus import events
 from apps.shared.events.registry import registry
-from apps.shared.events.repository import insert_business_event
 from apps.shared.persistence import database as db
 
 
@@ -53,35 +51,6 @@ async def _count_p1(actor: uuid.UUID) -> int:
         return await s.scalar(
             text("SELECT count(*) FROM business_events WHERE user_id = :a"), {"a": actor}
         )
-
-
-@pytest.mark.usefixtures("_clean_p1")
-@pytest.mark.asyncio
-async def test_failed_write_logs_a_warning_instead_of_raising():
-    # The sessionless branch of `insert_business_event` (test seeding only — every production fact
-    # rides a caller's transaction) opens its own admin session and swallows what it cannot write,
-    # so a DB it can't reach fails the seeding, not the test process. Regression: the warning must
-    # not pass `event=`/`kind=` under structlog's positional message key.
-    uid = uuid.uuid7()
-    with (
-        patch(
-            "apps.shared.events.repository._write.admin_session_factory",
-            side_effect=RuntimeError("db down"),
-        ),
-        patch("apps.shared.events.repository._write.log") as log,
-    ):
-        await insert_business_event(
-            app_name="auth",
-            verb="signed_in",
-            user_id=uid,
-            ip=None,
-            org_id=None,
-            request_id=None,
-            payload=None,
-        )
-    log.warning.assert_called_once_with(
-        "business_event.write_failed", kind="auth.signed_in", user_id=uid
-    )
 
 
 # ── Transactional persist (Phase 1): the fact commits iff the action commits ──────────────────

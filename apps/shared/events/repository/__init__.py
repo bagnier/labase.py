@@ -17,11 +17,7 @@ from apps.shared.events.repository._delivery import (
     task_payload,
 )
 from apps.shared.events.repository._read import _ReadsEvents
-from apps.shared.events.repository._write import (
-    _WritesEvents,
-    event_to_record,
-    insert_business_event,
-)
+from apps.shared.events.repository._write import _WritesEvents, event_to_record
 
 
 class EventRepository(_WritesEvents, _DispatchesEvents, _ReadsEvents):
@@ -34,6 +30,5 @@ __all__ = [
     "EventRepository",
     "TrailRow",
     "event_to_record",
-    "insert_business_event",
     "task_payload",
 ]

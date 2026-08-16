@@ -37,10 +37,9 @@ class BusinessEventRecord(Base, UUIDPk):
     instead, since a caller signing in or out has no RLS identity to write under. The signup trigger
     is the one exception: it inserts directly, itself SECURITY DEFINER, because user creation
     happens in GoTrue's transaction with no app session to join. Attribution is the emitter's to get
-    right — a durable consumer
-    legitimately records a fact for an actor that isn't its session's identity — so the function
-    trusts the supplied ``user_id`` rather than re-checking it. The tailer's dispatch (admin
-    session) and every read are unchanged.
+    right — a durable consumer legitimately records a fact for an actor that isn't its session's
+    identity — so the function trusts the supplied ``user_id`` rather than re-checking it. The
+    tailer's dispatch (admin session) and every read are unchanged.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so it stays the monotonic cursor the tailer
     claims/scans on and the newest-first feeds order by — no bigint sequence."""
