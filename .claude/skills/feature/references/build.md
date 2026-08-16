@@ -77,17 +77,32 @@ An app imports **only** from another app's `contract/`, never its `domain/` or `
 Expose what other apps need via `contract/current.py` (dependencies), `contract/queries.py`
 (read-only functions returning DTOs, not ORM rows), and `contract/events.py`.
 
-## Event-based decoupling (`apps/shared/bus.py`, `apps/shared/host.py`)
+## Decoupling: two mechanisms, two shapes
 
-- Define the event as a `@dataclass(frozen=True)` in `contract/events.py`
-  (e.g. `apps/auth/contract/events.py::UserCreated`).
-- Subscribe in `contract/integration.py::mount` via `host.events.on(Event, handler)`.
-- To react to another context's flow (e.g. `UserCreated`), **subscribe** — never call its code.
+Push (a fact happened) and pull (who contributes to this?) are different animals, so they are
+different objects — `host.events` (`apps/shared/events/`) and `host.contribs`
+(`apps/shared/contribs.py`). Both key handlers by the Python type they carry.
 
-| Primitive | Semantics | On handler failure | Use for |
-|-----------|-----------|--------------------|---------|
-| `await host.events.emit(event)` | command — runs all handlers in order, returns results | propagates the first exception (caller can compensate) | `UserCreated`, `OrgCreated` |
-| `await host.events.collect(query)` | query — runs all handlers, aggregates successes | logs & skips the failing handler | `OverviewQuery`, `ConsoleOverviewQuery` |
+| Primitive | Semantics | On failure | Use for |
+|-----------|-----------|------------|---------|
+| `await events.emit(event, session)` | persists the fact to the trail on the session you name — runs no handler | raises; the fact rolls back with the caller's transaction | `TodoCreated`, `OrganizationCreated` |
+| `host.events.on(Event, handler, name=…, app=…)` | durable, exactly-once consumer, run by the listener off the trail after commit | retried, then parked; the producer never sees it | welcome seeding, counters, alerts |
+| `host.events.spread(Event, handler)` | run-everywhere handler, replayed per instance | logged and skipped | config reload (`SettingsChanged`) |
+| `await contribs.collect(query)` | runs every provider, aggregates the successes | logs and skips the failing provider | `OverviewQuery`, `ConsoleOverviewQuery` |
+
+Defining a fact:
+
+- a frozen `BusinessEvent` subclass in `contract/events.py` (e.g.
+  `apps/todo/contract/events.py::TodoCreated`) — a per-app mixin gives `app_name` and the icon,
+  the class gives its `verb`; `kind` is derived, never written by hand.
+- declared at mount (`AppManifest(emits=[…])`), because `emit` refuses a fact no app owns.
+- emitted with the session that carries the mutation, so the fact commits iff the action does.
+
+Only what *happened* is a fact. A refused attempt — a wrong password, a blocked last-owner
+change, a non-owner on an owner-only route — changed nothing, so it is a `log.warning`, not a
+trail row. It stays visible in the console's Logs screen, on the technical side of the timeline.
+
+To react to another context's flow, subscribe — never call its code.
 
 ## Observability (`apps/shared/observability/`)
 
@@ -96,50 +111,58 @@ Expose what other apps need via `contract/current.py` (dependencies), `contract/
   `log.info("invitation.sent", email=email, org_id=str(org_id))`.
 - **Request tracing**: the `RequestLogger` middleware binds a `request_id` via contextvars —
   nothing to do per feature, but logging structured gets you the correlation for free.
-- **Audit**: for sensitive business actions (member joined/removed, ownership change…), call
-  `record_audit_event(bg, level="info", event="organizations.member_joined", user_id=..., **payload)` (`apps/shared/observability/audit.py`) — it logs *and* persists via a
-  background task.
+- **Audit**: there is no separate audit call. A sensitive business action (member joined or
+  removed, ownership change…) is a `BusinessEvent` emitted on the request's session — see the
+  section above — and the console merges the trail with the technical logs into one timeline.
 
 ## Cross-cutting surfaces (wire in `contract/integration.py`)
 
-Implement here the surfaces decided in the Impact phase, all via `host.events.on`:
+Declare the surfaces decided in the Impact phase as one `AppManifest`, which
+`host.register_app` walks in the one correct order — including the trap that the console tile
+must register *before* the enabled gate, since a disabled app still shows its tile:
 
-- **Dashboard**: `host.events.on(OverviewQuery, _overview)`. `_overview(query)` reads the
-  org-scoped repo (`query.session`, `query.org_id`) and returns an `Overview(key, title, icon,
-  href, template, data)` with a Jinja partial `templates/<module>/_overview.html`.
-  Source: `apps/todo/contract/integration.py`.
-- **Console**: `host.events.on(ConsoleOverviewQuery, _console_overview)`. Aggregates over
-  **all** orgs using the admin session (no `org_id`); returns `ConsoleOverview(key, title,
-  icon, data)`. Source: `apps/organizations/contract/integration.py`.
-- **Settings**: `settings.group = declare_app_settings("<module>", [SettingDef(key, type,
-  default, label)])`, then `settings.read()` and `host.events.on(SettingsChanged,
-  settings.reload)` for live reload. Source: `apps/settings/contract/settings.py`.
-- **Menu**: `host.register_nav(NavItem("Todos", "clipboard-text", "todos", "/todos",
-  order=10, owner_only=False))` (`apps/shared/host.py`). For dynamic per-org entries, handle
-  `OrgNavQuery` instead (`apps/organizations/contract/fullpage.py`).
-- **Seeding**: `host.events.on(OrgCreated, _seed)`; `_seed(event)` opens
-  `admin_session_factory()()` (BYPASSRLS), fetches the owner via `get_org_owner_id(session,
-  event.org_id)`, writes starter rows, `commit()`. Source: `apps/todo/contract/integration.py`.
-- **Reserved slugs**: `host.reserve("<segment>")` — reserve even when the app may be disabled.
-- **Feature switch**: declare `feature_switch()` among the settings, then short-circuit (see
-  `mount()` order below).
+- **Dashboard**: `provides_when_enabled=[(OverviewQuery, _overview)]`. `_overview(query)` reads
+  the org-scoped repo (`query.session`, `query.org_id`) and returns an `Overview(key, title,
+  icon, href, template, data)` with a Jinja partial `templates/<module>/_overview.html`.
+- **Console**: `provides=[(ConsoleOverviewQuery, _console_overview)]` — outside the gate, so the
+  tile survives the app being switched off. Aggregates over **all** orgs on the admin session
+  (no `org_id`); returns `ConsoleOverview(key, title, icon, data)`.
+- **Settings**: `settings=_declare_settings()` returning a `SettingsDeclaration(app_name, defs,
+  supabase)`; `register_app` returns the live handle, so `if not settings.enabled: return` works
+  immediately. Live reload is wired for you.
+- **Menu**: `nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)]`. For dynamic
+  per-org entries, provide `OrgNavQuery` instead (`apps/organizations/contract/fullpage.py`).
+- **Facts**: `emits=[TodoCreated, …]` — the events this app owns, so `emit` will accept them.
+- **Seeding**: `consumes_when_enabled=[(OrganizationCreated, "<module>_welcome", _seed)]`. The
+  handler is `async def _seed(session, event)`: the listener runs it off the trail after the org
+  commits, on the admin session, retried and idempotent — never on the creating request's path.
+- **Reserved slugs**: `reserve=["<segment>"]` — reserved even when the app is disabled.
+- **Feature switch**: `feature_switch()` among the setting defs.
 
-### `mount(host)` order (toggleable app)
+An app whose needs go past this shape (startup hooks, fullpage providers, open lists) keeps an
+explicit `mount()` and calls the same primitives directly.
+
+### `mount(host)` for a toggleable app
 
 ```python
 def mount(host: Host) -> None:
-    host.events.on(ConsoleOverviewQuery, _console_overview)  # always present, even if disabled
-    _declare_settings()                                      # always declarable in console
-    if not get_app_settings("<module>").enabled:             # feature switch → short-circuit
+    settings = host.register_app(
+        AppManifest(
+            settings=_declare_settings(),
+            provides=[(ConsoleOverviewQuery, _console_overview)],
+            routers=[(router, ORG_PREFIX)],                  # org-scoped: ORG_PREFIX
+            nav=[NavItem("Todos", "clipboard-text", "todos", "/todos", order=10)],
+            emits=[TodoCreated, TodoDeleted, TodoTicked],
+            consumes_when_enabled=[(OrganizationCreated, "todo_welcome", _seed)],
+            provides_when_enabled=[(OverviewQuery, _overview)],
+        )
+    )
+    if not settings.enabled:
         return
-    settings.read()
-    host.events.on(SettingsChanged, settings.reload)
-    host.app.include_router(router, prefix=ORG_PREFIX)       # org-scoped: ORG_PREFIX
-    host.register_nav(NavItem(...))
-    host.events.on(OverviewQuery, _overview)
-    host.events.on(OrgCreated, _seed)
-    host.reserve("<segment>")
+    host.events.on(TodoTicked, _bump_completed, name="completion_counter", app="todo")
 ```
+
+Source: `apps/todo/contract/integration.py`.
 
 ## Templates & HTMX (content negotiation)
 
