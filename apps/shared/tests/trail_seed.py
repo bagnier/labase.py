@@ -6,14 +6,12 @@ app's kind, without declaring that app's event class, and without a request to h
 timeline, the logs viewer and the tailer all need history that no test action produced.
 
 So this writes the columns directly, through the same ``record_business_event`` SECURITY DEFINER
-function the real write path uses. It lives **in tests** on purpose: it used to be
-``insert_business_event``, exported from ``apps.shared.events.repository`` beside
-``EventRepository`` — an importable way to record a fact on no transaction at all, reachable from
-any app module, which is precisely what ``tests/test_emit_sites`` exists to keep out of ``apps/``.
+function the real write path uses. It lives **in tests** on purpose: a way to record a fact on no
+transaction at all is exactly what ``tests/test_emit_sites`` keeps out of ``apps/``, and it stays
+out by not being importable from there.
 
 The row *is* the argument: :class:`BusinessEventRecord` already names every column, so the seeder
-does not re-list them (twelve keyword arguments that had to be edited in step with
-``event_to_record``, and that alone held ``max-args`` at 12).
+never re-lists them.
 """
 
 from apps.shared.events.models import BusinessEventRecord

@@ -53,7 +53,7 @@ class WiringSnapshot:
 
     owners: dict[type[BusinessEvent], str]
     reactions: dict[type[BusinessEvent], list[Reaction]]
-    spread: dict[type, list[SpreadHandler]]
+    spread: dict[type[BusinessEvent], list[SpreadHandler]]
 
 
 class EventWiring:
@@ -62,7 +62,7 @@ class EventWiring:
     def __init__(self) -> None:
         self._owner_by_type: dict[type[BusinessEvent], str] = {}
         self._reactions: dict[type[BusinessEvent], list[Reaction]] = {}
-        self._spread: dict[type, list[SpreadHandler]] = defaultdict(list)
+        self._spread: dict[type[BusinessEvent], list[SpreadHandler]] = defaultdict(list)
 
     # ── Ownership: who emits what ────────────────────────────────────────────────────────────
 
@@ -130,14 +130,16 @@ class EventWiring:
 
     # ── Spread handlers: run everywhere ──────────────────────────────────────────────────────
 
-    def add_spread_handler(self, event_type: type, handler: SpreadHandler) -> None:
+    def add_spread_handler(self, event_type: type[BusinessEvent], handler: SpreadHandler) -> None:
         """Register a run-everywhere ``spread`` handler for ``event_type`` (config propagation)."""
         self._spread[event_type].append(handler)
 
     def spread_kinds(self) -> list[str]:
         """The dotted kinds that have a ``spread`` handler — the listener scans the trail for
-        exactly these to replay per instance."""
-        return [k for t in self._spread if (k := getattr(t, "kind", ""))]
+        exactly these to replay per instance. An abstract base has no kind of its own and drops out
+        here; its concrete subclasses carry theirs, and :meth:`spread_handlers_for` walks the MRO
+        to reach the handler from them."""
+        return [k for t in self._spread if (k := t.kind)]
 
     def spread_handlers_for(self, event: BusinessEvent) -> Iterator[SpreadHandler]:
         """The ``spread`` handlers registered for the event's runtime type or any base, most-

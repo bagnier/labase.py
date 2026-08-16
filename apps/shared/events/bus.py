@@ -14,9 +14,10 @@ Four methods, nothing else:
 - ``spread(event_type, handler)`` — register a **run-everywhere** handler (config reload), replayed
   by the listener **per instance** off the trail.
 
-All three write into an :class:`~apps.shared.events.wiring.EventWiring` — *who emits what, and who
-reacts* — the process's :data:`~apps.shared.events.wiring.wiring` unless a test hands over its own.
-The bus is that wiring's writer, not its owner: the listener and the console import it directly.
+The three registration methods write into an :class:`~apps.shared.events.wiring.EventWiring` —
+*who emits what, and who reacts* — and ``emit`` reads its ownership gate. It is the process's
+:data:`~apps.shared.events.wiring.wiring` unless a test hands over its own, and the bus is that
+wiring's writer, not its owner: the listener and the console import it directly.
 What events *exist* is not here at all — a class registers itself in
 :data:`~apps.shared.events.catalog.catalog` at import, with no mount involved.
 
@@ -37,7 +38,7 @@ from apps.shared.events.wiring import EventWiring
 from apps.shared.events.wiring import wiring as process_wiring
 from apps.shared.queue import register_task_handler
 
-E = TypeVar("E")
+E = TypeVar("E", bound=BusinessEvent)
 
 # Durable consumer signature: the reconstructed, typed event on the worker's session.
 AsyncEventHandler = Callable[[AsyncSession, Any], Awaitable[None]]
@@ -76,10 +77,9 @@ class EventBus:
         be owned). Reactions run in the listener off the persisted trail after commit, so ``emit``
         never runs a handler, waits on one, or fails from one.
 
-        The session is required, with no default and no ambient lookup. It used to fall back to the
-        request's bound session, which made a fact's durability depend on a dependency chosen three
-        layers up the route — two facts in one handler could carry different guarantees with nothing
-        saying so. Now the call site states it, and the type checker enumerates the call sites."""
+        The session is required, with no default and no ambient lookup: durability is stated at the
+        call site rather than inherited from a dependency chosen three layers up the route, and the
+        type checker enumerates those call sites."""
         self._require_declared(event)
         await EventRepository(session).record(event)
 
@@ -113,7 +113,11 @@ class EventBus:
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         """Register a run-everywhere handler — for config propagation (a settings reload). The
         listener runs it **per instance** off the trail (no claim, no dispatch mark), so every
-        process applies the change. Handlers must be idempotent (re-delivery is harmless)."""
+        process applies the change. Handlers must be idempotent (re-delivery is harmless).
+
+        ``event_type`` is a ``BusinessEvent``, and cannot be anything else: the listener finds these
+        facts by scanning the trail for their ``kind``, so a type that has none would register a
+        handler nothing could ever call."""
         self._wiring.add_spread_handler(event_type, handler)
 
     @staticmethod

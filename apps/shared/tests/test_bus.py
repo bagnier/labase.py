@@ -1,7 +1,8 @@
-"""The event bus's durable-consumer surface — ``on`` registration, the MRO fan-out set, and the
-idempotency guard the reconstructed-typed-event wrapper folds in.
+"""The event bus's registration surface and the wiring it writes — ``declare`` ownership and the
+emit gate, ``on`` registration with the MRO fan-out set, the idempotency guard the
+reconstructed-typed-event wrapper folds in, and how a test isolates or restores the wiring.
 
-Delivery itself (log → task_queue) is the listener's job; see test_listener.py.
+Delivery itself (trail → task_queue) is the listener's job; see test_listener.py.
 """
 
 import uuid
@@ -123,7 +124,6 @@ def test_consumers_of_walks_the_mro_so_a_base_subscription_catches_subclasses():
 def test_restoring_a_snapshot_drops_what_was_registered_after_it():
     # A test that exercises the *real* fan-out has to register on the process-wide bus, then put
     # back what it found — otherwise its consumer keeps firing for every later test in the run.
-    # This is the surface that replaced reaching into the wiring's internals to do it.
     own = EventWiring()
     own.declare(_Ticked)
     own.add_consumer(_Ticked, "before", as_actor=False, app="test_bus")
@@ -142,7 +142,7 @@ def test_restoring_a_snapshot_drops_what_was_registered_after_it():
     assert [r.name for r in own.consumers_of(_Ticked)] == ["before"]
 
 
-def test_a_bus_given_its_own_wiring_stays_out_of_the_processs():
+def test_a_bus_given_its_own_wiring_stays_out_of_the_process_one():
     # Handing a bus a fresh wiring is how a test keeps its registrations to itself — the default
     # is the process's, which the live `events` writes. What events *exist* is shared either way:
     # that is the catalog, filled at import, and there is nothing to isolate about it.
