@@ -124,7 +124,8 @@ async def create_page(
     await events.emit(
         PageCreated(
             user_id=current_user.id, org_id=org_id, entity_id=page.id, slug=slug, entity_name=title
-        )
+        ),
+        repo.session,
     )
     # HTMX form submit navigates via HX-Redirect; plain HTML gets a 303 to the same edit page.
     return mutation_response(
@@ -224,7 +225,8 @@ async def update_page(
             entity_id=page.id,
             slug=page.slug,
             entity_name=page.title,
-        )
+        ),
+        repo.session,
     )
     # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
     # page so the save lands on visible, rendered output instead of a silent swap.
@@ -255,7 +257,8 @@ async def delete_page(
             entity_id=page.id,
             slug=slug,
             entity_name=page.title,
-        )
+        ),
+        repo.session,
     )
     # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
     # from a list row (X-Skip-Redirect) stays put and removes just that row client-side.
@@ -296,7 +299,8 @@ async def set_visibility(
             entity_id=page.id,
             slug=slug,
             entity_name=page.title,
-        )
+        ),
+        repo.session,
     )
     return mutation_response(
         request, obj=PageRead.model_validate(page), redirect_url=f"/{org.handle}/pages"

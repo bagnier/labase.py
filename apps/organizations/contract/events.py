@@ -72,20 +72,3 @@ class InvitationSent(OrgEvent):
 class InvitationRevoked(OrgEvent):
     verb: ClassVar[str] = "invitation_revoked"
     # the revoked invitation is the subject: its id rides on entity_id
-
-
-@dataclass(frozen=True, kw_only=True)
-class InvitationEmailMismatch(OrgEvent):
-    verb: ClassVar[str] = "invitation_email_mismatch"
-    # the mismatched invitee email rides in entity_name (no account guaranteed)
-
-
-@dataclass(frozen=True, kw_only=True)
-class LastOwnerViolationBlocked(OrgEvent):
-    verb: ClassVar[str] = "last_owner_violation"
-
-
-@dataclass(frozen=True, kw_only=True)
-class OwnershipViolation(OrgEvent):
-    verb: ClassVar[str] = "ownership_violation"
-    path: str

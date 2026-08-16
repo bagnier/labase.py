@@ -113,22 +113,33 @@ def _done(request: Request, message: str) -> Response:
     return RedirectResponse("/console/accounts", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# The gating mutation itself lives in GoTrue, so these handlers hold no transaction of their own —
+# but they take one anyway, for the fact: on a session the write either lands or fails loudly with
+# the request, instead of being swallowed by a detached best-effort task.
 @accounts_router.post("/{user_id}/disable", response_model=None)
-async def disable_user(request: Request, user_id: str, current_user: CurrentAdmin) -> Response:
+async def disable_user(
+    request: Request, user_id: str, current_user: CurrentAdmin, admin_session: AdminSession
+) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
-    await events.emit(AccountDisabled(user_id=current_user.id, entity_id=uuid.UUID(user_id)))
+    await events.emit(
+        AccountDisabled(user_id=current_user.id, entity_id=uuid.UUID(user_id)), admin_session
+    )
     return _done(request, "Account disabled.")
 
 
 @accounts_router.post("/{user_id}/enable", response_model=None)
-async def enable_user(request: Request, user_id: str, current_user: CurrentAdmin) -> Response:
+async def enable_user(
+    request: Request, user_id: str, current_user: CurrentAdmin, admin_session: AdminSession
+) -> Response:
     _ensure_enabled()
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": "none"})
-    await events.emit(AccountEnabled(user_id=current_user.id, entity_id=uuid.UUID(user_id)))
+    await events.emit(
+        AccountEnabled(user_id=current_user.id, entity_id=uuid.UUID(user_id)), admin_session
+    )
     return _done(request, "Account enabled.")
 
 
@@ -141,7 +152,9 @@ async def delete_user(
 ) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
-    await events.emit(AccountDeletedByAdmin(user_id=current_user.id, entity_id=uuid.UUID(user_id)))
+    await events.emit(
+        AccountDeletedByAdmin(user_id=current_user.id, entity_id=uuid.UUID(user_id)), admin_session
+    )
     # entity_id is the removed user's pk as a uuid (GoTrue ids are uuids) — matches the profile-side
     # self-deletion emit, so both UserDeleted paths carry the one shape the forget consumers key on.
     await events.emit(

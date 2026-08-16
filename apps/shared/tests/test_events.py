@@ -10,8 +10,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 from apps.shared.events.bus import EventBus
@@ -20,7 +22,7 @@ from apps.shared.events.repository import (
     LIFTED_COLUMNS,
     TRAIL_COLUMNS,
     TrailRow,
-    event_to_log,
+    event_to_record,
     task_payload,
 )
 from apps.shared.events.types import _is_secret_field_name
@@ -102,15 +104,20 @@ async def test_emit_does_not_run_handlers_in_process():
     bus.registry.declare_events(ConfigChanged)  # emit refuses an undeclared event
     bus.spread(ConfigChanged, reload)
 
-    await bus.emit(ConfigChanged())
+    # The write is stubbed: what is under test is that emit runs no handler, not the persistence.
+    with patch("apps.shared.events.bus.EventRepository", return_value=AsyncMock()):
+        await bus.emit(ConfigChanged(), cast(AsyncSession, None))
+
     assert seen == []  # emit does not run spread handlers in-process
 
 
-def test_event_to_log_lifts_scoping_and_carries_metadata():
+def test_event_to_record_lifts_scoping_and_carries_metadata():
     # emit maps a BusinessEvent straight onto a business_events row: scoping to columns, rest to
     # payload — a single event → row hop, no intermediate column dict.
     actor, org, eid = uuid.uuid7(), uuid.uuid7(), uuid.uuid7()
-    row = event_to_log(WidgetCreated(user_id=actor, org_id=org, entity_id=eid, entity_name="Gizmo"))
+    row = event_to_record(
+        WidgetCreated(user_id=actor, org_id=org, entity_id=eid, entity_name="Gizmo")
+    )
     # The row carries the two halves; `kind` is generated from them in the DB, so it has no value
     # on a row that hasn't been written yet — the composition lives there, not here.
     assert (row.app_name, row.verb) == ("widget", "created")
@@ -131,7 +138,7 @@ def test_event_to_log_lifts_scoping_and_carries_metadata():
 # ── One serialized shape, closed by a round-trip ───────────────────────────────────────────────
 #
 # A fact crosses the persistence/delivery boundary through four field lists that must agree: the
-# columns `event_to_log` lifts out of the payload, the columns the delivery scans SELECT, the
+# columns `event_to_record` lifts out of the payload, the columns the delivery scans SELECT, the
 # `TrailRow` they land in, and the keys `task_payload` folds back before `from_payload` rebuilds
 # the event. These tests fix that agreement, so a base field added to `BusinessEvent` without
 # threading it through the whole chain fails here, loudly, not by vanishing between write and read.
@@ -146,11 +153,12 @@ class _NoteEvent(BusinessEvent):
 
 
 def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
-    """Drive an event through the real serialized chain without a DB: `event_to_log` builds the row,
-    we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it — computing the
-    generated `kind`, which a SELECT returns but an unflushed ORM row leaves unset — then
+    """Drive an event through the real serialized chain without a DB: `event_to_record` builds
+    the row, we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it —
+    computing the generated `kind`, which a SELECT returns but an unflushed ORM row leaves unset —
+    then
     `task_payload` + `from_payload` rebuild it, exactly as the listener does off a claimed row."""
-    row = event_to_log(event)
+    row = event_to_record(event)
     projected = {c: getattr(row, c) for c in TRAIL_COLUMNS}
     projected["kind"] = f"{row.app_name}.{row.verb}"  # the generated column, unset pre-flush
     trail = cast(TrailRow, projected)
@@ -292,18 +300,18 @@ class _RefEvent(BusinessEvent):
     ref_id: uuid.UUID | None = None  # a plain FK carried as uuid on the DTO
 
 
-def test_event_to_log_stringifies_uuid_payload_fields():
+def test_event_to_record_stringifies_uuid_payload_fields():
     # A uuid.UUID payload field must reach the JSONB column json-safe (stdlib json can't dump UUID).
     ref = uuid.uuid7()
-    row = event_to_log(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
+    row = event_to_record(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
     assert row.payload is not None
     assert row.payload["ref_id"] == str(ref)  # stringified at the one serialization edge
 
 
-def test_event_to_log_lifts_a_uuid_entity_id():
+def test_event_to_record_lifts_a_uuid_entity_id():
     # entity_id is the entity's uuid pk, lifted straight to its own uuid column — no str() edge.
     eid = uuid.uuid7()
-    row = event_to_log(WidgetCreated(org_id=uuid.uuid7(), entity_id=eid, entity_name="Gizmo"))
+    row = event_to_record(WidgetCreated(org_id=uuid.uuid7(), entity_id=eid, entity_name="Gizmo"))
     assert row.entity_id == eid
 
 

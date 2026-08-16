@@ -18,7 +18,7 @@ from apps.shared.events.repository._base import _EventSQL
 # A base ``BusinessEvent`` field is stored one of two ways: *lifted* to its own indexed column (so
 # RLS, the timeline and full-text search reach it directly), or left in the JSON ``payload``.
 # ``LIFTED_COLUMNS`` is the single list of the lifted ones — the source every other list here (and
-# ``event_to_log``'s pop loop) derives from, so the four views can't drift apart silently. Add a
+# ``event_to_record``'s pop loop) derives from, so the four views can't drift apart silently. Add a
 # lifted base field here and the SELECTs, the fold-back and the round-trip test all move with it.
 LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_name")
 

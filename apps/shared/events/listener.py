@@ -1,8 +1,8 @@
 """The event listener — reads the persisted trail and runs both deliveries off it.
 
-``emit`` only writes a ``BusinessEvent`` to the ``business_events`` log inside the request's
-transaction (the bus's ``_persist_fact`` → ``EventRepository.record``). This listener reads that
-log, woken by the trail's ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
+``emit`` only writes a ``BusinessEvent`` to the ``business_events`` trail inside the request's
+transaction (the bus's ``emit`` → ``EventRepository.record``). This listener reads that
+trail, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
 producer no longer does — so it never knows its consumers nor waits for them:
 
 - **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched rows with

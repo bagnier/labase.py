@@ -92,7 +92,8 @@ async def add_todo(
     title = await parse_field(request, "title")
     todo = await repo.add(current_user.id, title)
     await events.emit(
-        TodoCreated(user_id=current_user.id, org_id=org_id, entity_id=todo.id, entity_name=title)
+        TodoCreated(user_id=current_user.id, org_id=org_id, entity_id=todo.id, entity_name=title),
+        session,
     )
     return await _render(request, session, current_user, repo, org, settings)
 
@@ -124,11 +125,15 @@ async def patch_todo(
         await events.emit(
             ticked(
                 user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=todo.title
-            )
+            ),
+            session,
         )
     if title is not None:
         await events.emit(
-            TodoEdited(user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=title)
+            TodoEdited(
+                user_id=current_user.id, org_id=org_id, entity_id=todo_id, entity_name=title
+            ),
+            session,
         )
     return await _render(request, session, current_user, repo, org, settings)
 
@@ -153,7 +158,8 @@ async def delete_todo(
                 org_id=org_id,
                 entity_id=todo_id,
                 entity_name=todo.title,
-            )
+            ),
+            session,
         )
     if wants_json(request):
         return delete_response(request)

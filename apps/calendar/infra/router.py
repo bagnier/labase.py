@@ -295,7 +295,8 @@ async def create_event(
     await events.emit(
         CalendarCreated(
             user_id=current_user.id, org_id=org_id, entity_id=event.id, entity_name=title
-        )
+        ),
+        session,
     )
     if wants_json(request):
         return JSONResponse(
@@ -398,7 +399,8 @@ async def update_event(
             org_id=org_id,
             entity_id=event.id,
             entity_name=event.title,
-        )
+        ),
+        session,
     )
     if wants_json(request):
         return JSONResponse(CalendarEventRead.model_validate(event).model_dump(mode="json"))
@@ -423,6 +425,7 @@ async def delete_event(
                 org_id=org_id,
                 entity_id=event_id,
                 entity_name=event.title,
-            )
+            ),
+            repo.session,
         )
     return delete_response(request, htmx_redirect_url=f"/{org.handle}/calendar")

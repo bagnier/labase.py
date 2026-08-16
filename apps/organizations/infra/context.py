@@ -5,11 +5,11 @@ from fastapi import Depends, HTTPException, Request, status
 
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.user import AuthenticatedUser
-from apps.organizations.contract.events import OwnershipViolation
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.events.bus import events
 from apps.shared.slug_registry import is_reserved
+
+log = structlog.get_logger("labase.organizations.context")
 
 
 async def get_current_org(
@@ -106,13 +106,11 @@ async def get_membership_by_org_id(
 
 async def _gate_owner(request: Request, membership: Membership) -> Membership:
     if membership.role != OrgRole.owner:
-        # ip rides in from the request contextvars; the persister enriches it at write time.
-        await events.emit(
-            OwnershipViolation(
-                user_id=membership.auth_user_id,
-                org_id=membership.org_id,
-                path=request.url.path,
-            )
+        log.warning(
+            "organizations.ownership_violation",
+            user_id=str(membership.auth_user_id),
+            org_id=str(membership.org_id),
+            path=request.url.path,
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership

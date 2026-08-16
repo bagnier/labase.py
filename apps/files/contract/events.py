@@ -40,13 +40,5 @@ class FileShareLinkCreated(OrgScoped, FileEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FileShareLinkRejected(FileEvent):
-    verb: ClassVar[str] = "share_link_rejected"
-    # The token is a capability, not an identity: it never lands on the trail. entity_id stays
-    # empty on purpose — a rejected link names no file we are willing to confirm exists.
-    reason: str
-
-
-@dataclass(frozen=True, kw_only=True)
 class FileShareDownloaded(OrgScoped, FileEvent):
     verb: ClassVar[str] = "share_downloaded"

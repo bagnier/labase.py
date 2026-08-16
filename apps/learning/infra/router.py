@@ -198,7 +198,8 @@ async def mark_card(
             entity_id=card.id,
             entity_name=card.question,
             outcome=outcome.value,
-        )
+        ),
+        session,
     )
     rows = _due_rows(await repo.catalog(), today_date)
     return await _render_session(request, session, current_user, rows, org, repo, settings)

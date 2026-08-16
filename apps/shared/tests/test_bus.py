@@ -96,7 +96,8 @@ def test_declare_rejects_an_event_that_names_no_app_and_verb():
 async def test_emit_refuses_an_undeclared_event():
     bus = EventBus(EventRegistry())
     with pytest.raises(ValueError, match="declared by no app"):
-        await bus.emit(_Ticked())  # no app declared it
+        # The gate runs before the session is ever touched, so a stand-in is enough here.
+        await bus.emit(_Ticked(), cast(AsyncSession, None))  # no app declared it
 
 
 # ── on() registration ────────────────────────────────────────────────────────────────────────

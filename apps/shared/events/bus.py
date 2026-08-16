@@ -2,10 +2,10 @@
 
 Three methods, nothing else:
 
-- ``emit(event, session)`` — **persist the fact** to the ``business_events`` trail on the caller's
-  transaction (atomic with the action). That is *all* it does: no handler runs here. The
-  :mod:`apps.shared.events.listener` reads the persisted log after commit and runs the reactions, so
-  a producer never waits on, or fails from, a consumer.
+- ``emit(event, session)`` — **persist the fact** to the ``business_events`` trail on the session
+  the caller names (atomic with the action). That is *all* it does: no handler runs here. The
+  :mod:`apps.shared.events.listener` reads the persisted trail after commit and runs the
+  reactions, so a producer never waits on, or fails from, a consumer.
 - ``on(event_type, handler)`` — register a **durable, exactly-once** consumer, run by the listener
   off the trail (one task-queue row per consumer, retried then parked). Handler signature is
   ``(session, event)``.
@@ -19,7 +19,6 @@ onto ``host.events`` — the same ``events`` in production (``host = Host(events
 registration and emit share one registry.
 """
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
@@ -29,8 +28,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.types import BusinessEvent
-from apps.shared.persistence.database import admin_session_factory
-from apps.shared.persistence.uow import current_session
 from apps.shared.queue import register_task_handler
 
 log = structlog.get_logger("labase.business_events")
@@ -61,8 +58,6 @@ class EventBus:
         # a test injects a fresh one to isolate its subscriptions (the catalog stays shared — event
         # classes register once at import).
         self.registry = registry
-        # Strong references to the in-flight detached writes (see _persist_fact).
-        self._detached: set[asyncio.Task] = set()
 
     def declare(self, *event_types: type[BusinessEvent]) -> None:
         """Record, at mount, the events this app emits — each names its own owner (``app_name``),
@@ -71,40 +66,24 @@ class EventBus:
         emitted)."""
         self.registry.declare_events(*event_types)
 
-    async def emit(self, event: BusinessEvent, session: AsyncSession | None = None) -> None:
-        """Persist the fact — and only that. Refuses an undeclared event (a fact must be owned).
-        Reactions run in the listener off the persisted log after commit, so ``emit`` never runs a
-        handler, waits on one, or fails from one."""
+    async def emit(self, event: BusinessEvent, session: AsyncSession) -> None:
+        """Persist the fact on ``session`` — and only that. Refuses an undeclared event (a fact must
+        be owned). Reactions run in the listener off the persisted trail after commit, so ``emit``
+        never runs a handler, waits on one, or fails from one.
+
+        The session is required, with no default and no ambient lookup. It used to fall back to the
+        request's bound session, which made a fact's durability depend on a dependency chosen three
+        layers up the route — two facts in one handler could carry different guarantees with nothing
+        saying so. Now the call site states it, and the type checker enumerates the call sites."""
+        self._require_declared(event)
+        await EventRepository(session).record(event)
+
+    def _require_declared(self, event: BusinessEvent) -> None:
+        """The ownership gate: an emitted fact is always some app's."""
         if not self.registry.is_declared(type(event)):
             raise ValueError(
                 f"{type(event).__name__} ({event.kind!r}) is emitted but declared by no app"
             )
-        await self._persist_fact(event, session or current_session())
-
-    async def _persist_fact(self, event: BusinessEvent, session: AsyncSession | None) -> None:
-        """Emit's session policy: an ambient session → the fact is atomic with the action; none
-        (auth signals, non-request contexts) → a detached best-effort write off the critical path.
-        The repository owns the write; the bus owns *which session*, since only emit knows the
-        request's ambient unit of work."""
-        if session is not None:
-            await EventRepository(session).record(event)
-        else:
-            # Held until done: the loop only references a task weakly, so an unreferenced detached
-            # write can be collected mid-flight and the fact is lost — the trail is best-effort
-            # here, but silently dropping a write is not the same as failing one.
-            task = asyncio.create_task(self._record_detached(event))
-            self._detached.add(task)
-            task.add_done_callback(self._detached.discard)
-
-    async def _record_detached(self, event: BusinessEvent) -> None:
-        """The no-ambient-session path: a best-effort admin write off the critical path that
-        swallows failures — a lost technical write never blocks or fails the caller."""
-        try:
-            async with admin_session_factory()() as own:
-                await EventRepository(own).record(event)
-                await own.commit()
-        except Exception:
-            log.warning("business_event.write_failed", kind=event.kind, user_id=event.user_id)
 
     def on(
         self,

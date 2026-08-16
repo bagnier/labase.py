@@ -1,5 +1,6 @@
 import uuid
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
@@ -9,7 +10,6 @@ from apps.console.contract import appearance
 from apps.console.contract.events import (
     AdminGranted,
     AdminRevoked,
-    LastAdminViolationBlocked,
     OrgOverrideRemoved,
     OrgOverrideSet,
 )
@@ -31,6 +31,9 @@ from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsChanged, SettingsDeclaration
 from apps.shared.supabase_studio import studio_link
+
+log = structlog.get_logger("labase.console.router")
+
 
 router = APIRouter(tags=["console"])
 
@@ -254,8 +257,12 @@ async def get_admins(
     )
 
 
+# The admin flag itself lives in GoTrue, so the session here carries only the fact — but it carries
+# it on a transaction, so a failed trail write fails the request instead of being swallowed.
 @router.post("/admins", response_class=HTMLResponse)
-async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
+async def add_admin(
+    request: Request, current_user: CurrentAdmin, session: AdminSession
+) -> Response:
     body = await parse_body(request)
     email = str(body.get("email") or "").strip()
     try:
@@ -273,7 +280,8 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
     await events.emit(
         AdminGranted(
             user_id=current_user.id, entity_id=await find_user_id_by_email(email), entity_name=email
-        )
+        ),
+        session,
     )
     if wants_json(request):
         return _admins_json(rows)
@@ -281,7 +289,9 @@ async def add_admin(request: Request, current_user: CurrentAdmin) -> Response:
 
 
 @router.put("/admins/{email}", response_class=HTMLResponse)
-async def update_admin(request: Request, email: str, current_user: CurrentAdmin) -> Response:
+async def update_admin(
+    request: Request, email: str, current_user: CurrentAdmin, session: AdminSession
+) -> Response:
     body = await parse_body(request)
     is_admin = service.coerce_bool(body.get("is_admin"))
     uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
@@ -290,16 +300,14 @@ async def update_admin(request: Request, email: str, current_user: CurrentAdmin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
-        await events.emit(
-            LastAdminViolationBlocked(user_id=current_user.id, entity_id=uid, entity_name=email)
-        )
+        log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=email)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     granted: AdminGranted | AdminRevoked = (
         AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email)
         if is_admin
         else AdminRevoked(user_id=current_user.id, entity_id=uid, entity_name=email)
     )
-    await events.emit(granted)
+    await events.emit(granted, session)
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -460,7 +468,8 @@ async def create_org_override(
             key=key,
             value=stored,
             entity_name=f"{app}.{key}",  # the setting is the subject: name it for the timeline
-        )
+        ),
+        session,
     )
     return await _render_org_overrides(request, session, app, group)
 
@@ -481,7 +490,8 @@ async def delete_org_override(
     await events.emit(
         OrgOverrideRemoved(
             user_id=current_user.id, org_id=org_id, app=app, key=key, entity_name=f"{app}.{key}"
-        )
+        ),
+        session,
     )
     return await _render_org_overrides(request, session, app, group)
 

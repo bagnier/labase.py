@@ -4,6 +4,7 @@ from typing import Annotated
 from urllib.parse import urlencode
 from zoneinfo import available_timezones
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +21,6 @@ from apps.organizations.contract.entity_links import entity_url
 from apps.organizations.contract.events import (
     InvitationRevoked,
     InvitationSent,
-    LastOwnerViolationBlocked,
     MemberLeft,
     MemberRemoved,
     MemberRoleChanged,
@@ -85,6 +85,9 @@ COMMON_TIMEZONES: tuple[str, ...] = (
 )
 
 # Collection router — multi-org, not scoped by a handle. Mounted at the root.
+log = structlog.get_logger("labase.organizations.router")
+
+
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 # Org-scoped router — every route resolves the org from the {org_handle} path
@@ -129,9 +132,11 @@ async def _emit_last_owner_violation(
     org_id: uuid.UUID,
     target_user_id: uuid.UUID | None = None,
 ) -> None:
-    # ip rides in from the request contextvars; the persister enriches it at write time.
-    await events.emit(
-        LastOwnerViolationBlocked(user_id=current_user.id, org_id=org_id, entity_id=target_user_id)
+    log.warning(
+        "organizations.last_owner_violation",
+        user_id=str(current_user.id),
+        org_id=str(org_id),
+        target_user_id=str(target_user_id or ""),
     )
 
 
@@ -181,7 +186,8 @@ async def create_organization(
     await events.emit(
         OrganizationCreated(
             user_id=current_user.id, org_id=org.id, entity_id=org.id, entity_name=name
-        )
+        ),
+        repo.session,
     )
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
     return mutation_response(
@@ -447,7 +453,8 @@ async def rename_organization(
     await events.emit(
         OrganizationRenamed(
             user_id=current_user.id, org_id=org_id, entity_id=org_id, entity_name=name
-        )
+        ),
+        session,
     )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
@@ -490,7 +497,8 @@ async def update_org_handle(
     await events.emit(
         OrgHandleChanged(
             user_id=current_user.id, org_id=org_id, entity_id=org_id, entity_name=handle
-        )
+        ),
+        session,
     )
     if wants_json(request):
         return _org_with_role_json(org, membership.role)
@@ -552,7 +560,7 @@ async def leave_organization(
             status_code=status.HTTP_403_FORBIDDEN,
         )
     await repo.remove_member(org_id, user_id)
-    await events.emit(MemberLeft(user_id=current_user.id, org_id=org_id))
+    await events.emit(MemberLeft(user_id=current_user.id, org_id=org_id), repo.session)
     return delete_response(request, htmx_redirect_url="/profile")
 
 
@@ -591,7 +599,8 @@ async def update_member_role(
             org_id=org_id,
             entity_id=user_id,
             role=new_role.value,
-        )
+        ),
+        repo.session,
     )
     emails = await resolve_user_emails([updated.auth_user_id])
     member = MemberRead(
@@ -637,7 +646,9 @@ async def remove_member(
     removed = await repo.remove_member(org_id, user_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    await events.emit(MemberRemoved(user_id=current_user.id, org_id=org_id, entity_id=user_id))
+    await events.emit(
+        MemberRemoved(user_id=current_user.id, org_id=org_id, entity_id=user_id), repo.session
+    )
     # HTML stays on the members page and re-renders an OOB count, not a redirect,
     # so this only ever uses delete_response's JSON branch.
     if wants_json(request):
@@ -692,7 +703,8 @@ async def create_invitation(
                 invited_by=current_user.id,
             )
             await events.emit(
-                InvitationSent(user_id=current_user.id, org_id=org_id, entity_name=email)
+                InvitationSent(user_id=current_user.id, org_id=org_id, entity_name=email),
+                repo.session,
             )
 
     link = ""
@@ -755,7 +767,8 @@ async def revoke_invitation(
     invitation = or_404(await repo.get_invitation_by_id(org_id, invitation_id))
     await repo.revoke_invitation(invitation)
     await events.emit(
-        InvitationRevoked(user_id=current_user.id, org_id=org_id, entity_id=invitation_id)
+        InvitationRevoked(user_id=current_user.id, org_id=org_id, entity_id=invitation_id),
+        repo.session,
     )
     # HTML re-renders the pending-invitations fragment in place, not a redirect,
     # so this only ever uses delete_response's JSON branch.

@@ -22,17 +22,10 @@ from apps.auth.contract.events import (
     EmailChanged,
     ImpersonationStarted,
     ImpersonationStopped,
-    LoginFailed,
-    MfaFailed,
-    MfaVerified,
-    OAuthFailed,
-    OAuthSignedIn,
-    PasskeyFailed,
-    PasskeySignedIn,
     PasswordReset,
-    RegisterFailed,
     SignedIn,
     SignedOut,
+    SignInMethod,
 )
 from apps.auth.contract.impersonation import (
     IMPERSONATION_MAX_SECONDS,
@@ -74,6 +67,7 @@ from apps.shared.http import parse_body, wants_json
 from apps.shared.http.addressing import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
+from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsView
 
 log = structlog.get_logger("labase.auth.router")
@@ -220,7 +214,9 @@ async def login_page(
 
 @router.post("/login")
 @rate_limit("10/minute")
-async def login_endpoint(request: Request, users_settings: UsersSettings) -> Response:
+async def login_endpoint(
+    request: Request, users_settings: UsersSettings, admin_session: AdminSession
+) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
     password = body.get("password", "")
@@ -240,10 +236,12 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
         if users_settings.two_factor_enabled:
             factor_id = await verified_totp_factor(tokens.access_token)
             if factor_id:
-                return await _mfa_challenge_response(request, tokens, factor_id, next)
+                return await _mfa_challenge_response(request, tokens, factor_id, next, "password")
         # Past the 2FA gate: this is a completed password sign-in (the 2FA branch is marked by
-        # MfaVerified). Record it — the freshly minted token carries the actor.
-        await events.emit(SignedIn(user_id=_token_sub(tokens.access_token)))
+        # two_factor). Record it — the freshly minted token carries the actor.
+        await events.emit(
+            SignedIn(user_id=_token_sub(tokens.access_token), method="password"), admin_session
+        )
         if wants_json(request):
             resp = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
             set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -252,7 +250,11 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        await events.emit(LoginFailed(entity_name=email))
+        # Not a business fact: nothing happened, and the subject may not even be an account.
+        # ``warning``, not ``info``: this is a signal about a *caller* (a run of these is what
+        # brute-force looks like), and the deployed log level is WARNING — an info line would be
+        # filtered out, leaving the attempt no trace at all.
+        log.warning("auth.login_failed", email=email, ip=ip)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -282,13 +284,28 @@ async def login_endpoint(request: Request, users_settings: UsersSettings) -> Res
 
 _MFA_COOKIE = "mfa_access_token"
 _MFA_REFRESH_COOKIE = "mfa_refresh_token"
+# Which ceremony opened this challenge, so the completed sign-in can name it. The AAL1 tokens
+# already ride the hand-off; the method rides beside them rather than being guessed after the fact.
+_MFA_METHOD_COOKIE = "mfa_method"
 _MFA_MAX_SECONDS = 300
+
+_RELAYABLE_METHODS: tuple[SignInMethod, ...] = ("password", "oauth")
+
+
+def relayed_method(cookie: str | None) -> SignInMethod:
+    """Narrow the relayed ceremony back to the closed set the event declares.
+
+    The value travelled through the caller's cookie jar, so it can arrive missing (the browser
+    dropped it, the challenge outlived it) or forged. Anything unrecognised falls back to the
+    password ceremony — the only one reachable without a relay — so a bad value degrades the fact's
+    precision instead of putting an unknown method on the trail."""
+    return cookie if cookie in _RELAYABLE_METHODS else "password"  # ty: narrowed by the membership
 
 
 async def _mfa_challenge_response(
-    request: Request, tokens: AuthTokens, factor_id: str, next: str
+    request: Request, tokens: AuthTokens, factor_id: str, next: str, method: SignInMethod
 ) -> Response:
-    """Correct password, TOTP enrolled: hold the AAL1 tokens in short-lived
+    """Correct credentials, TOTP enrolled: hold the AAL1 tokens in short-lived
     cookies and ask for the authenticator code before issuing the session."""
     challenge_id = await totp_challenge(tokens.access_token, factor_id)
     if wants_json(request):
@@ -303,6 +320,7 @@ async def _mfa_challenge_response(
         )
     _set_ephemeral_cookie(resp, _MFA_COOKIE, tokens.access_token, _MFA_MAX_SECONDS)
     _set_ephemeral_cookie(resp, _MFA_REFRESH_COOKIE, tokens.refresh_token, _MFA_MAX_SECONDS)
+    _set_ephemeral_cookie(resp, _MFA_METHOD_COOKIE, method, _MFA_MAX_SECONDS)
     return resp
 
 
@@ -310,7 +328,9 @@ async def _mfa_challenge_response(
 @rate_limit("10/minute")
 async def mfa_verify_endpoint(
     request: Request,
+    admin_session: AdminSession,
     mfa_access_token: str | None = Cookie(default=None),
+    mfa_method: str | None = Cookie(default=None),
 ) -> Response:
     body = await parse_body(request)
     code = str(body.get("code", "")).strip()
@@ -322,7 +342,7 @@ async def mfa_verify_endpoint(
     try:
         tokens = await verify_totp(mfa_access_token, factor_id, challenge_id, code)
     except TotpError:
-        await events.emit(MfaFailed(user_id=_token_sub(mfa_access_token)))
+        log.warning("auth.mfa_failed", user_id=str(_token_sub(mfa_access_token) or ""))
         error = "That code did not work. Try the next one from your app."
         if wants_json(request):
             return JSONResponse({"detail": error}, status_code=status.HTTP_401_UNAUTHORIZED)
@@ -334,7 +354,16 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    await events.emit(MfaVerified(user_id=_token_sub(tokens.access_token)))
+    # The completed second factor IS the sign-in: this is the first point at which a session
+    # exists, and the ceremony that opened the challenge rides in on the relay cookie.
+    await events.emit(
+        SignedIn(
+            user_id=_token_sub(tokens.access_token),
+            method=relayed_method(mfa_method),
+            two_factor=True,
+        ),
+        admin_session,
+    )
     if wants_json(request):
         resp: Response = JSONResponse({"access_token": tokens.access_token, "token_type": "bearer"})
     else:
@@ -342,11 +371,14 @@ async def mfa_verify_endpoint(
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     resp.delete_cookie(_MFA_COOKIE)
     resp.delete_cookie(_MFA_REFRESH_COOKIE)
+    resp.delete_cookie(_MFA_METHOD_COOKIE)
     return resp
 
 
 @router.post("/logout")
-async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Response:
+async def logout_endpoint(
+    admin_session: AdminSession, access_token: str | None = Cookie(default=None)
+) -> Response:
     if access_token:
         await logout(access_token)
         # Attribute the sign-out to the account holder — but the cookie may be expired by now, so
@@ -354,7 +386,7 @@ async def logout_endpoint(access_token: str | None = Cookie(default=None)) -> Re
         user_id = None
         with contextlib.suppress(Exception):
             user_id = _sub_uuid(decode_jwt(access_token).get("sub"))
-        await events.emit(SignedOut(user_id=user_id))
+        await events.emit(SignedOut(user_id=user_id), admin_session)
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")
     resp.delete_cookie("refresh_token")
@@ -383,7 +415,9 @@ async def passkey_options_endpoint(request: Request, users_settings: UsersSettin
 
 @router.post("/passkeys/verify")
 @rate_limit("10/minute")
-async def passkey_verify_endpoint(request: Request, users_settings: UsersSettings) -> Response:
+async def passkey_verify_endpoint(
+    request: Request, users_settings: UsersSettings, admin_session: AdminSession
+) -> Response:
     _ensure_passkeys_enabled(users_settings)
     body = await parse_body(request)
     challenge_id = str(body.get("challenge_id", ""))
@@ -396,10 +430,12 @@ async def passkey_verify_endpoint(request: Request, users_settings: UsersSetting
     try:
         tokens = await verify_passkey_authentication(challenge_id, credential)
     except PasskeyError as e:
-        await events.emit(PasskeyFailed())
+        log.warning("auth.passkey_failed", challenge_id=challenge_id)
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
     claims = decode_jwt(tokens.access_token)
-    await events.emit(PasskeySignedIn(user_id=_sub_uuid(claims.get("sub"))))
+    await events.emit(
+        SignedIn(user_id=_sub_uuid(claims.get("sub")), method="passkey"), admin_session
+    )
     resp = JSONResponse(
         {
             "access_token": tokens.access_token,
@@ -460,6 +496,7 @@ def _oauth_failure(request: Request, message: str, users_settings: SettingsView)
 async def oauth_callback(
     request: Request,
     users_settings: UsersSettings,
+    admin_session: AdminSession,
     code: str = Query(default=""),
     error_description: str = Query(default=""),
     oauth_code_verifier: str | None = Cookie(default=None),
@@ -482,17 +519,19 @@ async def oauth_callback(
         # creates the account, so a first-visit ``is_new`` no longer needs an app-side hook here.
         tokens, _is_new = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
-        await events.emit(OAuthFailed())
+        log.warning("auth.oauth_failed", detail=str(e))
         return _oauth_failure(request, str(e), users_settings)
     claims = decode_jwt(tokens.access_token)
-    await events.emit(OAuthSignedIn(user_id=_sub_uuid(claims.get("sub"))))
     next = oauth_next or ""
     if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
         if factor_id:
-            resp = await _mfa_challenge_response(request, tokens, factor_id, next)
+            # No session yet — the challenge decides. The sign-in is recorded on the other side,
+            # by mfa_verify_endpoint, carrying "oauth" across the relay.
+            resp = await _mfa_challenge_response(request, tokens, factor_id, next, "oauth")
             _clear_oauth_cookies(resp)
             return resp
+    await events.emit(SignedIn(user_id=_sub_uuid(claims.get("sub")), method="oauth"), admin_session)
     resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     _clear_oauth_cookies(resp)
@@ -512,7 +551,7 @@ async def register_page(
 
 @router.post("/register")
 @rate_limit("5/minute")
-async def register_endpoint(request: Request) -> Response:
+async def register_endpoint(request: Request, admin_session: AdminSession) -> Response:
     body = await parse_body(request)
     email = body.get("email", "")
     password = body.get("password", "")
@@ -549,7 +588,7 @@ async def register_endpoint(request: Request) -> Response:
     except AuthApiError as e:
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
-        await events.emit(RegisterFailed(entity_name=email))
+
     except Exception:
         log.exception("auth.register_error", ip=ip, email=email)
         error = "An unexpected error occurred."
@@ -562,6 +601,7 @@ async def register_endpoint(request: Request) -> Response:
 async def impersonate_endpoint(
     request: Request,
     admin: CurrentAdmin,
+    admin_session: AdminSession,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
 ) -> Response:
@@ -579,7 +619,8 @@ async def impersonate_endpoint(
         ) from None
     target_id = await find_user_id_by_email(email)
     await events.emit(
-        ImpersonationStarted(user_id=admin.id, entity_id=target_id, entity_name=email)
+        ImpersonationStarted(user_id=admin.id, entity_id=target_id, entity_name=email),
+        admin_session,
     )
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": email})
@@ -606,6 +647,7 @@ async def impersonate_endpoint(
 async def stop_impersonation_endpoint(
     request: Request,
     current_user: CurrentUser,
+    admin_session: AdminSession,
 ) -> Response:
     stash = request.cookies.get(IMPERSONATOR_COOKIE)
     refresh_stash = request.cookies.get(IMPERSONATOR_REFRESH_COOKIE, "")
@@ -619,7 +661,8 @@ async def stop_impersonation_endpoint(
     await events.emit(
         ImpersonationStopped(
             user_id=admin_id, entity_id=current_user.id, entity_name=current_user.email
-        )
+        ),
+        admin_session,
     )
     if wants_json(request):
         resp: Response = JSONResponse({"impersonating": None})
@@ -656,7 +699,9 @@ async def forgot_password_endpoint(request: Request) -> Response:
 
 @router.post("/resend-confirmation")
 @rate_limit("10/minute")
-async def resend_confirmation_endpoint(request: Request, users_settings: UsersSettings) -> Response:
+async def resend_confirmation_endpoint(
+    request: Request, users_settings: UsersSettings, admin_session: AdminSession
+) -> Response:
     """Send the signup confirmation again — the way out for an unconfirmed account.
 
     Neutral answer whatever happens (no account enumeration), like forgot-password.
@@ -669,7 +714,7 @@ async def resend_confirmation_endpoint(request: Request, users_settings: UsersSe
     if email:
         try:
             await resend_confirmation(email)
-            await events.emit(ConfirmationResent(entity_name=email))
+            await events.emit(ConfirmationResent(entity_name=email), admin_session)
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
     if wants_json(request):
@@ -686,7 +731,7 @@ async def reset_password_page(request: Request, token_hash: str = Query(default=
 
 @router.post("/reset-password")
 @rate_limit("10/minute")
-async def reset_password_endpoint(request: Request) -> Response:
+async def reset_password_endpoint(request: Request, admin_session: AdminSession) -> Response:
     body = await parse_body(request)
     token_hash = str(body.get("token_hash", ""))
     password = str(body.get("password", ""))
@@ -704,7 +749,7 @@ async def reset_password_endpoint(request: Request) -> Response:
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the trail attributed to the account holder.
-    await events.emit(PasswordReset(user_id=_token_sub(tokens.access_token)))
+    await events.emit(PasswordReset(user_id=_token_sub(tokens.access_token)), admin_session)
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
     return RedirectResponse(
@@ -714,7 +759,9 @@ async def reset_password_endpoint(request: Request) -> Response:
 
 @router.get("/confirm-email")
 @rate_limit("10/minute")
-async def confirm_email_endpoint(request: Request, token_hash: str = Query(default="")) -> Response:
+async def confirm_email_endpoint(
+    request: Request, admin_session: AdminSession, token_hash: str = Query(default="")
+) -> Response:
     """Finalize an email change from the link mailed to the new address.
 
     Anonymous on purpose — the single-use token IS the credential (the reader of
@@ -728,7 +775,11 @@ async def confirm_email_endpoint(request: Request, token_hash: str = Query(defau
             "/auth/login?info=email_change_failed", status_code=status.HTTP_303_SEE_OTHER
         )
     claims = decode_jwt(tokens.access_token)
-    await events.emit(EmailChanged(user_id=_sub_uuid(claims.get("sub"))))
+    actor = _sub_uuid(claims.get("sub"))
+    await events.emit(EmailChanged(user_id=actor), admin_session)
+    # The link also signs the reader in: the single-use token is the credential. That session was
+    # delivered silently until now.
+    await events.emit(SignedIn(user_id=actor, method="email_link"), admin_session)
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
     return resp
@@ -738,6 +789,7 @@ async def confirm_email_endpoint(request: Request, token_hash: str = Query(defau
 @rate_limit("10/minute")
 async def confirm_endpoint(
     request: Request,
+    admin_session: AdminSession,
     token_hash: str = Query(...),
     type: str = Query(...),
     next: str = Query(default="/profile"),
@@ -747,6 +799,11 @@ async def confirm_endpoint(
         # UserCreated (and thus the personal org) was recorded by the signup trigger when the
         # account row was first created; confirming an email adds no new provisioning here.
         tokens = await confirm_signup(token_hash, type)
+        # Confirming the link *is* the sign-in: the account's very first session was handed over
+        # here without leaving any trace at all until now.
+        await events.emit(
+            SignedIn(user_id=_token_sub(tokens.access_token), method="email_link"), admin_session
+        )
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp

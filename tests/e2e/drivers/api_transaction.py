@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from apps.auth.domain.service import AuthenticatedUser
 from apps.auth.infra.security import try_get_current_user
 from apps.shared.persistence.database import _user_session_factory, get_user_session
-from apps.shared.persistence.uow import bind_current_session, reset_current_session
 
 _test_connection: AsyncConnection | None = None
 
@@ -85,10 +84,4 @@ async def override_get_rls_session(
         await conn.execute(
             text("SELECT set_config('request.jwt.claims', :claims, true)").bindparams(claims=claims)
         )
-    # Bind the ambient unit of work, exactly as the real get_rls_session does, so emit()'s durable
-    # fan-out enqueues on this same (rolled-back) test transaction.
-    token = bind_current_session(session)
-    try:
-        yield session
-    finally:
-        reset_current_session(token)
+    yield session

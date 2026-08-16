@@ -1,17 +1,27 @@
-"""Auth's public events — a user's identity, sign-in, and account security on the shared trail.
+"""Auth's public events — a user's identity, sessions and account security on the shared trail.
 
 One lifecycle *signal* stays lean (subscribers react without importing one another):
 :class:`UserDeleted`. Everything else is a typed :class:`~apps.shared.events.BusinessEvent`:
-account creation, sign-in outcomes, MFA/passkey, impersonation and the self-service security
-actions a user takes from their profile (password, email, passkeys, 2FA) — all ``auth.*`` — plus
-admin account gating (``accounts.*``). Failed/security-sensitive actions are ``warning``-level.
-The persister on the base records them; sign-in failures carry no actor.
+account creation, signing in and out, impersonation, and the self-service security actions a user
+takes from their profile (password, email, passkeys, 2FA) — all ``auth.*`` — plus admin account
+gating (``accounts.*``).
+
+What is **not** here is as deliberate: a refused sign-in, a wrong TOTP code, a denied admin surface.
+Nothing happened in those, so they are structured log lines (``labase.auth.*``), read from the
+console's Logs screen alongside the trail. Only a delivered session is a fact, and there is one kind
+for it whatever the ceremony — see :class:`SignedIn`.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from apps.shared.events import BusinessEvent
+
+# How a caller proved who they were. A closed set on purpose: the type checker rejects a fifth
+# spelling of "password" before a row can carry it, which is what keeps the trail groupable by
+# method years later. ``email_link`` covers both mailed confirmations (signup, email change), whose
+# single-use token *is* the credential.
+SignInMethod = Literal["password", "oauth", "passkey", "email_link"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,51 +62,6 @@ class AuthEvent(BusinessEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class LoginFailed(AuthEvent):
-    verb: ClassVar[str] = "login_failed"
-    # the attempted account rides in entity_name — no account is guaranteed to exist
-
-
-@dataclass(frozen=True, kw_only=True)
-class RegisterFailed(AuthEvent):
-    verb: ClassVar[str] = "register_failed"
-    # the attempted account rides in entity_name
-
-
-@dataclass(frozen=True, kw_only=True)
-class MfaFailed(AuthEvent):
-    """A TOTP challenge was answered wrong. The subject is the account that failed it — resolved
-    from the half-issued MFA token, which is more than the factor id ever said."""
-
-    verb: ClassVar[str] = "mfa_failed"
-
-
-@dataclass(frozen=True, kw_only=True)
-class MfaVerified(AuthEvent):
-    verb: ClassVar[str] = "mfa_verified"
-
-
-@dataclass(frozen=True, kw_only=True)
-class PasskeyFailed(AuthEvent):
-    verb: ClassVar[str] = "passkey_failed"
-
-
-@dataclass(frozen=True, kw_only=True)
-class PasskeySignedIn(AuthEvent):
-    verb: ClassVar[str] = "passkey_signed_in"
-
-
-@dataclass(frozen=True, kw_only=True)
-class OAuthFailed(AuthEvent):
-    verb: ClassVar[str] = "oauth_failed"
-
-
-@dataclass(frozen=True, kw_only=True)
-class OAuthSignedIn(AuthEvent):
-    verb: ClassVar[str] = "oauth_signed_in"
-
-
-@dataclass(frozen=True, kw_only=True)
 class ConfirmationResent(AuthEvent):
     verb: ClassVar[str] = "confirmation_resent"
     # the target account rides in entity_name
@@ -109,11 +74,20 @@ class PasswordReset(AuthEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class SignedIn(AuthEvent):
-    """A session issued via email+password — the password peer of ``OAuthSignedIn`` /
-    ``PasskeySignedIn`` (a 2FA sign-in is marked by ``MfaVerified``). Closes the trail's blind
-    spot where only *failed* sign-ins were recorded."""
+    """A session was delivered to someone — the one fact of signing in, whatever obtained it.
+
+    ``method`` is how the caller proved who they were and ``two_factor`` whether a second factor was
+    cleared on the way: both are *properties of this session*, not separate facts. Keeping them in
+    the payload rather than in the ``kind`` is what makes "who signed in, and when" a single query —
+    the previous vocabulary split it across four kinds, and still left two paths recording nothing.
+
+    Emitted at the moment the session is handed over (``set_auth_cookies``), never before: a sign-in
+    that a second factor then refuses never happened.
+    """
 
     verb: ClassVar[str] = "signed_in"
+    method: SignInMethod
+    two_factor: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -171,15 +145,6 @@ class ImpersonationStarted(AuthEvent):
 class ImpersonationStopped(AuthEvent):
     verb: ClassVar[str] = "impersonation_stopped"
     # the impersonated user: entity_id = their id, entity_name = the email
-
-
-@dataclass(frozen=True, kw_only=True)
-class ForbiddenAdminAccess(AuthEvent):
-    """A signed-in non-admin was denied an admin-only surface (answered 404, not 403). Recorded as
-    a security signal — someone reaching for the console without rights — with the path tried."""
-
-    verb: ClassVar[str] = "forbidden_admin_access"
-    path: str
 
 
 # ── Admin account gating (accounts.*) ────────────────────────────────────────────

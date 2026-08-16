@@ -31,12 +31,6 @@ class AdminRevoked(SettingsEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class LastAdminViolationBlocked(SettingsEvent):
-    verb: ClassVar[str] = "last_admin_violation"
-    # the last-admin target: entity_name = the email (may be the admin's own)
-
-
-@dataclass(frozen=True, kw_only=True)
 class OrgOverrideSet(OrgScoped, SettingsEvent):
     verb: ClassVar[str] = "org_override_set"
     app: str

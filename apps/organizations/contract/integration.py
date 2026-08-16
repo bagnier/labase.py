@@ -16,10 +16,8 @@ from apps.auth.contract.events import UserCreated, UserDeleted
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import (
-    InvitationEmailMismatch,
     InvitationRevoked,
     InvitationSent,
-    LastOwnerViolationBlocked,
     MemberJoined,
     MemberLeft,
     MemberRemoved,
@@ -27,7 +25,6 @@ from apps.organizations.contract.events import (
     OrganizationCreated,
     OrganizationRenamed,
     OrgHandleChanged,
-    OwnershipViolation,
 )
 from apps.organizations.contract.fullpage import provide_org_nav
 from apps.organizations.contract.queries import org_handle_taken
@@ -64,9 +61,6 @@ def mount(host: Host) -> None:
         MemberRemoved,
         InvitationSent,
         InvitationRevoked,
-        InvitationEmailMismatch,
-        LastOwnerViolationBlocked,
-        OwnershipViolation,
     )
     host.events.on(UserCreated, _create_org, name="create_personal_org", app="organizations")
     host.events.on(UserDeleted, _forget_user, name="organizations_forget", app="organizations")

@@ -7,7 +7,6 @@ from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.infra.security import try_get_current_user
 from apps.shared.persistence.database import get_user_session
 from apps.shared.persistence.rls import set_rls_context
-from apps.shared.persistence.uow import bind_current_session, reset_current_session
 
 
 async def get_rls_session(
@@ -23,14 +22,10 @@ async def get_rls_session(
     Tolerant to anonymous callers — authentication (401) is enforced separately by
     ``CurrentUser`` where a route requires it.
 
-    The same session is bound as the ambient unit of work (``uow``) for the request, so
-    ``emit(event)`` can enqueue durable outbox rows on this exact transaction without the
-    producer having to thread a session through.
+    This session used to be *also* bound as an ambient unit of work, which ``emit`` read
+    when no session was passed. That made a fact's durability depend on whether its route
+    happened to depend on this function, so it is gone: ``emit`` now takes its session.
     """
     if current_user is not None:
         await set_rls_context(session, current_user.claims)
-    token = bind_current_session(session)
-    try:
-        yield session
-    finally:
-        reset_current_session(token)
+    yield session

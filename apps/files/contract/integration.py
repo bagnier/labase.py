@@ -15,7 +15,6 @@ from apps.files.contract.events import (
     FileRenamed,
     FileShareDownloaded,
     FileShareLinkCreated,
-    FileShareLinkRejected,
     FileUploaded,
 )
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
@@ -54,7 +53,6 @@ def mount(host: Host) -> None:
                 FileDeleted,
                 FileRenamed,
                 FileShareLinkCreated,
-                FileShareLinkRejected,
                 FileShareDownloaded,
             ],
             consumes_when_enabled=[(OrganizationCreated, "files_welcome", _seed)],

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.exc import DBAPIError
 
 from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSession
-from apps.organizations.contract.events import InvitationEmailMismatch, MemberJoined
+from apps.organizations.contract.events import MemberJoined
 from apps.organizations.domain.models import InvitationRead, InvitationStatus
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.events.bus import events
@@ -134,12 +134,11 @@ async def accept_invitation(
     if current_user.email.lower() != invitation["email"].lower():
         org = await rls_repo.get(invitation["org_id"])
         org_name = org.name if org else ""
-        await events.emit(
-            InvitationEmailMismatch(
-                user_id=current_user.id,
-                org_id=invitation["org_id"],
-                entity_name=invitation["email"],
-            )
+        log.warning(
+            "organizations.invitation_email_mismatch",
+            user_id=str(current_user.id),
+            org_id=str(invitation["org_id"]),
+            invited=invitation["email"],
         )
         if wants_json(request):
             raise HTTPException(
@@ -177,5 +176,7 @@ async def accept_invitation(
         log.exception("invitation.accept_error")
         raise
 
-    await events.emit(MemberJoined(user_id=current_user.id, org_id=invitation["org_id"]))
+    await events.emit(
+        MemberJoined(user_id=current_user.id, org_id=invitation["org_id"]), rls_session
+    )
     return await _dashboard_redirect(request, rls_repo, invitation["org_id"])

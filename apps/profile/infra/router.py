@@ -362,7 +362,7 @@ async def password_change(
             request, session, current_user, repo, key="password_error", message=error
         )
 
-    await events.emit(PasswordChanged(user_id=current_user.id))
+    await events.emit(PasswordChanged(user_id=current_user.id), session)
     if wants_json(request):
         return JSONResponse({"message": "Password changed."})
     return _profile_redirect("password_changed")
@@ -398,7 +398,7 @@ async def email_change(
             request, session, current_user, repo, key="email_error", message=error
         )
 
-    await events.emit(EmailChangeRequested(user_id=current_user.id, new_email=new_email))
+    await events.emit(EmailChangeRequested(user_id=current_user.id, new_email=new_email), session)
     if wants_json(request):
         return JSONResponse({"message": f"A confirmation email is on its way to {new_email}."})
     return _profile_redirect("email_requested")
@@ -449,6 +449,7 @@ async def passkey_verify(
     request: Request,
     current_user: CurrentUser,
     users_settings: UsersSettings,
+    session: RlsSession,
 ) -> JSONResponse:
     access_token = _ensure_passkeys(users_settings, current_user)
     body = await parse_body(request)
@@ -462,7 +463,7 @@ async def passkey_verify(
         created = await verify_passkey_registration(access_token, challenge_id, credential)
     except PasskeyError as e:
         return JSONResponse({"detail": str(e)}, status_code=400)
-    await events.emit(PasskeyAdded(user_id=current_user.id))
+    await events.emit(PasskeyAdded(user_id=current_user.id), session)
     return JSONResponse({"message": "Passkey added.", "passkey": created})
 
 
@@ -482,7 +483,7 @@ async def passkey_delete(
         return await _profile_error(
             request, session, current_user, repo, key="passkey_error", message=str(e)
         )
-    await events.emit(PasskeyRemoved(user_id=current_user.id, entity_id=passkey_id))
+    await events.emit(PasskeyRemoved(user_id=current_user.id, entity_id=passkey_id), session)
     if wants_json(request):
         return JSONResponse({"message": "Passkey removed."})
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -544,7 +545,7 @@ async def twofa_verify(
         return await _profile_error(
             request, session, current_user, repo, key="twofa_error", message=error
         )
-    await events.emit(TwoFactorEnabled(user_id=current_user.id))
+    await events.emit(TwoFactorEnabled(user_id=current_user.id), session)
     if wants_json(request):
         return JSONResponse({"message": "Two-factor enabled."})
     return _profile_redirect("twofa_enabled")
@@ -578,7 +579,7 @@ async def account_delete(
             request, session, current_user, repo, key="deletion_error", message=error
         )
 
-    await events.emit(AccountDeleted(user_id=current_user.id, entity_id=current_user.id))
+    await events.emit(AccountDeleted(user_id=current_user.id, entity_id=current_user.id), session)
     # The UserDeleted fact rides the admin session — it commits iff the deletion does. Its forget
     # consumers (organizations, profile) then run asynchronously off the tailer, by user id.
     await events.emit(
@@ -629,7 +630,7 @@ async def avatar_upload(
     profile = await repo.get_or_create(current_user.id, current_user.email)
     profile.avatar_path = path
     await session.flush()
-    await events.emit(AvatarUpdated(user_id=current_user.id))
+    await events.emit(AvatarUpdated(user_id=current_user.id), session)
     if wants_json(request):
         return JSONResponse({"message": "Avatar updated."})
     return _profile_redirect("avatar_updated")
@@ -689,7 +690,7 @@ async def profile_update(
     old_handle = profile.handle
     await repo.update(profile, ProfileUpdate(handle=handle))
     if old_handle != handle:
-        await events.emit(HandleChanged(user_id=current_user.id, new_handle=handle))
+        await events.emit(HandleChanged(user_id=current_user.id, new_handle=handle), session)
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(request, session, current_user, repo)

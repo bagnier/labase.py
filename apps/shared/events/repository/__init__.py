@@ -3,8 +3,7 @@
 :class:`EventRepository` is :class:`~apps.shared.persistence.repository.BaseRepository` over
 :class:`BusinessEventRecord`, composed from three concern modules: ``_write`` (append a fact + the
 ``event → row`` mapping), ``_delivery`` (the listener's claim/mark/scan + consumed ledger), and
-``_read`` (``search``/``daily_counts``). Humanizing rows is elsewhere (``timeline``); so is emit's
-session policy (the bus's ``_persist_fact``).
+``_read`` (``search``/``daily_counts``). Humanizing rows is elsewhere (``timeline``).
 
 This composition root wires the mixins together and re-exports the public surface, so callers keep
 ``from apps.shared.events.repository import EventRepository``.
@@ -18,7 +17,11 @@ from apps.shared.events.repository._delivery import (
     task_payload,
 )
 from apps.shared.events.repository._read import _ReadsEvents
-from apps.shared.events.repository._write import _WritesEvents, event_to_log, insert_business_event
+from apps.shared.events.repository._write import (
+    _WritesEvents,
+    event_to_record,
+    insert_business_event,
+)
 
 
 class EventRepository(_WritesEvents, _DispatchesEvents, _ReadsEvents):
@@ -30,7 +33,7 @@ __all__ = [
     "TRAIL_COLUMNS",
     "EventRepository",
     "TrailRow",
-    "event_to_log",
+    "event_to_record",
     "insert_business_event",
     "task_payload",
 ]

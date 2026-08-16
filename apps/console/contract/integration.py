@@ -28,7 +28,6 @@ from apps.console.contract.appearance import (
 from apps.console.contract.events import (
     AdminGranted,
     AdminRevoked,
-    LastAdminViolationBlocked,
     OrgOverrideRemoved,
     OrgOverrideSet,
 )
@@ -54,7 +53,6 @@ def mount(host: Host) -> None:
         SettingsChanged,
         AdminGranted,
         AdminRevoked,
-        LastAdminViolationBlocked,
         OrgOverrideSet,
         OrgOverrideRemoved,
     )

@@ -55,7 +55,11 @@ deleting an app removes every trace of it.
 
 **Business events are facts, not sagas.** A sensitive domain action is emitted as a typed,
 immutable `BusinessEvent` and persisted to an append-only trail _transactionally_ with the
-action — the fact commits iff the mutation does. Each app declares the events it owns, and
+action — the fact commits iff the mutation does, with no exception: the emitter names that
+transaction explicitly, and there is no second way to record a fact. **Only what happened is a
+fact**: a refused attempt (a wrong password, a blocked last-owner change, a non-owner reaching an
+owner-only route) changed nothing, so it is a structured log line, not a trail row — visible in the
+same console timeline, on its technical side. Each app declares the events it owns, and
 `emit` refuses an unowned one. Reactions are durable and run off the trail _after_ commit, so a
 producer never waits on — or fails from — a consumer; a reaction that finds its subject already
 gone is a clean no-op, never a compensation. The emitter never names its subscribers.
@@ -185,14 +189,24 @@ to this?) are different animals, so they are different objects — `host.events`
 `EventBus`) and `host.contribs` (the `Contribs` registry). Both key handlers by the Python
 type they carry, so there are no magic strings and no shared imports.
 
-**`host.events` — push.** `emit(event)` **persists** the `BusinessEvent` to the trail on the
-caller's own transaction — atomic with the action, so the fact commits iff the mutation commits —
-and does *only* that. It refuses an event no app declared (each app `declare`s the events it owns
-at mount, so an emitted fact is always owned); no reaction runs in-process. Durable **async**
-consumers registered with `on(...)` and run-everywhere handlers registered with `spread(...)` are
-delivered by the event listener off the persisted log after commit (see Observability), so a
-producer never waits on — or fails from — a consumer. Reactions treat the fact as immutable
-history: one that finds its subject already gone is a clean no-op, never a compensation.
+**`host.events` — push.** `emit(event, session)` **persists** the `BusinessEvent` to the trail on
+the session the caller names — atomic with the action, so the fact commits iff the mutation commits
+— and does *only* that. The session is a required argument: durability is stated at the call site,
+not inherited from whichever dependency the route happened to pick. It refuses an event no app
+declared (each app `declare`s the events it owns at mount, so an emitted fact is always owned); no
+reaction runs in-process. Durable **async** consumers registered with `on(...)` and run-everywhere
+handlers registered with `spread(...)` are delivered by the event listener off the persisted trail
+after commit (see Observability), so a producer never waits on — or fails from — a consumer.
+Reactions treat the fact as immutable history: one that finds its subject already gone is a clean
+no-op, never a compensation.
+
+**Signing in is one fact.** A session delivered by a password, an OAuth round-trip, a passkey or a
+mailed confirmation link is the same event — `auth.signed_in` — carrying *how* it was obtained
+(`method`) and whether a second factor was cleared (`two_factor`) in its payload, not in its `kind`.
+It is recorded at the moment the session is handed over, never before, so a sign-in a second factor
+then refuses never happened. `set_auth_cookies` is the single place a session is delivered, and a
+test over its call sites holds the rule: each one records a sign-in, except the two named
+*re-issues* (a token refresh, the restore of an admin's stashed session after an impersonation).
 
 Technical error capture is *not* on the bus: an `ExceptionCaptured` (not a business fact) is fanned
 out to its trackers by the capture drain with log-and-skip isolation, directly between the
@@ -255,9 +269,8 @@ singleton (`apps.shared.events.bus`) directly; `host.events` is that same bus, w
 **Two systems, one timeline.** A _business_ event ("something happened in the domain")
 and a _technical_ log ("a trace of the machinery") are different things, so they have
 different primitives — but the console's **Logs** screen merges them into one correlated
-timeline, filterable by source. The two are complementary, never redundant: the bus skips
-its own `event.emitted` trace line for a `BusinessEvent` (the durable trail already records
-it, with richer scoping), so a single business action shows up once, not twice.
+timeline, filterable by source. The two are complementary, never redundant: `emit` writes the
+durable trail and logs nothing of its own, so a single business action shows up once, not twice.
 
 - **Business events — `emit(...)`.** A sensitive domain action is emitted as a typed,
   frozen `BusinessEvent` dataclass (each app owns its vocabulary in `contract/events.py`;

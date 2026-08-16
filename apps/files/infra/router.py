@@ -3,6 +3,7 @@ import unicodedata
 import uuid
 from typing import Annotated, NoReturn
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from storage3.exceptions import StorageApiError
@@ -14,7 +15,6 @@ from apps.files.contract.events import (
     FileRenamed,
     FileShareDownloaded,
     FileShareLinkCreated,
-    FileShareLinkRejected,
     FileUploaded,
 )
 from apps.files.domain.models import OrgFileRead
@@ -42,6 +42,9 @@ from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
 from apps.shared.settings import SettingsView, get_settings
+
+log = structlog.get_logger("labase.files.router")
+
 
 router = APIRouter(prefix="/files", tags=["files"])
 public_router = APIRouter(prefix="/files", tags=["files"])
@@ -169,7 +172,8 @@ async def upload_file(
             org_id=org_id,
             entity_id=org_file.id,
             entity_name=org_file.filename,
-        )
+        ),
+        session,
     )
 
     if wants_json(request):
@@ -228,7 +232,8 @@ async def delete_file(
             org_id=org_id,
             entity_id=file_id,
             entity_name=org_file.filename,
-        )
+        ),
+        session,
     )
 
     if wants_json(request):
@@ -276,7 +281,8 @@ async def rename_file(
             entity_id=file_id,
             entity_name=safe_name,
             old_filename=old_filename,
-        )
+        ),
+        session,
     )
 
     files = await repo.all()
@@ -298,7 +304,8 @@ async def generate_share_link(
             user_id=current_user.id,
             org_id=org_id,
             entity_id=file_id,
-        )
+        ),
+        repo.session,
     )
     url = str(request.base_url) + f"files/share/{token.token}"
     if wants_json(request):
@@ -316,8 +323,8 @@ async def public_share_download(
     admin_session: AdminSession,
 ):
     async def reject(reason: str, code: int, detail: str) -> NoReturn:
-        # Anonymous attempt: no actor/org, ip rides in from the request contextvars.
-        await events.emit(FileShareLinkRejected(reason=reason))
+        # Anonymous attempt: no actor, no org — a refusal, not a fact.
+        log.warning("files.share_link_rejected", reason=reason, token=str(token))
         raise HTTPException(code, detail)
 
     repo = FileShareRepository(admin_session)
@@ -331,7 +338,9 @@ async def public_share_download(
     if org_file is None:
         await reject("file_missing", status.HTTP_404_NOT_FOUND, "File not found")
 
-    await events.emit(FileShareDownloaded(org_id=org_file.org_id, entity_id=org_file.id))
+    await events.emit(
+        FileShareDownloaded(org_id=org_file.org_id, entity_id=org_file.id), admin_session
+    )
     # Effective TTL for the file's org — the admin session reads its overrides (no RLS caller
     # here: share downloads are anonymous, the org comes from the file row).
     effective = await get_settings("files").for_org(admin_session, org_file.org_id)

@@ -33,7 +33,7 @@ _RECORD = text(
 
 async def _record_row(session: AsyncSession, row: BusinessEventRecord) -> None:
     """Append a fact through the writer function on ``session`` (its transaction). ``row`` is the
-    typed carrier :func:`event_to_log` (or the explicit-column writer) already built — the one
+    typed carrier :func:`event_to_record` (or the explicit-column writer) already built — the one
     ``event → row`` shape — read off as the function's arguments."""
     await session.execute(
         _RECORD,
@@ -60,7 +60,9 @@ class _WritesEvents(_EventSQL):
         """Append a typed event to the trail on the bound session; the caller commits."""
         org_id = event.org_id if isinstance(event, OrgScoped) else None
         user_name, org_name = await self.pinned_names(event.user_id, org_id)
-        await _record_row(self.session, event_to_log(event, user_name=user_name, org_name=org_name))
+        await _record_row(
+            self.session, event_to_record(event, user_name=user_name, org_name=org_name)
+        )
 
     async def pinned_names(
         self, user_id: uuid.UUID | None, org_id: uuid.UUID | None
@@ -91,7 +93,7 @@ class _WritesEvents(_EventSQL):
         return (row[0], row[1]) if row else (None, None)
 
 
-def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
+def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
     if not is_dataclass(event) or isinstance(event, type):
         return {}
     payload: dict[str, Any] = {}
@@ -113,7 +115,7 @@ def _loggable_payload(event: BusinessEvent) -> dict[str, Any]:
     return payload
 
 
-def event_to_log(
+def event_to_record(
     event: BusinessEvent, *, user_name: str | None = None, org_name: str | None = None
 ) -> BusinessEventRecord:
     """The one ``event → row`` conversion. Scoping (user/org/entity) and the readable names are
@@ -122,7 +124,7 @@ def event_to_log(
     contextvars."""
     ctx = get_contextvars()
     request_id = ctx.get("request_id")
-    payload = _loggable_payload(event)
+    payload = _fact_payload(event)
     for lifted in LIFTED_COLUMNS:  # the lifted fields get their own columns, not a payload key
         payload.pop(lifted, None)
     # created_at is the trail's own column, filled by the model default (one clock) — never the
