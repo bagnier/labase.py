@@ -30,9 +30,7 @@ Long is normal here — this is where the budget goes.
 
 No delegating the reading. A subagent returns a summary and its context dies with it — the
 detail needed on the seventh turn is exactly what its report dropped. Delegate *locating*
-(a broad sweep, "where does X live"), never consuming. Same on the web: search locates,
-`fetch` reads — not `WebFetch`, which delegates the reading to a small model: this very
-failure, one layer down.
+(a broad sweep, "where does X live"), never consuming.
 
 ## Say nothing, write nothing
 
