@@ -1,9 +1,11 @@
 """Files' business events — uploads, renames, deletes and share-link activity.
 
 CRUD-ish actions derive from the shared abstracts (overriding ``verb`` for the domain word:
-*uploaded*, *renamed*); the share-link actions are bespoke (anonymous downloads carry no actor,
-a rejected link is ``warning``), so they subclass :class:`~apps.shared.events.BusinessEvent`
-directly with an explicit ``kind``. Share tokens are redacted by name in the stored payload.
+*uploaded*, *renamed*); the share-link actions are not CRUD (a download carries no actor at all —
+the link is anonymous), so they subclass :class:`~apps.shared.events.BusinessEvent` directly and
+spell out a ``verb`` of their own. No share token is carried: a secret-named field is refused at
+class definition (:meth:`~apps.shared.events.BusinessEvent.__init_subclass__`), so only the file's
+id and name ever reach the trail.
 """
 
 from dataclasses import dataclass

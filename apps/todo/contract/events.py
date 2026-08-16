@@ -5,7 +5,7 @@ The verbs are the *domain* actions, not flat CRUD: a task is created, **edited**
 they derive from :class:`~apps.shared.events.EntityUpdated` (sharing its ``entity_id``/``label``
 shape) but override ``verb`` — giving each a distinct ``kind`` (``"todo.ticked"`` …) so the
 profile/dashboard timeline reads "Ticked", not a flat "Updated". ``kind`` is derived from
-``entity`` + ``verb``; the persister on the ``BusinessEvent`` base records them.
+``app_name`` + ``verb``.
 """
 
 from dataclasses import dataclass

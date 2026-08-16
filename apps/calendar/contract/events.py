@@ -1,8 +1,8 @@
 """Calendar's business events — an event's lifecycle on the shared trail.
 
 Plain CRUD: ``kind`` derives to ``"calendar.created"`` / ``"calendar.updated"`` /
-``"calendar.deleted"`` from the shared abstracts; the persister on the
-:class:`~apps.shared.events.BusinessEvent` base records them, scoped by ``user_id``/``org_id``.
+``"calendar.deleted"`` from the shared abstracts; the router emits them on the request's session,
+scoped by ``user_id``/``org_id``.
 """
 
 from dataclasses import dataclass

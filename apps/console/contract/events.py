@@ -1,10 +1,10 @@
 """Console's business events — platform-admin actions on the shared trail.
 
 Granting/revoking the platform-admin role and setting per-org overrides are ``settings.*`` events
-(the vocabulary the trail already uses); admin-role changes are ``warning``-level. They subclass
-:class:`~apps.shared.events.BusinessEvent` directly with an explicit ``kind``; the persister on
-the base records them. ``AdminGranted``/``AdminRevoked`` are server-wide (``org_id`` = ``None``),
-the override events carry the target org.
+(the vocabulary the trail already uses). None is CRUD, so they subclass
+:class:`~apps.shared.events.BusinessEvent` directly and spell out a ``verb`` of their own.
+``AdminGranted``/``AdminRevoked`` are server-wide (no ``org_id``), the override events carry the
+target org.
 """
 
 from dataclasses import dataclass

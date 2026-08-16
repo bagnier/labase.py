@@ -29,13 +29,15 @@ from apps.shared.persistence.base import Base, UUIDPk
 class BusinessEventRecord(Base, UUIDPk):
     """The append-only business-event row. Members read their own / their orgs' rows via RLS.
 
-    One writer: the ``record_business_event`` SECURITY DEFINER function (C4). On the **request
-    path** ``emit`` calls it on the caller's own RLS (``authenticated``) session, so the fact
-    commits atomically with the mutation; the function inserts as its owner, so no raw table INSERT
-    grant is exposed — a member (or a PostgREST client on the same role) can no longer POST the
-    trail table directly. Off the request path the **BYPASSRLS admin** session calls the same
-    function (the detached best-effort ``emit``, the seeders); the signup trigger inserts directly,
-    itself SECURITY DEFINER. Attribution is the emitter's to get right — a durable consumer
+    One writer: the ``record_business_event`` SECURITY DEFINER function (C4). ``emit`` calls it on
+    the session the caller names, so the fact commits atomically with the mutation; the function
+    inserts as its owner, so no raw table INSERT grant is exposed — a member (or a PostgREST client
+    on the same role) can no longer POST the trail table directly. That session is usually the
+    caller's own RLS (``authenticated``) one; the auth routes pass the **BYPASSRLS admin** session
+    instead, since a caller signing in or out has no RLS identity to write under. The signup trigger
+    is the one exception: it inserts directly, itself SECURITY DEFINER, because user creation
+    happens in GoTrue's transaction with no app session to join. Attribution is the emitter's to get
+    right — a durable consumer
     legitimately records a fact for an actor that isn't its session's identity — so the function
     trusts the supplied ``user_id`` rather than re-checking it. The tailer's dispatch (admin
     session) and every read are unchanged.

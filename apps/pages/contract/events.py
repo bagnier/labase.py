@@ -3,7 +3,7 @@
 Create/delete use the CRUD abstracts; every other change is a form of *update* (a re-slug, a
 publish, an unpublish) so it derives from :class:`~apps.shared.events.EntityUpdated` with a
 domain ``verb`` — giving each a distinct ``kind`` (``"pages.published_public"`` …). Every page
-event carries its ``slug``; the persister on the ``BusinessEvent`` base records them.
+event carries its ``slug``.
 """
 
 from dataclasses import dataclass

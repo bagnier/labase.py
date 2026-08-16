@@ -2,7 +2,7 @@
 
 Reviewing a card advances its schedule, so :class:`CardReviewed` derives from
 :class:`~apps.shared.events.EntityUpdated` (``kind`` → ``"learning.reviewed"``) and carries the
-review outcome; the persister on the ``BusinessEvent`` base records it, scoped by actor/org.
+review outcome; the router emits it on the request's session, scoped by actor/org.
 """
 
 from dataclasses import dataclass

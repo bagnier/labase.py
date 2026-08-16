@@ -58,8 +58,10 @@ async def _count_p1(actor: uuid.UUID) -> int:
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_failed_write_logs_a_warning_instead_of_raising():
-    # Regression: the warning must not pass `event=`/`kind=` under structlog's positional
-    # message key, and a lost row must never crash the fire-and-forget write task.
+    # The sessionless branch of `insert_business_event` (test seeding only — every production fact
+    # rides a caller's transaction) opens its own admin session and swallows what it cannot write,
+    # so a DB it can't reach fails the seeding, not the test process. Regression: the warning must
+    # not pass `event=`/`kind=` under structlog's positional message key.
     uid = uuid.uuid7()
     with (
         patch(

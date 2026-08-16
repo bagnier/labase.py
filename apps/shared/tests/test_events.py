@@ -1,8 +1,12 @@
-"""BusinessEvent vocabulary + the bus/persist wiring that records it.
+"""BusinessEvent vocabulary + the ``event → row → event`` chain that carries it.
 
-Covers the two mechanisms Phase 1 introduced: CRUD ``kind`` derivation (so apps write no dotted
-strings) and MRO dispatch (so one subscriber on the base records every subclass), plus the
-non-blocking persist contract (``emit`` never waits on — or fails from — the DB write).
+Covers ``kind`` derivation (so apps write no dotted strings), the secret-field refusal, and the
+round trip a fact makes through the serialized chain — ``event_to_record`` → the delivery columns
+→ ``task_payload`` → ``from_payload`` — which is where the four field lists must agree.
+
+What ``emit`` itself promises is next door: it persists on the session the caller names and runs no
+handler (``test_write_path`` for the transaction, ``test_emit_durability`` for what a rollback
+takes with it, ``test_listener`` for the reactions that run off the trail afterwards).
 """
 
 import json

@@ -33,10 +33,11 @@ def _shipped_events() -> dict[str, type[BusinessEvent]]:
     }
 
 
-# Every kind ever written to the trail. These strings are *stored data*: a row keeps the kind it
-# was written with, so renaming one orphans that slice of history from its own event class — the
-# listener stops reconstructing it and the console stops labelling it. Adding a line here is
-# routine; changing or removing one is a migration, not a refactor.
+# Every kind the product emits *today* — not every kind the trail holds: a retired one keeps its
+# rows, which the timeline still renders from their own columns, and leaves this set. These strings
+# are stored data, so *renaming* one is what costs: the rows keep the old spelling, the listener
+# stops reconstructing them and their consumers stop firing. Adding a line is routine; retiring one
+# means no code emits it any more; renaming one is a migration, not a refactor.
 _KINDS = {
     "accounts.deleted",
     "accounts.disabled",

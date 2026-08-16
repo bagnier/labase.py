@@ -1,7 +1,9 @@
 """The event bus — the one registration + emit surface every app uses.
 
-Three methods, nothing else:
+Four methods, nothing else:
 
+- ``declare(*event_types)`` — record, at mount, that this app's facts are live. ``emit`` refuses an
+  undeclared event, so a disabled app cannot emit.
 - ``emit(event, session)`` — **persist the fact** to the ``business_events`` trail on the session
   the caller names (atomic with the action). That is *all* it does: no handler runs here. The
   :mod:`apps.shared.events.listener` reads the persisted trail after commit and runs the
@@ -29,8 +31,6 @@ from apps.shared.events.registry import EventRegistry, registry
 from apps.shared.events.repository import EventRepository
 from apps.shared.events.types import BusinessEvent
 from apps.shared.queue import register_task_handler
-
-log = structlog.get_logger("labase.business_events")
 
 E = TypeVar("E")
 

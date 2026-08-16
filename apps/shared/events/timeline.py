@@ -44,7 +44,7 @@ class DaySection:
 
 
 def _activity_label(verb: str) -> str:
-    """`oauth_signed_in` → `Oauth signed in` — readable without a per-event table. Purely
+    """`share_link_created` → `Share link created` — readable without a per-event table. Purely
     string-shaping: shared never enumerates the apps, it just humanizes the verb the row carries."""
     return verb.replace("_", " ").capitalize()
 

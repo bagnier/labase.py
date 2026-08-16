@@ -2,8 +2,8 @@
 
 Only genuinely *profile* concerns live here: the avatar, the public handle, and deleting one's own
 account. Security actions (password, email, passkeys, 2FA) are auth-domain — see
-``apps.auth.contract.events``. All are user-scoped (``user_id`` = the account holder,
-``org_id`` = ``None``); the persister on the base records them.
+``apps.auth.contract.events``. All are user-scoped (``user_id`` = the account holder, and no
+``org_id`` at all — none of them mixes in ``OrgScoped``).
 """
 
 from dataclasses import dataclass

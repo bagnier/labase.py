@@ -2,8 +2,8 @@
 
 Issuing is a create, revoking a state change (an update), so they derive from the shared CRUD
 abstracts with domain verbs (``"api_keys.created"`` / ``"api_keys.revoked"``). ``ApiKeyIssued`` is
-named apart from the ``ApiKeyCreated`` response DTO; the persister records both, scoped by
-actor/org. The secret is never carried — only the key id and its name.
+named apart from the ``ApiKeyCreated`` response DTO; both are scoped by actor/org. The secret is
+never carried — only the key id and its name.
 """
 
 from dataclasses import dataclass

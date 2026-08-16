@@ -1,12 +1,13 @@
 """Org's public events — org lifecycle, membership and invitations on the shared trail.
 
 All are :class:`OrgEvent` business events (org-scoped) — an org being created, a member
-joining/leaving, roles changing, invitations, and the ``warning``-level guard rejections;
-the persister on the :class:`~apps.shared.events.BusinessEvent` base records every one.
+joining/leaving, roles changing, invitations. A refused action is *not* here: a blocked
+last-owner change or a non-owner reaching an owner-only route changed nothing, so it is a
+structured log line, not a trail row.
 
-:class:`OrganizationCreated` doubles as the welcome-seeding trigger: the per-app seeders
-subscribe to it directly, so emitting it dispatches to them (by concrete type) and then to
-the persister (by base type). One event, one business meaning — no separate seeding signal.
+:class:`OrganizationCreated` doubles as the welcome-seeding trigger: each per-app seeder is a
+durable ``bus.on`` consumer of it, run by the listener off the trail after the org commits. One
+event, one business meaning — no separate seeding signal.
 """
 
 from dataclasses import dataclass

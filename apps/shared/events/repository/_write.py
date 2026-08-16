@@ -167,10 +167,13 @@ async def insert_business_event(
     request_name: str | None = None,
     payload: dict[str, Any] | None,
 ) -> None:
-    """Write a row from explicit columns — the seeding / non-event writer. With a ``session`` the
-    row rides that transaction (atomic); without one, a best-effort admin write that swallows
-    failures (seeders, tests). Only the write mixin is needed, so it binds ``_WritesEvents``
-    directly rather than the fully composed repository."""
+    """Write a row from explicit columns, bypassing the typed vocabulary — seeding a trail whose
+    kinds a test does not want to declare. Every *production* fact goes through ``emit``, which
+    takes its session and rides the caller's transaction; the whole current call set is tests. With
+    a ``session`` the row rides that transaction; without one it is a best-effort admin write that
+    swallows failures, so an unreachable DB fails the seeding rather than the process. Only the
+    write mixin is needed, so it binds ``_WritesEvents`` directly rather than the full
+    repository."""
 
     async def write(s: AsyncSession) -> None:
         repo = _WritesEvents(s)
