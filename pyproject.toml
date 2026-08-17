@@ -95,15 +95,11 @@ show_missing = true
 skip_covered = false
 
 [tool.pyright]
-# Pyright is the language server, not a verdict. Two readers speak it off this single block —
-# Claude Code through its `pyright-lsp` plugin, VS Code through Pylance (the same analysis core
-# behind a proprietary shell) — so navigation, completion and hover behave identically on either
-# side. `ty` stays the project's only type checker: it is what `make lint` arbitrates on, and a
-# second checker would contradict it on inference it does not share. Hence type checking off here,
-# mirrored by `python.analysis.typeCheckingMode` in .vscode/settings.json.
-# The server itself is the dev group's pinned `pyright`, launched from `.venv/` by the in-tree
-# plugin `.claude/plugins/pyright-lsp/` — no machine-level install, one version per lockfile.
-typeCheckingMode = "off"
+# One config, three readers — `make lint`, Claude Code (via .claude/plugins/pyright-lsp/) and
+# VS Code's Pylance — so the gate holds the verdict the agent and the editor are shown.
+# Alongside `ty`, not instead: at 0.0.x most of its rules are still to come.
+# `standard`, not `strict`: strict reports 4801, nearly all `Unknown` from untyped third parties.
+typeCheckingMode = "standard"
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"

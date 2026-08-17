@@ -191,8 +191,10 @@ def heatmap_calendar(
     else:
         weeks_needed = max_weeks
     weeks = max(min_weeks, min(max_weeks, weeks_needed))
-    capped = weeks_needed > max_weeks or since_date is None
-    range_label = "Last 12 months" if capped else f"Since {since_date.strftime('%b %Y')}"
+    if since_date is None or weeks_needed > max_weeks:
+        range_label = "Last 12 months"
+    else:
+        range_label = f"Since {since_date.strftime('%b %Y')}"
     start = end_monday - timedelta(weeks=weeks - 1)
     nonzero = sorted(n for n in counts.values() if n)
     thresholds = (

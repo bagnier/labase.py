@@ -19,20 +19,25 @@ class IssueEvent(BusinessEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class IssueOpened(IssueEvent):
-    """A new issue appeared. The issue *is* the subject: its id and title are the base's
-    entity slots, narrowed to required here — an alert with no issue to point at is meaningless."""
+class IssueSubject:
+    """The base's entity slots, narrowed to required: an alert with no issue to point at is
+    meaningless. A base rather than a redeclaration per event — overriding a field that carries
+    a default cannot express "required again", while inheriting one that never had a default can."""
 
-    verb: ClassVar[str] = "opened"
     entity_id: uuid.UUID
     entity_name: str
 
 
 @dataclass(frozen=True, kw_only=True)
-class IssueRegressed(IssueEvent):
+class IssueOpened(IssueSubject, IssueEvent):
+    """A new issue appeared. The issue *is* the subject."""
+
+    verb: ClassVar[str] = "opened"
+
+
+@dataclass(frozen=True, kw_only=True)
+class IssueRegressed(IssueSubject, IssueEvent):
     verb: ClassVar[str] = "regressed"
-    entity_id: uuid.UUID
-    entity_name: str
     resolved_in_version: str | None
     seen_version: str
 

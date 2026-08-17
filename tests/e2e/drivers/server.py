@@ -8,9 +8,11 @@ browser substrate only orchestrates it.
 import asyncio
 import socket
 import time
+from typing import cast
 
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
+from hypercorn.typing import Framework
 
 from apps.main import host
 from tests.e2e.drivers.background_loop import BackgroundLoop
@@ -66,7 +68,9 @@ class InProcessServer:
         config.accesslog = config.errorlog = None
         self._shutdown = self._bg.run(_make_event())
         self._server_future = self._bg.submit(
-            serve(app, config, shutdown_trigger=self._shutdown.wait)
+            # starlette types an ASGI scope as a loose mapping, hypercorn as precise TypedDicts;
+            # a FastAPI app satisfies the protocol at runtime, not statically. Both checkers agree.
+            serve(cast(Framework, app), config, shutdown_trigger=self._shutdown.wait)
         )
         self._wait_for_server()
         return f"http://localhost:{self._port}"

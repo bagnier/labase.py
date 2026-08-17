@@ -167,13 +167,15 @@ class BusinessEvent:
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names and (v is not None or k in optional)}
         for key in _uuid_fields(cls):
-            if isinstance(kept.get(key), str):
+            value = kept.get(key)
+            if isinstance(value, str):
                 with contextlib.suppress(ValueError):
-                    kept[key] = uuid.UUID(kept[key])
+                    kept[key] = uuid.UUID(value)
         for key in _datetime_fields(cls):
-            if isinstance(kept.get(key), str):
+            value = kept.get(key)
+            if isinstance(value, str):
                 with contextlib.suppress(ValueError):
-                    kept[key] = datetime.fromisoformat(kept[key])
+                    kept[key] = datetime.fromisoformat(value)
         return cls(**kept)
 
 

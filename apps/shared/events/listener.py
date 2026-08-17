@@ -200,6 +200,8 @@ class EventListener:
         try:
             raw = await _user_engine().raw_connection()
             asyncpg_conn = raw.driver_connection
+            if asyncpg_conn is None:
+                raise RuntimeError("no asyncpg connection behind the pool")
             await asyncpg_conn.add_listener(NOTIFY_CHANNEL, self._on_notify)
             self._listen_conn = raw
         except Exception:

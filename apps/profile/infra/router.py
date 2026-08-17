@@ -176,7 +176,7 @@ async def _activity_context(
     )
 
     def link(r: BusinessEventRecord) -> str | None:
-        return entity_url(r.app_name, r.entity_id, handles.get(r.org_id))
+        return entity_url(r.app_name, r.entity_id, handles.get(r.org_id) if r.org_id else None)
 
     entries = activity_entries(records, show_actor=False, link=link)
     return {

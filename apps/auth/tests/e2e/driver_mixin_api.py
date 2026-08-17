@@ -182,8 +182,9 @@ class AuthApiMixin(ApiBase):
         resp = self.client().post("/profile/2fa/enroll", headers={"accept": "application/json"})
         assert resp.status_code == 200, f"enroll: {resp.status_code} {resp.text}"
         data = resp.json()
-        self._totp_secret = data["secret"]
-        code = pyotp.TOTP(self._totp_secret).now()
+        secret = data["secret"]
+        self._totp_secret = secret
+        code = pyotp.TOTP(secret).now()
         self.response = self.client().post(
             "/profile/2fa/verify",
             json={"factor_id": data["factor_id"], "code": code},

@@ -322,7 +322,7 @@ def _ndjson(rows: list[dict[str, Any]]) -> str:
 
 def _csv(rows: list[dict[str, Any]]) -> str:
     buffer = io.StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=_CSV_COLUMNS, extrasaction="ignore")
+    writer = csv.DictWriter[str](buffer, fieldnames=_CSV_COLUMNS, extrasaction="ignore")
     writer.writeheader()
     writer.writerows(rows)
     return buffer.getvalue()

@@ -1,5 +1,8 @@
 import contextlib
 import tempfile
+from typing import TYPE_CHECKING
+
+from playwright.sync_api import Page
 
 from apps.auth.tests.given_helpers import (
     create_user,
@@ -17,6 +20,11 @@ from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 
 class OrgFileBrowserMixin(BrowserBase):
+    if TYPE_CHECKING:
+        # Brought to the composed driver by the organizations mixin — declared alongside the
+        # attributes below, which state the same borrowing.
+        def _read_org_cards_from_profile(self, page: Page) -> list[dict]: ...
+
     primary_email: str
     active_org_handle: str
     last_registered_email: str | None
@@ -200,7 +208,7 @@ class OrgFileBrowserMixin(BrowserBase):
         ctx = self.context_for(email)
         page = ctx.new_page()
         try:
-            orgs = self._read_org_cards_from_profile(page)  # ty: ignore[unresolved-attribute]
+            orgs = self._read_org_cards_from_profile(page)
             assert orgs, f"No org for {email}"
             handle = orgs[0]["handle"]
         finally:

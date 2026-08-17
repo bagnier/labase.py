@@ -36,7 +36,7 @@ class Versioned:
 
     version: Mapped[int] = mapped_column(default=1)
 
-    @declared_attr
+    @declared_attr.directive
     def __mapper_args__(cls):
         return {"version_id_col": cls.version}
 

@@ -1,4 +1,5 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from playwright.sync_api import Page
 
@@ -9,6 +10,11 @@ from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
 
 class OrgBrowserMixin(BrowserBase):
+    if TYPE_CHECKING:
+        # Brought to the composed driver by the auth mixin; declared here so the borrowing is
+        # part of this mixin's contract instead of a suppression at the call site.
+        def sign_in(self, email: str, password: str) -> None: ...
+
     _org_list_response: list[dict] | None = None
     _pending_invitations: list[dict] | None = None
     _last_invitation_token: str | None = None
@@ -82,7 +88,7 @@ class OrgBrowserMixin(BrowserBase):
         # Sign in before reading the profile so the org list is visible.
         email = getattr(self, "last_registered_email", None)
         if "/auth/login" in self.page.url and email:
-            self.sign_in(email, _PASSWORD)  # ty: ignore[unresolved-attribute]
+            self.sign_in(email, _PASSWORD)
         orgs = self._read_org_cards_from_profile(self.page)
         assert len(orgs) == count, f"Expected {count} org(s), got {len(orgs)}: {orgs}"
 

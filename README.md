@@ -131,6 +131,7 @@ checker rejects a violation before a test has to.
 | **zizmor**                  | GitHub Actions security linting (`.github/zizmor.yml`)                           |
 | **droast**                  | Dockerfile linting — self-contained GitHub Action in CI (`.github/workflows/`)   |
 | **ty**                      | Type checking (Astral, Rust)                                                     |
+| **pyright**                 | Type checking, and the language server the editors and the agent run             |
 | **import-linter**           | Architecture boundaries between apps (contracts in `pyproject.toml`)             |
 | **pip-audit**               | Dependency vulnerability audit                                                   |
 | **pre-commit**              | Git hooks — `ruff --fix`, `ruff format`, talisman on staged files                |
@@ -529,7 +530,7 @@ make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)
 
 make install      # Supabase + uv sync + pre-commit + npm install + .env + npm run build
 
-make lint         # ruff + import-linter + ty + biome + djlint + pip-audit, read-only
+make lint         # ruff + import-linter + ty + pyright + biome + djlint + pip-audit, read-only
 make fix          # ruff --fix + format + import-linter + ty + biome + djlint --reformat
 make doctor       # local stack reachability AND latency (catches a wedged Docker proxy)
 

@@ -69,7 +69,9 @@ class LearningBrowserMixin(BrowserBase):
         t.join()
         if errors:
             raise errors[0]
-        return result.get("v")
+        # `result["v"]`, not `.get`: the key is set unless `target` raised, which `errors` already
+        # re-raised above. A KeyError here names a broken invariant instead of returning None.
+        return result["v"]
 
     # ── users / orgs ──────────────────────────────────────────────────────────
     def _user(self, name: str) -> str:
@@ -211,7 +213,11 @@ class LearningBrowserMixin(BrowserBase):
     def mark_all_learned(self, name: str) -> None:
         key = self._user(name)
         page = self._goto_today(key)
-        ids = [c.get_attribute("data-card-id") for c in page.locator(".lcard").all()]
+        ids = [
+            ext
+            for c in page.locator(".lcard").all()
+            if (ext := c.get_attribute("data-card-id")) is not None
+        ]
         for ext in ids:
             self.mark(name, ext, "learned")
 

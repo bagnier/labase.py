@@ -86,4 +86,8 @@ class TechnicalSettings(BaseSettings):
 
 @lru_cache
 def get_technical_settings() -> TechnicalSettings:
-    return TechnicalSettings()
+    # The one construction that passes nothing: pydantic-settings fills the required fields from
+    # the environment, while the generated __init__ advertises them as parameters. Kept as a
+    # suppression rather than a TYPE_CHECKING `__init__(**values)`, which would clear this line at
+    # the cost of checking test_preflight's nine explicit kwargs.
+    return TechnicalSettings()  # pyright: ignore[reportCallIssue]

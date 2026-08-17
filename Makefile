@@ -93,7 +93,7 @@ provision-test:
 
 # --- Quality ---
 # lint: read-only, fails on non-conforming code (used by `make ci`).
-# Per file type: ruff/ty (Python), sqlfluff (SQL migrations, lint-light — no reformat),
+# Per file type: ruff/ty/pyright (Python), sqlfluff (SQL migrations, lint-light — no reformat),
 # yamllint (YAML), validate-pyproject (pyproject schema), zizmor (GitHub Actions security),
 # biome (JS/CSS/JSON), gherkin-lint (.feature), djlint (Jinja2). Dockerfiles are linted by
 # droast, which runs as a self-contained GitHub Action in CI (see .github/workflows/ci.yml).
@@ -104,6 +104,7 @@ lint:
 	uv run ruff format --check .
 	uv run lint-imports --cache-dir .cache/import-linter
 	uv run ty check apps/
+	uv run pyright
 	uv run sqlfluff lint --config scripts/.sqlfluff supabase/migrations/
 	uv run yamllint -c scripts/.yamllint .github docker scripts
 	uv run validate-pyproject pyproject.toml
