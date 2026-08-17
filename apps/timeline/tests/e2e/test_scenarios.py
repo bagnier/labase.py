@@ -1,14 +1,14 @@
 import pytest
 from pytest_bdd import scenarios
 
-from apps.logs.contract.integration import DEFAULT_LOG_LEVEL
 from apps.shared.observability.firehose import clear_firehose
 from apps.shared.observability.logging import apply_log_level
+from apps.timeline.contract.integration import DEFAULT_LOG_LEVEL
 from tests.e2e import cleanup
 
 # Business-event/issue rows are persisted through a background admin session that commits outside
 # API driver's rolled-back transaction, so they leak across scenarios (the browser driver
-# already truncates between scenarios). The unified logs feature is the first to *read* these
+# already truncates between scenarios). The timeline feature is the first to *read* these
 # tables, so scrub them before each scenario to keep the timeline hermetic. The firehose lives
 # in files, outside any transaction, so it needs the same scrub.
 _OBSERVABILITY_TABLES = ["business_events", "error_events", "error_groups"]
@@ -23,4 +23,4 @@ def _isolate_observability_sources():
     apply_log_level(DEFAULT_LOG_LEVEL)
 
 
-scenarios("../../../../features/unified-logs.feature")
+scenarios("../../../../features/timeline.feature")

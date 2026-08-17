@@ -46,7 +46,7 @@ log = structlog.get_logger("labase.console.integration")
 
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console")
-    host.reserve("console", "admin", "logs", "settings")
+    host.reserve("console", "admin", "timeline", "settings")
     # The console owns the ``settings.*`` namespace: the platform-admin actions plus the
     # server-wide settings-change fact it emits when an admin edits a setting.
     host.events.declare(

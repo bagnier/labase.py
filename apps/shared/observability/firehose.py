@@ -2,7 +2,7 @@
 
 12-factor: logs are a stream, so every event is still rendered to stdout. In addition, this
 module appends each event as one JSON object to a per-day file under the firehose directory,
-giving the unified logs viewer (``apps/logs``) a recent window to read back. Nothing goes to
+giving the unified timeline viewer (``apps/timeline``) a recent window to read back. Nothing goes to
 the app DB — the files *are* the ``request`` source of truth, and per-day rotation makes
 retention a plain file delete.
 

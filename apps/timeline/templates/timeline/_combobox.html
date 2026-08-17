@@ -1,4 +1,4 @@
-{# Smart combobox filter pill (see features/unified-logs.mockup.html).
+{# Smart combobox filter pill (see features/timeline.mockup.html).
 
    A pill button shows `label + value` — muted italic "all" when inactive, bold with a ✕ to
    clear when a value is set. Clicking it opens a popover with a search field that narrows the
@@ -11,7 +11,7 @@
      label       the dimension caption shown on the pill (source, level, org, user, request)
      value       the currently selected raw value ("" = inactive)
      value_label the display for that selected value (org handle, or short id)
-     options     [{value, count, label?}] from LogReader.facets — label falls back to the raw value
+     options     [{value, count, label?}] from TimelineReader.facets — label falls back to the raw value
                  (source/level are already words; org/user/request are labelled by the router)
 #}
 {% macro combobox(name, label, value, value_label, options) %}

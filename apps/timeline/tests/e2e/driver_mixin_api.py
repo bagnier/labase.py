@@ -1,17 +1,17 @@
 import json
 from datetime import datetime
 
-from apps.logs.tests.e2e import seed_data
-from apps.logs.tests.e2e.seed_data import logs_org_id, logs_request_id, logs_user_id
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.observability.firehose import append_firehose
 from apps.shared.observability.logging import apply_log_level
+from apps.timeline.tests.e2e import seed_data
+from apps.timeline.tests.e2e.seed_data import timeline_org_id, timeline_request_id, timeline_user_id
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.api_base import ApiBase
 
 
-class LogsApiMixin(ApiBase):
-    def _logs_as_admin(self) -> None:
+class TimelineApiMixin(ApiBase):
+    def _timeline_as_admin(self) -> None:
         as_admin = getattr(self, "_as_admin", None)  # console mixin
         assert as_admin is not None
         as_admin()
@@ -24,10 +24,10 @@ class LogsApiMixin(ApiBase):
         self.run(db.seed_fixtures(_do))
 
     def seed_event_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
-        self._add_event(seed_data.event_model(event, org=logs_org_id(org), when=when))
+        self._add_event(seed_data.event_model(event, org=timeline_org_id(org), when=when))
 
     def seed_event_by_user(self, event: str, email: str) -> None:
-        self._add_event(seed_data.event_model(event, user=logs_user_id(email)))
+        self._add_event(seed_data.event_model(event, user=timeline_user_id(email)))
 
     def _append_request(
         self,
@@ -47,7 +47,7 @@ class LogsApiMixin(ApiBase):
     def seed_request_from_org(
         self, event: str, org: str, *, level: str = "info", when: datetime | None = None
     ) -> None:
-        self._append_request(event, org=logs_org_id(org), level=level, when=when)
+        self._append_request(event, org=timeline_org_id(org), level=level, when=when)
 
     def _insert_error(
         self, title: str, *, org: str | None = None, request_id: str | None = None, when=None
@@ -65,7 +65,7 @@ class LogsApiMixin(ApiBase):
         self.run(db.seed_fixtures(_do))
 
     def seed_error_from_org(self, title: str, org: str, *, when: datetime | None = None) -> None:
-        self._insert_error(title, org=logs_org_id(org), when=when)
+        self._insert_error(title, org=timeline_org_id(org), when=when)
 
     def set_process_log_level(self, level: str) -> None:
         # In-process: the API driver shares the running app, so this is the live firehose level.
@@ -74,70 +74,72 @@ class LogsApiMixin(ApiBase):
     def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
         # All three sources must key on the same value to correlate; the journal's column is a uuid,
         # so the scenario's readable token maps to one here.
-        oid, request_id = logs_org_id(org), logs_request_id(request_id)
+        oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
         self._append_request("request.finished", org=oid, request_id=request_id)
         self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
         self._insert_error(error, org=oid, request_id=request_id)
 
     # ── reads ────────────────────────────────────────────────────────────────
-    def _open_logs(self, **params) -> None:
-        self._logs_as_admin()
+    def _open_timeline(self, **params) -> None:
+        self._timeline_as_admin()
         # Remember the active filter so a following export carries the same params (WYSIWYG).
-        self._logs_filter = {k: v for k, v in params.items() if v is not None}
+        self._timeline_filter = {k: v for k, v in params.items() if v is not None}
         self.response = self.client().get(
-            "/console/logs", params=self._logs_filter, headers={"accept": "application/json"}
+            "/console/timeline",
+            params=self._timeline_filter,
+            headers={"accept": "application/json"},
         )
         assert self.response.status_code == 200, (
-            f"GET /console/logs: {self.response.status_code} {self.response.text}"
+            f"GET /console/timeline: {self.response.status_code} {self.response.text}"
         )
 
-    def open_logs_screen(self) -> None:
-        self._open_logs()
+    def open_timeline(self) -> None:
+        self._open_timeline()
 
-    def filter_logs_by_org(self, org: str) -> None:
-        self._open_logs(org_id=logs_org_id(org))
+    def filter_timeline_by_org(self, org: str) -> None:
+        self._open_timeline(org_id=timeline_org_id(org))
 
-    def filter_logs_by_user(self, email: str) -> None:
-        self._open_logs(user_id=logs_user_id(email))
+    def filter_timeline_by_user(self, email: str) -> None:
+        self._open_timeline(user_id=timeline_user_id(email))
 
-    def filter_logs_by_source(self, source: str) -> None:
-        self._open_logs(source=source)
+    def filter_timeline_by_source(self, source: str) -> None:
+        self._open_timeline(source=source)
 
-    def filter_logs_by_app(self, app: str) -> None:
-        self._open_logs(app=app)
+    def filter_timeline_by_app(self, app: str) -> None:
+        self._open_timeline(app=app)
 
-    def filter_logs_by_level(self, level: str) -> None:
-        self._open_logs(level=level)
+    def filter_timeline_by_level(self, level: str) -> None:
+        self._open_timeline(level=level)
 
-    def filter_logs_by_request(self, request_id: str) -> None:
-        self._open_logs(request_id=logs_request_id(request_id))
+    def filter_timeline_by_request(self, request_id: str) -> None:
+        self._open_timeline(request_id=timeline_request_id(request_id))
 
-    def search_logs(self, text: str) -> None:
-        self._open_logs(q=text)
+    def search_timeline(self, text: str) -> None:
+        self._open_timeline(q=text)
 
-    def filter_logs_by_dates(self, a: str, b: str) -> None:
-        self._open_logs(from_dt=a, to_dt=b)
+    def filter_timeline_by_dates(self, a: str, b: str) -> None:
+        self._open_timeline(from_dt=a, to_dt=b)
 
-    def sort_logs(self, column: str, direction: str) -> None:
-        self._open_logs(sort=column, dir=direction)
+    def sort_timeline(self, column: str, direction: str) -> None:
+        self._open_timeline(sort=column, dir=direction)
 
     def view_activity_by(self, grain: str) -> None:
-        self._open_logs(bucket=grain)
+        self._open_timeline(bucket=grain)
 
     # ── export ───────────────────────────────────────────────────────────────
-    def _export_logs(self, fmt: str) -> None:
-        self._logs_as_admin()
-        params = {**getattr(self, "_logs_filter", {}), "format": fmt}
-        self.export_response = self.client().get("/console/logs/export", params=params)
+    def _export_timeline(self, fmt: str) -> None:
+        self._timeline_as_admin()
+        params = {**getattr(self, "_timeline_filter", {}), "format": fmt}
+        self.export_response = self.client().get("/console/timeline/export", params=params)
         assert self.export_response.status_code == 200, (
             f"GET export: {self.export_response.status_code} {self.export_response.text}"
         )
 
-    def export_logs_ndjson(self) -> None:
-        self._export_logs("ndjson")
+    def export_timeline_ndjson(self) -> None:
+        self._export_timeline("ndjson")
 
-    def export_logs_csv(self) -> None:
-        self._export_logs("csv")
+    def export_timeline_csv(self) -> None:
+        self._export_timeline("csv")
 
     # ── assertions ───────────────────────────────────────────────────────────
     def _entries(self) -> list[dict]:
@@ -145,9 +147,9 @@ class LogsApiMixin(ApiBase):
         return self.response.json()["entries"]
 
     def _events(self) -> list[str]:
-        return [e["event"] for e in self._entries()]
+        return [e["name"] for e in self._entries()]
 
-    def assert_logs_empty(self) -> None:
+    def assert_timeline_empty(self) -> None:
         assert self._entries() == [], f"expected no entries: {self._entries()}"
 
     def assert_entry_listed(self, event: str) -> None:
@@ -157,7 +159,7 @@ class LogsApiMixin(ApiBase):
         assert event not in self._events(), f"{event!r} unexpectedly listed in {self._events()}"
 
     def assert_entry_source(self, event: str, source: str) -> None:
-        found = next((e for e in self._entries() if e["event"] == event), None)
+        found = next((e for e in self._entries() if e["name"] == event), None)
         assert found is not None, f"{event!r} not listed: {self._events()}"
         assert found["source"] == source, (
             f"{event!r} source: expected {source!r}, got {found['source']!r}"
@@ -198,5 +200,7 @@ class LogsApiMixin(ApiBase):
         assert lines[0].split(",")[0] == "ts", f"expected header row, got {lines[0]!r}"
         assert any(needle in line for line in lines[1:]), f"{needle!r} not listed in CSV rows"
 
-    def try_open_logs_screen(self) -> None:
-        self.response = self.client().get("/console/logs", headers={"accept": "application/json"})
+    def try_open_timeline(self) -> None:
+        self.response = self.client().get(
+            "/console/timeline", headers={"accept": "application/json"}
+        )

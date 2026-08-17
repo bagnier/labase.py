@@ -1,7 +1,7 @@
 {% for e in entries %}
-  <tr data-log-event="{{ e.event }}" data-log-source="{{ e.source }}">
+  <tr data-entry-name="{{ e.name }}" data-entry-source="{{ e.source }}">
     <td class="font-mono text-xs text-base-content/70 whitespace-nowrap"
-        data-log-time>{{ e.ts.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        data-entry-time>{{ e.ts.strftime("%Y-%m-%d %H:%M:%S") }}</td>
     <td><span class="badge badge-sm">{{ e.source }}</span></td>
     <td>
       <span class="badge badge-sm {{ 'badge-error' if e.level == 'error' else 'badge-warning' if e.level == 'warning' else 'badge-info' }}">
@@ -9,14 +9,14 @@
       </span>
     </td>
     <td class="font-mono text-xs text-base-content/60" title="{{ e.org_id }}">{{ labels.org.get(e.org_id) if e.org_id else "—" }}</td>
-    <td class="font-mono text-xs">{{ e.event }}</td>
+    <td class="font-mono text-xs">{{ e.name }}</td>
     <td class="font-mono text-xs text-base-content/60"
         title="{{ e.user_id }}">{{ labels.user.get(e.user_id) if e.user_id else "—" }}</td>
     <td class="font-mono text-xs text-base-content/60"
         title="{{ e.entity_id }}">
       {% if e.entity_id %}
         <a class="link link-hover"
-           href="/console/logs?entity_id={{ e.entity_id | urlencode }}"
+           href="/console/timeline?entity_id={{ e.entity_id | urlencode }}"
            title="Every event for this entity">{{ e.entity_id[:12] }}</a>
       {% else %}
         —
@@ -26,7 +26,7 @@
         title="{{ e.request_id }}">{{ labels.request.get(e.request_id) if e.request_id else "—" }}</td>
     {% set details = e.payload.items() | map("join", "=") | join(" ") %}
     <td class="font-mono text-xs text-base-content/60 max-w-xs truncate"
-        data-log-payload
+        data-entry-payload
         title="{{ details }}">{{ details }}</td>
   </tr>
 {% endfor %}

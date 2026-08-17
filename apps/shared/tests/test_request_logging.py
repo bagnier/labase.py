@@ -42,7 +42,7 @@ def test_is_asset_matches_favicon_static_and_extensions():
     assert request._is_asset("/favicon.ico")
     assert request._is_asset("/static/app.css")
     assert request._is_asset("/x/logo.png")
-    assert not request._is_asset("/console/logs")
+    assert not request._is_asset("/console/timeline")
     assert not request._is_asset("/acme/missing")
 
 
@@ -70,7 +70,7 @@ def test_every_5xx_logs_an_error_regardless_of_referer(monkeypatch):
 
 
 def test_successful_request_leaves_no_row(monkeypatch):
-    assert _decision(monkeypatch, "/console/logs", 200, "https://example.com/") == "none"
+    assert _decision(monkeypatch, "/console/timeline", 200, "https://example.com/") == "none"
 
 
 # The load metrics count the same universe the timeline shows: our own traffic and our own

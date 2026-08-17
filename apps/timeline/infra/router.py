@@ -13,8 +13,6 @@ from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.admin import resolve_user_emails
 from apps.auth.contract.current import CurrentAdmin
-from apps.logs.domain.models import LogEntry
-from apps.logs.infra.repository import LogFilter, LogReader, request_desc
 from apps.organizations.contract.queries import org_handles
 from apps.shared import clock
 from apps.shared.charts import chart_config
@@ -23,17 +21,19 @@ from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingRow, get_settings
+from apps.timeline.domain.models import TimelineEntry
+from apps.timeline.infra.repository import TimelineFilter, TimelineReader, request_desc
 
-router = APIRouter(tags=["logs"])
+router = APIRouter(tags=["timeline"])
 
-_LOGS_APP = "logs"
+_TIMELINE_APP = "timeline"
 _LOG_LEVEL_KEY = "log_level"
 
 
 def _settings_rows() -> list[SettingRow]:
-    """The logs app's own settings, straight from the settings model. The logs screen owns both
-    its timeline and its settings surface, so ``GET /console/logs`` carries them together."""
-    return get_settings(_LOGS_APP).rows()
+    """The app's own settings, straight from the settings model. The screen owns both its
+    timeline and its settings surface, so ``GET /console/timeline`` carries them together."""
+    return get_settings(_TIMELINE_APP).rows()
 
 
 _GRAINS = ("hour", "day", "week", "month")
@@ -117,15 +117,15 @@ def _bound(value: str) -> datetime | None:
 
 
 @dataclass(frozen=True)
-class LogQuery:
-    """The logs screen's filter *as the query string carries it* — every field a plain string,
+class TimelineQuery:
+    """The screen's filter *as the query string carries it* — every field a plain string,
     where empty means "not filtered".
 
-    This is deliberately a different shape from the reader's :class:`LogFilter`, which says absence
-    with ``None``. A form field can only ever be present-and-empty, so modelling these as optional
-    strings gave three states (absent / ``""`` / value) for two meanings, and every caller had to
-    collapse them. Here the HTML shape stays total, :meth:`to_filter` is the single place it becomes
-    the domain shape, and the screen, the export and the template all read one object.
+    This is deliberately a different shape from the reader's :class:`TimelineFilter`, which says
+    absence with ``None``. A form field can only be present-and-empty, so modelling these as
+    optional strings gave three states (absent / ``""`` / value) for two meanings, and every
+    caller had to collapse them. Here the HTML shape stays total, :meth:`to_filter` is the one
+    place it becomes the domain shape, and the screen, the export and the template read one object.
     """
 
     source: str = ""
@@ -144,9 +144,9 @@ class LogQuery:
     # sort/dir are the view's own state, not a filter: they ride their own params on a link.
     _ORDERING: ClassVar[tuple[str, ...]] = ("sort", "dir")
 
-    def to_filter(self) -> LogFilter:
+    def to_filter(self) -> TimelineFilter:
         """The reader's contract, where "no filter" is ``None`` — the one boundary conversion."""
-        return LogFilter(
+        return TimelineFilter(
             source=self.source or None,
             app=self.app or None,
             level=self.level or None,
@@ -173,7 +173,7 @@ class LogQuery:
         return urlencode(self.active())
 
 
-LogQueryParams = Annotated[LogQuery, Depends()]
+TimelineQueryParams = Annotated[TimelineQuery, Depends()]
 
 
 def _short(value: str) -> str:
@@ -189,7 +189,7 @@ def _as_uuid(value: str) -> uuid.UUID | None:
 
 
 def _ids(
-    facet: list[dict[str, Any]], entries: list[LogEntry], attr: str, selected: str | None
+    facet: list[dict[str, Any]], entries: list[TimelineEntry], attr: str, selected: str | None
 ) -> set[str]:
     """Every id that needs a label for this dimension: the facet options, the visible rows' ids,
     and the current selection — deduplicated so the resolver is called once."""
@@ -202,7 +202,7 @@ def _ids(
 
 async def _org_labeler(session: AdminSession, values: set[str]) -> Callable[[str], str]:
     """A ``value -> handle`` labeller over the given org ids, resolved in one bulk lookup. Ids with
-    no org row (background/app logs, test fixtures) fall back to the short id."""
+    no org (background/app lines, test fixtures) fall back to the short id."""
     uuids = {_as_uuid(v) for v in values}
     handles = await org_handles(session, {i for i in uuids if i is not None})
 
@@ -226,7 +226,7 @@ async def _user_labeler(values: set[str]) -> Callable[[str], str]:
     return label
 
 
-def _request_routes(facet: list[dict[str, Any]], entries: list[LogEntry]) -> dict[str, str]:
+def _request_routes(facet: list[dict[str, Any]], entries: list[TimelineEntry]) -> dict[str, str]:
     """A ``request_id -> route`` map: the facet already carries a route per request over its window;
     supplement it from the visible rows so a request narrowed outside that window still resolves."""
     routes = {o["value"]: o["label"] for o in facet}
@@ -237,17 +237,17 @@ def _request_routes(facet: list[dict[str, Any]], entries: list[LogEntry]) -> dic
 
 
 @router.get("", response_model=None)
-async def logs_screen(
+async def timeline_screen(
     request: Request,
     current_user: CurrentAdmin,
     session: AdminSession,
-    filters: LogQueryParams,
+    filters: TimelineQueryParams,
     bucket: str = "day",
 ) -> Response:
     flt = filters.to_filter()
     org_id, user_id, request_id = filters.org_id, filters.user_id, filters.request_id
     grain = bucket if bucket in _GRAINS else "day"
-    reader = LogReader(session)
+    reader = TimelineReader(session)
     entries = await reader.search(flt)
     activity = await reader.activity(flt, grain=grain)
     facets = await reader.facets(flt)
@@ -278,7 +278,7 @@ async def logs_screen(
     if wants_json(request):
         return JSONResponse(
             {
-                "app": _LOGS_APP,
+                "app": _TIMELINE_APP,
                 "entries": [e.model_dump(mode="json") for e in entries],
                 "activity": activity,
                 "facets": facets,
@@ -287,7 +287,7 @@ async def logs_screen(
         )
     return templates.TemplateResponse(
         request,
-        "logs/index.html",
+        "timeline/index.html",
         {
             "user": current_user,
             "entries": entries,
@@ -313,7 +313,7 @@ async def logs_screen(
 
 
 _EXPORT_LIMIT = 5000
-_CSV_COLUMNS = ("ts", "source", "level", "event", "org_id", "user_id", "entity_id", "request_id")
+_CSV_COLUMNS = ("ts", "source", "level", "name", "org_id", "user_id", "entity_id", "request_id")
 
 
 def _ndjson(rows: list[dict[str, Any]]) -> str:
@@ -329,25 +329,25 @@ def _csv(rows: list[dict[str, Any]]) -> str:
 
 
 @router.get("/export", response_model=None)
-async def export_logs(
+async def export_timeline(
     current_user: CurrentAdmin,
     session: AdminSession,
-    filters: LogQueryParams,
+    filters: TimelineQueryParams,
     format: str = "ndjson",
 ) -> Response:
-    """Structured export of the *current filter's* window — the same LogFilter the timeline uses,
-    so what you see is what you download. NDJSON keeps the nested payload; CSV flattens the core
-    columns for a spreadsheet."""
-    entries = await LogReader(session).search(filters.to_filter(), limit=_EXPORT_LIMIT)
+    """Structured export of the *current filter's* window — the same TimelineFilter the screen
+    uses, so what you see is what you download. NDJSON keeps the nested payload; CSV flattens
+    the core columns for a spreadsheet."""
+    entries = await TimelineReader(session).search(filters.to_filter(), limit=_EXPORT_LIMIT)
     rows = [e.model_dump(mode="json") for e in entries]
     if format == "csv":
         return Response(
             _csv(rows),
             media_type="text/csv",
-            headers={"Content-Disposition": 'attachment; filename="logs.csv"'},
+            headers={"Content-Disposition": 'attachment; filename="timeline.csv"'},
         )
     return Response(
         _ndjson(rows),
         media_type="application/x-ndjson",
-        headers={"Content-Disposition": 'attachment; filename="logs.ndjson"'},
+        headers={"Content-Disposition": 'attachment; filename="timeline.ndjson"'},
     )

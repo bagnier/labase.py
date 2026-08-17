@@ -5,11 +5,11 @@ from apps.console.tests.e2e import ConsoleBrowserMixin
 from apps.files.tests.e2e import OrgFileBrowserMixin
 from apps.issues.tests.e2e import IssuesBrowserMixin
 from apps.learning.tests.e2e import LearningBrowserMixin
-from apps.logs.tests.e2e import LogsBrowserMixin
 from apps.metrics.tests.e2e import MetricsBrowserMixin
 from apps.organizations.tests.e2e import OrgBrowserMixin
 from apps.pages.tests.e2e import PagesBrowserMixin
 from apps.profile.tests.e2e import ProfileBrowserMixin
+from apps.timeline.tests.e2e import TimelineBrowserMixin
 from apps.todo.tests.e2e import TodoBrowserMixin
 from tests.e2e.drivers.browser_base import BrowserBase
 
@@ -19,7 +19,7 @@ class BrowserDriver(
     ApiKeysBrowserMixin,
     IssuesBrowserMixin,
     MetricsBrowserMixin,
-    LogsBrowserMixin,
+    TimelineBrowserMixin,
     ConsoleBrowserMixin,
     ProfileBrowserMixin,
     TodoBrowserMixin,

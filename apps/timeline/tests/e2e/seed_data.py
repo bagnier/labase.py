@@ -1,4 +1,4 @@
-"""Driver-agnostic seeding for the unified-logs scenarios.
+"""Driver-agnostic seeding for the timeline scenarios.
 
 Two of the three sources are seeded through their real writers:
 - request lines → the firehose's own writer (``append_firehose``);
@@ -26,15 +26,15 @@ from apps.shared.events.models import BusinessEventRecord
 _NS = uuid.UUID("00000000-0000-0000-0000-00000000da7a")
 
 
-def logs_org_id(name: str) -> str:
+def timeline_org_id(name: str) -> str:
     return str(uuid.uuid5(_NS, f"org:{name}"))
 
 
-def logs_user_id(email: str) -> str:
+def timeline_user_id(email: str) -> str:
     return str(uuid.uuid5(_NS, f"user:{email}"))
 
 
-def logs_request_id(token: str) -> str:
+def timeline_request_id(token: str) -> str:
     """A scenario names a request "r-100"; the journal stores a uuid. Same trick as orgs and users:
     map the readable token to a stable uuid5 so the Gherkin stays plain language."""
     return str(uuid.uuid5(_NS, f"request:{token}"))

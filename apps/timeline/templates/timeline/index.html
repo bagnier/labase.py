@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% from "logs/_combobox.html" import combobox %}
+{% from "timeline/_combobox.html" import combobox %}
 {% from "macros/page_header.html" import page_header %}
 {% from "macros/empty_state.html" import empty_state %}
 {% from "macros/data_table.html" import filter_bar %}
 {% from "macros/chart.html" import chart, chart_scripts %}
-{% block title %}Logs — Console{% endblock %}
+{% block title %}Timeline — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
-  <li>Logs</li>
+  <li>Timeline</li>
 {% endblock %}
 {% block content %}
   {% set paused = filters.from_dt or filters.to_dt %}
@@ -15,17 +15,17 @@
      that reads far better with room to breathe. #}
   <div class="space-y-6">
     {# Export is a page-level action on the current filtered view — kept away from the filters. #}
-    {% call page_header('Logs',
+    {% call page_header('Timeline',
       'One timeline across every source — the structlog firehose, the business-events journal and
       tracked issues — server-wide. Correlate by request id.') %}
       <a class="btn btn-sm btn-ghost"
          aria-label="Export NDJSON"
-         href="/console/logs/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">
+         href="/console/timeline/export?format=ndjson{{ '&' ~ export_qs if export_qs }}">
         <i class="ph ph-download-simple" aria-hidden="true"></i>NDJSON
       </a>
       <a class="btn btn-sm btn-ghost"
          aria-label="Export CSV"
-         href="/console/logs/export?format=csv{{ '&' ~ export_qs if export_qs }}">
+         href="/console/timeline/export?format=csv{{ '&' ~ export_qs if export_qs }}">
         <i class="ph ph-download-simple" aria-hidden="true"></i>CSV
       </a>
     {% endcall %}
@@ -49,13 +49,13 @@
               <a class="btn btn-xs join-item {{ 'btn-active' if g == grain else 'btn-ghost' }}"
                  data-grain-option="{{ g }}"
                  aria-current="{{ 'true' if g == grain else 'false' }}"
-                 href="/console/logs?bucket={{ g }}&sort={{ sort }}&dir={{ dir }}{{ '&' ~ export_qs if export_qs }}">{{ g }}</a>
+                 href="/console/timeline?bucket={{ g }}&sort={{ sort }}&dir={{ dir }}{{ '&' ~ export_qs if export_qs }}">{{ g }}</a>
             {% endfor %}
           </span>
         </div>
-        <p class="text-xs text-base-content/50 mb-3">Log rows per {{ grain }}, stacked by source.</p>
+        <p class="text-xs text-base-content/50 mb-3">Entries per {{ grain }}, stacked by source.</p>
         {% if activity %}
-          {{ chart(activity_chart, label='Log rows per ' ~ grain ~ ', stacked by source') }}
+          {{ chart(activity_chart, label='Entries per ' ~ grain ~ ', stacked by source') }}
         {% else %}
           <p class="text-xs text-base-content/60" data-activity-summary>No activity in the current window.</p>
         {% endif %}
@@ -64,7 +64,7 @@
          Every control applies instantly — the categorical pills (see _combobox.html)
          auto-submit on selection, and free text / the date range submit on change. No
          Filter button: the whole toolbar is live. #}
-      {% call filter_bar('/console/logs', 'Filter logs', class_='p-3 border-b border-base-300') %}
+      {% call filter_bar('/console/timeline', 'Filter the timeline', class_='p-3 border-b border-base-300') %}
         {{ combobox("source", "source", filters.source, filters.source, facets.source) }}
         {{ combobox("app", "app", filters.app, filters.app, facets.app) }}
         {{ combobox("level", "level", filters.level, filters.level, facets.level) }}
@@ -101,7 +101,7 @@
         {% if filters.entity_id %}
           <a class="badge badge-sm badge-neutral gap-1"
              data-entity-filter
-             href="/console/logs"
+             href="/console/timeline"
              title="Clear entity filter">
             entity: {{ filters.entity_id[:12] }}
             <i class="ph ph-x" aria-hidden="true"></i>
@@ -112,7 +112,7 @@
           {% if paused %}
             <span class="w-2 h-2 rounded-full bg-warning"></span>
             Paused — browsing a period
-            <a class="link link-primary" href="/console/logs">↑ Back to live</a>
+            <a class="link link-primary" href="/console/timeline">↑ Back to live</a>
           {% else %}
             <span class="w-2 h-2 rounded-full bg-success"></span>
             Live
@@ -124,11 +124,11 @@
           <table class="table table-sm">
             <thead>
               <tr>
-                {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("event", "Event"), ("user", "User"), ("entity", "Entity"), ("request", "Request")] %}
+                {% for col, label in [("ts", "Time"), ("source", "Source"), ("level", "Level"), ("org", "Org"), ("name", "Name"), ("user", "User"), ("entity", "Entity"), ("request", "Request")] %}
                   <th>
                     <a class="inline-flex items-center gap-1 hover:text-base-content"
                        data-sort="{{ col }}"
-                       href="/console/logs?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}&bucket={{ grain }}{{ '&' ~ export_qs if export_qs }}">
+                       href="/console/timeline?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}&bucket={{ grain }}{{ '&' ~ export_qs if export_qs }}">
                       {{ label }}
                       {% if sort == col %}
                         <span aria-hidden="true">{{ "▼" if dir == "desc" else "▲" }}</span>
@@ -141,26 +141,26 @@
                 <th>Details</th>
               </tr>
             </thead>
-            <tbody id="log-entries">
-              {% include "logs/_entries.html" %}
+            <tbody id="timeline-entries">
+              {% include "timeline/_entries.html" %}
             </tbody>
           </table>
         </div>
       {% else %}
-        {{ empty_state('No log entries yet',
-          hint='Nothing has been logged in the current window. Lower the firehose level to capture
+        {{ empty_state('No entries yet',
+          hint='Nothing was recorded in the current window. Lower the firehose level to capture
           request traffic.',
           icon='magnifying-glass',
-          attr='data-logs-empty') }}
+          attr='data-timeline-empty') }}
       {% endif %}
     </div>
-    <section aria-label="Logs settings" class="max-w-2xl">
+    <section aria-label="Timeline settings" class="max-w-2xl">
       <h2 class="text-sm font-semibold mb-1">Firehose level</h2>
       <p class="text-xs text-base-content/70 mb-3">
         Gates the request/app firehose. Business events and issues are recorded regardless.
         Applies live — no restart.
       </p>
-      {% with app = "logs", saved_key = none %}
+      {% with app = "timeline", saved_key = none %}
         {% include "console/_settings.html" %}
       {% endwith %}
     </section>

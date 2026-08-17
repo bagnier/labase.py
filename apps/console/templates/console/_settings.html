@@ -23,7 +23,7 @@
                  {% if s.value == "true" %}checked{% endif %} />
           <span class="text-sm text-base-content/70">Enabled</span>
         </label>
-      {% elif app == "logs" and s.key == "log_level" %}
+      {% elif app == "timeline" and s.key == "log_level" %}
         <select name="value" class="select w-full" aria-label="{{ s.key }}">
           {% for lvl in ["DEBUG", "INFO", "WARNING", "ERROR"] %}
             <option value="{{ lvl }}" {% if s.value == lvl %}selected{% endif %}>{{ lvl }}</option>

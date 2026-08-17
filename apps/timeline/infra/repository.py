@@ -17,13 +17,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.issues.contract.queries import IssueEventRow, search_issue_events
-from apps.logs.domain.models import LogEntry, LogSource
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.observability.firehose import FirehoseRow, read_firehose
+from apps.timeline.domain.models import TimelineEntry, TimelineSource
 
-_SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
+_SORT_KEYS = {"ts", "source", "level", "org", "name", "user", "entity", "request"}
 
 # The display level the viewer gives every business fact. Business events have no severity of
 # their own (that is a logging notion); this is the merged timeline's axis, not the journal's.
@@ -53,7 +53,7 @@ def bucket_key(ts: datetime, grain: str) -> str:
 
 
 @dataclass(frozen=True)
-class LogFilter:
+class TimelineFilter:
     """The combinable filters (all optional) plus sort — the read contract shared by
     the timeline, the activity graph and the export."""
 
@@ -70,37 +70,37 @@ class LogFilter:
     sort: str = "ts"
     descending: bool = True
 
-    def wants(self, source: LogSource) -> bool:
+    def wants(self, source: TimelineSource) -> bool:
         """Whether this source can contribute given the source filter."""
         return self.source is None or self.source == source
 
 
-def _key_app(event: str) -> str:
-    """The owning app of a *keyed* source — the first dotted segment of its event name
+def _key_app(name: str) -> str:
+    """The owning app of a *keyed* source — the first dotted segment of its name
     (``request.failed`` → ``request``). Only the firehose and issue occurrences need this: a
-    business row states its app on its own column. Issues carry a bare title, which collapses to
+    business fact states its app on its own column. Issues carry a bare title, which collapses to
     its full name."""
-    return event.split(".", 1)[0]
+    return name.split(".", 1)[0]
 
 
-class LogReader:
+class TimelineReader:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def search(self, flt: LogFilter, *, limit: int = 100) -> list[LogEntry]:
-        entries: list[LogEntry] = []
+    async def search(self, flt: TimelineFilter, *, limit: int = 100) -> list[TimelineEntry]:
+        entries: list[TimelineEntry] = []
         # The firehose is a synchronous read of local files — the HTTP diagnostics stream
         # (request.failed), level-gated at write time; the durable sources below carry full history.
-        if flt.wants(LogSource.http):
+        if flt.wants(TimelineSource.http):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         # A business fact has no severity of its own — it is a domain event, not a log line. The
         # viewer needs one axis across its three sources, so it reads them all at BUSINESS_LEVEL;
         # a filter on any other level excludes the journal wholesale, as it does for issues.
-        if flt.wants(LogSource.business) and flt.level in (None, BUSINESS_LEVEL):
+        if flt.wants(TimelineSource.business) and flt.level in (None, BUSINESS_LEVEL):
             rows = await EventRepository(self.session).search(**_business_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
-        if flt.wants(LogSource.error) and flt.level in (None, "error"):
+        if flt.wants(TimelineSource.error) and flt.level in (None, "error"):
             rows = await search_issue_events(self.session, **_issue_kwargs(flt, limit))
             entries += [_from_issue(r) for r in rows]
         # The app filter narrows the merged timeline to one app's event key prefix — applied in
@@ -114,7 +114,7 @@ class LogReader:
         return _sorted(entries, flt)[:limit]
 
     async def activity(
-        self, flt: LogFilter, *, grain: str = "day", cap: int = 20000
+        self, flt: TimelineFilter, *, grain: str = "day", cap: int = 20000
     ) -> dict[str, dict[str, int]]:
         """Per-bucket, per-source counts over the filtered window — feeds the stacked graph.
         Honours the same filters as the timeline (see the two activity scenarios); ``grain`` picks
@@ -129,7 +129,9 @@ class LogReader:
             b[e.source.value] = b.get(e.source.value, 0) + 1
         return buckets
 
-    async def facets(self, flt: LogFilter, *, cap: int = 2000) -> dict[str, list[dict[str, Any]]]:
+    async def facets(
+        self, flt: TimelineFilter, *, cap: int = 2000
+    ) -> dict[str, list[dict[str, Any]]]:
         """Distinct values with occurrence counts for the five categorical filters — the option
         lists behind the combobox pills. Honours only the date + text window (the categorical
         selections are cleared) so every pill offers all its pickable values and counts stay
@@ -141,7 +143,9 @@ class LogReader:
         return {
             "source": _tally(entries, lambda e: e.source.value),
             # The app axis is a business notion (``<app>.<verb>``); only business rows have one.
-            "app": _tally([e for e in entries if e.source == LogSource.business], lambda e: e.app),
+            "app": _tally(
+                [e for e in entries if e.source == TimelineSource.business], lambda e: e.app
+            ),
             "level": _tally(entries, lambda e: e.level),
             "org": _tally(entries, lambda e: e.org_id),
             "user": _tally(entries, lambda e: e.user_id),
@@ -149,7 +153,9 @@ class LogReader:
         }
 
 
-def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> list[dict[str, Any]]:
+def _tally(
+    entries: list[TimelineEntry], pick: Callable[[TimelineEntry], str | None]
+) -> list[dict[str, Any]]:
     counts: dict[str, int] = {}
     for e in entries:
         value = pick(e)
@@ -159,7 +165,7 @@ def _tally(entries: list[LogEntry], pick: Callable[[LogEntry], str | None]) -> l
     return [{"value": value, "count": count} for value, count in ranked]
 
 
-def request_desc(entry: LogEntry) -> str | None:
+def request_desc(entry: TimelineEntry) -> str | None:
     """The human label for a request: its ``METHOD /path``.
 
     A business row carries it on its own ``request_name`` column, pinned when the request ran — so
@@ -171,10 +177,10 @@ def request_desc(entry: LogEntry) -> str | None:
     return f"{method} {path}" if method and path else None
 
 
-def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
+def _request_facet(entries: list[TimelineEntry]) -> list[dict[str, Any]]:
     """Like ``_tally`` over ``request_id``, but each option also carries the request's route as its
-    label so the pill reads ``GET /console/logs`` instead of an opaque id (falling back to the id
-    when no line in the window describes the route)."""
+    label so the pill reads ``GET /console/timeline`` instead of an opaque id (falling back to
+    the id when no entry in the window describes the route)."""
     counts: dict[str, int] = {}
     labels: dict[str, str] = {}
     for e in entries:
@@ -188,7 +194,7 @@ def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
     return [{"value": rid, "count": count, "label": labels.get(rid, rid)} for rid, count in ranked]
 
 
-def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+def _event_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     # The shared str base for all three sources: issue occurrences match a JSONB ``context ->>``
     # (text) and firehose lines match file JSON — both keep the ids as strings. Only the business
     # journal's uuid columns need parsing, done in ``_business_kwargs``.
@@ -205,8 +211,8 @@ def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     }
 
 
-def _business_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
-    # The journal's id columns are uuid; LogFilter carries them as strings from the URL query, so
+def _business_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
+    # The journal's id columns are uuid; TimelineFilter carries them as strings off the URL, so
     # parse at this boundary (a malformed id raises, as the previous in-repository cast did).
     kwargs = _event_kwargs(flt, limit)
     del kwargs["level"]  # the journal carries no level column — see BUSINESS_LEVEL
@@ -217,14 +223,14 @@ def _business_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     return kwargs
 
 
-def _issue_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+def _issue_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     kwargs = _event_kwargs(flt, limit)
     del kwargs["level"]  # issues carry no level column — always "error"
     del kwargs["entity_id"]  # issue occurrences aren't keyed to a domain entity
     return kwargs
 
 
-def _firehose_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
+def _firehose_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     # The firehose keeps its own retention window; it takes the same filters as the DB sources,
     # minus entity_id — firehose lines aren't keyed to a domain entity (dropped in memory below).
     kwargs = _event_kwargs(flt, limit)
@@ -232,12 +238,12 @@ def _firehose_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     return kwargs
 
 
-def _from_firehose(row: FirehoseRow) -> LogEntry:
-    return LogEntry(
+def _from_firehose(row: FirehoseRow) -> TimelineEntry:
+    return TimelineEntry(
         ts=row.ts,
-        source=LogSource.http,
+        source=TimelineSource.http,
         level=row.level,
-        event=row.event,
+        name=row.event,
         app=_key_app(row.event),
         org_id=row.org_id,
         user_id=row.user_id,
@@ -246,31 +252,31 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
     )
 
 
-def _from_event(row: BusinessEventRecord) -> LogEntry:
-    # LogEntry merges three sources (firehose ids are plain strings from JSON), so its ids stay str:
-    # stringify the journal row's uuids at this boundary.
-    return LogEntry(
-        ts=row.created_at,
-        source=LogSource.business,
+def _from_event(record: BusinessEventRecord) -> TimelineEntry:
+    # TimelineEntry merges three sources (firehose ids are plain strings from JSON), so its ids
+    # stay str: stringify the journal record's uuids at this boundary.
+    return TimelineEntry(
+        ts=record.created_at,
+        source=TimelineSource.business,
         level=BUSINESS_LEVEL,
-        event=row.kind,
-        app=row.app_name,  # the row's own column — never re-split out of the composed kind
-        org_id=str(row.org_id) if row.org_id else None,
-        user_id=str(row.user_id) if row.user_id else None,
-        entity_id=str(row.entity_id) if row.entity_id else None,
-        request_id=str(row.request_id) if row.request_id else None,
-        request_name=row.request_name,
-        payload=row.payload or {},
+        name=record.kind,
+        app=record.app_name,  # its own column — never re-split out of the composed kind
+        org_id=str(record.org_id) if record.org_id else None,
+        user_id=str(record.user_id) if record.user_id else None,
+        entity_id=str(record.entity_id) if record.entity_id else None,
+        request_id=str(record.request_id) if record.request_id else None,
+        request_name=record.request_name,
+        payload=record.payload or {},
     )
 
 
-def _from_issue(row: IssueEventRow) -> LogEntry:
+def _from_issue(row: IssueEventRow) -> TimelineEntry:
     ctx = row.context
-    return LogEntry(
+    return TimelineEntry(
         ts=row.ts,
-        source=LogSource.error,
+        source=TimelineSource.error,
         level="error",
-        event=row.title,
+        name=row.title,
         app=_key_app(row.title),
         org_id=ctx.get("org_id"),
         user_id=ctx.get("user_id"),
@@ -279,7 +285,7 @@ def _from_issue(row: IssueEventRow) -> LogEntry:
     )
 
 
-def _sort_value(entry: LogEntry, key: str) -> Any:
+def _sort_value(entry: TimelineEntry, key: str) -> Any:
     if key == "ts":
         return entry.ts
     attr = {"org": "org_id", "user": "user_id", "entity": "entity_id", "request": "request_id"}.get(
@@ -288,7 +294,7 @@ def _sort_value(entry: LogEntry, key: str) -> Any:
     return getattr(entry, attr, "") or ""
 
 
-def _sorted(entries: list[LogEntry], flt: LogFilter) -> list[LogEntry]:
+def _sorted(entries: list[TimelineEntry], flt: TimelineFilter) -> list[TimelineEntry]:
     key = flt.sort if flt.sort in _SORT_KEYS else "ts"
     # Secondary key on ts keeps ties deterministic (and chronological within a column sort).
     return sorted(entries, key=lambda e: (_sort_value(e, key), e.ts), reverse=flt.descending)

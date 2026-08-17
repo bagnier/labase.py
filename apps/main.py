@@ -6,7 +6,6 @@ from apps.files.contract import integration as files
 from apps.health.contract import integration as health
 from apps.issues.contract import integration as issues
 from apps.learning.contract import integration as learning
-from apps.logs.contract import integration as logs
 from apps.metrics.contract import integration as metrics
 from apps.organizations.contract import integration as organizations
 from apps.pages.contract import integration as pages
@@ -15,6 +14,7 @@ from apps.public.contract import integration as public
 from apps.shared.contract import integration as shared
 from apps.shared.host import host
 from apps.shared.persistence.database import dispose_engines
+from apps.timeline.contract import integration as timeline
 from apps.todo.contract import integration as todo
 
 # Composition root: each context's mount() wires its routers, events, and claimed slugs.
@@ -28,7 +28,7 @@ _apps = sorted(
         health,
         issues,
         metrics,
-        logs,
+        timeline,
         console,
         organizations,
         api_keys,

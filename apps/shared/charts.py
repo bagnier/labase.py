@@ -30,7 +30,7 @@ def day_buckets_series(
     height: int = 240,
 ) -> dict[str, Any]:
     """A stacked per-day column chart from ``{iso_day: {key: count}}`` buckets
-    (the shape :meth:`LogReader.activity` returns) over a fixed trailing window —
+    (the shape :meth:`TimelineReader.activity` returns) over a fixed trailing window —
     missing days render as gaps of zero, so a quiet week still shows its width."""
     window = last_days(days, end=end)
     keys = sorted({k for day in buckets.values() for k in day})

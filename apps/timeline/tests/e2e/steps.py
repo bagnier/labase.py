@@ -76,59 +76,59 @@ def step_event_recorded(driver, event, org):
 
 
 # ── Filtering / sorting ──────────────────────────────────────────────────────
-@when(parsers.parse('the admin filters the logs by org "{org}"'))
+@when(parsers.parse('the admin filters the timeline by org "{org}"'))
 def step_filter_org(driver, org):
-    driver.filter_logs_by_org(org)
+    driver.filter_timeline_by_org(org)
 
 
-@when(parsers.parse('the admin filters the logs by user "{email}"'))
+@when(parsers.parse('the admin filters the timeline by user "{email}"'))
 def step_filter_user(driver, email):
-    driver.filter_logs_by_user(email)
+    driver.filter_timeline_by_user(email)
 
 
-@when(parsers.parse('the admin filters the logs by source "{source}"'))
+@when(parsers.parse('the admin filters the timeline by source "{source}"'))
 def step_filter_source(driver, source):
-    driver.filter_logs_by_source(source)
+    driver.filter_timeline_by_source(source)
 
 
-@when(parsers.parse('the admin filters the logs by app "{app}"'))
+@when(parsers.parse('the admin filters the timeline by app "{app}"'))
 def step_filter_app(driver, app):
-    driver.filter_logs_by_app(app)
+    driver.filter_timeline_by_app(app)
 
 
-@when(parsers.parse('the admin filters the logs by level "{level}"'))
+@when(parsers.parse('the admin filters the timeline by level "{level}"'))
 def step_filter_level(driver, level):
-    driver.filter_logs_by_level(level)
+    driver.filter_timeline_by_level(level)
 
 
-@when(parsers.parse('the admin filters the logs by request "{rid}"'))
+@when(parsers.parse('the admin filters the timeline by request "{rid}"'))
 def step_filter_request(driver, rid):
-    driver.filter_logs_by_request(rid)
+    driver.filter_timeline_by_request(rid)
 
 
-@when(parsers.parse('the admin searches the logs for "{text}"'))
+@when(parsers.parse('the admin searches the timeline for "{text}"'))
 def step_search_text(driver, text):
-    driver.search_logs(text)
+    driver.search_timeline(text)
 
 
-@when("the admin exports the filtered logs as NDJSON")
+@when("the admin exports the filtered timeline as NDJSON")
 def step_export_ndjson(driver):
-    driver.export_logs_ndjson()
+    driver.export_timeline_ndjson()
 
 
-@when("the admin exports the filtered logs as CSV")
+@when("the admin exports the filtered timeline as CSV")
 def step_export_csv(driver):
-    driver.export_logs_csv()
+    driver.export_timeline_csv()
 
 
-@when(parsers.parse('the admin filters the logs to dates from "{a}" to "{b}"'))
+@when(parsers.parse('the admin filters the timeline to dates from "{a}" to "{b}"'))
 def step_filter_dates(driver, a, b):
-    driver.filter_logs_by_dates(a, b)
+    driver.filter_timeline_by_dates(a, b)
 
 
-@when(parsers.parse('the admin sorts the logs by "{column}" ascending'))
+@when(parsers.parse('the admin sorts the timeline by "{column}" ascending'))
 def step_sort_asc(driver, column):
-    driver.sort_logs(column, "asc")
+    driver.sort_timeline(column, "asc")
 
 
 @when(parsers.parse('the admin views the activity by "{grain}"'))
@@ -196,16 +196,16 @@ def step_activity(driver, date, business, http, error):
 
 
 # ── Access + empty state ─────────────────────────────────────────────────────
-@when("the admin opens the logs screen")
-def step_open_logs(driver):
-    driver.open_logs_screen()
+@when("the admin opens the timeline")
+def step_open_timeline(driver):
+    driver.open_timeline()
 
 
-@then("the logs screen reports no entries")
-def step_logs_empty(driver):
-    driver.assert_logs_empty()
+@then("the timeline reports no entries")
+def step_timeline_empty(driver):
+    driver.assert_timeline_empty()
 
 
-@when("they try to open the logs screen")
-def step_try_open_logs(driver):
-    driver.try_open_logs_screen()
+@when("they try to open the timeline")
+def step_try_open_timeline(driver):
+    driver.try_open_timeline()
