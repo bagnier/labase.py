@@ -1,0 +1,18 @@
+{
+  "name": "pyright-lsp",
+  "description": "Python language server, run from the repo's own pinned pyright",
+  "version": "1.0.0",
+  "author": {
+    "name": "labase.py"
+  },
+  "lspServers": {
+    "pyright": {
+      "command": "${CLAUDE_PROJECT_DIR}/.venv/bin/pyright-langserver",
+      "args": ["--stdio"],
+      "extensionToLanguage": {
+        ".py": "python",
+        ".pyi": "python"
+      }
+    }
+  }
+}

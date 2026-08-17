@@ -473,6 +473,10 @@ Notes:
   request.
 - **Migrations** — `supabase start` and `make db-reset` apply `supabase/migrations/`
   locally. `make migrate` (`supabase db push`) is for a linked **remote** project.
+- **Python language server** — nothing to install: `pyright` is pinned in the dev group, so
+  `make install` puts it in `.venv/`. The in-tree plugin `.claude/plugins/pyright-lsp/` points
+  Claude Code at that binary; VS Code reaches the same engine through Pylance. Both read the
+  `[tool.pyright]` block, which leaves type checking to `ty`.
 
 ### Parallel work: isolated worktrees
 

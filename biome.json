@@ -11,7 +11,8 @@
       "package.json",
       "biome.json",
       ".mcp.json",
-      ".vscode/*.json"
+      ".vscode/*.json",
+      ".claude/plugins/**/*.json"
     ]
   },
   "formatter": {

@@ -1,0 +1,13 @@
+{
+  "name": "labase",
+  "description": "This repo's own Claude Code plugins, carried in-tree so a clone needs no machine-level install",
+  "owner": {
+    "name": "labase.py"
+  },
+  "plugins": [
+    {
+      "name": "pyright-lsp",
+      "source": "./pyright-lsp"
+    }
+  ]
+}

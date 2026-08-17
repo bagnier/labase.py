@@ -3,7 +3,12 @@
     // Python
     "ms-python.python",
 
-    // Ruff — linting + formatting (remplace black, isort, flake8)
+    // Pylance — the Python language server (completion, navigation, refactoring). Same
+    // pyright core Claude Code's `pyright-lsp` plugin runs, reading the same [tool.pyright]
+    // block in pyproject.toml. Its type checking is off: `ty` is the type checker.
+    "ms-python.vscode-pylance",
+
+    // Ruff — linting + formatting (replaces black, isort, flake8)
     "charliermarsh.ruff",
 
     // ty — type checking (Astral)
@@ -12,16 +17,16 @@
     // Jinja2 templates
     "samuelcolvin.jinjahtml",
 
-    // Tailwind CSS (autocomplétion dans les classes HTML)
+    // Tailwind CSS (completion inside HTML class attributes)
     "bradlc.vscode-tailwindcss",
 
-    // HTMX (autocomplétion des attributs hx-*)
+    // HTMX (completion for hx-* attributes)
     "otovo-oss.htmx-tags",
 
     // Docker
     "ms-azuretools.vscode-containers",
 
-    // Coverage dans le gutter (lignes couvertes/non couvertes)
+    // Coverage in the gutter (covered / uncovered lines)
     "ryanluker.vscode-coverage-gutters",
 
     // .env

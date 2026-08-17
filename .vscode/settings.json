@@ -13,7 +13,9 @@
   },
   // Format + fix on save
   "editor.formatOnSave": true,
-  "python.analysis.typeCheckingMode": "off",
+  // Pylance is not configured here: it runs the same pyright core as Claude Code's
+  // `pyright-lsp` plugin, and both read [tool.pyright] in pyproject.toml — the single source
+  // for venv, paths and typeCheckingMode. A `python.analysis.*` twin here would be ignored.
   // Prevent VSCode from injecting VIRTUAL_ENV into terminals (conflicts with uv)
   "python.terminal.activateEnvironment": false,
   // Python interpreter — uv managed venv
@@ -29,9 +31,9 @@
   "python.testing.unittestEnabled": false,
   "ruff.fixAll": true,
   "ruff.organizeImports": true,
-  // Ruff — linting + formatting (remplace black, isort, flake8)
+  // Ruff — linting + formatting (replaces black, isort, flake8)
   "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
-  // ty est le type checker — on désactive le type checking de Pylance pour éviter les conflits
+  // ty — the project's only type checker, which is why pyright/Pylance does none
   "ty.path": ["${workspaceFolder}/.venv/bin/ty"],
   // SQL — point the sqlfluff extension at the relocated project config
   // (needs sqlfluff on PATH locally, e.g. `uv tool install sqlfluff`)

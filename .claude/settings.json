@@ -48,5 +48,16 @@
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
   },
   "model": "opus",
-  "effortLevel": "high"
+  "effortLevel": "high",
+  "extraKnownMarketplaces": {
+    "labase": {
+      "source": {
+        "source": "directory",
+        "path": "${CLAUDE_PROJECT_DIR}/.claude/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "pyright-lsp@labase": true
+  }
 }

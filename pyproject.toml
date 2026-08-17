@@ -32,7 +32,8 @@ dev = [
     "pip-audit==2.10.1",
     "playwright==1.62.0",
     "pre-commit==4.6.2",
-    "pyotp>=2.10.0",
+    "pyotp==2.10.0",
+    "pyright==1.1.411",
     "pytest-asyncio==1.4.0",
     "pytest-bdd==8.1.0",
     "pytest-cov==7.1.0",
@@ -92,6 +93,25 @@ data_file = ".cache/cov/.coverage"
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+
+[tool.pyright]
+# Pyright is the language server, not a verdict. Two readers speak it off this single block —
+# Claude Code through its `pyright-lsp` plugin, VS Code through Pylance (the same analysis core
+# behind a proprietary shell) — so navigation, completion and hover behave identically on either
+# side. `ty` stays the project's only type checker: it is what `make lint` arbitrates on, and a
+# second checker would contradict it on inference it does not share. Hence type checking off here,
+# mirrored by `python.analysis.typeCheckingMode` in .vscode/settings.json.
+# The server itself is the dev group's pinned `pyright`, launched from `.venv/` by the in-tree
+# plugin `.claude/plugins/pyright-lsp/` — no machine-level install, one version per lockfile.
+typeCheckingMode = "off"
+pythonVersion = "3.14"
+venvPath = "."
+venv = ".venv"
+include = ["apps", "tests", "scripts"]
+# client/ is generated and gitignored: on the path so scripts/smoke.py resolves its import,
+# outside `include` so regenerating it never floods a reader with diagnostics on code nobody edits.
+extraPaths = ["client"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "worktrees"]
 
 [tool.ruff]
 line-length = 100

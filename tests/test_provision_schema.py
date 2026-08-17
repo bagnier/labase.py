@@ -7,6 +7,8 @@ new Storage policy or a second bucket would land in ``public`` but not in a clon
 provisions a throwaway schema and asserts the clone is faithful, so drift fails CI loudly.
 """
 
+from collections.abc import Iterator
+
 import pytest
 
 from scripts import provision_schema as ps
@@ -16,7 +18,7 @@ GUARD_BUCKET = "org-files-guard"
 
 
 @pytest.fixture
-def guard_schema() -> str:
+def guard_schema() -> Iterator[str]:
     ps.provision(GUARD_SCHEMA, GUARD_BUCKET, reset=True)
     yield GUARD_SCHEMA
     ps.deprovision(GUARD_SCHEMA, GUARD_BUCKET)
