@@ -11,8 +11,6 @@ This composition root wires the mixins together and re-exports the public surfac
 
 from apps.shared.events.repository._delivery import (
     LIFTED_COLUMNS,
-    TRAIL_COLUMNS,
-    TrailRow,
     _DispatchesEvents,
     task_payload,
 )
@@ -26,9 +24,7 @@ class EventRepository(_WritesEvents, _DispatchesEvents, _ReadsEvents):
 
 __all__ = [
     "LIFTED_COLUMNS",
-    "TRAIL_COLUMNS",
     "EventRepository",
-    "TrailRow",
     "event_to_record",
     "task_payload",
 ]

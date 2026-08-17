@@ -1,8 +1,8 @@
 """BusinessEvent vocabulary + the ``event → record → event`` chain that carries it.
 
 Covers ``kind`` derivation (so apps write no dotted strings), the secret-field refusal, and the
-round trip a fact makes through the serialized chain — ``event_to_record`` → the delivery columns
-→ ``task_payload`` → ``from_payload`` — which is where the four field lists must agree.
+round trip a fact makes through the serialized chain — ``event_to_record`` → ``task_payload`` →
+``from_payload`` — which is where the lifted columns and the fold-back must agree.
 
 What ``emit`` itself promises is next door: it persists on the session the caller names and runs no
 handler (``test_write_path`` for the transaction, ``test_emit_durability`` for what a rollback
@@ -22,13 +22,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
 from apps.shared.events.bus import EventBus
 from apps.shared.events.catalog import catalog
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import (
     LIFTED_COLUMNS,
-    TRAIL_COLUMNS,
-    TrailRow,
     event_to_record,
     task_payload,
 )
+from apps.shared.events.repository._write import _RECORD, _append_record
 from apps.shared.events.types import _is_secret_field_name
 from apps.shared.events.wiring import EventWiring
 
@@ -143,11 +143,10 @@ def test_event_to_record_lifts_scoping_and_carries_metadata():
 
 # ── One serialized shape, closed by a round-trip ───────────────────────────────────────────────
 #
-# A fact crosses the persistence/delivery boundary through four field lists that must agree: the
-# columns `event_to_record` lifts out of the payload, the columns the delivery scans SELECT, the
-# `TrailRow` they land in, and the keys `task_payload` folds back before `from_payload` rebuilds
-# the event. These tests fix that agreement, so a base field added to `BusinessEvent` without
-# threading it through the whole chain fails here, loudly, not by vanishing between write and read.
+# A fact crosses the persistence/delivery boundary through one record and two mirrored loops: the
+# columns `event_to_record` lifts out of the payload, and the keys `task_payload` folds back before
+# `from_payload` rebuilds the event. These tests fix that agreement, so a base field added to
+# `BusinessEvent` without threading it through fails here, loudly, not by vanishing in between.
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -159,15 +158,10 @@ class _NoteEvent(BusinessEvent):
 
 
 def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
-    """Drive an event through the real serialized chain without a DB: `event_to_record` builds
-    the record, we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it —
-    computing the generated `kind`, which a SELECT returns but an unflushed ORM record leaves unset
-    — then `task_payload` + `from_payload` rebuild it, as the listener does off a claimed one."""
-    record = event_to_record(event)
-    projected = {c: getattr(record, c) for c in TRAIL_COLUMNS}
-    projected["kind"] = f"{record.app_name}.{record.verb}"  # generated column, unset pre-flush
-    scanned = cast(TrailRow, projected)
-    return type(event).from_payload(task_payload(scanned))
+    """Drive an event through the real serialized chain without a DB: `event_to_record` builds the
+    record, then `task_payload` + `from_payload` rebuild it, exactly as the listener does off a
+    claimed one. The delivery reads the record itself, so there is no third shape to fake here."""
+    return type(event).from_payload(task_payload(event_to_record(event)))
 
 
 @pytest.mark.parametrize(
@@ -195,33 +189,25 @@ def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
     ],
 )
 def test_a_fact_round_trips_identically_through_the_serialized_chain(event: BusinessEvent):
-    # event → record → TrailRow → payload → event returns something equal to what went in. Frozen
+    # event → record → payload → event returns something equal to what went in. Frozen
     # dataclass equality compares every instance field, so this asserts the whole event survives.
     assert _reconstruct_through_delivery(event) == event
 
 
-def test_the_delivery_column_lists_derive_from_one_source():
-    # The lifted columns, the SELECT columns and the TrailRow that receives them are three views of
-    # one tuple — not three hand-kept lists that must be edited in lockstep. Pin them to it so a
-    # drift (a column added to one but not the others) fails at import of this test, not in prod.
-    correlation = {"id", "kind", "created_at", "request_id"}  # identity + delivery context
-    assert set(TRAIL_COLUMNS) == correlation | set(LIFTED_COLUMNS) | {"payload"}
-    assert set(TrailRow.__annotations__) == set(TRAIL_COLUMNS)
+def test_every_lifted_field_is_a_column_of_the_record():
+    # The pop loop and the fold-back both walk LIFTED_COLUMNS, so they cannot disagree — but a name
+    # in it that is not a column would only surface when a fact is delivered. Pin it to the model.
+    assert set(LIFTED_COLUMNS) <= set(BusinessEventRecord.__mapper__.columns.keys())
 
 
 # ── C4: the write path goes through the SECURITY DEFINER writer function, not a raw INSERT ──────
 
 
 @pytest.mark.asyncio
-async def test_the_write_path_calls_the_definer_function_with_the_row_columns():
+async def test_the_write_path_calls_the_definer_function_with_the_records_columns():
     # Since C4 revoked the raw INSERT grant, the journal is written only through
     # record_business_event(...). Assert the write path calls exactly that, with the record's
     # columns as arguments and the payload json-encoded for the jsonb parameter — no ORM INSERT.
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from apps.shared.events.models import BusinessEventRecord
-    from apps.shared.events.repository._write import _RECORD, _append_record
-
     captured: dict[str, object] = {}
 
     class _FakeSession:
@@ -244,8 +230,8 @@ async def test_the_write_path_calls_the_definer_function_with_the_row_columns():
 # ── C2: a delivered event is self-descriptive (its own instant) and correlated (the request) ───
 
 
-def _trail_record(**over: object) -> TrailRow:
-    """A TrailRow with every column present, overridable — the shape a delivery scan returns."""
+def _scanned_record(**over: object) -> BusinessEventRecord:
+    """A record with every delivered column set, overridable — what a delivery scan returns."""
     columns: dict[str, object] = {
         "id": uuid.uuid7(),
         "kind": "test_note.noted",
@@ -258,7 +244,7 @@ def _trail_record(**over: object) -> TrailRow:
         "payload": {},
     }
     columns.update(over)
-    return cast(TrailRow, columns)
+    return BusinessEventRecord(**columns)
 
 
 def test_task_payload_folds_the_fact_instant_and_the_originating_request():
@@ -266,7 +252,7 @@ def test_task_payload_folds_the_fact_instant_and_the_originating_request():
     # json-safe strings (iso / str) so they survive the queue, alongside the dedup event_id.
     fid, rid = uuid.uuid7(), uuid.uuid7()
     instant = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
-    record = _trail_record(id=fid, created_at=instant, request_id=rid, payload={"note": "hi"})
+    record = _scanned_record(id=fid, created_at=instant, request_id=rid, payload={"note": "hi"})
     payload = task_payload(record)
     assert payload["created_at"] == instant.isoformat()
     assert payload["request_id"] == str(rid)

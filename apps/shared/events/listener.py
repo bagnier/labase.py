@@ -26,7 +26,8 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events.catalog import catalog
-from apps.shared.events.repository import EventRepository, TrailRow, task_payload
+from apps.shared.events.models import BusinessEventRecord
+from apps.shared.events.repository import EventRepository, task_payload
 from apps.shared.events.types import BusinessEvent
 from apps.shared.events.wiring import EventWiring
 from apps.shared.events.wiring import wiring as process_wiring
@@ -87,7 +88,7 @@ class EventListener:
             for record in claimed:
                 await self._fan_out(session, record)
             if claimed:
-                await repo.mark_dispatched([r["id"] for r in claimed])
+                await repo.mark_dispatched([r.id for r in claimed])
             spread_records = await self._read_spread(repo)
             await session.commit()
         for record in spread_records:
@@ -96,7 +97,7 @@ class EventListener:
         # LIMIT — a single tick applies all of it — so it never needs another pass.
         return len(claimed)
 
-    async def _read_spread(self, repo: EventRepository) -> list[TrailRow]:
+    async def _read_spread(self, repo: EventRepository) -> list[BusinessEventRecord]:
         """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
         kinds = self._wiring.spread_kinds()
         if not kinds:
@@ -105,7 +106,7 @@ class EventListener:
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
         return await repo.scan_spread(cursor, kinds)
 
-    async def _apply_spread(self, record: TrailRow) -> None:
+    async def _apply_spread(self, record: BusinessEventRecord) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
         cursor. Handlers are idempotent (a reload is a plain assignment), so a failure is logged and
         skipped rather than blocking the cursor — and so is a record that cannot be rebuilt at all
@@ -118,17 +119,17 @@ class EventListener:
                 try:
                     await handler(event)
                 except Exception:
-                    log.warning("listener.spread_handler_failed", kind=record["kind"])
-        self._spread_cursor = record["id"]
+                    log.warning("listener.spread_handler_failed", kind=record.kind)
+        self._spread_cursor = record.id
 
-    def _reconstruct(self, record: TrailRow) -> BusinessEvent | None:
+    def _reconstruct(self, record: BusinessEventRecord) -> BusinessEvent | None:
         """Rebuild the typed event from a business_events record (its fields + scoping columns)."""
-        event_type = catalog.class_for(record["kind"])
+        event_type = catalog.class_for(record.kind)
         if event_type is None:
             return None
         return event_type.from_payload(task_payload(record))
 
-    def _reconstruct_safely(self, record: TrailRow) -> BusinessEvent | None:
+    def _reconstruct_safely(self, record: BusinessEventRecord) -> BusinessEvent | None:
         """:meth:`_reconstruct`, but a payload that no longer fits its event class yields ``None``
         instead of raising — the caller skips the record rather than stalling on it. The skip is
         not silent: a stored fact that no longer rebuilds (a field made required after the fact was
@@ -137,13 +138,11 @@ class EventListener:
         try:
             return self._reconstruct(record)
         except Exception:
-            log.exception(
-                "listener.reconstruct_failed", kind=record["kind"], event_id=str(record["id"])
-            )
+            log.exception("listener.reconstruct_failed", kind=record.kind, event_id=str(record.id))
             return None
 
-    async def _fan_out(self, session: AsyncSession, record: TrailRow) -> None:
-        event_type = catalog.class_for(record["kind"])
+    async def _fan_out(self, session: AsyncSession, record: BusinessEventRecord) -> None:
+        event_type = catalog.class_for(record.kind)
         if event_type is None:
             # A kind with no registered class: we can route this fact to no one. This is *not* the
             # benign "known kind, nobody listens" no-op below — it means a fact was persisted that
@@ -156,21 +155,19 @@ class EventListener:
         if not subs:
             return  # known kind, nobody listens — a clean no-op, no fact is lost
         payload = task_payload(record)
-        actor = record["user_id"]
+        actor = record.user_id
         for sub in subs:
             await enqueue(session, sub.topic, payload, user_id=actor if sub.as_actor else None)
 
     @staticmethod
-    def _capture_unroutable(record: TrailRow) -> None:
+    def _capture_unroutable(record: BusinessEventRecord) -> None:
         """Log an unroutable fact at ``exception`` level so the capture seam records a console
         Issue. Raised-and-caught to give the capture fingerprint a live traceback; the caller marks
         the record dispatched regardless, so a fact we cannot route never wedges the cursor."""
         try:
-            raise UnroutableFact(f"no event class registered for kind {record['kind']!r}")
+            raise UnroutableFact(f"no event class registered for kind {record.kind!r}")
         except UnroutableFact:
-            log.exception(
-                "listener.unroutable_fact", kind=record["kind"], event_id=str(record["id"])
-            )
+            log.exception("listener.unroutable_fact", kind=record.kind, event_id=str(record.id))
 
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:

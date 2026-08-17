@@ -1,99 +1,59 @@
 """Delivery scans — the listener's plumbing over the journal (claim/mark/scan + consumed ledger).
 
-Raw ``text()`` on purpose: queue-like plumbing whose locking (``SKIP LOCKED``, ``ON CONFLICT``)
-reads best as SQL, and it touches columns/tables kept off the fact model (``dispatched_at``, the
-``consumed`` ledger).
+The two scans read whole :class:`BusinessEventRecord` objects: the journal already has a typed
+shape, so the delivery path reads it rather than re-deriving a narrower one of its own. What stays
+raw ``text()`` is the plumbing proper — the ``dispatched_at`` cursor, deliberately left off the fact
+model, and the ``consumed`` ledger, whose ``ON CONFLICT`` reads best as SQL.
 """
 
 import uuid
-from datetime import datetime
-from typing import Any, TypedDict, cast
+from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository._base import _EventSQL
 
-# ── The one serialized shape the whole delivery chain agrees on ────────────────────────────────
-#
 # A base ``BusinessEvent`` field is stored one of two ways: *lifted* to its own indexed column (so
-# RLS, the timeline and full-text search reach it directly), or left in the JSON ``payload``.
-# ``LIFTED_COLUMNS`` is the single list of the lifted ones — the source every other list here (and
-# ``event_to_record``'s pop loop) derives from, so the four views can't drift apart silently. Add a
-# lifted base field here and the SELECTs, the fold-back and the round-trip test all move with it.
+# RLS, the timeline and full-text search reach it directly), or left in the JSON ``payload``. This
+# is the single list of the lifted ones — ``event_to_record`` pops exactly these out of the payload
+# and ``task_payload`` folds exactly these back in, so the two halves cannot drift apart.
 LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_name")
 
-# Columns the delivery carries that are *not* lifted event fields: the id (dispatch cursor +
-# dedup key + causation), the composed ``kind`` (→ the event class), and the two correlation keys a
-# consumer needs — ``created_at`` (the fact's own instant, so a reaction reasons about when the fact
-# happened, not when it was delivered) and ``request_id`` (the originating request, so the
-# reaction's logs join the same timeline). ``created_at`` rebuilds onto the event; ``request_id``
-# rides only to the handler's log context (it is not an event field).
-_CORRELATION_COLUMNS: tuple[str, ...] = ("id", "kind", "created_at", "request_id")
 
-# What both delivery scans read off a record: the correlation columns + the lifted scoping columns +
-# the residual JSON ``payload``. Not selected: ``icon`` (rides on the reconstructed event) and
-# ``user_name``/``org_name`` (denormalized for display, not event fields) — kept out of the fetch.
-TRAIL_COLUMNS: tuple[str, ...] = (*_CORRELATION_COLUMNS, *LIFTED_COLUMNS, "payload")
-
-_SELECT = f"SELECT {', '.join(TRAIL_COLUMNS)} FROM business_events "
-
-
-class TrailRow(TypedDict):
-    """The subset of a ``business_events`` record the delivery path reads — exactly the
-    ``TRAIL_COLUMNS`` both ``_CLAIM`` and ``_SPREAD_SCAN`` select. The listener rebuilds the typed
-    event from it (``kind`` + lifted scoping columns + the JSON ``payload``); ``id`` doubles as the
-    dispatch cursor and dedup key. Its keys are pinned to ``TRAIL_COLUMNS`` by a test, so the static
-    type and the runtime column source can't diverge."""
-
-    id: uuid.UUID
-    kind: str
-    created_at: datetime  # the fact's own instant, rebuilt onto the delivered event
-    request_id: uuid.UUID | None  # the originating request, bound to the reaction's log context
-    user_id: uuid.UUID | None
-    org_id: uuid.UUID | None
-    entity_id: uuid.UUID | None
-    entity_name: str | None  # a base field of every event, lifted to its own column
-    payload: dict[str, Any] | None
-
-
-_CLAIM = text(
-    _SELECT + "WHERE dispatched_at IS NULL ORDER BY id FOR UPDATE SKIP LOCKED LIMIT :batch"
-)
-
-_SPREAD_SCAN = text(_SELECT + "WHERE id > :cursor AND kind = ANY(:kinds) ORDER BY id")
-
-
-def task_payload(record: TrailRow) -> dict[str, Any]:
+def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
     """Rebuild the async-consumer payload from a claimed record: the residual JSON ``payload`` plus
-    the lifted columns folded back in (a uuid column stringified — the queue json-encodes it, and
+    the lifted columns folded back in (a uuid stringified — the queue json-encodes it, and
     ``from_payload`` re-parses it), the two correlation keys, and the record id as the dedup
-    ``event_id``. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it is
-    one edit away from the SELECTs and the TrailRow it reads. Lives here, beside the columns it
-    mirrors; the listener imports it."""
-    # A plain-mapping view of the record: the fold indexes by a runtime column name, which a
-    # TypedDict (literal keys only) cannot be subscripted with — it arrived as a dict off a scan.
-    cells = cast(dict[str, Any], record)
-    payload = dict(cells["payload"] or {})
-    for col in LIFTED_COLUMNS:
-        value = cells[col]
-        payload[col] = str(value) if isinstance(value, uuid.UUID) else value
+    ``event_id``. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it stays
+    one edit away from the pop loop it mirrors; the listener imports it."""
+    payload = dict(record.payload or {})
+    for column in LIFTED_COLUMNS:
+        value = getattr(record, column)
+        payload[column] = str(value) if isinstance(value, uuid.UUID) else value
     # Correlation keys ride as strings the queue can json-encode. ``created_at`` rebuilds onto the
     # event (``from_payload`` re-parses it); ``request_id`` is not an event field — the delivery
     # wrapper reads it here to bind the reaction's log context, then ``from_payload`` drops it.
-    created_at = cells["created_at"]
-    payload["created_at"] = created_at.isoformat() if created_at is not None else None
-    request_id = cells["request_id"]
-    payload["request_id"] = str(request_id) if request_id is not None else None
-    payload["event_id"] = str(cells["id"])  # the dedup key + causation id (uuid; queue-encoded)
+    payload["created_at"] = record.created_at.isoformat() if record.created_at else None
+    payload["request_id"] = str(record.request_id) if record.request_id else None
+    payload["event_id"] = str(record.id)  # the dedup key + causation id (uuid; queue-encoded)
     return payload
 
 
 class _DispatchesEvents(_EventSQL):
-    async def claim_undispatched(self, batch: int) -> list[TrailRow]:
+    async def claim_undispatched(self, batch: int) -> list[BusinessEventRecord]:
         """``SKIP LOCKED`` so N instances never double-claim; the caller marks them dispatched in
-        the same transaction."""
-        result = await self.session.execute(_CLAIM, {"batch": batch})
-        return [cast(TrailRow, dict(r)) for r in result.mappings()]
+        the same transaction. ``dispatched_at`` is queue mechanics, not part of what happened, so
+        the model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate
+        in an otherwise ORM query."""
+        claimed = await self.session.scalars(
+            select(BusinessEventRecord)
+            .where(text("dispatched_at IS NULL"))
+            .order_by(BusinessEventRecord.id)
+            .with_for_update(skip_locked=True)
+            .limit(batch)
+        )
+        return list(claimed)
 
     async def mark_dispatched(self, ids: list[uuid.UUID]) -> None:
         await self.session.execute(
@@ -101,11 +61,15 @@ class _DispatchesEvents(_EventSQL):
             {"ids": ids},
         )
 
-    async def scan_spread(self, cursor: uuid.UUID, kinds: list[str]) -> list[TrailRow]:
+    async def scan_spread(self, cursor: uuid.UUID, kinds: list[str]) -> list[BusinessEventRecord]:
         """No lock, no dispatch mark — a ``spread`` handler runs on *every* instance, each replaying
         off its own cursor."""
-        result = await self.session.execute(_SPREAD_SCAN, {"cursor": cursor, "kinds": kinds})
-        return [cast(TrailRow, dict(r)) for r in result.mappings()]
+        found = await self.session.scalars(
+            select(BusinessEventRecord)
+            .where(BusinessEventRecord.id > cursor, BusinessEventRecord.kind.in_(kinds))
+            .order_by(BusinessEventRecord.id)
+        )
+        return list(found)
 
     async def already_consumed(self, topic: str, event_id: uuid.UUID | str) -> bool:
         """Insert-or-nothing against the ``consumed`` ledger — the idempotency substrate for
