@@ -1,10 +1,10 @@
--- `kind` stops being a string to re-split: the trail stores the two halves it is made of.
+-- `kind` stops being a string to re-split: the journal stores the two halves it is made of.
 --
 -- An event names itself in two parts — the app it belongs to and the verb it performs — and the
 -- class composes `kind` from them (`app_name` + "." + `verb`). The table stored only the composed
 -- string, so every reader that needed a half had to take it back apart: the activity timeline
 -- recomputed the verb (`kind.split(".", 1)[-1]`) and the app (`[0]`), the deep-link map keyed on
--- the app segment, the console's log viewer derived its per-app axis the same way, and the trail's
+-- the app segment, the console's log viewer derived its per-app axis the same way, and the journal's
 -- own app filter was a `like 'todo.%'` prefix scan.
 --
 -- Here the halves become the stored truth and `kind` becomes their *view*: a stored generated

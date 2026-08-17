@@ -170,7 +170,7 @@ class SettingsView:
 class SettingsChanged(BusinessEvent):
     """A server-wide setting of ``target_app`` was edited in the console.
 
-    One fact, two faces: it is **persisted** on the trail as the audit record of who changed what
+    One fact, two faces: it is **persisted** on the journal as the record of who changed what
     (``user_id`` + ``key``/``value``, the platform peer of the per-org override events), *and*
     it drives cross-instance **propagation** — it carries the full fresh ``values`` so each app's
     :meth:`AppSettings.reload` (subscribed via ``spread``) re-points its in-memory handle. Generic:

@@ -82,7 +82,7 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _record(event: ExceptionCaptured) -> None:
-    """Fold a captured exception into its group, emitting the trail fact on the same transaction
+    """Fold a captured exception into its group, emitting the journal fact on the same transaction
     (atomic with the recording); runs under collect(): best-effort."""
     version = get_technical_settings().app_version
     context = {

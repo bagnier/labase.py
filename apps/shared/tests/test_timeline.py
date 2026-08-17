@@ -5,7 +5,7 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.timeline import activity_entries
 
 
-def _row(
+def _record(
     *,
     app_name="todo",
     verb="created",
@@ -33,7 +33,7 @@ def _row(
 
 def test_activity_entries_surface_who_what_which_document():
     """The feed shows the actor, the humanized verb and the object's own name — never the kind."""
-    [entry] = activity_entries([_row(user_name="alice", entity_name="Ship the Q3 report")])
+    [entry] = activity_entries([_record(user_name="alice", entity_name="Ship the Q3 report")])
     assert entry.who == "alice"
     assert entry.label == "Created"  # humanized from the kind, verb only
     assert entry.detail == "Ship the Q3 report"  # the "which document"
@@ -42,14 +42,14 @@ def test_activity_entries_surface_who_what_which_document():
 
 def test_activity_entries_drop_the_actor_on_the_users_own_trail():
     """The profile feed is all the viewer's own actions, so repeating 'who' is noise."""
-    [entry] = activity_entries([_row(user_name="alice")], show_actor=False)
+    [entry] = activity_entries([_record(user_name="alice")], show_actor=False)
     assert entry.who is None
 
 
 def test_activity_entries_take_an_href_from_the_surface_link():
     """Each surface supplies its own deep link (entity page, filtered logs…) via ``link``."""
-    row = _row(app_name="pages")
-    [entry] = activity_entries([row], link=lambda r: f"/go/{r.app_name}")
+    record = _record(app_name="pages")
+    [entry] = activity_entries([record], link=lambda r: f"/go/{r.app_name}")
     assert entry.href == "/go/pages"
-    [plain] = activity_entries([row])  # no link → no href, rendered as text
+    [plain] = activity_entries([record])  # no link → no href, rendered as text
     assert plain.href is None

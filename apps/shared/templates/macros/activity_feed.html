@@ -1,12 +1,12 @@
 {# The day-grouped activity feed as a centered vertical timeline — content · node · time
    (e.g. "Ticked Write the changelog   ●   14:32"). Takes the day sections
-   `group_activity_by_day()` returns; each row is an `activity_entries` dict
-   {who, label, detail, app, icon, level, ts, href}. A row with an `href` links the whole
+   `group_activity_by_day()` returns; each entry is an `activity_entries` dict
+   {who, label, detail, app, icon, level, ts, href}. An entry with an `href` links the whole
    content block to the entity it concerns (todo, file, page, calendar event). The rail
-   (`.activity-timeline`) is a single centered spine. The day header carries the date, so each row
-   shows the clock time. #}
+   (`.activity-timeline`) is a single centered spine. The day header carries the date, so each
+   entry shows the clock time. #}
 {% from "macros/empty_state.html" import empty_state %}
-{% macro _row(e) %}
+{% macro _entry(e) %}
   {# One tone for every fact: a business event has no severity — that is a logging notion. #}
   {% set tone = "bg-primary/10 text-primary" %}
   {% set content %}
@@ -53,7 +53,7 @@
           <span class="flex-1 h-px bg-base-300"></span>
         </div>
         <ul class="activity-timeline list-none m-0 p-0">
-          {% for e in g.entries %}{{ _row(e) }}{% endfor %}
+          {% for e in g.entries %}{{ _entry(e) }}{% endfor %}
         </ul>
       {% endfor %}
     </div>

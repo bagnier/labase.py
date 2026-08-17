@@ -1,8 +1,8 @@
-"""The business-events timeline projection — pure presentation over trail rows.
+"""The business-events timeline projection — pure presentation over journal records.
 
-The repository reads the trail; this module humanizes those rows for the surfaces that show history
-(profile / dashboard feed, contribution calendar). Every function is pure — no session, no I/O — and
-the raw ``kind``/payload never reach a member; only projected, safe fields do.
+The repository reads the journal; this module humanizes those records for the surfaces that show
+history (profile / dashboard feed, contribution calendar). Every function is pure — no session, no
+I/O — and the raw ``kind``/payload never reach a member; only projected, safe fields do.
 """
 
 from collections.abc import Callable
@@ -12,16 +12,16 @@ from itertools import groupby
 
 from apps.shared.events.models import BusinessEventRecord
 
-# ── Activity feed — humanize rows for the profile/dashboard timeline ──────────────────────────
+# ── Activity feed — humanize records for the profile/dashboard timeline ──────────────────────────
 
 
 @dataclass(frozen=True, slots=True)
 class ActivityEntry:
-    """One humanized trail row for the timeline — *who did what to which, when*. Only safe,
+    """One humanized journal record for the timeline — *who did what to which, when*. Only safe,
     projected fields; the raw ``kind`` and the rest of the payload never reach here. Templates
     read it by attribute (``e.who``, ``e.icon``)."""
 
-    who: str | None  # the actor's handle, or None on the viewer's own trail
+    who: str | None  # the actor's handle, or None on the viewer's own journal
     label: str  # the humanized verb (``Created``), never the dotted kind
     detail: str | None  # the subject's own name (a todo title, a page slug)
     app: str  # the owning app prefix, for a subtle source line
@@ -45,19 +45,20 @@ class DaySection:
 
 def _activity_label(verb: str) -> str:
     """`share_link_created` → `Share link created` — readable without a per-event table. Purely
-    string-shaping: shared never enumerates the apps, it just humanizes the verb the row carries."""
+    string-shaping: shared never enumerates the apps, it just humanizes the verb a record
+    carries."""
     return verb.replace("_", " ").capitalize()
 
 
 def activity_entries(
-    rows: list[BusinessEventRecord],
+    records: list[BusinessEventRecord],
     *,
     show_actor: bool = True,
     link: Callable[[BusinessEventRecord], str | None] | None = None,
 ) -> list[ActivityEntry]:
-    """Project rows to *who did what to which, when* — only safe fields, never the raw ``kind`` or
-    the rest of the payload. ``show_actor`` drops *who* on the profile's own trail (always the
-    viewer); ``link`` lets the surface supply a deep link."""
+    """Project records to *who did what to which, when* — only safe fields, never the raw
+    ``kind`` or the rest of the payload. ``show_actor`` drops *who* on the profile's own journal
+    (always the viewer); ``link`` lets the surface supply a deep link."""
     return [
         ActivityEntry(
             who=r.user_name if show_actor else None,
@@ -68,7 +69,7 @@ def activity_entries(
             ts=r.created_at,
             href=link(r) if link else None,
         )
-        for r in rows
+        for r in records
     ]
 
 
@@ -237,7 +238,7 @@ def heatmap_calendar(
             MonthHeader(label=cols[0].strftime("%b") if span >= 3 else "", span=span)
         )
 
-    # rows are Mon→Sun (week_start is a Monday); every weekday labelled.
+    # A column runs Mon→Sun (week_start is a Monday); every weekday labelled.
     return HeatmapCalendar(
         weeks=weeks_out,
         weekday_labels=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],

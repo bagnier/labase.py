@@ -54,13 +54,13 @@ apps' flows travel through typed events — the emitter never knows its subscrib
 deleting an app removes every trace of it.
 
 **Business events are facts, not sagas.** A sensitive domain action is emitted as a typed,
-immutable `BusinessEvent` and persisted to an append-only trail _transactionally_ with the
+immutable `BusinessEvent` and persisted to an append-only journal _transactionally_ with the
 action — the fact commits iff the mutation does, with no exception: the emitter names that
 transaction explicitly, and there is no second way to record a fact. **Only what happened is a
 fact**: a refused attempt (a wrong password, a blocked last-owner change, a non-owner reaching an
-owner-only route) changed nothing, so it is a structured log line, not a trail row — visible in the
+owner-only route) changed nothing, so it is a structured log line, not a fact — visible in the
 same console timeline, on its technical side. Each app declares the events it owns, and
-`emit` refuses an unowned one. Reactions are durable and run off the trail _after_ commit, so a
+`emit` refuses an unowned one. Reactions are durable and run off the journal _after_ commit, so a
 producer never waits on — or fails from — a consumer; a reaction that finds its subject already
 gone is a clean no-op, never a compensation. The emitter never names its subscribers.
 
@@ -77,7 +77,7 @@ migrations, is the single source of truth for who sees what. Python never re-imp
 isolation for authenticated access.
 
 **Observability is built in.** Structured, machine-readable logs, correlated per request and
-merged in the admin console with the business-events trail into one timeline. Technical logs are
+merged in the admin console with the business-events journal into one timeline. Technical logs are
 best-effort — they never block, slow, or fail the action they observe.
 
 **Tests are sincere.** The same plain-language scenarios run twice — over real HTTP and
@@ -189,13 +189,13 @@ to this?) are different animals, so they are different objects — `host.events`
 `EventBus`) and `host.contribs` (the `Contribs` registry). Both key handlers by the Python
 type they carry, so there are no magic strings and no shared imports.
 
-**`host.events` — push.** `emit(event, session)` **persists** the `BusinessEvent` to the trail on
+**`host.events` — push.** `emit(event, session)` **persists** the `BusinessEvent` to the journal on
 the session the caller names — atomic with the action, so the fact commits iff the mutation commits
 — and does *only* that. The session is a required argument: durability is stated at the call site,
 not inherited from whichever dependency the route happened to pick. It refuses an event no app
 declared (each app `declare`s the events it owns at mount, so an emitted fact is always owned); no
 reaction runs in-process. Durable **async** consumers registered with `on(...)` and run-everywhere
-handlers registered with `spread(...)` are delivered by the event listener off the persisted trail
+handlers registered with `spread(...)` are delivered by the event listener off the persisted journal
 after commit (see Observability), so a producer never waits on — or fails from — a consumer.
 Reactions treat the fact as immutable history: one that finds its subject already gone is a clean
 no-op, never a compensation.
@@ -225,7 +225,7 @@ declared at mount and read synchronously on the request path — *not* events:
 **Sign-up event chain:** the signup trigger records `UserCreated` on GoTrue's own transaction
 (atomic with the account); a **durable async consumer** then creates the user's personal org and
 persists `OrgCreated`, whose welcome seeders are themselves durable async consumers — every reaction
-delivered by the event listener off the trail (retried and parked on failure, never on the signup's
+delivered by the event listener off the journal (retried and parked on failure, never on the signup's
 critical path).
 
 ```
@@ -270,7 +270,7 @@ singleton (`apps.shared.events.bus`) directly; `host.events` is that same bus, w
 and a _technical_ log ("a trace of the machinery") are different things, so they have
 different primitives — but the console's **Logs** screen merges them into one correlated
 timeline, filterable by source. The two are complementary, never redundant: `emit` writes the
-durable trail and logs nothing of its own, so a single business action shows up once, not twice.
+durable journal and logs nothing of its own, so a single business action shows up once, not twice.
 
 - **Business events — `emit(...)`.** A sensitive domain action is emitted as a typed,
   frozen `BusinessEvent` dataclass (each app owns its vocabulary in `contract/events.py`;
@@ -291,7 +291,7 @@ the firehose only _enqueues_ on the request path (a background `FirehoseWriter` 
 disk); error capture enqueues to a bounded deque drained by a background task; load metrics
 accumulate in memory and flush on a timer. A lost or failed technical write never blocks, fails, or
 slows the action it observes. _Business_ events are the deliberate exception: the fact is written
-**transactionally** with the action (it commits iff the mutation does, so the trail can't diverge
+**transactionally** with the action (it commits iff the mutation does, so the journal can't diverge
 from what happened), while its async _delivery_ to consumers rides the event listener off the log —
 so the producer still never waits on a reaction.
 
@@ -356,7 +356,7 @@ merges them — called explicitly, never injected silently.
 **Identity.** Every table's primary key is a time-ordered **UUIDv7** — the `UUIDPk` mixin
 (`default=uuid.uuid7`, Python 3.14 stdlib) on the ORM write path, mirrored by a `public.uuidv7()`
 column default in SQL for raw / PostgREST inserts. Globally unique with no shared sequence (safe
-across instances) *and* monotonic, so the append-only trails use a pk as a cursor: the event tailer
+across instances) *and* monotonic, so the append-only stores use a pk as a cursor: the event listener
 claims/scans `business_events.id`, the issues detail pages `error_events.id`. Because every key is a
 uuid, a business event's `entity_id` correlates entities by their stable pk, never a renameable
 handle. Security tokens are the deliberate exception — they stay random **UUIDv4** (unguessable, no

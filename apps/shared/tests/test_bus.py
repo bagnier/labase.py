@@ -2,7 +2,7 @@
 emit gate, ``on`` registration with the MRO fan-out set, the idempotency guard the
 reconstructed-typed-event wrapper folds in, and how a test isolates or restores the wiring.
 
-Delivery itself (trail → task_queue) is the listener's job; see test_listener.py.
+Delivery itself (journal → task_queue) is the listener's job; see test_listener.py.
 """
 
 import uuid
@@ -82,7 +82,7 @@ def test_declare_records_the_owner_app_and_gates_emit():
 
 
 def test_declare_rejects_an_event_that_names_no_app_and_verb():
-    # Without both halves an event has no kind: it never entered the catalog, so a persisted row
+    # Without both halves an event has no kind: it never entered the catalog, so a persisted fact
     # could not be rebuilt from it. Usually an abstract base handed over instead of its subclasses.
     class _Abstract(BusinessEvent):
         pass
@@ -155,7 +155,7 @@ def test_a_bus_given_its_own_wiring_stays_out_of_the_process_one():
     assert [r.name for r in wiring.consumers_of(_Ticked)] == ["counter"]
 
 
-# ── already_consumed (idempotency substrate, keyed on the business_events row id) ─────────────
+# ── already_consumed (idempotency substrate, keyed on the business_events record id) ──────────
 
 
 @pytest.mark.asyncio
@@ -193,7 +193,7 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
 
 @pytest.mark.asyncio
 async def test_a_reaction_runs_with_the_request_and_fact_bound_to_its_log_context():
-    # A reaction runs off the trail on a background task with no request context of its own. The
+    # A reaction runs off the journal on a background task with no request context of its own. The
     # wrapper binds the originating request_id (correlation) and the fact's event_id (causation)
     # onto structlog, so the reaction's log lines join the emitting request's timeline — then
     # restores the context, so nothing leaks into the next task the worker runs.

@@ -1,7 +1,7 @@
 """How the console context plugs into the running app: mounts the admin router, claims slugs.
 
 Also owns the *bootstrap policy*: the first registered user becomes a server admin. It reacts
-to auth's ``UserCreated`` (a durable consumer, run off the trail after commit) and promotes the
+to auth's ``UserCreated`` (a durable consumer, run off the journal after commit) and promotes the
 user iff the server has no admin yet. The claim lands in GoTrue shortly after registration; a
 signed-in session picks it up on its next token mint (tests drive the listener to make this
 deterministic).
@@ -66,8 +66,8 @@ def mount(host: Host) -> None:
 
     host.contribs.provide(ConsoleOverviewQuery, technical_overview)
 
-    # Settings live-reload rides the event tailer: a persisted ``SettingsChanged`` is replayed to
-    # each process's ``spread`` handler (``settings.reload``) off the trail — no per-app re-read
+    # Settings live-reload rides the event listener: a persisted ``SettingsChanged`` is replayed to
+    # each process's ``spread`` handler (``settings.reload``) off the journal — no per-app re-read
     # loop here (see ``host.register_settings`` + ``apps.shared.events.listener``).
 
     # Live appearance globals, alongside ``asset`` — every page reads the app-wide theme.

@@ -121,7 +121,7 @@ class RequestLogger(BaseHTTPMiddleware):
         request_id = new_request_id()
         ip = request.client.host if request.client else None
         structlog.contextvars.clear_contextvars()
-        # Both ride every log line *and* every business event of this request (the trail's write
+        # Both ride every log line *and* every business event of this request (the journal's write
         # path reads them off these contextvars). The name is bound here, before call_next, because
         # a fact emitted mid-request must already carry it — the matched route template is only
         # readable afterwards, and the raw path is what a reader wants anyway.

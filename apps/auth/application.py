@@ -3,7 +3,7 @@
 Sign-up creates the auth user in GoTrue; the ``UserCreated`` fact is recorded at the source by the
 ``on_auth_user_created`` trigger (``handle_new_user``), atomic with the user row in GoTrue's own
 transaction — see migration ``20260723000002``. Its reactions (personal org, admin bootstrap,
-welcome seeders) are durable consumers run off the trail. HTTP routers call into here and only map
+welcome seeders) are durable consumers run off the journal. HTTP routers call into here and only map
 results/errors to responses.
 """
 

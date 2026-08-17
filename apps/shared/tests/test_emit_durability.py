@@ -2,10 +2,10 @@
 
 ``emit(fact, session)`` rides the request's transaction, and ``_commit_on_success`` commits it on a
 clean exit but rolls it back on an exception. So the two failure shapes a handler can take are *not*
-equivalent for the trail: returning a 4xx response keeps the fact, raising ``HTTPException`` loses
+equivalent for the journal: returning a 4xx keeps the fact, raising ``HTTPException`` loses
 it.
 
-That asymmetry is why the trail holds no refusals. A fact emitted on a raising path would need to
+That asymmetry is why the journal holds no refusals. A fact emitted on a raising path would need to
 escape its transaction to survive, and the facts that wanted to — a blocked revoke, a denied admin
 surface — turned out to describe nothing that happened. They are log lines now, and ``emit`` has no
 exception left. This pins the mechanism, so the reasoning stays derivable rather than remembered.

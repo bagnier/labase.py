@@ -1,6 +1,6 @@
 {# The activity feed fragment — the HTMX swap target for the profile Activity tab's toolbar
    (search / type filter / date range) and the Load-older pager. Re-rendered whole each time
-   (a personal trail is bounded), so day grouping stays correct across the growing window. #}
+   (a personal journal is bounded), so day grouping stays correct across the growing window. #}
 {% from "macros/activity_feed.html" import activity_feed %}
 <div id="activity-feed">
   {{ activity_feed(activity_groups, empty="No activity matches — try another search or range.") }}

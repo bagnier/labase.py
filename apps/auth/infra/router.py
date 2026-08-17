@@ -298,7 +298,7 @@ def relayed_method(cookie: str | None) -> SignInMethod:
     The value travelled through the caller's cookie jar, so it can arrive missing (the browser
     dropped it, the challenge outlived it) or forged. Anything unrecognised falls back to the
     password ceremony — the only one reachable without a relay — so a bad value degrades the fact's
-    precision instead of putting an unknown method on the trail."""
+    precision instead of putting an unknown method on the journal."""
     return cookie if cookie in _RELAYABLE_METHODS else "password"  # ty: narrowed by the membership
 
 
@@ -748,7 +748,7 @@ async def reset_password_endpoint(request: Request, admin_session: AdminSession)
         error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
-    # decode its ``sub`` first, so the reset lands on the trail attributed to the account holder.
+    # decode its ``sub`` first, so the reset lands on the journal attributed to the account holder.
     await events.emit(PasswordReset(user_id=_token_sub(tokens.access_token)), admin_session)
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})

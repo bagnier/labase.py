@@ -7,7 +7,7 @@ first session of every account.
 
 The two exemptions below are *re-issues*, not sign-ins: a token refresh renews the session the
 caller already holds, and stopping an impersonation restores the admin's own stashed one. Adding a
-third exemption is a real decision — it means a session someone can use that the trail will not
+third exemption is a real decision — it means a session someone can use that the journal will not
 show.
 """
 

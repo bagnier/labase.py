@@ -72,7 +72,7 @@ admin_session_factory = _make_session_factory(_admin_engine)
 async def dispose_engines() -> None:
     """Close both pools while the loop still runs — the shutdown counterpart of the engines.
 
-    Every background component stops on its own hook (task worker, tailer, flusher, drains); the
+    Every background component stops on its own hook (task worker, listener, flusher, drains); the
     pools were the one piece left to the interpreter's teardown, where closing an asyncpg
     connection has neither loop nor greenlet to await in. Only engines that were actually built
     are disposed: touching the lru_cache here would create one just to close it.

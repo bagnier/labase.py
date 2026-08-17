@@ -4,7 +4,7 @@ import uuid
 
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.tests.trail_seed import seed_fact
+from apps.shared.tests.journal_seed import seed_fact
 
 _EMAIL = "dashboard-activity@example.com"
 

@@ -127,8 +127,8 @@ async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
 ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 
 
-_ACTIVITY_PAGE = 25  # rows per activity view; "Load older" grows the window by this step
-_ACTIVITY_MAX = 250  # a personal trail is bounded — cap the growable window
+_ACTIVITY_PAGE = 25  # facts per activity view; "Load older" grows the window by this step
+_ACTIVITY_MAX = 250  # a personal feed is bounded — cap the growable window
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -162,11 +162,11 @@ async def _activity_context(
     """The day-grouped activity feed under the given filters — shared by the profile page's
     initial render and the ``/profile/activity`` HTMX fragment.
 
-    Reads on the request's own RLS session: the ``business_events`` policy scopes rows to the
-    reader (own actions + their orgs), so ``user_id`` narrows to the user's own trail. Each entry
-    deep-links to the concerned entity, resolving the row's org to a handle from the user's own
-    orgs (``handles``). ``who`` is dropped — every row is the viewer."""
-    rows = await EventRepository(session).search(
+    Reads on the request's own RLS session: the ``business_events`` policy scopes the journal to the
+    reader (own actions + their orgs), so ``user_id`` narrows to the user's own journal. Each entry
+    deep-links to the concerned entity, resolving the record's org to a handle from the user's own
+    orgs (``handles``). ``who`` is dropped — every fact is the viewer's."""
+    records = await EventRepository(session).search(
         user_id=user_id,
         app=app or None,
         text=q or None,
@@ -178,10 +178,10 @@ async def _activity_context(
     def link(r: BusinessEventRecord) -> str | None:
         return entity_url(r.app_name, r.entity_id, handles.get(r.org_id))
 
-    entries = activity_entries(rows, show_actor=False, link=link)
+    entries = activity_entries(records, show_actor=False, link=link)
     return {
         "activity_groups": group_activity_by_day(entries, now=clock.now()),
-        "activity_has_more": len(rows) >= limit and limit < _ACTIVITY_MAX,
+        "activity_has_more": len(records) >= limit and limit < _ACTIVITY_MAX,
         "activity_limit": limit,
         "activity_next_limit": min(limit + _ACTIVITY_PAGE, _ACTIVITY_MAX),
         "activity_q": q,
@@ -322,7 +322,7 @@ async def profile_activity(
     limit: int = _ACTIVITY_PAGE,
 ) -> HTMLResponse | JSONResponse:
     """The day-grouped activity feed as an HTMX fragment — search, type filter, date range and
-    Load-older all re-render it. API callers get the same trail as JSON."""
+    Load-older all re-render it. API callers get the same feed as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     context = await fullpage_context(session, current_user)
     handles = {o.id: o.handle for o in context["org_nav"]}
@@ -581,7 +581,7 @@ async def account_delete(
 
     await events.emit(AccountDeleted(user_id=current_user.id, entity_id=current_user.id), session)
     # The UserDeleted fact rides the admin session — it commits iff the deletion does. Its forget
-    # consumers (organizations, profile) then run asynchronously off the tailer, by user id.
+    # consumers (organizations, profile) then run asynchronously off the listener, by user id.
     await events.emit(
         UserDeleted(user_id=current_user.id, entity_id=current_user.id), session=admin_session
     )

@@ -1,4 +1,4 @@
-"""Delivery scans — the listener's plumbing over the trail (claim/mark/scan + the consumed ledger).
+"""Delivery scans — the listener's plumbing over the journal (claim/mark/scan + consumed ledger).
 
 Raw ``text()`` on purpose: queue-like plumbing whose locking (``SKIP LOCKED``, ``ON CONFLICT``)
 reads best as SQL, and it touches columns/tables kept off the fact model (``dispatched_at``, the
@@ -22,7 +22,7 @@ from apps.shared.events.repository._base import _EventSQL
 # lifted base field here and the SELECTs, the fold-back and the round-trip test all move with it.
 LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_name")
 
-# Row columns the delivery carries that are *not* lifted event fields: the id (dispatch cursor +
+# Columns the delivery carries that are *not* lifted event fields: the id (dispatch cursor +
 # dedup key + causation), the composed ``kind`` (→ the event class), and the two correlation keys a
 # consumer needs — ``created_at`` (the fact's own instant, so a reaction reasons about when the fact
 # happened, not when it was delivered) and ``request_id`` (the originating request, so the
@@ -30,7 +30,7 @@ LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_nam
 # rides only to the handler's log context (it is not an event field).
 _CORRELATION_COLUMNS: tuple[str, ...] = ("id", "kind", "created_at", "request_id")
 
-# What both delivery scans read off a row: the correlation columns + the lifted scoping columns +
+# What both delivery scans read off a record: the correlation columns + the lifted scoping columns +
 # the residual JSON ``payload``. Not selected: ``icon`` (rides on the reconstructed event) and
 # ``user_name``/``org_name`` (denormalized for display, not event fields) — kept out of the fetch.
 TRAIL_COLUMNS: tuple[str, ...] = (*_CORRELATION_COLUMNS, *LIFTED_COLUMNS, "payload")
@@ -39,7 +39,7 @@ _SELECT = f"SELECT {', '.join(TRAIL_COLUMNS)} FROM business_events "
 
 
 class TrailRow(TypedDict):
-    """The subset of a ``business_events`` row the delivery path reads — exactly the
+    """The subset of a ``business_events`` record the delivery path reads — exactly the
     ``TRAIL_COLUMNS`` both ``_CLAIM`` and ``_SPREAD_SCAN`` select. The listener rebuilds the typed
     event from it (``kind`` + lifted scoping columns + the JSON ``payload``); ``id`` doubles as the
     dispatch cursor and dedup key. Its keys are pinned to ``TRAIL_COLUMNS`` by a test, so the static
@@ -63,16 +63,16 @@ _CLAIM = text(
 _SPREAD_SCAN = text(_SELECT + "WHERE id > :cursor AND kind = ANY(:kinds) ORDER BY id")
 
 
-def task_payload(row: TrailRow) -> dict[str, Any]:
-    """Rebuild the async-consumer payload from a claimed row: the residual JSON ``payload`` plus the
-    lifted columns folded back in (a uuid column stringified — the queue json-encodes it, and
-    ``from_payload`` re-parses it), the two correlation keys, and the row id as the dedup
+def task_payload(record: TrailRow) -> dict[str, Any]:
+    """Rebuild the async-consumer payload from a claimed record: the residual JSON ``payload`` plus
+    the lifted columns folded back in (a uuid column stringified — the queue json-encodes it, and
+    ``from_payload`` re-parses it), the two correlation keys, and the record id as the dedup
     ``event_id``. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it is
     one edit away from the SELECTs and the TrailRow it reads. Lives here, beside the columns it
     mirrors; the listener imports it."""
-    # A plain-mapping view of the row: the fold indexes by a runtime column name, which a TypedDict
-    # (literal keys only) cannot be subscripted with — the row already arrived as a dict off a scan.
-    cells = cast(dict[str, Any], row)
+    # A plain-mapping view of the record: the fold indexes by a runtime column name, which a
+    # TypedDict (literal keys only) cannot be subscripted with — it arrived as a dict off a scan.
+    cells = cast(dict[str, Any], record)
     payload = dict(cells["payload"] or {})
     for col in LIFTED_COLUMNS:
         value = cells[col]
@@ -111,7 +111,7 @@ class _DispatchesEvents(_EventSQL):
         """Insert-or-nothing against the ``consumed`` ledger — the idempotency substrate for
         at-least-once ``bus.on`` delivery. ``True`` means this pair is a re-delivery. Runs on the
         handler's session, so it commits/rolls back with the handler's own writes. ``event_id`` is
-        the trail row's uuid — it arrives as a string when replayed off the JSON queue, so the
+        the journal record's uuid — it arrives as a string when replayed off the JSON queue, so the
         ``CAST(... AS uuid)`` normalizes both forms."""
         result = await self.session.execute(
             text(

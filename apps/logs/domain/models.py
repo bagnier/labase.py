@@ -1,7 +1,7 @@
 """The unified log record — one envelope over three sources.
 
 ``apps/logs`` is a pure reader: it never writes logs. It merges, at read time, the
-structlog firehose (a rotated JSON file), the business-events trail (``business_events``)
+structlog firehose (a rotated JSON file), the business-events journal (``business_events``)
 and issue occurrences (``error_events``) into this single shape, keyed for correlation by
 ``request_id`` / ``org_id`` / ``user_id`` / ``entity_id`` (the concerned entity).
 """
@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 class LogSource(StrEnum):
     http = "http"  # per-request firehose lines (request.failed — dead links & 5xx)
     app = "app"  # non-request structlog lines (queue, background…)
-    business = "business"  # the append-only business-events trail
+    business = "business"  # the append-only business-events journal
     error = "error"  # occurrences of tracked errors
 
 

@@ -18,7 +18,7 @@ process knows about events, and a reader of either imports it directly. A test t
 subscriptions builds ``EventBus(EventWiring())``; a test that must register on the *live* bus — to
 exercise the real fan-out — uses :meth:`snapshot` and :meth:`restore` instead.
 
-The bus writes here at mount; the listener reads reactions to deliver off the trail; the console
+The bus writes here at mount; the listener reads reactions to deliver off the journal; the console
 reads both halves for its event → reaction graph.
 """
 
@@ -73,7 +73,7 @@ class EventWiring:
         whose they are. Re-declaring is idempotent.
 
         An event with no ``app_name``/``verb`` has no kind at all — it never entered the catalog, so
-        the listener could not rebuild it from a row. Declaring one is a mistake worth naming
+        the listener could not rebuild it from a record. Declaring one is a mistake worth naming
         (typically an abstract base handed over instead of its concrete subclasses)."""
         for event_type in event_types:
             if not event_type.kind:
@@ -107,7 +107,7 @@ class EventWiring:
         """Register a durable consumer ``name`` (in ``app``) for ``event_type``; return its topic.
 
         ``name`` must be unique among the event's consumers (the topic ``evt:<kind>:<name>`` keys an
-        independent task row per consumer). Raises ``ValueError`` on a duplicate."""
+        independent queued task per consumer). Raises ``ValueError`` on a duplicate."""
         topic = f"evt:{event_type.kind}:{name}"
         registered = self._reactions.setdefault(event_type, [])
         if any(r.topic == topic for r in registered):
@@ -135,7 +135,7 @@ class EventWiring:
         self._spread[event_type].append(handler)
 
     def spread_kinds(self) -> list[str]:
-        """The dotted kinds that have a ``spread`` handler — the listener scans the trail for
+        """The dotted kinds that have a ``spread`` handler — the listener scans the journal for
         exactly these to replay per instance. An abstract base has no kind of its own and drops out
         here; its concrete subclasses carry theirs, and :meth:`spread_handlers_for` walks the MRO
         to reach the handler from them."""

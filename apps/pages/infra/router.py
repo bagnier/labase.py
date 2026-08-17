@@ -464,7 +464,7 @@ async def view_page_by_id(
     rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> RedirectResponse:
-    """Timeline deep link: a page's stable uuid (its ``entity_id`` on the trail) resolves to its
+    """Timeline deep link: a page's stable uuid (its ``entity_id`` on the journal) resolves to its
     *current* slug URL. A temporary redirect on purpose — never 301: the slug can change, so the
     uuid→slug mapping must not be cached, else an old feed link would 404 after a re-slug."""
     org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)

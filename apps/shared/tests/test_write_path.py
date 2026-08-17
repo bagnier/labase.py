@@ -30,7 +30,7 @@ def _clear_engine_caches() -> None:
 @pytest_asyncio.fixture
 async def _clean_p1():
     # Bypass the ApiDriver's shared test connection (its background loop) with a fresh engine on
-    # this test's loop, and clean up our own committed rows — the pattern test_bus established.
+    # this test's loop, and clean up our own committed facts — the pattern test_bus established.
     _clear_engine_caches()
     wiring.declare(_P1Event)  # emit refuses an undeclared event
 
@@ -58,7 +58,7 @@ async def _count_p1(actor: uuid.UUID) -> int:
 
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_emit_writes_the_row_on_the_given_session():
+async def test_emit_writes_the_record_on_the_given_session():
     """emit persists the fact on the caller's session — scoping to columns, the rest in payload."""
     actor, eid = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
@@ -67,24 +67,24 @@ async def test_emit_writes_the_row_on_the_given_session():
         )
         await session.commit()
     async with db.admin_session_factory()() as session:
-        row = (
+        record = (
             await session.execute(
                 text("SELECT kind, entity_id, payload FROM business_events WHERE user_id = :a"),
                 {"a": actor},
             )
         ).first()
-    assert row is not None
-    assert row.kind == "test_p1.happened"
-    assert row.entity_id == eid
-    assert row.payload["label"] == "Hi"
-    assert "user_id" not in row.payload  # scoping fields are lifted to their own columns
-    assert "org_id" not in row.payload
+    assert record is not None
+    assert record.kind == "test_p1.happened"
+    assert record.entity_id == eid
+    assert record.payload["label"] == "Hi"
+    assert "user_id" not in record.payload  # scoping fields are lifted to their own columns
+    assert "org_id" not in record.payload
 
 
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_the_trail_composes_kind_from_the_two_halves_it_stores():
-    """``kind`` is a view over the row, not a value in it.
+async def test_the_journal_composes_kind_from_the_two_halves_it_stores():
+    """``kind`` is a view over the record, not a value in it.
 
     An event names itself in two parts, and the class composes them; the table now does the same —
     ``kind`` is generated from ``app_name`` and ``verb``. So the two derivations cannot drift: there
@@ -143,12 +143,12 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically():
 
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
-async def test_the_row_keeps_the_org_name_after_the_org_is_gone():
-    """The trail is history: it has to stay readable once its subjects are deleted.
+async def test_the_record_keeps_the_org_name_after_the_org_is_gone():
+    """The journal is history: it has to stay readable once its subjects are deleted.
 
     Resolving an org's name at read time works only while the org exists — and deleting an org is a
-    product feature, so the audit trail would lose the *where* exactly when it matters. The name is
-    therefore pinned onto the row as it was then (the same reason ``user_name`` is denormalized:
+    product feature, so the journal would lose the *where* exactly when it matters. The name is
+    therefore pinned onto the record as it was then (the same reason ``user_name`` is denormalized:
     RLS can't resolve a co-member's handle later either).
     """
     actor, org = uuid.uuid7(), uuid.uuid7()

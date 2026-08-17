@@ -1,7 +1,7 @@
-"""Console's business events — platform-admin actions on the shared trail.
+"""Console's business events — platform-admin actions on the shared journal.
 
 Granting/revoking the platform-admin role and setting per-org overrides are ``settings.*`` events
-(the vocabulary the trail already uses). None is CRUD, so they subclass
+(the vocabulary the journal already uses). None is CRUD, so they subclass
 :class:`~apps.shared.events.BusinessEvent` directly and spell out a ``verb`` of their own.
 ``AdminGranted``/``AdminRevoked`` are server-wide (no ``org_id``), the override events carry the
 target org.

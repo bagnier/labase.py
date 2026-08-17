@@ -53,7 +53,7 @@ def mount(host: Host) -> None:
     )
     if not settings.enabled:
         return
-    # Durable async consumer: every `emit(TodoTicked)` fans out here off the trail and bumps the
+    # Durable async consumer: every `emit(TodoTicked)` fans out here off the journal and bumps the
     # org's cumulative completion counter — the producer's emit site never changed. Runs on the
     # admin session (server-owned aggregate) and is idempotent (at-least-once delivery may repeat).
     host.events.on(TodoTicked, _bump_completed, name="completion_counter", app="todo")

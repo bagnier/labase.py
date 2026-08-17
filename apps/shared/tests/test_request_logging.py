@@ -115,7 +115,7 @@ def test_the_request_id_is_a_whole_uuid_not_a_prefix():
 
     It used to be truncated to 8 hex chars at the source — 32 bits, so a birthday collision lands
     around 77k requests and two unrelated requests would merge under one filter in the Logs viewer.
-    The trail keeps the full uuid (its column is typed for it) and `_short` shortens it for
+    The journal keeps the full uuid (its column is typed for it) and `_short` shortens it for
     display, which is where a shortened id is actually useful.
     """
     rid = request.new_request_id()

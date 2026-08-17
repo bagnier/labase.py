@@ -111,20 +111,20 @@ class ApiBase:
 
     def test_session_factory(self) -> Callable[[], AsyncSession]:
         """A session factory bound to the rolled-back test connection — for driving background loops
-        (tailer, worker, settings refresher) on the same transaction a request just wrote to, since
+        (listener, worker, settings refresher) on the transaction a request just wrote to, since
         the real polling loops are off under tests and could not see it anyway."""
         assert db._test_connection is not None, "No active test transaction"
         return lambda: AsyncSession(bind=db._test_connection, expire_on_commit=False)
 
     def drain_task_queue(self) -> None:
-        """Deliver async work now: fan persisted facts out to consumers (tailer), then run them
+        """Deliver async work now: fan persisted facts out to consumers (listener), then run them
         (worker), looping until both are dry so an event that emits an event is delivered too.
         """
         factory = self.test_session_factory()
-        tailer = EventListener(0, session_factory=factory)
+        listener = EventListener(0, session_factory=factory)
         worker = TaskWorker(0, session_factory=factory)
         while True:
-            fanned = self.run(tailer.tick())
+            fanned = self.run(listener.tick())
             processed = 0
             while self.run(worker.tick()):
                 processed += 1
@@ -137,8 +137,8 @@ class ApiBase:
             self._test_auth_emails.append(email)
 
     def _cleanup_auth_users(self) -> None:
-        # The signup trigger records ``UserCreated`` on the trail inside GoTrue's own committed
-        # transaction, so it escapes this driver's rollback. The trail deliberately has no FK to
+        # The signup trigger records ``UserCreated`` on the journal inside GoTrue's own committed
+        # transaction, so it escapes this driver's rollback. The journal deliberately has no FK to
         # auth.users (it must outlive the user), so nothing cascades it — sweep this user's events
         # by id. Everything else the trigger wrote (the profile) cascades when the GoTrue user goes.
         for email in self._test_auth_emails:

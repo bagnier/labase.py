@@ -69,7 +69,7 @@ class AppManifest:
     # The events this app owns and may emit (see Host.events.declare) — declared only when enabled.
     emits: Sequence[type[BusinessEvent]] = ()
     # Durable async consumers (event_type, name, handler), registered only when enabled. Run off
-    # the tailer on the admin session, idempotent — for server-owned reactions (welcome seeding)
+    # the listener on the admin session, idempotent — for server-owned reactions (welcome seeding)
     # that must be retryable and never sit on the emitting request's path.
     consumes_when_enabled: Sequence[
         tuple[type[BusinessEvent], str, Callable[..., Awaitable[None]]]

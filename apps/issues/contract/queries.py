@@ -1,6 +1,6 @@
 """Read-only inter-app surface: issue occurrences flattened for the unified logs timeline.
 
-``apps/logs`` merges these with the business-events trail and the firehose; it must not reach
+``apps/logs`` merges these with the business-events journal and the firehose; it must not reach
 into the issues tables directly (they're private to this context), so it calls this contract query.
 """
 

@@ -5,7 +5,7 @@ Feature: Unified logs
 
   # The unified log gathers three sources into one append-only stream:
   #   - http     : the structlog firehose (failed requests — dead links & 5xx), gated by the log level
-  #   - business : the business-events trail (contributes regardless of the log level)
+  #   - business : the business-events journal (contributes regardless of the log level)
   #   - error    : occurrences of tracked errors (contributes regardless of the log level)
   # Every entry carries org_id / user_id / request_id, so the timeline filters and correlates.
   # The screen is server-wide and admin-only, like the rest of the console.

@@ -2,7 +2,7 @@
 
 GoTrue is *soft*-deleted (sign-in impossible, row retained): hard-deleting
 auth.users would block under open transactions holding key-share locks on the
-user row, and would erase the deletion trail with it. A purge job on the async
+user row, and would erase the record of the deletion with it. A purge job on the async
 substrate can hard-delete cold soft-deleted accounts later.
 """
 

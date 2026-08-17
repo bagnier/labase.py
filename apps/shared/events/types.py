@@ -1,7 +1,7 @@
 """Business events — the typed vocabulary of "something happened".
 
-A business event is a frozen dataclass persisted to the ``business_events`` trail by the bus's
-``emit`` — no handler runs at emit; the listener dispatches by type off the trail after commit. It
+A business event is a frozen dataclass persisted to the ``business_events`` journal by the bus's
+``emit`` — no handler runs at emit; the listener dispatches by type off the journal after commit. It
 declares only who acted (``user_id``) and which org it concerns (``org_id``); the write path
 enriches ``ip``/``request_id`` from the request contextvars at write time, while
 ``kind``/``icon`` are the event's own class metadata.
@@ -19,7 +19,7 @@ mixin — no ``kind`` string is hand-written::
 
 Non-CRUD actions (sign-in, a member joining, a page being published) subclass
 :class:`BusinessEvent` directly and spell out their own ``verb`` — never a dotted ``kind``, which is
-always the composition of the two halves, here and on the trail alike (a generated column).
+always the composition of the two halves, here and on the journal alike (a generated column).
 """
 
 import contextlib
@@ -56,11 +56,11 @@ def _datetime_fields(cls: type[BusinessEvent]) -> frozenset[str]:
     return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), datetime))
 
 
-# Field-name fragments that mark *secret material*. A business event is persisted to the append-only
-# trail — kept indefinitely, RLS-readable by the org's members, exportable to CSV/NDJSON — the exact
-# inverse of a secret's lifecycle (short-lived, need-to-know, revocable). So a secret may not be an
-# event field at all. Underscores are stripped before the match, so ``api_key`` / ``access_token`` /
-# ``recovery_code`` are all caught by a single fragment.
+# Field-name fragments that mark *secret material*. A business event is persisted to the
+# append-only journal — kept for good, RLS-readable by the org's members, exportable to
+# CSV/NDJSON — the exact inverse of a secret's lifecycle (short-lived, need-to-know, revocable).
+# So a secret may not be an event field at all. Underscores are stripped before the match, so
+# ``api_key`` / ``access_token`` / ``recovery_code`` are all caught by a single fragment.
 _SECRET_FRAGMENTS = (
     "token",
     "password",
@@ -110,9 +110,9 @@ class BusinessEvent:
     # target) an invitee's email. Emit-provided; rides in the payload for display (the timeline's
     # "detail"). A pure-id user subject (account/membership action) carries none — its entity_id is.
     entity_name: str | None = None
-    # the instant the fact happened — the trail's own column, *not* an emit-provided value: the
-    # emitter never sets it (the trail is the clock, one source), so it is None on the event that
-    # is emitted and populated only on the event a durable consumer receives, rebuilt from the row.
+    # the instant the fact happened — the journal's own column, *not* an emit-provided value: the
+    # emitter never sets it (the journal is the clock, one source), so it is None on the event
+    # that is emitted and populated only on the event a consumer receives, rebuilt from the record.
     # That is what lets a reaction reason about *when the fact happened*, not when it was delivered
     # (which a retry or a parked-then-resumed task pushes minutes — or days — later).
     created_at: datetime | None = None
@@ -129,40 +129,40 @@ class BusinessEvent:
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         # A secret cannot be an event field: refuse it here, at class definition, so the type system
-        # rejects the violation before a row is ever written (the write-time mask in the repository
+        # rejects the violation before a fact is ever written (the write-time mask in the repository
         # is only a last-resort net that should now never fire). The message names the alternative.
         for name in _annotation_names(cls):
             if _is_secret_field_name(name):
                 raise TypeError(
                     f"{cls.__name__} declares field {name!r}, which looks like secret material. "
-                    "A business event is persisted to the append-only trail — kept indefinitely, "
+                    "A business event is persisted to the append-only journal — kept for good, "
                     "readable by the org's members under RLS, exportable — the opposite of a "
                     "secret's lifecycle, so a secret may not be an event field. Carry the "
                     f"subject's id instead (e.g. {name}_id) and let the durable handler re-read "
                     "the current state off it."
                 )
         # A concrete event has both halves (an app_name from its app mixin, a verb of its own):
-        # compose its kind. The derivation is unconditional — the trail derives the very same way
+        # compose its kind. The derivation is unconditional — the journal derives the same way
         # (a generated column), so a hand-written kind would only make the class disagree with the
-        # rows it is meant to rebuild.
+        # records it is meant to rebuild.
         if cls.app_name and cls.verb:
             cls.kind = f"{cls.app_name}.{cls.verb}"
         # A concrete event (non-empty kind) registers itself in the catalog so the listener can
-        # reconstruct it from a stored row. Abstract bases (EntityCreated…, kind still "") never do.
+        # reconstruct it from a stored record. Abstract bases (EntityCreated…, kind "") never do.
         if cls.kind:
             catalog.register(cls)
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
-        """Rebuild the event from a stored row — dropping transport-only keys (``event_id``, the
+        """Rebuild the event from a stored record — dropping transport-only keys (``event_id``, the
         denormalized ``user_name`` handle) that aren't event fields, and re-parsing every
         uuid-typed field the task queue serialized to a string. The re-parse is generic (driven by
         the field annotations) and defensive: a value that isn't a valid uuid — a redacted ``"***"``
         token — is left as-is rather than crashing the rebuild. Both delivery paths use this."""
         # A stored NULL never satisfies a field the type declares required: dropping it lets the
-        # dataclass raise rather than hand back an event whose required scope is None. Rows written
-        # before a field became required (or by a raw writer) fail the rebuild here, and the
-        # listener's guard logs and skips them — the one place that decision belongs.
+        # dataclass raise rather than hand back an event whose required scope is None. Facts
+        # written before a field became required (or by a raw writer) fail the rebuild here, and
+        # the listener's guard logs and skips them — the one place that decision belongs.
         optional = {f.name for f in fields(cls) if f.default is not MISSING}
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names and (v is not None or k in optional)}
@@ -185,7 +185,7 @@ class OrgScoped:
     same non-nullable ``org_id`` on org-owned tables; an event composes it the way a model does
     (``class TodoEvent(OrgScoped, BusinessEvent)``). Scope belongs to the *type*: a server-wide
     fact (an admin grant, an issue) has no org field to leave empty, and an org fact cannot be
-    emitted without naming its org — which would otherwise persist a row that RLS then hides from
+    emitted without naming its org — which would otherwise persist a fact that RLS then hides from
     the very org it concerns.
 
     Unlike the ORM twin this must itself be a dataclass: SQLAlchemy reads annotations off a bare
@@ -197,7 +197,7 @@ class OrgScoped:
 
 @dataclass(frozen=True, kw_only=True)
 class EntityCreated(BusinessEvent):
-    """An entity was created — ``kind`` becomes ``"<entity>.created"``. The created row's id
+    """An entity was created — ``kind`` becomes ``"<entity>.created"``. The created entity's id
     rides on the base's ``entity_id``, its display name on ``entity_name``. Scope is orthogonal:
     compose ``OrgScoped`` for an org-owned entity, leave it off for a server-wide one."""
 

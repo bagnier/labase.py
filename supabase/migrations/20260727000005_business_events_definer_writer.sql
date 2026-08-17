@@ -1,16 +1,16 @@
--- C4: the trail's only writer becomes a controlled function; the raw INSERT capability is retired.
+-- C4: the journal's only writer becomes a controlled function; the raw INSERT is retired.
 --
 -- Until now the request path recorded a business event by INSERTing straight into
 -- `business_events` on the caller's own RLS (`authenticated`) session — atomic with the mutation,
 -- but resting on `grant insert ... to authenticated` + a `self-attributed insert` policy. A
 -- PostgREST client, being the same `authenticated` role, could drive that INSERT just as well:
--- forge a `todo.created` with any payload and any scoping, and the tailer would deliver that
+-- forge a `todo.created` with any payload and any scoping, and the listener would deliver that
 -- fabricated fact to the real consumers.
 --
 -- Route every write through one SECURITY DEFINER function and retire the raw grant, WITHOUT
 -- breaking atomic request-path emit:
 --
---   1. `record_business_event(...)` inserts the row as its owner, so a caller needs no table
+--   1. `record_business_event(...)` inserts the record as its owner, so a caller needs no table
 --      INSERT grant. The request session still calls it inside its own transaction, so the fact
 --      still commits iff the mutation does — atomicity is untouched.
 --   2. The raw `grant insert` + the `self-attributed insert` policy are dropped: `authenticated`
@@ -29,7 +29,7 @@
 -- writer, which retiring the raw grant achieves.
 --
 -- `kind` stays generated and `id`/`created_at` keep their column defaults — the function passes
--- none of them, so the trail composes its identity and stamps its clock exactly as before.
+-- none of them, so the journal composes its identity and stamps its clock exactly as before.
 --
 -- CREATE OR REPLACE so every schema clone (scripts/provision_schema.py dumps public, rewriting
 -- `public.` -> `<schema>.`) inherits the function and its `public.business_events` target as
@@ -69,7 +69,7 @@ end;
 $$;
 
 -- Only the app's authenticated role may call it (the request path); anon has no business writing
--- the trail. The admin/superuser path reaches it through ownership.
+-- the journal. The admin/superuser path reaches it through ownership.
 revoke all on function public.record_business_event(
   text, text, text, uuid, text, uuid, text, uuid, text, uuid, text, text, jsonb
 ) from public;

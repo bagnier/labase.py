@@ -1,4 +1,4 @@
--- `level` leaves the business trail. It belongs to logs.
+-- `level` leaves the business journal. It belongs to logs.
 --
 -- A log level answers "how much should an operator care about this trace". A business fact has no
 -- severity — it happened. The column was a `ClassVar` on the event class, so its value was constant
@@ -7,8 +7,8 @@
 -- attempt that was *refused*, and a privileged action that *succeeded*.
 --
 -- The console's Logs screen keeps `level` as its own display axis: it merges three heterogeneous
--- sources (the firehose with real structlog levels, this trail, and issue occurrences that are
--- always "error"), so it needs one shared column to sort and facet on. Business rows are now
+-- sources (the firehose with real structlog levels, this journal, and issue occurrences that are
+-- always "error"), so it needs one shared column to sort and facet on. Business facts are now
 -- projected at a constant level by the viewer — exactly the pattern issue occurrences already use
 -- (`_issue_kwargs` drops the filter, `_from_issue` hardcodes "error"). Nothing changes for the
 -- JSON response, the NDJSON/CSV exports or the templates.

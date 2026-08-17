@@ -33,11 +33,11 @@ def _shipped_events() -> dict[str, type[BusinessEvent]]:
     }
 
 
-# Every kind the product emits *today* — not every kind the trail holds: a retired one keeps its
-# rows, which the timeline still renders from their own columns, and leaves this set. These strings
-# are stored data, so *renaming* one is what costs: the rows keep the old spelling, the listener
-# stops reconstructing them and their consumers stop firing. Adding a line is routine; retiring one
-# means no code emits it any more; renaming one is a migration, not a refactor.
+# Every kind the product emits *today* — not every kind the journal holds: a retired one keeps its
+# records, which the timeline still renders from their own columns, and leaves this set. These
+# strings are stored data, so *renaming* one is what costs: records keep the old spelling, the
+# listener stops reconstructing them and their consumers stop firing. Adding a line is routine;
+# retiring one means no code emits it any more; renaming one is a migration, not a refactor.
 _KINDS = {
     "accounts.deleted",
     "accounts.disabled",
@@ -104,7 +104,7 @@ _KINDS = {
 
 def test_the_stored_vocabulary_is_exactly_what_history_expects():
     # No kind is hand-written any more: each is derived from its app mixin's `app_name` plus the
-    # event's `verb`. That derivation must keep producing the very strings already on the trail —
+    # event's `verb`. That derivation must keep producing the strings already in the journal —
     # this pins them, so a typo in a verb or a family reshuffle fails here and not in production.
     assert set(_shipped_events()) == _KINDS
 

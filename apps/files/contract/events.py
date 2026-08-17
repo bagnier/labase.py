@@ -5,7 +5,7 @@ CRUD-ish actions derive from the shared abstracts (overriding ``verb`` for the d
 the link is anonymous), so they subclass :class:`~apps.shared.events.BusinessEvent` directly and
 spell out a ``verb`` of their own. No share token is carried: a secret-named field is refused at
 class definition (:meth:`~apps.shared.events.BusinessEvent.__init_subclass__`), so only the file's
-id and name ever reach the trail.
+id and name ever reach the journal.
 """
 
 from dataclasses import dataclass

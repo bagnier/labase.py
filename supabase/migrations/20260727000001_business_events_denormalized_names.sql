@@ -1,6 +1,6 @@
--- Pin the readable names onto the trail row, so history outlives the things it describes.
+-- Pin the readable names onto the record, so history outlives the things it describes.
 --
--- The trail is an audit record, and its subjects are deletable by design: a user can close their
+-- The journal is history, and its subjects are deletable by design: a user can close their
 -- account, an owner can delete an org, and an org can be renamed. Resolving those names at read
 -- time therefore fails in the two cases that matter most — a deleted subject renders as a bare
 -- uuid, and a renamed org shows its *current* name against a fact from before the rename.

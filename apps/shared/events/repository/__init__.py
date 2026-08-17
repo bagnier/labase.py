@@ -2,8 +2,8 @@
 
 :class:`EventRepository` is :class:`~apps.shared.persistence.repository.BaseRepository` over
 :class:`BusinessEventRecord`, composed from three concern modules: ``_write`` (append a fact + the
-``event → row`` mapping), ``_delivery`` (the listener's claim/mark/scan + consumed ledger), and
-``_read`` (``search``/``daily_counts``). Humanizing rows is elsewhere (``timeline``).
+``event → record`` mapping), ``_delivery`` (the listener's claim/mark/scan + consumed ledger), and
+``_read`` (``search``/``daily_counts``). Humanizing records is elsewhere (``timeline``).
 
 This composition root wires the mixins together and re-exports the public surface, so callers keep
 ``from apps.shared.events.repository import EventRepository``.

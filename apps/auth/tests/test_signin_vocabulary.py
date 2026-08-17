@@ -19,9 +19,9 @@ from apps.shared.events.repository import event_to_record
 def test_a_sign_in_records_how_the_session_was_obtained():
     actor = uuid.uuid7()
 
-    row = event_to_record(SignedIn(user_id=actor, method="passkey", two_factor=False))
+    record = event_to_record(SignedIn(user_id=actor, method="passkey", two_factor=False))
 
-    assert (row.app_name, row.verb, row.user_id, row.payload) == (
+    assert (record.app_name, record.verb, record.user_id, record.payload) == (
         "auth",
         "signed_in",
         actor,
@@ -32,9 +32,9 @@ def test_a_sign_in_records_how_the_session_was_obtained():
 def test_a_sign_in_records_that_a_second_factor_was_cleared():
     # The 2FA passage is a property of the session, not a separate ceremony to name: the same kind
     # carries it, so "how many people signed in" stays one query.
-    row = event_to_record(SignedIn(user_id=uuid.uuid7(), method="password", two_factor=True))
+    record = event_to_record(SignedIn(user_id=uuid.uuid7(), method="password", two_factor=True))
 
-    assert row.payload == {"method": "password", "two_factor": True}
+    assert record.payload == {"method": "password", "two_factor": True}
 
 
 @pytest.mark.parametrize(
@@ -49,6 +49,6 @@ def test_a_sign_in_records_that_a_second_factor_was_cleared():
 def test_the_method_that_opened_the_ceremony_survives_the_second_factor(relayed, expected):
     # The second factor is verified on a later request, so how the ceremony began travels in a
     # cookie — i.e. through the caller's hands. Narrowing it back to the closed set here is what
-    # stops a forged or missing value from reaching the trail as an unknown method; falling back to
-    # the password ceremony is honest, since that is the only one reachable without a relay.
+    # stops a forged or missing value from reaching the journal as an unknown method; falling
+    # back to the password ceremony is honest, since that is the only one reachable without a relay.
     assert relayed_method(relayed) == expected

@@ -1,4 +1,4 @@
-"""Auth's public events — a user's identity, sessions and account security on the shared trail.
+"""Auth's public events — a user's identity, sessions and account security on the shared journal.
 
 One lifecycle *signal* stays lean (subscribers react without importing one another):
 :class:`UserDeleted`. Everything else is a typed :class:`~apps.shared.events.BusinessEvent`:
@@ -8,8 +8,8 @@ gating (``accounts.*``).
 
 What is **not** here is as deliberate: a refused sign-in, a wrong TOTP code, a denied admin surface.
 Nothing happened in those, so they are structured log lines (``labase.auth.*``), read from the
-console's Logs screen alongside the trail. Only a delivered session is a fact, and there is one kind
-for it whatever the ceremony — see :class:`SignedIn`.
+console's Logs screen alongside the journal. Only a delivered session is a fact, and one kind
+carries it whatever the ceremony — see :class:`SignedIn`.
 """
 
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ from typing import ClassVar, Literal
 from apps.shared.events import BusinessEvent
 
 # How a caller proved who they were. A closed set on purpose: the type checker rejects a fifth
-# spelling of "password" before a row can carry it, which is what keeps the trail groupable by
+# spelling of "password" before a row can carry it, which is what keeps the journal groupable by
 # method years later. ``email_link`` covers both mailed confirmations (signup, email change), whose
 # single-use token *is* the credential.
 SignInMethod = Literal["password", "oauth", "passkey", "email_link"]
@@ -29,7 +29,7 @@ class UserCreated(BusinessEvent):
     """A new account was provisioned — the fact org seeding and first-admin bootstrap react to.
 
     Distinct from a sign-in (the ``*SignedIn`` Login events): emitted once, at genuine account
-    creation — never on a returning OAuth login — so the trail records real signups only. The new
+    creation — never on a returning OAuth login — so the journal records real signups only. The new
     user is the actor; a token is never carried (and would be redacted from any payload anyway)."""
 
     app_name: ClassVar[str] = "auth"  # outside AuthEvent (own icon), so it names its app here

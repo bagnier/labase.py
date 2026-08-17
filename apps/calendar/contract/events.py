@@ -1,4 +1,4 @@
-"""Calendar's business events — an event's lifecycle on the shared trail.
+"""Calendar's business events — an event's lifecycle on the shared journal.
 
 Plain CRUD: ``kind`` derives to ``"calendar.created"`` / ``"calendar.updated"`` /
 ``"calendar.deleted"`` from the shared abstracts; the router emits them on the request's session,

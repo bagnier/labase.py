@@ -1,12 +1,12 @@
-"""Org's public events — org lifecycle, membership and invitations on the shared trail.
+"""Org's public events — org lifecycle, membership and invitations on the shared journal.
 
 All are :class:`OrgEvent` business events (org-scoped) — an org being created, a member
 joining/leaving, roles changing, invitations. A refused action is *not* here: a blocked
 last-owner change or a non-owner reaching an owner-only route changed nothing, so it is a
-structured log line, not a trail row.
+structured log line, not a fact.
 
 :class:`OrganizationCreated` doubles as the welcome-seeding trigger: each per-app seeder is a
-durable ``bus.on`` consumer of it, run by the listener off the trail after the org commits. One
+durable ``bus.on`` consumer of it, run by the listener off the journal after the org commits. One
 event, one business meaning — no separate seeding signal.
 """
 
@@ -29,7 +29,7 @@ class OrganizationCreated(OrgEvent, EntityCreated):
 @dataclass(frozen=True, kw_only=True)
 class OrganizationRenamed(OrgEvent, EntityUpdated):
     """The org's display name changed — ``kind`` → ``"organizations.renamed"``. ``entity_id`` is
-    the org id, ``label`` the new name, so it joins the org's rows in the per-entity filter."""
+    the org id, ``label`` the new name, so it joins the org's facts in the per-entity filter."""
 
     verb: ClassVar[str] = "renamed"
 

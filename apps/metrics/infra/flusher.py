@@ -1,6 +1,6 @@
 """Per-process flush of the in-memory accumulator to Postgres.
 
-Same lifespan-task shape as the event tailer. Each process writes its own
+Same lifespan-task shape as the event listener. Each process writes its own
 rows (keyed by a random instance id) — multi-instance is correct by summing in
 the read path, no coordination needed. The accumulator stays cumulative for the
 Prometheus exposition; this task persists the deltas between ticks.

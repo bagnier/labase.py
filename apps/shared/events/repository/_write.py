@@ -1,4 +1,4 @@
-"""Write path — append a fact (typed, or from explicit columns) and the single ``event → row``
+"""Write path — append a fact (typed, or from explicit columns) and the single ``event → record``
 mapping (no column dict between)."""
 
 import json
@@ -19,7 +19,7 @@ from apps.shared.events.types import BusinessEvent, OrgScoped, _is_secret_field_
 
 log = structlog.get_logger("labase.business_events")
 
-# The trail's one writer since C4 retired the raw INSERT grant: a SECURITY DEFINER function that
+# The journal's one writer since C4 retired the raw INSERT grant: a SECURITY DEFINER function that
 # inserts as its owner, so the request's ``authenticated`` session writes the fact atomically with
 # its mutation without a table grant PostgREST would share. ``kind`` is generated and ``id`` /
 # ``created_at`` keep their column defaults, so none of the three is passed.
@@ -30,55 +30,55 @@ _RECORD = text(
 )
 
 
-async def _record_row(session: AsyncSession, row: BusinessEventRecord) -> None:
-    """Append a fact through the writer function on ``session`` (its transaction). ``row`` is the
+async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> None:
+    """Append a fact through the writer function on ``session`` (its transaction). ``record`` is the
     typed carrier :func:`event_to_record` (or the explicit-column writer) already built — the one
-    ``event → row`` shape — read off as the function's arguments."""
+    ``event → record`` shape — read off as the function's arguments."""
     await session.execute(
         _RECORD,
         {
-            "app_name": row.app_name,
-            "verb": row.verb,
-            "icon": row.icon,
-            "user_id": row.user_id,
-            "user_name": row.user_name,
-            "org_id": row.org_id,
-            "org_name": row.org_name,
-            "entity_id": row.entity_id,
-            "entity_name": row.entity_name,
-            "request_id": row.request_id,
-            "request_name": row.request_name,
-            "ip": row.ip,
-            "payload": json.dumps(row.payload or {}),
+            "app_name": record.app_name,
+            "verb": record.verb,
+            "icon": record.icon,
+            "user_id": record.user_id,
+            "user_name": record.user_name,
+            "org_id": record.org_id,
+            "org_name": record.org_name,
+            "entity_id": record.entity_id,
+            "entity_name": record.entity_name,
+            "request_id": record.request_id,
+            "request_name": record.request_name,
+            "ip": record.ip,
+            "payload": json.dumps(record.payload or {}),
         },
     )
 
 
 class _WritesEvents(_EventSQL):
     async def record(self, event: BusinessEvent) -> None:
-        """Append a typed event to the trail on the bound session; the caller commits."""
+        """Append a typed event to the journal on the bound session; the caller commits."""
         org_id = event.org_id if isinstance(event, OrgScoped) else None
         user_name, org_name = await self.pinned_names(event.user_id, org_id)
-        await _record_row(
+        await _append_record(
             self.session, event_to_record(event, user_name=user_name, org_name=org_name)
         )
 
     async def pinned_names(
         self, user_id: uuid.UUID | None, org_id: uuid.UUID | None
     ) -> tuple[str | None, str | None]:
-        """Resolve the actor's handle and the org's name *now*, to store them on the row.
+        """Resolve the actor's handle and the org's name *now*, to store them on the record.
 
         One round trip for both: the write path already sat on a query for the handle, and a second
         one per emitted fact would double the cost of every business mutation. Both are read on the
         caller's session, so they see the same transaction the fact commits with.
 
         Profiles are ``own read`` under RLS, so a member cannot resolve a co-member's handle at read
-        time; an org can be renamed or deleted outright. Pinning both here is what keeps the trail
+        time; an org can be renamed or deleted outright. Pinning both here is what keeps the journal
         legible later."""
         if not user_id and not org_id:
             return None, None
         try:
-            row = (
+            names = (
                 await self.session.execute(
                     text(
                         "select (select handle from profiles where auth_user_id = :u),"
@@ -89,7 +89,7 @@ class _WritesEvents(_EventSQL):
             ).first()
         except Exception:
             return None, None
-        return (row[0], row[1]) if row else (None, None)
+        return (names[0], names[1]) if names else (None, None)
 
 
 def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
@@ -117,7 +117,7 @@ def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
 def event_to_record(
     event: BusinessEvent, *, user_name: str | None = None, org_name: str | None = None
 ) -> BusinessEventRecord:
-    """The one ``event → row`` conversion. Scoping (user/org/entity) and the readable names are
+    """The one ``event → record`` conversion. Scoping (user/org/entity) and the readable names are
     lifted to their own columns — so RLS, the timeline and full-text search reach them directly —
     leaving only the (redacted) rest in ``payload``; ``ip``/``request_id`` ride in from the request
     contextvars."""
@@ -126,12 +126,12 @@ def event_to_record(
     payload = _fact_payload(event)
     for lifted in LIFTED_COLUMNS:  # the lifted fields get their own columns, not a payload key
         payload.pop(lifted, None)
-    # created_at is the trail's own column, filled by the model default (one clock) — never the
+    # created_at is the journal's own column, filled by the model default (one clock) — never the
     # emitter's None, which would only shadow it. Drop it: the column is its one home.
     payload.pop("created_at", None)
     return BusinessEventRecord(
-        # The two halves the event declares; the row's ``kind`` is generated from them (a writer
-        # cannot set it), so the trail composes its identity exactly as the class does.
+        # The two halves the event declares; the record's ``kind`` is generated from them (a writer
+        # cannot set it), so the journal composes its identity exactly as the class does.
         app_name=event.app_name,
         verb=event.verb,
         icon=event.icon,

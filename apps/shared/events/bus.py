@@ -4,15 +4,15 @@ Four methods, nothing else:
 
 - ``declare(*event_types)`` — record, at mount, that this app's facts are live. ``emit`` refuses an
   undeclared event, so a disabled app cannot emit.
-- ``emit(event, session)`` — **persist the fact** to the ``business_events`` trail on the session
+- ``emit(event, session)`` — **persist the fact** to the ``business_events`` journal on the session
   the caller names (atomic with the action). That is *all* it does: no handler runs here. The
-  :mod:`apps.shared.events.listener` reads the persisted trail after commit and runs the
+  :mod:`apps.shared.events.listener` reads the persisted journal after commit and runs the
   reactions, so a producer never waits on, or fails from, a consumer.
 - ``on(event_type, handler)`` — register a **durable, exactly-once** consumer, run by the listener
-  off the trail (one task-queue row per consumer, retried then parked). Handler signature is
+  off the journal (one queued task per consumer, retried then parked). Handler signature is
   ``(session, event)``.
 - ``spread(event_type, handler)`` — register a **run-everywhere** handler (config reload), replayed
-  by the listener **per instance** off the trail.
+  by the listener **per instance** off the journal.
 
 The three registration methods write into an :class:`~apps.shared.events.wiring.EventWiring` —
 *who emits what, and who reacts* — and ``emit`` reads its ownership gate. It is the process's
@@ -57,7 +57,7 @@ def _delivery_context(payload: dict[str, Any]) -> dict[str, str]:
 class EventBus:
     """Registration + emit. What a mount wires goes into an
     :class:`~apps.shared.events.wiring.EventWiring` — the process's by default, which its readers
-    import for themselves; reactions run in the listener off the persisted trail, never here."""
+    import for themselves; reactions run in the listener off the persisted journal, never here."""
 
     def __init__(self, wiring: EventWiring | None = None) -> None:
         # The bus *writes* the wiring, it does not own it: the listener and the console read the
@@ -74,7 +74,7 @@ class EventBus:
 
     async def emit(self, event: BusinessEvent, session: AsyncSession) -> None:
         """Persist the fact on ``session`` — and only that. Refuses an undeclared event (a fact must
-        be owned). Reactions run in the listener off the persisted trail after commit, so ``emit``
+        be owned). Reactions run in the listener off the persisted journal after commit, so ``emit``
         never runs a handler, waits on one, or fails from one.
 
         The session is required, with no default and no ambient lookup: durability is stated at the
@@ -101,7 +101,7 @@ class EventBus:
         idempotent: bool = True,
     ) -> None:
         """Register a durable, exactly-once consumer of ``event_type`` (and its subclasses), run by
-        the listener off the trail after commit (one task-queue row per consumer, retry/park).
+        the listener off the journal after commit (one queued task per consumer, retry/park).
         ``name`` disambiguates consumers of the same event; ``app`` is the listening app (console's
         reaction graph); ``as_actor`` runs under the actor's RLS claims (else admin); ``idempotent``
         guards re-delivery via the ``consumed`` ledger."""
@@ -112,11 +112,11 @@ class EventBus:
 
     def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
         """Register a run-everywhere handler — for config propagation (a settings reload). The
-        listener runs it **per instance** off the trail (no claim, no dispatch mark), so every
+        listener runs it **per instance** off the journal (no claim, no dispatch mark), so every
         process applies the change. Handlers must be idempotent (re-delivery is harmless).
 
         ``event_type`` is a ``BusinessEvent``, and cannot be anything else: the listener finds these
-        facts by scanning the trail for their ``kind``, so a type that has none would register a
+        facts by scanning the journal for their ``kind``, so a type that has none would register a
         handler nothing could ever call."""
         self._wiring.add_spread_handler(event_type, handler)
 
@@ -135,10 +135,10 @@ class EventBus:
             if idempotent and await EventRepository(session).already_consumed(
                 topic, payload["event_id"]
             ):
-                return  # a re-delivery — the ledger row (from the first run) makes this a no-op
+                return  # a re-delivery — the ledger entry (from the first run) makes this a no-op
             # Correlate the reaction's logs with the fact that triggered it: request_id is the
             # originating stimulus (so a reaction joins the emitting request's timeline), event_id
-            # the immediate cause. The reaction runs off the trail, minutes-to-days after the
+            # the immediate cause. The reaction runs off the journal, minutes-to-days after the
             # request, on a background task with no request context of its own — so bind them here.
             with structlog.contextvars.bound_contextvars(**_delivery_context(payload)):
                 await handler(session, event_type.from_payload(payload))

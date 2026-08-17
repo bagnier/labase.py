@@ -1,4 +1,4 @@
-"""Pages' business events — a page's authoring lifecycle on the shared trail.
+"""Pages' business events — a page's authoring lifecycle on the shared journal.
 
 Create/delete use the CRUD abstracts; every other change is a form of *update* (a re-slug, a
 publish, an unpublish) so it derives from :class:`~apps.shared.events.EntityUpdated` with a

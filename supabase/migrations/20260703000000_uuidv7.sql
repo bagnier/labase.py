@@ -1,6 +1,6 @@
 -- One key shape for the whole schema: a time-ordered UUIDv7. Every table's `id` defaults to it, so
 -- a primary key is globally unique (no shared sequence, safe across instances) *and* monotonic —
--- which the append-only trails rely on as a cursor (business_events dispatch/feeds, error_events
+-- which the append-only stores rely on as a cursor (business_events dispatch/feeds, error_events
 -- pagination). Defined first (earliest migration) so every later CREATE can reference it as a column
 -- default. Security tokens keep `gen_random_uuid()` on purpose (unguessable, no embedded timestamp).
 --

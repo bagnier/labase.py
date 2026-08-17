@@ -102,7 +102,7 @@ class ConsoleApiMixin(ApiBase):
 
     def drive_spread(self) -> None:
         """Apply the settings change now. A settings edit persists a ``SettingsChanged`` fact; the
-        event tailer replays it to each process's ``spread`` handler off the trail. No tailer runs
+        event listener replays it to each process's ``spread`` handler off the journal. None runs
         under the API driver (and it could not see the rolled-back transaction anyway), so drive one
         tick on the test connection here."""
         self.run(EventListener(0, session_factory=self.test_session_factory()).tick())

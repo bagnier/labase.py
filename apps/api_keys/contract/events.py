@@ -1,4 +1,4 @@
-"""API keys' business events — issuing and revoking recorded on the shared trail.
+"""API keys' business events — issuing and revoking recorded on the shared journal.
 
 Issuing is a create, revoking a state change (an update), so they derive from the shared CRUD
 abstracts with domain verbs (``"api_keys.created"`` / ``"api_keys.revoked"``). ``ApiKeyIssued`` is

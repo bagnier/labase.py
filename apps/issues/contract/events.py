@@ -1,8 +1,8 @@
-"""Issues' business events — alerting *and* the trail, one typed vocabulary.
+"""Issues' business events — alerting *and* the journal, one typed vocabulary.
 
 ``IssueOpened``/``IssueRegressed`` are the alerting signals (subscribers react without knowing the
 emitter); as :class:`~apps.shared.events.BusinessEvent` subclasses they also land on the shared
-trail — server-wide, so ``user_id``/``org_id`` stay ``None`` (console-only rows). A human
+journal — server-wide, so ``user_id``/``org_id`` stay ``None`` (console-only rows). A human
 resolving/reopening an issue is ``IssueStatusChanged``, carrying the acting admin as ``user_id``.
 """
 

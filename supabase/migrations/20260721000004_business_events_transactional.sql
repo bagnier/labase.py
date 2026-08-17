@@ -2,16 +2,16 @@
 -- iff the action commits (atomic) — replacing the former detached, best-effort persister. Two
 -- consequences captured here:
 --
---   1. `dispatched_at` — a cursor the async event tailer (next brick) uses to claim facts it has
+--   1. `dispatched_at` — a cursor the async event listener (next brick) uses to claim facts it has
 --      not yet fanned out to consumers, straight off this one table (no separate event log).
---   2. INSERT grant — the authenticated role must write its OWN-attributed rows on the request
+--   2. INSERT grant — the authenticated role must write its OWN-attributed facts on the request
 --      session. A member may only insert events where user_id = auth.uid(); admin writes (auth
---      signals, server actions, the tailer) go through the BYPASSRLS session and skip the check.
+--      signals, server actions, the listener) go through the BYPASSRLS session and skip the check.
 --      Self-attributed forgery via PostgREST is accepted for now (to harden later).
 
 alter table public.business_events add column dispatched_at timestamptz;
 
--- The tailer claims facts not yet dispatched, oldest first.
+-- The listener claims facts not yet dispatched, oldest first.
 create index business_events_undispatched_idx on public.business_events (id)
   where dispatched_at is null;
 

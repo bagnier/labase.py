@@ -132,7 +132,7 @@ class ConsoleBrowserMixin(BrowserBase):
 
     def drive_spread(self) -> None:
         """Apply the settings change deterministically. The in-process server runs a real event
-        tailer that a NOTIFY would wake, but driving one tick here removes the race between the
+        listener that a NOTIFY would wake, but driving one tick here removes the race between the
         persist and the next assertion."""
         if self._server is None:
             return

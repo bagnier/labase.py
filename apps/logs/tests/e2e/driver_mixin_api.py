@@ -72,7 +72,7 @@ class LogsApiMixin(ApiBase):
         apply_log_level(level)
 
     def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
-        # All three sources must key on the same value to correlate; the trail's column is a uuid,
+        # All three sources must key on the same value to correlate; the journal's column is a uuid,
         # so the scenario's readable token maps to one here.
         oid, request_id = logs_org_id(org), logs_request_id(request_id)
         self._append_request("request.finished", org=oid, request_id=request_id)

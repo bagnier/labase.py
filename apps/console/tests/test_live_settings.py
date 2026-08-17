@@ -25,7 +25,7 @@ def _settings() -> AppSettings:
 @pytest.mark.asyncio
 async def test_reload_and_coerce_to_declared_type() -> None:
     settings = _settings()
-    # ``settings.reload`` is the ``spread`` handler the tailer replays off the trail; applying it
+    # ``settings.reload`` is the ``spread`` handler the listener replays off the journal; it
     # adopts the fresh values, coerced to their declared types on the next read.
     await settings.reload(
         SettingsChanged(

@@ -35,7 +35,7 @@ def logs_user_id(email: str) -> str:
 
 
 def logs_request_id(token: str) -> str:
-    """A scenario names a request "r-100"; the trail stores a uuid. Same trick as orgs and users:
+    """A scenario names a request "r-100"; the journal stores a uuid. Same trick as orgs and users:
     map the readable token to a stable uuid5 so the Gherkin stays plain language."""
     return str(uuid.uuid5(_NS, f"request:{token}"))
 

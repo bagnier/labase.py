@@ -1,4 +1,4 @@
-"""The event tailer — reads the business_events log and fans each fact to its async consumers."""
+"""The event listener — reads the journal and fans each fact to its async consumers."""
 
 import uuid
 from dataclasses import dataclass
@@ -16,28 +16,28 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.wiring import EventWiring, wiring
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
-from apps.shared.tests.trail_seed import seed_fact
+from apps.shared.tests.journal_seed import seed_fact
 
 
 @dataclass(frozen=True, kw_only=True)
 class _TailEvent(BusinessEvent):
-    app_name = "test_tailer"
+    app_name = "test_listener"
     verb = "happened"
     label: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class _SpreadEvent(BusinessEvent):
-    app_name = "test_tailer"
+    app_name = "test_listener"
     verb = "spread"
     value: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class _StrictSpreadEvent(BusinessEvent):
-    """A spread event with a *required* payload field: a stored row missing it cannot be rebuilt."""
+    """A spread event with a *required* payload field: a stored fact missing it cannot rebuild."""
 
-    app_name = "test_tailer"
+    app_name = "test_listener"
     verb = "strict_spread"
     value: str
 
@@ -50,8 +50,8 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture
 async def iso():
-    # Isolate the tailer's global view: mark every pre-existing fact dispatched so tick() sees only
-    # rows this test inserts. Restore the process-wide wiring and task handlers afterwards.
+    # Isolate the listener's global view: mark every pre-existing fact dispatched so tick() sees
+    # only what this test inserts. Restore the process-wide wiring and task handlers afterwards.
     _clear_engine_caches()
     saved_wiring = wiring.snapshot()
     saved_handlers = dict(_handlers)
@@ -59,14 +59,14 @@ async def iso():
         await s.execute(
             text("UPDATE business_events SET dispatched_at = now() WHERE dispatched_at IS NULL")
         )
-        await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_tailer%'"))
-        await s.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_tailer%'"))
+        await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_listener%'"))
+        await s.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_listener%'"))
         await s.commit()
     yield
     async with db.admin_session_factory()() as s:
-        await s.execute(text("DELETE FROM business_events WHERE kind LIKE 'test_tailer.%'"))
-        await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_tailer%'"))
-        await s.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_tailer%'"))
+        await s.execute(text("DELETE FROM business_events WHERE kind LIKE 'test_listener.%'"))
+        await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_listener%'"))
+        await s.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_listener%'"))
         await s.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
@@ -82,7 +82,7 @@ async def _noop(session, event) -> None:
 async def _seed(actor: uuid.UUID, *, label: str = "Hi", entity_id: uuid.UUID | None = None) -> None:
     await seed_fact(
         BusinessEventRecord(
-            app_name="test_tailer",
+            app_name="test_listener",
             verb="happened",
             user_id=actor,
             entity_id=entity_id,
@@ -93,10 +93,12 @@ async def _seed(actor: uuid.UUID, *, label: str = "Hi", entity_id: uuid.UUID | N
 
 async def _topics() -> list[str]:
     async with db.admin_session_factory()() as s:
-        rows = await s.execute(
-            text("SELECT topic FROM task_queue WHERE topic LIKE 'evt:test_tailer%' ORDER BY topic")
+        queued = await s.execute(
+            text(
+                "SELECT topic FROM task_queue WHERE topic LIKE 'evt:test_listener%' ORDER BY topic"
+            )
         )
-        return [r[0] for r in rows]
+        return [r[0] for r in queued]
 
 
 async def _undispatched(kind: str) -> int:
@@ -109,18 +111,18 @@ async def _undispatched(kind: str) -> int:
 
 @pytest.mark.asyncio
 async def test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched(iso):
-    events.on(_TailEvent, _noop, name="counter", app="test_tailer", as_actor=False)
-    events.on(_TailEvent, _noop, name="search", app="test_tailer", as_actor=False)
+    events.on(_TailEvent, _noop, name="counter", app="test_listener", as_actor=False)
+    events.on(_TailEvent, _noop, name="search", app="test_listener", as_actor=False)
     await _seed(uuid.uuid7())
 
     dispatched = await EventListener(0).tick()
 
     assert dispatched == 1
     assert await _topics() == [
-        "evt:test_tailer.happened:counter",
-        "evt:test_tailer.happened:search",
+        "evt:test_listener.happened:counter",
+        "evt:test_listener.happened:search",
     ]
-    assert await _undispatched("test_tailer.happened") == 0
+    assert await _undispatched("test_listener.happened") == 0
 
 
 @pytest.mark.asyncio
@@ -130,7 +132,7 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
     async def handler(session, event) -> None:
         seen.append(event)
 
-    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    events.on(_TailEvent, handler, name="counter", app="test_listener", as_actor=False)
     actor, eid = uuid.uuid7(), uuid.uuid7()
     await _seed(actor, label="Ship it", entity_id=eid)
 
@@ -150,20 +152,20 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
 
 @pytest.mark.asyncio
 async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(iso):
-    # A durable consumer must reason about *when the fact happened* — the trail's own created_at —
-    # not when a retry/park finally delivered it. The delivered event carries the row's instant.
+    # A durable consumer must reason about *when the fact happened* — the journal's created_at —
+    # not when a retry/park finally delivered it. The delivered event carries the record's instant.
     seen: list[BusinessEvent] = []
 
     async def handler(session, event) -> None:
         seen.append(event)
 
-    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    events.on(_TailEvent, handler, name="counter", app="test_listener", as_actor=False)
     await _seed(uuid.uuid7())
     async with db.admin_session_factory()() as s:
         stored = await s.scalar(
             text(
                 "SELECT created_at FROM business_events "
-                "WHERE kind = 'test_tailer.happened' ORDER BY id DESC LIMIT 1"
+                "WHERE kind = 'test_listener.happened' ORDER BY id DESC LIMIT 1"
             )
         )
 
@@ -174,12 +176,12 @@ async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(is
         pass
 
     assert len(seen) == 1
-    assert seen[0].created_at == stored  # the fact's instant, rebuilt from the row — not delivery's
+    assert seen[0].created_at == stored  # the fact's instant, rebuilt from the record
 
 
 @pytest.mark.asyncio
 async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
-    # The reaction runs off the trail on a background task with no request of its own; the delivery
+    # The reaction runs off the journal on a background task with no request of its own; delivery
     # wrapper binds the fact's originating request_id onto structlog, so the reaction's log lines
     # join the emitting request's timeline. Assert it is bound while the handler runs.
     seen: dict[str, object] = {}
@@ -187,11 +189,11 @@ async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
     async def handler(session, event) -> None:
         seen.update(structlog.contextvars.get_contextvars())
 
-    events.on(_TailEvent, handler, name="counter", app="test_tailer", as_actor=False)
+    events.on(_TailEvent, handler, name="counter", app="test_listener", as_actor=False)
     request_id = uuid.uuid7()
     await seed_fact(
         BusinessEventRecord(
-            app_name="test_tailer",
+            app_name="test_listener",
             verb="happened",
             user_id=uuid.uuid7(),
             request_id=request_id,
@@ -213,28 +215,28 @@ async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispa
     # A kind with no registered class can be routed to no one — a fact we cannot even name. That is
     # not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
     # it into a console Issue), so it stops being lost in silence. The cursor still advances — the
-    # row is marked dispatched and nothing is enqueued.
+    # the record is marked dispatched and nothing is enqueued.
     async with db.admin_session_factory()() as s:
         await s.execute(
             text(
                 "INSERT INTO business_events (app_name, verb, user_id) "
-                "VALUES ('test_tailer', 'legacy', NULL)"
+                "VALUES ('test_listener', 'legacy', NULL)"
             )
         )
         await s.commit()
 
     with capture_logs() as logs:
         assert await EventListener(0).tick() == 1
-    surfaced = [entry for entry in logs if entry["event"] == "tailer.unroutable_fact"]
+    surfaced = [entry for entry in logs if entry["event"] == "listener.unroutable_fact"]
     assert len(surfaced) == 1
     assert surfaced[0]["log_level"] == "error"  # exception level → captured as an Issue
-    assert surfaced[0]["kind"] == "test_tailer.legacy"
+    assert surfaced[0]["kind"] == "test_listener.legacy"
     assert await _topics() == []
-    assert await _undispatched("test_tailer.legacy") == 0
+    assert await _undispatched("test_listener.legacy") == 0
 
 
 def test_forget_apps_register_durable_consumers_of_user_deleted():
-    # Account deletion cleanup runs off the tailer: organizations and profile each declare a durable
+    # Account deletion cleanup runs off the listener: organizations and profile each declare one
     # async consumer of UserDeleted (auth.user_deleted), keyed by topic (shared may not import the
     # bounded contexts to name the handlers).
     import apps.main  # noqa: F401
@@ -257,7 +259,7 @@ def test_org_seed_apps_register_durable_consumers_of_organization_created():
 
 @pytest.mark.asyncio
 async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
-    # A spread fact is replayed to this process's spread handler off the trail — no claim, no
+    # A spread fact is replayed to this process's spread handler off the journal — no claim, no
     # dispatch mark (every instance applies it). Reconstructed as its typed event. Its own wiring
     # isolates the spread handler; the catalog is process-wide, so class_for resolves the kind.
     own = EventWiring()
@@ -268,7 +270,7 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
 
     EventBus(own).spread(_SpreadEvent, apply)
     await seed_fact(
-        BusinessEventRecord(app_name="test_tailer", verb="spread", payload={"value": "on"})
+        BusinessEventRecord(app_name="test_listener", verb="spread", payload={"value": "on"})
     )
 
     await EventListener(0, wiring=own).tick()
@@ -280,9 +282,9 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
 
 @pytest.mark.asyncio
 async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_advances(iso):
-    # A row whose payload can't rebuild its typed event (a field added to the class after the row
-    # was written, a hand-inserted row) must not wedge the spread path: without advancing the
-    # cursor, every later tick would replay the same poison row and no fact would ever propagate
+    # A fact whose payload can't rebuild its typed event (a field added to the class after it
+    # was written, a hand-inserted one) must not wedge the spread path: without advancing the
+    # cursor, every later tick would replay the same poison fact and none would ever propagate
     # again. It is logged, skipped, and the healthy fact behind it still runs.
     own = EventWiring()
     seen: list[_StrictSpreadEvent] = []
@@ -291,9 +293,9 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
         seen.append(event)
 
     EventBus(own).spread(_StrictSpreadEvent, apply)
-    for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy row behind it
+    for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy one behind
         await seed_fact(
-            BusinessEventRecord(app_name="test_tailer", verb="strict_spread", payload=payload)
+            BusinessEventRecord(app_name="test_listener", verb="strict_spread", payload=payload)
         )
 
     listener = EventListener(0, wiring=own)
@@ -301,20 +303,20 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
         await listener.tick()
 
     assert [e.value for e in seen] == ["on"]
-    # The poison row is not swallowed as a warning: it is logged at exception level, so the capture
+    # The poison fact is not swallowed as a warning: it is logged at exception level, so capture
     # seam records a console Issue for a fact that can no longer be rebuilt.
-    failed = [entry for entry in logs if entry["event"] == "tailer.reconstruct_failed"]
+    failed = [entry for entry in logs if entry["event"] == "listener.reconstruct_failed"]
     assert len(failed) == 1
     assert failed[0]["log_level"] == "error"
-    await listener.tick()  # cursor moved past both rows: nothing replays
+    await listener.tick()  # cursor moved past both facts: nothing replays
     assert [e.value for e in seen] == ["on"]
 
 
 @pytest.mark.asyncio
 async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
-    events.on(_TailEvent, _noop, name="counter", app="test_tailer", as_actor=False)
+    events.on(_TailEvent, _noop, name="counter", app="test_listener", as_actor=False)
     await _seed(uuid.uuid7())
 
     assert await EventListener(0).tick() == 1
     assert await EventListener(0).tick() == 0  # nothing left undispatched
-    assert await _topics() == ["evt:test_tailer.happened:counter"]  # not duplicated
+    assert await _topics() == ["evt:test_listener.happened:counter"]  # not duplicated

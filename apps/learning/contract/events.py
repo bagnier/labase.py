@@ -1,4 +1,4 @@
-"""Learning's business events — a review recorded on the shared trail.
+"""Learning's business events — a review recorded on the shared journal.
 
 Reviewing a card advances its schedule, so :class:`CardReviewed` derives from
 :class:`~apps.shared.events.EntityUpdated` (``kind`` → ``"learning.reviewed"``) and carries the

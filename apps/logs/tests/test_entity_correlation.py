@@ -3,7 +3,7 @@
 import uuid
 
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.tests.trail_seed import seed_fact
+from apps.shared.tests.journal_seed import seed_fact
 
 _ADMIN = "entity-corr@example.com"
 

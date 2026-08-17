@@ -1,4 +1,4 @@
-"""To-do's business events — a task's life recorded on the shared trail.
+"""To-do's business events — a task's life recorded on the shared journal.
 
 The verbs are the *domain* actions, not flat CRUD: a task is created, **edited** (its title),
 **ticked**/un-ticked (its done flag) and deleted. Edit/tick/untick are all forms of *update*, so

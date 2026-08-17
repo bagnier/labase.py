@@ -44,7 +44,7 @@ async def seed_org_welcome(
     """Run a welcome seeder for a newly created org, on the worker's session.
 
     Each app registers its seeder as a durable async consumer of ``OrganizationCreated``
-    (``consumes_when_enabled``); the tailer delivers it and the task worker owns the transaction,
+    (``consumes_when_enabled``); the listener delivers it and the task worker owns the transaction,
     retry, parking and idempotency. This helper spells the shared boilerplate — resolve the org's
     owner (bail if there isn't one yet), honor the test-schema suppression — so each seeder only
     writes its own welcome rows. No commit: the worker commits the task."""

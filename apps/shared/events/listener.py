@@ -1,19 +1,19 @@
-"""The event listener — reads the persisted trail and runs both deliveries off it.
+"""The event listener — reads the persisted journal and runs both deliveries off it.
 
-``emit`` only writes a ``BusinessEvent`` to the ``business_events`` trail inside the request's
+``emit`` only writes a ``BusinessEvent`` to the ``business_events`` journal inside the request's
 transaction (the bus's ``emit`` → ``EventRepository.record``). This listener reads that
-trail, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
+journal, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
 producer no longer does — so it never knows its consumers nor waits for them:
 
-- **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched rows with
-  ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one task-queue row per
+- **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched records
+  with ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one queued task per
   registered ``bus.on`` consumer (read from the wiring via ``consumers_of``) and stamps
-  ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a row.
+  ``dispatched_at``. No sequence-visibility gap, and N instances never double-fan a fact.
 - **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
   each tick reads facts newer than this process's in-memory cursor whose kind has a ``spread``
   subscriber and runs those handlers in-process (idempotent, so a replay is harmless).
-- **Reconstruct from the row.** Both paths rebuild the typed event from the row's ``kind`` via the
-  catalog's ``class_for``; the async dedup key is the row id.
+- **Reconstruct from the record.** Both paths rebuild the typed event from the record's ``kind``
+  via the catalog's ``class_for``; the async dedup key is the record id.
 """
 
 import asyncio
@@ -41,7 +41,7 @@ NOTIFY_CHANNEL = "business_event"
 class UnroutableFact(Exception):
     """A persisted fact the listener cannot route: its ``kind`` maps to no registered event class,
     so no consumer could ever be handed it. Raised only to give the capture seam a live exception
-    to fingerprint on — caught immediately, logged, and the row is still marked dispatched."""
+    to fingerprint on — caught immediately, logged, and the record is still marked dispatched."""
 
 
 class EventListener:
@@ -53,12 +53,12 @@ class EventListener:
         wiring: EventWiring | None = None,
     ) -> None:
         # session_factory overrides the admin session (the API test driver injects its rolled-back
-        # test connection, so the tailer sees the same uncommitted facts a request just wrote).
+        # test connection, so the listener sees the same uncommitted facts a request just wrote).
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory
         # Delivering is where the two halves of the event system meet, and it is the only place
-        # they do: the *catalog* says what this row is, the *wiring* says who wants it. Both are
+        # they do: the *catalog* says what this record is, the *wiring* says who wants it. Both are
         # imported — the listener reads what a mount declared without holding the bus that wrote
         # it. A test hands over its own wiring to deliver against isolated subscriptions.
         self._wiring = wiring if wiring is not None else process_wiring
@@ -83,18 +83,18 @@ class EventListener:
         """
         async with self._session() as session:
             repo = EventRepository(session)
-            rows = await repo.claim_undispatched(self._batch)
-            for row in rows:
-                await self._fan_out(session, row)
-            if rows:
-                await repo.mark_dispatched([r["id"] for r in rows])
-            spread_rows = await self._read_spread(repo)
+            claimed = await repo.claim_undispatched(self._batch)
+            for record in claimed:
+                await self._fan_out(session, record)
+            if claimed:
+                await repo.mark_dispatched([r["id"] for r in claimed])
+            spread_records = await self._read_spread(repo)
             await session.commit()
-        for row in spread_rows:
-            await self._apply_spread(row)
+        for record in spread_records:
+            await self._apply_spread(record)
         # Return the on-path count only: it drives the drain loop's batching. The spread scan has no
         # LIMIT — a single tick applies all of it — so it never needs another pass.
-        return len(rows)
+        return len(claimed)
 
     async def _read_spread(self, repo: EventRepository) -> list[TrailRow]:
         """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
@@ -105,68 +105,72 @@ class EventListener:
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
         return await repo.scan_spread(cursor, kinds)
 
-    async def _apply_spread(self, row: TrailRow) -> None:
+    async def _apply_spread(self, record: TrailRow) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
         cursor. Handlers are idempotent (a reload is a plain assignment), so a failure is logged and
-        skipped rather than blocking the cursor — and so is a row that cannot be rebuilt at all
-        (a field added to the event class after the row was written, a hand-inserted payload).
-        The cursor advances either way: it is a high-water mark, so leaving it on a row we can
-        never process would replay that same row forever and freeze propagation for good."""
-        event = self._reconstruct_safely(row)
+        skipped rather than blocking the cursor — and so is a record that cannot be rebuilt at all
+        (a field added to the event class after the fact was written, a hand-inserted payload).
+        The cursor advances either way: it is a high-water mark, so leaving it on a record we can
+        never process would replay that same fact forever and freeze propagation for good."""
+        event = self._reconstruct_safely(record)
         if event is not None:
             for handler in self._wiring.spread_handlers_for(event):
                 try:
                     await handler(event)
                 except Exception:
-                    log.warning("tailer.spread_handler_failed", kind=row["kind"])
-        self._spread_cursor = row["id"]
+                    log.warning("listener.spread_handler_failed", kind=record["kind"])
+        self._spread_cursor = record["id"]
 
-    def _reconstruct(self, row: TrailRow) -> BusinessEvent | None:
-        """Rebuild the typed event from a business_events row (its own fields + scoping columns)."""
-        event_type = catalog.class_for(row["kind"])
+    def _reconstruct(self, record: TrailRow) -> BusinessEvent | None:
+        """Rebuild the typed event from a business_events record (its fields + scoping columns)."""
+        event_type = catalog.class_for(record["kind"])
         if event_type is None:
             return None
-        return event_type.from_payload(task_payload(row))
+        return event_type.from_payload(task_payload(record))
 
-    def _reconstruct_safely(self, row: TrailRow) -> BusinessEvent | None:
+    def _reconstruct_safely(self, record: TrailRow) -> BusinessEvent | None:
         """:meth:`_reconstruct`, but a payload that no longer fits its event class yields ``None``
-        instead of raising — the caller skips the row rather than stalling on it. The skip is not
-        silent: a stored fact that no longer rebuilds (a field made required after the row was
+        instead of raising — the caller skips the record rather than stalling on it. The skip is
+        not silent: a stored fact that no longer rebuilds (a field made required after the fact was
         written, a hand-inserted payload) is a defect, so it is logged at ``exception`` level — the
         capture seam folds it into a console Issue — not swallowed as a mere warning."""
         try:
-            return self._reconstruct(row)
+            return self._reconstruct(record)
         except Exception:
-            log.exception("tailer.reconstruct_failed", kind=row["kind"], event_id=str(row["id"]))
+            log.exception(
+                "listener.reconstruct_failed", kind=record["kind"], event_id=str(record["id"])
+            )
             return None
 
-    async def _fan_out(self, session: AsyncSession, row: TrailRow) -> None:
-        event_type = catalog.class_for(row["kind"])
+    async def _fan_out(self, session: AsyncSession, record: TrailRow) -> None:
+        event_type = catalog.class_for(record["kind"])
         if event_type is None:
             # A kind with no registered class: we can route this fact to no one. This is *not* the
             # benign "known kind, nobody listens" no-op below — it means a fact was persisted that
             # the running process cannot even name, so surface it as a console Issue (fingerprint-
-            # grouped: one kind is one issue, not one per row). The row is still marked dispatched
+            # grouped: one kind is one issue, not one per fact). It is still marked dispatched
             # by the caller — the cursor must advance, we simply have nothing to deliver.
-            self._capture_unroutable(row)
+            self._capture_unroutable(record)
             return
         subs = self._wiring.consumers_of(event_type)
         if not subs:
             return  # known kind, nobody listens — a clean no-op, no fact is lost
-        payload = task_payload(row)
-        actor = row["user_id"]
+        payload = task_payload(record)
+        actor = record["user_id"]
         for sub in subs:
             await enqueue(session, sub.topic, payload, user_id=actor if sub.as_actor else None)
 
     @staticmethod
-    def _capture_unroutable(row: TrailRow) -> None:
+    def _capture_unroutable(record: TrailRow) -> None:
         """Log an unroutable fact at ``exception`` level so the capture seam records a console
         Issue. Raised-and-caught to give the capture fingerprint a live traceback; the caller marks
-        the row dispatched regardless, so a fact we cannot route never wedges the cursor."""
+        the record dispatched regardless, so a fact we cannot route never wedges the cursor."""
         try:
-            raise UnroutableFact(f"no event class registered for kind {row['kind']!r}")
+            raise UnroutableFact(f"no event class registered for kind {record['kind']!r}")
         except UnroutableFact:
-            log.exception("tailer.unroutable_fact", kind=row["kind"], event_id=str(row["id"]))
+            log.exception(
+                "listener.unroutable_fact", kind=record["kind"], event_id=str(record["id"])
+            )
 
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:
@@ -187,7 +191,7 @@ class EventListener:
                 while await self.tick():
                     pass  # drain all ready facts before waiting
             except Exception:
-                log.warning("tailer.tick_failed")
+                log.warning("listener.tick_failed")
             # Wake on NOTIFY, or poll after the interval as a durability net.
             with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), timeout=self._interval)
@@ -203,7 +207,7 @@ class EventListener:
             self._listen_conn = raw
         except Exception:
             # No LISTEN (e.g. DB down at boot) — the poll loop still delivers, just not instantly.
-            log.warning("tailer.listen_failed")
+            log.warning("listener.listen_failed")
 
     async def _unlisten(self) -> None:
         conn = self._listen_conn

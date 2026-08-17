@@ -261,7 +261,7 @@ async def get_admins(
 
 
 # The admin flag itself lives in GoTrue, so the session here carries only the fact — but it carries
-# it on a transaction, so a failed trail write fails the request instead of being swallowed.
+# it on a transaction, so a failed journal write fails the request instead of being swallowed.
 @router.post("/admins", response_class=HTMLResponse)
 async def add_admin(
     request: Request, current_user: CurrentAdmin, session: AdminSession

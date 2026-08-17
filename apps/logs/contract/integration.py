@@ -1,7 +1,7 @@
 """How the logs context plugs into the running app.
 
 ``apps/logs`` is the single observability *read* context: it merges the firehose (a rotated
-JSON file), the business-events trail (``business_events``) and issue occurrences
+JSON file), the business-events journal (``business_events``) and issue occurrences
 (``error_events``) into one admin-only timeline, with an activity graph and structured export.
 The *write* primitives stay in ``apps/shared/observability`` — a foundation every app imports down.
 

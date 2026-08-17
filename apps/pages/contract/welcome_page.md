@@ -22,7 +22,7 @@ plain SQL migrations. The database is the guard, not the app.
 Server-wide stats from every app, admin-tunable settings with per-organisation
 overrides, and runtime feature switches — disable an app and it vanishes everywhere,
 re-enable it with one click. Accounts management with bannered, audited
-impersonation. A unified log viewer merging application logs, the audit trail and
+impersonation. A unified log viewer merging application logs, business events and
 error events. Error tracking with fingerprint-grouped issues and a lifecycle
 (open → resolved → regressed). Live load graphs. All of it ships in the box.
 
@@ -52,8 +52,8 @@ leaves no trace.** This very page was seeded by one of them.
 ## Observability built in
 
 Structured logs correlated per request. Every domain event on the bus is logged
-with sensitive fields redacted. Sensitive actions land in an append-only audit
-trail, browsable from the console. A Prometheus endpoint feeds the load screen.
+with sensitive fields redacted. Sensitive actions land in an append-only journal,
+browsable from the console. A Prometheus endpoint feeds the load screen.
 You will know what your app is doing before your users tell you.
 
 ## Tested sincerely

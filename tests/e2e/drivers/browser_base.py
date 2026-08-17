@@ -118,15 +118,15 @@ class BrowserBase:
         pass
 
     def drain_task_queue(self) -> None:
-        """Deliver async work now: fan persisted facts out to consumers (tailer), then run them
+        """Deliver async work now: fan persisted facts out to consumers (listener), then run them
         (worker), looping until both are dry. Runs on the in-process server's loop, where the
-        engines live; the browser driver commits for real, so the tailer sees committed facts."""
+        engines live; the browser driver commits for real, so the listener sees committed facts."""
         if self._server is None:
-            return  # external APP_URL: that deployment runs its own tailer/worker
-        tailer = EventListener(0)
+            return  # external APP_URL: that deployment runs its own listener/worker
+        listener = EventListener(0)
         worker = TaskWorker(0)
         while True:
-            fanned = self._server.run(tailer.tick())
+            fanned = self._server.run(listener.tick())
             processed = 0
             while self._server.run(worker.tick()):
                 processed += 1
@@ -146,7 +146,7 @@ class BrowserBase:
         page.click("button[type=submit]")
         page.wait_for_load_state("domcontentloaded")
         # Run UserCreated's reactions (admin bootstrap, personal org) before login, so the JWT
-        # carries the admin claim and the org exists — the reactions are async off the trail now.
+        # carries the admin claim and the org exists — the reactions are async off the journal now.
         self.drain_task_queue()
         page.goto(f"{self.base_url}/auth/login")
         page.fill("input[name=email]", email)

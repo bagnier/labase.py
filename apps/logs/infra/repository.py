@@ -1,4 +1,4 @@
-"""The merge reader — orchestrates the durable DB sources (business-events trail + issue
+"""The merge reader — orchestrates the durable DB sources (business-events journal + issue
 occurrences) and (added in a later step) the firehose file into one timeline, applies sorting,
 and paginates over a bounded recent window.
 
@@ -26,7 +26,7 @@ from apps.shared.observability.firehose import FirehoseRow, read_firehose
 _SORT_KEYS = {"ts", "source", "level", "org", "event", "user", "entity", "request"}
 
 # The display level the viewer gives every business fact. Business events have no severity of
-# their own (that is a logging notion); this is the merged timeline's axis, not the trail's.
+# their own (that is a logging notion); this is the merged timeline's axis, not the journal's.
 BUSINESS_LEVEL = "info"
 
 # The activity chart's own lookback per grain — wider than the paginated table, so the graph can
@@ -95,7 +95,7 @@ class LogReader:
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         # A business fact has no severity of its own — it is a domain event, not a log line. The
         # viewer needs one axis across its three sources, so it reads them all at BUSINESS_LEVEL;
-        # a filter on any other level excludes the trail wholesale, as it does for issues.
+        # a filter on any other level excludes the journal wholesale, as it does for issues.
         if flt.wants(LogSource.business) and flt.level in (None, BUSINESS_LEVEL):
             rows = await EventRepository(self.session).search(**_business_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
@@ -191,7 +191,7 @@ def _request_facet(entries: list[LogEntry]) -> list[dict[str, Any]]:
 def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
     # The shared str base for all three sources: issue occurrences match a JSONB ``context ->>``
     # (text) and firehose lines match file JSON — both keep the ids as strings. Only the business
-    # trail's uuid columns need parsing, done in ``_business_kwargs``.
+    # journal's uuid columns need parsing, done in ``_business_kwargs``.
     return {
         "level": flt.level,
         "org_id": flt.org_id,
@@ -206,10 +206,10 @@ def _event_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
 
 
 def _business_kwargs(flt: LogFilter, limit: int) -> dict[str, Any]:
-    # The trail's id columns are uuid; LogFilter carries them as strings from the URL query, so
+    # The journal's id columns are uuid; LogFilter carries them as strings from the URL query, so
     # parse at this boundary (a malformed id raises, as the previous in-repository cast did).
     kwargs = _event_kwargs(flt, limit)
-    del kwargs["level"]  # the trail carries no level column — see BUSINESS_LEVEL
+    del kwargs["level"]  # the journal carries no level column — see BUSINESS_LEVEL
     kwargs["org_id"] = uuid.UUID(flt.org_id) if flt.org_id else None
     kwargs["user_id"] = uuid.UUID(flt.user_id) if flt.user_id else None
     kwargs["entity_id"] = uuid.UUID(flt.entity_id) if flt.entity_id else None
@@ -248,7 +248,7 @@ def _from_firehose(row: FirehoseRow) -> LogEntry:
 
 def _from_event(row: BusinessEventRecord) -> LogEntry:
     # LogEntry merges three sources (firehose ids are plain strings from JSON), so its ids stay str:
-    # stringify the trail row's uuids at this boundary.
+    # stringify the journal row's uuids at this boundary.
     return LogEntry(
         ts=row.created_at,
         source=LogSource.business,

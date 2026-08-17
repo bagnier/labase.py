@@ -122,7 +122,7 @@ def test_user_created_is_a_persisted_business_event():
     actor = uuid7()
     event = UserCreated(user_id=actor, entity_id=actor, email="a@b.c")
 
-    assert isinstance(event, BusinessEvent)  # persisted on the trail like any fact
+    assert isinstance(event, BusinessEvent)  # persisted on the journal like any fact
     assert event.kind == "auth.user_created"  # distinct from the sign-in (Login) events
     assert event.user_id == actor  # the new user acts
     assert event.email == "a@b.c"

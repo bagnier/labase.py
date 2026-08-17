@@ -1,4 +1,4 @@
--- Make the *concerned entity* first-class on the business-events trail, the way org_id and
+-- Make the *concerned entity* first-class on the business-events journal, the way org_id and
 -- request_id already are (20260708000001), so the unified logs viewer (apps/logs) can filter and
 -- correlate every event of one todo / page / file — not just those of one org or one request.
 -- Until now the id lived only inside `payload` (unindexed, and absent from non-CRUD events).

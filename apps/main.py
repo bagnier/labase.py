@@ -45,7 +45,7 @@ for _app in _apps:
     _app.mount(host)
 
 # Last hook registered, so last to run: Starlette fires shutdown handlers in registration order,
-# and every context's own hook (task worker, event tailer, metrics flusher, issue drain) still
+# and every context's own hook (task worker, event listener, metrics flusher, issue drain) still
 # needs the pools while it stops.
 host.on_shutdown(dispose_engines)
 

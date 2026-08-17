@@ -61,11 +61,11 @@ def mount(host: Host) -> None:
     host.on_startup(worker.start)
     host.on_shutdown(worker.stop)
 
-    # Event tailer: reads the business_events log and fans each fact out to its async consumers
+    # Event listener: reads the business_events journal and fans each fact out to its consumers
     # (NOTIFY-woken, poll as a net). One per process, like the worker.
-    tailer = EventListener(settings.task_worker_interval_seconds)
-    host.on_startup(tailer.start)
-    host.on_shutdown(tailer.stop)
+    listener = EventListener(settings.task_worker_interval_seconds)
+    host.on_startup(listener.start)
+    host.on_shutdown(listener.stop)
 
     # Firehose drains off the request path: the log processor only enqueues; this task writes.
     firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)

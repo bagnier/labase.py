@@ -1,4 +1,4 @@
-"""Read path — RLS-scoped reads of the trail for the observability timeline and dashboards."""
+"""Read path — RLS-scoped reads of the journal for the observability timeline and dashboards."""
 
 import uuid
 from datetime import date, datetime, timedelta
@@ -25,9 +25,9 @@ class _ReadsEvents(_EventSQL):
         limit: int = 100,
         offset: int = 0,
     ) -> list[BusinessEventRecord]:
-        """Newest-first read under the filters. RLS already scopes rows to the reader (self + orgs);
-        the ``user_id``/``org_id`` filters narrow to one feed on top of that. ``app`` matches the
-        row's own ``app_name`` column — an equality, not a scan of the composed kind's prefix."""
+        """Newest-first read under the filters. RLS already scopes the journal to the reader (self
+        + orgs); the ``user_id``/``org_id`` filters narrow to one feed on top. ``app`` matches the
+        record's own ``app_name`` column — an equality, not a scan of the composed kind's prefix."""
         query = (
             select(BusinessEventRecord)
             .order_by(BusinessEventRecord.id.desc())
@@ -76,5 +76,5 @@ class _ReadsEvents(_EventSQL):
             query = query.where(BusinessEventRecord.user_id == user_id)
         if org_id:
             query = query.where(BusinessEventRecord.org_id == org_id)
-        rows = await self.session.execute(query)
-        return {d: n for d, n in rows.all()}
+        per_day = await self.session.execute(query)
+        return {d: n for d, n in per_day.all()}

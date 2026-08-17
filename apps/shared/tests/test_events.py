@@ -1,4 +1,4 @@
-"""BusinessEvent vocabulary + the ``event → row → event`` chain that carries it.
+"""BusinessEvent vocabulary + the ``event → record → event`` chain that carries it.
 
 Covers ``kind`` derivation (so apps write no dotted strings), the secret-field refusal, and the
 round trip a fact makes through the serialized chain — ``event_to_record`` → the delivery columns
@@ -6,7 +6,7 @@ round trip a fact makes through the serialized chain — ``event_to_record`` →
 
 What ``emit`` itself promises is next door: it persists on the session the caller names and runs no
 handler (``test_write_path`` for the transaction, ``test_emit_durability`` for what a rollback
-takes with it, ``test_listener`` for the reactions that run off the trail afterwards).
+takes with it, ``test_listener`` for the reactions that run off the journal afterwards).
 """
 
 import json
@@ -63,8 +63,8 @@ def test_crud_kind_is_derived_from_entity_and_verb():
 
 def test_a_non_crud_event_still_derives_its_kind_from_its_own_verb():
     # Non-CRUD actions spell out a verb of their own rather than a dotted string: the derivation is
-    # unconditional, because the trail composes kind the very same way (a generated column). A
-    # hand-written kind could only make the class disagree with the rows it is meant to rebuild.
+    # unconditional, because the journal composes kind the very same way (a generated column). A
+    # hand-written kind could only make the class disagree with the records it must rebuild.
     @dataclass(frozen=True, kw_only=True)
     class SignedIn(BusinessEvent):
         app_name = "test_explicit"
@@ -84,8 +84,8 @@ def test_an_event_naming_only_one_half_has_no_kind_and_stays_out_of_the_catalog(
 
 
 def test_concrete_events_register_in_the_catalog_for_reconstruction():
-    # The listener rebuilds a typed event from a persisted row's `kind`, so every concrete event
-    # registers itself in the catalog. Abstract bases (empty kind) do not.
+    # The listener rebuilds a typed event from a persisted record's `kind`, so every concrete
+    # event registers itself in the catalog. Abstract bases (empty kind) do not.
     assert catalog.class_for("widget.created") is WidgetCreated
     assert catalog.class_for("widget.deleted") is WidgetDeleted
     assert catalog.class_for("no.such_kind") is None
@@ -94,7 +94,7 @@ def test_concrete_events_register_in_the_catalog_for_reconstruction():
 @pytest.mark.asyncio
 async def test_emit_does_not_run_handlers_in_process():
     # emit only persists the fact — every reaction (`on` consumers, `spread` handlers) runs in the
-    # listener off the trail, never here. A spread handler registered on this bus stays inert.
+    # listener off the journal, never here. A spread handler registered on this bus stays inert.
     own = EventWiring()
     bus = EventBus(own)
     seen: list[object] = []
@@ -118,22 +118,22 @@ async def test_emit_does_not_run_handlers_in_process():
 
 
 def test_event_to_record_lifts_scoping_and_carries_metadata():
-    # emit maps a BusinessEvent straight onto a business_events row: scoping to columns, rest to
-    # payload — a single event → row hop, no intermediate column dict.
+    # emit maps a BusinessEvent straight onto a business_events record: scoping to columns, rest
+    # to payload — a single event → record hop, no intermediate column dict.
     actor, org, eid = uuid.uuid7(), uuid.uuid7(), uuid.uuid7()
-    row = event_to_record(
+    record = event_to_record(
         WidgetCreated(user_id=actor, org_id=org, entity_id=eid, entity_name="Gizmo")
     )
-    # The row carries the two halves; `kind` is generated from them in the DB, so it has no value
-    # on a row that hasn't been written yet — the composition lives there, not here.
-    assert (row.app_name, row.verb) == ("widget", "created")
-    assert row.icon == "cube"
-    assert row.user_id == actor
-    assert row.org_id == org
-    assert row.entity_id == eid  # the concerned entity's uuid, lifted to its own column
+    # The record carries the two halves; `kind` is generated from them in the DB, so it has no
+    # value on a record that hasn't been written yet — the composition lives there, not here.
+    assert (record.app_name, record.verb) == ("widget", "created")
+    assert record.icon == "cube"
+    assert record.user_id == actor
+    assert record.org_id == org
+    assert record.entity_id == eid  # the concerned entity's uuid, lifted to its own column
     # scoping fields are lifted to columns, never duplicated into the payload
-    assert row.entity_name == "Gizmo"  # the subject's name: its own column, pinned at write time
-    payload = row.payload
+    assert record.entity_name == "Gizmo"  # the subject's name: its own column, pinned at write time
+    payload = record.payload
     assert payload is not None
     assert "entity_name" not in payload
     assert "user_id" not in payload
@@ -160,15 +160,14 @@ class _NoteEvent(BusinessEvent):
 
 def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
     """Drive an event through the real serialized chain without a DB: `event_to_record` builds
-    the row, we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it —
-    computing the generated `kind`, which a SELECT returns but an unflushed ORM row leaves unset —
-    then
-    `task_payload` + `from_payload` rebuild it, exactly as the listener does off a claimed row."""
-    row = event_to_record(event)
-    projected = {c: getattr(row, c) for c in TRAIL_COLUMNS}
-    projected["kind"] = f"{row.app_name}.{row.verb}"  # the generated column, unset pre-flush
-    trail = cast(TrailRow, projected)
-    return type(event).from_payload(task_payload(trail))
+    the record, we project exactly the columns the delivery scans read (`TRAIL_COLUMNS`) off it —
+    computing the generated `kind`, which a SELECT returns but an unflushed ORM record leaves unset
+    — then `task_payload` + `from_payload` rebuild it, as the listener does off a claimed one."""
+    record = event_to_record(event)
+    projected = {c: getattr(record, c) for c in TRAIL_COLUMNS}
+    projected["kind"] = f"{record.app_name}.{record.verb}"  # generated column, unset pre-flush
+    scanned = cast(TrailRow, projected)
+    return type(event).from_payload(task_payload(scanned))
 
 
 @pytest.mark.parametrize(
@@ -196,7 +195,7 @@ def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
     ],
 )
 def test_a_fact_round_trips_identically_through_the_serialized_chain(event: BusinessEvent):
-    # event → row → TrailRow → payload → event returns something equal to what went in. Frozen
+    # event → record → TrailRow → payload → event returns something equal to what went in. Frozen
     # dataclass equality compares every instance field, so this asserts the whole event survives.
     assert _reconstruct_through_delivery(event) == event
 
@@ -205,7 +204,7 @@ def test_the_delivery_column_lists_derive_from_one_source():
     # The lifted columns, the SELECT columns and the TrailRow that receives them are three views of
     # one tuple — not three hand-kept lists that must be edited in lockstep. Pin them to it so a
     # drift (a column added to one but not the others) fails at import of this test, not in prod.
-    correlation = {"id", "kind", "created_at", "request_id"}  # row identity + delivery context
+    correlation = {"id", "kind", "created_at", "request_id"}  # identity + delivery context
     assert set(TRAIL_COLUMNS) == correlation | set(LIFTED_COLUMNS) | {"payload"}
     assert set(TrailRow.__annotations__) == set(TRAIL_COLUMNS)
 
@@ -215,13 +214,13 @@ def test_the_delivery_column_lists_derive_from_one_source():
 
 @pytest.mark.asyncio
 async def test_the_write_path_calls_the_definer_function_with_the_row_columns():
-    # Since C4 revoked the raw INSERT grant, the trail is written only through
-    # record_business_event(...). Assert the write path calls exactly that, with the row's columns
-    # as arguments and the payload json-encoded for the jsonb parameter — no ORM INSERT.
+    # Since C4 revoked the raw INSERT grant, the journal is written only through
+    # record_business_event(...). Assert the write path calls exactly that, with the record's
+    # columns as arguments and the payload json-encoded for the jsonb parameter — no ORM INSERT.
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from apps.shared.events.models import BusinessEventRecord
-    from apps.shared.events.repository._write import _RECORD, _record_row
+    from apps.shared.events.repository._write import _RECORD, _append_record
 
     captured: dict[str, object] = {}
 
@@ -230,24 +229,24 @@ async def test_the_write_path_calls_the_definer_function_with_the_row_columns():
             captured["statement"] = statement
             captured["params"] = params
 
-    row = BusinessEventRecord(
+    record = BusinessEventRecord(
         app_name="todo", verb="created", icon="check", user_id=uuid.uuid7(), payload={"k": "v"}
     )
-    await _record_row(cast(AsyncSession, _FakeSession()), row)
+    await _append_record(cast(AsyncSession, _FakeSession()), record)
 
     assert captured["statement"] is _RECORD  # the writer function, not an ORM INSERT
     params = cast(dict, captured["params"])
     assert (params["app_name"], params["verb"], params["icon"]) == ("todo", "created", "check")
-    assert params["user_id"] == row.user_id
+    assert params["user_id"] == record.user_id
     assert params["payload"] == json.dumps({"k": "v"})  # json-encoded for the jsonb arg
 
 
 # ── C2: a delivered event is self-descriptive (its own instant) and correlated (the request) ───
 
 
-def _trail_row(**over: object) -> TrailRow:
+def _trail_record(**over: object) -> TrailRow:
     """A TrailRow with every column present, overridable — the shape a delivery scan returns."""
-    row: dict[str, object] = {
+    columns: dict[str, object] = {
         "id": uuid.uuid7(),
         "kind": "test_note.noted",
         "created_at": None,
@@ -258,8 +257,8 @@ def _trail_row(**over: object) -> TrailRow:
         "entity_name": None,
         "payload": {},
     }
-    row.update(over)
-    return cast(TrailRow, row)
+    columns.update(over)
+    return cast(TrailRow, columns)
 
 
 def test_task_payload_folds_the_fact_instant_and_the_originating_request():
@@ -267,15 +266,15 @@ def test_task_payload_folds_the_fact_instant_and_the_originating_request():
     # json-safe strings (iso / str) so they survive the queue, alongside the dedup event_id.
     fid, rid = uuid.uuid7(), uuid.uuid7()
     instant = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
-    row = _trail_row(id=fid, created_at=instant, request_id=rid, payload={"note": "hi"})
-    payload = task_payload(row)
+    record = _trail_record(id=fid, created_at=instant, request_id=rid, payload={"note": "hi"})
+    payload = task_payload(record)
     assert payload["created_at"] == instant.isoformat()
     assert payload["request_id"] == str(rid)
     assert payload["event_id"] == str(fid)
     assert payload["note"] == "hi"
 
 
-def test_a_delivered_event_carries_the_facts_instant_rebuilt_from_the_row():
+def test_a_delivered_event_carries_the_facts_instant_rebuilt_from_the_record():
     # The plan's promise: a durable consumer receives an event whose instant is the fact's, so it
     # reasons about when the fact happened — not when a retry/park finally delivered it.
     instant = datetime(2026, 7, 27, 12, 0, tzinfo=UTC)
@@ -283,9 +282,9 @@ def test_a_delivered_event_carries_the_facts_instant_rebuilt_from_the_row():
     assert event.created_at == instant
 
 
-def test_the_emitted_event_has_no_instant_because_the_trail_is_the_clock():
-    # The emitter never stamps created_at (one clock: the trail's own column assigns it). It is None
-    # on the emitted event and populated only on the reconstructed one a consumer receives.
+def test_the_emitted_event_has_no_instant_because_the_journal_is_the_clock():
+    # The emitter never stamps created_at (one clock: the journal's own column assigns it). It is
+    # None on the emitted event and populated only on the reconstructed one a consumer receives.
     assert _NoteEvent(user_id=uuid.uuid7()).created_at is None
 
 
@@ -309,16 +308,16 @@ class _RefEvent(BusinessEvent):
 def test_event_to_record_stringifies_uuid_payload_fields():
     # A uuid.UUID payload field must reach the JSONB column json-safe (stdlib json can't dump UUID).
     ref = uuid.uuid7()
-    row = event_to_record(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
-    assert row.payload is not None
-    assert row.payload["ref_id"] == str(ref)  # stringified at the one serialization edge
+    record = event_to_record(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
+    assert record.payload is not None
+    assert record.payload["ref_id"] == str(ref)  # stringified at the one serialization edge
 
 
 def test_event_to_record_lifts_a_uuid_entity_id():
     # entity_id is the entity's uuid pk, lifted straight to its own uuid column — no str() edge.
     eid = uuid.uuid7()
-    row = event_to_record(WidgetCreated(org_id=uuid.uuid7(), entity_id=eid, entity_name="Gizmo"))
-    assert row.entity_id == eid
+    record = event_to_record(WidgetCreated(org_id=uuid.uuid7(), entity_id=eid, entity_name="Gizmo"))
+    assert record.entity_id == eid
 
 
 def test_from_payload_reparses_every_uuid_field_by_type():
@@ -331,7 +330,7 @@ def test_from_payload_reparses_every_uuid_field_by_type():
 
 
 def test_from_payload_is_defensive_on_unparseable_strings():
-    # A stored value that isn't a valid uuid (a hand-inserted row, a legacy shape) is left untouched
+    # A stored value that isn't a valid uuid (hand-inserted, a legacy shape) is left untouched
     # rather than crashing the rebuild — the listener's guard decides what to do with the odd event.
     event = _RefEvent.from_payload({"ref_id": "not-a-uuid"})
     assert event.ref_id == "not-a-uuid"
@@ -341,7 +340,7 @@ def test_from_payload_is_defensive_on_unparseable_strings():
 
 
 def test_a_secret_named_field_is_refused_at_class_definition():
-    # The trail is immutable, kept indefinitely, RLS-readable by an org's members and exportable —
+    # The journal is immutable, kept for good, RLS-readable by an org's members and exportable —
     # a secret has no business there. Declaring one is refused at class creation (before @dataclass
     # even applies), and the message names the alternative: carry the subject's id, re-read state.
     with pytest.raises(TypeError, match="secret material") as exc:
@@ -392,10 +391,10 @@ def test_is_secret_field_name_carves_out_id_references():
 
 
 def test_from_payload_refuses_a_stored_null_for_a_required_field():
-    # A trail row whose org column is NULL cannot rebuild an org-scoped fact. Dataclasses don't
+    # A record whose org column is NULL cannot rebuild an org-scoped fact. Dataclasses don't
     # validate at runtime, so without this the event would come back claiming `org_id=None` while
     # its type promises a uuid — a lie handed to a consumer. Refusing is what makes the listener's
-    # guard skip the row (and log it) instead of acting on it.
+    # guard skip the record (and log it) instead of acting on it.
     with pytest.raises(TypeError):
         WidgetCreated.from_payload({"org_id": None, "entity_id": str(uuid.uuid7())})
 
@@ -415,7 +414,7 @@ def test_from_payload_reparses_a_uuid_entity_id():
 
 
 def test_two_classes_cannot_claim_the_same_kind():
-    """A kind is the trail's stored identity, so it must map back to exactly one class.
+    """A kind is the journal's stored identity, so it must map back to exactly one class.
 
     The catalog is keyed by kind and was last-write-wins: a second claimant silently replaced the
     first, and the listener then handed the *wrong* type to that kind's durable consumers. This bit

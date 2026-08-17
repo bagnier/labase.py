@@ -1,6 +1,6 @@
 """The event catalog — which facts exist, by their stored name.
 
-One question, one answer: given a dotted ``kind`` off a ``business_events`` row, which
+One question, one answer: given a dotted ``kind`` off a ``business_events`` record, which
 :class:`~apps.shared.events.types.BusinessEvent` subclass rebuilds it. Every concrete event class
 registers itself here at class creation (``BusinessEvent.__init_subclass__``), so the catalog is
 complete as soon as the modules are imported.
@@ -34,7 +34,7 @@ def _qualified(cls: type) -> str:
 
 
 class EventCatalog:
-    """Concrete event classes, keyed by the ``kind`` the trail stores."""
+    """Concrete event classes, keyed by the ``kind`` the journal stores."""
 
     def __init__(self) -> None:
         self._by_kind: dict[str, type[BusinessEvent]] = {}
@@ -43,7 +43,7 @@ class EventCatalog:
         """Record a concrete event class under its ``kind`` — called once per class from
         :meth:`~apps.shared.events.types.BusinessEvent.__init_subclass__`, for reconstruction.
 
-        A kind is the trail's *stored* identity: it is what :meth:`class_for` maps back to a class
+        A kind is the journal's *stored* identity: it is what :meth:`class_for` maps back to a class
         when the listener rebuilds a persisted fact. Two classes claiming one kind would therefore
         replace each other by import order, and a durable consumer would be handed the wrong type —
         so a duplicate is refused here, at import, rather than found in production.
@@ -56,13 +56,13 @@ class EventCatalog:
             raise ValueError(
                 f"event kind {event_type.kind!r} is already registered by "
                 f"{_qualified(claimed)}; {_qualified(event_type)} cannot claim it too — "
-                "a kind must map back to exactly one class for the trail to be reconstructable"
+                "a kind must map back to exactly one class for the journal to be reconstructable"
             )
         self._by_kind[event_type.kind] = event_type
 
     def class_for(self, kind: str) -> type[BusinessEvent] | None:
         """The concrete ``BusinessEvent`` subclass for a dotted ``kind``, or ``None`` if unknown —
-        lets the listener rebuild a typed event from a persisted ``business_events`` row."""
+        lets the listener rebuild a typed event from a persisted ``business_events`` record."""
         return self._by_kind.get(kind)
 
     def kinds(self) -> dict[str, type[BusinessEvent]]:

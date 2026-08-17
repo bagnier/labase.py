@@ -3,7 +3,7 @@
 Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the
 collection, invitation and org-scoped routers, claims the ``invitations`` slug, and reacts to
 auth's ``UserCreated`` by creating the user's personal org then emitting ``OrganizationCreated``
-— the trail record that also triggers the welcome seeders.
+— the journal record that also triggers the welcome seeders.
 """
 
 import uuid
@@ -124,7 +124,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     """Durable consumer of ``UserCreated``: create the user's personal org, then emit
-    ``OrganizationCreated`` (the fact the welcome seeders react to). Runs off the trail on the
+    ``OrganizationCreated`` (the fact the welcome seeders react to). Runs off the journal on the
     worker's session — the worker commits the org and the emitted fact together, so the seeders
     (delivered after that commit) always read the org back. Idempotent (the ``already_member``
     guard), so a task retry never double-creates."""
@@ -165,7 +165,7 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     """Account deletion: drop the user's memberships, reaping any org the departure
     would leave without an owner (nobody could run it) or without any member.
 
-    A durable async consumer of ``UserDeleted`` (run on the admin session off the tailer, keyed on
+    A durable async consumer of ``UserDeleted`` (run on the admin session off the listener, keyed on
     the removed user's ``entity_id``), so cleanup never sits on the deleting request's path and is
     retried/parked on failure. A last-owner seat is not deleted directly — the DB guard forbids
     orphaning an org, and deleting it would strand any remaining members in an ownerless org — so we

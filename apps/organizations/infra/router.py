@@ -214,8 +214,8 @@ async def list_organizations(
 # ── Org-scoped pages ────────────────────────────────────────────────────────────
 
 
-_ACTIVITY_PAGE = 8  # rows shown by default; "Load older" grows the window by this step
-_ACTIVITY_MAX = 250  # the dashboard trail is bounded — cap the growable window
+_ACTIVITY_PAGE = 8  # facts shown by default; "Load older" grows the window by this step
+_ACTIVITY_MAX = 250  # the dashboard feed is bounded — cap the growable window
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -250,10 +250,10 @@ async def _activity_context(
     initial render and the ``/{org}/dashboard/activity`` HTMX fragment.
 
     Reads on the request's own RLS session: the ``business_events`` policy lets a member read
-    every event of any org they belong to, so ``org_id`` narrows to this org's trail. Each entry
+    every event of any org they belong to, so ``org_id`` narrows to this org's journal. Each entry
     keeps its actor (``who did what``, a shared org feed) and deep-links to the concerned entity
     where the app exposes a page. Exposes only humanized labels and moments — never payloads."""
-    rows = await EventRepository(session).search(
+    records = await EventRepository(session).search(
         org_id=org_id,
         app=app or None,
         text=q or None,
@@ -265,10 +265,10 @@ async def _activity_context(
     def link(r: BusinessEventRecord) -> str | None:
         return entity_url(r.app_name, r.entity_id, org_handle)
 
-    entries = activity_entries(rows, link=link)
+    entries = activity_entries(records, link=link)
     return {
         "activity_groups": group_activity_by_day(entries, now=clock.now()),
-        "activity_has_more": len(rows) >= limit and limit < _ACTIVITY_MAX,
+        "activity_has_more": len(records) >= limit and limit < _ACTIVITY_MAX,
         "activity_limit": limit,
         "activity_next_limit": min(limit + _ACTIVITY_PAGE, _ACTIVITY_MAX),
         "activity_q": q,
@@ -319,7 +319,7 @@ async def org_dashboard_activity(
     limit: int = _ACTIVITY_PAGE,
 ) -> HTMLResponse | JSONResponse:
     """The org's day-grouped activity feed as an HTMX fragment — search, type filter, date range
-    and Load-older all re-render it. API callers get the same trail as JSON."""
+    and Load-older all re-render it. API callers get the same feed as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)

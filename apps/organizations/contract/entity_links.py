@@ -1,5 +1,5 @@
 """Deep links for activity-feed entries — map a business event to the org-scoped member page for
-the entity it concerns, so a dashboard/profile timeline row is clickable ("go to that page").
+the entity it concerns, so a dashboard/profile timeline entry is clickable ("go to that page").
 
 Only apps that expose a member detail route resolve; every other event stays plain text. Keyed by
 the event's own ``app_name`` and the entity's uuid pk (``entity_id``).
@@ -25,7 +25,7 @@ _ENTITY_ROUTES = {
 
 def entity_url(app_name: str, entity_id: uuid.UUID | None, org_handle: str | None) -> str | None:
     """The member page for a business event's entity, or ``None`` when the app has no detail route
-    (or the row lacks the entity/handle needed to build one)."""
+    (or the fact lacks the entity/handle needed to build one)."""
     if not entity_id or not org_handle:
         return None
     template = _ENTITY_ROUTES.get(app_name)
