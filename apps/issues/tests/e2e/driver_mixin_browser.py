@@ -1,4 +1,4 @@
-from apps.issues.infra.repository import record_event
+from apps.issues.infra.repository import record_occurrence
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -9,7 +9,7 @@ class IssuesBrowserMixin(BrowserBase):
 
         async def _do(s):
             for _ in range(count):
-                await record_event(
+                await record_occurrence(
                     s,
                     fingerprint=f"seed-{title}",
                     title=title,
@@ -46,8 +46,8 @@ class IssuesBrowserMixin(BrowserBase):
         assert f"×{count}" in row.inner_text(), f"×{count} not in row: {row.inner_text()!r}"
 
     def assert_issue_detail_shows(self, count: int) -> None:
-        assert self.page.locator("[data-issue-event]").count() == count
-        first = self.page.locator("[data-issue-event]").first
+        assert self.page.locator("[data-issue-occurrence]").count() == count
+        first = self.page.locator("[data-issue-occurrence]").first
         first.locator("summary").click()
         assert "Traceback" in first.locator("pre").inner_text()
 

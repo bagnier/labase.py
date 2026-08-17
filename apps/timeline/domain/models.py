@@ -2,7 +2,7 @@
 
 ``apps/timeline`` is a pure reader: it writes nothing. It merges, at read time, the structlog
 firehose (a rotated JSON file), the business-events journal (``business_events``) and issue
-occurrences (``error_events``) into this single shape, keyed for correlation by
+occurrences (``issue_occurrences``) into this single shape, keyed for correlation by
 ``request_id`` / ``org_id`` / ``user_id`` / ``entity_id`` (the concerned entity).
 """
 

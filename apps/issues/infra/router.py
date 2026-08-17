@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.issues.contract.events import IssueStatusChanged
-from apps.issues.domain.models import ErrorEventRead, ErrorGroup, ErrorGroupRead, IssueStatus
-from apps.issues.infra.repository import ErrorGroupRepository
+from apps.issues.domain.models import Issue, IssueRead, IssueStatus, OccurrenceRead
+from apps.issues.infra.repository import IssueRepository
 from apps.shared import clock
 from apps.shared.charts import last_days, sparkline
 from apps.shared.config import get_technical_settings
@@ -23,11 +23,11 @@ _TRIAGE_STATUSES = {IssueStatus.resolved, IssueStatus.ignored, IssueStatus.unres
 _SPARK_DAYS = 14
 
 
-async def _group_or_404(repo: ErrorGroupRepository, group_id: uuid.UUID) -> ErrorGroup:
-    group = await repo.get(group_id)
-    if group is None:
+async def _issue_or_404(repo: IssueRepository, issue_id: uuid.UUID) -> Issue:
+    issue = await repo.get(issue_id)
+    if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return group
+    return issue
 
 
 @router.get("", response_model=None)
@@ -37,18 +37,18 @@ async def list_issues(
     session: AdminSession,
     status_filter: str = "",
 ) -> Response:
-    groups = [
-        ErrorGroupRead.model_validate(g)
-        for g in await ErrorGroupRepository(session).list_groups(status=status_filter)
+    issues = [
+        IssueRead.model_validate(i)
+        for i in await IssueRepository(session).list_issues(status=status_filter)
     ]
     if wants_json(request):
-        return JSONResponse([g.model_dump(mode="json") for g in groups])
+        return JSONResponse([i.model_dump(mode="json") for i in issues])
     return templates.TemplateResponse(
         request,
         "issues/index.html",
         {
             "user": current_user,
-            "groups": groups,
+            "issues": issues,
             "status_filter": status_filter,
             "statuses": [s.value for s in IssueStatus],
             **await fullpage_context(session, current_user),
@@ -56,37 +56,37 @@ async def list_issues(
     )
 
 
-@router.get("/{group_id}", response_model=None)
+@router.get("/{issue_id}", response_model=None)
 async def issue_detail(
     request: Request,
-    group_id: uuid.UUID,
+    issue_id: uuid.UUID,
     current_user: CurrentAdmin,
     session: AdminSession,
     before_id: uuid.UUID | None = None,
 ) -> Response:
-    repo = ErrorGroupRepository(session)
-    group = await _group_or_404(repo, group_id)
-    events, next_before_id = await repo.events(group_id, before_id=before_id)
-    group_read = ErrorGroupRead.model_validate(group)
-    event_reads = [ErrorEventRead.model_validate(e) for e in events]
+    repo = IssueRepository(session)
+    issue = await _issue_or_404(repo, issue_id)
+    occurrences, next_before_id = await repo.occurrences(issue_id, before_id=before_id)
+    issue_read = IssueRead.model_validate(issue)
+    occurrence_reads = [OccurrenceRead.model_validate(o) for o in occurrences]
     if wants_json(request):
         return JSONResponse(
             {
-                "group": group_read.model_dump(mode="json"),
-                "events": [e.model_dump(mode="json") for e in event_reads],
+                "issue": issue_read.model_dump(mode="json"),
+                "occurrences": [o.model_dump(mode="json") for o in occurrence_reads],
                 "next_before_id": str(next_before_id) if next_before_id else None,
             }
         )
     is_htmx = request.headers.get("HX-Request") == "true"
-    template = "issues/_events.html" if is_htmx else "issues/detail.html"
+    template = "issues/_occurrences.html" if is_htmx else "issues/detail.html"
     ctx: dict[str, Any] = {
         "user": current_user,
-        "group": group_read,
-        "events": event_reads,
+        "issue": issue_read,
+        "occurrences": occurrence_reads,
         "next_before_id": next_before_id,
     }
     if not is_htmx:
-        counts = await repo.daily_counts(group_id, days=_SPARK_DAYS)
+        counts = await repo.daily_counts(issue_id, days=_SPARK_DAYS)
         window = last_days(_SPARK_DAYS, end=clock.now().date())
         ctx["spark"] = sparkline([counts.get(d.isoformat(), 0) for d in window], color="error")
         ctx["spark_days"] = _SPARK_DAYS
@@ -94,10 +94,10 @@ async def issue_detail(
     return templates.TemplateResponse(request, template, ctx)
 
 
-@router.post("/{group_id}/status", response_model=None)
+@router.post("/{issue_id}/status", response_model=None)
 async def set_issue_status(
     request: Request,
-    group_id: uuid.UUID,
+    issue_id: uuid.UUID,
     current_user: CurrentAdmin,
     session: AdminSession,
 ) -> Response:
@@ -106,21 +106,21 @@ async def set_issue_status(
     if raw not in {s.value for s in _TRIAGE_STATUSES}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status")
     new_status = IssueStatus(raw)
-    repo = ErrorGroupRepository(session)
-    group = await _group_or_404(repo, group_id)
-    await repo.set_status(group, new_status, get_technical_settings().app_version)
+    repo = IssueRepository(session)
+    issue = await _issue_or_404(repo, issue_id)
+    await repo.set_status(issue, new_status, get_technical_settings().app_version)
     # Emit on the request session: the status-change fact commits iff the status does (auto-commit
     # at request teardown, like every other business route — no explicit commit here).
     await events.emit(
         IssueStatusChanged(
             user_id=current_user.id,
-            entity_id=group_id,
-            entity_name=group.title,
+            entity_id=issue_id,
+            entity_name=issue.title,
             status=new_status.value,
         ),
         session,
     )
-    group_read = ErrorGroupRead.model_validate(group)
+    issue_read = IssueRead.model_validate(issue)
     if wants_json(request):
-        return JSONResponse(group_read.model_dump(mode="json"))
-    return templates.TemplateResponse(request, "issues/_triage.html", {"group": group_read})
+        return JSONResponse(issue_read.model_dump(mode="json"))
+    return templates.TemplateResponse(request, "issues/_triage.html", {"issue": issue_read})

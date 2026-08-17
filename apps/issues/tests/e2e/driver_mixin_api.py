@@ -1,4 +1,4 @@
-from apps.issues.infra.repository import record_event
+from apps.issues.infra.repository import record_occurrence
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.api_base import ApiBase
 
@@ -7,7 +7,7 @@ class IssuesApiMixin(ApiBase):
     def seed_captured_error(self, title: str, count: int, version: str = "dev") -> None:
         async def _do(s):
             for _ in range(count):
-                await record_event(
+                await record_occurrence(
                     s,
                     fingerprint=f"seed-{title}",
                     title=title,
@@ -56,9 +56,9 @@ class IssuesApiMixin(ApiBase):
     def assert_issue_detail_shows(self, count: int) -> None:
         assert self.response is not None
         detail = self.response.json()
-        events = detail["events"]
-        assert len(events) == count, f"expected {count} occurrences, got {len(events)}"
-        assert all("stack" in e["context"] for e in events)
+        occurrences = detail["occurrences"]
+        assert len(occurrences) == count, f"expected {count} occurrences, got {len(occurrences)}"
+        assert all("stack" in o["context"] for o in occurrences)
 
     def try_open_issues_screen(self) -> None:
         self.response = self.client().get("/console/issues", headers={"accept": "application/json"})

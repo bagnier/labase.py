@@ -19,10 +19,10 @@ class IssueStatus(StrEnum):
     regressed = "regressed"
 
 
-class ErrorGroup(Base, UUIDPk, Versioned, Timestamped):
-    """One *issue*: every event sharing a stack fingerprint, with its lifecycle."""
+class Issue(Base, UUIDPk, Versioned, Timestamped):
+    """One *issue*: every occurrence sharing a stack fingerprint, with its lifecycle."""
 
-    __tablename__ = "error_groups"
+    __tablename__ = "issues"
 
     fingerprint: Mapped[str] = mapped_column(Text, unique=True)
     title: Mapped[str]
@@ -35,20 +35,20 @@ class ErrorGroup(Base, UUIDPk, Versioned, Timestamped):
     resolved_in_version: Mapped[str | None] = mapped_column(default=None)
 
 
-class ErrorEvent(Base, UUIDPk):
-    """One occurrence, with the JSONB context that pivots to the structured logs.
+class Occurrence(Base, UUIDPk):
+    """One sighting of an issue, with the JSONB context that pivots to the firehose.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so the newest-first cursor page
     (``order_by(id.desc())`` + ``id < before_id``) keeps working without a bigint sequence."""
 
-    __tablename__ = "error_events"
+    __tablename__ = "issue_occurrences"
 
-    group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("error_groups.id"))
+    issue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("issues.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
 
-class ErrorGroupRead(BaseModel):
+class IssueRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -62,7 +62,7 @@ class ErrorGroupRead(BaseModel):
     resolved_in_version: str | None
 
 
-class ErrorEventRead(BaseModel):
+class OccurrenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID

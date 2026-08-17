@@ -1,7 +1,7 @@
 """How the issues context (error tracking) plugs into the running app.
 
 Registers an ``ExceptionCaptured`` tracker with the capture module (500 handler +
-event-bus failures), groups events by stack fingerprint, and serves the console
+event-bus failures), folds occurrences into issues by stack fingerprint, and serves the console
 screen. Best-effort doctrine verbatim: the capture drain fans out with log-and-skip
 isolation — a failing tracker never worsens the failure it is tracking.
 
@@ -18,9 +18,9 @@ from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuer
 from apps.issues.contract.events import IssueOpened, IssueRegressed, IssueStatusChanged
 from apps.issues.domain import service
 from apps.issues.infra.repository import (
-    ErrorGroupRepository,
-    purge_old_events,
-    record_event,
+    IssueRepository,
+    purge_old_occurrences,
+    record_occurrence,
 )
 from apps.issues.infra.router import router
 from apps.shared.config import get_technical_settings
@@ -45,7 +45,7 @@ log = structlog.get_logger("labase.issues")
 
 PURGE_TOPIC = "issues.purge"
 PURGE_EVERY_SECONDS = 86400
-# How often the capture queue is drained into error groups — near-real-time, cheap.
+# How often the capture queue is drained into issues — near-real-time, cheap.
 CAPTURE_DRAIN_SECONDS = 1.0
 
 
@@ -62,7 +62,7 @@ def mount(host: Host) -> None:
     host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
     register_task_handler(PURGE_TOPIC, _purge)
     host.on_startup(_plant_purge)
-    # Every ``log.exception`` is queued by the capture processor; this drains it into groups.
+    # Every ``log.exception`` is queued by the capture processor; this drains it into issues.
     drain = CaptureDrain(CAPTURE_DRAIN_SECONDS)
     host.on_startup(drain.start)
     host.on_shutdown(drain.stop)
@@ -77,12 +77,12 @@ def _declare_settings() -> SettingsDeclaration:
             SettingDef("alerting_enabled", "boolean", "false", "Email on new/regressed issues"),
             SettingDef("alert_email", "string", "", "Where issue alerts are sent"),
         ],
-        supabase=SupabaseLink("Browse error groups in Supabase", table="error_groups"),
+        supabase=SupabaseLink("Browse the issues in Supabase", table="issues"),
     )
 
 
 async def _record(event: ExceptionCaptured) -> None:
-    """Fold a captured exception into its group, emitting the journal fact on the same transaction
+    """Fold a captured exception into its issue, emitting the journal fact on the same transaction
     (atomic with the recording); runs under collect(): best-effort."""
     version = get_technical_settings().app_version
     context = {
@@ -91,30 +91,30 @@ async def _record(event: ExceptionCaptured) -> None:
         "stack": service.formatted_stack(event.exc),
     }
     async with admin_session_factory()() as session:
-        recorded = await record_event(
+        recorded = await record_occurrence(
             session,
             fingerprint=service.fingerprint(event.exc),
             title=service.title_for(event.exc),
             version=version,
             context=context,
         )
-        group_id, title = recorded.group.id, recorded.group.title
-        # Emit on the recording session — IssueOpened/Regressed lands iff the group commits.
+        issue_id, title = recorded.issue.id, recorded.issue.title
+        # Emit on the recording session — IssueOpened/Regressed lands iff the issue commits.
         # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
         # bus here is unconditional — no mount-state guard needed.
         if recorded.opened:
-            opened = IssueOpened(entity_id=group_id, entity_name=title)
+            opened = IssueOpened(entity_id=issue_id, entity_name=title)
             await events.emit(opened, session)
         if recorded.regressed:
             regressed = IssueRegressed(
-                entity_id=group_id,
+                entity_id=issue_id,
                 entity_name=title,
-                resolved_in_version=recorded.group.resolved_in_version,
+                resolved_in_version=recorded.issue.resolved_in_version,
                 seen_version=version,
             )
             await events.emit(regressed, session)
         await session.commit()
-    log.info("issue.recorded", group_id=group_id, opened=recorded.opened)
+    log.info("issue.recorded", issue_id=issue_id, opened=recorded.opened)
 
 
 async def _alert_opened(session: AsyncSession, event: IssueOpened) -> None:
@@ -125,21 +125,21 @@ async def _alert_regressed(session: AsyncSession, event: IssueRegressed) -> None
     await _send_alert(session, f"Regressed issue: {event.entity_name}", event.entity_id)
 
 
-async def _send_alert(session: AsyncSession, subject: str, group_id: uuid.UUID) -> None:
+async def _send_alert(session: AsyncSession, subject: str, issue_id: uuid.UUID) -> None:
     # Durable consumer: the alert email is enqueued on the worker's session (it commits).
     settings = get_settings("issues")
     if not settings.alerting_enabled or not settings.alert_email:
         return
-    text = f"{subject}\n\nSee /console/issues/{group_id} for the stack and context."
+    text = f"{subject}\n\nSee /console/issues/{issue_id} for the stack and context."
     email = Email(to=str(settings.alert_email), subject=subject, text=text)
     try:  # alerting is best-effort: a failing enqueue never worsens the tracked failure
         await enqueue_email(session, email)
     except Exception:
-        log.warning("issues.alert_enqueue_failed", group_id=group_id)
+        log.warning("issues.alert_enqueue_failed", issue_id=issue_id)
 
 
 async def _purge(session, _payload: dict) -> None:
-    deleted = await purge_old_events(session, int(get_settings("issues").retention_days))
+    deleted = await purge_old_occurrences(session, int(get_settings("issues").retention_days))
     log.info("issues.purged", deleted=deleted)
 
 
@@ -151,7 +151,7 @@ async def _plant_purge() -> None:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    unresolved = await ErrorGroupRepository(query.session).unresolved_count()
+    unresolved = await IssueRepository(query.session).unresolved_count()
     lines = [f"{unresolved} unresolved"] if unresolved else ["No open issues"]
     return ConsoleOverview(
         key="issues", title="Issues", icon="bug-beetle", section="operations", data={"lines": lines}

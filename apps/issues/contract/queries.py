@@ -11,17 +11,17 @@ from typing import Any
 from sqlalchemy import Text, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.issues.domain.models import ErrorEvent, ErrorGroup
+from apps.issues.domain.models import Issue, Occurrence
 
 
 @dataclass(frozen=True)
-class IssueEventRow:
+class IssueOccurrence:
     ts: datetime
     title: str
     context: dict[str, Any]
 
 
-async def search_issue_events(
+async def search_issue_occurrences(
     session: AsyncSession,
     *,
     org_id: str | None = None,
@@ -31,32 +31,32 @@ async def search_issue_events(
     from_dt: datetime | None = None,
     to_dt: datetime | None = None,
     limit: int = 100,
-) -> list[IssueEventRow]:
+) -> list[IssueOccurrence]:
     """Newest-first, bounded read of error occurrences. Org/user/request are matched inside the
-    JSONB ``context`` (issues has no dedicated columns); the group supplies the title."""
+    JSONB ``context`` (issues has no dedicated columns); the issue supplies the title."""
     query = (
-        select(ErrorEvent, ErrorGroup.title)
-        .join(ErrorGroup, ErrorGroup.id == ErrorEvent.group_id)
-        .order_by(ErrorEvent.id.desc())
+        select(Occurrence, Issue.title)
+        .join(Issue, Issue.id == Occurrence.issue_id)
+        .order_by(Occurrence.id.desc())
         .limit(limit)
     )
     if org_id:
-        query = query.where(ErrorEvent.context["org_id"].astext == org_id)
+        query = query.where(Occurrence.context["org_id"].astext == org_id)
     if user_id:
-        query = query.where(ErrorEvent.context["user_id"].astext == user_id)
+        query = query.where(Occurrence.context["user_id"].astext == user_id)
     if request_id:
-        query = query.where(ErrorEvent.context["request_id"].astext == request_id)
+        query = query.where(Occurrence.context["request_id"].astext == request_id)
     if text:
         like = f"%{text}%"
         query = query.where(
-            or_(ErrorGroup.title.ilike(like), cast(ErrorEvent.context, Text).ilike(like))
+            or_(Issue.title.ilike(like), cast(Occurrence.context, Text).ilike(like))
         )
     if from_dt:
-        query = query.where(ErrorEvent.created_at >= from_dt)
+        query = query.where(Occurrence.created_at >= from_dt)
     if to_dt:
-        query = query.where(ErrorEvent.created_at <= to_dt)
+        query = query.where(Occurrence.created_at <= to_dt)
     rows = await session.execute(query)
     return [
-        IssueEventRow(ts=event.created_at, title=title, context=event.context or {})
+        IssueOccurrence(ts=event.created_at, title=title, context=event.context or {})
         for event, title in rows.all()
     ]

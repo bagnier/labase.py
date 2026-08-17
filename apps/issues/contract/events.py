@@ -20,7 +20,7 @@ class IssueEvent(BusinessEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class IssueOpened(IssueEvent):
-    """A new error group appeared. The group *is* the subject: its id and title are the base's
+    """A new issue appeared. The issue *is* the subject: its id and title are the base's
     entity slots, narrowed to required here — an alert with no issue to point at is meaningless."""
 
     verb: ClassVar[str] = "opened"

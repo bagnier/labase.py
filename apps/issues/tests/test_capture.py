@@ -1,4 +1,4 @@
-"""Integration: the capture seam really lands rows — log.exception, bus failures, grouping."""
+"""Integration: the capture seam really lands occurrences — log.exception, bus failures."""
 
 import uuid
 from dataclasses import dataclass
@@ -9,8 +9,8 @@ import structlog
 from sqlalchemy import select
 
 import apps.main  # noqa: F401 — mounts every context, including issues' subscriber
-from apps.issues.domain.models import ErrorGroup, IssueStatus
-from apps.issues.infra.repository import record_event
+from apps.issues.domain.models import Issue, IssueStatus
+from apps.issues.infra.repository import record_occurrence
 from apps.shared.host import host
 from apps.shared.observability import capture
 from apps.shared.observability.capture import CaptureDrain
@@ -35,26 +35,24 @@ async def issues_isolation():
     yield
     capture._QUEUE.clear()
     async with db.admin_session_factory()() as session:
-        groups = list(
-            await session.scalars(select(ErrorGroup).where(ErrorGroup.title.like("%capture-test%")))
+        issues = list(
+            await session.scalars(select(Issue).where(Issue.title.like("%capture-test%")))
         )
-        for group in groups:
-            await session.delete(group)
+        for issue in issues:
+            await session.delete(issue)
         await session.commit()
     await db._admin_engine().dispose()
     _clear_engine_caches()
 
 
-async def _group_titled(fragment: str) -> ErrorGroup | None:
+async def _issue_titled(fragment: str) -> Issue | None:
     async with db.admin_session_factory()() as session:
-        return await session.scalar(
-            select(ErrorGroup).where(ErrorGroup.title.like(f"%{fragment}%"))
-        )
+        return await session.scalar(select(Issue).where(Issue.title.like(f"%{fragment}%")))
 
 
 @pytest.mark.asyncio
 async def test_log_exception_is_captured():
-    """The doctrine: any log.exception is queued and drained into an error group."""
+    """The doctrine: any log.exception is queued and drained into an error issue."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     log = structlog.get_logger("labase.test.capture")
     try:
@@ -66,10 +64,10 @@ async def test_log_exception_is_captured():
     await CaptureDrain(0).tick()
     assert not capture._QUEUE, "tick must drain the queue"
 
-    group = await _group_titled(marker)
-    assert group is not None, "the logged exception should have landed in error_groups"
-    assert group.status == IssueStatus.new
-    assert group.count == 1
+    issue = await _issue_titled(marker)
+    assert issue is not None, "the logged exception should have landed in issues"
+    assert issue.status == IssueStatus.new
+    assert issue.count == 1
 
 
 @pytest.mark.asyncio
@@ -87,10 +85,10 @@ async def test_failing_bus_handler_is_recorded_as_an_issue():
         host.contribs._providers[_DummyQuery].remove(boom)
 
     await CaptureDrain(0).tick()
-    group = await _group_titled(marker)
-    assert group is not None, "the failing handler should have landed in error_groups"
-    assert group.status == IssueStatus.new
-    assert group.count == 1
+    issue = await _issue_titled(marker)
+    assert issue is not None, "the failing handler should have landed in issues"
+    assert issue.status == IssueStatus.new
+    assert issue.count == 1
 
 
 @pytest.mark.asyncio
@@ -114,17 +112,17 @@ async def test_drain_does_not_recurse_when_a_tracker_handler_fails():
     finally:
         capture._trackers.remove(failing_tracker)
 
-    # The real _record still ran alongside the failing handler, so the group landed.
-    assert await _group_titled(marker) is not None
+    # The real _record still ran alongside the failing handler, so the issue landed.
+    assert await _issue_titled(marker) is not None
 
 
 @pytest.mark.asyncio
-async def test_events_group_by_fingerprint_and_regress_after_resolve():
+async def test_occurrences_group_by_fingerprint_and_regress_after_resolve():
     marker = f"capture-test-{uuid.uuid4().hex}"
 
-    async def record(version: str) -> ErrorGroup:
+    async def record(version: str) -> Issue:
         async with db.admin_session_factory()() as session:
-            recorded = await record_event(
+            recorded = await record_occurrence(
                 session,
                 fingerprint=marker,
                 title=f"ValueError: {marker}",
@@ -132,14 +130,14 @@ async def test_events_group_by_fingerprint_and_regress_after_resolve():
                 context={},
             )
             await session.commit()
-            return recorded.group
+            return recorded.issue
 
     await record("v1")
-    group = await record("v1")
-    assert group.count == 2, "same fingerprint must fold into one group"
+    issue = await record("v1")
+    assert issue.count == 2, "same fingerprint must fold into one issue"
 
     async with db.admin_session_factory()() as session:
-        stored = await session.scalar(select(ErrorGroup).where(ErrorGroup.fingerprint == marker))
+        stored = await session.scalar(select(Issue).where(Issue.fingerprint == marker))
         assert stored is not None
         stored.status = IssueStatus.resolved
         stored.resolved_in_version = "v1"

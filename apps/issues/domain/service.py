@@ -2,8 +2,8 @@
 
 The value is not capture (trivial) but *grouping*: the fingerprint hashes the
 exception type plus the top in-app frames normalized to ``file:function`` —
-never the message, whose variable parts would shatter groups. Lifecycle: an
-event landing on a resolved group from a *different* version than the fix
+never the message, whose variable parts would shatter issues. Lifecycle: an
+occurrence landing on a resolved issue from a *different* version than the fix
 reopens it as ``regressed`` (git SHAs have no ordering, so "different" is the
 honest test).
 """
@@ -48,15 +48,15 @@ def formatted_stack(exc: BaseException) -> str:
     return "".join(traceback.format_exception(exc))[-_STACK_MAX:]
 
 
-def status_after_event(
-    current: IssueStatus, resolved_in_version: str | None, event_version: str
+def status_after_occurrence(
+    current: IssueStatus, resolved_in_version: str | None, seen_version: str
 ) -> IssueStatus:
-    """The group status once one more event lands on it.
+    """The issue's status once one more occurrence lands on it.
 
-    Resolved + an event from another version ⇒ the fix did not hold: regressed
+    Resolved + an occurrence from another version ⇒ the fix did not hold: regressed
     (Sentry's most useful feature — one column and one if). Ignored stays
     ignored; everything else keeps its triage state.
     """
-    if current is IssueStatus.resolved and event_version != (resolved_in_version or ""):
+    if current is IssueStatus.resolved and seen_version != (resolved_in_version or ""):
         return IssueStatus.regressed
     return current

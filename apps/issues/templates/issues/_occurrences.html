@@ -1,20 +1,20 @@
-{% for e in events %}
-  <details class="card-panel" data-issue-event="{{ e.id }}">
+{% for o in occurrences %}
+  <details class="card-panel" data-issue-occurrence="{{ o.id }}">
     <summary class="cursor-pointer p-4 text-sm flex items-center gap-3">
-      <time datetime="{{ e.created_at.isoformat() }}">{{ e.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</time>
-      {% if e.context.request_id %}
-        <span class="font-mono text-xs text-base-content/70">request {{ e.context.request_id }}</span>
+      <time datetime="{{ o.created_at.isoformat() }}">{{ o.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</time>
+      {% if o.context.request_id %}
+        <span class="font-mono text-xs text-base-content/70">request {{ o.context.request_id }}</span>
       {% endif %}
-      {% if e.context.path %}
-        <span class="font-mono text-xs text-base-content/70">{{ e.context.method }} {{ e.context.path }}</span>
+      {% if o.context.path %}
+        <span class="font-mono text-xs text-base-content/70">{{ o.context.method }} {{ o.context.path }}</span>
       {% endif %}
     </summary>
     <div class="px-4 pb-4 space-y-2">
-      {% if e.context.stack %}
-        <pre class="text-xs bg-base-200 rounded-box p-3 overflow-x-auto">{{ e.context.stack }}</pre>
+      {% if o.context.stack %}
+        <pre class="text-xs bg-base-200 rounded-box p-3 overflow-x-auto">{{ o.context.stack }}</pre>
       {% endif %}
       <dl class="text-xs space-y-1">
-        {% for key, value in e.context.items() %}
+        {% for key, value in o.context.items() %}
           {% if key != "stack" %}
             <div class="flex gap-2">
               <dt class="font-mono text-base-content/60 w-32 flex-none">{{ key }}</dt>
@@ -31,7 +31,7 @@
 {% if next_before_id %}
   <button type="button"
           class="btn btn-sm"
-          hx-get="/console/issues/{{ group.id }}?before_id={{ next_before_id }}"
+          hx-get="/console/issues/{{ issue.id }}?before_id={{ next_before_id }}"
           hx-target="this"
           hx-swap="outerHTML">Load older occurrences</button>
 {% endif %}

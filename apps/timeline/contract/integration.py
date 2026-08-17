@@ -2,7 +2,7 @@
 
 ``apps/timeline`` is the single observability *read* context: it merges the firehose (a rotated
 JSON file), the business-events journal (``business_events``) and issue occurrences
-(``error_events``) into one admin-only timeline, with an activity graph and structured export.
+(``issue_occurrences``) into one admin-only timeline, with an activity graph and structured export.
 The *write* primitives stay in ``apps/shared/observability`` — a foundation every app imports down.
 
 NOTE: mounted BEFORE the console context so its /console/timeline routes register ahead of the

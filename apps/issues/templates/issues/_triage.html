@@ -1,24 +1,24 @@
 {% from "issues/_badge.html" import status_badge %}
 <div class="flex items-center gap-3">
-  {{ status_badge(group.status.value) }}
-  {% if group.status.value != "resolved" %}
-    <form hx-post="/console/issues/{{ group.id }}/status"
+  {{ status_badge(issue.status.value) }}
+  {% if issue.status.value != "resolved" %}
+    <form hx-post="/console/issues/{{ issue.id }}/status"
           hx-target="#triage"
           hx-swap="innerHTML">
       <input type="hidden" name="status" value="resolved" />
       <button type="submit" class="btn btn-sm btn-success">Resolve</button>
     </form>
   {% endif %}
-  {% if group.status.value != "ignored" %}
-    <form hx-post="/console/issues/{{ group.id }}/status"
+  {% if issue.status.value != "ignored" %}
+    <form hx-post="/console/issues/{{ issue.id }}/status"
           hx-target="#triage"
           hx-swap="innerHTML">
       <input type="hidden" name="status" value="ignored" />
       <button type="submit" class="btn btn-sm btn-ghost">Ignore</button>
     </form>
   {% endif %}
-  {% if group.status.value in ("resolved", "ignored") %}
-    <form hx-post="/console/issues/{{ group.id }}/status"
+  {% if issue.status.value in ("resolved", "ignored") %}
+    <form hx-post="/console/issues/{{ issue.id }}/status"
           hx-target="#triage"
           hx-swap="innerHTML">
       <input type="hidden" name="status" value="unresolved" />

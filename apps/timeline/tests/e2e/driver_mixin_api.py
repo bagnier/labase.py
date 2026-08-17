@@ -53,13 +53,13 @@ class TimelineApiMixin(ApiBase):
         self, title: str, *, org: str | None = None, request_id: str | None = None, when=None
     ) -> None:
         context = seed_data.error_context(org=org, request_id=request_id)
-        gp = seed_data.group_params(title, when)
+        params = seed_data.issue_params(title, when)
 
         async def _do(s):
-            gid = (await s.execute(seed_data.INSERT_ERROR_GROUP, gp)).scalar_one()
+            issue_id = (await s.execute(seed_data.INSERT_ISSUE, params)).scalar_one()
             await s.execute(
-                seed_data.INSERT_ERROR_EVENT,
-                {"gid": gid, "ts": gp["ts"], "context": json.dumps(context)},
+                seed_data.INSERT_OCCURRENCE,
+                {"iid": issue_id, "ts": params["ts"], "context": json.dumps(context)},
             )
 
         self.run(db.seed_fixtures(_do))

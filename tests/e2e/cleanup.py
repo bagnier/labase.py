@@ -51,8 +51,8 @@ def truncate_app_tables() -> None:
     tables = [
         "app_settings",
         "business_events",
-        "error_events",
-        "error_groups",
+        "issue_occurrences",
+        "issues",
         "request_metrics",
         "org_file_share_tokens",
         "org_files",

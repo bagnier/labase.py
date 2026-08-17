@@ -1,7 +1,7 @@
 """Guard: primary keys must stay time-ordered (UUIDv7), not random (UUIDv4).
 
 The append-only stores lean on the pk being monotonic — the event listener claims/scans by
-``business_events.id`` and the issues detail page pages by ``error_events.id`` (``id desc`` /
+``business_events.id`` and the issues detail page pages by ``issue_occurrences.id`` (``id desc`` /
 ``id < before_id``). A silent revert of the ``UUIDPk`` default to ``uuid.uuid4`` would keep every
 type check and most tests green while quietly breaking that ordering. These assertions fail loudly
 instead — one on the mixin every model inherits, one on the primitive itself.

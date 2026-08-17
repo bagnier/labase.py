@@ -299,7 +299,7 @@ def relayed_method(cookie: str | None) -> SignInMethod:
     dropped it, the challenge outlived it) or forged. Anything unrecognised falls back to the
     password ceremony — the only one reachable without a relay — so a bad value degrades the fact's
     precision instead of putting an unknown method on the journal."""
-    return cookie if cookie in _RELAYABLE_METHODS else "password"  # ty: narrowed by the membership
+    return cookie if cookie in _RELAYABLE_METHODS else "password"  # narrowed by the membership test
 
 
 async def _mfa_challenge_response(

@@ -4,7 +4,7 @@ and paginates over a bounded recent window.
 
 It never touches another context's tables: business events are read through the shared
 ``events.EventRepository`` (shared infra), issues through
-``issues.contract.queries.search_issue_events``. Sorting/pagination happen in memory over the
+``issues.contract.queries.search_issue_occurrences``. Sorting/pagination happen in memory over the
 merged window — the only way to order a file stream and two tables as one timeline.
 """
 
@@ -16,11 +16,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.issues.contract.queries import IssueEventRow, search_issue_events
+from apps.issues.contract.queries import IssueOccurrence, search_issue_occurrences
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
-from apps.shared.observability.firehose import FirehoseRow, read_firehose
+from apps.shared.observability.firehose import LogLine, read_firehose
 from apps.timeline.domain.models import TimelineEntry, TimelineSource
 
 _SORT_KEYS = {"ts", "source", "level", "org", "name", "user", "entity", "request"}
@@ -101,7 +101,7 @@ class TimelineReader:
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
         if flt.wants(TimelineSource.error) and flt.level in (None, "error"):
-            rows = await search_issue_events(self.session, **_issue_kwargs(flt, limit))
+            rows = await search_issue_occurrences(self.session, **_issue_kwargs(flt, limit))
             entries += [_from_issue(r) for r in rows]
         # The app filter narrows the merged timeline to one app's event key prefix — applied in
         # memory over every source at once, the same seam sort/pagination already live in.
@@ -238,17 +238,17 @@ def _firehose_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     return kwargs
 
 
-def _from_firehose(row: FirehoseRow) -> TimelineEntry:
+def _from_firehose(line: LogLine) -> TimelineEntry:
     return TimelineEntry(
-        ts=row.ts,
+        ts=line.ts,
         source=TimelineSource.http,
-        level=row.level,
-        name=row.event,
-        app=_key_app(row.event),
-        org_id=row.org_id,
-        user_id=row.user_id,
-        request_id=row.request_id,
-        payload=row.payload,
+        level=line.level,
+        name=line.event,  # structlog's own key for the trace name — the library's word, not ours
+        app=_key_app(line.event),
+        org_id=line.org_id,
+        user_id=line.user_id,
+        request_id=line.request_id,
+        payload=line.payload,
     )
 
 
@@ -270,14 +270,14 @@ def _from_event(record: BusinessEventRecord) -> TimelineEntry:
     )
 
 
-def _from_issue(row: IssueEventRow) -> TimelineEntry:
-    ctx = row.context
+def _from_issue(occurrence: IssueOccurrence) -> TimelineEntry:
+    ctx = occurrence.context
     return TimelineEntry(
-        ts=row.ts,
+        ts=occurrence.ts,
         source=TimelineSource.error,
         level="error",
-        name=row.title,
-        app=_key_app(row.title),
+        name=occurrence.title,
+        app=_key_app(occurrence.title),
         org_id=ctx.get("org_id"),
         user_id=ctx.get("user_id"),
         request_id=ctx.get("request_id"),

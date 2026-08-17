@@ -99,16 +99,16 @@ def error_context(
     }
 
 
-# Issue occurrences: a group (by fingerprint) plus one event carrying the correlation context.
-INSERT_ERROR_GROUP = text(
-    "INSERT INTO error_groups (fingerprint, title, first_seen, last_seen) "
+# Issue occurrences: an issue (by fingerprint) plus one occurrence carrying the context.
+INSERT_ISSUE = text(
+    "INSERT INTO issues (fingerprint, title, first_seen, last_seen) "
     "VALUES (:fp, :title, :ts, :ts) RETURNING id"
 )
-INSERT_ERROR_EVENT = text(
-    "INSERT INTO error_events (group_id, created_at, context) "
-    "VALUES (:gid, :ts, CAST(:context AS jsonb))"
+INSERT_OCCURRENCE = text(
+    "INSERT INTO issue_occurrences (issue_id, created_at, context) "
+    "VALUES (:iid, :ts, CAST(:context AS jsonb))"
 )
 
 
-def group_params(title: str, when: datetime | None = None) -> dict[str, Any]:
+def issue_params(title: str, when: datetime | None = None) -> dict[str, Any]:
     return {"fp": f"{title}:{uuid.uuid7()}", "title": title, "ts": when or clock.now()}

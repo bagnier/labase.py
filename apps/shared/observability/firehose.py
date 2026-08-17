@@ -39,7 +39,7 @@ _RESERVED = {"timestamp", "level", "event", "org_id", "user_id", "request_id"}
 
 
 @dataclass(frozen=True)
-class FirehoseRow:
+class LogLine:
     """One firehose line, flattened for the unified timeline."""
 
     ts: datetime
@@ -118,8 +118,8 @@ def firehose_processor(
     return event_dict
 
 
-def _row(record: dict[str, Any]) -> FirehoseRow:
-    return FirehoseRow(
+def _line(record: dict[str, Any]) -> LogLine:
+    return LogLine(
         ts=_parse_ts(record.get("timestamp")),
         level=str(record.get("level") or "info"),
         event=str(record.get("event") or ""),
@@ -153,7 +153,7 @@ def read_firehose(
     to_dt: datetime | None = None,
     window: timedelta = FIREHOSE_WINDOW,
     limit: int = 100,
-) -> list[FirehoseRow]:
+) -> list[LogLine]:
     """Newest-first read of the firehose over its recent window, under the given filters.
 
     The window floor (``now - window``) is the firehose's own retention horizon; an explicit
@@ -162,31 +162,31 @@ def read_firehose(
     if from_dt and from_dt > floor:
         floor = from_dt
     needle = text.lower() if text else None
-    rows: list[FirehoseRow] = []
+    lines: list[LogLine] = []
     for path in _recent_files(floor):
         for raw in path.read_text(encoding="utf-8").splitlines():
-            line = raw.strip()
-            if not line:
+            serialized = raw.strip()
+            if not serialized:
                 continue
             try:
-                row = _row(json.loads(line))
+                line = _line(json.loads(serialized))
             except json.JSONDecodeError:
                 continue
-            if row.ts < floor or (to_dt and row.ts > to_dt):
+            if line.ts < floor or (to_dt and line.ts > to_dt):
                 continue
-            if level and row.level.lower() != level.lower():
+            if level and line.level.lower() != level.lower():
                 continue
-            if org_id and row.org_id != org_id:
+            if org_id and line.org_id != org_id:
                 continue
-            if user_id and row.user_id != user_id:
+            if user_id and line.user_id != user_id:
                 continue
-            if request_id and row.request_id != request_id:
+            if request_id and line.request_id != request_id:
                 continue
-            if needle and needle not in line.lower():
+            if needle and needle not in serialized.lower():
                 continue
-            rows.append(row)
-    rows.sort(key=lambda r: r.ts, reverse=True)
-    return rows[:limit]
+            lines.append(line)
+    lines.sort(key=lambda entry: entry.ts, reverse=True)
+    return lines[:limit]
 
 
 def clear_firehose() -> None:

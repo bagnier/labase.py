@@ -11,7 +11,7 @@
 {% block content %}
   <div class="max-w-2xl space-y-6">
     {{ page_header('Issues',
-      'Captured errors, grouped by stack fingerprint. The request id of each event
+      'Captured errors, grouped by stack fingerprint. The request id of each occurrence
       links it to the structured logs.') }}
     {% call filter_bar('/console/issues', 'Filter issues') %}
       <label for="status-filter" class="text-sm text-base-content/70">Status</label>
@@ -25,18 +25,18 @@
         {% endfor %}
       </select>
     {% endcall %}
-    {% if groups %}
+    {% if issues %}
       <div class="list-panel">
-        {% for g in groups %}
-          <a href="/console/issues/{{ g.id }}"
-             data-issue="{{ g.id }}"
-             data-issue-status="{{ g.status.value }}"
+        {% for i in issues %}
+          <a href="/console/issues/{{ i.id }}"
+             data-issue="{{ i.id }}"
+             data-issue-status="{{ i.status.value }}"
              class="grid grid-cols-1 sm:grid-cols-[1fr_90px_110px_150px] gap-4 items-center p-4 hover:bg-base-200">
-            <span class="font-mono text-xs truncate">{{ g.title }}</span>
-            <span class="text-xs text-base-content/70">×{{ g.count }}</span>
-            <span>{{ status_badge(g.status.value) }}</span>
+            <span class="font-mono text-xs truncate">{{ i.title }}</span>
+            <span class="text-xs text-base-content/70">×{{ i.count }}</span>
+            <span>{{ status_badge(i.status.value) }}</span>
             <time class="text-xs text-base-content/70"
-                  datetime="{{ g.last_seen.isoformat() }}">{{ g.last_seen.strftime("%Y-%m-%d %H:%M") }}</time>
+                  datetime="{{ i.last_seen.isoformat() }}">{{ i.last_seen.strftime("%Y-%m-%d %H:%M") }}</time>
           </a>
         {% endfor %}
       </div>

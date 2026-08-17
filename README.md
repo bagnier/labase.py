@@ -68,17 +68,18 @@ gone is a clean no-op, never a compensation. The emitter never names its subscri
 console, declares its admin-tunable settings there, and can be switched on or off
 (applied on restart) — a disabled app drops its routes, nav and dashboard card but 
 keeps its console tile (and still reserves its URL slugs) so admins can re-enable it.
-Beyond per-app stats, the console ships the operational screens: accounts (disable, 
-delete, impersonate — bannered and recorded), the business-events browser, the unified 
-logs viewer, error issues, load metrics, and runtime log level.
+Beyond per-app stats, the console ships the operational screens: accounts (disable,
+delete, impersonate — bannered and recorded), the unified **Timeline**, error issues,
+load metrics, and the runtime firehose level.
 
 **The database enforces isolation.** Row-level security, versioned as plain SQL
 migrations, is the single source of truth for who sees what. Python never re-implements
 isolation for authenticated access.
 
-**Observability is built in.** Structured, machine-readable logs, correlated per request and
-merged in the admin console with the business-events journal into one timeline. Technical logs are
-best-effort — they never block, slow, or fail the action they observe.
+**Observability is built in.** Domain facts go to an append-only journal, machine traces to the
+firehose, bugs to fingerprinted issues; the console's Timeline reads all three and correlates them
+per user, org, request and entity. Only the journal is transactional — the rest never blocks, slows
+or fails the action it observes.
 
 **Tests are sincere.** The same plain-language scenarios run twice — over real HTTP and
 through a real browser — against a real database. Nothing business-critical is mocked;
@@ -266,51 +267,39 @@ singleton (`apps.shared.events.bus`) directly; `host.events` is that same bus, w
 
 ### Observability
 
-**Two systems, one timeline.** A _business_ event ("something happened in the domain")
-and a _technical_ log ("a trace of the machinery") are different things, so they have
-different primitives — but the console's **Logs** screen merges them into one correlated
-timeline, filterable by source. The two are complementary, never redundant: `emit` writes the
-durable journal and logs nothing of its own, so a single business action shows up once, not twice.
+**The journal — what changed the domain.** A sensitive domain action is a typed, frozen
+`BusinessEvent`, its `kind` (`todo.ticked`, `organizations.renamed`) derived from an app prefix and
+a verb, never hand-written. `emit(event, session)` appends it to `business_events` through one
+SECURITY DEFINER writer, on the caller's own transaction — the fact commits iff the mutation does,
+and no PostgREST client can forge one. Reads are RLS-scoped; the **profile** and
+**`/{org}/dashboard`** render them as a feed. This is the one record the base lets sit on a
+request's critical path. A fact has no severity: it happened. `emit` logs nothing of its own, so
+an action shows up once, not twice.
 
-- **Business events — `emit(...)`.** A sensitive domain action is emitted as a typed,
-  frozen `BusinessEvent` dataclass (each app owns its vocabulary in `contract/events.py`;
-  the `kind` — `todo.ticked`, `organizations.renamed` — is derived from an app prefix + a
-  verb, no magic strings). `emit` records it to the append-only `business_events` table **on the
-  request's own transaction** — atomic with the action — under a self-attributed INSERT policy
-  (RLS-scoped: members read their own and their orgs' events, and write only events attributed to
-  themselves). The **profile** and **`/{org}/dashboard`** show a per-user / per-org timeline; the
-  console **Business events** screen browses them per app.
-- **Technical logs — `structlog`.** `structlog.get_logger("labase.<context>.<subject>")`;
-  events are dotted `snake_case` with kwargs, never f-strings or `print`. Rendered to stdout
-  (JSON in production, pretty console in dev) **and** teed to the **firehose** — per-day JSON
-  files that give the Logs viewer a recent window to read back. The level
-  (`observability.log_level`) is admin-tunable from the console and applies live, no restart.
+**The firehose — a trace of the machinery.** `structlog.get_logger("labase.<context>.<subject>")`,
+dotted `snake_case` names with kwargs, never f-strings or `print`. Rendered to stdout (JSON in
+production, pretty console in dev) and teed to per-day JSON Lines files, which is what lets a reader
+scroll a recent window back. The request path only enqueues; a background `FirehoseWriter` batches
+to disk, so a dropped line never costs the action that wrote it. Its level (`timeline.log_level`) is
+admin-tunable from the console and applies live, no restart.
 
-**Non-blocking by doctrine.** _Technical_ observability never sits on a mutation's critical path:
-the firehose only _enqueues_ on the request path (a background `FirehoseWriter` batches the queue to
-disk); error capture enqueues to a bounded deque drained by a background task; load metrics
-accumulate in memory and flush on a timer. A lost or failed technical write never blocks, fails, or
-slows the action it observes. _Business_ events are the deliberate exception: the fact is written
-**transactionally** with the action (it commits iff the mutation does, so the journal can't diverge
-from what happened), while its async _delivery_ to consumers rides the event listener off the log —
-so the producer still never waits on a reaction.
+**Issues — a bug, with a lifecycle.** Every `log.exception` is teed to a bounded queue and folded,
+by stack fingerprint, into an `Issue` that opens, resolves, and regresses on a later version. Each
+sighting is an `Occurrence` carrying the JSONB context that pivots back to the firehose. The drain
+fans out with log-and-skip isolation, so a failing tracker never worsens what it tracks. Opening and
+regressing are themselves facts (`issues.opened`, `issues.regressed`).
 
-**Qualified events.** Both systems tag every record with the correlation keys that make the
-merged timeline navigable — **user**, **org**, **request**, and the concerned **entity**.
-Business events carry `actor_id` / `org_id` / `entity_id` explicitly (plus the actor's handle,
-denormalized so RLS can't hide _who_); technical logs inherit `request_id` (+ `ip`), `user_id`
-and `org_id` from contextvars bound by the request / auth / org-scope layers, merged onto every
-line. The Logs viewer's facets and per-entity filter join both sources on these keys.
+**The Timeline reads all three.** `apps/timeline` writes nothing: its console screen merges the
+journal, the firehose window and issue occurrences into one view, filterable by source and
+correlated on four keys — **user**, **org**, **request**, and the concerned **entity**. A fact
+carries them in its own columns, plus the handle and org name as they read *then*, so a deletion or
+RLS cannot hide _who_ and _where_ later; lines and occurrences inherit them from contextvars bound
+by the request / auth / org-scope layers. Only a fact knows an entity, hence the per-entity filter
+narrows to the journal alone.
 
-Two supporting layers ride the same non-blocking doctrine:
-
-- **Load metrics** — every request feeds a shared accumulator, exposed as a Prometheus
-  `/metrics` endpoint and persisted per minute by `apps/metrics`; the console **Load**
-  screen graphs it, and a daily rollup downsamples minute → hour and applies retention.
-- **Error tracking** — unhandled 500s and event-bus failures emit `ExceptionCaptured`;
-  `apps/issues` groups events by stack fingerprint into issues with a lifecycle
-  (open → resolved → regressed on a later version), browsable in the console.
-  A failing tracker never worsens what it tracks.
+**Load metrics.** Every request feeds a shared accumulator, exposed as a Prometheus `/metrics`
+endpoint and persisted per minute by `apps/metrics`; the console **Load** screen graphs it, and a
+daily rollup downsamples minute → hour and applies retention.
 
 ### Conventions
 
@@ -357,7 +346,7 @@ merges them — called explicitly, never injected silently.
 (`default=uuid.uuid7`, Python 3.14 stdlib) on the ORM write path, mirrored by a `public.uuidv7()`
 column default in SQL for raw / PostgREST inserts. Globally unique with no shared sequence (safe
 across instances) *and* monotonic, so the append-only stores use a pk as a cursor: the event listener
-claims/scans `business_events.id`, the issues detail pages `error_events.id`. Because every key is a
+claims/scans `business_events.id`, the issues detail pages `issue_occurrences.id`. Because every key is a
 uuid, a business event's `entity_id` correlates entities by their stable pk, never a renameable
 handle. Security tokens are the deliberate exception — they stay random **UUIDv4** (unguessable, no
 embedded timestamp).
@@ -404,7 +393,8 @@ labase.py/
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations
 │   ├── profile/           # User profile
 │   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav
-│   ├── settings/          # App settings / SaaS admin console (stats, settings, business events)
+│   ├── console/           # SaaS admin console — server-wide stats, settings, admins, appearance
+│   ├── timeline/          # The unified read view: firehose + business journal + issue occurrences
 │   ├── issues/            # Error tracking (Sentry-as-Postgres): fingerprint-grouped issues
 │   ├── metrics/           # Load metrics: /metrics Prometheus endpoint + console Load screen
 │   ├── public/            # Public landing pages + public org pages (/{org_handle}/{slug})
