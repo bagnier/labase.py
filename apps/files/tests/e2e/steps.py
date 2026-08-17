@@ -59,7 +59,7 @@ def step_file_size_limit():
 @given(parsers.parse("the organisation storage quota is {mb:d} MB"))
 def step_set_storage_quota(mb):
     files_settings = get_settings("files")
-    files_settings._raw = {**(files_settings._raw or {}), "org_storage_quota_mb": str(mb)}
+    files_settings._raw = {**files_settings._raw, "org_storage_quota_mb": str(mb)}
 
 
 @when(parsers.parse("they upload a file of {mb:d} MB to the org"))

@@ -6,7 +6,6 @@ answers the dashboard ``OverviewQuery``, and seeds welcome data on ``Organizatio
 
 import uuid
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -15,6 +14,7 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.persistence.repository import count_where
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.contract.events import (
     TodoCreated,
@@ -72,11 +72,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    total = await query.session.scalar(select(func.count()).select_from(TodoItem)) or 0
-    done = (
-        await query.session.scalar(select(func.count()).select_from(TodoItem).where(TodoItem.done))
-        or 0
-    )
+    total = await count_where(query.session, TodoItem)
+    done = await count_where(query.session, TodoItem, TodoItem.done)
     lines = [f"{total - done} open", f"{done} done"] if total else ["No tasks yet"]
     return ConsoleOverview(key="todo", title="To-do", icon="clipboard-text", data={"lines": lines})
 

@@ -1,6 +1,6 @@
 import uuid
 
-from apps.organizations.domain.exceptions import LastOwnerViolation, PendingInvitationExists
+from apps.organizations.domain.exceptions import InvitationRefused, LastOwnerViolation
 from apps.organizations.domain.models import InvitationStatus, OrgRole
 from apps.organizations.domain.repository import OrganizationRepositoryProtocol
 
@@ -10,7 +10,7 @@ async def ensure_no_pending_invitation(
 ) -> None:
     existing = await repo.get_invitation_by_email(org_id, email, InvitationStatus.pending)
     if existing is not None:
-        raise PendingInvitationExists("invitation already pending")
+        raise InvitationRefused("invitation already pending")
 
 
 async def ensure_not_last_owner(

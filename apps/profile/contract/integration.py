@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.events import UserDeleted
@@ -13,7 +13,7 @@ from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
 from apps.shared.host import Host, MountPhase
-from apps.shared.persistence.repository import count_created_per_day
+from apps.shared.persistence.repository import count_created_per_day, count_where
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
 
 PHASE = MountPhase.FOUNDATION
@@ -80,13 +80,8 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    count = await query.session.scalar(select(func.count()).select_from(Profile)) or 0
-    handles = (
-        await query.session.scalar(
-            select(func.count()).select_from(Profile).where(Profile.handle.isnot(None))
-        )
-        or 0
-    )
+    count = await count_where(query.session, Profile)
+    handles = await count_where(query.session, Profile, Profile.handle.isnot(None))
     # A profile exists 1:1 per account, so the raw total just echoes the Users tile.
     # Lead with what's profile-specific instead: handle adoption (public identity).
     if count:

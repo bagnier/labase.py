@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.issues.domain.models import Issue, IssueStatus, Occurrence
 from apps.issues.domain.service import status_after_occurrence
 from apps.shared import clock
+from apps.shared.persistence.repository import count_where
 
 OPEN_STATUSES = (IssueStatus.new, IssueStatus.unresolved, IssueStatus.regressed)
 
@@ -108,13 +109,8 @@ class IssueRepository:
         return {d.isoformat(): n for d, n in per_day.all()}
 
     async def unresolved_count(self) -> int:
-        return (
-            await self.session.scalar(
-                select(func.count())
-                .select_from(Issue)
-                .where(Issue.status.in_([s.value for s in OPEN_STATUSES]))
-            )
-            or 0
+        return await count_where(
+            self.session, Issue, Issue.status.in_([s.value for s in OPEN_STATUSES])
         )
 
 

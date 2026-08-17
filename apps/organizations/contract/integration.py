@@ -9,7 +9,7 @@ auth's ``UserCreated`` by creating the user's personal org then emitting ``Organ
 import uuid
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.events import UserCreated, UserDeleted
@@ -34,6 +34,7 @@ from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.shared.events.bus import events
 from apps.shared.host import Host, MountPhase, NavItem
+from apps.shared.persistence.repository import count_where
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
 from apps.shared.text import pluralize
 
@@ -101,8 +102,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    orgs = await query.session.scalar(select(func.count()).select_from(Organization)) or 0
-    members = await query.session.scalar(select(func.count()).select_from(Membership)) or 0
+    orgs = await count_where(query.session, Organization)
+    members = await count_where(query.session, Membership)
     if orgs:
         lines = [
             f"{orgs} {pluralize(orgs, 'organisation')}",
@@ -140,9 +141,7 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     if not exists:
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    already_member = await session.scalar(
-        select(func.count()).select_from(Membership).where(Membership.auth_user_id == user_id)
-    )
+    already_member = await count_where(session, Membership, Membership.auth_user_id == user_id)
     if already_member:
         return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
     org = await OrganizationRepository(session).create_with_owner(
@@ -183,17 +182,12 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     org_ids = {m.org_id for m in memberships}
     doomed: set[uuid.UUID] = set()
     for membership in memberships:
-        other_owners = (
-            await session.scalar(
-                select(func.count())
-                .select_from(Membership)
-                .where(
-                    Membership.org_id == membership.org_id,
-                    Membership.role == OrgRole.owner,
-                    Membership.auth_user_id != user_id,
-                )
-            )
-            or 0
+        other_owners = await count_where(
+            session,
+            Membership,
+            Membership.org_id == membership.org_id,
+            Membership.role == OrgRole.owner,
+            Membership.auth_user_id != user_id,
         )
         # Losing the last owner leaves the org unmanageable — reap it whole rather than
         # delete this seat (which the guard would refuse anyway). Otherwise drop the seat.
@@ -206,12 +200,7 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
         org = await session.get(Organization, org_id)
         if org is None:
             continue
-        remaining = (
-            await session.scalar(
-                select(func.count()).select_from(Membership).where(Membership.org_id == org_id)
-            )
-            or 0
-        )
+        remaining = await count_where(session, Membership, Membership.org_id == org_id)
         if org_id in doomed or remaining == 0:
             await session.delete(org)
     await session.flush()

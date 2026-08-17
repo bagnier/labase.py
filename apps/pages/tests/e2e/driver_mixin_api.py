@@ -12,7 +12,6 @@ def _decode(content: str) -> str:
 
 class PagesApiMixin(ApiBase):
     def reset_session(self) -> None:
-        self.response: httpx.Response | None = None
         self._pages_list: list[dict] | None = None
         super().reset_session()
 
@@ -141,19 +140,16 @@ class PagesApiMixin(ApiBase):
         assert text in resp.text, f"'{text}' not found in rendered page"
 
     def assert_rendered_heading(self, text: str) -> None:
-        assert self.response is not None
         assert re.search(rf"<h1[^>]*>{re.escape(text)}</h1>", self.response.text), (
             f"heading '{text}' not found in: {self.response.text}"
         )
 
     def assert_rendered_list_item(self, text: str) -> None:
-        assert self.response is not None
         assert f"<li>{text}</li>" in self.response.text, (
             f"list item '{text}' not found in: {self.response.text}"
         )
 
     def assert_rendered_shown(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 200, (
             f"expected 200, got {self.response.status_code}: {self.response.text}"
         )
@@ -164,7 +160,6 @@ class PagesApiMixin(ApiBase):
         assert f"/pages/{slug}/edit" not in resp.text, "an edit link is shown but should not be"
 
     def assert_visible_to_members(self, slug: str) -> None:
-        assert self.response is not None, "publish failed: no response"
         assert self.response.status_code == 200, f"publish failed: {self.response.status_code}"
         self.assert_page_visibility(slug, "members")
 
@@ -173,7 +168,6 @@ class PagesApiMixin(ApiBase):
         assert resp.status_code == 200, f"visitor view got {resp.status_code}: {resp.text}"
 
     def assert_visitor_forbidden(self) -> None:
-        assert self.response is not None
         assert self.response.status_code in (403, 404), (
             f"expected 403/404, got {self.response.status_code}"
         )
@@ -253,11 +247,9 @@ class PagesApiMixin(ApiBase):
         assert title not in titles, f"'{title}' should not be a nav candidate: {titles}"
 
     def assert_page_nav_shows(self, title: str) -> None:
-        assert self.response is not None
         assert title in self.response.text, f"nav link to '{title}' not found in page"
 
     def assert_page_nav_not_shows(self, title: str) -> None:
-        assert self.response is not None
         content = self.response.text
         nav_start = content.find('aria-label="Page navigation"')
         if nav_start == -1:

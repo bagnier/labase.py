@@ -143,7 +143,6 @@ class TimelineApiMixin(ApiBase):
 
     # ── assertions ───────────────────────────────────────────────────────────
     def _entries(self) -> list[dict]:
-        assert self.response is not None
         return self.response.json()["entries"]
 
     def _events(self) -> list[str]:
@@ -181,7 +180,6 @@ class TimelineApiMixin(ApiBase):
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
     def assert_activity(self, date: str, business: int, http: int, error: int) -> None:
-        assert self.response is not None
         act = self.response.json()["activity"].get(date, {})
         assert act.get("business", 0) == business, f"activity {date} business: {act}"
         assert act.get("http", 0) == http, f"activity {date} http: {act}"

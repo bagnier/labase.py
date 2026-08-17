@@ -1,7 +1,5 @@
 from datetime import UTC, datetime
 
-import httpx
-
 from apps.auth.tests.given_helpers import delete_user_if_exists
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
@@ -9,7 +7,6 @@ from tests.e2e.drivers.api_base import ApiBase
 
 class ProfileApiMixin(ApiBase):
     def reset_session(self) -> None:
-        self.response: httpx.Response | None = None
         self._email_change_requested_at: datetime | None = None
         super().reset_session()
 
@@ -27,7 +24,6 @@ class ProfileApiMixin(ApiBase):
         )
 
     def assert_email_change_pending(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 200, (
             f"expected 200, got {self.response.status_code} {self.response.text}"
         )
@@ -50,7 +46,6 @@ class ProfileApiMixin(ApiBase):
         self.rekey_acting_identity(new_email)
 
     def assert_email_change_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 400, (
             f"expected 400, got {self.response.status_code} {self.response.text}"
         )
@@ -75,7 +70,6 @@ class ProfileApiMixin(ApiBase):
         )
 
     def assert_account_deletion_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
 
     def assert_account_deletion_not_offered(self) -> None:
@@ -103,12 +97,10 @@ class ProfileApiMixin(ApiBase):
         assert image.headers["content-type"].startswith("image/")
 
     def assert_avatar_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
 
     def assert_avatar_not_offered(self) -> None:
         self.upload_avatar("probe.png", b"\x89PNG", "image/png")
-        assert self.response is not None
         assert self.response.status_code == 404, f"expected 404, got {self.response.status_code}"
 
     def assert_handle_not_offered(self) -> None:
@@ -135,7 +127,6 @@ class ProfileApiMixin(ApiBase):
             )
 
     def assert_last_update_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code in (422, 409), (
             f"Expected 422/409, got {self.response.status_code}"
         )

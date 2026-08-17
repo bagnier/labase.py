@@ -54,7 +54,6 @@ class IssuesApiMixin(ApiBase):
         assert self.response.status_code == 200
 
     def assert_issue_detail_shows(self, count: int) -> None:
-        assert self.response is not None
         detail = self.response.json()
         occurrences = detail["occurrences"]
         assert len(occurrences) == count, f"expected {count} occurrences, got {len(occurrences)}"

@@ -25,7 +25,7 @@ def _two_factor_enabled():
     """
     handle = get_settings("users")
     before = handle._raw
-    handle._raw = {**(before or {}), "two_factor_enabled": "true"}
+    handle._raw = {**before, "two_factor_enabled": "true"}
     try:
         yield
     finally:

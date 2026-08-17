@@ -51,7 +51,7 @@ def step_rename_org(driver, new_name):
 @given(parsers.parse("the maximum owned organisations per user is {n:d}"))
 def step_set_max_owned_orgs(n):
     org_settings = get_settings("organizations")
-    org_settings._raw = {**(org_settings._raw or {}), "max_owned_orgs_per_user": str(n)}
+    org_settings._raw = {**org_settings._raw, "max_owned_orgs_per_user": str(n)}
 
 
 @when(parsers.parse('they try to create an organisation named "{name}"'))

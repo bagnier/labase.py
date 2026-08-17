@@ -29,7 +29,7 @@ class OrgBrowserMixin(BrowserBase):
         self._last_accept_response = None
         self._last_error_text = None
         self._invitation_action_failed = False
-        get_settings("organizations")._raw = None  # restore declared defaults between scenarios
+        get_settings("organizations")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _read_org_cards_from_profile(self, page: Page) -> list[dict]:

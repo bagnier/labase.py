@@ -29,7 +29,10 @@ async def test_reload_and_coerce_to_declared_type() -> None:
     # adopts the fresh values, coerced to their declared types on the next read.
     await settings.reload(
         SettingsChanged(
-            target_app="files", values={"max_upload_mb": "1", "uploads_enabled": "false"}
+            target_app="files",
+            key="max_upload_mb",
+            value="1",
+            values={"max_upload_mb": "1", "uploads_enabled": "false"},
         )
     )
 
@@ -41,7 +44,14 @@ async def test_reload_and_coerce_to_declared_type() -> None:
 async def test_ignores_changes_for_other_apps() -> None:
     settings = _settings()
 
-    await settings.reload(SettingsChanged(target_app="todo", values={"max_upload_mb": "1"}))
+    await settings.reload(
+        SettingsChanged(
+            target_app="todo",
+            key="max_upload_mb",
+            value="1",
+            values={"max_upload_mb": "1"},
+        )
+    )
 
     assert settings.max_upload_mb == 25  # declared default, untouched
 
@@ -89,8 +99,8 @@ def test_undeclared_persisted_key_passes_through_as_text() -> None:
     assert settings.stray == "5"  # no SettingDef -> left as the raw string
 
 
-def test_no_declaration_leaves_everything_as_text() -> None:
-    settings = AppSettings(raw={"limit": "42"}, declaration=None)
+def test_declaration_without_defs_leaves_everything_as_text() -> None:
+    settings = AppSettings(raw={"limit": "42"}, declaration=SettingsDeclaration("nothing_declared"))
 
     assert settings.limit == "42"
 

@@ -3,7 +3,7 @@ from datetime import timedelta
 from operator import attrgetter
 from typing import Any, ClassVar, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnExpressionArgument, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared import clock
@@ -32,7 +32,7 @@ class BaseRepository[T: Base]:
         await self.session.flush()
 
     async def count(self) -> int:
-        return await self.session.scalar(select(func.count()).select_from(self.model)) or 0
+        return await count_where(self.session, self.model)
 
 
 class OrgScopedRepository[T: Base](BaseRepository[T]):
@@ -63,12 +63,7 @@ class OrgScopedRepository[T: Base](BaseRepository[T]):
         return cast(list[T], list(await self.session.scalars(query)))
 
     async def count(self) -> int:
-        return (
-            await self.session.scalar(
-                select(func.count()).select_from(self.model).where(self.model.org_id == self.org_id)
-            )
-            or 0
-        )
+        return await count_where(self.session, self.model, self.model.org_id == self.org_id)
 
 
 class PositionedRepository[T: Base](OrgScopedRepository[T]):
@@ -112,9 +107,21 @@ class PositionedRepository[T: Base](OrgScopedRepository[T]):
         await self.session.flush()
 
 
+async def count_where(
+    session: AsyncSession, model: type[Any], *criteria: ColumnExpressionArgument[bool]
+) -> int:
+    """How many `model` rows match `criteria` — all of them when none is given.
+
+    The one place `count(*)`'s result is coalesced. An aggregate always returns exactly one row,
+    so `scalar()`'s `int | None` is SQLAlchemy's stub not knowing that, never a real absence:
+    the `or 0` is the adapter for that imprecision and belongs here alone, not at each call site.
+    """
+    return int(await session.scalar(select(func.count()).select_from(model).where(*criteria)) or 0)
+
+
 async def count_all(session: AsyncSession, model: type[Any]) -> int:
     """Server-wide count for `model`, across every organisation (console overview)."""
-    return int(await session.scalar(select(func.count()).select_from(model)) or 0)
+    return await count_where(session, model)
 
 
 async def count_created_per_day(

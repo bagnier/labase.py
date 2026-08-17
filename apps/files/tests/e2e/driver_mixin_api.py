@@ -26,13 +26,12 @@ class OrgFileApiMixin(ApiBase):
 
     # ── lifecycle hooks (extend the substrate via super()) ─────────────────────
     def reset_session(self) -> None:
-        self.response: httpx.Response | None = None
         self.secondary_handles = {}
         self.share_link_url = None
         self.primary_email = ""
         self.active_org_handle = ""
         self.last_registered_email = None
-        get_settings("files")._raw = None  # restore declared defaults between scenarios
+        get_settings("files")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _cleanup_committed_data(self) -> None:
@@ -135,7 +134,6 @@ class OrgFileApiMixin(ApiBase):
         )
 
     def assert_upload_rejected(self, status: int) -> None:
-        assert self.response is not None
         assert self.response.status_code == status, (
             f"Expected {status}, got {self.response.status_code}: {self.response.text}"
         )
@@ -254,13 +252,11 @@ class OrgFileApiMixin(ApiBase):
         assert filename not in names, f"'{filename}' should be absent but found in: {names}"
 
     def assert_download_succeeds(self) -> None:
-        assert self.response is not None
         assert self.response.status_code in (200, 302), (
             f"Expected 200 or 302, got {self.response.status_code}"
         )
 
     def assert_action_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code in (413, 422), (
             f"Expected 413 or 422, got {self.response.status_code}"
         )

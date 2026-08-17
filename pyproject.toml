@@ -212,7 +212,7 @@ allowed-confusables = ["×", "–"]
 # which is why ruff marks this fix unsafe. Reverted here after `ty` caught it.
 "apps/shared/events/repository.py" = ["C416"]
 "apps/shared/persistence/settings_store.py" = ["C416"]
-"apps/shared/settings.py" = ["C416", "S101"]
+"apps/shared/settings.py" = ["C416"]
 # PIE807 rewrites `lambda: {}` to `dict`, which is right everywhere except as a FastAPI
 # endpoint: the framework reads the handler's signature, and a builtin type has none.
 "apps/shared/tests/test_request_logging.py" = ["PIE807"]

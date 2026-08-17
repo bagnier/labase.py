@@ -6,7 +6,6 @@ answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``Organizat
 
 import uuid
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -18,6 +17,7 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.persistence.repository import count_where
 from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import overview_from_count
 
@@ -65,8 +65,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    decks = await query.session.scalar(select(func.count()).select_from(Deck)) or 0
-    cards = await query.session.scalar(select(func.count()).select_from(Card)) or 0
+    decks = await count_where(query.session, Deck)
+    cards = await count_where(query.session, Card)
     if decks:
         lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:
@@ -77,13 +77,8 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    decks = await query.session.scalar(
-        select(func.count()).select_from(Deck).where(Deck.org_id == query.org_id)
-    )
-    cards = await query.session.scalar(
-        select(func.count()).select_from(Card).where(Card.org_id == query.org_id)
-    )
-    decks, cards = decks or 0, cards or 0
+    decks = await count_where(query.session, Deck, Deck.org_id == query.org_id)
+    cards = await count_where(query.session, Card, Card.org_id == query.org_id)
     if decks:
         lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:

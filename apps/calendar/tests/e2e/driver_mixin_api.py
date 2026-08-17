@@ -1,11 +1,8 @@
-import httpx
-
 from tests.e2e.drivers.api_base import ApiBase
 
 
 class CalendarApiMixin(ApiBase):
     def reset_session(self) -> None:
-        self.response: httpx.Response | None = None
         self._cal_events: list[dict] | None = None
         self._cal_detail: dict | None = None
         super().reset_session()
@@ -120,7 +117,6 @@ class CalendarApiMixin(ApiBase):
         assert title not in titles, f"'{title}' should be absent but found in: {titles}"
 
     def assert_event_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code in (400, 422), (
             f"expected rejection, got {self.response.status_code}: {self.response.text}"
         )

@@ -37,7 +37,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self.last_registered_email = None
         self.secondary_handles = {}
         self._share_link_url = None
-        get_settings("files")._raw = None  # restore declared defaults between scenarios
+        get_settings("files")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _files_url(self, slug: str | None = None) -> str:

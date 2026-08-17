@@ -1,5 +1,3 @@
-import httpx
-
 from apps.auth.tests.given_helpers import user_id_for_email
 from apps.shared.settings import get_settings
 from tests.e2e.drivers import mailbox
@@ -13,8 +11,7 @@ class OrgApiMixin(ApiBase):
 
     def reset_session(self) -> None:
         self._org_list_response = None
-        self.response: httpx.Response | None = None
-        get_settings("organizations")._raw = None  # restore declared defaults between scenarios
+        get_settings("organizations")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _fetch_org_list(self) -> list[dict]:
@@ -242,7 +239,6 @@ class OrgApiMixin(ApiBase):
         )
 
     def assert_redirected_to_org_dashboard(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 200, (
             f"Expected 200 with redirect payload,"
             f" got {self.response.status_code}: {self.response.text}"
@@ -252,7 +248,6 @@ class OrgApiMixin(ApiBase):
         assert "/dashboard" in data["redirect"], f"Expected redirect to dashboard, got: {data}"
 
     def assert_action_fails_with(self, message: str) -> None:
-        assert self.response is not None, "No response stored"
         assert self.response.status_code in (400, 409, 404, 422), (
             f"Expected error status, got {self.response.status_code}: {self.response.text}"
         )
@@ -265,7 +260,6 @@ class OrgApiMixin(ApiBase):
         self.response = self.client().get(f"/{slug}/dashboard")
 
     def assert_org_dashboard_visible(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 200, (
             f"Expected 200 for org dashboard, got {self.response.status_code}"
         )

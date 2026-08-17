@@ -43,7 +43,6 @@ class MetricsApiMixin(ApiBase):
         )
 
     def _route_load(self, label: str) -> dict:
-        assert self.response is not None
         routes = self.response.json()["routes"]
         load = next((r for r in routes if r["label"] == label), None)
         assert load is not None, f"no route {label!r}: {routes}"
@@ -63,7 +62,6 @@ class MetricsApiMixin(ApiBase):
         assert round(load["avg_ms"]) == avg_ms, f"expected avg {avg_ms}, got {load['avg_ms']}"
 
     def assert_load_screen_empty(self) -> None:
-        assert self.response is not None
         body = self.response.json()
         assert body["routes"] == [], f"expected no routes: {body['routes']}"
         assert body["totals"]["requests"] == 0
@@ -74,7 +72,6 @@ class MetricsApiMixin(ApiBase):
         assert self.response.status_code == 200, f"GET /metrics: {self.response.status_code}"
 
     def assert_exposition_reports_console_route(self) -> None:
-        assert self.response is not None
         text = self.response.text
         assert "http_requests_total" in text
         assert 'route="/console"' in text, f"/console not measured:\n{text}"

@@ -100,6 +100,14 @@ daisyUI); markup is semantic and accessible.
 a constrained type (Pydantic `Literal`, a value object) wherever it can be, so the type
 checker rejects a violation before a test has to.
 
+**`| None` means optional.** Not _unknown_ — if no writer can produce a `None`, the annotation is
+slack and every reader pays for it by tracing the writers itself. Not _not yet_ — a value bound
+after construction is a lifecycle, and a lifecycle belongs in the constructor, or behind one
+accessor that narrows it, never in each reader's type. The same rule runs down to the schema: a
+column is `not null` wherever null is unreachable. A compensating `assert x is not None`, a
+defensive `or {}` at every read, or a suppression added to tolerate either, is the sign the
+annotation is wider than the truth.
+
 ## The boilerplate
 
 ### Stack

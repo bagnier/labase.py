@@ -31,14 +31,15 @@ from apps.organizations.contract.events import (
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.organizations.contract.settings_sections import OrgSettingsSectionQuery
 from apps.organizations.domain.exceptions import (
+    InvitationRefused,
     LastOwnerViolation,
     OrgLimitReached,
-    PendingInvitationExists,
 )
 from apps.organizations.domain.models import (
     InvitationRead,
     MemberRead,
     OrganizationWithRoleRead,
+    OrgInvitation,
     OrgRole,
 )
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
@@ -664,6 +665,28 @@ async def remove_member(
 # ── Invitations ─────────────────────────────────────────────────────────────────
 
 
+async def _issue_invitation(
+    repo: OrganizationRepository,
+    org_id: uuid.UUID,
+    email: str,
+    inviter_id: uuid.UUID,
+    max_invites: int,
+) -> OrgInvitation:
+    """The invitation, or :class:`InvitationRefused` carrying why. One outcome, so the caller
+    never holds a missing invitation and a refusal side by side and has to know only one is set."""
+    existing_user_id = await find_user_id_by_email(email)
+    if existing_user_id is not None and await repo.get_membership(org_id, existing_user_id):
+        raise InvitationRefused("already a member")
+
+    if max_invites >= 0 and len(await repo.list_invitations(org_id)) >= max_invites:
+        raise InvitationRefused(f"invitation limit reached ({max_invites} pending)")
+
+    await ensure_no_pending_invitation(repo, org_id, email)
+    return await repo.create_invitation(
+        org_id=org_id, email=email, role=OrgRole.member, invited_by=inviter_id
+    )
+
+
 @org_router.post("/invitations", response_class=HTMLResponse)
 async def create_invitation(
     request: Request,
@@ -677,59 +700,36 @@ async def create_invitation(
     # Canonicalise once: the accept RPC matches case-insensitively (lower()), so without this
     # `Foo@x.com` and `foo@x.com` slip past the pending-dedup and both stay acceptable.
     email = str(body.get("email", "")).strip().lower()
-    error: str | None = None
-    invitation = None
 
-    existing_user_id = await find_user_id_by_email(email)
-    if existing_user_id is not None and await repo.get_membership(org_id, existing_user_id):
-        error = "already a member"
-
-    max_invites = org_settings.max_invitations_per_org
-    if error is None and max_invites >= 0:
-        pending = len(await repo.list_invitations(org_id))
-        if pending >= max_invites:
-            error = f"invitation limit reached ({max_invites} pending)"
-
-    if error is None:
-        try:
-            await ensure_no_pending_invitation(repo, org_id, email)
-        except PendingInvitationExists as exc:
-            error = str(exc)
-        else:
-            invitation = await repo.create_invitation(
-                org_id=org_id,
-                email=email,
-                role=OrgRole.member,
-                invited_by=current_user.id,
-            )
-            await events.emit(
-                InvitationSent(user_id=current_user.id, org_id=org_id, entity_name=email),
-                repo.session,
-            )
-
-    link = ""
-    if invitation is not None:
-        base_url = str(request.base_url).rstrip("/")
-        link = f"{base_url}/invitations/{invitation.token}"
-        inviting_org = await repo.get(org_id)
-        org_name = inviting_org.name if inviting_org else ""
-        # Outbox: the mail task commits (or rolls back) with the invitation itself.
-        await enqueue_email(repo.session, invitation_email(to=email, org_name=org_name, link=link))
-
-    if wants_json(request):
-        if error is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error)
-        assert invitation is not None
-        return JSONResponse(
-            InvitationRead.model_validate(invitation).model_dump(mode="json"),
-            status_code=status.HTTP_201_CREATED,
+    try:
+        invitation = await _issue_invitation(
+            repo, org_id, email, current_user.id, org_settings.max_invitations_per_org
         )
-
-    if invitation is None or error is not None:
+    except InvitationRefused as refusal:
+        if wants_json(request):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(refusal)
+            ) from refusal
         return templates.TemplateResponse(
             request,
             "organizations/_invite_result.html",
-            {"email": email, "link": link, "error": error},
+            {"email": email, "link": "", "error": str(refusal)},
+        )
+
+    await events.emit(
+        InvitationSent(user_id=current_user.id, org_id=org_id, entity_name=email), repo.session
+    )
+    base_url = str(request.base_url).rstrip("/")
+    link = f"{base_url}/invitations/{invitation.token}"
+    inviting_org = await repo.get(org_id)
+    org_name = inviting_org.name if inviting_org else ""
+    # Outbox: the mail task commits (or rolls back) with the invitation itself.
+    await enqueue_email(repo.session, invitation_email(to=email, org_name=org_name, link=link))
+
+    if wants_json(request):
+        return JSONResponse(
+            InvitationRead.model_validate(invitation).model_dump(mode="json"),
+            status_code=status.HTTP_201_CREATED,
         )
 
     # Success: return invite result + OOB swap to refresh the pending invitations list.

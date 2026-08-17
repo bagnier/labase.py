@@ -41,17 +41,33 @@ class ApiBase:
         self._test_auth_emails: list[str] = []
         self._clients: dict[str, httpx.Client] = {}
         self._acting_email: str = VISITOR
-        self.response: httpx.Response | None = None
+        self._response: httpx.Response | None = None
+
+    @property
+    def response(self) -> httpx.Response:
+        """The last response this driver captured.
+
+        "No request has been made yet" is a lifecycle of the driver, not a value a step can
+        meaningfully branch on: a step that reads a response before sending one is a broken
+        scenario. So the state stays in ``_response`` — private, and the only ``| None`` here —
+        while readers get a plain ``Response`` and one raise in one place instead of an
+        ``assert ... is not None`` at each of them. A step that genuinely asks *whether* a request
+        happened reads ``_response`` directly."""
+        if self._response is None:
+            raise AssertionError("No response stored — the scenario asserted before requesting")
+        return self._response
+
+    @response.setter
+    def response(self, response: httpx.Response) -> None:
+        self._response = response
 
     # ── shared access-control assertions (phrases live in tests/e2e/steps_common) ─
     def assert_forbidden(self) -> None:
-        assert self.response is not None, "No response stored — cannot check forbidden"
         assert self.response.status_code == 403, (
             f"Expected 403, got {self.response.status_code}: {self.response.text}"
         )
 
     def assert_not_found(self) -> None:
-        assert self.response is not None, "No response stored — cannot check not-found"
         assert self.response.status_code == 404, (
             f"Expected 404, got {self.response.status_code}: {self.response.text}"
         )
@@ -86,6 +102,7 @@ class ApiBase:
     def reset_session(self) -> None:
         self._close_clients()
         self._acting_email = VISITOR
+        self._response = None  # back to "no request made"; the base owns the field, so it resets it
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:

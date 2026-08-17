@@ -185,8 +185,8 @@ class SettingsChanged(BusinessEvent):
     # The app whose setting changed — distinct from the class-level `app_name`, which says which
     # app owns this *kind*. This event is owned by "settings" and speaks about another app.
     target_app: str
-    key: str | None = None
-    value: str | None = None
+    key: str
+    value: str
     values: dict[str, str] = field(default_factory=dict)
 
 
@@ -195,58 +195,52 @@ class AppSettings:
     its declared-typed value (``str``/``int``/``bool``); coercion is the console's job, so apps
     never do it.
 
-    Holds a ref to its :class:`SettingsDeclaration` for the declared types. Live handles are
-    created by ``host.register_settings(declaration)`` — which seeds values, does the initial
-    read, registers the handle in the process registry (:func:`get_settings`) and subscribes it
-    to ``SettingsChanged`` — all in one call from ``mount()``. Direct construction (no I/O)
-    remains for tests.
+    A handle is never half-built: both the declaration and the values are required at
+    construction, so no reader has to ask whether binding has happened yet. Live handles come from
+    ``host.register_settings(declaration)`` — which seeds values, does the initial read, registers
+    the handle in the process registry (:func:`get_settings`) and subscribes it to
+    ``SettingsChanged``, all in one call from ``mount()``. Direct construction (no I/O) remains for
+    tests; an empty ``raw`` means "nothing persisted yet", and declared defaults answer every read.
     """
 
-    def __init__(
-        self,
-        raw: dict[str, str] | None = None,
-        declaration: SettingsDeclaration | None = None,
-    ) -> None:
-        self._raw_values = raw  # None until first read; a dict once loaded or after a change
-        self._declaration = declaration  # bound explicitly by Host.register_settings
+    def __init__(self, raw: dict[str, str], declaration: SettingsDeclaration) -> None:
+        self._raw_values = raw
+        self._declaration = declaration
         self._typed: dict[str, SettingValue] | None = None  # coercion cache; None = stale
 
     @property
-    def declaration(self) -> SettingsDeclaration | None:
+    def declaration(self) -> SettingsDeclaration:
         return self._declaration
 
     @declaration.setter
-    def declaration(self, declaration: SettingsDeclaration | None) -> None:
+    def declaration(self, declaration: SettingsDeclaration) -> None:
         self._declaration = declaration
         self._typed = None
 
     @property
     def _defs(self) -> list[SettingDef]:
-        """The declared settings, or ``[]`` when no declaration is bound yet (tests)."""
-        return self._declaration.defs if self._declaration is not None else []
+        return self._declaration.defs
 
     @property
-    def _raw(self) -> dict[str, str] | None:
+    def _raw(self) -> dict[str, str]:
         return self._raw_values
 
     @_raw.setter
-    def _raw(self, raw: dict[str, str] | None) -> None:
+    def _raw(self, raw: dict[str, str]) -> None:
         # Every write path (read/reload, tests poking values in) drops the coercion cache.
         self._raw_values = raw
         self._typed = None
 
     def read(self) -> None:
-        """Read current values from the DB — call once at ``mount``, after ``declaration`` is
-        bound (sync, before the serving loop; :func:`read_values` drives :func:`asyncio.run`,
-        which can't run inside it)."""
-        assert self._declaration is not None, "read() requires declaration to be bound first"
+        """Read current values from the DB — call once at ``mount`` (sync, before the serving
+        loop; :func:`read_values` drives :func:`asyncio.run`, which can't run inside it)."""
         self._raw = read_values(self._declaration.app_name)
 
     @property
     def values(self) -> dict[str, SettingValue]:
         # Coercion runs once per fresh value set, not on every attribute access.
         if self._typed is None:
-            self._typed = _typed(self._defs, self._raw or {})
+            self._typed = _typed(self._defs, self._raw)
         return self._typed
 
     def view(self) -> SettingsView:
@@ -259,7 +253,7 @@ class AppSettings:
         Stored values are already normalised text (``validate`` normalises on write; defaults are
         declared as text), so no coercion is needed — this is the same shape the console settings
         page iterates, exposed on the settings model so callers never hand-roll it."""
-        raw = self._raw or {}
+        raw = self._raw
         return [
             SettingRow(key=d.key, type=d.type, label=d.label, value=str(raw.get(d.key, d.default)))
             for d in self._defs
@@ -272,12 +266,12 @@ class AppSettings:
 
     async def reload(self, event: SettingsChanged) -> None:
         """Console event handler: adopt the fresh values when they're for this app."""
-        if self._declaration is not None and event.target_app == self._declaration.app_name:
+        if event.target_app == self._declaration.app_name:
             self._raw = event.values
 
     def merged_for_org(self, overrides: dict[str, str]) -> SettingsView:
         """Server-wide values overlaid with per-org overrides, coerced to declared types."""
-        return SettingsView(_typed(self._defs, {**(self._raw or {}), **overrides}))
+        return SettingsView(_typed(self._defs, {**self._raw, **overrides}))
 
     async def for_org(self, session: AsyncSession, org_id: uuid.UUID) -> SettingsView:
         """This org's effective settings — the server value unless the console overrode it.
@@ -286,7 +280,6 @@ class AppSettings:
         members read their own org's overrides, so the regular request session works
         and no cache needs invalidating across instances.
         """
-        assert self.declaration is not None, "for_org() requires declaration to be bound first"
         return self.merged_for_org(await org_values(session, self.declaration.app_name, org_id))
 
 
@@ -327,7 +320,7 @@ def bind_settings(declaration: SettingsDeclaration) -> AppSettings:
     :meth:`Host.register_settings` does that doesn't touch ``host`` itself (indexing into
     ``host.settings_handles``, subscribing to ``host.events``)."""
     seed_values(declaration.app_name, {d.key: d.default for d in declaration.defs})
-    settings = _registry.setdefault(declaration.app_name, AppSettings())
-    settings.declaration = declaration
+    settings = _registry.setdefault(declaration.app_name, AppSettings({}, declaration))
+    settings.declaration = declaration  # re-mount (tests build fresh Hosts) rebinds the handle
     settings.read()
     return settings

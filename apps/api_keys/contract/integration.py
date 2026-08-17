@@ -8,8 +8,6 @@ authenticated, org-pinned principal. Deleting this context removes the feature w
 touching auth.
 """
 
-from sqlalchemy import func, select
-
 from apps.api_keys.contract.events import ApiKeyIssued, ApiKeyRevoked
 from apps.api_keys.domain.models import ApiKey, ApiKeyRead
 from apps.api_keys.domain.service import hash_token
@@ -25,6 +23,7 @@ from apps.organizations.contract.settings_sections import (
     OrgSettingsSectionQuery,
 )
 from apps.shared.host import AppManifest, Host, MountPhase
+from apps.shared.persistence.repository import count_where
 from apps.shared.settings import SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
@@ -89,13 +88,8 @@ async def _resolve(query: ApiKeyQuery) -> AuthenticatedUser | None:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    total = await query.session.scalar(select(func.count()).select_from(ApiKey)) or 0
-    active = (
-        await query.session.scalar(
-            select(func.count()).select_from(ApiKey).where(ApiKey.revoked_at.is_(None))
-        )
-        or 0
-    )
+    total = await count_where(query.session, ApiKey)
+    active = await count_where(query.session, ApiKey, ApiKey.revoked_at.is_(None))
     lines = [f"{active} active", f"{total - active} revoked"] if total else ["No API keys yet"]
     return ConsoleOverview(
         key="api_keys", title="API keys", icon="key", section="identity", data={"lines": lines}

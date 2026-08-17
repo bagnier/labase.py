@@ -15,7 +15,6 @@ _USER_PASSWORD = "Secret1!"
 
 class ConsoleApiMixin(ApiBase):
     def reset_session(self) -> None:
-        self.response: httpx.Response | None = None
         self.settings_response: httpx.Response | None = None
         self._admin_email: str | None = None
         super().reset_session()
@@ -69,7 +68,6 @@ class ConsoleApiMixin(ApiBase):
 
     # ── overviews ──────────────────────────────────────────────────────────────
     def _console_overview(self, key: str) -> dict:
-        assert self.response is not None
         assert self.response.status_code == 200, (
             f"GET /console: {self.response.status_code} {self.response.text}"
         )
@@ -206,7 +204,6 @@ class ConsoleApiMixin(ApiBase):
         )
 
     def assert_admin_add_error(self, email: str) -> None:
-        assert self.response is not None
         assert self.response.status_code == 404, (
             f"Expected 404 adding {email!r}, got {self.response.status_code}: {self.response.text}"
         )

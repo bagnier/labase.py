@@ -1,8 +1,6 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import httpx
-
 from apps.auth.tests.given_helpers import (
     create_unconfirmed_user,
     delete_user_if_exists,
@@ -17,7 +15,6 @@ class AuthApiMixin(ApiBase):
     last_registered_email: str | None
 
     def reset_session(self) -> None:
-        self.response: httpx.Response | None = None
         self.last_registered_email = None
         self._reset_email: str | None = None
         self._reset_requested_at: datetime | None = None
@@ -36,7 +33,6 @@ class AuthApiMixin(ApiBase):
         assert contains in resp.text, f"'{contains}' not found in response"
 
     def assert_page_loaded(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 200, f"Expected 200, got {self.response.status_code}"
 
     def _store_active_slug(self) -> None:
@@ -107,7 +103,6 @@ class AuthApiMixin(ApiBase):
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
     def assert_redirected_to_login(self) -> None:
-        assert self.response is not None
         hx_redirect = self.response.headers.get("hx-redirect", "")
         is_hx = "/auth/login" in hx_redirect
         is_http = self.response.status_code in (301, 302, 303, 307, 308)
@@ -118,7 +113,6 @@ class AuthApiMixin(ApiBase):
         )
 
     def assert_login_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 401, f"Expected 401, got {self.response.status_code}"
 
     # ── unconfirmed email ──────────────────────────────────────────────────────
@@ -129,7 +123,6 @@ class AuthApiMixin(ApiBase):
 
     def assert_login_rejected_with(self, message: str) -> None:
         self.assert_login_rejected()
-        assert self.response is not None
         detail = self.response.json().get("detail", "")
         assert message in detail, f"{message!r} not in {detail!r}"
 
@@ -195,11 +188,9 @@ class AuthApiMixin(ApiBase):
         )
 
     def assert_twofa_enabled(self) -> None:
-        assert self.response is not None
         assert "Two-factor enabled" in self.response.json().get("message", "")
 
     def assert_mfa_challenge(self) -> None:
-        assert self.response is not None
         body = self.response.json()
         assert body.get("mfa_required") is True, f"no mfa challenge: {body}"
         self._mfa_challenge = body
@@ -207,7 +198,7 @@ class AuthApiMixin(ApiBase):
     def enter_totp_code(self, code: str | None) -> None:
         import pyotp
 
-        if self._mfa_challenge is None and self.response is not None:
+        if self._mfa_challenge is None and self._response is not None:
             body = self.response.json()
             if body.get("mfa_required"):
                 self._mfa_challenge = body
@@ -226,7 +217,6 @@ class AuthApiMixin(ApiBase):
         )
 
     def assert_totp_rejected(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 401, f"expected 401, got {self.response.status_code}"
 
     def assert_twofa_not_offered(self) -> None:
@@ -255,7 +245,6 @@ class AuthApiMixin(ApiBase):
         )
 
     def assert_oauth_authorize_redirect(self, provider: str) -> None:
-        assert self.response is not None
         assert self.response.status_code == 303, f"expected 303, got {self.response.status_code}"
         location = self.response.headers.get("location", "")
         assert "/auth/v1/authorize" in location, f"unexpected redirect: {location}"
@@ -322,7 +311,6 @@ class AuthApiMixin(ApiBase):
 
     def _accounts(self) -> list[dict]:
         self.open_accounts_screen()
-        assert self.response is not None
         return self.response.json()["accounts"]
 
     def assert_account_listed(self, email: str) -> None:
@@ -343,7 +331,6 @@ class AuthApiMixin(ApiBase):
         )
 
     def _filtered_emails(self) -> list[str]:
-        assert self.response is not None
         return [a["email"] for a in self.response.json()["accounts"]]
 
     def assert_account_in_filtered_list(self, email: str) -> None:
@@ -373,7 +360,6 @@ class AuthApiMixin(ApiBase):
         self.try_open_accounts_screen()
 
     def assert_redirected_to_dashboard(self) -> None:
-        assert self.response is not None
         is_303 = self.response.status_code == 303 and "/profile" in self.response.headers.get(
             "location", ""
         )
@@ -386,7 +372,6 @@ class AuthApiMixin(ApiBase):
         )
 
     def assert_registration_successful(self) -> None:
-        assert self.response is not None
         is_303 = self.response.status_code == 303 and "/auth/login" in self.response.headers.get(
             "location", ""
         )
@@ -402,12 +387,10 @@ class AuthApiMixin(ApiBase):
         )
 
     def assert_registration_failed(self) -> None:
-        assert self.response is not None
         assert self.response.status_code == 400, f"Expected 400, got {self.response.status_code}"
 
     def assert_registration_failed_with_message(self, message: str) -> None:
         self.assert_registration_failed()
-        assert self.response is not None
         ct = self.response.headers.get("content-type", "")
         is_json_resp = ct.startswith("application/json")
         body = self.response.json().get("detail", "") if is_json_resp else self.response.text
@@ -455,6 +438,5 @@ class AuthApiMixin(ApiBase):
         self.response = self.client().post("/auth/impersonate", data={"email": email})
 
     def assert_impersonation_refused(self) -> None:
-        assert self.response is not None
         # Non-admins get the console treatment: a plain 404, never a confirmation.
         assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"
