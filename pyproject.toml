@@ -189,9 +189,8 @@ allowed-confusables = ["×", "–"]
 "apps/*/contract/*.py" = ["ARG001"]
 # SQLAlchemy's `@declared_attr` hands the class, so `cls` is the correct first argument.
 "apps/shared/persistence/base.py" = ["N805"]
-# Both interpolate module-level literals into SQL, never runtime input: `TRAIL_COLUMNS` is
-# built from literal tuples above it, and `_VISIBILITY_TIMEOUT_SECONDS` is `300`.
-"apps/shared/events/repository/_delivery.py" = ["S608"]
+# The claim query interpolates a module-level literal into SQL, never runtime input:
+# `_VISIBILITY_TIMEOUT_SECONDS` is `300`. Everything else there is a bound parameter.
 "apps/shared/queue.py" = ["S608"]
 # `scripts/` are standalone dev CLIs: stdout *is* their contract, where the app speaks
 # through structlog. They shell out to `docker`/`supabase` by name, hold the local-only
@@ -211,7 +210,7 @@ allowed-confusables = ["×", "–"]
 # A SQLAlchemy `Row` is not statically a key/value pair: `dict(rows)` runs, but `ty` rejects it
 # (no matching `dict.__init__` overload). The explicit comprehension unpacks and type-checks —
 # which is why ruff marks this fix unsafe. Reverted here after `ty` caught it.
-"apps/shared/events/repository/_read.py" = ["C416"]
+"apps/shared/events/repository.py" = ["C416"]
 "apps/shared/persistence/settings_store.py" = ["C416"]
 "apps/shared/settings.py" = ["C416", "S101"]
 # PIE807 rewrites `lambda: {}` to `dict`, which is right everywhere except as a FastAPI

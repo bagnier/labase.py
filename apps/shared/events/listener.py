@@ -113,7 +113,7 @@ class EventListener:
         (a field added to the event class after the fact was written, a hand-inserted payload).
         The cursor advances either way: it is a high-water mark, so leaving it on a record we can
         never process would replay that same fact forever and freeze propagation for good."""
-        event = self._reconstruct_safely(record)
+        event = self._reconstruct(record)
         if event is not None:
             for handler in self._wiring.spread_handlers_for(event):
                 try:
@@ -122,21 +122,20 @@ class EventListener:
                     log.warning("listener.spread_handler_failed", kind=record.kind)
         self._spread_cursor = record.id
 
-    def _reconstruct(self, record: BusinessEventRecord) -> BusinessEvent | None:
-        """Rebuild the typed event from a business_events record (its fields + scoping columns)."""
+    @staticmethod
+    def _reconstruct(record: BusinessEventRecord) -> BusinessEvent | None:
+        """Rebuild the typed event from a business_events record (its fields + scoping columns), or
+        ``None`` when it cannot be — the caller skips such a record rather than stalling on it.
+
+        A payload that no longer fits its event class is not skipped silently: a stored fact that
+        stopped rebuilding (a field made required after the fact was written, a hand-inserted
+        payload) is a defect, so it is logged at ``exception`` level — the capture seam folds it
+        into a console Issue — not swallowed as a mere warning."""
         event_type = catalog.class_for(record.kind)
         if event_type is None:
             return None
-        return event_type.from_payload(task_payload(record))
-
-    def _reconstruct_safely(self, record: BusinessEventRecord) -> BusinessEvent | None:
-        """:meth:`_reconstruct`, but a payload that no longer fits its event class yields ``None``
-        instead of raising — the caller skips the record rather than stalling on it. The skip is
-        not silent: a stored fact that no longer rebuilds (a field made required after the fact was
-        written, a hand-inserted payload) is a defect, so it is logged at ``exception`` level — the
-        capture seam folds it into a console Issue — not swallowed as a mere warning."""
         try:
-            return self._reconstruct(record)
+            return event_type.from_payload(task_payload(record))
         except Exception:
             log.exception("listener.reconstruct_failed", kind=record.kind, event_id=str(record.id))
             return None

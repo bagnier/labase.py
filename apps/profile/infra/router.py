@@ -57,15 +57,15 @@ from apps.profile.domain.models import ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.events.bus import events
-from apps.shared.events.models import BusinessEventRecord
-from apps.shared.events.repository import EventRepository
-from apps.shared.events.timeline import (
+from apps.shared.events.activity import (
     activity_entries,
     activity_stats,
     group_activity_by_day,
     heatmap_calendar,
 )
+from apps.shared.events.bus import events
+from apps.shared.events.models import BusinessEventRecord
+from apps.shared.events.repository import EventRepository
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context

@@ -11,12 +11,12 @@ a typed event as a record on the session the caller names). Durable async consum
 ``bus.on`` and are delivered off the journal by the ``listener`` after commit, the one place the two
 halves meet: the catalog says what a record is, the wiring says who wants it. Reading the journal
 back for a surface — the humanized activity feed and contribution calendar — is pure presentation,
-in ``timeline``.
+in ``activity`` (not to be confused with ``apps.timeline``, the console's own read view).
 
 This ``__init__`` re-exports only the lightweight **vocabulary** so declaration sites can keep
 ``from apps.shared.events import BusinessEvent`` without dragging in SQLAlchemy or the DB engine —
 importing a type must stay cheap. Everything else is reached at its submodule path
-(``apps.shared.events.bus`` / ``.catalog`` / ``.wiring`` / ``.repository`` / ``.timeline`` /
+(``apps.shared.events.bus`` / ``.catalog`` / ``.wiring`` / ``.repository`` / ``.activity`` /
 ``.listener``).
 """
 

@@ -1,8 +1,8 @@
-"""Business-events timeline — the feed projection is rich and never leaks the raw kind/payload."""
+"""The activity projection — the feed is rich and never leaks the raw kind/payload."""
 
 from apps.shared import clock
+from apps.shared.events.activity import activity_entries
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.events.timeline import activity_entries
 
 
 def _record(

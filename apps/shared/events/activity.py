@@ -1,8 +1,13 @@
-"""The business-events timeline projection — pure presentation over journal records.
+"""The activity projection — pure presentation over journal records.
 
-The repository reads the journal; this module humanizes those records for the surfaces that show
-history (profile / dashboard feed, contribution calendar). Every function is pure — no session, no
-I/O — and the raw ``kind``/payload never reach a member; only projected, safe fields do.
+The repository reads the journal; this module humanizes those records for the two surfaces that
+show a member their own history: the profile / dashboard feed, and the contribution calendar.
+Every function is pure — no session, no I/O — and the raw ``kind``/payload never reach a member;
+only projected, safe fields do.
+
+Not :mod:`apps.timeline`, which is the console's unified read view over the firehose, the journal
+*and* issue occurrences. This one owns no screen, reads one source, and knows nothing of the bus,
+the catalog, the wiring or the listener — only :class:`BusinessEventRecord`.
 """
 
 from collections.abc import Callable
@@ -168,34 +173,35 @@ def activity_stats(counts: dict[date, int], *, now: datetime) -> ActivityStats:
     )
 
 
-def heatmap_calendar(
-    counts: dict[date, int],
-    *,
-    now: datetime,
-    since: date | datetime | None = None,
-    min_weeks: int = 5,
-    max_weeks: int = 53,
-) -> HeatmapCalendar:
-    """A GitHub-style contribution grid, fully computed for the macro to iterate.
+def _calendar_window(
+    today: date, since: date | None, min_weeks: int, max_weeks: int
+) -> tuple[list[date], str]:
+    """The Monday-starting week columns to render, and the label naming that range.
 
-    Intensity is a 0–4 ``level`` from quartiles of the non-zero days, so the ramp adapts to each
-    user instead of a fixed scale that washes out a light one. The window runs from the join week
-    (``since``) to now, floored at ``min_weeks`` (a fresh account isn't a lone column) and capped at
-    ``max_weeks`` (so a new account never shows a mostly-empty year)."""
-    today = now.date()
+    The window runs from the join week (``since``) to now, floored at ``min_weeks`` (a fresh
+    account isn't a lone column) and capped at ``max_weeks`` (so a new account never shows a
+    mostly-empty year). A window that hit the cap can no longer claim the join date, so it says
+    "last 12 months" instead."""
     end_monday = today - timedelta(days=today.weekday())
-    since_date = since.date() if isinstance(since, datetime) else since
-    if since_date is not None:
-        since_monday = since_date - timedelta(days=since_date.weekday())
+    if since is not None:
+        since_monday = since - timedelta(days=since.weekday())
         weeks_needed = (end_monday - since_monday).days // 7 + 1
     else:
         weeks_needed = max_weeks
     weeks = max(min_weeks, min(max_weeks, weeks_needed))
-    if since_date is None or weeks_needed > max_weeks:
-        range_label = "Last 12 months"
-    else:
-        range_label = f"Since {since_date.strftime('%b %Y')}"
+    label = (
+        "Last 12 months"
+        if since is None or weeks_needed > max_weeks
+        else f"Since {since.strftime('%b %Y')}"
+    )
     start = end_monday - timedelta(weeks=weeks - 1)
+    return [start + timedelta(weeks=w) for w in range(weeks)], label
+
+
+def _intensity(counts: dict[date, int]) -> Callable[[int], int]:
+    """The 0–4 ``level`` ramp, built from quartiles of the non-zero days — so it adapts to each
+    user instead of a fixed scale that washes out a light one. With no activity at all, every
+    non-zero day is a plain level 1."""
     nonzero = sorted(n for n in counts.values() if n)
     thresholds = (
         [nonzero[min(len(nonzero) - 1, int(len(nonzero) * f))] for f in (0.25, 0.5, 0.75)]
@@ -211,39 +217,58 @@ def heatmap_calendar(
         t1, t2, t3 = thresholds
         return 1 if n <= t1 else 2 if n <= t2 else 3 if n <= t3 else 4
 
-    week_starts = [start + timedelta(weeks=w) for w in range(weeks)]
-    weeks_out: list[HeatmapWeek] = []
-    for week_start in week_starts:
-        days: list[HeatmapDay] = []
-        for i in range(7):
-            d = week_start + timedelta(days=i)
-            if d > today:
-                days.append(HeatmapDay(empty=True))
-                continue
-            n = counts.get(d, 0)
-            moment = d.strftime("%b %-d, %Y")
-            title = (
-                f"{n} action{'s' if n != 1 else ''} on {moment}"
-                if n
-                else f"No activity on {moment}"
-            )
-            days.append(HeatmapDay(level=level(n), title=title))
-        weeks_out.append(HeatmapWeek(days=days))
+    return level
 
-    # Month headers as colspan segments (consecutive week-columns sharing a month), so the label
-    # never widens a cell. A segment narrower than 3 weeks stays blank to avoid clutter.
-    month_headers: list[MonthHeader] = []
+
+def _week_column(
+    week_start: date, today: date, counts: dict[date, int], level: Callable[[int], int]
+) -> HeatmapWeek:
+    """One column of the grid, Mon→Sun (``week_start`` is a Monday). A day past today is a blank
+    filler cell, not a zero-activity one."""
+    days: list[HeatmapDay] = []
+    for offset in range(7):
+        d = week_start + timedelta(days=offset)
+        if d > today:
+            days.append(HeatmapDay(empty=True))
+            continue
+        n = counts.get(d, 0)
+        moment = d.strftime("%b %-d, %Y")
+        title = (
+            f"{n} action{'s' if n != 1 else ''} on {moment}" if n else f"No activity on {moment}"
+        )
+        days.append(HeatmapDay(level=level(n), title=title))
+    return HeatmapWeek(days=days)
+
+
+def _month_headers(week_starts: list[date]) -> list[MonthHeader]:
+    """Colspan segments over the consecutive week-columns sharing a month, so a label never widens
+    a cell. A segment narrower than 3 weeks stays blank to avoid clutter."""
+    headers: list[MonthHeader] = []
     for _key, run in groupby(week_starts, key=lambda ws: (ws.year, ws.month)):
         cols = list(run)
         span = len(cols)
-        month_headers.append(
-            MonthHeader(label=cols[0].strftime("%b") if span >= 3 else "", span=span)
-        )
+        headers.append(MonthHeader(label=cols[0].strftime("%b") if span >= 3 else "", span=span))
+    return headers
 
-    # A column runs Mon→Sun (week_start is a Monday); every weekday labelled.
+
+def heatmap_calendar(
+    counts: dict[date, int],
+    *,
+    now: datetime,
+    since: date | datetime | None = None,
+    min_weeks: int = 5,
+    max_weeks: int = 53,
+) -> HeatmapCalendar:
+    """A GitHub-style contribution grid, fully computed for the macro to iterate — the window
+    (:func:`_calendar_window`), the intensity ramp (:func:`_intensity`) and the month segments
+    (:func:`_month_headers`) each decided on their own."""
+    today = now.date()
+    since_date = since.date() if isinstance(since, datetime) else since
+    week_starts, range_label = _calendar_window(today, since_date, min_weeks, max_weeks)
+    level = _intensity(counts)
     return HeatmapCalendar(
-        weeks=weeks_out,
+        weeks=[_week_column(ws, today, counts, level) for ws in week_starts],
         weekday_labels=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        month_headers=month_headers,
+        month_headers=_month_headers(week_starts),
         range_label=range_label,
     )

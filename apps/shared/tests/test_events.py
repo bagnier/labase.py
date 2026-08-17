@@ -24,11 +24,12 @@ from apps.shared.events.bus import EventBus
 from apps.shared.events.catalog import catalog
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import (
+    _RECORD,
     LIFTED_COLUMNS,
+    _append_record,
     event_to_record,
     task_payload,
 )
-from apps.shared.events.repository._write import _RECORD, _append_record
 from apps.shared.events.types import _is_secret_field_name
 from apps.shared.events.wiring import EventWiring
 

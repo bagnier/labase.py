@@ -1,7 +1,7 @@
 {# The day-grouped activity feed as a centered vertical timeline — content · node · time
    (e.g. "Ticked Write the changelog   ●   14:32"). Takes the day sections
-   `group_activity_by_day()` returns; each entry is an `activity_entries` dict
-   {who, label, detail, app, icon, level, ts, href}. An entry with an `href` links the whole
+   `group_activity_by_day()` returns; each entry is an `ActivityEntry`, read by attribute
+   (who, label, detail, app, icon, ts, href). An entry with an `href` links the whole
    content block to the entity it concerns (todo, file, page, calendar event). The rail
    (`.activity-timeline`) is a single centered spine. The day header carries the date, so each
    entry shows the clock time. #}

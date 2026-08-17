@@ -27,7 +27,7 @@ registration and emit share one wiring.
 """
 
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,10 +38,11 @@ from apps.shared.events.wiring import EventWiring
 from apps.shared.events.wiring import wiring as process_wiring
 from apps.shared.queue import register_task_handler
 
-E = TypeVar("E", bound=BusinessEvent)
-
-# Durable consumer signature: the reconstructed, typed event on the worker's session.
-AsyncEventHandler = Callable[[AsyncSession, Any], Awaitable[None]]
+# Durable consumer signature: the reconstructed, typed event on the worker's session. Generic over
+# that event, and deliberately so — subscribing one fact with a handler written for another is
+# otherwise found only when the reaction runs off the journal, on an ``AttributeError`` in
+# production. Here ``ty`` and ``pyright`` reject it at the mount that registers it.
+type AsyncEventHandler[E: BusinessEvent] = Callable[[AsyncSession, E], Awaitable[None]]
 
 
 def _delivery_context(payload: dict[str, Any]) -> dict[str, str]:
@@ -90,10 +91,10 @@ class EventBus:
                 f"{type(event).__name__} ({event.kind!r}) is emitted but declared by no app"
             )
 
-    def on(
+    def on[E: BusinessEvent](
         self,
-        event_type: type[BusinessEvent],
-        handler: AsyncEventHandler,
+        event_type: type[E],
+        handler: AsyncEventHandler[E],
         *,
         name: str,
         app: str,
@@ -104,13 +105,16 @@ class EventBus:
         the listener off the journal after commit (one queued task per consumer, retry/park).
         ``name`` disambiguates consumers of the same event; ``app`` is the listening app (console's
         reaction graph); ``as_actor`` runs under the actor's RLS claims (else admin); ``idempotent``
-        guards re-delivery via the ``consumed`` ledger."""
+        guards re-delivery via the ``consumed`` ledger. ``handler`` is checked against the fact it
+        subscribes: a consumer written for another event does not compile."""
         topic = self._wiring.add_consumer(event_type, name, as_actor=as_actor, app=app)
         register_task_handler(
             topic, self._make_wrapper(event_type, handler, topic, idempotent=idempotent)
         )
 
-    def spread(self, event_type: type[E], handler: Callable[[E], Awaitable[object]]) -> None:
+    def spread[E: BusinessEvent](
+        self, event_type: type[E], handler: Callable[[E], Awaitable[object]]
+    ) -> None:
         """Register a run-everywhere handler — for config propagation (a settings reload). The
         listener runs it **per instance** off the journal (no claim, no dispatch mark), so every
         process applies the change. Handlers must be idempotent (re-delivery is harmless).
@@ -121,9 +125,9 @@ class EventBus:
         self._wiring.add_spread_handler(event_type, handler)
 
     @staticmethod
-    def _make_wrapper(
-        event_type: type[BusinessEvent],
-        handler: AsyncEventHandler,
+    def _make_wrapper[E: BusinessEvent](
+        event_type: type[E],
+        handler: AsyncEventHandler[E],
         topic: str,
         *,
         idempotent: bool,

@@ -15,7 +15,7 @@ seeder never re-lists them.
 """
 
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.events.repository._write import _append_record, _WritesEvents
+from apps.shared.events.repository import EventRepository, _append_record
 from apps.shared.persistence.database import admin_session_factory
 
 
@@ -31,7 +31,7 @@ async def seed_fact(record: BusinessEventRecord) -> None:
     A failed write raises: seeding is arranging, and an arrangement that silently did nothing
     surfaces later as an assertion about a page, pointing anywhere but here."""
     async with admin_session_factory()() as session:
-        repo = _WritesEvents(session)
+        repo = EventRepository(session)
         record.user_name, record.org_name = await repo.pinned_names(record.user_id, record.org_id)
         record.icon = record.icon or "circle"
         await _append_record(session, record)

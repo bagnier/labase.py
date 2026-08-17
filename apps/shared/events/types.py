@@ -25,6 +25,7 @@ always the composition of the two halves, here and on the journal alike (a gener
 import contextlib
 import typing
 import uuid
+from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields
 from datetime import datetime
 from functools import cache
@@ -32,28 +33,27 @@ from typing import Any, ClassVar, Self
 
 from apps.shared.events.catalog import catalog
 
-
-def _wants(hint: Any, target: type) -> bool:
-    """A field carries ``target`` if its annotation *is* ``target`` or a union that includes it
-    (e.g. ``uuid.UUID | None``, ``datetime | None``)."""
-    return hint is target or target in typing.get_args(hint)
-
-
-@cache
-def _uuid_fields(cls: type[BusinessEvent]) -> frozenset[str]:
-    """The dataclass fields whose type carries a ``uuid.UUID`` — resolved once per class. Drives the
-    generic re-parse so any DTO can carry uuids without a hand-maintained field list."""
-    hints = typing.get_type_hints(cls)
-    return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), uuid.UUID))
+# What the queue's JSON encoding turns a field into, and how to undo it: a uuid rides as its
+# string form, a datetime as an ISO one (both written that way by ``event_to_record``). One entry
+# per serialized type, so adding a third — a ``date``, a ``Decimal`` — is one line rather than a
+# lookup helper *and* a re-parse loop that must be kept in step with it.
+_REPARSERS: dict[type, Callable[[str], Any]] = {
+    uuid.UUID: uuid.UUID,
+    datetime: datetime.fromisoformat,
+}
 
 
 @cache
-def _datetime_fields(cls: type[BusinessEvent]) -> frozenset[str]:
-    """The dataclass fields whose type carries a ``datetime`` — the timestamp twin of
-    :func:`_uuid_fields`. The queue serializes a datetime to an ISO string, so reconstruction
-    re-parses these back, driven by the annotation rather than a hand-kept list."""
+def _fields_carrying(cls: type[BusinessEvent], target: type) -> frozenset[str]:
+    """The dataclass fields whose annotation carries ``target`` — it *is* ``target``, or a union
+    that includes it (``uuid.UUID | None``, ``datetime | None``). Resolved once per class and type,
+    so any DTO round-trips without a hand-maintained field list."""
     hints = typing.get_type_hints(cls)
-    return frozenset(f.name for f in fields(cls) if _wants(hints.get(f.name), datetime))
+    return frozenset(
+        f.name
+        for f in fields(cls)
+        if (hint := hints.get(f.name)) is target or target in typing.get_args(hint)
+    )
 
 
 # Field-name fragments that mark *secret material*. A business event is persisted to the
@@ -155,10 +155,11 @@ class BusinessEvent:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Self:
         """Rebuild the event from a stored record — dropping transport-only keys (``event_id``, the
-        denormalized ``user_name`` handle) that aren't event fields, and re-parsing every
-        uuid-typed field the task queue serialized to a string. The re-parse is generic (driven by
-        the field annotations) and defensive: a value that isn't a valid uuid — a redacted ``"***"``
-        token — is left as-is rather than crashing the rebuild. Both delivery paths use this."""
+        denormalized ``user_name`` handle) that aren't event fields, and undoing the task queue's
+        JSON encoding on every field :data:`_REPARSERS` covers. The re-parse is generic (driven by
+        the field annotations) and defensive: a value that no longer parses — a redacted ``"***"``
+        token where a uuid stood — is left as-is rather than crashing the rebuild. Both delivery
+        paths use this."""
         # A stored NULL never satisfies a field the type declares required: dropping it lets the
         # dataclass raise rather than hand back an event whose required scope is None. Facts
         # written before a field became required (or by a raw writer) fail the rebuild here, and
@@ -166,16 +167,12 @@ class BusinessEvent:
         optional = {f.name for f in fields(cls) if f.default is not MISSING}
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names and (v is not None or k in optional)}
-        for key in _uuid_fields(cls):
-            value = kept.get(key)
-            if isinstance(value, str):
-                with contextlib.suppress(ValueError):
-                    kept[key] = uuid.UUID(value)
-        for key in _datetime_fields(cls):
-            value = kept.get(key)
-            if isinstance(value, str):
-                with contextlib.suppress(ValueError):
-                    kept[key] = datetime.fromisoformat(value)
+        for target, parse in _REPARSERS.items():
+            for key in _fields_carrying(cls, target):
+                value = kept.get(key)
+                if isinstance(value, str):
+                    with contextlib.suppress(ValueError):
+                        kept[key] = parse(value)
         return cls(**kept)
 
 
