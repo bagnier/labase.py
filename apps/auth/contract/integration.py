@@ -4,7 +4,6 @@ Event wiring for sign-up (``UserCreated`` emission, compensation) lives in the r
 orchestrator (:mod:`app.registration`), not here.
 """
 
-from apps.auth.contract.admin import list_server_admins
 from apps.auth.contract.events import (
     AccountDeletedByAdmin,
     AccountDisabled,
@@ -26,6 +25,7 @@ from apps.auth.contract.events import (
 )
 from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
+from apps.auth.infra.user_repository import list_server_admins
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.host import Host, MountPhase
 from apps.shared.settings import ConsoleLink, SettingDef, SettingsDeclaration, SupabaseLink

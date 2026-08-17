@@ -11,7 +11,6 @@ import httpx
 import structlog
 from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
 
-from apps.auth.contract.user import AuthenticatedUser as AuthenticatedUser
 from apps.shared.config import get_technical_settings
 from apps.shared.persistence.supabase import get_user_supabase
 

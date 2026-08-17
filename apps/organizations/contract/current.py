@@ -17,8 +17,7 @@ from uuid import UUID
 from fastapi import Depends, Request
 
 from apps.auth.contract.current import OptionalCurrentUser, RlsSession
-from apps.organizations.domain.models import Membership as Membership
-from apps.organizations.domain.models import Organization
+from apps.organizations.domain.models import Membership, Organization
 from apps.organizations.domain.models import OrganizationRead as OrganizationRead
 from apps.organizations.domain.models import OrgRole as OrgRole
 from apps.organizations.infra.context import (
