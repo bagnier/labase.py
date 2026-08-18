@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page
+from playwright.sync_api import BrowserContext, Page
 
 from apps.auth.tests.given_helpers import find_users
 from apps.shared.settings import get_settings
@@ -111,14 +111,19 @@ class OrgBrowserMixin(BrowserBase):
 
     def join_org_as_member(self, org_name: str, email: str) -> None:
         slug = org_name.lower().replace(" ", "-")
-        owner_email = f"owner-{slug}@example.com"
-        owner_ctx = self.context_for(owner_email)
-        # Read the owner's org handle from profile
-        owner_page = owner_ctx.new_page()
+        owner_page = self.context_for(f"owner-{slug}@example.com").new_page()
+        handle = self._own_org_handle(owner_page, slug)
+        self._rename_org(owner_page, handle, org_name)
+        token = self._invite_and_read_token(owner_page, handle, email)
+        owner_page.close()
+        self._accept_invitation_as(email, token)
+
+    def _own_org_handle(self, owner_page: Page, slug: str) -> str:
         orgs = self._read_org_cards_from_profile(owner_page)
-        assert orgs, f"No org for {owner_email}"
-        handle = orgs[0]["handle"]
-        # Rename the org via settings page
+        assert orgs, f"No org for the owner of {slug!r}"
+        return orgs[0]["handle"]
+
+    def _rename_org(self, owner_page: Page, handle: str, org_name: str) -> None:
         owner_page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
         save = owner_page.locator("form:has(input[name=name])").get_by_role("button", name="Save")
         self.submit_labelled_form(
@@ -128,7 +133,8 @@ class OrgBrowserMixin(BrowserBase):
             method="PATCH",
             path_token=f"/{handle}",
         )
-        # Invite the member
+
+    def _invite_and_read_token(self, owner_page: Page, handle: str, email: str) -> str:
         owner_page.goto(f"{self.base_url}/{handle}/members", wait_until="load")
         owner_page.click("[data-invite-toggle]")
         self.submit_labelled_form(
@@ -141,9 +147,9 @@ class OrgBrowserMixin(BrowserBase):
         link_el = owner_page.query_selector("#invite-result [data-invitation-link]")
         assert link_el, "No invitation link found after sending invite"
         link = link_el.get_attribute("data-invitation-link") or ""
-        token = link.rsplit("/", 1)[-1]
-        owner_page.close()
-        # Ensure member user exists and accept invitation
+        return link.rsplit("/", 1)[-1]
+
+    def _accept_invitation_as(self, email: str, token: str) -> None:
         member_page = self.page_for(email)
         member_page.goto(f"{self.base_url}/invitations/{token}", wait_until="load")
         member_page.click("[data-accept]")
@@ -243,7 +249,7 @@ class OrgBrowserMixin(BrowserBase):
 
     def leave_org(self) -> None:
         page = self._goto_members()
-        # Leave now lives inside the row's Manage combo — open that row's combo before clicking.
+        # Leave lives inside the row's Manage combo — open that row's combo before clicking.
         manage = page.query_selector("li:has([data-leave]) [data-manage]")
         if manage is None:
             self._probe_blocked("DELETE", f"/{self._active_slug()}/members/me")
@@ -339,31 +345,43 @@ class OrgBrowserMixin(BrowserBase):
         assert token, "No invitation token stored"
         visitor_ctx = self.context_for(_VISITOR)
         page = visitor_ctx.new_page()
-        # Visit the invitation link — should show "Create account to accept"
+        self._follow_accept_to_registration(page, token)
+        self._register(page, email)
+        self._sign_in_on_this_page(page, email)
+        self._click_accept_back_on_the_invitation(page)
+        self._become(email, visitor_ctx, page)
+        self._last_accept_response = {"redirect": page.url}
+
+    def _follow_accept_to_registration(self, page: Page, token: str) -> None:
         page.goto(f"{self.base_url}/invitations/{token}", wait_until="load")
-        page.click("[data-accept]")  # "Create account to accept" link → /auth/register?next=...
+        page.click("[data-accept]")  # "Create account to accept" → /auth/register?next=…
         page.wait_for_load_state("load")
-        # Register
+
+    def _register(self, page: Page, email: str) -> None:
         page.get_by_label("Email").fill(email)
         page.get_by_label("Password").fill(_PASSWORD)
         page.get_by_role("button", name="Create my account").click()
         page.wait_for_load_state("load")
-        # Should land on login page with next preserved; fill login form
+
+    def _sign_in_on_this_page(self, page: Page, email: str) -> None:
+        """Registration lands on the login page, ``next`` preserved — sign in where it left us."""
         page.get_by_label("Email").fill(email)
         page.get_by_label("Password").fill(_PASSWORD)
         page.get_by_role("button", name="Sign in").click()
         page.wait_for_load_state("load")
-        # Should be back on the invitation page — click accept
+
+    def _click_accept_back_on_the_invitation(self, page: Page) -> None:
         accept_btn = page.query_selector("[data-accept]")
         assert accept_btn is not None, (
             f"Accept button not found after register+login redirect — landed on {page.url}"
         )
         page.click("[data-accept]")
         page.wait_for_load_state("load")
-        # Promote visitor context to this user so subsequent steps work
-        self._contexts[email] = visitor_ctx
+
+    def _become(self, email: str, ctx: BrowserContext, page: Page) -> None:
+        """Promote the visitor context to this user, so the following steps act as them."""
+        self._contexts[email] = ctx
         self._pages[email] = page
-        self._last_accept_response = {"redirect": page.url}
 
     def accept_invitation(self, email: str) -> None:
         token = self._last_invitation_token
@@ -385,7 +403,6 @@ class OrgBrowserMixin(BrowserBase):
         token = self._last_invitation_token
         assert token, "No invitation token stored"
         page = self._open_invitation_page(email, token)
-        # A revoked token renders the invalid state — no accept control is offered.
         assert page.query_selector("[data-accept]") is None, (
             "Revoked invitation should not expose an accept button"
         )
@@ -398,7 +415,6 @@ class OrgBrowserMixin(BrowserBase):
         token = self._last_invitation_token
         assert token, "No invitation token stored"
         page = self._open_invitation_page(email, token)
-        # An already-accepted token shows the membership acknowledgement, not an accept form.
         assert page.query_selector("[data-accept]") is None, (
             "Accepted invitation should not expose an accept button"
         )

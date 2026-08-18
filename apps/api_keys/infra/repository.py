@@ -5,7 +5,8 @@ from apps.api_keys.domain.models import ApiKey
 from apps.shared import clock
 from apps.shared.persistence.repository import OrgScopedRepository
 
-# last_used_at is informational; refresh it at most this often to avoid a write per request.
+# ``last_used_at`` is informational, so it is refreshed at most this often — never a write per
+# request.
 _LAST_USED_GRANULARITY_SECONDS = 300
 
 

@@ -49,7 +49,7 @@ class ConsoleBrowserMixin(BrowserBase):
         self.last_response = self.page.goto(f"{self.base_url}/console", wait_until="load")
 
     def try_open_console(self) -> None:
-        # Acts as the current (non-admin) user's page — no admin re-targeting.
+        """Acts as the current (non-admin) user's page — no admin re-targeting."""
         self.last_response = self.page.goto(f"{self.base_url}/console", wait_until="load")
 
     def reset_session(self) -> None:

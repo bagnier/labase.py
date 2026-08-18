@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from itertools import groupby
 
 from apps.shared.events.models import BusinessEventRecord
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 # ── Activity feed — humanize records for the profile/dashboard timeline ──────────────────────────
 
@@ -29,8 +30,8 @@ class ActivityEntry:
     who: str | None  # the actor's handle, or None on the viewer's own journal
     label: str  # the humanized verb (``Created``), never the dotted kind
     detail: str | None  # the subject's own name (a todo title, a page slug)
-    app: str  # the owning app prefix, for a subtle source line
-    icon: str  # the phosphor name the event owns
+    app: AppName  # shown as a subtle source line under the entry
+    icon: PhosphorIcon
     ts: datetime  # the exact instant, shown as clock time under the day header
     href: str | None  # a deep link to the concerned entity, when the surface supplies one
 
@@ -70,7 +71,7 @@ def activity_entries(
             label=_activity_label(r.verb),
             detail=r.entity_name,
             app=r.app_name,
-            icon=r.icon,  # not-null default 'circle' since 20260726000002 — always set
+            icon=r.icon,
             ts=r.created_at,
             href=link(r) if link else None,
         )
@@ -108,7 +109,7 @@ class ActivityStats:
 
     total: int
     active_days: int
-    longest_streak: int  # longest run of consecutive active days
+    longest_streak: int  # consecutive active days
     this_week: int
     week_delta: int  # this week minus the one before
 

@@ -11,8 +11,8 @@ from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import CardResource, DueCard, Outcome, Schedule
 from apps.learning.domain.repository import ReviewRepositoryProtocol
 
-# Interval (in days) until the next review, indexed by the card's resulting level.
-# Follows the Fibonacci sequence; the level is capped at MAX_LEVEL.
+# Days until the next review, indexed by the level the card lands on — the Fibonacci sequence, and
+# the level is capped at :data:`MAX_LEVEL`.
 FIBONACCI_INTERVALS = {1: 1, 2: 1, 3: 2, 4: 3, 5: 5, 6: 8, 7: 13, 8: 21, 9: 34}
 MAX_LEVEL = 9
 

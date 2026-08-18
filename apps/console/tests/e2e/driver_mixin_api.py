@@ -44,7 +44,7 @@ class ConsoleApiMixin(ApiBase):
         self.response = self.client().get("/console")
 
     def try_open_console(self) -> None:
-        # Acts as the current (non-admin) user — no admin re-targeting.
+        """Acts as the current (non-admin) user — no admin re-targeting."""
         self.response = self.client().get("/console")
 
     def set_org_override(self, app: str, key: str, value: str) -> None:
@@ -225,5 +225,5 @@ class ConsoleApiMixin(ApiBase):
         self.response = self._put_admin(email, is_admin=False)
 
     def try_designate_server_admin(self, email: str) -> None:
-        # Acts as the current (non-admin) user — no admin re-targeting.
+        """Acts as the current (non-admin) user — no admin re-targeting."""
         self.response = self.client().put(f"/console/admins/{email}", json={"is_admin": True})

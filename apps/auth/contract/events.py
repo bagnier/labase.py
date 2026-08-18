@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import ClassVar, Literal
 
 from apps.shared.events import BusinessEvent
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 # How a caller proved who they were. A closed set on purpose: the type checker rejects a fifth
 # spelling of "password" before a row can carry it, which is what keeps the journal groupable by
@@ -32,10 +33,10 @@ class UserCreated(BusinessEvent):
     creation — never on a returning OAuth login — so the journal records real signups only. The new
     user is the actor; a token is never carried (and would be redacted from any payload anyway)."""
 
-    app_name: ClassVar[str] = "auth"  # outside AuthEvent (own icon), so it names its app here
+    app_name: ClassVar[AppName] = "auth"  # outside AuthEvent (own icon), so it names its app here
     verb: ClassVar[str] = "user_created"
-    icon: ClassVar[str] = "user-plus"
-    email: str  # the new account's email — always present at genuine creation
+    icon: ClassVar[PhosphorIcon] = "user-plus"
+    email: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,14 +49,14 @@ class UserDeleted(BusinessEvent):
     user is gone, so cleanup runs asynchronously on the admin session, by user id (RLS-as-user is
     impossible)."""
 
-    app_name: ClassVar[str] = "auth"
+    app_name: ClassVar[AppName] = "auth"
     verb: ClassVar[str] = "user_deleted"
-    icon: ClassVar[str] = "user-minus"
+    icon: ClassVar[PhosphorIcon] = "user-minus"
 
 
 class AuthEvent(BusinessEvent):
-    app_name: ClassVar[str] = "auth"
-    icon: ClassVar[str] = "shield-check"
+    app_name: ClassVar[AppName] = "auth"
+    icon: ClassVar[PhosphorIcon] = "shield-check"
 
 
 # ── Sign-in outcomes ─────────────────────────────────────────────────────────────
@@ -151,8 +152,8 @@ class ImpersonationStopped(AuthEvent):
 
 
 class AccountsEvent(BusinessEvent):
-    app_name: ClassVar[str] = "accounts"
-    icon: ClassVar[str] = "user-gear"
+    app_name: ClassVar[AppName] = "accounts"
+    icon: ClassVar[PhosphorIcon] = "user-gear"
 
 
 @dataclass(frozen=True, kw_only=True)

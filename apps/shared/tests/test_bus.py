@@ -75,8 +75,8 @@ async def _noop(session, event) -> None:
 
 
 def test_declare_records_the_owner_app_and_gates_emit():
-    # Declaring activates a fact; it never attributes one. The owner is the app the event itself
-    # names, so a mount cannot spell it differently from the class.
+    """Declaring activates a fact; it never attributes one. The owner is the app the event itself
+    names, so a mount cannot spell it differently from the class."""
     own = EventWiring()
     assert own.is_declared(_Ticked) is False
     own.declare(_Ticked)
@@ -86,8 +86,9 @@ def test_declare_records_the_owner_app_and_gates_emit():
 
 
 def test_declare_rejects_an_event_that_names_no_app_and_verb():
-    # Without both halves an event has no kind: it never entered the catalog, so a persisted fact
-    # could not be rebuilt from it. Usually an abstract base handed over instead of its subclasses.
+    """Without both halves an event has no kind: it never entered the catalog, so a persisted fact
+    could not be rebuilt from it. Usually an abstract base handed over instead of its subclasses."""
+
     class _Abstract(BusinessEvent):
         pass
 
@@ -126,8 +127,8 @@ def test_consumers_of_walks_the_mro_so_a_base_subscription_catches_subclasses():
 
 
 def test_restoring_a_snapshot_drops_what_was_registered_after_it():
-    # A test that exercises the *real* fan-out has to register on the process-wide bus, then put
-    # back what it found — otherwise its consumer keeps firing for every later test in the run.
+    """A test that exercises the *real* fan-out has to register on the process-wide bus, then put
+    back what it found — otherwise its consumer keeps firing for every later test in the run."""
     own = EventWiring()
     own.declare(_Ticked)
     own.add_consumer(_Ticked, "before", as_actor=False, app="test_bus")
@@ -147,9 +148,9 @@ def test_restoring_a_snapshot_drops_what_was_registered_after_it():
 
 
 def test_a_bus_given_its_own_wiring_stays_out_of_the_process_one():
-    # Handing a bus a fresh wiring is how a test keeps its registrations to itself — the default
-    # is the process's, which the live `events` writes. What events *exist* is shared either way:
-    # that is the catalog, filled at import, and there is nothing to isolate about it.
+    """Handing a bus a fresh wiring is how a test keeps its registrations to itself — the default is
+    the process's, which the live `events` writes. What events *exist* is shared either way: that is
+    the catalog, filled at import, and there is nothing to isolate about it."""
     own = EventWiring()
     EventBus(own).on(_Ticked, _noop, name="isolated", app="test_bus")
 
@@ -197,10 +198,10 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
 
 @pytest.mark.asyncio
 async def test_a_reaction_runs_with_the_request_and_fact_bound_to_its_log_context():
-    # A reaction runs off the journal on a background task with no request context of its own. The
-    # wrapper binds the originating request_id (correlation) and the fact's event_id (causation)
-    # onto structlog, so the reaction's log lines join the emitting request's timeline — then
-    # restores the context, so nothing leaks into the next task the worker runs.
+    """A reaction runs off the journal on a background task with no request context of its own. The
+    wrapper binds the originating request_id (correlation) and the fact's event_id (causation) onto
+    structlog, so the reaction's log lines join the emitting request's timeline — then restores the
+    context, so nothing leaks into the next task the worker runs."""
     seen: dict[str, object] = {}
 
     async def handler(session, event) -> None:

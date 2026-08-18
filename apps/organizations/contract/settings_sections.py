@@ -19,14 +19,15 @@ metric, so it is *not* a dashboard ``Overview``. It is a setting of the org — 
 from dataclasses import dataclass, field
 
 from apps.organizations.contract.collect import OrgMemberQuery
+from apps.shared.vocabulary import AppName
 
 
 @dataclass(frozen=True)
 class OrgSettingsSection:
-    key: str  # context id, e.g. "api_keys"
-    title: str  # human title, e.g. "API keys"
+    key: AppName
+    title: str
     template: str  # the app's own Jinja partial, embedded on the settings page
-    order: int = 50  # display order; lower comes first
+    order: int = 50  # lower comes first
     data: dict = field(default_factory=dict)  # vars the partial reads
 
 

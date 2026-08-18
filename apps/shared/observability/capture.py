@@ -34,17 +34,17 @@ from apps.shared.observability.errors import ExceptionCaptured
 
 log = structlog.get_logger("labase.issues.capture")
 
-# Bounded so that, when the issues app is disabled (no drain running), the queue self-caps by
-# dropping the oldest instead of growing without limit.
+# Bounded so that with the issues app disabled — no drain running — the queue self-caps by dropping
+# the oldest instead of growing without limit.
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
 
 # Set while the drain is recording, so the capture path's own logs (``issue.recorded``, and
-# ``issues.tracker_failed`` if a tracker raises) never re-enter the capture processor.
+# ``issues.tracker_failed`` when a tracker raises) never re-enter the capture processor.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
-# Error trackers, registered directly (not via the event bus) — the drain fans each captured
-# exception out to them. Registered at mount by whoever tracks errors (``apps/issues``); a single
-# event type, so a plain list, no MRO/type-key dispatch.
+# An error tracker, registered directly at mount by whoever tracks errors (``apps/issues``) rather
+# than through the event bus — the drain fans each captured exception out to them. One event type
+# only, hence a plain list and no MRO or type-key dispatch.
 ExceptionTracker = Callable[[ExceptionCaptured], Awaitable[None]]
 _trackers: list[ExceptionTracker] = []
 
@@ -101,7 +101,7 @@ def capture_processor(
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
     # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
-    # unified logs viewer joins on; a coarse source stands in for the old "http"/"event_bus".
+    # unified logs viewer joins on; ``source`` only sorts request work from the rest.
     context["source"] = "http" if context.get("request_id") else "app"
     _QUEUE.append(ExceptionCaptured(exc=exc, source=str(context["source"]), context=context))
     return event_dict

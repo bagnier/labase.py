@@ -37,12 +37,14 @@ def _settings_rows() -> list[SettingRow]:
 
 
 _GRAINS = ("hour", "day", "week", "month")
-# (source value, human series label) — the label rides the ApexCharts tooltip; colors mirror the
-# template's legend swatches (info/secondary/error), which is why the chart's own legend stays off.
+# ``(source value, human series label)`` — the label rides the ApexCharts tooltip, and the colors
+# mirror the template's legend swatches (info/secondary/error), which is why the chart's own legend
+# stays off.
 _SOURCE_SERIES = (("http", "HTTP"), ("business", "Business"), ("error", "Error"))
-# How many buckets the x-axis shows per grain — a *fixed* count ending at the current period, so
-# the axis width is stable and bounded no matter how the data clusters (aligned with the data
-# windows in ``repository._GRAIN_WINDOW``).
+
+# How many buckets the x-axis shows per grain — a *fixed* count ending at the current period, so the
+# axis width is stable and bounded however the data clusters. Aligned with the data windows in
+# ``repository._GRAIN_WINDOW``.
 _GRAIN_SPAN = {"hour": 24, "day": 14, "week": 12, "month": 12}
 
 

@@ -38,8 +38,8 @@ async def handle_stale_data(request: Request, _exc: Exception) -> Response:
 
 
 async def handle_unhandled_error(request: Request, _exc: Exception) -> Response:
-    # ``log.exception`` (via sys.exc_info under the active except) is now the capture seam —
-    # the capture processor queues this into an error group. No explicit emit needed here.
+    # ``log.exception`` (via sys.exc_info under the active except) *is* the capture seam: the
+    # capture processor queues this into an error group, so nothing has to emit one here.
     log.exception(
         "request.unhandled_error",
         method=request.method,

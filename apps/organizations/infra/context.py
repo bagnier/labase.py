@@ -39,7 +39,6 @@ async def _resolve_current_org(
         # lets one reach here, fail as 404 — never confirm the reserved surface exists.
         if is_reserved(slug):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-        # Single join: org by slug that the current user is a member of
         org = await repo.get_by_handle_for_user(slug, user_uuid)
         if org is not None:
             _ensure_api_key_scope(current_user, org.id)
@@ -52,7 +51,7 @@ async def _resolve_current_org(
     if current_user.api_key_org_id is not None:
         return current_user.api_key_org_id
 
-    # Fallback for routes not under /{org_handle}: use first org
+    # Routes outside /{org_handle} have no handle to resolve: fall back to the user's first org.
     org = await repo.get_first_for_user(user_uuid)
     if org is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization found")

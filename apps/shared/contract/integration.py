@@ -7,7 +7,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
-from apps.shared.config import get_technical_settings
+from apps.shared.config import TechnicalSettings, get_technical_settings
 from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
 from apps.shared.events.listener import EventListener
 from apps.shared.host import Host, MountPhase
@@ -53,24 +53,9 @@ def mount(host: Host) -> None:
     app.add_middleware(RequestLogger)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
 
-    # Async substrate: one task worker per process; recurring jobs planted at startup.
-    register_task_handler(PURGE_TOPIC, purge_counters)
-    register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
-    worker = TaskWorker(settings.task_worker_interval_seconds)
-    host.on_startup(_plant_recurring_tasks)
-    host.on_startup(worker.start)
-    host.on_shutdown(worker.stop)
-
-    # Event listener: reads the business_events journal and fans each fact out to its consumers
-    # (NOTIFY-woken, poll as a net). One per process, like the worker.
-    listener = EventListener(settings.task_worker_interval_seconds)
-    host.on_startup(listener.start)
-    host.on_shutdown(listener.stop)
-
-    # Firehose drains off the request path: the log processor only enqueues; this task writes.
-    firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)
-    host.on_startup(firehose_writer.start)
-    host.on_shutdown(firehose_writer.stop)
+    _start_task_worker(host, settings)
+    _start_event_listener(host, settings)
+    _start_firehose_writer(host, settings)
 
     app.mount(
         "/static",
@@ -83,6 +68,31 @@ def mount(host: Host) -> None:
         return Response(status_code=204)
 
     host.reserve("static", "api")  # infra-owned slugs (StaticFiles mount + reserved API namespace)
+
+
+def _start_task_worker(host: Host, settings: TechnicalSettings) -> None:
+    """The async substrate: one task worker per process, and the recurring jobs it plants."""
+    register_task_handler(PURGE_TOPIC, purge_counters)
+    register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
+    worker = TaskWorker(settings.task_worker_interval_seconds)
+    host.on_startup(_plant_recurring_tasks)
+    host.on_startup(worker.start)
+    host.on_shutdown(worker.stop)
+
+
+def _start_event_listener(host: Host, settings: TechnicalSettings) -> None:
+    """Reads the ``business_events`` journal and fans each fact out to its consumers (NOTIFY-woken,
+    polling as a net). One per process, like the worker."""
+    listener = EventListener(settings.task_worker_interval_seconds)
+    host.on_startup(listener.start)
+    host.on_shutdown(listener.stop)
+
+
+def _start_firehose_writer(host: Host, settings: TechnicalSettings) -> None:
+    """Keeps the firehose off the request path: the log processor enqueues, this task writes."""
+    firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)
+    host.on_startup(firehose_writer.start)
+    host.on_shutdown(firehose_writer.stop)
 
 
 async def _plant_recurring_tasks() -> None:

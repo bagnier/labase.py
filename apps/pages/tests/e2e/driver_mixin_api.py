@@ -34,7 +34,6 @@ class PagesApiMixin(ApiBase):
         )
 
     def open_new_page_form(self) -> None:
-        # A GET must render only — it must never create a draft (the old bug littered orphans).
         self.response = self.client().get(self._pages_url("/new/edit"))
         assert self.response.status_code == 200, (
             f"new-page form GET got {self.response.status_code}: {self.response.text}"
@@ -107,8 +106,8 @@ class PagesApiMixin(ApiBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_pages_list_as(self, email: str) -> None:
-        # Read another tenant's pages list from their own org handle (seeded by the
-        # "is a member of" step) to prove one org's pages never surface in another.
+        # The other tenant's org is seeded by the "is a member of" step; read its list from its
+        # own handle.
         slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
         self._viewed_page_titles = [
             p["title"] for p in self._list(client=self.client_for(email), handle=slug)

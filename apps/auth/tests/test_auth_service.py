@@ -130,8 +130,8 @@ def test_user_created_is_a_persisted_business_event():
 
 
 def test_is_first_sign_in_detects_a_brand_new_oauth_user():
-    # GoTrue stamps created_at and last_sign_in_at in the same sign-up — milliseconds apart, and
-    # last carries nanosecond precision + Z. That is a genuine first sign-in.
+    """GoTrue stamps created_at and last_sign_in_at in the same sign-up — milliseconds apart, and
+    last carries nanosecond precision + Z. That is a genuine first sign-in."""
     assert _is_first_sign_in(
         {
             "created_at": "2026-07-22T09:10:08.33665Z",

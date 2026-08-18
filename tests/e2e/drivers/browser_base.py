@@ -25,17 +25,16 @@ _PASSWORD = "Secret1!"
 _VISITOR = "visitor"  # sentinel — unauthenticated context, no associated user
 VISITOR = _VISITOR  # public alias, mirroring api_base.VISITOR
 
-# Pinned so http://localhost:8801 can sit in supabase/config.toml [auth.webauthn]
-# rp_origins — GoTrue verifies the origin signed into WebAuthn ceremonies, and a
-# random port could never be allow-listed. Override with LABASE_E2E_PORT when two
-# checkouts run browser e2e at once (passkey scenarios then need that origin
-# allow-listed too).
+# Pinned so ``http://localhost:8801`` can sit in ``supabase/config.toml`` ``[auth.webauthn]``
+# rp_origins: GoTrue verifies the origin signed into a WebAuthn ceremony, and a random port could
+# never be allow-listed. ``LABASE_E2E_PORT`` overrides it when two checkouts run browser e2e at once
+# — passkey scenarios then need that origin allow-listed too.
 _E2E_PORT = 8801
 
 
 class BrowserBase:
-    # Canonical e2e password — mirror of ApiBase.PASSWORD; the per-email contexts
-    # sign in with it, so scenarios that only name a user can omit the password.
+    # The canonical e2e password, mirroring ``ApiBase.PASSWORD``: the per-email contexts sign in
+    # with it, so a scenario that only names a user can omit it.
     PASSWORD = _PASSWORD
 
     def __init__(self) -> None:
@@ -120,7 +119,10 @@ class BrowserBase:
     def drain_task_queue(self) -> None:
         """Deliver async work now: fan persisted facts out to consumers (listener), then run them
         (worker), looping until both are dry. Runs on the in-process server's loop, where the
-        engines live; the browser driver commits for real, so the listener sees committed facts."""
+        engines live; the browser driver commits for real, so the listener sees committed facts.
+
+        The polling worker is off under tests, so a scenario reading what a reaction produced has
+        to drain first."""
         if self._server is None:
             return  # external APP_URL: that deployment runs its own listener/worker
         listener = EventListener(0)
@@ -145,8 +147,8 @@ class BrowserBase:
         page.fill("input[name=password]", _PASSWORD)
         page.click("button[type=submit]")
         page.wait_for_load_state("domcontentloaded")
-        # Run UserCreated's reactions (admin bootstrap, personal org) before login, so the JWT
-        # carries the admin claim and the org exists — the reactions are async off the journal now.
+        # Run UserCreated's reactions (admin bootstrap, personal org) before login: they are async
+        # off the journal, and the JWT must already carry the admin claim.
         self.drain_task_queue()
         page.goto(f"{self.base_url}/auth/login")
         page.fill("input[name=email]", email)

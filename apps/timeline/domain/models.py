@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from apps.shared.vocabulary import AppName
+
 
 class TimelineSource(StrEnum):
     http = "http"  # per-request firehose lines (request.failed — dead links & 5xx)
@@ -24,17 +26,17 @@ class TimelineEntry(BaseModel):
     """One entry of the unified timeline (a DTO, never an ORM row).
 
     ``name`` is what its source calls it: a business ``kind``, a firehose trace name, or an issue
-    title. One column, three vocabularies — the viewer names its sources, it never renames
-    them."""
+    title. One column, three vocabularies — the viewer names its sources, it never renames them.
+
+    ``app`` is the per-app axis the console browses by. A business fact carries it as its own
+    column; the other two sources have none, so they name themselves off their dotted name at the
+    boundary that builds them."""
 
     ts: datetime
     source: TimelineSource
     level: str
     name: str
-    # The owning app — the per-app axis the console browses by. A business fact carries it as its
-    # own column; the other two sources have no such column, so they name themselves from their
-    # dotted name at the boundary that builds them.
-    app: str = ""
+    app: AppName = ""
     org_id: str | None = None
     user_id: str | None = None
     entity_id: str | None = None

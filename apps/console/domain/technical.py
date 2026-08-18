@@ -20,9 +20,9 @@ from apps.shared.config import get_technical_settings
 
 _SENSITIVE_SUBSTRINGS = ("secret", "password", "token", "key", "credential", "private", "auth")
 
-# Primed once at import time so the first request already reports a meaningful (non-zero) value.
 _PROCESS = psutil.Process()
 _PROCESS.cpu_percent(interval=None)
+"""Primed at import, so the first request already reports a meaningful, non-zero CPU share."""
 
 
 class EnvVar(TypedDict):

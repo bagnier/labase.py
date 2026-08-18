@@ -17,8 +17,9 @@ SPAWN_RATE = os.environ.get("PERF_SPAWN_RATE", "4")
 DURATION = os.environ.get("PERF_DURATION", "15s")
 
 # A perf-smoke tunable like the three above: this drives a *real* server, so its background loops
-# must be on — .env.test disables them (=0) for pytest, which drives them by hand. Without them the
-# async signup consumer never runs and the personal org is never created. Env wins over the dotenv.
+# must be on. ``.env.test`` disables them (=0) for pytest, which drives them by hand — without them
+# the async signup consumer never runs and the personal org is never created. Env wins over the
+# dotenv.
 SERVER_WORKER_INTERVAL = os.environ.get("PERF_WORKER_INTERVAL", "1.0")
 
 

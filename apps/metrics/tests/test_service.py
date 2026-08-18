@@ -28,8 +28,8 @@ def _row(method: str, route: str, requests: int, errors: int, buckets: list[int]
 
 
 def test_percentile_interpolates_inside_the_crossing_bucket():
-    # 30 observations in the (50, 100] bucket: p95 sits 95% of the way up it.
-    # rank = 0.95 * 30 = 28.5 → 50 + (100-50) * 28.5/30 = 97.5, not a bare 100.
+    """30 observations in the (50, 100] bucket: p95 sits 95% of the way up it. rank = 0.95 * 30 =
+    28.5 → 50 + (100-50) * 28.5/30 = 97.5, not a bare 100."""
     assert percentile_ms(_buckets(ms_100=30)) == 97.5
     # 95 fast + 5 slow: rank 95 lands exactly on the (10, 25] bucket's top edge.
     assert percentile_ms(_buckets(ms_25=95, ms_5000=5)) == 25

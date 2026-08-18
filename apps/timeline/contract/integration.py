@@ -42,8 +42,7 @@ def mount(host: Host) -> None:
     if not settings.enabled:
         return
     # Align the live process with the persisted level at mount, then keep it in step as the
-    # console edits it — the control the console used to own now lives with the screen that
-    # shows what it gates.
+    # console edits it.
     apply_log_level(str(settings.log_level))
     host.events.spread(SettingsChanged, _reload_level)
     host.contribs.provide(ConsoleOverviewQuery, _overview)

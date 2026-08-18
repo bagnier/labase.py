@@ -18,8 +18,8 @@ from locust import HttpUser, between, events, task
 
 _PASSWORD = "Perf1234!"
 
-# Blocking thresholds (enforced on quit): a smoke, not a benchmark — generous
-# enough for a loaded CI runner, tight enough to catch a real regression.
+# Blocking thresholds, enforced on quit: a smoke, not a benchmark — generous enough for a loaded CI
+# runner, tight enough to catch a real regression.
 FAIL_RATIO_MAX = 0.01
 P95_MS_MAX = 800.0
 

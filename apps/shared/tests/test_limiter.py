@@ -38,8 +38,8 @@ def _app(limit_string: str) -> FastAPI:
     async def ping(request: Request) -> JSONResponse:
         return JSONResponse({"pong": True})
 
-    # unique counter key per test run: the Postgres store outlives the test, and the bucket
-    # key is now module-qualified (`__qualname__`), so that is what must be made unique.
+    # A unique counter key per test run: the Postgres store outlives the test, and the bucket key
+    # is module-qualified (`__qualname__`), so that is what has to be made unique.
     ping.__qualname__ = f"ping_{uuid.uuid4().hex}"
     _app.get("/ping")(rate_limit(limit_string)(ping))
     return _app

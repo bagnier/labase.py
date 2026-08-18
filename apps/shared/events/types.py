@@ -32,11 +32,12 @@ from functools import cache
 from typing import Any, ClassVar, Self
 
 from apps.shared.events.catalog import catalog
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
-# What the queue's JSON encoding turns a field into, and how to undo it: a uuid rides as its
-# string form, a datetime as an ISO one (both written that way by ``event_to_record``). One entry
-# per serialized type, so adding a third — a ``date``, a ``Decimal`` — is one line rather than a
-# lookup helper *and* a re-parse loop that must be kept in step with it.
+# What the queue's JSON encoding turns a field into, and how to undo it: a uuid rides as its string
+# form, a datetime as an ISO one (both written that way by ``event_to_record``). One entry per
+# serialized type, so adding a third — a ``date``, a ``Decimal`` — is one line rather than a lookup
+# helper *and* a re-parse loop that must be kept in step with it.
 _REPARSERS: dict[type, Callable[[str], Any]] = {
     uuid.UUID: uuid.UUID,
     datetime: datetime.fromisoformat,
@@ -56,11 +57,9 @@ def _fields_carrying(cls: type[BusinessEvent], target: type) -> frozenset[str]:
     )
 
 
-# Field-name fragments that mark *secret material*. A business event is persisted to the
-# append-only journal — kept for good, RLS-readable by the org's members, exportable to
-# CSV/NDJSON — the exact inverse of a secret's lifecycle (short-lived, need-to-know, revocable).
-# So a secret may not be an event field at all. Underscores are stripped before the match, so
-# ``api_key`` / ``access_token`` / ``recovery_code`` are all caught by a single fragment.
+# Field-name fragments that mark *secret material*, matched against the field name with its
+# underscores stripped — so ``api_key`` / ``access_token`` / ``recovery_code`` are each caught by a
+# single fragment.
 _SECRET_FRAGMENTS = (
     "token",
     "password",
@@ -86,6 +85,22 @@ def _is_secret_field_name(name: str) -> bool:
     return any(fragment in normalized for fragment in _SECRET_FRAGMENTS)
 
 
+def _refuse_secret_fields(cls: type) -> None:
+    """Refuse a field that looks like secret material, at class creation — so a violation is a
+    definition error, never a written fact. The write-time mask in the repository is only the
+    last-resort net behind this one."""
+    for name in _annotation_names(cls):
+        if _is_secret_field_name(name):
+            raise TypeError(
+                f"{cls.__name__} declares field {name!r}, which looks like secret material. "
+                "A business event is persisted to the append-only journal — kept for good, "
+                "readable by the org's members under RLS, exportable — the opposite of a "
+                "secret's lifecycle, so a secret may not be an event field. Carry the "
+                f"subject's id instead (e.g. {name}_id) and let the durable handler re-read "
+                "the current state off it."
+            )
+
+
 def _annotation_names(cls: type) -> set[str]:
     """Every annotated name on ``cls`` and its bases — read at class-creation time, before the
     ``@dataclass`` transform runs (so ``fields()`` is not yet available). Only the names matter for
@@ -99,56 +114,41 @@ def _annotation_names(cls: type) -> set[str]:
 @dataclass(frozen=True, kw_only=True)
 class BusinessEvent:
     """Base for every recorded domain event. ``kw_only`` so subclasses may add required payload
-    fields without tripping dataclass default-ordering against the base's optional scoping."""
+    fields without tripping dataclass default-ordering against the base's optional scoping.
 
-    # the actor of the event
+    ``entity_id`` is the concerned entity's own uuid pk, which is what correlates a fact with the
+    thing it changed; ``entity_name`` is the readable name shown beside it (a todo title, an org
+    name, an invitee's email address). A subject that is only an id — an account or membership
+    action — carries no name, just the id.
+
+    ``created_at`` is not the emitter's to fill: the journal column is the one clock, so the field
+    is ``None`` on the event handed to :meth:`~apps.shared.events.bus.EventBus.emit` and populated
+    only on the one a consumer receives, rebuilt from the record. That is what lets a reaction
+    reason about *when the fact happened*, not when it was delivered — which a retry, or a parked
+    then resumed task, pushes minutes or days later.
+
+    ``app_name``/``verb``/``kind``/``icon`` are class-level, so they identify the event type
+    without ever entering an instance's payload.
+    """
+
     user_id: uuid.UUID | None = None
-    # the concerned entity's stable id, for correlation — always its uuid pk
-    # it could be a user_id, todo_id, page_id, whateven
     entity_id: uuid.UUID | None = None
-    # the subject's readable name — a todo title, an org name, or (when the subject is an email
-    # target) an invitee's email. Emit-provided; rides in the payload for display (the timeline's
-    # "detail"). A pure-id user subject (account/membership action) carries none — its entity_id is.
     entity_name: str | None = None
-    # the instant the fact happened — the journal's own column, *not* an emit-provided value: the
-    # emitter never sets it (the journal is the clock, one source), so it is None on the event
-    # that is emitted and populated only on the event a consumer receives, rebuilt from the record.
-    # That is what lets a reaction reason about *when the fact happened*, not when it was delivered
-    # (which a retry or a parked-then-resumed task pushes minutes — or days — later).
     created_at: datetime | None = None
 
-    # Class-level identity/metadata — never instance fields, so they stay out of the payload.
-    # The app the event belongs to ("todo", "files"), usually set once by the per-app mixin, and
-    # the verb it performs ("created", "signed_in"). Together they *are* the event's identity;
-    # ``kind`` below is only their composition.
-    app_name: ClassVar[str] = ""
+    app_name: ClassVar[AppName] = ""
     verb: ClassVar[str] = ""
-    kind: ClassVar[str] = ""  # derived — "<app_name>.<verb>", never written by hand
-    icon: ClassVar[str] = "circle"  # phosphor name the event OWNS, so shared never maps apps→icons
+    kind: ClassVar[str] = ""
+    icon: ClassVar[PhosphorIcon] = "circle"
 
     def __init_subclass__(cls, **kwargs: object) -> None:
+        """Compose the concrete subclass's ``kind`` and enter it in the catalog, which is what
+        lets the listener rebuild a typed event from a stored record. An abstract base — an app
+        mixin with no verb — composes nothing and stays out."""
         super().__init_subclass__(**kwargs)
-        # A secret cannot be an event field: refuse it here, at class definition, so the type system
-        # rejects the violation before a fact is ever written (the write-time mask in the repository
-        # is only a last-resort net that should now never fire). The message names the alternative.
-        for name in _annotation_names(cls):
-            if _is_secret_field_name(name):
-                raise TypeError(
-                    f"{cls.__name__} declares field {name!r}, which looks like secret material. "
-                    "A business event is persisted to the append-only journal — kept for good, "
-                    "readable by the org's members under RLS, exportable — the opposite of a "
-                    "secret's lifecycle, so a secret may not be an event field. Carry the "
-                    f"subject's id instead (e.g. {name}_id) and let the durable handler re-read "
-                    "the current state off it."
-                )
-        # A concrete event has both halves (an app_name from its app mixin, a verb of its own):
-        # compose its kind. The derivation is unconditional — the journal derives the same way
-        # (a generated column), so a hand-written kind would only make the class disagree with the
-        # records it is meant to rebuild.
+        _refuse_secret_fields(cls)
         if cls.app_name and cls.verb:
             cls.kind = f"{cls.app_name}.{cls.verb}"
-        # A concrete event (non-empty kind) registers itself in the catalog so the listener can
-        # reconstruct it from a stored record. Abstract bases (EntityCreated…, kind "") never do.
         if cls.kind:
             catalog.register(cls)
 
@@ -159,11 +159,12 @@ class BusinessEvent:
         JSON encoding on every field :data:`_REPARSERS` covers. The re-parse is generic (driven by
         the field annotations) and defensive: a value that no longer parses — a redacted ``"***"``
         token where a uuid stood — is left as-is rather than crashing the rebuild. Both delivery
-        paths use this."""
-        # A stored NULL never satisfies a field the type declares required: dropping it lets the
-        # dataclass raise rather than hand back an event whose required scope is None. Facts
-        # written before a field became required (or by a raw writer) fail the rebuild here, and
-        # the listener's guard logs and skips them — the one place that decision belongs.
+        paths use this.
+
+        A stored NULL is dropped along with them, so the dataclass raises rather than hand back an
+        event whose required scope is ``None``: a fact whose column is empty — written by a raw
+        writer, or before the field became required — fails the rebuild here, and the listener's
+        guard logs and skips it, which is the one place that decision belongs."""
         optional = {f.name for f in fields(cls) if f.default is not MISSING}
         names = {f.name for f in fields(cls)}
         kept = {k: v for k, v in payload.items() if k in names and (v is not None or k in optional)}

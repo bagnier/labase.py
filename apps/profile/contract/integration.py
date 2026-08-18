@@ -25,7 +25,6 @@ def mount(host: Host) -> None:
     host.app.include_router(router, tags=["profile"])
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_fullpage_provider("profile", provide_profile_handle)
-    # Advanced-auth options are individually admin-switchable (2026-07-06 decision).
     host.register_settings(_declare_settings())
     host.events.declare(AccountDeleted, AvatarUpdated, HandleChanged)
     host.events.on(UserDeleted, _forget_user, name="profile_forget", app="profile")

@@ -57,8 +57,8 @@ async def _identity(session: AsyncSession) -> tuple[int, str, str | None]:
 
 @pytest.mark.asyncio
 async def test_rls_context_does_not_leak_across_pooled_reuse(single_conn_engine):
-    # Session A: adopt an authenticated identity, then commit — which discards the
-    # transaction-local role + claims and returns the connection to the pool.
+    """Session A: adopt an authenticated identity, then commit — which discards the transaction-
+    local role + claims and returns the connection to the pool."""
     async with AsyncSession(single_conn_engine, expire_on_commit=False) as a:
         await set_rls_context(a, {"sub": _UID, "role": "authenticated"})
         pid_a, role_a, claims_a = await _identity(a)

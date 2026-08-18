@@ -119,8 +119,8 @@ def test_impersonation_remaining_reads_deadline():
 
 @pytest.mark.asyncio
 async def test_refresh_while_impersonating_caps_cookie_to_window(client, test_user):
-    # A mid-window refresh must re-emit the session capped to the impersonation window's
-    # remaining time, not the long login TTL — otherwise the disguise outlives its time-box.
+    """A mid-window refresh must re-emit the session capped to the impersonation window's remaining
+    time, not the long login TTL — otherwise the disguise outlives its time-box."""
     import time
 
     email, password = test_user
@@ -214,8 +214,8 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
 
 @pytest.mark.asyncio
 async def test_expired_token_stale_refresh_logs_info_not_exception(client):
-    # A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the end of a
-    # session, not a bug. It logs at info; log.exception (the capture seam) must not fire.
+    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the end of a session,
+    not a bug. It logs at info; log.exception (the capture seam) must not fire."""
     stale = AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, None)
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "stale.refresh.token")

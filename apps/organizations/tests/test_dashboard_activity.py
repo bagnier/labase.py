@@ -35,7 +35,7 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
     section = body.split("data-recent-activity")[1].split("</section>")[0]
     assert "Event created" in section  # the event key, humanised
     assert "calendar.event_created" not in section  # raw keys and payloads stay internal
-    # The activity block sits above the apps' overview cards — no longer the page's last section.
+    # The activity block sits above the apps' overview cards.
     assert body.index("data-org-activity") < body.index("grid grid-cols-1 sm:grid-cols-2 gap-4")
 
 

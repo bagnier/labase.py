@@ -10,11 +10,14 @@ def set_auth_cookies(
     refresh_token: str,
     max_age: int | None = None,
 ) -> None:
+    """Hand a session over to the caller — the single place that does.
+
+    The TTL is server-wide auth policy, deliberately not org-overridable: the cookie is user-global,
+    one session across every org, set at login outside any ``/{org_handle}``. A caller may pass a
+    shorter ``max_age`` to keep a re-emitted session inside a time-boxed window (impersonation),
+    where the default long TTL would defeat the box.
+    """
     secure = get_technical_settings().cookies_secure
-    # Server-wide auth policy: the cookie is user-global (one session across every org, set at
-    # login outside any /{org_handle}), so the TTL is deliberately not org-overridable.
-    # Callers may pass an explicit, shorter ``max_age`` to keep a re-emitted session within a
-    # time-boxed window (e.g. impersonation), where the default long TTL would defeat the box.
     if max_age is None:
         max_age = get_settings("users").session_ttl_seconds
     response.set_cookie(

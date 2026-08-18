@@ -14,14 +14,15 @@ labels); both surfaces render the same content.
 from dataclasses import dataclass, field
 
 from apps.organizations.contract.collect import OrgQuery
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 @dataclass(frozen=True)
 class Overview:
-    key: str  # context id, e.g. "todo"
-    title: str  # human title, e.g. "To-do"
-    icon: str  # phosphor icon name
-    href: str  # link into the app (relative to the org handle)
+    key: AppName
+    title: str
+    icon: PhosphorIcon
+    href: str  # link into the app, relative to the org handle
     template: str  # the app's own Jinja partial (web view)
     data: dict = field(default_factory=dict)  # JSON-serializable; "lines"/"recent"
 

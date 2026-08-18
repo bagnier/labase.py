@@ -13,15 +13,16 @@ from supabase_auth.errors import AuthError
 from apps.auth.domain.service import AuthTokens, confirm_signup
 from apps.shared.persistence.supabase import get_admin_supabase
 
-# The admin's own session is stashed in these cookies while impersonating —
-# their presence is what renders the banner; deleting them ends the disguise.
+# Where the admin's own session is stashed while impersonating: their presence is what renders the
+# banner, and deleting them is what ends the disguise.
 IMPERSONATOR_COOKIE = "impersonator_access_token"
 IMPERSONATOR_REFRESH_COOKIE = "impersonator_refresh_token"
-# Absolute unix deadline of the impersonation window, so a mid-window token refresh can
-# re-cap the re-emitted target session to the time it has left instead of the long login TTL.
+
+# The absolute unix deadline of the impersonation window, so a mid-window token refresh re-caps the
+# re-emitted target session to the time it has left instead of the long login TTL.
 IMPERSONATOR_DEADLINE_COOKIE = "impersonator_deadline"
 
-# Time-box: every impersonation cookie dies after this long, disguise included.
+# The time-box: every impersonation cookie dies after this long, disguise included.
 IMPERSONATION_MAX_SECONDS = 3600
 
 

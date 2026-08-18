@@ -156,8 +156,8 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
 
 @pytest.mark.asyncio
 async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(iso):
-    # A durable consumer must reason about *when the fact happened* — the journal's created_at —
-    # not when a retry/park finally delivered it. The delivered event carries the record's instant.
+    """A durable consumer must reason about *when the fact happened* — the journal's created_at —
+    not when a retry/park finally delivered it. The delivered event carries the record's instant."""
     seen: list[BusinessEvent] = []
 
     async def handler(session, event) -> None:
@@ -185,9 +185,9 @@ async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(is
 
 @pytest.mark.asyncio
 async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
-    # The reaction runs off the journal on a background task with no request of its own; delivery
-    # wrapper binds the fact's originating request_id onto structlog, so the reaction's log lines
-    # join the emitting request's timeline. Assert it is bound while the handler runs.
+    """The reaction runs off the journal on a background task with no request of its own; delivery
+    wrapper binds the fact's originating request_id onto structlog, so the reaction's log lines join
+    the emitting request's timeline. Assert it is bound while the handler runs."""
     seen: dict[str, object] = {}
 
     async def handler(session, event) -> None:
@@ -216,10 +216,10 @@ async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
 
 @pytest.mark.asyncio
 async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispatched(iso):
-    # A kind with no registered class can be routed to no one — a fact we cannot even name. That is
-    # not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
-    # it into a console Issue), so it stops being lost in silence. The cursor still advances — the
-    # the record is marked dispatched and nothing is enqueued.
+    """A kind with no registered class can be routed to no one — a fact we cannot even name. That is
+    not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
+    it into a console Issue), so it stops being lost in silence. The cursor still advances: the
+    record is marked dispatched and nothing is enqueued."""
     async with db.admin_session_factory()() as s:
         await s.execute(
             text(
@@ -240,9 +240,9 @@ async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispa
 
 
 def test_forget_apps_register_durable_consumers_of_user_deleted():
-    # Account deletion cleanup runs off the listener: organizations and profile each declare one
-    # async consumer of UserDeleted (auth.user_deleted), keyed by topic (shared may not import the
-    # bounded contexts to name the handlers).
+    """Account deletion cleanup runs off the listener: organizations and profile each declare one
+    async consumer of UserDeleted (auth.user_deleted), keyed by topic (shared may not import the
+    bounded contexts to name the handlers)."""
     import apps.main  # noqa: F401
 
     topics = set(_handlers)
@@ -251,9 +251,9 @@ def test_forget_apps_register_durable_consumers_of_user_deleted():
 
 
 def test_org_seed_apps_register_durable_consumers_of_organization_created():
-    # Importing the composition root mounts every app; each welcome-seed app declares a durable
-    # async consumer of OrganizationCreated via the manifest's consumes_when_enabled. Checked by
-    # topic string (shared may not import a bounded context to name the event type).
+    """Importing the composition root mounts every app; each welcome-seed app declares a durable
+    async consumer of OrganizationCreated via the manifest's consumes_when_enabled. Checked by
+    topic string (shared may not import a bounded context to name the event type)."""
     import apps.main  # noqa: F401
 
     topics = set(_handlers)
@@ -263,9 +263,9 @@ def test_org_seed_apps_register_durable_consumers_of_organization_created():
 
 @pytest.mark.asyncio
 async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
-    # A spread fact is replayed to this process's spread handler off the journal — no claim, no
-    # dispatch mark (every instance applies it). Reconstructed as its typed event. Its own wiring
-    # isolates the spread handler; the catalog is process-wide, so class_for resolves the kind.
+    """A spread fact is replayed to this process's spread handler off the journal — no claim, no
+    dispatch mark (every instance applies it). Reconstructed as its typed event. Its own wiring
+    isolates the spread handler; the catalog is process-wide, so class_for resolves the kind."""
     own = EventWiring()
     seen: list[object] = []
 
@@ -286,10 +286,10 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
 
 @pytest.mark.asyncio
 async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_advances(iso):
-    # A fact whose payload can't rebuild its typed event (a field added to the class after it
-    # was written, a hand-inserted one) must not wedge the spread path: without advancing the
-    # cursor, every later tick would replay the same poison fact and none would ever propagate
-    # again. It is logged, skipped, and the healthy fact behind it still runs.
+    """A fact whose payload can't rebuild its typed event (a field added to the class after it was
+    written, a hand-inserted one) must not wedge the spread path: without advancing the cursor,
+    every later tick would replay the same poison fact and none would ever propagate again. It is
+    logged, skipped, and the healthy fact behind it still runs."""
     own = EventWiring()
     seen: list[_StrictSpreadEvent] = []
 

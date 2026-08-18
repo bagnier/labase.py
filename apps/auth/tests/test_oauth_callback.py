@@ -68,9 +68,8 @@ def test_callback_issues_the_session_and_clears_the_oauth_cookies(driver):
 
 
 def test_callback_with_totp_enrolled_asks_for_the_code_before_any_session(driver):
-    # The step-up branch: 2FA switched on server-wide AND the account has a
-    # verified TOTP factor — the callback must park the tokens and challenge,
-    # never issue the session cookies directly.
+    """The step-up branch: 2FA switched on server-wide AND the account has a verified TOTP factor —
+    the callback must park the tokens and challenge, never issue the session cookies directly."""
     with _two_factor_enabled():
         response = _callback(driver, verified_totp_factor="factor-1")
     assert response.status_code == 200
@@ -96,8 +95,8 @@ def test_callback_without_the_verifier_cookie_lands_back_on_login(driver):
 
 
 def test_confirm_failure_lands_on_login_with_a_visible_message(driver):
-    # Regression: the redirect used ?info=registered, a key absent from
-    # _INFO_MESSAGES — the user got a blank login page after clicking a dead link.
+    """Regression: the redirect used ?info=registered, a key absent from _INFO_MESSAGES — the user
+    got a blank login page after clicking a dead link."""
     from apps.auth.infra.router import _INFO_MESSAGES
 
     err = AuthApiError("Email link is invalid or has expired", 403, "otp_expired")

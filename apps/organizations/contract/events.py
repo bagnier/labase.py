@@ -14,11 +14,12 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityUpdated, OrgScoped
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 class OrgEvent(OrgScoped, BusinessEvent):
-    app_name: ClassVar[str] = "organizations"
-    icon: ClassVar[str] = "buildings"
+    app_name: ClassVar[AppName] = "organizations"
+    icon: ClassVar[PhosphorIcon] = "buildings"
 
 
 @dataclass(frozen=True, kw_only=True)

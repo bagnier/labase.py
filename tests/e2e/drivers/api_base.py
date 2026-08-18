@@ -31,9 +31,8 @@ VISITOR = "visitor"  # sentinel — unauthenticated client, no associated user
 
 
 class ApiBase:
-    # Canonical e2e password. client_for() re-authenticates every seeded email
-    # with it, so a scenario that only *names* a user (no auth intent) can omit
-    # the password and rely on this default.
+    # The canonical e2e password: ``client_for()`` re-authenticates every seeded email with it, so a
+    # scenario that only *names* a user — no auth intent — can omit it.
     PASSWORD = _PASSWORD
 
     def __init__(self) -> None:
@@ -136,6 +135,9 @@ class ApiBase:
     def drain_task_queue(self) -> None:
         """Deliver async work now: fan persisted facts out to consumers (listener), then run them
         (worker), looping until both are dry so an event that emits an event is delivered too.
+
+        The polling worker is off under tests, so a scenario reading what a reaction produced has
+        to drain first.
         """
         factory = self.test_session_factory()
         listener = EventListener(0, session_factory=factory)
@@ -171,8 +173,8 @@ class ApiBase:
             if email != VISITOR:
                 creds = {"email": email, "password": _PASSWORD}
                 client.post("/auth/register", json=creds)
-                # Run UserCreated's reactions (personal org, admin bootstrap) before login, so the
-                # org exists and the JWT carries the admin claim — the reactions are async now.
+                # Run UserCreated's reactions (personal org, admin bootstrap) before login: they
+                # are async off the journal, and the JWT must already carry the admin claim.
                 self.drain_task_queue()
                 client.post("/auth/login", json=creds)
                 self._track_auth_email(email)

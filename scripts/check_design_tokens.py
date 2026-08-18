@@ -31,16 +31,17 @@ _PALETTE_NAMES = (
     "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|"
     "teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose"
 )
-# e.g. text-gray-500, bg-indigo-600, border-slate-200 — a Tailwind palette utility with a
-# numeric shade. daisyUI tokens (bg-primary, text-base-content, bg-neutral) carry no
-# numeric shade, so they never match.
+# A Tailwind palette utility carrying a numeric shade — ``text-gray-500``, ``bg-indigo-600``,
+# ``border-slate-200``. daisyUI tokens (``bg-primary``, ``text-base-content``) carry no shade, so
+# they never match.
 RAW_PALETTE = re.compile(
     r"\b(?:text|bg|border|ring|ring-offset|from|via|to|divide|fill|stroke|outline|"
     r"shadow|decoration|accent|caret)-(?:" + _PALETTE_NAMES + r")-"
     r"(?:50|100|200|300|400|500|600|700|800|900|950)\b"
 )
-# CSS hex literal. Phosphor glyph escapes (content: "\e058") use a backslash, not a
-# hash, so they never match.
+
+# A CSS hex literal. A Phosphor glyph escape (``content: "\e058"``) uses a backslash, not a hash, so
+# it never matches.
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 

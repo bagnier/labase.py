@@ -40,12 +40,11 @@ router = APIRouter(tags=["console"])
 
 _NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-# Display metadata for folded groups — (title, icon, section); see _fold_groups.
+# Display metadata for a folded group — ``(title, icon, section)``; see ``_fold_groups``.
 _GROUP_DISPLAY: dict[str, tuple[str, str, str]] = {
     "settings": ("Settings", "gear-six", "configuration")
 }
 
-# Human labels for the console landing sections (order comes from SECTIONS).
 _SECTION_LABELS: dict[str, str] = {
     "operations": "Operations",
     "identity": "Identity & access",

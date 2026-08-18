@@ -12,13 +12,14 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 class TodoEvent(OrgScoped, BusinessEvent):
     """Per-app mixin: fixes the entity prefix and the icon every to-do event carries."""
 
-    app_name: ClassVar[str] = "todo"
-    icon: ClassVar[str] = "clipboard-text"
+    app_name: ClassVar[AppName] = "todo"
+    icon: ClassVar[PhosphorIcon] = "clipboard-text"
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -22,9 +22,9 @@ async def get_rls_session(
     Tolerant to anonymous callers — authentication (401) is enforced separately by
     ``CurrentUser`` where a route requires it.
 
-    This session used to be *also* bound as an ambient unit of work, which ``emit`` read
-    when no session was passed. That made a fact's durability depend on whether its route
-    happened to depend on this function, so it is gone: ``emit`` now takes its session.
+    It is a session, and nothing else: ``emit`` takes the session it writes on, so a fact's
+    durability is stated at its call site rather than inherited from whichever route happened to
+    depend on this function.
     """
     if current_user is not None:
         await set_rls_context(session, current_user.claims)

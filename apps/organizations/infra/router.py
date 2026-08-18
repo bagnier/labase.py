@@ -62,8 +62,8 @@ from apps.shared.http.templates import templates
 from apps.shared.page import fullpage_context
 from apps.shared.slug_registry import validate_handle
 
-# A curated shortlist for the org timezone picker — any IANA zone is accepted by the
-# endpoint (validated against zoneinfo), but the dropdown stays scannable.
+# A curated shortlist for the org timezone picker: any IANA zone is accepted by the endpoint, which
+# validates against ``zoneinfo`` — this only keeps the dropdown scannable.
 COMMON_TIMEZONES: tuple[str, ...] = (
     "UTC",
     "Europe/London",
@@ -85,14 +85,13 @@ COMMON_TIMEZONES: tuple[str, ...] = (
     "Pacific/Auckland",
 )
 
-# Collection router — multi-org, not scoped by a handle. Mounted at the root.
 log = structlog.get_logger("labase.organizations.router")
 
-
+# The collection router — multi-org, not scoped by a handle, mounted at the root.
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
-# Org-scoped router — every route resolves the org from the {org_handle} path
-# parameter (via CurrentOrg) and negotiates JSON vs HTML. Mounted under /{org_handle}.
+# The org-scoped router: every route resolves its org from the ``{org_handle}`` path parameter (via
+# ``CurrentOrg``) and negotiates JSON vs HTML. Mounted under ``/{org_handle}``.
 org_router = APIRouter(tags=["organizations"])
 
 

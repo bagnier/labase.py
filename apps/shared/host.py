@@ -26,12 +26,12 @@ from apps.shared.settings import (
 from apps.shared.slug_registry import OpenListChecker
 from apps.shared.slug_registry import register_open_list as _register_open_list
 from apps.shared.slug_registry import reserve as _reserve_slugs
+from apps.shared.vocabulary import PhosphorIcon
 
 if TYPE_CHECKING:
     from apps.shared.page import FullpageQuery
 
-# A sequence of ``(query type, provider)`` pairs — contribution providers
-# (``provides``/``provides_when_enabled``) an app declares at mount.
+# The ``(query type, provider)`` pairs an app declares at mount, for the contribs registry.
 _Registrations = Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]]
 
 
@@ -59,18 +59,19 @@ class AppManifest:
     disabled (the console tile is such a contribution); everything else only exists when
     it is enabled. Apps with needs beyond this shape
     (startup hooks, fullpage providers, open lists) keep an explicit ``mount()``.
+
+    ``emits`` names the events this app owns and may emit (see :meth:`Host.events.declare`);
+    ``consumes_when_enabled`` its durable async consumers, which the listener runs on the admin
+    session, idempotent — the shape a server-owned reaction (welcome seeding) needs to be
+    retryable and to stay off the emitting request's path.
     """
 
     settings: SettingsDeclaration
-    provides: _Registrations = ()  # contribution providers, alive even when the app is disabled
+    provides: _Registrations = ()
     routers: Sequence[tuple[Any, str]] = ()  # (APIRouter, prefix)
     nav: Sequence[NavItem] = ()
-    provides_when_enabled: _Registrations = ()  # contribution providers, only when enabled
-    # The events this app owns and may emit (see Host.events.declare) — declared only when enabled.
+    provides_when_enabled: _Registrations = ()
     emits: Sequence[type[BusinessEvent]] = ()
-    # Durable async consumers (event_type, name, handler), registered only when enabled. Run off
-    # the listener on the admin session, idempotent — for server-owned reactions (welcome seeding)
-    # that must be retryable and never sit on the emitting request's path.
     consumes_when_enabled: Sequence[
         tuple[type[BusinessEvent], str, Callable[..., Awaitable[None]]]
     ] = ()
@@ -86,11 +87,11 @@ class NavItem:
     """
 
     label: str
-    icon: str  # phosphor icon name, e.g. "clipboard-text"
-    segment: str  # path relative to the org, e.g. "todos", "learning/sessions"
-    match: str  # substring of request path marking the link active, e.g. "/todos"
-    order: int = 50  # display order; lower comes first
-    owner_only: bool = False  # only show to org owners
+    icon: PhosphorIcon
+    segment: str  # relative to the org, e.g. "todos", "learning/sessions"
+    match: str  # substring of the request path marking the link active, e.g. "/todos"
+    order: int = 50  # lower comes first
+    owner_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -110,15 +111,13 @@ class FullpageProvider:
 class Host:
     app: FastAPI = field(default_factory=lambda: FastAPI(title="labase"))
     # A bare Host (a test) gets a bus on a wiring of its own, so what it mounts never lands in the
-    # process's — what events *exist* is process-wide either way (the catalog). Production passes
-    # ``events=events`` (the singleton, writing the process wiring) explicitly.
+    # process's — what events *exist* is process-wide either way (the catalog).
     events: EventBus = field(default_factory=lambda: EventBus(EventWiring()))
     contribs: Contribs = field(default_factory=Contribs)
     nav_items: list[NavItem] = field(default_factory=list)
     fullpage_providers: list[FullpageProvider] = field(default_factory=list)
-    # The live settings handles of this composition, by declared group name (an app may
-    # declare under a name meant for admins: auth declares "users", console "appearance").
-    # The declaration itself lives on the handle — one source of truth, no parallel dict.
+    # Keyed by *declared group* name, which an app may aim at admins rather than at itself:
+    # auth declares "users", console "appearance".
     settings_handles: dict[str, AppSettings] = field(default_factory=dict)
 
     def reserve(self, *slugs: str) -> None:
@@ -202,8 +201,7 @@ class Host:
         return handle.declaration if handle is not None else None
 
 
-# Production singleton: share the process-wide registries so runtime ``events.emit`` /
-# ``contribs.collect`` and these mount-time ``host.events.on(...)`` / ``host.contribs.provide(...)``
-# registrations hit one registry each. A bare ``Host()`` (e.g. in a test) still gets its own
-# isolated bus and contribs via the field defaults.
+# The production composition: the process-wide registries, so runtime ``events.emit`` /
+# ``contribs.collect`` and mount-time ``host.events.on(...)`` / ``host.contribs.provide(...)`` hit
+# one registry each. A bare ``Host()`` still gets its own isolated pair from the field defaults.
 host = Host(events=events, contribs=contribs)

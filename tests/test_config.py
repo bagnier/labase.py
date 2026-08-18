@@ -29,8 +29,8 @@ def test_test_settings_are_loaded():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("name", "check"), CHECKS, ids=[name for name, _ in CHECKS])
 async def test_local_stack_is_responsive(name, check):
-    # Generous ×4 headroom over doctor's warn threshold: catch the ×5 degradation,
-    # not a busy laptop.
+    """Generous ×4 headroom over doctor's warn threshold: catch the ×5 degradation, not a busy
+    laptop."""
     budget = WARN_SECONDS * 4
     elapsed = await timed(check)
     assert elapsed < budget, (

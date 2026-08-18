@@ -10,11 +10,12 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, OrgScoped
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 class ApiKeyEvent(OrgScoped, BusinessEvent):
-    app_name: ClassVar[str] = "api_keys"
-    icon: ClassVar[str] = "key"
+    app_name: ClassVar[AppName] = "api_keys"
+    icon: ClassVar[PhosphorIcon] = "key"
 
 
 @dataclass(frozen=True, kw_only=True)

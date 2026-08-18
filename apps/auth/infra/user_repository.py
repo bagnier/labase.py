@@ -76,14 +76,10 @@ async def resolve_user_emails(user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]
     admin = get_admin_supabase().auth.admin
 
     async def _get(uid: uuid.UUID) -> tuple[uuid.UUID, str]:
-        # Best-effort, per id: the caller only wants a label. An id the directory no longer knows
-        # (a deleted user, a stale id read off an old log line) resolves to "" — and so does a
-        # record that cannot be read at all. The batch resolves ids concurrently, so *anything*
-        # escaping here propagates out of the gather and fails the whole request: catching only
-        # AuthApiError let a malformed GoTrue record (an identity missing a field the SDK's own
-        # model declares required → a pydantic ValidationError) take down the Logs screen with a
-        # 500. No failure to read one account is worth failing a page for; it is logged instead,
-        # since a blank label would otherwise be the only trace.
+        # Best-effort, per id: the caller only wants a label, so an id the directory no longer
+        # knows resolves to "" — and so does a record that cannot be read at all. Catching every
+        # exception, not just AuthApiError: the batch gathers concurrently, so anything escaping
+        # here fails the whole page, and a GoTrue record the SDK's own model rejects is enough.
         try:
             resp = await asyncio.to_thread(admin.get_user_by_id, str(uid))
         except Exception:

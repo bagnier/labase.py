@@ -12,11 +12,12 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from apps.shared.events import BusinessEvent, EntityCreated, EntityDeleted, EntityUpdated, OrgScoped
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 class FileEvent(BusinessEvent):
-    app_name: ClassVar[str] = "files"
-    icon: ClassVar[str] = "folder"
+    app_name: ClassVar[AppName] = "files"
+    icon: ClassVar[PhosphorIcon] = "folder"
 
 
 @dataclass(frozen=True, kw_only=True)

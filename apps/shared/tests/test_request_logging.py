@@ -113,10 +113,10 @@ def test_well_known_probe_stays_silent_even_from_our_page(monkeypatch):
 def test_the_request_id_is_a_whole_uuid_not_a_prefix():
     """The correlation key is stored whole; only the screen shortens it.
 
-    It used to be truncated to 8 hex chars at the source — 32 bits, so a birthday collision lands
-    around 77k requests and two unrelated requests would merge under one filter in the Logs viewer.
-    The journal keeps the full uuid (its column is typed for it) and `_short` shortens it for
-    display, which is where a shortened id is actually useful.
+    Truncated to 8 hex chars at the source it would be 32 bits — a birthday collision around 77k
+    requests, merging two unrelated requests under one filter in the Logs viewer. The journal keeps
+    the full uuid (its column is typed for it) and `_short` shortens it for display, which is where
+    a shortened id is actually useful.
     """
     rid = request.new_request_id()
     assert uuid.UUID(rid)  # parses whole — not a prefix

@@ -86,10 +86,10 @@ async def test_emit_writes_the_record_on_the_given_session():
 async def test_the_journal_composes_kind_from_the_two_halves_it_stores():
     """``kind`` is a view over the record, not a value in it.
 
-    An event names itself in two parts, and the class composes them; the table now does the same —
-    ``kind`` is generated from ``app_name`` and ``verb``. So the two derivations cannot drift: there
+    An event names itself in two parts and the class composes them; the table composes the same way,
+    ``kind`` being generated from ``app_name`` and ``verb``. The two derivations cannot drift: there
     is no second writer to keep in sync, and no writer at all can put a dotted string in that column
-    (which is what used to let a hand-written kind disagree with the halves it claimed to be)."""
+    — which is what would let a hand-written kind disagree with the halves it claims to be."""
     actor = uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await session.execute(

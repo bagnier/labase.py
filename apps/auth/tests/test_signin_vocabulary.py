@@ -30,8 +30,8 @@ def test_a_sign_in_records_how_the_session_was_obtained():
 
 
 def test_a_sign_in_records_that_a_second_factor_was_cleared():
-    # The 2FA passage is a property of the session, not a separate ceremony to name: the same kind
-    # carries it, so "how many people signed in" stays one query.
+    """The 2FA passage is a property of the session, not a separate ceremony to name: the same kind
+    carries it, so "how many people signed in" stays one query."""
     record = event_to_record(SignedIn(user_id=uuid.uuid7(), method="password", two_factor=True))
 
     assert record.payload == {"method": "password", "two_factor": True}
@@ -47,8 +47,8 @@ def test_a_sign_in_records_that_a_second_factor_was_cleared():
     ],
 )
 def test_the_method_that_opened_the_ceremony_survives_the_second_factor(relayed, expected):
-    # The second factor is verified on a later request, so how the ceremony began travels in a
-    # cookie — i.e. through the caller's hands. Narrowing it back to the closed set here is what
-    # stops a forged or missing value from reaching the journal as an unknown method; falling
-    # back to the password ceremony is honest, since that is the only one reachable without a relay.
+    """The second factor is verified on a later request, so how the ceremony began travels in a
+    cookie — i.e. through the caller's hands. Narrowing it back to the closed set here is what
+    stops a forged or missing value from reaching the journal as an unknown method; falling back
+    to the password ceremony is honest, since that is the only one reachable without a relay."""
     assert relayed_method(relayed) == expected

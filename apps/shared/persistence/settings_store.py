@@ -24,7 +24,7 @@ from apps.shared.persistence.database import admin_url, search_path_connect_args
 
 log = structlog.get_logger("labase.settings.store")
 
-# Stored form of a boolean setting value.
+# The stored form of a boolean setting value.
 BOOL_TRUE = "true"
 BOOL_FALSE = "false"
 

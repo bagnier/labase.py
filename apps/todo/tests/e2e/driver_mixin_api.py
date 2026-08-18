@@ -113,8 +113,8 @@ class TodoApiMixin(ApiBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_todo_list_as(self, email: str) -> None:
-        # Read the todo list of another tenant, from their own org handle (seeded by
-        # the organizations/files "is a member of" step), to prove it stays private.
+        # The other tenant's org is seeded by the "is a member of" step; read its list from its
+        # own handle.
         slug = getattr(self, "secondary_handles", {}).get(
             email, getattr(self, "active_org_handle", "")
         )
@@ -129,8 +129,7 @@ class TodoApiMixin(ApiBase):
 
     # ── durable async completion counter ──────────────────────────────────────
     def assert_completion_badge(self, badge: str) -> None:
-        # The counter is maintained by the durable async consumer of todo.ticked; deliver the
-        # outboxed task (the polling worker is off under tests) before reading the dashboard.
+        # The counter is maintained by the durable async consumer of todo.ticked.
         self.drain_task_queue()
         slug = getattr(self, "active_org_handle", "")
         resp = self.client().get(f"/{slug}/dashboard/overviews.json")

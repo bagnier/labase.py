@@ -66,8 +66,7 @@ class TimelineBrowserMixin(BrowserBase):
         apply_log_level(level)
 
     def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
-        # All three sources must key on the same value to correlate; the journal's column is a uuid,
-        # so the scenario's readable token maps to one here.
+        # All three sources must key on the same value for the timeline to correlate them.
         oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
         append_firehose(
             seed_data.firehose_record("request.finished", org=oid, request_id=request_id)

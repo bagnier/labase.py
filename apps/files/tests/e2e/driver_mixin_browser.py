@@ -143,7 +143,6 @@ class OrgFileBrowserMixin(BrowserBase):
         self.context_for(email)  # isolated context: registers + logs in via _setup_context
         self.set_acting_email(email)  # self.page → email's isolated context
         self.page.goto(f"{self.base_url}/profile", wait_until="load")
-        # self.page is on /profile; extract handle from org card link
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
@@ -151,13 +150,13 @@ class OrgFileBrowserMixin(BrowserBase):
         self.active_org_handle = handle
         self.primary_email = email
         self.last_registered_email = email
-        # Rename via settings page
-        self.page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
-        self.page.fill("input[name=name]", org_name)
-        with self.page.expect_response(
-            lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
-        ):
-            self.page.click("form:has(input[name=name]) button[type=submit]")
+        self._rename_org_from_settings_page(self.page, handle, org_name)
+
+    def _rename_org_from_settings_page(self, page: Page, handle: str, org_name: str) -> None:
+        page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
+        page.fill("input[name=name]", org_name)
+        with page.expect_response(lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"):
+            page.click("form:has(input[name=name]) button[type=submit]")
 
     def sign_in_as_member_of_org(self, email: str, org_name: str) -> None:
         # Non-owner member: seed the org under a synthetic owner (committed, for the
@@ -214,15 +213,9 @@ class OrgFileBrowserMixin(BrowserBase):
         finally:
             page.close()
         self.secondary_handles[email] = handle
-        # Rename via settings page
         settings_page = ctx.new_page()
         try:
-            settings_page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
-            settings_page.fill("input[name=name]", org_name)
-            with settings_page.expect_response(
-                lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"
-            ):
-                settings_page.click("form:has(input[name=name]) button[type=submit]")
+            self._rename_org_from_settings_page(settings_page, handle, org_name)
         finally:
             settings_page.close()
 

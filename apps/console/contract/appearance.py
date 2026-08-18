@@ -14,11 +14,11 @@ THEME_APP = "appearance"
 THEME_KEY = "theme"
 DEFAULT_THEME = "labase-light"
 
-# The themes available in static/css/input.css. The two `labase-*` names are custom
-# themes declared with `@plugin "daisyui/theme"` (they carry the product identity and
-# are the light/dark defaults); the rest are the built-in daisyUI themes kept enabled
-# in the `@plugin "daisyui" { themes: ... }` block as an admin-selectable roster.
-# `scripts/check_design_tokens.py` asserts this list stays in sync with input.css.
+# The themes available in ``static/css/input.css``, as an admin-selectable roster. The two
+# ``labase-*`` names are custom themes declared with ``@plugin "daisyui/theme"`` — they carry the
+# product identity and are the light/dark defaults; the rest are built-in daisyUI themes kept
+# enabled in the ``@plugin "daisyui" { themes: ... }`` block. ``scripts/check_design_tokens.py``
+# asserts this list stays in step with ``input.css``.
 THEMES = [
     "labase-light",
     "labase-dark",

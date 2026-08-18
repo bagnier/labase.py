@@ -61,9 +61,6 @@ class EventBus:
     import for themselves; reactions run in the listener off the persisted journal, never here."""
 
     def __init__(self, wiring: EventWiring | None = None) -> None:
-        # The bus *writes* the wiring, it does not own it: the listener and the console read the
-        # same one by importing it, rather than reaching through an emitter to find who reacts.
-        # A test that wants its own subscriptions passes a fresh `EventWiring()`.
         self._wiring = wiring if wiring is not None else process_wiring
 
     def declare(self, *event_types: type[BusinessEvent]) -> None:
@@ -139,11 +136,9 @@ class EventBus:
             if idempotent and await EventRepository(session).already_consumed(
                 topic, payload["event_id"]
             ):
-                return  # a re-delivery — the ledger entry (from the first run) makes this a no-op
-            # Correlate the reaction's logs with the fact that triggered it: request_id is the
-            # originating stimulus (so a reaction joins the emitting request's timeline), event_id
-            # the immediate cause. The reaction runs off the journal, minutes-to-days after the
-            # request, on a background task with no request context of its own — so bind them here.
+                return
+            # The reaction runs on a background task with no request context of its own, minutes to
+            # days after the fact — bound here, its logs still join the emitting request's timeline.
             with structlog.contextvars.bound_contextvars(**_delivery_context(payload)):
                 await handler(session, event_type.from_payload(payload))
 
@@ -151,6 +146,6 @@ class EventBus:
 
 
 # Process-wide singleton, writing the process-wide wiring. Runtime code emits on this directly; the
-# production Host is built with ``events=events`` so its mount-time ``.on(...)`` registrations and
+# production Host is built with ``events=events``, so its mount-time ``.on(...)`` registrations and
 # the singleton's ``emit`` share one wiring.
 events = EventBus()

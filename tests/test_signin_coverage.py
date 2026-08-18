@@ -57,6 +57,6 @@ def test_every_delivered_session_is_recorded_as_a_sign_in():
 
 
 def test_the_scan_actually_finds_the_delivery_points():
-    # Guards the guard: a broken glob would leave the assertion above comparing two empty sets
-    # against an exemption list that is not empty — but say it plainly rather than by luck.
+    """Guards the guard: a broken glob would leave the assertion above comparing two empty sets
+    against an exemption list that is not empty — but say it plainly rather than by luck."""
     assert len(_functions_delivering_a_session()) >= 6

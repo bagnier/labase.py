@@ -89,7 +89,7 @@ class AuthBrowserMixin(BrowserBase):
         self.register(email, password)
 
     def _store_active_org_handle(self) -> None:
-        # self._page is on /profile after sign_in; extract handle from the org card link
+        """Read the handle off the org card link — the caller leaves the page on /profile."""
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]

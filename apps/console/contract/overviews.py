@@ -11,21 +11,23 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-#: Console landing sections, in display order. ``operations`` groups the monitoring
-#: screens (issues, metrics, logs) so they are visible at a glance; ``identity`` groups
-#: the who-and-tenancy screens (users, organisations, profiles) in one place; ``features``
-#: are the product apps; ``configuration`` are the platform/foundation settings.
+from apps.shared.vocabulary import AppName, PhosphorIcon
+
+# The console landing sections, in display order. ``operations`` groups the monitoring screens
+# (issues, metrics, logs) so they are visible at a glance; ``identity`` the who-and-tenancy screens
+# (users, organisations, profiles); ``features`` the product apps; ``configuration`` the platform
+# and foundation settings.
 SECTIONS: tuple[str, ...] = ("operations", "identity", "features", "configuration")
 
 
 @dataclass(frozen=True)
 class ConsoleOverview:
-    key: str  # context id, e.g. "files"
-    title: str  # human title
-    icon: str  # phosphor icon name
+    key: AppName
+    title: str
+    icon: PhosphorIcon
     data: dict = field(default_factory=dict)  # JSON-serializable; "lines"
     group: str | None = None  # fold into one console tile with others sharing this group
-    section: str = "features"  # console landing section — one of SECTIONS
+    section: str = "features"  # one of SECTIONS
     href: str | None = None  # card link; defaults to /console/{key} when None
 
 

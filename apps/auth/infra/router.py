@@ -285,7 +285,7 @@ async def login_endpoint(
 _MFA_COOKIE = "mfa_access_token"
 _MFA_REFRESH_COOKIE = "mfa_refresh_token"
 # Which ceremony opened this challenge, so the completed sign-in can name it. The AAL1 tokens
-# already ride the hand-off; the method rides beside them rather than being guessed after the fact.
+# already ride the hand-off; the method rides beside them rather than being guessed afterwards.
 _MFA_METHOD_COOKIE = "mfa_method"
 _MFA_MAX_SECONDS = 300
 
@@ -299,7 +299,7 @@ def relayed_method(cookie: str | None) -> SignInMethod:
     dropped it, the challenge outlived it) or forged. Anything unrecognised falls back to the
     password ceremony — the only one reachable without a relay — so a bad value degrades the fact's
     precision instead of putting an unknown method on the journal."""
-    return cookie if cookie in _RELAYABLE_METHODS else "password"  # narrowed by the membership test
+    return cookie if cookie in _RELAYABLE_METHODS else "password"
 
 
 async def _mfa_challenge_response(
@@ -516,7 +516,7 @@ async def oauth_callback(
         )
     try:
         # The org and admin bootstrap are provisioned by the signup trigger the moment GoTrue
-        # creates the account, so a first-visit ``is_new`` no longer needs an app-side hook here.
+        # creates the account, so a first visit needs no app-side hook here.
         tokens, _is_new = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
         log.warning("auth.oauth_failed", detail=str(e))
@@ -777,8 +777,7 @@ async def confirm_email_endpoint(
     claims = decode_jwt(tokens.access_token)
     actor = _sub_uuid(claims.get("sub"))
     await events.emit(EmailChanged(user_id=actor), admin_session)
-    # The link also signs the reader in: the single-use token is the credential. That session was
-    # delivered silently until now.
+    # The link also signs the reader in: the single-use token is the credential.
     await events.emit(SignedIn(user_id=actor, method="email_link"), admin_session)
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -799,8 +798,8 @@ async def confirm_endpoint(
         # UserCreated (and thus the personal org) was recorded by the signup trigger when the
         # account row was first created; confirming an email adds no new provisioning here.
         tokens = await confirm_signup(token_hash, type)
-        # Confirming the link *is* the sign-in: the account's very first session was handed over
-        # here without leaving any trace at all until now.
+        # Confirming the link *is* the sign-in: the account's very first session is handed over
+        # here.
         await events.emit(
             SignedIn(user_id=_token_sub(tokens.access_token), method="email_link"), admin_session
         )

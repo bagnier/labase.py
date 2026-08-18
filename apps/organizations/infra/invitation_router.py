@@ -76,7 +76,6 @@ async def get_invitation(
             created_at=invitation["created_at"],
         )
 
-    # HTML response
     if invitation is None:
         return templates.TemplateResponse(
             request,
@@ -118,19 +117,17 @@ async def accept_invitation(
     admin_repo: AdminOrgRepo,
     rls_repo: RlsOrgRepo,
 ):
-    # Resolve current invitation state (no membership required)
+    # Read on the admin repo: accepting is exactly what the caller has no membership for yet.
     invitation = await admin_repo.get_invitation_by_token(token)
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
     if invitation["status"] == "accepted":
-        # Idempotent: already accepted — resolve org slug and redirect
-        return await _dashboard_redirect(request, rls_repo, invitation["org_id"])
+        return await _dashboard_redirect(request, rls_repo, invitation["org_id"])  # idempotent
 
     if invitation["status"] != "pending":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
-    # Check that the logged-in user's email matches the invitation
     if current_user.email.lower() != invitation["email"].lower():
         org = await rls_repo.get(invitation["org_id"])
         org_name = org.name if org else ""

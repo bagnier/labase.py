@@ -172,5 +172,5 @@ class EventWiring:
 
 # The process's wiring — what the mounted apps declared and subscribed. Imported by everyone who
 # reads it (the listener, the console), never reached through the bus that writes it: a reader
-# wanting to know who reacts to a fact has no business holding an emitter to find out.
+# wanting to know who reacts to a fact has no business holding an emitter.
 wiring = EventWiring()

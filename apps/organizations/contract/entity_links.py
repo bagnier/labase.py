@@ -10,11 +10,11 @@ templates are data, so this pulls in no cross-app imports.
 import uuid
 from urllib.parse import quote
 
-# app name → org-scoped route template ({handle}, {id} = entity_id, always a uuid pk). Extend
-# as apps grow a member-facing detail page; unknown apps simply don't link. Apps with only a list
-# page (no per-entity detail route) link to that list with an anchor on the item's `<app>-<id>`.
-# Pages route via `by-id`, which redirects to the page's current slug URL (the slug can change, so
-# the uuid is the stable link target).
+# App name → the org-scoped route template for one of its entities (``{id}`` is always a uuid pk).
+# Extend it as apps grow a member-facing detail page; an app that is absent simply never links. One
+# with only a list page links to that list, anchored on the item's ``<app>-<id>``. Pages route
+# through ``by-id``, which redirects to the page's current slug URL — the slug can change, the uuid
+# cannot.
 _ENTITY_ROUTES = {
     "pages": "/{handle}/pages/by-id/{id}",
     "calendar": "/{handle}/calendar/{id}",

@@ -25,13 +25,14 @@ from apps.timeline.domain.models import TimelineEntry, TimelineSource
 
 _SORT_KEYS = {"ts", "source", "level", "org", "name", "user", "entity", "request"}
 
-# The display level the viewer gives every business fact. Business events have no severity of
-# their own (that is a logging notion); this is the merged timeline's axis, not the journal's.
+# The display level the viewer gives every business fact. Business events have no severity of their
+# own — that is a logging notion — so this is the merged timeline's axis, never the journal's.
 BUSINESS_LEVEL = "info"
 
 # The activity chart's own lookback per grain — wider than the paginated table, so the graph can
 # zoom out to a month without the timeline pulling a year of rows. Bounds match the fixed x-axis
-# spans in ``router._GRAIN_SPAN``. Skipped when the caller already set a date bound (filter wins).
+# spans in ``router._GRAIN_SPAN``, and are skipped when the caller already set a date bound: a
+# filter wins.
 _GRAIN_WINDOW = {
     "hour": timedelta(hours=24),
     "day": timedelta(days=14),
@@ -213,7 +214,7 @@ def _event_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
 
 def _business_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     # The journal's id columns are uuid; TimelineFilter carries them as strings off the URL, so
-    # parse at this boundary (a malformed id raises, as the previous in-repository cast did).
+    # parse at this boundary — a malformed id raises.
     kwargs = _event_kwargs(flt, limit)
     del kwargs["level"]  # the journal carries no level column — see BUSINESS_LEVEL
     kwargs["org_id"] = uuid.UUID(flt.org_id) if flt.org_id else None

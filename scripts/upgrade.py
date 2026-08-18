@@ -4,8 +4,8 @@ import re
 import sys
 from pathlib import Path
 
-# Backups live under .cache/ like every other scratch artefact here (pytest, ruff, coverage),
-# not in the world-writable /tmp where a predictable name is anyone's to preempt.
+# Backups live under ``.cache/`` like every other scratch artefact here (pytest, ruff, coverage),
+# never in the world-writable ``/tmp`` where a predictable name is anyone's to preempt.
 BAK = Path(".cache/upgrade")
 LOCK_BAK = BAK / "uv.lock.bak"
 TOML_BAK = BAK / "pyproject.toml.bak"

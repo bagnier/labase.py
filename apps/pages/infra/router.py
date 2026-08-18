@@ -145,8 +145,8 @@ async def new_page(
     session: RlsSession,
     org: CurrentOrgModel,
 ) -> Response:
-    # Pure render: the empty form POSTs to create_page. A GET must never mutate — a
-    # prefetch/crawler/double-click used to litter the org with orphan `page-N` drafts.
+    # Pure render: the empty form POSTs to create_page. A GET must never mutate, or a prefetch,
+    # a crawler or a double-click litters the org with orphan drafts.
     ctx = await fullpage_context(
         session,
         current_user,

@@ -200,13 +200,15 @@ class OrgFileApiMixin(ApiBase):
             client.patch(f"/{slug}", json={"name": org_name})
 
     def promote_to_owner(self) -> None:
-        # Uses admin helper to bypass last-owner constraint during test setup.
+        """A precondition, not the behaviour under test: the admin helper bypasses the last-owner
+        constraint the real endpoint would enforce."""
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(self.primary_email)
         set_membership_role(org_id, user_id, "owner")
 
     def demote_to_member(self) -> None:
-        # Uses admin helper to bypass last-owner constraint during test setup.
+        """A precondition, not the behaviour under test: the admin helper bypasses the last-owner
+        constraint the real endpoint would enforce."""
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(self.primary_email)
         set_membership_role(org_id, user_id, "member")

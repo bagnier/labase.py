@@ -39,6 +39,7 @@ from apps.shared.persistence.settings_store import (
     read_values,
     seed_values,
 )
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 SettingType = Literal["string", "number", "boolean"]
 
@@ -55,13 +56,18 @@ class SettingRow(TypedDict):
 
 @dataclass(frozen=True)
 class SettingDef:
+    """One declared setting: its key, its declared type, and the value seeded the first time the
+    app declares it (stored as text, coerced by ``type``).
+
+    Some settings are meaningful only server-wide — the promoted org handle, say — where a
+    per-organisation override makes no sense at all. Those set ``org_overridable=False``, which
+    drops them from the console's per-org override UI and makes the override endpoint reject them.
+    """
+
     key: str
     type: SettingType
-    default: str  # the value seeded on first declaration; stored as text, coerced by ``type``
+    default: str
     label: str
-    # Some settings are meaningful only server-wide (e.g. the promoted org handle):
-    # a per-organisation override makes no sense. Such settings opt out of the console's
-    # per-org override UI (and the override endpoint rejects them).
     org_overridable: bool = True
 
 
@@ -106,7 +112,7 @@ class SettingsDeclaration:
     """What an app declares at mount: the in-memory metadata the console renders and validates,
     bundled so :meth:`Host.register_settings` takes one payload instead of a growing kwarg list."""
 
-    app_name: str  # context id, e.g. "files"
+    app_name: AppName
     defs: list[SettingDef] = field(default_factory=list)
     supabase: SupabaseLink | None = None
     links: tuple[ConsoleLink, ...] = ()
@@ -179,12 +185,12 @@ class SettingsChanged(BusinessEvent):
     """
 
     verb: ClassVar[str] = "server_changed"
-    app_name: ClassVar[str] = "settings"
-    icon: ClassVar[str] = "gear"
+    app_name: ClassVar[AppName] = "settings"
+    icon: ClassVar[PhosphorIcon] = "gear"
 
-    # The app whose setting changed — distinct from the class-level `app_name`, which says which
-    # app owns this *kind*. This event is owned by "settings" and speaks about another app.
-    target_app: str
+    # Not the class-level ``app_name``, which names the app owning this *kind*: the fact is owned
+    # by "settings" and speaks about another app.
+    target_app: AppName
     key: str
     value: str
     values: dict[str, str] = field(default_factory=dict)
@@ -206,7 +212,7 @@ class AppSettings:
     def __init__(self, raw: dict[str, str], declaration: SettingsDeclaration) -> None:
         self._raw_values = raw
         self._declaration = declaration
-        self._typed: dict[str, SettingValue] | None = None  # coercion cache; None = stale
+        self._typed: dict[str, SettingValue] | None = None  # None = stale, recoerce on read
 
     @property
     def declaration(self) -> SettingsDeclaration:
@@ -227,7 +233,8 @@ class AppSettings:
 
     @_raw.setter
     def _raw(self, raw: dict[str, str]) -> None:
-        # Every write path (read/reload, tests poking values in) drops the coercion cache.
+        # The one write path — read, reload, a test poking values in — so the cache cannot survive
+        # a value change.
         self._raw_values = raw
         self._typed = None
 
@@ -238,7 +245,6 @@ class AppSettings:
 
     @property
     def values(self) -> dict[str, SettingValue]:
-        # Coercion runs once per fresh value set, not on every attribute access.
         if self._typed is None:
             self._typed = _typed(self._defs, self._raw)
         return self._typed
@@ -260,8 +266,8 @@ class AppSettings:
         ]
 
     def __getattr__(self, name: str) -> Any:
-        # A setting's static type depends on its key, so it's ``Any`` here; the value is coerced
-        # to its declared ``str``/``int``/``bool`` at runtime. Only reached for setting keys.
+        """A setting's value, coerced to its declared ``str``/``int``/``bool``. Statically ``Any``:
+        which of the three it is depends on the key, and only setting keys reach here."""
         return _lookup(self.values, name)
 
     async def reload(self, event: SettingsChanged) -> None:
@@ -293,9 +299,9 @@ async def org_values(session: AsyncSession, app_name: str, org_id: uuid.UUID) ->
     return {key: value for key, value in rows.all()}
 
 
-# Process-wide handle registry, one entry per declared app — the single place a live
-# ``AppSettings`` exists. Populated by ``Host.register_settings`` at mount; reused on
-# re-mount (tests build fresh ``Host``\ s) so ``get_settings`` consumers keep a stable handle.
+# One entry per declared app — the single place a live ``AppSettings`` exists. Populated by
+# ``Host.register_settings`` at mount and reused on re-mount (tests build fresh ``Host``\ s), so
+# ``get_settings`` consumers keep a stable handle.
 _registry: dict[str, AppSettings] = {}
 
 
@@ -321,6 +327,6 @@ def bind_settings(declaration: SettingsDeclaration) -> AppSettings:
     ``host.settings_handles``, subscribing to ``host.events``)."""
     seed_values(declaration.app_name, {d.key: d.default for d in declaration.defs})
     settings = _registry.setdefault(declaration.app_name, AppSettings({}, declaration))
-    settings.declaration = declaration  # re-mount (tests build fresh Hosts) rebinds the handle
+    settings.declaration = declaration
     settings.read()
     return settings

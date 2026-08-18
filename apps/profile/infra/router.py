@@ -80,15 +80,12 @@ _AVATAR_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 _AVATAR_MEDIA = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
 _AVATAR_MAX_BYTES = 2 * 1024 * 1024
 
-# The 2FA enrolment secret is generated once per POST and must survive the
-# post/redirect/get to /profile — parked in a short-lived cookie (the MFA
-# step-up / OAuth PKCE idiom) rather than re-rendered at the POST URL.
+# Where the 2FA enrolment secret waits: generated once per POST, it must survive the
+# post/redirect/get to /profile, so it is parked in a short-lived cookie — the MFA step-up and OAuth
+# PKCE idiom — rather than re-rendered at the POST URL.
 _ENROLLMENT_COOKIE = "twofa_enrollment"
 _ENROLLMENT_MAX_SECONDS = 300
 
-# Flash codes carried on the redirect back to GET /profile: a browser form POST
-# lands on a real GET, so a reload never re-submits (JSON callers keep their
-# inline message).
 _PROFILE_FLASHES = {
     "password_changed": ("password_info", "Password changed."),
     "email_requested": ("email_info", "A confirmation email is on its way to your new address."),
@@ -195,15 +192,18 @@ async def _activity_context(
 async def _profile_context(
     request: Request, session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
 ) -> dict:
-    # Helper outside DI: profile routes carry no org, so the server view is the effective one.
+    """The page context, assembled outside DI: profile routes carry no org, so the server view is
+    the effective one.
+
+    The verified-factor lookup and the passkey list are two independent GoTrue round-trips that gate
+    display state only, touching neither the DB session nor each other. They are fired up front so
+    they overlap each other *and* the sequential DB work below, rather than serializing three waits
+    on the critical path of the site's busiest HTML page.
+    """
     profile_settings = get_settings("profile").view()
     users_settings = get_settings("users").view()
     access_token = request.cookies.get("access_token", "")
 
-    # The verified-factor lookup and the passkey list are two independent GoTrue round-trips
-    # that gate only display state and touch neither the DB session nor each other. Fire them
-    # up front so they overlap each other *and* the sequential DB work below, instead of
-    # serializing three separate waits on the critical path of the site's busiest HTML page.
     two_factor_enabled = bool(users_settings.two_factor_enabled)
     passkeys_enabled = bool(users_settings.passkeys_enabled)
     twofa_task = (

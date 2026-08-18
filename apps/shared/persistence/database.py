@@ -120,5 +120,5 @@ async def get_admin_session(request: Request) -> AsyncGenerator[AsyncSession]:
         yield session
 
 
-# BYPASSRLS session — shared infra, owned by no context.
+# A BYPASSRLS session — shared infra, owned by no context.
 AdminSession = Annotated[AsyncSession, Depends(get_admin_session)]

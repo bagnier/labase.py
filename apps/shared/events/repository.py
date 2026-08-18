@@ -30,16 +30,16 @@ from apps.shared.persistence.repository import BaseRepository
 
 log = structlog.get_logger("labase.business_events")
 
-# A base ``BusinessEvent`` field is stored one of two ways: *lifted* to its own indexed column (so
-# RLS, the timeline and full-text search reach it directly), or left in the JSON ``payload``. This
-# is the single list of the lifted ones — ``event_to_record`` pops exactly these out of the payload
-# and ``task_payload`` folds exactly these back in, so the two halves cannot drift apart.
+# The base ``BusinessEvent`` fields stored in their own indexed column rather than in the JSON
+# ``payload`` — which is what lets RLS, the timeline and full-text search reach them directly.
+# ``event_to_record`` pops exactly these out of the payload and ``task_payload`` folds exactly these
+# back in, both walking this tuple, so the two halves cannot drift apart.
 LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_name")
 
-# The journal's one writer since C4 retired the raw INSERT grant: a SECURITY DEFINER function that
-# inserts as its owner, so the request's ``authenticated`` session writes the fact atomically with
-# its mutation without a table grant PostgREST would share. ``kind`` is generated and ``id`` /
-# ``created_at`` keep their column defaults, so none of the three is passed.
+# The journal's one writer: a SECURITY DEFINER function that inserts as its owner, so the request's
+# ``authenticated`` session writes the fact atomically with its mutation without a table grant
+# PostgREST would share. ``kind`` is generated and ``id``/``created_at`` keep their column defaults,
+# so none of the three is passed.
 _RECORD = sql_text(
     "SELECT record_business_event("
     ":app_name, :verb, :icon, :user_id, :user_name, :org_id, :org_name, "
@@ -106,14 +106,12 @@ def event_to_record(
     ctx = get_contextvars()
     request_id = ctx.get("request_id")
     payload = _fact_payload(event)
-    for lifted in LIFTED_COLUMNS:  # the lifted fields get their own columns, not a payload key
+    for lifted in LIFTED_COLUMNS:
         payload.pop(lifted, None)
-    # created_at is the journal's own column, filled by the model default (one clock) — never the
-    # emitter's None, which would only shadow it. Drop it: the column is its one home.
+    # Dropped, not carried: the emitter's created_at is always None, and passing it would shadow the
+    # column default that is the fact's one clock.
     payload.pop("created_at", None)
     return BusinessEventRecord(
-        # The two halves the event declares; the record's ``kind`` is generated from them (a writer
-        # cannot set it), so the journal composes its identity exactly as the class does.
         app_name=event.app_name,
         verb=event.verb,
         icon=event.icon,
@@ -122,7 +120,7 @@ def event_to_record(
         # Scope is carried by the event's type, not by every event: only an OrgScoped fact names
         # an org. The column stays nullable — a server-wide fact legitimately has none.
         org_id=event.org_id if isinstance(event, OrgScoped) else None,
-        entity_id=event.entity_id,  # the concerned entity's uuid pk, lifted to its own uuid column
+        entity_id=event.entity_id,
         # The contextvar carries a str (structlog serializes it); the column is a uuid.
         request_id=uuid.UUID(request_id) if request_id else None,
         request_name=ctx.get("request_name"),
@@ -139,19 +137,20 @@ def event_to_record(
 def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
     """Rebuild the async-consumer payload from a claimed record: the residual JSON ``payload`` plus
     the lifted columns folded back in (a uuid stringified — the queue json-encodes it, and
-    ``from_payload`` re-parses it), the two correlation keys, and the record id as the dedup
-    ``event_id``. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it stays
-    one edit away from the pop loop it mirrors; the listener imports it."""
+    ``from_payload`` re-parses it), the two correlation keys, and the record id as the dedup key and
+    causation id. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it stays
+    one edit away from the pop loop it mirrors; the listener imports it.
+
+    Both correlation keys ride as strings the queue can json-encode. ``created_at`` rebuilds onto
+    the event; ``request_id`` is not an event field at all — the delivery wrapper reads it here to
+    bind the reaction's log context, and ``from_payload`` then drops it."""
     payload = dict(record.payload or {})
     for column in LIFTED_COLUMNS:
         value = getattr(record, column)
         payload[column] = str(value) if isinstance(value, uuid.UUID) else value
-    # Correlation keys ride as strings the queue can json-encode. ``created_at`` rebuilds onto the
-    # event (``from_payload`` re-parses it); ``request_id`` is not an event field — the delivery
-    # wrapper reads it here to bind the reaction's log context, then ``from_payload`` drops it.
     payload["created_at"] = record.created_at.isoformat() if record.created_at else None
     payload["request_id"] = str(record.request_id) if record.request_id else None
-    payload["event_id"] = str(record.id)  # the dedup key + causation id (uuid; queue-encoded)
+    payload["event_id"] = str(record.id)
     return payload
 
 

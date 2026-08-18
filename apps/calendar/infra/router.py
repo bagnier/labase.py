@@ -100,10 +100,13 @@ def _agenda(events: list[CalendarEvent], tz: tzinfo = UTC) -> list[dict]:
 def _month_grid(
     events: list[CalendarEvent], ref: date, today: date, tz: tzinfo = UTC
 ) -> list[list[dict]]:
-    # A multi-day event is placed on every day it spans, not just its start day. Each day
-    # marks whether it is the event's start/end so the grid can show the time only on the
-    # first day and a continuation bar on the rest. Spans use the org-local date, so an
-    # event is placed on the days it occupies in the org's timezone.
+    """The month's cells, one row per week.
+
+    A multi-day event is placed on every day it spans, not just its start day, and each day marks
+    whether it is the event's start or end — which is what lets the grid show the time on the first
+    day and a continuation bar on the rest. Spans are computed on the org-local date, so an event
+    occupies the days it occupies in the org's timezone.
+    """
     local: dict[uuid.UUID, tuple[date, date, str]] = {}
     by_day: dict[date, list[CalendarEvent]] = {}
     for e in events:

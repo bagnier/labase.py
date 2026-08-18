@@ -19,13 +19,13 @@ accumulator (see ``_feeds_load_metrics``).
 
 from dataclasses import dataclass, field
 
-# Fixed histogram boundaries (ms). p50/p95 are derived from bucket counts,
-# Prometheus-style; the +Inf bucket is the implicit last slot of ``buckets``.
+# Fixed histogram boundaries, in milliseconds. p50/p95 are derived from the bucket counts,
+# Prometheus-style; the ``+Inf`` bucket is the implicit last slot of ``buckets``.
 BUCKET_BOUNDS_MS: tuple[float, ...] = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000)
 UNMATCHED_ROUTE = "unmatched"
-# How many distinct no-route paths keep their real label before overflow collapses into
-# ``unmatched``. A safety net: recordable unmatched are already gated to our own dead links
-# (a handful), so this only caps a same-host-referer scanner.
+# How many distinct no-route paths keep their real label before overflow collapses them into
+# ``unmatched``. A safety net only: what is recordable is already gated to our own dead links, a
+# handful, so this caps nothing but a same-host-referer scanner.
 UNMATCHED_LABEL_CAP = 25
 
 

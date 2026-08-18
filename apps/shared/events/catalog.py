@@ -71,6 +71,5 @@ class EventCatalog:
         return dict(self._by_kind)
 
 
-# The process-wide catalog. Global by nature (see the module docstring), so it is imported, never
-# passed: every event class registers into this one at import.
+# The process-wide catalog: every event class registers into this one at import.
 catalog = EventCatalog()

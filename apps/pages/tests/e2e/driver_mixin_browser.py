@@ -49,7 +49,6 @@ class PagesBrowserMixin(BrowserBase):
         self.submit_labelled_form(self.page, fields, self.page.get_by_role("button", name="Save"))
 
     def open_new_page_form(self) -> None:
-        # A GET must render only — it must never create a draft (the old bug littered orphans).
         self._goto_list()
         self.page.click('a[href$="/pages/new/edit"]')
         self.page.wait_for_selector("#edit-page-form", timeout=5000)
@@ -151,8 +150,8 @@ class PagesBrowserMixin(BrowserBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_pages_list_as(self, email: str) -> None:
-        # Read another tenant's pages list from their own page/org handle (seeded by
-        # the "is a member of" step) to prove one org's pages never surface elsewhere.
+        # The other tenant's org is seeded by the "is a member of" step; read its list from its
+        # own handle.
         page = self.page_for(email)
         slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
         page.goto(self._pages_url(handle=slug), wait_until="load")

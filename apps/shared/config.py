@@ -11,6 +11,9 @@ from functools import lru_cache
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# The interval of a per-process background loop, in seconds — ``0`` disables that loop.
+type PollSeconds = float
+
 
 class TechnicalSettings(BaseSettings):
     # populate_by_name: `environment` carries a validation_alias, which would otherwise make it
@@ -27,16 +30,15 @@ class TechnicalSettings(BaseSettings):
     supabase_database_user_url: str
     supabase_database_admin_url: str = ""
     supabase_database_schema: str = "public"
-    # Deployment environment. "production" activates the boot-time preflight gate
-    # (apps/shared/preflight.py). Accepts either ENVIRONMENT or LABASE_ENV.
+    # "production" activates the boot-time preflight gate (apps/shared/preflight.py).
     environment: str = Field(
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "LABASE_ENV"),
     )
     log_debug: bool = False
-    # Firehose: structlog events are rendered to stdout AND appended to per-day JSON files
-    # under this directory, giving the unified logs viewer a recent window to read back.
-    # Local default is a gitignored dot-dir; production points this at a real log volume.
+    # structlog events are rendered to stdout AND appended to per-day JSON files here, which is
+    # what gives the unified logs viewer a recent window to read back. Production points this at a
+    # real log volume.
     firehose_dir: str = ".firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
@@ -48,24 +50,19 @@ class TechnicalSettings(BaseSettings):
     # Closed by default: no cross-origin access until CORS_ORIGINS lists the exact front-end
     # origins that need it. "*" is honoured but forces credentials off (see cors_config).
     cors_origins: list[str] = []
-    # Cross-instance settings freshness: TTL of the per-process re-read loop; 0 disables.
-    settings_refresh_seconds: float = 30
-    # Async substrate: poll interval of the per-process task worker; 0 disables.
-    task_worker_interval_seconds: float = 1.0
-    # Load metrics: per-process flush of the request accumulator; 0 disables.
-    metrics_flush_seconds: float = 60
-    # Static assets: browser cache TTL (seconds) for un-fingerprinted files; fingerprinted
-    # ones (?v=…) are served immutable regardless. 0 → always revalidate (dev). Prod can push
-    # this high, especially once every bundle is fingerprinted.
+    settings_refresh_seconds: PollSeconds = 30  # re-read, for cross-instance freshness
+    task_worker_interval_seconds: PollSeconds = 1.0  # the task worker's claim poll
+    metrics_flush_seconds: PollSeconds = 60  # flush of the request accumulator
+    # Browser cache TTL for un-fingerprinted static files; fingerprinted ones (?v=…) are served
+    # immutable regardless. 0 → always revalidate (dev).
     static_cache_seconds: int = 3600
-    # Firehose: per-process drain of the in-memory log queue to the per-day files; 0 disables
-    # the background writer (the runtime log path then drops lines instead of blocking on I/O).
-    firehose_flush_seconds: float = 1.0
+    # At 0 the background writer stops, and the runtime log path drops lines rather than block.
+    firehose_flush_seconds: PollSeconds = 1.0  # drain of the log queue to the per-day files
     # Deployed version (git SHA in Docker); drives error-tracking regression detection.
     app_version: str = "dev"
-    # SMTP defaults target the local Supabase mail catcher (Mailpit); prod sets
-    # SMTP_* to any provider. Sending is best-effort (see apps/shared/email.py).
-    # 127.0.0.1 (not localhost): keeps DNS out of every local connection.
+    # These defaults target the local Supabase mail catcher (Mailpit); prod sets SMTP_* to any
+    # provider, and sending stays best-effort (see apps/shared/email.py). 127.0.0.1 rather than
+    # localhost keeps DNS out of every local connection.
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 54325
     smtp_sender: str = "labase <noreply@labase.local>"

@@ -8,11 +8,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 from apps.shared import clock
 
-# Postgres' own auto-naming, spelled out — so a constraint the ORM declares and the same
-# constraint written in a migration land on the very same name, by construction rather than by
-# vigilance. SQLAlchemy issues no DDL here (the schema is versioned as plain SQL under
-# supabase/migrations/), so this is what keeps the two halves able to talk about one object;
-# tests/test_schema_parity.py is what checks they still do.
+# Postgres' own auto-naming, spelled out — so a constraint the ORM declares and the same constraint
+# written in a migration land on the very same name, by construction rather than by vigilance.
+# SQLAlchemy issues no DDL here (the schema is versioned as plain SQL under
+# ``supabase/migrations/``), so this is what keeps the two halves able to talk about one object;
+# ``tests/test_schema_parity.py`` is what checks they still do.
 NAMING_CONVENTION = {
     "pk": "%(table_name)s_pkey",
     "uq": "%(table_name)s_%(column_0_N_name)s_key",
@@ -27,9 +27,14 @@ class Base(DeclarativeBase):
 
 
 class UUIDPk:
-    # UUIDv7: time-ordered, so a pk doubles as a monotonic cursor (the append-only trails order on
-    # it). Generated Python-side on the ORM write path; the DB column mirrors `default
-    # public.uuidv7()` for raw / PostgREST inserts. Tokens keep uuid4 (unguessable, no timestamp).
+    """A UUIDv7 primary key: time-ordered, so a pk doubles as the monotonic cursor the append-only
+    trails read on.
+
+    Generated Python-side on the ORM write path, while the column mirrors ``default
+    public.uuidv7()`` for raw and PostgREST inserts. Security tokens are the exception and keep
+    uuid4 — unguessable, with no timestamp to read off them.
+    """
+
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
 
 

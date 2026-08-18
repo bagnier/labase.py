@@ -124,15 +124,19 @@ _CLAIM = text(
 
 
 class TaskWorker:
+    """The per-process claimer, ticking on its own task.
+
+    ``session_factory`` overrides the admin sessions it uses (claim, bookkeeping, admin handlers):
+    the API test driver injects its rolled-back test connection, so drained tasks see — and leave —
+    no committed rows.
+    """
+
     def __init__(
         self,
         interval_seconds: float,
         batch_size: int = 10,
         session_factory: Callable[[], AsyncSession] | None = None,
     ) -> None:
-        # session_factory overrides the admin sessions (claim, bookkeeping, admin
-        # handlers) — the API test driver injects its rolled-back test connection
-        # so drained tasks see (and leave) no committed rows.
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory

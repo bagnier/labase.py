@@ -89,10 +89,10 @@ def _write_batch(path: Path, records: list[dict[str, Any]]) -> None:
         pass
 
 
-# Runtime log lines wait here between the structlog processor (producer) and the background
-# writer (consumer). Bounded so that, with no writer draining (writer disabled, or unit runs that
-# log but never start the lifespan task), the queue self-caps by dropping the oldest diagnostic
-# line instead of growing without limit — the firehose is a best-effort tail, never load-bearing.
+# Where runtime log lines wait, between the structlog processor (producer) and the background writer
+# (consumer). Bounded so that with no writer draining — disabled, or a unit run that logs but never
+# starts the lifespan task — the queue self-caps by dropping the oldest line instead of growing
+# without limit. The firehose is a best-effort tail, never load-bearing.
 _QUEUE: deque[dict[str, Any]] = deque(maxlen=10000)
 
 

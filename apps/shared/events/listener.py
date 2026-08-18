@@ -46,6 +46,18 @@ class UnroutableFact(Exception):
 
 
 class EventListener:
+    """The journal's reader, ticking on its own task.
+
+    Delivering is where the two halves of the event system meet, and the only place they do: the
+    *catalog* says what a record is, the *wiring* says who wants it. Both are imported, so the
+    listener reads what a mount declared without holding the bus that wrote it — and a test can hand
+    over a ``wiring`` of its own to deliver against isolated subscriptions.
+
+    ``session_factory`` likewise overrides the admin session: the API test driver injects its
+    rolled-back test connection, so the listener sees the same uncommitted facts a request just
+    wrote.
+    """
+
     def __init__(
         self,
         interval_seconds: float,
@@ -53,15 +65,9 @@ class EventListener:
         session_factory: Callable[[], AsyncSession] | None = None,
         wiring: EventWiring | None = None,
     ) -> None:
-        # session_factory overrides the admin session (the API test driver injects its rolled-back
-        # test connection, so the listener sees the same uncommitted facts a request just wrote).
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory
-        # Delivering is where the two halves of the event system meet, and it is the only place
-        # they do: the *catalog* says what this record is, the *wiring* says who wants it. Both are
-        # imported — the listener reads what a mount declared without holding the bus that wrote
-        # it. A test hands over its own wiring to deliver against isolated subscriptions.
         self._wiring = wiring if wiring is not None else process_wiring
         self._spread_cursor: uuid.UUID | None = None  # per-instance high-water (uuid7, ordered)
         self._task: asyncio.Task | None = None
@@ -73,7 +79,9 @@ class EventListener:
         return factory()
 
     async def tick(self) -> int:
-        """One pass of both delivery paths. Returns how much work was processed.
+        """One pass of both delivery paths. Returns the ``on``-path count, which is what drives
+        the drain loop's batching — the spread scan has no ``LIMIT``, so one tick applies all of it
+        and never needs another pass.
 
         - **``on`` / async** — claim a batch of never-dispatched facts (``FOR UPDATE SKIP LOCKED``),
           enqueue one task per durable consumer, stamp them dispatched. Exactly-once cluster-wide;
@@ -93,8 +101,6 @@ class EventListener:
             await session.commit()
         for record in spread_records:
             await self._apply_spread(record)
-        # Return the on-path count only: it drives the drain loop's batching. The spread scan has no
-        # LIMIT — a single tick applies all of it — so it never needs another pass.
         return len(claimed)
 
     async def _read_spread(self, repo: EventRepository) -> list[BusinessEventRecord]:
@@ -143,11 +149,8 @@ class EventListener:
     async def _fan_out(self, session: AsyncSession, record: BusinessEventRecord) -> None:
         event_type = catalog.class_for(record.kind)
         if event_type is None:
-            # A kind with no registered class: we can route this fact to no one. This is *not* the
-            # benign "known kind, nobody listens" no-op below — it means a fact was persisted that
-            # the running process cannot even name, so surface it as a console Issue (fingerprint-
-            # grouped: one kind is one issue, not one per fact). It is still marked dispatched
-            # by the caller — the cursor must advance, we simply have nothing to deliver.
+            # Not the benign "known kind, nobody listens" no-op below: a fact was persisted that
+            # this process cannot even name, and that is a defect worth an Issue of its own.
             self._capture_unroutable(record)
             return
         subs = self._wiring.consumers_of(event_type)

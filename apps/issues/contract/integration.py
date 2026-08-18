@@ -45,12 +45,11 @@ log = structlog.get_logger("labase.issues")
 
 PURGE_TOPIC = "issues.purge"
 PURGE_EVERY_SECONDS = 86400
-# How often the capture queue is drained into issues — near-real-time, cheap.
+# How often the capture queue is drained into issues — near-real-time, and cheap.
 CAPTURE_DRAIN_SECONDS = 1.0
 
 
 def mount(host: Host) -> None:
-    # Console presence is kept even when disabled, so an admin can see and re-enable the app.
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     settings = host.register_settings(_declare_settings())
     if not settings.enabled:

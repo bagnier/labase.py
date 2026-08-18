@@ -1,3 +1,9 @@
+"""The composition root: each context's ``mount()`` wires its routers, events and claimed slugs.
+
+FastAPI matches routes in registration order, so registration follows each module's declared
+``PHASE`` (:class:`apps.shared.host.MountPhase`); ties keep the listing order below.
+"""
+
 from apps.api_keys.contract import integration as api_keys
 from apps.auth.contract import integration as auth
 from apps.calendar.contract import integration as calendar
@@ -17,9 +23,6 @@ from apps.shared.persistence.database import dispose_engines
 from apps.timeline.contract import integration as timeline
 from apps.todo.contract import integration as todo
 
-# Composition root: each context's mount() wires its routers, events, and claimed slugs.
-# FastAPI matches routes in registration order, so registration follows each module's
-# declared MountPhase (see apps.shared.host.MountPhase); ties keep this listing order.
 _apps = sorted(
     (
         shared,
@@ -49,5 +52,5 @@ for _app in _apps:
 # needs the pools while it stops.
 host.on_shutdown(dispose_engines)
 
-# ASGI entrypoint: hypercorn loads ``apps.main:app`` (see docker/docker-compose.yml).
 app = host.app
+"""The ASGI entrypoint: hypercorn loads ``apps.main:app`` (see docker/docker-compose.yml)."""

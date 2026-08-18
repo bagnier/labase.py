@@ -34,6 +34,5 @@ def _emit_variants() -> set[str]:
 
 
 def test_the_only_way_to_record_a_fact_is_on_a_transaction():
-    # A second entry point would have to weaken durability to be worth adding — which is exactly
-    # the divergence this subsystem spent a month removing.
+    """A second entry point would have to weaken durability to be worth adding at all."""
     assert _emit_variants() == {"emit"}

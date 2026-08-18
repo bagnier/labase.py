@@ -22,8 +22,8 @@ from envfile import merge_env
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKTREES = ROOT / "worktrees"
-# Symlinked from the main checkout so a worktree skips `npm install` (static/ is built
-# per-worktree by `make dev`, and holds tracked sources, so it is not linked).
+# Symlinked from the main checkout so a worktree skips ``npm install``. ``static/`` is not linked:
+# it is built per-worktree by ``make dev`` and holds tracked sources.
 SHARED_LINKS = ["node_modules"]
 
 
@@ -50,7 +50,6 @@ def create(name: str) -> None:
     if path.exists():
         sys.exit(f"{path} already exists.")
 
-    # Branch: reuse if it exists, else create from current HEAD.
     branches = _run(
         ["git", "branch", "--list", name], cwd=ROOT, capture_output=True, text=True
     ).stdout

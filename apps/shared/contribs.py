@@ -60,6 +60,6 @@ class Contribs:
         return results
 
 
-# Process-wide singleton. Runtime code collects on this directly; the production Host is built
-# with ``contribs=contribs`` so its mount-time ``.provide(...)`` registrations land here too.
+# Process-wide singleton. Runtime code collects on this directly; the production Host is built with
+# ``contribs=contribs``, so its mount-time ``.provide(...)`` registrations land here too.
 contribs = Contribs()

@@ -10,11 +10,12 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from apps.shared.events import BusinessEvent
+from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 class ProfileEvent(BusinessEvent):
-    app_name: ClassVar[str] = "profile"
-    icon: ClassVar[str] = "user-circle"
+    app_name: ClassVar[AppName] = "profile"
+    icon: ClassVar[PhosphorIcon] = "user-circle"
 
 
 @dataclass(frozen=True, kw_only=True)

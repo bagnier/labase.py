@@ -29,8 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 log = structlog.get_logger("labase.db")
 
-# Sync engines already carrying our listeners — keeps instrument_engine idempotent without
-# stamping an attribute onto SQLAlchemy's Engine. Weak so a disposed engine can be collected.
+# Sync engines already carrying our listeners — what keeps ``instrument_engine`` idempotent without
+# stamping an attribute onto SQLAlchemy's ``Engine``. Weak, so a disposed engine can be collected.
 _instrumented: WeakSet[Engine] = WeakSet()
 
 _MAX_STATEMENT = 300  # statements are truncated in logs; full text lives in Postgres
