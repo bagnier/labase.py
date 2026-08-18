@@ -93,14 +93,14 @@ def compute_resources(cards: list[CardResource]) -> list[tuple[str, str]]:
     result: list[tuple[str, str]] = []
     for deck in decks_in_order:
         deck_cards = sorted((c for c in cards if c.deck == deck), key=lambda c: c.card_position)
-        deck_resource = next((c.deck_resource for c in deck_cards), None)
+        deck_resource_url = next((c.deck_resource_url for c in deck_cards), None)
         seen: list[str] = []
-        if deck_resource:
-            seen.append(deck_resource)
-            result.append((deck, deck_resource))
+        if deck_resource_url:
+            seen.append(deck_resource_url)
+            result.append((deck, deck_resource_url))
         for c in deck_cards:
-            link = c.card_resource
-            if link and link != deck_resource and link not in seen:
+            link = c.card_resource_url
+            if link and link != deck_resource_url and link not in seen:
                 seen.append(link)
                 result.append((deck, link))
     return result

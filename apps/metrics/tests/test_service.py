@@ -15,7 +15,7 @@ def _buckets(**at_ms: int) -> list[int]:
 
 def _row(method: str, route: str, requests: int, errors: int, buckets: list[int]):
     return RequestMetric(
-        bucket=datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
+        bucket_start=datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
         resolution=MetricResolution.minute,
         instance="test",
         method=method,
@@ -71,7 +71,7 @@ def test_aggregate_empty_window():
 
 def _row_at(minute: int, requests: int, errors: int) -> RequestMetric:
     row = _row("GET", "/todo", requests, errors, _buckets(ms_100=requests))
-    row.bucket = datetime(2026, 7, 6, 12, minute, tzinfo=UTC)
+    row.bucket_start = datetime(2026, 7, 6, 12, minute, tzinfo=UTC)
     return row
 
 
@@ -83,7 +83,7 @@ def test_timeseries_sums_per_bucket_across_routes_and_sorts_chronologically():
     ]
     points = timeseries(rows)
 
-    assert [p.bucket.minute for p in points] == [0, 2]
+    assert [p.bucket_start.minute for p in points] == [0, 2]
     assert [(p.requests, p.errors) for p in points] == [(20, 0), (15, 3)]
 
 

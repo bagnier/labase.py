@@ -48,7 +48,9 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 ### technical
 
-- [ ] squash migrations
+- [x] **squash migrations** — 43 fichiers d'historique remplacés par un socle et un fichier par
+  bounded context, supprimable avec son app ; noms revus contre les conventions Postgres et leurs
+  homologues Python, parité ORM ↔ base tenue par `tests/test_schema_parity.py`.
 - [ ] Role-Based Access Control
 - [ ] dataclass or pydantic ?
 - [ ] multi processes ?

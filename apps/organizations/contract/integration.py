@@ -141,12 +141,12 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     if not exists:
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    already_member = await count_where(session, Membership, Membership.auth_user_id == user_id)
+    already_member = await count_where(session, Membership, Membership.user_id == user_id)
     if already_member:
         return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
     org = await OrganizationRepository(session).create_with_owner(
         name=event.email,
-        auth_user_id=user_id,
+        user_id=user_id,
     )
     await session.flush()  # assign org.id; the worker commits the whole unit
     await events.emit(
@@ -177,7 +177,7 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     if user_id is None:
         return
     memberships = list(
-        await session.scalars(select(Membership).where(Membership.auth_user_id == user_id))
+        await session.scalars(select(Membership).where(Membership.user_id == user_id))
     )
     org_ids = {m.org_id for m in memberships}
     doomed: set[uuid.UUID] = set()
@@ -187,7 +187,7 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
             Membership,
             Membership.org_id == membership.org_id,
             Membership.role == OrgRole.owner,
-            Membership.auth_user_id != user_id,
+            Membership.user_id != user_id,
         )
         # Losing the last owner leaves the org unmanageable — reap it whole rather than
         # delete this seat (which the guard would refuse anyway). Otherwise drop the seat.

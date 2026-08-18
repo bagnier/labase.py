@@ -143,11 +143,11 @@ async def _emit_last_owner_violation(
 
 async def _build_members(repo: OrganizationRepository, org_id: uuid.UUID) -> list[MemberRead]:
     raw_members = await repo.list_members(org_id)
-    emails = await resolve_user_emails([m.auth_user_id for m in raw_members])
+    emails = await resolve_user_emails([m.user_id for m in raw_members])
     return [
         MemberRead(
-            auth_user_id=m.auth_user_id,
-            email=emails.get(m.auth_user_id, ""),
+            user_id=m.user_id,
+            email=emails.get(m.user_id, ""),
             role=m.role,
             created_at=m.created_at,
         )
@@ -603,10 +603,10 @@ async def update_member_role(
         ),
         repo.session,
     )
-    emails = await resolve_user_emails([updated.auth_user_id])
+    emails = await resolve_user_emails([updated.user_id])
     member = MemberRead(
-        auth_user_id=updated.auth_user_id,
-        email=emails.get(updated.auth_user_id, ""),
+        user_id=updated.user_id,
+        email=emails.get(updated.user_id, ""),
         role=updated.role,
         created_at=updated.created_at,
     )

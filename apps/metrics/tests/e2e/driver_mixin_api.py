@@ -10,7 +10,7 @@ def seeded_metric(label: str, requests: int, errors: int, around_ms: int) -> Req
     buckets = [0] * (len(BUCKET_BOUNDS_MS) + 1)
     buckets[bucket_index(around_ms)] = requests
     return RequestMetric(
-        bucket=clock.now().replace(second=0, microsecond=0),
+        bucket_start=clock.now().replace(second=0, microsecond=0),
         resolution=MetricResolution.minute,
         instance="seed",
         method=method,

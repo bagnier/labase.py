@@ -72,8 +72,8 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
     # from_payload already re-parsed the polymorphic entity_id to a uuid (the removed user's pk);
     # narrow the union, re-parsing only as a defensive fallback.
     entity_id = event.entity_id
-    auth_user_id = entity_id if isinstance(entity_id, uuid.UUID) else uuid.UUID(entity_id)
-    profile = await session.scalar(select(Profile).where(Profile.auth_user_id == auth_user_id))
+    user_id = entity_id if isinstance(entity_id, uuid.UUID) else uuid.UUID(entity_id)
+    profile = await session.scalar(select(Profile).where(Profile.user_id == user_id))
     if profile is not None:
         await session.delete(profile)
         await session.flush()

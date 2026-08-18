@@ -49,7 +49,7 @@ def formatted_stack(exc: BaseException) -> str:
 
 
 def status_after_occurrence(
-    current: IssueStatus, resolved_in_version: str | None, seen_version: str
+    current: IssueStatus, resolved_in_release: str | None, seen_version: str
 ) -> IssueStatus:
     """The issue's status once one more occurrence lands on it.
 
@@ -57,6 +57,6 @@ def status_after_occurrence(
     (Sentry's most useful feature — one column and one if). Ignored stays
     ignored; everything else keeps its triage state.
     """
-    if current is IssueStatus.resolved and seen_version != (resolved_in_version or ""):
+    if current is IssueStatus.resolved and seen_version != (resolved_in_release or ""):
         return IssueStatus.regressed
     return current

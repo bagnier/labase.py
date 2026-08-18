@@ -108,7 +108,7 @@ async def _gate_owner(request: Request, membership: Membership) -> Membership:
     if membership.role != OrgRole.owner:
         log.warning(
             "organizations.ownership_violation",
-            user_id=str(membership.auth_user_id),
+            user_id=str(membership.user_id),
             org_id=str(membership.org_id),
             path=request.url.path,
         )

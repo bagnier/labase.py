@@ -38,7 +38,7 @@ class IssueOpened(IssueSubject, IssueEvent):
 @dataclass(frozen=True, kw_only=True)
 class IssueRegressed(IssueSubject, IssueEvent):
     verb: ClassVar[str] = "regressed"
-    resolved_in_version: str | None
+    resolved_in_release: str | None
     seen_version: str
 
 

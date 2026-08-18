@@ -13,7 +13,7 @@ from apps.shared.persistence.base import (
 )
 
 
-class TodoItem(Base, UUIDPk, OrgScoped, Positioned, Versioned, Timestamped):
+class Todo(Base, UUIDPk, OrgScoped, Positioned, Versioned, Timestamped):
     __tablename__ = "todos"
 
     user_id: Mapped[uuid.UUID]

@@ -37,7 +37,7 @@ class AppSetting(Base, Versioned, Timestamped):
 
     __tablename__ = "app_settings"
 
-    app: Mapped[str] = mapped_column(primary_key=True)
+    app_name: Mapped[str] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(primary_key=True)
     value: Mapped[str]  # stored as text; coerced by the app's declared SettingDef.type
 
@@ -45,12 +45,12 @@ class AppSetting(Base, Versioned, Timestamped):
 class OrgAppSetting(Base, Versioned, Timestamped):
     """A per-organisation override of one app setting — managed from the console.
 
-    Unset (app, key, org) triples fall back to the server-wide `AppSetting` value.
+    Unset (app_name, key, org) triples fall back to the server-wide `AppSetting` value.
     """
 
     __tablename__ = "org_app_settings"
 
-    app_name: Mapped[str] = mapped_column("app", primary_key=True)  # DB column is still "app"
+    app_name: Mapped[str] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(primary_key=True)
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
     value: Mapped[str]
@@ -61,14 +61,14 @@ def disabled_apps_select() -> Select[tuple[str]]:
 
     Used by the admin-session repository to render the console's toggle state.
     """
-    return select(AppSetting.app).where(
+    return select(AppSetting.app_name).where(
         AppSetting.key == ENABLED_KEY, AppSetting.value == BOOL_FALSE
     )
 
 
 def _app_settings_select(app: str) -> Select[tuple[str, str]]:
     """Every persisted ``(key, value)`` for ``app`` — read at mount on a throwaway engine."""
-    return select(AppSetting.key, AppSetting.value).where(AppSetting.app == app)
+    return select(AppSetting.key, AppSetting.value).where(AppSetting.app_name == app)
 
 
 async def _on_throwaway_engine[T](work: Callable[[AsyncConnection], Awaitable[T]]) -> T:
@@ -115,8 +115,12 @@ def seed_values(app: str, initial: dict[str, str]) -> None:
         return
 
     async def _work(conn: AsyncConnection) -> None:
-        rows = [{"app": app, "key": key, "value": value} for key, value in initial.items()]
-        stmt = insert(AppSetting).values(rows).on_conflict_do_nothing(index_elements=["app", "key"])
+        rows = [{"app_name": app, "key": key, "value": value} for key, value in initial.items()]
+        stmt = (
+            insert(AppSetting)
+            .values(rows)
+            .on_conflict_do_nothing(index_elements=["app_name", "key"])
+        )
         await conn.execute(stmt)
 
     try:

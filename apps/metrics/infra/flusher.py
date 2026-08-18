@@ -48,7 +48,9 @@ class MetricsFlusher:
         if deltas:
             minute = clock.now().replace(second=0, microsecond=0)
             async with admin_session_factory()() as session:
-                await add_deltas(session, instance=self._instance, bucket=minute, deltas=deltas)
+                await add_deltas(
+                    session, instance=self._instance, bucket_start=minute, deltas=deltas
+                )
                 await session.commit()
         # Advance only after a successful write, so a failed flush is retried
         # next tick instead of dropping the interval's traffic.

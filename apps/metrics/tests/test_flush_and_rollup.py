@@ -83,7 +83,7 @@ async def test_rollup_downsamples_old_minute_rows_then_purge_applies_retention()
         for minute in (old, old + timedelta(minutes=1)):
             session.add(
                 RequestMetric(
-                    bucket=minute,
+                    bucket_start=minute,
                     resolution=MetricResolution.minute,
                     instance="a",
                     method="GET",

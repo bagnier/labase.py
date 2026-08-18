@@ -109,7 +109,7 @@ async def _record(event: ExceptionCaptured) -> None:
             regressed = IssueRegressed(
                 entity_id=issue_id,
                 entity_name=title,
-                resolved_in_version=recorded.issue.resolved_in_version,
+                resolved_in_release=recorded.issue.resolved_in_release,
                 seen_version=version,
             )
             await events.emit(regressed, session)

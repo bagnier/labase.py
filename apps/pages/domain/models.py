@@ -3,7 +3,8 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Computed, ForeignKey, String
+from sqlalchemy import Computed, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,12 +29,16 @@ class PageVisibility(StrEnum):
 
 class Page(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
     __tablename__ = "pages"
+    __table_args__ = (UniqueConstraint("org_id", "slug"),)
 
     user_id: Mapped[uuid.UUID]
     title: Mapped[str] = mapped_column(String)
     slug: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(String, default="")
-    visibility: Mapped[PageVisibility] = mapped_column(String, default=PageVisibility.draft)
+    visibility: Mapped[PageVisibility] = mapped_column(
+        SAEnum(PageVisibility, name="page_visibility", create_type=False),
+        default=PageVisibility.draft,
+    )
     # Generated in the DB (see the pages_fulltext migration); read-only for the ORM. Never null:
     # the expression coalesces both inputs, so an empty page still yields an empty tsvector.
     search_vector: Mapped[str] = mapped_column(
@@ -58,6 +63,7 @@ class PageRead(BaseModel):
 
 class PageNavItem(Base, UUIDPk, OrgScoped, Positioned, Versioned, Timestamped):
     __tablename__ = "page_nav_items"
+    __table_args__ = (UniqueConstraint("org_id", "page_id"),)
 
     page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id"))
 

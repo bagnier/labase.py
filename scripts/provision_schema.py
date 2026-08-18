@@ -129,7 +129,7 @@ def _storage_and_trigger_sql(schema: str, bucket: str) -> str:
         f'drop policy if exists "{bucket}: org members {act}" on storage.objects;\n'
         f'create policy "{bucket}: org members {act}" on storage.objects for {act}\n'
         f"  {clause} (bucket_id = '{bucket}'\n"
-        f"    and (storage.foldername(name))[1]::uuid in (select {schema}.user_orgs()));"
+        f"    and (storage.foldername(name))[1]::uuid in (select {schema}.user_org_ids()));"
         for act, clause in actions
     )
     return f"""

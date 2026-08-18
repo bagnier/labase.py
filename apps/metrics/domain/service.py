@@ -51,10 +51,10 @@ def timeseries(rows: list[RequestMetric]) -> list[LoadPoint]:
     """Collapse rows to one point per time bucket, chronological — for the load chart."""
     by_bucket: dict[datetime, LoadPoint] = {}
     for row in rows:
-        point = by_bucket.get(row.bucket)
+        point = by_bucket.get(row.bucket_start)
         if point is None:
-            by_bucket[row.bucket] = LoadPoint(
-                bucket=row.bucket, requests=row.requests, errors=row.errors
+            by_bucket[row.bucket_start] = LoadPoint(
+                bucket_start=row.bucket_start, requests=row.requests, errors=row.errors
             )
         else:
             point.requests += row.requests

@@ -30,7 +30,7 @@ async def create_deck(
 ) -> Deck:
     deck = await session.scalar(select(Deck).where(Deck.org_id == org_id, Deck.name == name))
     if deck is None:
-        deck = Deck(org_id=org_id, name=name, resource=resource, position=position)
+        deck = Deck(org_id=org_id, name=name, resource_url=resource, position=position)
         session.add(deck)
         await session.flush()
     for i, c in enumerate(cards):
@@ -45,7 +45,7 @@ async def create_deck(
                     external_id=c["external_id"],
                     question=c["question"],
                     answer=c["answer"],
-                    resource=c.get("resource") or None,
+                    resource_url=c.get("resource") or None,
                     position=i,
                 )
             )

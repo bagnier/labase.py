@@ -636,9 +636,9 @@ async def avatar_upload(
     return _profile_redirect("avatar_updated")
 
 
-@router.get("/profile/avatar/{auth_user_id}", response_model=None)
+@router.get("/profile/avatar/{user_id}", response_model=None)
 async def avatar_image(
-    auth_user_id: uuid.UUID,
+    user_id: uuid.UUID,
     current_user: CurrentUser,
     admin_session: AdminSession,
     profile_settings: ProfileSettings,
@@ -646,7 +646,7 @@ async def avatar_image(
     """Streams the avatar to any signed-in user (they appear next to members)."""
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    profile = await ProfileRepository(admin_session).get_by_auth_user_id(auth_user_id)
+    profile = await ProfileRepository(admin_session).get_by_user_id(user_id)
     if profile is None or not profile.avatar_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     content = await admin_storage().from_(bucket()).download(profile.avatar_path)

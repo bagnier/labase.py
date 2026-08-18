@@ -105,8 +105,8 @@ class EventBus:
         the listener off the journal after commit (one queued task per consumer, retry/park).
         ``name`` disambiguates consumers of the same event; ``app`` is the listening app (console's
         reaction graph); ``as_actor`` runs under the actor's RLS claims (else admin); ``idempotent``
-        guards re-delivery via the ``consumed`` ledger. ``handler`` is checked against the fact it
-        subscribes: a consumer written for another event does not compile."""
+        guards re-delivery via the ``consumed_events`` ledger. ``handler`` is checked against the
+        fact it subscribes: a consumer written for another event does not compile."""
         topic = self._wiring.add_consumer(event_type, name, as_actor=as_actor, app=app)
         register_task_handler(
             topic, self._make_wrapper(event_type, handler, topic, idempotent=idempotent)

@@ -38,9 +38,9 @@ class TodoApiMixin(ApiBase):
         async def _do(s):
             await s.execute(
                 text(
-                    "INSERT INTO org_app_settings (app, key, org_id, value) "
+                    "INSERT INTO org_app_settings (app_name, key, org_id, value) "
                     "VALUES (:a, :k, :o, :v) "
-                    "ON CONFLICT (app, key, org_id) DO UPDATE SET value = :v"
+                    "ON CONFLICT (app_name, key, org_id) DO UPDATE SET value = :v"
                 ),
                 {"a": app, "k": key, "o": org_id, "v": value},
             )

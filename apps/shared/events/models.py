@@ -15,18 +15,16 @@ choice lives here so the absence reads as intent, not oversight.
 """
 
 import uuid
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Computed, DateTime
+from sqlalchemy import Computed
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared import clock
-from apps.shared.persistence.base import Base, UUIDPk
+from apps.shared.persistence.base import Base, Created, UUIDPk
 
 
-class BusinessEventRecord(Base, UUIDPk):
+class BusinessEventRecord(Base, UUIDPk, Created):
     """The append-only business-event record. Members read their own / their orgs' facts via RLS.
 
     One writer: the ``record_business_event`` SECURITY DEFINER function (C4). ``emit`` calls it on
@@ -46,9 +44,6 @@ class BusinessEventRecord(Base, UUIDPk):
 
     __tablename__ = "business_events"
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: clock.now()
-    )
     # An event names itself in two halves: the app it belongs to and the verb it performs. They are
     # what a writer supplies; ``kind`` is their view — generated in the DB (see the migration), so
     # it is read-only here and no writer can make the whole disagree with its parts.
@@ -73,5 +68,5 @@ class BusinessEventRecord(Base, UUIDPk):
     # is only resolvable while the firehose still holds that request's lines; the firehose is a
     # recent window of files, so past its retention the id would be opaque for good.
     request_name: Mapped[str | None] = mapped_column(default=None)
-    ip: Mapped[str | None] = mapped_column(default=None)
+    ip_address: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

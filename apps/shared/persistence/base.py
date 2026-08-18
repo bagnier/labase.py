@@ -3,14 +3,27 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy import DateTime, ForeignKey, MetaData
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 from apps.shared import clock
 
+# Postgres' own auto-naming, spelled out — so a constraint the ORM declares and the same
+# constraint written in a migration land on the very same name, by construction rather than by
+# vigilance. SQLAlchemy issues no DDL here (the schema is versioned as plain SQL under
+# supabase/migrations/), so this is what keeps the two halves able to talk about one object;
+# tests/test_schema_parity.py is what checks they still do.
+NAMING_CONVENTION = {
+    "pk": "%(table_name)s_pkey",
+    "uq": "%(table_name)s_%(column_0_N_name)s_key",
+    "fk": "%(table_name)s_%(column_0_N_name)s_fkey",
+    "ck": "%(table_name)s_%(constraint_name)s_check",
+    "ix": "%(table_name)s_%(column_0_N_name)s_idx",
+}
+
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 class UUIDPk:
@@ -41,10 +54,18 @@ class Versioned:
         return {"version_id_col": cls.version}
 
 
-class Timestamped:
+class Created:
+    """Birth stamp alone — for the append-only tables, where a row is never updated."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
     )
+
+
+class Timestamped(Created):
+    """Birth and last-touch stamps; ``updated_at`` is also maintained by a DB trigger, so a
+    write through PostgREST or psql is stamped exactly like a write through the ORM."""
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
     )

@@ -101,8 +101,8 @@ def _from_ms(raw: str | None) -> datetime | None:
 
 def _series_chart_json(series: list[LoadPoint]) -> str:
     """Shape the time series into the charts.js declarative config (an area chart)."""
-    requests = [[int(p.bucket.timestamp() * 1000), p.requests] for p in series]
-    errors = [[int(p.bucket.timestamp() * 1000), p.errors] for p in series]
+    requests = [[int(p.bucket_start.timestamp() * 1000), p.requests] for p in series]
+    errors = [[int(p.bucket_start.timestamp() * 1000), p.errors] for p in series]
     return json.dumps(
         {
             "type": "area",

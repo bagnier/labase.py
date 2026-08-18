@@ -19,7 +19,7 @@ class OrganizationRepository(BaseRepository[Organization]):
     async def create_with_owner(
         self,
         name: str,
-        auth_user_id: uuid.UUID,
+        user_id: uuid.UUID,
         suggested_handle: str | None = None,
     ) -> Organization:
         base = suggested_handle or slugify(name)
@@ -29,47 +29,47 @@ class OrganizationRepository(BaseRepository[Organization]):
         org = Organization(name=name, handle=handle)
         self.session.add(org)
         await self.session.flush()
-        membership = Membership(org_id=org.id, auth_user_id=auth_user_id, role=OrgRole.owner)
+        membership = Membership(org_id=org.id, user_id=user_id, role=OrgRole.owner)
         self.session.add(membership)
         await self.session.flush()
 
         return org
 
-    async def count_owned_by(self, auth_user_id: uuid.UUID) -> int:
+    async def count_owned_by(self, user_id: uuid.UUID) -> int:
         result = await self.session.execute(
             select(func.count())
             .select_from(Membership)
             .where(
-                Membership.auth_user_id == auth_user_id,
+                Membership.user_id == user_id,
                 Membership.role == OrgRole.owner,
             )
         )
         return result.scalar_one()
 
     async def list_with_role_for_user(
-        self, auth_user_id: uuid.UUID
+        self, user_id: uuid.UUID
     ) -> list[tuple[Organization, OrgRole]]:
         result = await self.session.execute(
             select(Organization, Membership.role)
             .join(Membership, Membership.org_id == Organization.id)
-            .where(Membership.auth_user_id == auth_user_id)
+            .where(Membership.user_id == user_id)
         )
         return [(row[0], row[1]) for row in result.all()]
 
-    async def get_membership(self, org_id: uuid.UUID, auth_user_id: uuid.UUID) -> Membership | None:
+    async def get_membership(self, org_id: uuid.UUID, user_id: uuid.UUID) -> Membership | None:
         result = await self.session.execute(
             select(Membership).where(
                 Membership.org_id == org_id,
-                Membership.auth_user_id == auth_user_id,
+                Membership.user_id == user_id,
             )
         )
         return result.scalars().first()
 
-    async def get_first_for_user(self, auth_user_id: uuid.UUID) -> Organization | None:
+    async def get_first_for_user(self, user_id: uuid.UUID) -> Organization | None:
         result = await self.session.execute(
             select(Organization)
             .join(Membership, Membership.org_id == Organization.id)
-            .where(Membership.auth_user_id == auth_user_id)
+            .where(Membership.user_id == user_id)
             .order_by(Organization.created_at)
             .limit(1)
         )
@@ -78,13 +78,11 @@ class OrganizationRepository(BaseRepository[Organization]):
     async def get_by_handle(self, handle: str) -> Organization | None:
         return await self.session.scalar(select(Organization).where(Organization.handle == handle))
 
-    async def get_by_handle_for_user(
-        self, handle: str, auth_user_id: uuid.UUID
-    ) -> Organization | None:
+    async def get_by_handle_for_user(self, handle: str, user_id: uuid.UUID) -> Organization | None:
         return await self.session.scalar(
             select(Organization)
             .join(Membership, Membership.org_id == Organization.id)
-            .where(Organization.handle == handle, Membership.auth_user_id == auth_user_id)
+            .where(Organization.handle == handle, Membership.user_id == user_id)
         )
 
     async def is_handle_available(self, handle: str, org_id: uuid.UUID) -> bool:
@@ -122,8 +120,8 @@ class OrganizationRepository(BaseRepository[Organization]):
     async def remove_member(self, org_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         result = await self.session.execute(
             delete(Membership)
-            .where(Membership.org_id == org_id, Membership.auth_user_id == user_id)
-            .returning(Membership.auth_user_id)
+            .where(Membership.org_id == org_id, Membership.user_id == user_id)
+            .returning(Membership.user_id)
         )
 
         return result.scalar() is not None

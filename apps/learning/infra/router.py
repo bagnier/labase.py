@@ -221,13 +221,13 @@ async def resources(
                 deck=r.deck.name,
                 deck_position=r.deck.position,
                 card_position=r.card.position,
-                deck_resource=r.deck.resource,
-                card_resource=r.card.resource,
+                deck_resource_url=r.deck.resource_url,
+                card_resource_url=r.card.resource_url,
             )
             for r in needing
         ]
     )
-    items = [ResourceRead(deck=deck, resource=res) for deck, res in pairs]
+    items = [ResourceRead(deck=deck, resource_url=res) for deck, res in pairs]
     if wants_json(request):
         return JSONResponse([i.model_dump(mode="json") for i in items])
     org_handle = request.path_params.get("org_handle", "")

@@ -5,7 +5,7 @@
 
 - **write** — append a fact through the SECURITY DEFINER writer, plus the single ``event →
   record`` mapping (no column dict in between);
-- **delivery** — the listener's claim / mark / scan and the ``consumed`` ledger;
+- **delivery** — the listener's claim / mark / scan and the ``consumed_events`` ledger;
 - **read** — the RLS-scoped ``search`` and ``daily_counts`` behind the activity surfaces.
 
 Humanizing a record for a surface is not here: that is :mod:`apps.shared.events.activity`.
@@ -43,7 +43,7 @@ LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_nam
 _RECORD = sql_text(
     "SELECT record_business_event("
     ":app_name, :verb, :icon, :user_id, :user_name, :org_id, :org_name, "
-    ":entity_id, :entity_name, :request_id, :request_name, :ip, CAST(:payload AS jsonb))"
+    ":entity_id, :entity_name, :request_id, :request_name, :ip_address, CAST(:payload AS jsonb))"
 )
 
 
@@ -68,7 +68,7 @@ async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> 
             "entity_name": record.entity_name,
             "request_id": record.request_id,
             "request_name": record.request_name,
-            "ip": record.ip,
+            "ip_address": record.ip_address,
             "payload": json.dumps(record.payload or {}),
         },
     )
@@ -101,8 +101,8 @@ def event_to_record(
 ) -> BusinessEventRecord:
     """The one ``event → record`` conversion. Scoping (user/org/entity) and the readable names are
     lifted to their own columns — so RLS, the timeline and full-text search reach them directly —
-    leaving only the (redacted) rest in ``payload``; ``ip``/``request_id`` ride in from the request
-    contextvars."""
+    leaving only the (redacted) rest in ``payload``; ``ip_address``/``request_id`` ride in from
+    the request contextvars."""
     ctx = get_contextvars()
     request_id = ctx.get("request_id")
     payload = _fact_payload(event)
@@ -118,7 +118,7 @@ def event_to_record(
         verb=event.verb,
         icon=event.icon,
         user_id=event.user_id,
-        ip=ctx.get("ip"),
+        ip_address=ctx.get("ip"),
         # Scope is carried by the event's type, not by every event: only an OrgScoped fact names
         # an org. The column stays nullable — a server-wide fact legitimately has none.
         org_id=event.org_id if isinstance(event, OrgScoped) else None,
@@ -161,8 +161,8 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
     The two delivery scans read whole :class:`BusinessEventRecord` objects: the journal already has
     a typed shape, so the delivery path reads it rather than re-deriving a narrower one of its own.
     What stays raw ``sql_text()`` is the plumbing proper — the ``dispatched_at`` cursor,
-    deliberately left off the fact model, and the ``consumed`` ledger, whose ``ON CONFLICT`` reads
-    best as SQL.
+    deliberately left off the fact model, and the ``consumed_events`` ledger, whose
+    ``ON CONFLICT`` reads best as SQL.
     """
 
     model: ClassVar[type[BusinessEventRecord]] = BusinessEventRecord
@@ -195,7 +195,7 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
             names = (
                 await self.session.execute(
                     sql_text(
-                        "select (select handle from profiles where auth_user_id = :u),"
+                        "select (select handle from profiles where user_id = :u),"
                         "       (select name from organizations where id = :o)"
                     ),
                     {"u": user_id, "o": org_id},
@@ -238,17 +238,18 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
         return list(found)
 
     async def already_consumed(self, topic: str, event_id: uuid.UUID | str) -> bool:
-        """Insert-or-nothing against the ``consumed`` ledger — the idempotency substrate for
+        """Insert-or-nothing against the ``consumed_events`` ledger — the idempotency substrate for
         at-least-once ``bus.on`` delivery. ``True`` means this pair is a re-delivery. Runs on the
         handler's session, so it commits/rolls back with the handler's own writes. ``event_id`` is
         the journal record's uuid — it arrives as a string when replayed off the JSON queue, so the
         ``CAST(... AS uuid)`` normalizes both forms."""
         result = await self.session.execute(
             sql_text(
-                "INSERT INTO consumed (topic, event_id) VALUES (:topic, CAST(:event_id AS uuid)) "
-                "ON CONFLICT DO NOTHING RETURNING topic"
+                "INSERT INTO consumed_events (consumer, event_id) "
+                "VALUES (:consumer, CAST(:event_id AS uuid)) "
+                "ON CONFLICT DO NOTHING RETURNING consumer"
             ),
-            {"topic": topic, "event_id": event_id},
+            {"consumer": topic, "event_id": event_id},
         )
         return result.first() is None
 

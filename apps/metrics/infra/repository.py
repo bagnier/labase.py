@@ -16,7 +16,7 @@ from apps.shared.observability.metrics import MetricsSnapshot
 async def _merge_row(
     session: AsyncSession,
     *,
-    bucket: datetime,
+    bucket_start: datetime,
     resolution: MetricResolution,
     instance: str,
     method: str,
@@ -28,7 +28,7 @@ async def _merge_row(
 ) -> None:
     existing = await session.scalar(
         select(RequestMetric).where(
-            RequestMetric.bucket == bucket,
+            RequestMetric.bucket_start == bucket_start,
             RequestMetric.resolution == resolution,
             RequestMetric.instance == instance,
             RequestMetric.method == method,
@@ -38,7 +38,7 @@ async def _merge_row(
     if existing is None:
         session.add(
             RequestMetric(
-                bucket=bucket,
+                bucket_start=bucket_start,
                 resolution=resolution,
                 instance=instance,
                 method=method,
@@ -61,13 +61,13 @@ async def _merge_row(
 
 
 async def add_deltas(
-    session: AsyncSession, *, instance: str, bucket: datetime, deltas: MetricsSnapshot
+    session: AsyncSession, *, instance: str, bucket_start: datetime, deltas: MetricsSnapshot
 ) -> None:
     """Fold one flush's deltas into their minute rows."""
     for (method, route), stats in deltas.items():
         await _merge_row(
             session,
-            bucket=bucket,
+            bucket_start=bucket_start,
             resolution=MetricResolution.minute,
             instance=instance,
             method=method,
@@ -82,9 +82,9 @@ async def add_deltas(
 async def window_rows(
     session: AsyncSession, since: datetime, until: datetime | None = None
 ) -> list[RequestMetric]:
-    query = select(RequestMetric).where(RequestMetric.bucket >= since)
+    query = select(RequestMetric).where(RequestMetric.bucket_start >= since)
     if until is not None:
-        query = query.where(RequestMetric.bucket <= until)
+        query = query.where(RequestMetric.bucket_start <= until)
     return list(await session.scalars(query))
 
 
@@ -92,7 +92,7 @@ async def total_requests(session: AsyncSession, since: datetime) -> int:
     return (
         await session.scalar(
             select(func.coalesce(func.sum(RequestMetric.requests), 0)).where(
-                RequestMetric.bucket >= since
+                RequestMetric.bucket_start >= since
             )
         )
         or 0
@@ -110,13 +110,13 @@ async def rollup(session: AsyncSession, *, minute_retention_days: int) -> tuple[
         await session.scalars(
             select(RequestMetric).where(
                 RequestMetric.resolution == MetricResolution.minute,
-                RequestMetric.bucket < cutoff,
+                RequestMetric.bucket_start < cutoff,
             )
         )
     )
     merged: dict[tuple[datetime, str, str], list[RequestMetric]] = {}
     for row in stale:
-        hour = row.bucket.replace(minute=0, second=0, microsecond=0)
+        hour = row.bucket_start.replace(minute=0, second=0, microsecond=0)
         merged.setdefault((hour, row.method, row.route), []).append(row)
     for (hour, method, route), rows in merged.items():
         buckets = [0] * len(rows[0].duration_buckets)
@@ -125,7 +125,7 @@ async def rollup(session: AsyncSession, *, minute_retention_days: int) -> tuple[
                 buckets[i] += count
         await _merge_row(
             session,
-            bucket=hour,
+            bucket_start=hour,
             resolution=MetricResolution.hour,
             instance="*",
             method=method,
@@ -148,7 +148,7 @@ async def purge(session: AsyncSession, retention_days: int) -> int:
             "WITH purged AS ("
             "  DELETE FROM request_metrics"
             "  WHERE resolution = 'hour'"
-            "    AND bucket < now() - make_interval(days => :days) RETURNING 1"
+            "    AND bucket_start < now() - make_interval(days => :days) RETURNING 1"
             ") SELECT count(*) FROM purged"
         ),
         {"days": retention_days},

@@ -49,11 +49,15 @@ async def bus_isolation():
     saved_handlers = dict(_handlers)
     saved_wiring = wiring.snapshot()
     async with db.admin_session_factory()() as session:
-        await session.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_bus%'"))
+        await session.execute(
+            text("DELETE FROM consumed_events WHERE consumer LIKE 'evt:test_bus%'")
+        )
         await session.commit()
     yield
     async with db.admin_session_factory()() as session:
-        await session.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_bus%'"))
+        await session.execute(
+            text("DELETE FROM consumed_events WHERE consumer LIKE 'evt:test_bus%'")
+        )
         await session.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)

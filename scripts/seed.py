@@ -24,7 +24,7 @@ from apps.auth.tests.given_helpers import (
 )
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.config import get_technical_settings
-from apps.todo.domain.models import TodoItem
+from apps.todo.domain.models import Todo
 
 _DEFAULT_EMAIL = "dev@labase.dev"
 _DEFAULT_PASSWORD = "Devpass123!"
@@ -47,8 +47,8 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
 
     print(f"Creating user {email}…")
     uid_str = create_user(email, password)
-    auth_user_id = uuid.UUID(uid_str)
-    print(f"  → auth_user_id={auth_user_id}")
+    user_id = uuid.UUID(uid_str)
+    print(f"  → user_id={user_id}")
 
     # First seeded user is the server admin (matches the bootstrap rule for the first registrant).
     set_admin_role(uid_str)
@@ -62,11 +62,11 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
 
     async with engine.begin() as conn, AsyncSession(bind=conn, expire_on_commit=False) as session:
         repo = OrganizationRepository(session)
-        org = await repo.create_with_owner(org_name, auth_user_id)
+        org = await repo.create_with_owner(org_name, user_id)
         print(f"  → org '{org.name}' (handle={org.handle}, id={org.id})")
 
         for i, title in enumerate(_TODOS):
-            session.add(TodoItem(user_id=auth_user_id, org_id=org.id, title=title, position=i))
+            session.add(Todo(user_id=user_id, org_id=org.id, title=title, position=i))
 
         await session.flush()
 

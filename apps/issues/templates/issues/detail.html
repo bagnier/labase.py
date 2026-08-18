@@ -13,10 +13,10 @@
     <div>
       {{ page_header(issue.title, title_class='font-mono break-all') }}
       <p class="text-sm text-base-content/70 mt-0.5">
-        ×{{ issue.count }} · first seen {{ issue.first_seen.strftime("%Y-%m-%d %H:%M") }}
-        ({{ issue.first_version }}) · last seen {{ issue.last_seen.strftime("%Y-%m-%d %H:%M") }}
-        ({{ issue.last_version }})
-        {% if issue.resolved_in_version %}· resolved in {{ issue.resolved_in_version }}{% endif %}
+        ×{{ issue.occurrence_count }} · first seen {{ issue.first_seen.strftime("%Y-%m-%d %H:%M") }}
+        ({{ issue.first_release }}) · last seen {{ issue.last_seen.strftime("%Y-%m-%d %H:%M") }}
+        ({{ issue.last_release }})
+        {% if issue.resolved_in_release %}· resolved in {{ issue.resolved_in_release }}{% endif %}
       </p>
     </div>
     <div id="triage" aria-live="polite">{% include "issues/_triage.html" %}</div>

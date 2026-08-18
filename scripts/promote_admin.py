@@ -27,7 +27,7 @@ def promote_admin(email: str, password: str | None) -> None:
         password = password or secrets.token_urlsafe(12) + "A1!"
         print(f"Creating user {email}…")
         uid = create_user(email, password)
-        print(f"  → auth_user_id={uid}")
+        print(f"  → user_id={uid}")
         print(f"  → password: {password}")
 
     set_admin_role(uid)

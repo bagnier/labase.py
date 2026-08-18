@@ -26,7 +26,7 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
 
     async def add(
         self,
-        user_id: uuid.UUID,
+        uploaded_by: uuid.UUID,
         filename: str,
         storage_path: str,
         content_type: str,
@@ -35,7 +35,7 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
     ) -> OrgFile:
         org_file = OrgFile(
             org_id=self.org_id,
-            user_id=user_id,
+            uploaded_by=uploaded_by,
             filename=filename,
             storage_path=storage_path,
             content_type=content_type,

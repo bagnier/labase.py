@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.shared.persistence.base import Base, OrgScoped, Timestamped, UUIDPk, Versioned
@@ -17,6 +17,7 @@ class OrgRole(StrEnum):
 
 class Organization(Base, UUIDPk, Versioned, Timestamped):
     __tablename__ = "organizations"
+    __table_args__ = (UniqueConstraint("handle"),)
 
     name: Mapped[str]
     handle: Mapped[str] = mapped_column(default="")
@@ -28,7 +29,7 @@ class Membership(Base, Versioned, Timestamped):
     __tablename__ = "memberships"
 
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
-    auth_user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     role: Mapped[OrgRole] = mapped_column(
         SAEnum(OrgRole, name="org_role", create_type=False), nullable=False, default=OrgRole.member
     )
@@ -89,14 +90,14 @@ class MembershipRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     org_id: uuid.UUID
-    auth_user_id: uuid.UUID
+    user_id: uuid.UUID
     role: OrgRole
 
 
 class MemberRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    auth_user_id: uuid.UUID
+    user_id: uuid.UUID
     email: str
     role: OrgRole
     created_at: datetime

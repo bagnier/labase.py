@@ -23,7 +23,7 @@ async def org_handle_taken(
 
 async def get_org_owner_id(session: AsyncSession, org_id: uuid.UUID) -> uuid.UUID | None:
     return await session.scalar(
-        select(Membership.auth_user_id).where(
+        select(Membership.user_id).where(
             Membership.org_id == org_id, Membership.role == OrgRole.owner
         )
     )
@@ -93,12 +93,10 @@ async def list_org_handles(session: AsyncSession, limit: int = 500) -> list[str]
 
 
 async def role_in_org(
-    session: AsyncSession, org_id: uuid.UUID, auth_user_id: uuid.UUID
+    session: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID
 ) -> OrgRole | None:
     return await session.scalar(
-        select(Membership.role).where(
-            Membership.org_id == org_id, Membership.auth_user_id == auth_user_id
-        )
+        select(Membership.role).where(Membership.org_id == org_id, Membership.user_id == user_id)
     )
 
 
@@ -107,7 +105,7 @@ async def get_user_orgs(session: AsyncSession, user_id: uuid.UUID) -> list[UserO
         await session.execute(
             select(Organization, Membership.role)
             .join(Membership, Membership.org_id == Organization.id)
-            .where(Membership.auth_user_id == user_id)
+            .where(Membership.user_id == user_id)
             .order_by(Organization.created_at)
         )
     ).all()

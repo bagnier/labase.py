@@ -8,7 +8,7 @@ from apps.organizations.infra.context import require_current_owner
 
 
 def _membership(role: OrgRole) -> Membership:
-    return Membership(org_id=uuid.uuid7(), auth_user_id=uuid.uuid7(), role=role)
+    return Membership(org_id=uuid.uuid7(), user_id=uuid.uuid7(), role=role)
 
 
 def _request() -> Request:

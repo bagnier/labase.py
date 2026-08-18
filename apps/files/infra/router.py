@@ -70,8 +70,8 @@ def _sanitize_filename(name: str) -> str:
     return cleaned
 
 
-def _can_modify(file_user_id: uuid.UUID, membership: Membership) -> bool:
-    return file_user_id == membership.auth_user_id or membership.role == OrgRole.owner
+def _can_modify(uploaded_by: uuid.UUID, membership: Membership) -> bool:
+    return uploaded_by == membership.user_id or membership.role == OrgRole.owner
 
 
 async def _render(
@@ -159,7 +159,7 @@ async def upload_file(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     org_file = await repo.add(
-        user_id=current_user.id,
+        uploaded_by=current_user.id,
         filename=safe_name,
         storage_path=path,
         content_type=content_type,
@@ -220,7 +220,7 @@ async def delete_file(
     settings: FilesSettings,
 ):
     org_file = or_404(await repo.get(file_id))
-    if not _can_modify(org_file.user_id, membership):
+    if not _can_modify(org_file.uploaded_by, membership):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
 
     storage = user_storage_client(current_user.access_token)
@@ -262,7 +262,7 @@ async def rename_file(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid filename") from None
 
     org_file = or_404(await repo.get(file_id))
-    if not _can_modify(org_file.user_id, membership):
+    if not _can_modify(org_file.uploaded_by, membership):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
 
     new_path = storage_path(org_id, file_id, safe_name)

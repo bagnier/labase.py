@@ -1,6 +1,6 @@
 {% from "macros/role_badge.html" import role_badge %}
 {% from "macros/avatar.html" import avatar %}
-<li id="member-row-{{ m.auth_user_id }}"
+<li id="member-row-{{ m.user_id }}"
     class="flex items-center justify-between px-4 py-3"
     data-member-email="{{ m.email }}"
     data-member-role="{{ m.role.value }}">
@@ -38,18 +38,18 @@
               <li>
                 <button data-promote
                         role="menuitem"
-                        hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
+                        hx-patch="/{{ org_handle }}/members/{{ m.user_id }}"
                         hx-vals='{"role": "owner"}'
-                        hx-target="#member-row-{{ m.auth_user_id }}"
+                        hx-target="#member-row-{{ m.user_id }}"
                         hx-swap="outerHTML">Promote to owner</button>
               </li>
             {% else %}
               <li>
                 <button data-demote
                         role="menuitem"
-                        hx-patch="/{{ org_handle }}/members/{{ m.auth_user_id }}"
+                        hx-patch="/{{ org_handle }}/members/{{ m.user_id }}"
                         hx-vals='{"role": "member"}'
-                        hx-target="#member-row-{{ m.auth_user_id }}"
+                        hx-target="#member-row-{{ m.user_id }}"
                         hx-swap="outerHTML">Demote to member</button>
               </li>
             {% endif %}
@@ -57,8 +57,8 @@
               <button data-remove
                       role="menuitem"
                       class="text-error"
-                      hx-delete="/{{ org_handle }}/members/{{ m.auth_user_id }}"
-                      hx-target="#member-row-{{ m.auth_user_id }}"
+                      hx-delete="/{{ org_handle }}/members/{{ m.user_id }}"
+                      hx-target="#member-row-{{ m.user_id }}"
                       hx-swap="outerHTML"
                       hx-confirm="Remove {{ m.email }} from the organisation?">Remove from org</button>
             </li>

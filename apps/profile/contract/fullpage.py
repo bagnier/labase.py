@@ -25,9 +25,7 @@ async def provide_profile_handle(query: FullpageQuery) -> dict:
     try:
         row = (
             await query.session.execute(
-                select(Profile.handle, Profile.avatar_path).where(
-                    Profile.auth_user_id == query.user.id
-                )
+                select(Profile.handle, Profile.avatar_path).where(Profile.user_id == query.user.id)
             )
         ).first()
     except Exception:

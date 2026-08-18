@@ -3,10 +3,11 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 from sqlalchemy import BigInteger, DateTime, Float, Integer
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.persistence.base import Base, UUIDPk
+from apps.shared.persistence.base import Base, Created, UUIDPk
 
 
 class MetricResolution(StrEnum):
@@ -14,7 +15,7 @@ class MetricResolution(StrEnum):
     hour = "hour"
 
 
-class RequestMetric(Base, UUIDPk):
+class RequestMetric(Base, UUIDPk, Created):
     """One flushed delta: traffic of one route on one instance in one time bucket.
 
     ``duration_buckets`` is positionally aligned with ``BUCKET_BOUNDS_MS`` (+Inf
@@ -24,8 +25,13 @@ class RequestMetric(Base, UUIDPk):
 
     __tablename__ = "request_metrics"
 
-    bucket: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    resolution: Mapped[str] = mapped_column(default=MetricResolution.minute)
+    # The instant the bucket opens — `bucket` alone would collide with `duration_buckets` (a
+    # histogram) and with Storage buckets.
+    bucket_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolution: Mapped[MetricResolution] = mapped_column(
+        SAEnum(MetricResolution, name="metric_resolution", create_type=False),
+        default=MetricResolution.minute,
+    )
     instance: Mapped[str]
     method: Mapped[str]
     route: Mapped[str]
@@ -58,6 +64,6 @@ class LoadTotals(BaseModel):
 class LoadPoint(BaseModel):
     """Traffic of one time bucket, summed across routes and instances."""
 
-    bucket: datetime
+    bucket_start: datetime
     requests: int
     errors: int

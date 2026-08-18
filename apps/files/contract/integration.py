@@ -135,7 +135,7 @@ async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid
         admin_storage().from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
     )
     await OrgFileRepository(session, org_id).add(
-        user_id=owner_id,
+        uploaded_by=owner_id,
         filename=_WELCOME_FILENAME,
         storage_path=path,
         content_type="text/plain",

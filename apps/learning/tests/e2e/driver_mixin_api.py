@@ -171,7 +171,7 @@ class LearningApiMixin(ApiBase):
     def assert_resources(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
         items = self._learn_json(key, "/resources")
-        actual = [(i["deck"], i["resource"]) for i in items]
+        actual = [(i["deck"], i["resource_url"]) for i in items]
         expected = [(r["Deck"], r["Resources"]) for r in rows]
         assert actual == expected, f"resources {actual} != {expected}"
 

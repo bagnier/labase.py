@@ -11,12 +11,14 @@ from apps.shared.persistence.base import Base, OrgScoped, Timestamped, UUIDPk, V
 class OrgFile(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
     __tablename__ = "org_files"
 
-    user_id: Mapped[uuid.UUID]
+    uploaded_by: Mapped[uuid.UUID]
+    # The uploader's email as it read *then*, so the list survives RLS hiding a co-member's
+    # identity and an account being closed.
+    uploader_email: Mapped[str] = mapped_column(String, default="")
     filename: Mapped[str] = mapped_column(String)
     storage_path: Mapped[str] = mapped_column(String)
     content_type: Mapped[str] = mapped_column(String, default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(default=0)
-    uploader_email: Mapped[str] = mapped_column(String, default="")
 
 
 class OrgFileShareToken(Base):

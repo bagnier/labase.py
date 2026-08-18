@@ -7,10 +7,10 @@ admin-switchable (`profile.avatar_enabled`, `profile.handle_enabled` — the
 ## Avatar
 
 - **Storage**: same Supabase Storage bucket as org files, under a reserved
-  `avatars/{auth_user_id}` prefix — no new bucket to provision, overwrite on
+  `avatars/{user_id}` prefix — no new bucket to provision, overwrite on
   re-upload. Uploaded through the service-role storage client; the path is
   forced from the session, so no storage-policy work is needed.
-- **Serving**: `GET /profile/avatar/{auth_user_id}` streams from storage
+- **Serving**: `GET /profile/avatar/{user_id}` streams from storage
   (signed-in users only — avatars appear next to other members), with cache
   headers. No public bucket, no signed URLs to expire.
 - **Model**: `profiles.avatar_path` column (migration) — presence drives the

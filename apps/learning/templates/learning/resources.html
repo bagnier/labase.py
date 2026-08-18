@@ -14,9 +14,9 @@
         <li class="flex gap-2 px-4 py-2 text-sm"
             data-resource-deck="{{ item.deck }}">
           <span class="font-medium">{{ item.deck }}</span>
-          <a href="{{ item.resource }}"
+          <a href="{{ item.resource_url }}"
              data-resource
-             class="link link-primary break-all">{{ item.resource }}</a>
+             class="link link-primary break-all">{{ item.resource_url }}</a>
         </li>
       {% else %}
         {{ empty_state('No resources to review — nicely done.', tag='li') }}

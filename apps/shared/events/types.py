@@ -3,7 +3,7 @@
 A business event is a frozen dataclass persisted to the ``business_events`` journal by the bus's
 ``emit`` — no handler runs at emit; the listener dispatches by type off the journal after commit. It
 declares only who acted (``user_id``) and which org it concerns (``org_id``); the write path
-enriches ``ip``/``request_id`` from the request contextvars at write time, while
+enriches ``ip_address``/``request_id`` from the request contextvars at write time, while
 ``kind``/``icon`` are the event's own class metadata.
 
 Most mutations are CRUD, so the ``EntityCreated``/``EntityUpdated``/``EntityDeleted`` abstracts

@@ -23,7 +23,7 @@ from apps.todo.contract.events import (
     TodoTicked,
     TodoUnticked,
 )
-from apps.todo.domain.models import TodoItem
+from apps.todo.domain.models import Todo
 from apps.todo.infra.completion_stats import bump_completion, completion_count
 from apps.todo.infra.repository import TodoRepository
 from apps.todo.infra.router import router
@@ -72,8 +72,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    total = await count_where(query.session, TodoItem)
-    done = await count_where(query.session, TodoItem, TodoItem.done)
+    total = await count_where(query.session, Todo)
+    done = await count_where(query.session, Todo, Todo.done)
     lines = [f"{total - done} open", f"{done} done"] if total else ["No tasks yet"]
     return ConsoleOverview(key="todo", title="To-do", icon="clipboard-text", data={"lines": lines})
 

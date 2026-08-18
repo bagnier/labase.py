@@ -5,10 +5,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.persistence.base import Base, Timestamped, UUIDPk, Versioned
+from apps.shared.persistence.base import Base, Created, Timestamped, UUIDPk, Versioned
 
 
 class IssueStatus(StrEnum):
@@ -26,16 +27,19 @@ class Issue(Base, UUIDPk, Versioned, Timestamped):
 
     fingerprint: Mapped[str] = mapped_column(Text, unique=True)
     title: Mapped[str]
-    status: Mapped[str] = mapped_column(default=IssueStatus.new)
-    count: Mapped[int] = mapped_column(BigInteger, default=0)
+    status: Mapped[IssueStatus] = mapped_column(
+        SAEnum(IssueStatus, name="issue_status", create_type=False), default=IssueStatus.new
+    )
+    occurrence_count: Mapped[int] = mapped_column(BigInteger, default=0)
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    first_version: Mapped[str] = mapped_column(default="dev")
-    last_version: Mapped[str] = mapped_column(default="dev")
-    resolved_in_version: Mapped[str | None] = mapped_column(default=None)
+    # The app release, not the optimistic-lock `version` this table also carries.
+    first_release: Mapped[str] = mapped_column(default="dev")
+    last_release: Mapped[str] = mapped_column(default="dev")
+    resolved_in_release: Mapped[str | None] = mapped_column(default=None)
 
 
-class Occurrence(Base, UUIDPk):
+class Occurrence(Base, UUIDPk, Created):
     """One sighting of an issue, with the JSONB context that pivots to the firehose.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so the newest-first cursor page
@@ -44,7 +48,6 @@ class Occurrence(Base, UUIDPk):
     __tablename__ = "issue_occurrences"
 
     issue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("issues.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
 
@@ -54,12 +57,12 @@ class IssueRead(BaseModel):
     id: uuid.UUID
     title: str
     status: IssueStatus
-    count: int
+    occurrence_count: int
     first_seen: datetime
     last_seen: datetime
-    first_version: str
-    last_version: str
-    resolved_in_version: str | None
+    first_release: str
+    last_release: str
+    resolved_in_release: str | None
 
 
 class OccurrenceRead(BaseModel):

@@ -25,7 +25,7 @@ class AppSettingRepository:
         return frozenset(await self.session.scalars(disabled_apps_select()))
 
     async def values(self, app: str) -> dict[str, str]:
-        rows = await self.session.scalars(select(AppSetting).where(AppSetting.app == app))
+        rows = await self.session.scalars(select(AppSetting).where(AppSetting.app_name == app))
         return {row.key: row.value for row in rows}
 
     async def set(self, app: str, key: str, value: str) -> None:
@@ -33,7 +33,7 @@ class AppSettingRepository:
         # trigger engage; a raw upsert would bypass both.
         row = await self.session.get(AppSetting, (app, key))
         if row is None:
-            self.session.add(AppSetting(app=app, key=key, value=value))
+            self.session.add(AppSetting(app_name=app, key=key, value=value))
         else:
             row.value = value
 

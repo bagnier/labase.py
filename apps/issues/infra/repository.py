@@ -38,23 +38,23 @@ async def record_occurrence(
             fingerprint=fingerprint,
             title=title,
             status=IssueStatus.new,
-            count=0,
+            occurrence_count=0,
             first_seen=now,
             last_seen=now,
-            first_version=version,
-            last_version=version,
+            first_release=version,
+            last_release=version,
         )
         session.add(issue)
         opened = True
     else:
         next_status = status_after_occurrence(
-            IssueStatus(issue.status), issue.resolved_in_version, version
+            IssueStatus(issue.status), issue.resolved_in_release, version
         )
         regressed = next_status is IssueStatus.regressed and issue.status != next_status
         issue.status = next_status
-    issue.count += 1
+    issue.occurrence_count += 1
     issue.last_seen = now
-    issue.last_version = version
+    issue.last_release = version
     await session.flush()
     session.add(Occurrence(issue_id=issue.id, created_at=now, context=context))
     await session.flush()
@@ -78,7 +78,7 @@ class IssueRepository:
 
     async def set_status(self, issue: Issue, status: IssueStatus, version: str) -> None:
         issue.status = status
-        issue.resolved_in_version = version if status is IssueStatus.resolved else None
+        issue.resolved_in_release = version if status is IssueStatus.resolved else None
         await self.session.flush()
 
     async def occurrences(

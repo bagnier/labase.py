@@ -11,27 +11,25 @@ from apps.shared.slug_registry import handle_is_available, slugify, unique_handl
 class ProfileRepository(BaseRepository[Profile]):
     model = Profile
 
-    async def get_by_auth_user_id(self, auth_user_id: uuid.UUID) -> Profile | None:
-        return await self.session.scalar(
-            select(Profile).where(Profile.auth_user_id == auth_user_id)
-        )
+    async def get_by_user_id(self, user_id: uuid.UUID) -> Profile | None:
+        return await self.session.scalar(select(Profile).where(Profile.user_id == user_id))
 
     async def get_by_email(self, email: str) -> Profile | None:
         return await self.session.scalar(select(Profile).where(Profile.email == email))
 
     async def get_with_auto_handle(
-        self, auth_user_id: uuid.UUID, email: str, *, handle_enabled: bool
+        self, user_id: uuid.UUID, email: str, *, handle_enabled: bool
     ) -> Profile | None:
         """Load the profile and, if it still lacks a handle, mint one when handles are on."""
-        profile = await self.get_by_auth_user_id(auth_user_id)
+        profile = await self.get_by_user_id(user_id)
         if profile is not None and profile.handle is None and handle_enabled:
             profile = await self.auto_handle(profile, email)
         return profile
 
-    async def get_or_create(self, auth_user_id: uuid.UUID, email: str) -> Profile:
-        profile = await self.get_by_auth_user_id(auth_user_id)
+    async def get_or_create(self, user_id: uuid.UUID, email: str) -> Profile:
+        profile = await self.get_by_user_id(user_id)
         if profile is None:
-            profile = await self.create(ProfileCreate(auth_user_id=auth_user_id, email=email))
+            profile = await self.create(ProfileCreate(user_id=user_id, email=email))
         return profile
 
     async def create(self, data: ProfileCreate) -> Profile:

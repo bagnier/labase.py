@@ -60,13 +60,17 @@ async def iso():
             text("UPDATE business_events SET dispatched_at = now() WHERE dispatched_at IS NULL")
         )
         await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_listener%'"))
-        await s.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_listener%'"))
+        await s.execute(
+            text("DELETE FROM consumed_events WHERE consumer LIKE 'evt:test_listener%'")
+        )
         await s.commit()
     yield
     async with db.admin_session_factory()() as s:
         await s.execute(text("DELETE FROM business_events WHERE kind LIKE 'test_listener.%'"))
         await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_listener%'"))
-        await s.execute(text("DELETE FROM consumed WHERE topic LIKE 'evt:test_listener%'"))
+        await s.execute(
+            text("DELETE FROM consumed_events WHERE consumer LIKE 'evt:test_listener%'")
+        )
         await s.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)

@@ -45,7 +45,7 @@ def test_clone_matches_public(guard_schema: str) -> None:
         _count(
             c,
             "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
-            f"where n.nspname = '{GUARD_SCHEMA}' and p.proname = 'user_orgs'",
+            f"where n.nspname = '{GUARD_SCHEMA}' and p.proname = 'user_org_ids'",
         )
         == "1"
     )

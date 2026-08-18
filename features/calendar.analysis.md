@@ -79,7 +79,7 @@ This context **emits no new events** in v1; it only **consumes** existing contra
   - `create index calendar_events_org on public.calendar_events (org_id, starts_at);`
   - `alter table ... enable row level security;`
   - Policy **`"calendar_events: org members"` `for all`** —
-    `using (org_id in (select public.user_orgs())) with check (org_id in (select public.user_orgs()))`.
+    `using (org_id in (select public.user_org_ids())) with check (org_id in (select public.user_org_ids()))`.
     No anon `select` policy (members-only).
   - `grant select, insert, update, delete on public.calendar_events to authenticated;`
     (no grant to `anon`).

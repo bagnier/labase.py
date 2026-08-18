@@ -92,7 +92,7 @@ class ProfileApiMixin(ApiBase):
     def assert_avatar_shown(self) -> None:
         me = self.client().get("/profile", headers={"accept": "application/json"}).json()
         assert me.get("avatar_path"), f"no avatar_path in profile: {me}"
-        image = self.client().get(f"/profile/avatar/{me['auth_user_id']}")
+        image = self.client().get(f"/profile/avatar/{me['user_id']}")
         assert image.status_code == 200, f"avatar not served: {image.status_code}"
         assert image.headers["content-type"].startswith("image/")
 

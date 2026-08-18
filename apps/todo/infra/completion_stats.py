@@ -16,9 +16,10 @@ async def bump_completion(session: AsyncSession, org_id: uuid.UUID) -> None:
     """Increment (or seed) the org's tally — called once per delivered ``todo.ticked``."""
     await session.execute(
         text(
-            "INSERT INTO todo_completion_stats (org_id, completed) VALUES (CAST(:org AS uuid), 1) "
+            "INSERT INTO todo_completion_stats (org_id, completed_count) "
+            "VALUES (CAST(:org AS uuid), 1) "
             "ON CONFLICT (org_id) DO UPDATE "
-            "SET completed = todo_completion_stats.completed + 1, updated_at = now()"
+            "SET completed_count = todo_completion_stats.completed_count + 1, updated_at = now()"
         ),
         {"org": str(org_id)},
     )
@@ -27,7 +28,7 @@ async def bump_completion(session: AsyncSession, org_id: uuid.UUID) -> None:
 async def completion_count(session: AsyncSession, org_id: uuid.UUID) -> int:
     """The org's cumulative completion count (0 before the first tick is delivered)."""
     value = await session.scalar(
-        text("SELECT completed FROM todo_completion_stats WHERE org_id = CAST(:org AS uuid)"),
+        text("SELECT completed_count FROM todo_completion_stats WHERE org_id = CAST(:org AS uuid)"),
         {"org": str(org_id)},
     )
     return value or 0

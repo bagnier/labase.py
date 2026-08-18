@@ -14,7 +14,7 @@ def orgs_for_user(user_id: str) -> list[dict]:
         """
         select o.id::text as id, o.name, o.handle, m.role
         from memberships m join organizations o on o.id = m.org_id
-        where m.auth_user_id = :uid
+        where m.user_id = :uid
         order by m.created_at
         """,
         {"uid": user_id},
@@ -24,7 +24,7 @@ def orgs_for_user(user_id: str) -> list[dict]:
 
 def add_membership(org_id: str, user_id: str, role: str = "member") -> None:
     run_sql(
-        "insert into memberships (org_id, auth_user_id, role) values (:org, :uid, :role)",
+        "insert into memberships (org_id, user_id, role) values (:org, :uid, :role)",
         {"org": org_id, "uid": user_id, "role": role},
     )
 
@@ -33,7 +33,7 @@ def set_membership_role(org_id: str, user_id: str, role: str) -> None:
     # Setup escape hatch: forces role states the app forbids (e.g. demoting a sole owner),
     # so it must bypass the last-owner DB trigger just as it bypasses RLS by running as admin.
     run_sql(
-        "update memberships set role = :role where org_id = :org and auth_user_id = :uid",
+        "update memberships set role = :role where org_id = :org and user_id = :uid",
         {"role": role, "org": org_id, "uid": user_id},
         bypass_triggers=True,
     )
@@ -56,7 +56,7 @@ def create_org_for_user(name: str, user_id: str) -> dict:
     )
     org_id = rows[0]["id"]
     run_sql(
-        "insert into memberships (org_id, auth_user_id, role) values (:org, :uid, 'owner')",
+        "insert into memberships (org_id, user_id, role) values (:org, :uid, 'owner')",
         {"org": org_id, "uid": user_id},
     )
     return {"id": org_id, "handle": handle}

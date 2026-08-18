@@ -31,7 +31,7 @@ git switch main && git merge upgrade-base-<date>
 | demo apps (`todo/`, `files/`, `learning/`, `calendar/`) | deleted in products | modify/delete conflicts: keep them deleted (`git rm`) |
 | `apps/main.py` | **shared** — the one file both sides edit by design | keep base's mounts, keep your mounts; order stays: shared → auth → your apps |
 | `pyproject.toml` | shared | union of dependencies; base wins on tool configs (`[tool.*]`), incl. the import-linter contracts you extend (never relax) |
-| `supabase/migrations/**` | append-only, both | never edit an applied migration; conflicts mean both added files — keep both, timestamps order them |
+| `supabase/migrations/**` | append-only, both | never edit an applied migration; conflicts mean both added files — keep both, timestamps order them. One exception: if base squashes its baseline, take base's set whole and realign an already-pushed remote with `supabase migration repair` (the schema is untouched, only the ledger moves) |
 | `features/**`, per-context tests | follow their context's owner | demo features go with the demos |
 | `README.md`, branding, `.env*` | **product** | keep yours; cherry-pick doc improvements manually |
 

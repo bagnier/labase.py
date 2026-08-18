@@ -38,7 +38,7 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
                 with pytest.raises(IntegrityError) as exc:
                     async with db_session.begin_nested():
                         await db_session.execute(
-                            text("delete from memberships where org_id = :o and auth_user_id = :u"),
+                            text("delete from memberships where org_id = :o and user_id = :u"),
                             {"o": str(org.id), "u": uid1},
                         )
                 assert "last owner" in str(exc.value).lower()
@@ -49,7 +49,7 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
                         await db_session.execute(
                             text(
                                 "update memberships set role = 'member' "
-                                "where org_id = :o and auth_user_id = :u"
+                                "where org_id = :o and user_id = :u"
                             ),
                             {"o": str(org.id), "u": uid1},
                         )
@@ -58,13 +58,12 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
                 # With a co-owner present, removing one owner is allowed (no over-blocking).
                 await db_session.execute(
                     text(
-                        "insert into memberships (org_id, auth_user_id, role) "
-                        "values (:o, :u, 'owner')"
+                        "insert into memberships (org_id, user_id, role) values (:o, :u, 'owner')"
                     ),
                     {"o": str(org.id), "u": uid2},
                 )
                 await db_session.execute(
-                    text("delete from memberships where org_id = :o and auth_user_id = :u"),
+                    text("delete from memberships where org_id = :o and user_id = :u"),
                     {"o": str(org.id), "u": uid1},
                 )
             finally:

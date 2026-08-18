@@ -67,7 +67,7 @@ async def test_log_exception_is_captured():
     issue = await _issue_titled(marker)
     assert issue is not None, "the logged exception should have landed in issues"
     assert issue.status == IssueStatus.new
-    assert issue.count == 1
+    assert issue.occurrence_count == 1
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_failing_bus_handler_is_recorded_as_an_issue():
     issue = await _issue_titled(marker)
     assert issue is not None, "the failing handler should have landed in issues"
     assert issue.status == IssueStatus.new
-    assert issue.count == 1
+    assert issue.occurrence_count == 1
 
 
 @pytest.mark.asyncio
@@ -134,13 +134,13 @@ async def test_occurrences_group_by_fingerprint_and_regress_after_resolve():
 
     await record("v1")
     issue = await record("v1")
-    assert issue.count == 2, "same fingerprint must fold into one issue"
+    assert issue.occurrence_count == 2, "same fingerprint must fold into one issue"
 
     async with db.admin_session_factory()() as session:
         stored = await session.scalar(select(Issue).where(Issue.fingerprint == marker))
         assert stored is not None
         stored.status = IssueStatus.resolved
-        stored.resolved_in_version = "v1"
+        stored.resolved_in_release = "v1"
         await session.commit()
 
     regressed = await record("v2")
