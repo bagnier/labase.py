@@ -6,9 +6,10 @@ import pytest_asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
+from structlog.testing import capture_logs
 
 from apps.shared.config import get_technical_settings
-from apps.shared.http.limiter import RateLimitExceeded, rate_limit
+from apps.shared.http.limiter import RateLimitExceeded, UnlimitedEndpoint, rate_limit
 from apps.shared.persistence import database as db
 
 
@@ -138,8 +139,14 @@ async def test_distinct_endpoints_do_not_share_a_bucket(rate_limiting_enabled):
 
 
 @pytest.mark.asyncio
-async def test_missing_request_param_fails_open_but_logs_loudly(rate_limiting_enabled):
-    """A handler without a `request` param can't be limited — it must not silently pass."""
+async def test_missing_request_param_fails_open_but_opens_an_issue(rate_limiting_enabled):
+    """A handler without a `request` param can't be limited — it must not silently pass.
+
+    "Loudly" used to mean ``log.error`` with no exception, which is the one level the capture
+    seam ignores: the line went to the firehose, rolled out of its window two days later, and an
+    endpoint stayed unlimited with nothing on the issues screen ever saying so. The seam reads
+    "error carrying a live exception", so the wiring bug raises one to be seen.
+    """
 
     async def no_request() -> str:
         return "ok"
@@ -149,9 +156,11 @@ async def test_missing_request_param_fails_open_but_logs_loudly(rate_limiting_en
 
     with (
         patch("apps.shared.http.limiter._increment", new_callable=AsyncMock) as increment,
-        patch("apps.shared.http.limiter.log") as log,
+        capture_logs() as logs,
     ):
         assert await wrapped() == "ok"
 
     increment.assert_not_awaited()
-    log.error.assert_called_once()
+    assert [(e["event"], e["log_level"], type(e.get("exc_info"))) for e in logs] == [
+        ("rate_limit.no_request", "error", UnlimitedEndpoint)
+    ]

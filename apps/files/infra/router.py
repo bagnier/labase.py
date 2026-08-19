@@ -38,12 +38,32 @@ from apps.shared.http import (
     wants_json,
 )
 from apps.shared.http.templates import templates
+from apps.shared.observability.dependency import is_refusal, log_dependency_failure
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
 from apps.shared.settings import SettingsView, get_settings
 
 log = structlog.get_logger(__name__)
+
+
+def storage_failure(event: str, exc: StorageApiError, **context: object) -> HTTPException:
+    """One verdict for a failed Storage call, and the answer the caller is owed.
+
+    Storage is a dependency like GoTrue or Postgres, so the level is the base's
+    (:mod:`apps.shared.observability.dependency`) — a 4xx is Storage answering no (a name already
+    taken, an object that isn't there), anything else is Storage being broken, which the capture
+    seam tracks as an issue. Logged with *this* module's logger, so the issue and the lines around
+    it file under ``files`` rather than under ``shared``.
+
+    The status follows the same split: only a refusal is the caller's fault. Answering 400 to an
+    outage told a user their upload was malformed when it was fine, and hid the outage behind a
+    status nothing alerts on.
+    """
+    log_dependency_failure(log, event, exc, **context)
+    if is_refusal(exc):
+        return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Storage is unavailable")
 
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -156,7 +176,7 @@ async def upload_file(
     try:
         await storage.from_(bucket()).upload(path, content, {"content-type": content_type})
     except StorageApiError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise storage_failure("files.upload_failed", exc, path=path) from exc
 
     org_file = await repo.add(
         uploaded_by=current_user.id,
@@ -270,7 +290,7 @@ async def rename_file(
     try:
         await storage.from_(bucket()).move(org_file.storage_path, new_path)
     except StorageApiError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise storage_failure("files.rename_failed", exc, path=new_path) from exc
 
     old_filename = org_file.filename
     await repo.rename(org_file, safe_name, new_path)

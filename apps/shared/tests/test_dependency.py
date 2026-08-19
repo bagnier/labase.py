@@ -37,6 +37,16 @@ class _AnsweredOnItsResponse(Exception):
         self.response = SimpleNamespace(status_code=status_code)
 
 
+class _AnsweredInText(Exception):
+    """A client that keeps the status as the *string* its dependency sent — storage3, which
+    builds ``StorageApiError`` straight from Supabase Storage's JSON body, where ``statusCode``
+    is text. Read as "never answered", every ordinary 404 from Storage becomes a bug."""
+
+    def __init__(self, status: str) -> None:
+        super().__init__(f"the dependency answered {status}")
+        self.status = status
+
+
 @pytest.fixture(autouse=True)
 def _empty_capture_queue():
     capture._QUEUE.clear()
@@ -44,7 +54,15 @@ def _empty_capture_queue():
     capture._QUEUE.clear()
 
 
-@pytest.mark.parametrize("exc", [_Answered(400), _Answered(429), _AnsweredOnItsResponse(404)])
+@pytest.mark.parametrize(
+    "exc",
+    [
+        _Answered(400),
+        _Answered(429),
+        _AnsweredOnItsResponse(404),
+        _AnsweredInText("404"),  # a status is what it says, not what type it arrived as
+    ],
+)
 def test_a_dependency_that_answers_4xx_is_refusing(exc):
     assert is_refusal(exc) is True
 
@@ -54,6 +72,8 @@ def test_a_dependency_that_answers_4xx_is_refusing(exc):
     [
         _Answered(500),  # the dependency broke while answering
         _AnsweredOnItsResponse(503),
+        _AnsweredInText("503"),
+        _AnsweredInText("not a status at all"),  # unparseable is not an answer
         ConnectionError("no route to host"),  # it never answered at all
         ValueError("our own mistake, on the way to calling it"),
     ],

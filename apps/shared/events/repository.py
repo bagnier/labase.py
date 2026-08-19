@@ -30,6 +30,18 @@ from apps.shared.persistence.repository import BaseRepository
 
 log = structlog.get_logger(__name__)
 
+
+class MaskedSecret(Exception):
+    """A field that looks like secret material reached the journal's write path.
+
+    ``BusinessEvent.__init_subclass__`` refuses one at class creation, so getting here means a
+    writer bypassed that check. Raised only to give the capture seam a live exception to
+    fingerprint on — caught immediately, like the listener's ``UnroutableFact``: a bare
+    ``log.error`` carries no exception, which is precisely the level the seam ignores, so the
+    leak was masked and then forgotten.
+    """
+
+
 # The base ``BusinessEvent`` fields stored in their own indexed column rather than in the JSON
 # ``payload`` — which is what lets RLS, the timeline and full-text search reach them directly.
 # ``event_to_record`` pops exactly these out of the payload and ``task_payload`` folds exactly these
@@ -74,6 +86,16 @@ async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> 
     )
 
 
+def _report_masked_secret(field_name: str, kind: str) -> None:
+    """Shout where an admin will still hear it tomorrow: the issues screen, not a log window."""
+    try:
+        raise MaskedSecret(f"{kind} carries a field named {field_name!r}")
+    except MaskedSecret as exc:
+        log.exception(
+            "business_event.secret_field_masked", exc_info=exc, field=field_name, kind=kind
+        )
+
+
 def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
     if not is_dataclass(event) or isinstance(event, type):
         return {}
@@ -83,9 +105,9 @@ def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
         if _is_secret_field_name(f.name):
             # Defence in depth: ``__init_subclass__`` already refuses a secret-named event field, so
             # reaching here means one slipped past (a raw or legacy writer). Mask it *and* shout — a
-            # silent mask is how the leak stayed invisible; an error is what gets it fixed.
+            # silent mask is how the leak stayed invisible; an issue is what gets it fixed.
             if value is not None:
-                log.error("business_event.secret_field_masked", field=f.name, kind=event.kind)
+                _report_masked_secret(f.name, event.kind)
             payload[f.name] = "***" if value is not None else None
         elif isinstance(value, uuid.UUID):
             payload[f.name] = str(value)  # json-safe: stdlib json can't serialize a uuid.UUID

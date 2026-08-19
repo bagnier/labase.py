@@ -7,9 +7,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
+from structlog.testing import capture_logs
 
-from apps.shared.events import BusinessEvent, OrgScoped
+from apps.shared.events import BusinessEvent, OrgScoped, repository
 from apps.shared.events.bus import events
+from apps.shared.events.repository import MaskedSecret
 from apps.shared.events.wiring import wiring
 from apps.shared.persistence import database as db
 
@@ -174,3 +176,26 @@ async def test_the_record_keeps_the_org_name_after_the_org_is_gone():
         async with db.admin_session_factory()() as session:
             await session.execute(text("DELETE FROM organizations WHERE id = :i"), {"i": org})
             await session.commit()
+
+
+def test_a_secret_that_slips_past_the_class_check_opens_an_issue(monkeypatch):
+    """Defence in depth, and the half that was mute.
+
+    ``__init_subclass__`` refuses a secret-named field at class creation, so reaching the write
+    path's mask means one got through — a raw writer, or a class defined before the check existed.
+    The mask worked; the shout did not: ``log.error`` with no exception is the one level the
+    capture seam ignores, so the leak was masked and then forgotten, which is exactly how it
+    stayed invisible. Only the *write-path* half of the check is loosened here — that is the whole
+    scenario, the two halves disagreeing.
+    """
+    monkeypatch.setattr(repository, "_is_secret_field_name", lambda name: name == "entity_name")
+
+    with capture_logs() as logs:
+        payload = repository._fact_payload(_P1Event(org_id=uuid.uuid7(), entity_name="acme"))
+
+    # ``log_level`` alone cannot tell the two apart — ``log.exception`` *is* ``error``. What the
+    # seam actually reads is the live exception riding ``exc_info``, so that is what to assert.
+    assert (payload["entity_name"], [(e["event"], type(e.get("exc_info"))) for e in logs]) == (
+        "***",
+        [("business_event.secret_field_masked", MaskedSecret)],
+    )

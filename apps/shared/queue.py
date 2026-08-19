@@ -29,6 +29,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.observability.loop import LoopHealth
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.persistence.rls import clear_rls_context, set_rls_context
 
@@ -141,6 +142,7 @@ class TaskWorker:
         self._batch = batch_size
         self._session_factory = session_factory
         self._task: asyncio.Task | None = None
+        self._health = LoopHealth(log, "queue.worker")
 
     def _admin_session(self) -> AsyncSession:
         factory = self._session_factory or admin_session_factory()
@@ -165,13 +167,23 @@ class TaskWorker:
                 await self._task
             self._task = None
 
+    async def guarded_tick(self) -> None:
+        """One pass of the loop, and the verdict its outcome earns.
+
+        Split out of ``_run`` so the failure path is drivable: a test cannot race an infinite
+        loop, and a worker that stops claiming is exactly what used to go unnoticed.
+        """
+        try:
+            while await self.tick():
+                pass  # drain ready tasks before sleeping
+        except Exception as exc:
+            self._health.tick_failed(exc)
+        else:
+            self._health.tick_succeeded()
+
     async def _run(self) -> None:
         while True:
-            try:
-                while await self.tick():
-                    pass  # drain ready tasks before sleeping
-            except Exception as exc:
-                log.warning("queue.worker_failed", exc_info=exc)
+            await self.guarded_tick()
             await asyncio.sleep(self._interval)
 
     async def tick(self) -> int:

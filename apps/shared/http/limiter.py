@@ -23,6 +23,30 @@ from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger(__name__)
 
+
+class UnlimitedEndpoint(Exception):
+    """A ``@rate_limit`` decorator that cannot see a request, so its endpoint is not limited.
+
+    Raised only to give the capture seam a live exception to fingerprint on — caught immediately
+    and logged, exactly like the listener's ``UnroutableFact``. The seam reads "error carrying an
+    exception", so a bare ``log.error`` — which is what this used to be — reached the firehose and
+    nothing else: the hole rolled out of the two-day window with no issue ever opened.
+    """
+
+
+def _report_unlimited_endpoint(scope: str, func: Any) -> None:
+    """Say that this endpoint is unlimited, in the one place an admin will still see it tomorrow.
+
+    The decorator requires a ``request: Request`` parameter; its absence is a wiring bug. Failing
+    open is the doctrine (a limiter must never be what takes an endpoint down) — which is exactly
+    why the report has to survive.
+    """
+    try:
+        raise UnlimitedEndpoint(f"{getattr(func, '__qualname__', func)} takes no request")
+    except UnlimitedEndpoint as exc:
+        log.exception("rate_limit.no_request", exc_info=exc, scope=scope)
+
+
 _PERIOD_SECONDS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400}
 
 _INCREMENT = text(
@@ -92,10 +116,7 @@ def rate_limit(limit_string: str) -> Callable[[Any], Any]:
                 (a for a in args if isinstance(a, Request)), None
             )
             if request is None:
-                # The decorator requires a `request: Request` param — its absence is a wiring
-                # bug that would leave the endpoint silently unlimited. Fail open (doctrine)
-                # but loudly, so the hole is visible instead of invisible.
-                log.error("rate_limit.no_request", scope=scope)
+                _report_unlimited_endpoint(scope, func)
                 return await func(*args, **kwargs)
             ip = client_ip(request)
             if ip is None:

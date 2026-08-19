@@ -27,12 +27,29 @@ from typing import Any
 _STATUS_ATTRS = ("status", "status_code")
 
 
+def _as_status(value: object) -> int | None:
+    """One status out of whatever shape the client kept it in.
+
+    A digit *string* counts: storage3 builds ``StorageApiError`` straight from Supabase Storage's
+    JSON error body, where ``statusCode`` is text. Requiring an ``int`` read every one of those as
+    "never answered", which would file each ordinary 404 — a file that isn't there — as a bug.
+    ``bool`` is excluded on purpose: it is an ``int`` in Python, and ``True`` is not a status.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
 def refused_status(exc: BaseException) -> int | None:
     """The status the dependency answered with, or ``None`` if it never answered at all."""
     for holder in (exc, getattr(exc, "response", None)):
         for attr in _STATUS_ATTRS:
-            status = getattr(holder, attr, None)
-            if isinstance(status, int):
+            status = _as_status(getattr(holder, attr, None))
+            if status is not None:
                 return status
     return None
 

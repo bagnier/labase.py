@@ -14,6 +14,7 @@ import structlog
 
 from apps.metrics.infra.repository import add_deltas
 from apps.shared import clock
+from apps.shared.observability.loop import LoopHealth
 from apps.shared.observability.metrics import (
     MetricsSnapshot,
     accumulator,
@@ -30,6 +31,7 @@ class MetricsFlusher:
         self._task: asyncio.Task | None = None
         self._instance = uuid.uuid4().hex[:8]
         self._previous: MetricsSnapshot = {}
+        self._health = LoopHealth(log, "metrics.flush")
 
     async def start(self) -> None:
         if self._interval > 0 and self._task is None:
@@ -63,10 +65,18 @@ class MetricsFlusher:
         # next tick instead of dropping the interval's traffic.
         self._previous = snapshot
 
+    async def guarded_tick(self) -> None:
+        """One flush, and the verdict its outcome earns. Split out of ``_run`` so the failure
+        path is drivable — and so a flusher that has stopped persisting says so in the console
+        rather than in a firehose window that rolls over."""
+        try:
+            await self.tick()
+        except Exception as exc:
+            self._health.tick_failed(exc)
+        else:
+            self._health.tick_succeeded()
+
     async def _run(self) -> None:
         while True:
             await asyncio.sleep(self._interval)
-            try:
-                await self.tick()
-            except Exception as exc:
-                log.warning("metrics.flush_failed", exc_info=exc)
+            await self.guarded_tick()

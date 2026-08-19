@@ -317,6 +317,32 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
 
 
 @pytest.mark.asyncio
+async def test_a_spread_handler_that_refuses_is_surfaced_as_an_issue(iso):
+    """A ``spread`` handler is a config reload — the settings the console just changed reaching
+    this instance. One that raises means this process is now running on stale values while every
+    other one moved, and nothing retries it (spread has no claim and no queue). That is a defect,
+    not a degradation, and used to be a ``warning`` inside a two-day window.
+
+    The cursor still advances, like a fact that cannot be rebuilt: replaying a handler that
+    refuses would freeze propagation for good."""
+    own = EventWiring()
+
+    async def refuse(_event: _SpreadEvent) -> None:
+        raise RuntimeError("the reload found no such setting")
+
+    EventBus(own).spread(_SpreadEvent, refuse)
+    await seed_fact(
+        BusinessEventRecord(app_name="test_listener", verb="spread", payload={"value": "on"})
+    )
+
+    with capture_logs() as logs:
+        await EventListener(0, wiring=own).tick()
+
+    surfaced = [e for e in logs if e["event"] == "listener.spread_handler_failed"]
+    assert [(e["kind"], e["log_level"]) for e in surfaced] == [("test_listener.spread", "error")]
+
+
+@pytest.mark.asyncio
 async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
     events.on(_TailEvent, _noop, name="counter", app="test_listener", as_actor=False)
     await _seed(uuid.uuid7())

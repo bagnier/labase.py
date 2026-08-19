@@ -31,6 +31,7 @@ from apps.shared.events.repository import EventRepository, task_payload
 from apps.shared.events.types import BusinessEvent
 from apps.shared.events.wiring import EventWiring
 from apps.shared.events.wiring import wiring as process_wiring
+from apps.shared.observability.loop import LoopHealth
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 
@@ -73,6 +74,7 @@ class EventListener:
         self._task: asyncio.Task | None = None
         self._listen_conn: Any | None = None
         self._wake = asyncio.Event()
+        self._health = LoopHealth(log, "listener.tick")
 
     def _session(self) -> AsyncSession:
         factory = self._session_factory or admin_session_factory()
@@ -114,9 +116,15 @@ class EventListener:
 
     async def _apply_spread(self, record: BusinessEventRecord) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
-        cursor. Handlers are idempotent (a reload is a plain assignment), so a failure is logged and
-        skipped rather than blocking the cursor — and so is a record that cannot be rebuilt at all
-        (a field added to the event class after the fact was written, a hand-inserted payload).
+        cursor.
+
+        A handler that raises leaves *this* instance running on stale config while every other one
+        moved on, and nothing will retry it: spread has no claim, no queue and no ledger. So it is
+        a defect, logged at ``exception`` level — the capture seam folds it into a console Issue —
+        exactly like a record that cannot be rebuilt at all (a field added to the event class after
+        the fact was written, a hand-inserted payload). Not a loop, hence no transition rule: these
+        run when an admin edits a setting, not once a second.
+
         The cursor advances either way: it is a high-water mark, so leaving it on a record we can
         never process would replay that same fact forever and freeze propagation for good."""
         event = self._reconstruct(record)
@@ -125,7 +133,7 @@ class EventListener:
                 try:
                     await handler(event)
                 except Exception as exc:
-                    log.warning("listener.spread_handler_failed", kind=record.kind, exc_info=exc)
+                    log.exception("listener.spread_handler_failed", exc_info=exc, kind=record.kind)
         self._spread_cursor = record.id
 
     @staticmethod
@@ -184,13 +192,23 @@ class EventListener:
             self._task = None
         await self._unlisten()
 
+    async def guarded_tick(self) -> None:
+        """One pass of both delivery paths, and the verdict its outcome earns.
+
+        Split out of ``_run`` so the failure path is drivable: a listener that stops delivering
+        leaves every fact's reactions unrun, and used to say so only at ``warning``.
+        """
+        try:
+            while await self.tick():
+                pass  # drain all ready facts before waiting
+        except Exception as exc:
+            self._health.tick_failed(exc)
+        else:
+            self._health.tick_succeeded()
+
     async def _run(self) -> None:
         while True:
-            try:
-                while await self.tick():
-                    pass  # drain all ready facts before waiting
-            except Exception as exc:
-                log.warning("listener.tick_failed", exc_info=exc)
+            await self.guarded_tick()
             # Wake on NOTIFY, or poll after the interval as a durability net.
             with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), timeout=self._interval)

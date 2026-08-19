@@ -6,6 +6,19 @@ Doctrine (three levels):
 - ``log.warning`` — degraded but manageable (something failed but was handled/retried).
 - ``log.exception`` — a bug; captured here and folded into an issue by ``apps/issues``.
 
+A bare ``log.error`` — ``error`` level carrying no exception — is deliberately **not** the seam,
+and that is not an oversight: ``request.finished`` is written at ``error`` on every 5xx to state
+the *outcome* of the exchange, while the exception itself is captured once by the 500 handler.
+Opening an issue on level alone would double every 500.
+
+The consequence is a trap worth naming: a site that means "this is a bug" and writes ``log.error``
+gets a firehose line that rolls out of its window and nothing else. Such a site raises an
+exception of its own to be seen — ``UnroutableFact`` in the event listener, ``UnlimitedEndpoint``
+in the rate limiter, ``MaskedSecret`` on the journal's write path — caught immediately, purely so
+the seam has something to fingerprint on. And a failure that *repeats* (a background loop, a
+readiness probe) goes through :mod:`apps.shared.observability.loop` instead, which files the
+transition and not every tick.
+
 A structlog processor (:func:`capture_processor`, wired into the chain *before*
 ``format_exc_info`` so the live exception is still present) tees every ``log.exception`` call
 into a bounded in-memory queue. A background :class:`CaptureDrain` — the ``MetricsFlusher``
