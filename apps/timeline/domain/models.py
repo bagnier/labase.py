@@ -29,8 +29,8 @@ class TimelineEntry(BaseModel):
     title. One column, three vocabularies — the viewer names its sources, it never renames them.
 
     ``app`` is the per-app axis the console browses by. A business fact carries it as its own
-    column; the other two sources have none, so they name themselves off their dotted name at the
-    boundary that builds them."""
+    column; the other two read it off the *logger* that wrote them — the one an occurrence keeps in
+    its captured context — so a failure and the lines around it land under the same app."""
 
     ts: datetime
     source: TimelineSource

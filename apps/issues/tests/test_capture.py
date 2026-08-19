@@ -12,6 +12,7 @@ import apps.main  # noqa: F401 — mounts every context, including issues' subsc
 from apps.issues.contract.queries import search_issue_occurrences
 from apps.issues.domain.models import Issue, IssueStatus
 from apps.issues.infra.repository import see_occurrence
+from apps.shared.events.models import BusinessEventRecord
 from apps.shared.host import host
 from apps.shared.observability import capture
 from apps.shared.observability.capture import CaptureDrain, ExceptionCaptured
@@ -169,3 +170,35 @@ async def test_occurrences_group_by_fingerprint_and_regress_after_resolve():
 
     regressed = await record("v2")
     assert regressed.status == IssueStatus.regressed
+
+
+@pytest.mark.asyncio
+async def test_the_fact_that_opens_an_issue_points_back_at_the_request():
+    """``_track`` runs on the drain's task, minutes after the request that failed and with none of
+    its context — so the fact it records had no request id at all, and the one filter an admin
+    reaches for (correlate by request) showed the log line and the occurrence but never the
+    "this issue just opened" that explains them."""
+    marker = f"capture-test-{uuid.uuid4().hex}"
+    request_id = uuid.uuid7()
+    log = structlog.get_logger(_PROBE_LOGGER)
+    with structlog.contextvars.bound_contextvars(
+        request_id=str(request_id), request_name="GET /acme/todo", user_id=str(uuid.uuid7())
+    ):
+        try:
+            raise ValueError(marker)
+        except ValueError:
+            log.exception("test.capture_probe")
+
+    await CaptureDrain(0).tick()
+
+    async with db.admin_session_factory()() as session:
+        facts = list(
+            await session.scalars(
+                select(BusinessEventRecord).where(BusinessEventRecord.request_id == request_id)
+            )
+        )
+    # No actor and no org, deliberately: the journal is RLS-readable by the user it names, so
+    # attributing an internal issue to whoever tripped it would put it in *their* activity feed.
+    assert [(f.kind, f.request_name, f.user_id, f.org_id) for f in facts] == [
+        ("issues.opened", "GET /acme/todo", None, None)
+    ]

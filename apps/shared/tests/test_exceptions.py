@@ -1,6 +1,7 @@
 import json
 
 import pytest
+import structlog
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -116,3 +117,14 @@ async def test_the_error_page_captures_the_exception_it_was_handed(log_chain):
     await handle_unhandled_error(_mock_request(), boom)
 
     assert [captured.exc for captured in capture._QUEUE] == [boom]
+
+
+@pytest.mark.asyncio
+async def test_the_error_page_carries_the_request_id(log_chain):
+    """A 500 is built above the middleware that stamps every other response, so it used to be the
+    one page without the id — the page a user is looking at when an admin needs to find the trace.
+    """
+    with structlog.contextvars.bound_contextvars(request_id="the-request"):
+        resp = await handle_unhandled_error(_mock_request(), RuntimeError("boom"))
+
+    assert resp.headers["X-Request-ID"] == "the-request"

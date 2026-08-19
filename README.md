@@ -290,20 +290,36 @@ an action shows up once, not twice.
 name is the `app` axis the Timeline reads. Rendered to stdout (JSON in production, pretty console
 in dev) and teed to per-day JSON Lines files a reader can scroll back. The request path only
 enqueues; a background `FirehoseWriter` batches to disk, so a dropped line never costs the action
-that wrote it. Its level (`timeline.log_level`) is admin-tunable from the console, live.
+that wrote it — and when the disk refuses (a full volume, a read-only mount) it says so once on
+each transition rather than going quiet. Its level (`timeline.log_level`) defaults to `INFO`, so
+what the code states is what gets recorded, and is admin-tunable from the console, live.
 
 **Nothing escapes it.** The libraries' stdlib `logging` joins the same chain at `WARNING` and above
 — a library is there for its degradations, not its chatter — and so do `warnings.warn` and the four
 exits an exception can take without meeting an `except`: a bare task, a thread, `__del__`, the
-interpreter on its way out. Every served request leaves one `request.finished` line whose *level*
-carries the outcome — `error` on a 5xx, `warning` on a dead link of ours, `info` otherwise; what
-the browser fetched by itself leaves nothing unless it 5xx'd.
+interpreter on its way out. A broad `except Exception` that logs carries its `exc_info`, so the
+stack survives even where the failure is handled rather than tracked (an AST test holds the rule).
+Every served request leaves one `request.finished` line — including one whose handler raised —
+whose *level* carries the outcome: `error` on a 5xx, `warning` on a dead link of ours, `info`
+otherwise; what the browser fetched by itself leaves nothing unless it 5xx'd. The request
+middlewares are plain ASGI, not `BaseHTTPMiddleware`, which is what lets that line name the user
+and org the request bound below it.
 
 **Issues — a bug, with a lifecycle.** Every `log.exception` is teed to a bounded queue and folded,
 by stack fingerprint, into an `Issue` that opens, resolves, and regresses on a later version. Each
-sighting is an `Occurrence` carrying the JSONB context that pivots back to the firehose. The drain
-fans out with log-and-skip isolation, so a failing tracker never worsens what it tracks. Opening and
-regressing are themselves facts (`issues.opened`, `issues.regressed`).
+sighting is an `Occurrence` carrying the JSONB context that pivots back to the firehose — one per
+failure, whatever else logs the same exception on its way out. The drain fans out with log-and-skip
+isolation, so a failing tracker never worsens what it tracks, and drains once more when the process
+is asked to stop. Opening and regressing are themselves facts (`issues.opened`, `issues.regressed`)
+naming the request that tripped them, never its user: the journal is readable by whoever it names,
+and an internal issue has no business in someone's activity feed.
+
+**What counts as a bug.** A call outside the process fails two ways that look alike: the dependency
+*answered no* — a 4xx, a wrong password, an expired link — which is an ordinary outcome at `info`;
+or it is *broken* — unreachable, a 5xx, a client raising something of its own — which is an issue.
+One verdict (`apps/shared/observability/dependency.py`) for GoTrue, Postgres, Storage and SMTP
+alike, so an outage does not fill the issues screen or stay silent depending on the module it was
+reached through.
 
 **The Timeline reads all three.** `apps/timeline` writes nothing: its console screen merges the
 journal (`business`), the firehose window (`logs`) and issue occurrences (`issue`) into one view,

@@ -76,18 +76,15 @@ class TimelineFilter:
         return self.source is None or self.source == source
 
 
-def _key_app(name: str) -> str:
-    """The owning app of an issue occurrence — the first dotted segment of its title. A business
-    fact states its app on its own column, and a firehose line reads it off its logger; only an
-    issue carries a bare title, which collapses to its full name."""
-    return name.split(".", 1)[0]
-
-
 def _app_of(logger: str) -> str:
     """The app a line belongs to, read off the logger that wrote it: the package under ``apps.``
     for our own code, the top-level distribution for a library's (``sqlalchemy.pool`` →
     ``sqlalchemy``). Reading it off the *event name* instead would guess, and guess wrong —
-    ``invitation.accept_error`` belongs to organizations, ``page.provider_failed`` to shared."""
+    ``invitation.accept_error`` belongs to organizations, ``page.provider_failed`` to shared.
+
+    Shared by the firehose and by issue occurrences, which carry the logger in their captured
+    context: a failure and the lines around it must land under the same app, or the pivot from an
+    issue back to the code that raised it stops working."""
     head, _, rest = logger.partition(".")
     if head == "apps" and rest:
         return rest.partition(".")[0]
@@ -153,10 +150,10 @@ class TimelineReader:
         entries = await self.search(base, limit=cap)
         return {
             "source": _tally(entries, lambda e: e.source.value),
-            # The app axis is a business notion (``<app>.<verb>``); only business rows have one.
-            "app": _tally(
-                [e for e in entries if e.source == TimelineSource.business], lambda e: e.app
-            ),
+            # Every source names an app — its own column, or the logger that wrote it — and the
+            # filter runs over all three, so the pill has to offer all three. Counting business
+            # rows alone left ``shared`` and every library filterable but never listed.
+            "app": _tally(entries, lambda e: e.app),
             "level": _tally(entries, lambda e: e.level),
             "org": _tally(entries, lambda e: e.org_id),
             "user": _tally(entries, lambda e: e.user_id),
@@ -288,7 +285,9 @@ def _from_issue(occurrence: IssueOccurrence) -> TimelineEntry:
         source=TimelineSource.issue,
         level="error",
         name=occurrence.title,
-        app=_key_app(occurrence.title),
+        # Never the title: it is ``ValueError: user 42 not found``, an exception type and a
+        # message, so reading an app out of it yielded the whole title and no filter ever matched.
+        app=_app_of(str(ctx.get("logger") or "")),
         org_id=ctx.get("org_id"),
         user_id=ctx.get("user_id"),
         request_id=ctx.get("request_id"),

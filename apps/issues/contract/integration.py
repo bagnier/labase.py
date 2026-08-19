@@ -7,9 +7,11 @@ it is tracking.
 """
 
 import uuid
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.contextvars import bound_contextvars
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.issues.contract.events import IssueOpened, IssueRegressed, IssueStatusChanged
@@ -73,6 +75,22 @@ def _declare_settings() -> SettingsDeclaration:
     )
 
 
+def _originating_request(context: dict[str, Any]) -> dict[str, str]:
+    """The request the exception escaped, read back off the captured context.
+
+    The journal's write path takes these from contextvars, and ``_track`` runs on the drain's own
+    task — no request, no contextvars — so a fact recorded here named no request at all, and
+    correlating a timeline by request showed the log line and the occurrence but never the
+    "this issue just opened" that explains them. The capture processor snapshotted them at the
+    moment of the failure; this hands them back.
+
+    Only the request, never the actor: ``business_events`` is RLS-readable by the user it names
+    and the profile feed renders it, so attributing an internal issue to whoever happened to trip
+    it would file it in *their* activity. These facts stay server-wide (see ``contract.events``).
+    """
+    return {k: str(v) for k in ("request_id", "request_name") if (v := context.get(k)) is not None}
+
+
 async def _track(captured: ExceptionCaptured) -> None:
     """Fold a captured exception into its issue, and record the fact that opens or reopens it on
     the very same transaction — so the fact lands iff the occurrence does."""
@@ -89,18 +107,19 @@ async def _track(captured: ExceptionCaptured) -> None:
         issue_id, title = seen.issue.id, seen.issue.title
         # ``_track`` is only subscribed when the app is enabled (see ``mount``), so reaching the
         # bus here is unconditional — no mount-state guard needed.
-        if seen.opened:
-            await events.emit(IssueOpened(entity_id=issue_id, entity_name=title), session)
-        if seen.regressed:
-            await events.emit(
-                IssueRegressed(
-                    entity_id=issue_id,
-                    entity_name=title,
-                    resolved_in_release=seen.issue.resolved_in_release,
-                    seen_version=version,
-                ),
-                session,
-            )
+        with bound_contextvars(**_originating_request(captured.context)):
+            if seen.opened:
+                await events.emit(IssueOpened(entity_id=issue_id, entity_name=title), session)
+            if seen.regressed:
+                await events.emit(
+                    IssueRegressed(
+                        entity_id=issue_id,
+                        entity_name=title,
+                        resolved_in_release=seen.issue.resolved_in_release,
+                        seen_version=version,
+                    ),
+                    session,
+                )
         await session.commit()
     log.info("issues.occurrence_recorded", issue_id=str(issue_id), opened=seen.opened)
 

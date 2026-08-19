@@ -37,6 +37,21 @@ async def handle_stale_data(request: Request, _exc: Exception) -> Response:
     return _html_error(request, 409, detail)
 
 
+def _echo_request_id(response: Response) -> Response:
+    """Put the request id on a response the request middleware never got to see.
+
+    ``RequestLogger`` stamps every response it hands back, but a 500 is built *above* it, by
+    Starlette's own error middleware, on the way out of an exception that flew past. Without this
+    the one page where the id matters most — the error page a user is looking at while an admin
+    asks "when was this?" — is the only one that does not carry it. Read from the contextvar the
+    middleware bound, which this handler still sees: it runs on the same task, not a child of it.
+    """
+    request_id = structlog.contextvars.get_contextvars().get("request_id")
+    if request_id is not None:
+        response.headers["X-Request-ID"] = str(request_id)
+    return response
+
+
 async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
     # This line *is* the capture seam — the processor folds it into an issue, so nothing else
     # has to. ``exc`` is passed rather than left to ``sys.exc_info()``: the seam then holds
@@ -48,8 +63,8 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
         path=request.url.path,
     )
     if wants_json(request):
-        return JSONResponse({"detail": "Internal server error"}, status_code=500)
-    return _html_error(request, 500, "An unexpected error occurred.")
+        return _echo_request_id(JSONResponse({"detail": "Internal server error"}, status_code=500))
+    return _echo_request_id(_html_error(request, 500, "An unexpected error occurred."))
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:

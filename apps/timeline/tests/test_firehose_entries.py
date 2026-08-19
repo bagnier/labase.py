@@ -9,15 +9,13 @@ app, read off the logger that wrote it.
 from datetime import UTC, datetime
 
 import pytest
-import pytest_asyncio
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.observability import firehose
 from apps.shared.observability.firehose import append_firehose
-from apps.shared.persistence import database as db
 from apps.timeline.domain.models import TimelineSource
-from apps.timeline.infra.repository import TimelineFilter, TimelineReader
+from apps.timeline.infra.repository import TimelineFilter
 
 # The firehose reads a window around ``clock.now()``; pinning both ends keeps it deterministic.
 _NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
@@ -33,12 +31,6 @@ def _isolate_firehose(tmp_path, monkeypatch):
     firehose.clear_firehose()
     yield
     firehose.clear_firehose()
-
-
-@pytest_asyncio.fixture
-async def reader():
-    async with db.admin_session_factory()() as session:
-        yield TimelineReader(session)
 
 
 def _seed(logger: str, event: str) -> None:
