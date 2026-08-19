@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from fastapi import FastAPI
 
@@ -33,6 +33,22 @@ if TYPE_CHECKING:
 
 # The ``(query type, provider)`` pairs an app declares at mount, for the contribs registry.
 _Registrations = Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]]
+
+
+class LifespanTask(Protocol):
+    """What every background worker of the base looks like from the outside.
+
+    Five of them exist — the task worker, the event listener, the firehose writer, the metrics
+    flusher, the capture drain — and they agree on exactly this much: ``start`` is idempotent,
+    ``stop`` cancels and awaits. What each does per tick, and whether that tick is sync or
+    async, is its own business (the firehose writes to disk, so its tick blocks and the loop
+    hands it to a thread). This states the shared half so :meth:`Host.run_background` can take
+    any of them, and so a new one cannot drift into a different lifecycle by accident.
+    """
+
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
 
 
 class MountPhase(IntEnum):
@@ -180,6 +196,14 @@ class Host:
         Routed through the host so apps never touch ``host.app.router`` or FastAPI's lifespan
         directly — used by the recurring-task planters, task workers and metrics flushers."""
         self.app.router.add_event_handler("startup", handler)
+
+    def run_background(self, task: LifespanTask) -> None:
+        """Run ``task`` for the life of the app — the two halves registered together.
+
+        Registering them by hand is how a worker ends up started and never stopped: nothing
+        fails, the task simply outlives its shutdown and holds a pool open."""
+        self.on_startup(task.start)
+        self.on_shutdown(task.stop)
 
     def on_shutdown(self, handler: Callable[[], Awaitable[None]]) -> None:
         """Register an async shutdown hook, contributed by an app from its :func:`mount`."""

@@ -50,8 +50,7 @@ def mount(host: Host) -> None:
     register_task_handler(ROLLUP_TOPIC, _rollup)
     host.on_startup(_plant_rollup)
     flusher = MetricsFlusher(get_technical_settings().metrics_flush_seconds)
-    host.on_startup(flusher.start)
-    host.on_shutdown(flusher.stop)
+    host.run_background(flusher)
 
 
 def _declare_settings() -> SettingsDeclaration:

@@ -62,8 +62,7 @@ def mount(host: Host) -> None:
     host.on_startup(_plant_purge)
     # Every ``log.exception`` is queued by the capture processor; this drains it into issues.
     drain = CaptureDrain(CAPTURE_DRAIN_SECONDS)
-    host.on_startup(drain.start)
-    host.on_shutdown(drain.stop)
+    host.run_background(drain)
 
 
 def _declare_settings() -> SettingsDeclaration:

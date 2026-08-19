@@ -4,7 +4,9 @@ Proves the non-blocking doctrine — the structlog processor never touches the d
 queue grows), and a tick funnels the queue to the day files, batching a burst per file.
 """
 
+import asyncio
 import json
+import threading
 from datetime import UTC, datetime
 
 import pytest
@@ -109,3 +111,26 @@ def test_line_is_valid_json_on_disk():
     assert len(files) == 1
     line = files[0].read_text(encoding="utf-8").splitlines()[0]
     assert json.loads(line)["event"] == "shape"
+
+
+@pytest.mark.asyncio
+async def test_the_periodic_drain_writes_off_the_event_loop(monkeypatch):
+    """The batch write is blocking disk I/O. Done on the loop it stalls every request in
+    flight — once per interval, and for as long as a burst of queued lines takes."""
+    on_loop_thread: list[bool] = []
+    real_open = firehose.Path.open
+
+    def recording_open(self, *args, **kwargs):
+        on_loop_thread.append(threading.current_thread() is threading.main_thread())
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(firehose.Path, "open", recording_open)
+    enqueue_firehose({"event": "a.line", "timestamp": "2026-07-12T10:00:00", "level": "info"})
+    writer = FirehoseWriter(interval_seconds=0.01)
+    await writer.start()
+    async with asyncio.timeout(2):  # the loop keeps turning only if the write is elsewhere
+        while not on_loop_thread:
+            await asyncio.sleep(0.005)
+    await writer.stop()
+
+    assert on_loop_thread == [False]

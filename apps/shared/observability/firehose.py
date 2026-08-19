@@ -226,8 +226,11 @@ class FirehoseWriter:
 
     Same shape as ``MetricsFlusher``/``CaptureDrain`` — idempotent ``start``, cancel-and-await
     ``stop`` (with a final drain so a graceful shutdown loses no buffered line), and a ``tick``
-    tests can drive by hand. Each tick groups the queued lines by their day file so a burst
-    costs one ``open`` per file, not one per line."""
+    tests can drive by hand.
+
+    Its sibling drains ``await`` their I/O; this one's is a blocking ``open``, so the periodic
+    run hands it to a thread. Left on the loop it would stall every request in flight, once per
+    interval and for as long as a burst of queued lines takes to write."""
 
     def __init__(self, interval_seconds: float) -> None:
         self._interval = interval_seconds
@@ -246,13 +249,15 @@ class FirehoseWriter:
         self.tick()  # flush whatever the cancelled loop left behind
 
     def tick(self) -> None:
+        """Drain once, on the calling thread. Synchronous on purpose: ``stop`` runs it as the
+        loop closes, and the dying-process hook has no loop left to await on."""
         flush_firehose()
 
     async def _run(self) -> None:
         while True:
             await asyncio.sleep(self._interval)
             try:
-                self.tick()
+                await asyncio.to_thread(self.tick)
             except Exception:
                 # A drain failure is degraded-but-manageable; warn (never log.exception, which the
                 # firehose would re-enqueue) and retry next tick with the lines still queued.

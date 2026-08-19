@@ -82,23 +82,20 @@ def _start_task_worker(host: Host, settings: TechnicalSettings) -> None:
     register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
     worker = TaskWorker(settings.task_worker_interval_seconds)
     host.on_startup(_plant_recurring_tasks)
-    host.on_startup(worker.start)
-    host.on_shutdown(worker.stop)
+    host.run_background(worker)
 
 
 def _start_event_listener(host: Host, settings: TechnicalSettings) -> None:
     """Reads the ``business_events`` journal and fans each fact out to its consumers (NOTIFY-woken,
     polling as a net). One per process, like the worker."""
     listener = EventListener(settings.task_worker_interval_seconds)
-    host.on_startup(listener.start)
-    host.on_shutdown(listener.stop)
+    host.run_background(listener)
 
 
 def _start_firehose_writer(host: Host, settings: TechnicalSettings) -> None:
     """Keeps the firehose off the request path: the log processor enqueues, this task writes."""
     firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)
-    host.on_startup(firehose_writer.start)
-    host.on_shutdown(firehose_writer.stop)
+    host.run_background(firehose_writer)
 
 
 async def _plant_recurring_tasks() -> None:
