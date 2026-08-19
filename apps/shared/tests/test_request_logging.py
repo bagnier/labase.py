@@ -7,7 +7,8 @@ Pure middleware logic — no DB, no running app: the decision is exercised throu
 
 import uuid
 
-from fastapi import APIRouter, FastAPI, Response
+import structlog
+from fastapi import APIRouter, Depends, FastAPI, Response
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
@@ -186,3 +187,42 @@ def test_a_served_request_leaves_one_finished_line(log_chain):
     TestClient(_serving_app()).get("/console/timeline")
     lines = log_chain()
     assert [(line.name, line.level) for line in lines] == [("request.finished", "info")]
+
+
+def test_a_handler_that_raises_still_leaves_its_finished_line(log_chain):
+    """The 5xx an admin most wants to find is the one nobody handled. The exception travels back
+    *through* this middleware, so the line has to be written on the way out and the exception
+    re-raised — Starlette's own 500 handler is what turns it into an issue, one layer further up.
+    """
+    TestClient(_serving_app(), raise_server_exceptions=False).get("/boom")
+
+    lines = log_chain()
+
+    assert [(line.name, line.level, line.payload["status"]) for line in lines] == [
+        ("request.finished", "error", 500)
+    ]
+
+
+# The four correlation keys are the timeline's whole point, and three of them are bound *below*
+# this middleware — by auth's ``get_current_user`` and organizations' ``get_current_org``, as the
+# request is served. The finished line is written after that, so it must see them.
+
+
+def _correlated_app() -> FastAPI:
+    async def bind_the_scope() -> None:
+        structlog.contextvars.bind_contextvars(user_id="u-1", org_id="o-1")
+
+    app = FastAPI()
+    app.get("/acme/todo", dependencies=[Depends(bind_the_scope)])(lambda: {"ok": True})
+    app.add_middleware(request.RequestLogger)
+    return app
+
+
+def test_the_finished_line_carries_what_the_request_bound_below_it(log_chain):
+    TestClient(_correlated_app()).get("/acme/todo")
+
+    lines = log_chain()
+
+    assert [(line.name, line.user_id, line.org_id) for line in lines] == [
+        ("request.finished", "u-1", "o-1")
+    ]

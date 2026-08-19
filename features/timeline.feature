@@ -133,16 +133,16 @@ Feature: Unified timeline
 
   # Tunable log level
 
-  Scenario: The log level defaults to WARNING
+  Scenario: The log level defaults to INFO
     Given a server admin is signed in as "root@example.com"
     When the admin opens the settings for the "timeline" app
-    Then the "timeline" setting "log_level" is shown as "WARNING"
-
-  Scenario: An admin lowers the log level and it persists
-    Given a server admin is signed in as "root@example.com"
-    When the admin sets the "timeline" setting "log_level" to "INFO"
-    And the admin opens the settings for the "timeline" app
     Then the "timeline" setting "log_level" is shown as "INFO"
+
+  Scenario: An admin changes the log level and it persists
+    Given a server admin is signed in as "root@example.com"
+    When the admin sets the "timeline" setting "log_level" to "WARNING"
+    And the admin opens the settings for the "timeline" app
+    Then the "timeline" setting "log_level" is shown as "WARNING"
 
   # Contribution independent of the log level
 

@@ -97,11 +97,13 @@ def read_values(app: str) -> dict[str, str]:
 
     try:
         return asyncio.run(_on_throwaway_engine(_work))
-    except Exception:
-        # A DB unreachable at mount is a serious infra failure (the app runs on defaults and the
-        # next request fails anyway), but not our code bug — log.error is high-severity yet, with
-        # no exc_info, is not captured as an issue. Tests/probes boot DB-less and simply see it.
-        log.error("settings.read_values_failed", app=app)
+    except Exception as exc:
+        # A DB unreachable at mount is a broken dependency, and a broken dependency is an issue —
+        # the same verdict auth reaches for an unreachable GoTrue. The app then runs on defaults
+        # and every request that needed a stored value is silently wrong, which is precisely the
+        # kind of failure that must not read as "nothing happened". Tests/probes boot DB-less and
+        # see it too; a mount that cannot reach its database is worth saying out loud.
+        log.exception("settings.read_values_failed", exc_info=exc, app=app)
         return {}
 
 
@@ -125,7 +127,7 @@ def seed_values(app: str, initial: dict[str, str]) -> None:
 
     try:
         asyncio.run(_on_throwaway_engine(_work))
-    except Exception:
-        # Serious infra failure (DB unreachable at mount), not our code bug: log.error is
-        # high-severity yet, with no exc_info, is not captured as an issue. See read_values.
-        log.error("settings.seed_values_failed", app=app)
+    except Exception as exc:
+        # Broken dependency at mount — an issue, like read_values above: the declared settings
+        # never reached the table, so the console shows an app whose rows do not exist.
+        log.exception("settings.seed_values_failed", exc_info=exc, app=app)

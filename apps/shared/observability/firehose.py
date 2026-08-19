@@ -74,22 +74,66 @@ def _parse_ts(value: Any) -> datetime:
     return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
 
 
+@dataclass
+class _Outage:
+    """Whether the disk is refusing lines, and how many it has refused since it last accepted one
+    — a full volume, a read-only mount, a directory a rotation took away.
+
+    Reported on its two *transitions* and silent in between, for the reason the capture queue
+    counts its overflow rather than logging it: the report is itself a log line, so one per refused
+    write would feed the very queue that cannot be drained. Stdout still works during an outage, so
+    the entry line reaches an aggregator immediately even while the file cannot take it; the exit
+    line carries the toll, which is only final once the disk accepts again.
+    """
+
+    lines: int = 0
+    refusing: bool = False
+    announced: bool = False
+
+
+_outage = _Outage()
+
+
+def _write_batch(path: Path, lines: list[dict[str, Any]]) -> bool:
+    """Append several lines to one day's file in a single ``open`` — the drain's unit of work.
+    Returns whether they reached the disk.
+
+    Best-effort: a firehose write must never break the request that logged it (matches the
+    business-event/metrics doctrine). What was refused is tallied on :data:`_outage`; saying so is
+    the caller's job, since only a whole drain knows whether the disk is refusing or just one file.
+    """
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.writelines(json.dumps(one, default=str) + "\n" for one in lines)
+    except OSError:
+        _outage.lines += len(lines)
+        return False
+    return True
+
+
+def report_write_outage() -> None:
+    """Say that the disk stopped accepting lines, or started again — once per transition.
+
+    Called by the writer after its drain, so the state read here is that of the write it just
+    attempted. The recovery line is the one carrying the toll: during the outage the count is
+    still climbing, and no line written then can reach the file anyway.
+    """
+    if _outage.refusing and not _outage.announced:
+        _outage.announced = True
+        log.error("firehose.write_failed")
+    elif not _outage.refusing and _outage.announced:
+        _outage.announced = False
+        log.info("firehose.write_recovered", lines=_outage.lines)
+        _outage.lines = 0
+
+
 def append_firehose(line: dict[str, Any]) -> None:
     """Append one line as a JSON object to its day's file. Best-effort: a firehose write must
     never break the request that logged it (matches the business-event/metrics doctrine).
 
     The synchronous, low-level writer: tests and seeds call it directly for a line they read back
     at once, and the background :class:`FirehoseWriter` funnels the runtime queue through it."""
-    _write_batch(_file_for(_parse_ts(line.get("timestamp"))), [line])
-
-
-def _write_batch(path: Path, lines: list[dict[str, Any]]) -> None:
-    """Append several lines to one day's file in a single ``open`` — the drain's unit of work."""
-    try:
-        with path.open("a", encoding="utf-8") as fh:
-            fh.writelines(json.dumps(one, default=str) + "\n" for one in lines)
-    except OSError:
-        pass
+    _outage.refusing = not _write_batch(_file_for(_parse_ts(line.get("timestamp"))), [line])
 
 
 # Where runtime log lines wait, between the structlog processor (producer) and the background writer
@@ -231,6 +275,7 @@ def read_firehose(
 def clear_firehose() -> None:
     """Drop queued lines and delete every firehose file — test isolation between scenarios."""
     _QUEUE.clear()
+    _outage.lines, _outage.refusing, _outage.announced = 0, False, False
     for path in firehose_dir().glob("firehose-*.jsonl"):
         path.unlink(missing_ok=True)
 
@@ -250,8 +295,12 @@ def flush_firehose() -> None:
         except IndexError:
             break
         batches[_file_for(_parse_ts(line.get("timestamp")))].append(line)
-    for path, lines in batches.items():
-        _write_batch(path, lines)
+    # One verdict for the whole drain, not one per file: a burst spanning midnight writes two day
+    # files, and "the disk is refusing" is true if either was turned away. An empty drain says
+    # nothing at all — the state stands until a write actually tests it.
+    reached = [_write_batch(path, lines) for path, lines in batches.items()]
+    if reached:
+        _outage.refusing = not all(reached)
 
 
 class FirehoseWriter:
@@ -285,13 +334,15 @@ class FirehoseWriter:
         """Drain once, on the calling thread. Synchronous on purpose: ``stop`` runs it as the
         loop closes, and the dying-process hook has no loop left to await on."""
         flush_firehose()
+        report_write_outage()
 
     async def _run(self) -> None:
         while True:
             await asyncio.sleep(self._interval)
             try:
                 await asyncio.to_thread(self.tick)
-            except Exception:
+            except Exception as exc:
                 # A drain failure is degraded-but-manageable; warn (never log.exception, which the
-                # firehose would re-enqueue) and retry next tick with the lines still queued.
-                log.warning("firehose.drain_failed")
+                # firehose would re-enqueue) and retry next tick with the lines still queued. The
+                # stack rides ``exc_info``, which at ``warning`` level opens no issue.
+                log.warning("firehose.drain_failed", exc_info=exc)

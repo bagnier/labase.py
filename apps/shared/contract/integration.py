@@ -23,7 +23,7 @@ from apps.shared.http.limiter import (
     RateLimitExceeded,
     purge_counters,
 )
-from apps.shared.http.security import cors_config, csrf_protect, security_headers
+from apps.shared.http.security import CsrfProtect, SecurityHeaders, cors_config
 from apps.shared.http.static import CachingStaticFiles
 from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import catch_loop_exceptions, setup_logging
@@ -50,8 +50,12 @@ def mount(host: Host) -> None:
     app.exception_handler(HTTPException)(handle_http_error)
     app.exception_handler(StarletteHTTPException)(handle_http_error)
 
-    app.middleware("http")(security_headers)
-    app.middleware("http")(csrf_protect)
+    # Added innermost-first: each ``add_middleware`` wraps what is already there, so CORS ends up
+    # outermost and the hardening headers closest to the router. All four are plain ASGI — a
+    # ``BaseHTTPMiddleware`` anywhere under ``RequestLogger`` would run the rest in a child task
+    # and strip the request's correlation off the finished line (see ``RequestLogger``).
+    app.add_middleware(SecurityHeaders)
+    app.add_middleware(CsrfProtect)
     app.add_middleware(RequestLogger)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
 
@@ -102,5 +106,5 @@ async def _plant_recurring_tasks() -> None:
     """Best-effort: a missing DB at startup must not prevent serving (probes, unit runs)."""
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
-    except Exception:
-        log.warning("queue.plant_recurring_failed")
+    except Exception as exc:
+        log.warning("queue.plant_recurring_failed", exc_info=exc)

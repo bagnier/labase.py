@@ -57,8 +57,8 @@ async def logout(access_token: str) -> None:
                 f"{s.supabase_api_url}/auth/v1/logout",
                 headers=_auth_headers(access_token),
             )
-    except Exception:
-        log.warning("auth.signout_failed")
+    except Exception as exc:
+        log.warning("auth.signout_failed", exc_info=exc)
 
 
 async def refresh_session(refresh_token: str) -> AuthTokens:

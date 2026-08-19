@@ -174,7 +174,8 @@ class CaptureDrain:
             await asyncio.sleep(self._interval)
             try:
                 await self.tick()
-            except Exception:
+            except Exception as exc:
                 # A drain failure is degraded-but-manageable — and must NOT log.exception, which
-                # would re-enter capture. Warn and retry next tick.
-                log.warning("capture.drain_failed")
+                # would re-enter capture. Warn and retry next tick. ``exc_info`` on a *warning* is
+                # how the stack still reaches the firehose: the seam only fires at ``error``.
+                log.warning("capture.drain_failed", exc_info=exc)

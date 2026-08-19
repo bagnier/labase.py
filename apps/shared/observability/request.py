@@ -3,9 +3,9 @@ import uuid
 from urllib.parse import urlparse
 
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from apps.shared.observability.metrics import accumulator
 from apps.shared.observability.sql import read_request_stats, start_request_stats
@@ -112,62 +112,92 @@ def new_request_id() -> str:
     return str(uuid.uuid7())
 
 
-class RequestLogger(BaseHTTPMiddleware):
+class RequestLogger:
     """Per-request correlation and telemetry (README: observability is built in).
 
     Binds a ``request_id`` in a contextvar so every log line of the request correlates, times the
     request, and feeds the load metrics. It logs **once per served request**, under one name —
-    ``request.finished`` — whose *level* carries the outcome: ``error`` on a 5xx (our own bug),
-    ``warning`` on a dead link from one of our own pages, ``info`` on everything else. This is the
-    ``http`` source of the timeline, and the only one: a line written anywhere else is ``app``.
+    ``request.finished`` — whose *level* carries the outcome: ``error`` on a 5xx (our own bug or an
+    exception nobody handled), ``warning`` on a dead link from one of our own pages, ``info`` on
+    everything else. This is the ``http`` source of the timeline, and the only one: a line written
+    anywhere else is ``app``.
+
+    **A plain ASGI middleware, not a ``BaseHTTPMiddleware``.** That base runs the rest of the app
+    in a *child task*, which gets a copy of the context — so the ``user_id``/``org_id`` that auth
+    and organizations bind while serving the request never travel back up here, and the finished
+    line named neither. Awaiting the app directly keeps one context for the whole exchange, and the
+    same move puts the exception on this frame: a handler that raises now leaves its line (at
+    ``error``) before the exception carries on to Starlette's 500 handler, which is what turns it
+    into an issue. Both properties are lost again the moment a ``BaseHTTPMiddleware`` is mounted
+    *underneath* this one, hence the ones next to it in the stack are plain ASGI too.
 
     What the browser fetches on its own leaves nothing behind — static assets, the favicon and
     ``/.well-known`` probes — unless it 5xx'd, which is our fault whatever asked for it.
     Liveness/readiness probes are skipped before any of this.
     """
 
-    async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
-        if request.url.path in _SKIP_PATHS:
-            return await call_next(request)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"] in _SKIP_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
         request_id = new_request_id()
-        ip = request.client.host if request.client else None
         structlog.contextvars.clear_contextvars()
-        # Both ride every log line *and* every business event of this request (the journal's write
-        # path reads them off these contextvars). The name is bound here, before call_next, because
-        # a fact emitted mid-request must already carry it — the matched route template is only
-        # readable afterwards, and the raw path is what a reader wants anyway.
+        # These ride every log line *and* every business event of this request (the journal's
+        # write path reads them off these contextvars). The name is bound here, before the app
+        # runs, because a fact emitted mid-request must already carry it — the matched route
+        # template is only readable afterwards, and the raw path is what a reader wants anyway.
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
-            ip=ip,
+            ip=request.client.host if request.client else None,
             request_name=f"{request.method} {request.url.path}",
         )
         start_request_stats()
 
+        status = 500  # what Starlette answers if the app raises before saying otherwise
         start = time.perf_counter()
-        response = await call_next(request)
+
+        async def send_with_request_id(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_request_id)
+        except Exception:
+            # The line first, then the exception on its way: it is the 500 handler further up
+            # that captures it as an issue, and this middleware's job is only to say the exchange
+            # ended — which is exactly what used to go missing on the requests that mattered most.
+            self._finish(request, status, start)
+            raise
+        self._finish(request, status, start)
+
+    def _finish(self, request: Request, status: int, start: float) -> None:
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        self._observe(request, status, duration_ms)
+        self._log_finished(request, status, duration_ms)
 
-        # The router mutates the shared scope during matching, so the matched template
-        # (low-cardinality label) is only readable after call_next.
-        if _feeds_load_metrics(request, response.status_code):
-            route = _route_template(request)
-            if route is not None:
-                accumulator.observe(request.method, route, response.status_code, duration_ms)
-            else:
-                # No route matched: record the real path (bounded by the accumulator) rather
-                # than an opaque label, so a genuine dead link from ourselves is identifiable.
-                accumulator.observe(
-                    request.method,
-                    request.url.path,
-                    response.status_code,
-                    duration_ms,
-                    unmatched=True,
-                )
-
-        self._log_finished(request, response.status_code, duration_ms)
-        response.headers["X-Request-ID"] = request_id
-        return response
+    @staticmethod
+    def _observe(request: Request, status: int, duration_ms: float) -> None:
+        """Feed the load metrics under the matched route template — a low-cardinality label the
+        router only fills in while serving, hence read here rather than up front."""
+        if not _feeds_load_metrics(request, status):
+            return
+        route = _route_template(request)
+        if route is not None:
+            accumulator.observe(request.method, route, status, duration_ms)
+        else:
+            # No route matched: record the real path (bounded by the accumulator) rather
+            # than an opaque label, so a genuine dead link from ourselves is identifiable.
+            accumulator.observe(
+                request.method, request.url.path, status, duration_ms, unmatched=True
+            )
 
     @staticmethod
     def _log_finished(request: Request, status: int, duration_ms: float) -> None:

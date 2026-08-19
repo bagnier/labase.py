@@ -73,8 +73,8 @@ async def _rollup(session, _payload: dict) -> None:
 async def _plant_rollup() -> None:
     try:
         await ensure_scheduled(ROLLUP_TOPIC, ROLLUP_EVERY_SECONDS)
-    except Exception:
-        log.warning("metrics.plant_rollup_failed")
+    except Exception as exc:
+        log.warning("metrics.plant_rollup_failed", exc_info=exc)
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

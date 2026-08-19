@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
-from apps.shared.http.security import cors_config, csrf_protect
+from apps.shared.http.security import CsrfProtect, cors_config
 
 
 def test_cors_closed_default_grants_nothing():
@@ -26,7 +26,7 @@ def test_cors_explicit_allowlist_keeps_credentials():
 @pytest_asyncio.fixture()
 async def csrf_client():
     _app = FastAPI()
-    _app.middleware("http")(csrf_protect)
+    _app.add_middleware(CsrfProtect)
 
     @_app.get("/ping")
     async def ping() -> JSONResponse:

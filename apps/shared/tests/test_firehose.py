@@ -7,6 +7,7 @@ queue grows), and a tick funnels the queue to the day files, batching a burst pe
 import asyncio
 import json
 import threading
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 import pytest
@@ -134,3 +135,66 @@ async def test_the_periodic_drain_writes_off_the_event_loop(monkeypatch):
     await writer.stop()
 
     assert on_loop_thread == [False]
+
+
+# The disk can refuse — a full volume, a read-only mount, a directory that vanished under a
+# rotation. Swallowed, that turns the firehose off in silence: the timeline simply shows nothing,
+# and reads as a quiet server. The writer says it instead, once per outage rather than per line.
+
+
+@contextmanager
+def _a_disk_that_refuses():
+    """Put a *directory* where the day's file belongs, so every ``open(..., "a")`` on it raises
+    ``IsADirectoryError``.
+
+    A full volume or a read-only mount does the same thing to the writer, and this is the version
+    a test can set up and take down on demand — the real ``_write_batch`` runs throughout, which a
+    patched one would not.
+    """
+    blocked = firehose._file_for(_NOW)
+    blocked.mkdir()
+    try:
+        yield
+    finally:
+        blocked.rmdir()  # before any read: the reader globs this name and would try to parse it
+
+
+def _write(event: str, writer: FirehoseWriter) -> None:
+    enqueue_firehose({"timestamp": _NOW.isoformat(), "event": event})
+    writer.tick()
+
+
+def test_a_disk_that_refuses_the_write_is_announced_once(log_chain, caplog):
+    """Once per outage, not per refused line: the announcement is itself a log line, so one per
+    failed write would feed the very queue that cannot be drained.
+
+    Read off the stream rather than the file on purpose — the announcement cannot survive its own
+    outage on disk, which is exactly why it is also written to stdout, where an aggregator sees it
+    while it is happening.
+    """
+    writer = FirehoseWriter(interval_seconds=0)
+    with _a_disk_that_refuses():
+        for _ in range(3):
+            _write("lost.line", writer)
+
+    announced = [r for r in caplog.records if r.msg.get("event") == "firehose.write_failed"]
+    assert len(announced) == 1
+
+
+def test_a_disk_that_comes_back_says_what_it_cost(log_chain):
+    """The recovery line is the only one that can carry the toll: during the outage the count is
+    still climbing, and nothing written then reaches the file to be read back."""
+    writer = FirehoseWriter(interval_seconds=0)
+    with _a_disk_that_refuses():
+        _write("lost.line", writer)
+        _write("lost.line", writer)
+
+    _write("kept.line", writer)
+
+    # Two, not three: the announcement is stamped by structlog's own clock, so it belongs to
+    # today's file rather than the pinned day this test blocked — it is not part of the toll.
+    assert [
+        (line.name, line.payload.get("lines"))
+        for line in log_chain()
+        if line.name == "firehose.write_recovered"
+    ] == [("firehose.write_recovered", 2)]

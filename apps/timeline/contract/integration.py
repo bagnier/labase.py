@@ -31,10 +31,13 @@ log = structlog.get_logger(__name__)
 TIMELINE_APP = "timeline"
 LOG_LEVEL_KEY = "log_level"
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
-# The firehose defaults to WARNING — quiet enough that request/app diagnostics don't drown the
-# business and issue signal — and an admin can lower it live from the timeline when they need
-# the detail. The other two sources never depend on this level (each has its own write path).
-DEFAULT_LOG_LEVEL = "WARNING"
+# The firehose defaults to INFO, so every technical fact the code states is actually recorded —
+# a served request, a drained task, an occurrence folded into its issue. At WARNING those lines
+# were written in the code and dropped by the filter, which made the timeline's `logs` source
+# empty on a healthy server: only failures had ever happened. An admin can still raise the level
+# to quiet a noisy instance, or lower it to DEBUG for per-query traces. The other two sources
+# never depend on this level (each has its own write path).
+DEFAULT_LOG_LEVEL = "INFO"
 
 
 def mount(host: Host) -> None:

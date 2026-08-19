@@ -122,8 +122,8 @@ async def _send_alert(session: AsyncSession, subject: str, issue_id: uuid.UUID) 
     email = Email(to=str(settings.alert_email), subject=subject, text=text)
     try:  # alerting is best-effort: a failing enqueue never worsens the tracked failure
         await enqueue_email(session, email)
-    except Exception:
-        log.warning("issues.alert_enqueue_failed", issue_id=str(issue_id))
+    except Exception as exc:
+        log.warning("issues.alert_enqueue_failed", issue_id=str(issue_id), exc_info=exc)
 
 
 async def _purge(session: AsyncSession, _payload: dict) -> None:
@@ -134,8 +134,8 @@ async def _purge(session: AsyncSession, _payload: dict) -> None:
 async def _plant_purge() -> None:
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
-    except Exception:
-        log.warning("issues.plant_purge_failed")
+    except Exception as exc:
+        log.warning("issues.plant_purge_failed", exc_info=exc)
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:

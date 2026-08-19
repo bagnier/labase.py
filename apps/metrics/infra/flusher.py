@@ -61,5 +61,5 @@ class MetricsFlusher:
             await asyncio.sleep(self._interval)
             try:
                 await self.tick()
-            except Exception:
-                log.warning("metrics.flush_failed")
+            except Exception as exc:
+                log.warning("metrics.flush_failed", exc_info=exc)

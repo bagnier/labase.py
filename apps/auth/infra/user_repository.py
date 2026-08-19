@@ -82,8 +82,8 @@ async def resolve_user_emails(user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]
         # here fails the whole page, and a GoTrue record the SDK's own model rejects is enough.
         try:
             resp = await asyncio.to_thread(admin.get_user_by_id, str(uid))
-        except Exception:
-            log.warning("auth.user_lookup_failed", user_id=str(uid))
+        except Exception as exc:
+            log.warning("auth.user_lookup_failed", user_id=str(uid), exc_info=exc)
             return uid, ""
         email = resp.user.email if resp.user else ""
         return uid, email or ""

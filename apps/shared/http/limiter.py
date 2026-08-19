@@ -57,8 +57,8 @@ async def _increment(key: str, window_seconds: int) -> int | None:
             hits = await session.scalar(_INCREMENT, {"key": key, "window_start": window_start})
             await session.commit()
             return int(hits or 0)
-    except Exception:
-        log.warning("rate_limit.store_failed", key=key)
+    except Exception as exc:
+        log.warning("rate_limit.store_failed", key=key, exc_info=exc)
         return None
 
 

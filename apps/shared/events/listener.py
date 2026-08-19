@@ -124,8 +124,8 @@ class EventListener:
             for handler in self._wiring.spread_handlers_for(event):
                 try:
                     await handler(event)
-                except Exception:
-                    log.warning("listener.spread_handler_failed", kind=record.kind)
+                except Exception as exc:
+                    log.warning("listener.spread_handler_failed", kind=record.kind, exc_info=exc)
         self._spread_cursor = record.id
 
     @staticmethod
@@ -189,8 +189,8 @@ class EventListener:
             try:
                 while await self.tick():
                     pass  # drain all ready facts before waiting
-            except Exception:
-                log.warning("listener.tick_failed")
+            except Exception as exc:
+                log.warning("listener.tick_failed", exc_info=exc)
             # Wake on NOTIFY, or poll after the interval as a durability net.
             with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), timeout=self._interval)
@@ -206,9 +206,9 @@ class EventListener:
                 raise RuntimeError("no asyncpg connection behind the pool")
             await asyncpg_conn.add_listener(NOTIFY_CHANNEL, self._on_notify)
             self._listen_conn = raw
-        except Exception:
+        except Exception as exc:
             # No LISTEN (e.g. DB down at boot) — the poll loop still delivers, just not instantly.
-            log.warning("listener.listen_failed")
+            log.warning("listener.listen_failed", exc_info=exc)
 
     async def _unlisten(self) -> None:
         conn = self._listen_conn

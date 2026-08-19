@@ -2,6 +2,12 @@
 
 Cross-site cookie-authenticated mutations are rejected from the ``Sec-Fetch-Site``
 header, so there are no CSRF tokens to plumb through forms (README: HTTP security).
+
+Both are plain ASGI middleware rather than ``BaseHTTPMiddleware`` dispatch functions. Nothing
+here needs the difference, but they sit *under* ``RequestLogger``, and that base runs what it
+wraps in a child task whose context never rejoins the parent's — one of these in the stack is
+enough to strip the request's ``user_id``/``org_id`` off the finished line
+(see :class:`~apps.shared.observability.request.RequestLogger`).
 """
 
 from typing import Any
@@ -9,7 +15,9 @@ from urllib.parse import urlparse
 
 import structlog
 from fastapi import Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 log = structlog.get_logger(__name__)
 
@@ -54,13 +62,33 @@ _CSP = (
 )
 
 
-async def security_headers(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
-    response = await call_next(request)
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Content-Security-Policy"] = _CSP
-    return response
+_HARDENING = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": _CSP,
+}
+
+
+class SecurityHeaders:
+    """Stamp the hardening headers on every response, whatever produced it."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_hardened(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in _HARDENING.items():
+                    headers[name] = value
+            await send(message)
+
+        await self.app(scope, receive, send_hardened)
 
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -85,15 +113,26 @@ def _is_cross_site(request: Request) -> bool:
     return urlparse(origin).netloc != request.headers.get("host", "")
 
 
-async def csrf_protect(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
+class CsrfProtect:
     """Reject unsafe cross-site requests (see :func:`_is_cross_site`)."""
-    if request.method not in _SAFE_METHODS and _is_cross_site(request):
-        log.warning(
-            "csrf.rejected",
-            path=request.url.path,
-            method=request.method,
-            sec_fetch_site=request.headers.get("sec-fetch-site"),
-            origin=request.headers.get("origin"),
-        )
-        return JSONResponse({"detail": "Cross-site request rejected"}, status_code=403)
-    return await call_next(request)
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope)
+        if request.method not in _SAFE_METHODS and _is_cross_site(request):
+            log.warning(
+                "csrf.rejected",
+                path=request.url.path,
+                method=request.method,
+                sec_fetch_site=request.headers.get("sec-fetch-site"),
+                origin=request.headers.get("origin"),
+            )
+            refusal = JSONResponse({"detail": "Cross-site request rejected"}, status_code=403)
+            await refusal(scope, receive, send)
+            return
+        await self.app(scope, receive, send)

@@ -170,8 +170,8 @@ class TaskWorker:
             try:
                 while await self.tick():
                     pass  # drain ready tasks before sleeping
-            except Exception:
-                log.warning("queue.worker_failed")
+            except Exception as exc:
+                log.warning("queue.worker_failed", exc_info=exc)
             await asyncio.sleep(self._interval)
 
     async def tick(self) -> int:
@@ -207,7 +207,7 @@ class TaskWorker:
                     topic=task["topic"],
                     task_id=task["id"],
                     attempt=task["attempts"],
-                    error=repr(exc),
+                    exc_info=exc,
                 )
                 await self._retry(task, repr(exc))
         else:

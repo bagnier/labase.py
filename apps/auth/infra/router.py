@@ -656,8 +656,8 @@ async def stop_impersonation_endpoint(
     admin_id = None
     try:
         admin_id = _sub_uuid(decode_jwt(stash)["sub"])
-    except Exception:  # expired stash: still drop the disguise, record without the id
-        log.warning("auth.impersonation_stash_invalid")
+    except Exception as exc:  # expired stash: still drop the disguise, record without the id
+        log.warning("auth.impersonation_stash_invalid", exc_info=exc)
     await events.emit(
         ImpersonationStopped(
             user_id=admin_id, entity_id=current_user.id, entity_name=current_user.email
