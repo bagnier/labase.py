@@ -9,13 +9,15 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 - [ ] **[LATENT · 🟢 basse] Redaction business-events = match sur le *nom* du champ** (denylist de fragments : `token|password|secret|apikey|otp|…`). Le champ de portée a rétréci depuis l'audit : la denylist s'applique désormais **à la définition de la classe** (`BusinessEvent.__init_subclass__` lève un `TypeError` et nomme l'alternative), le masque au write path (`_fact_payload`) n'étant plus qu'un filet de dernier recours qui log en `error` s'il tire. Reste que la denylist ne couvre pas un secret nommé hors fragments. Elle ne concerne **que** `business_events`, jamais les logs. Fix : allowlist au lieu de denylist. `apps/shared/events/types.py:64-86`, `apps/shared/events/repository.py:77-96`.
 - [ ] **[LATENT · 🟡 basse] Setting `"number"` mal typé silencieusement** — `_coerce` fait `int(raw)` et sur `ValueError` renvoie la *string* brute ; `"1.5"` relu comme `str`, floats non supportés. **Mais aucun setting déclaré n'utilise de défaut décimal** et le write path (`_normalise`) rejette les non-int → non atteignable aujourd'hui. `apps/shared/settings.py:117-125`.
 - [ ] **[LATENT · 🟡 moyenne] Résolution templates = glob trié, pas de namespace par app** — mécanisme first-match-wins alphabétique confirmé, mais **aucune collision réelle** aujourd'hui (les apps se namespacent en sous-dossier). Latent : le jour où deux apps posent un `base.html`/`errors/404.html` racine. Fix : imposer la convention sous-dossier / namespacer le loader. `apps/shared/http/templates.py:20-22`.
-- [x] **[RÉSOLU 2026-08-16] Business-event fire-and-forget : référence tenue, drain manquant** — sans objet : il n'y a plus d'écriture détachée du tout. `emit(event, session)` exige sa session et écrit dans la transaction de l'appelant, donc un fait commite si et seulement si l'action commite ; il n'y a plus de task à référencer ni à drainer, et un SIGTERM ne peut plus perdre un write en vol. `tests/test_emit_sites.py` épingle qu'aucune seconde voie ne réapparaisse.
 - [ ] **[PARTIEL · 🟡 basse-moyenne] Scope « une clé API = une org » = check Python, pas RLS** — la clé s'authentifie comme son créateur ; RLS seule verrait toutes ses orgs. Routes handle-scopées **protégées** par `_ensure_api_key_scope` dans `get_current_org` ; le bypass `{org_id}`+`require_owner` est **dormant** (non câblé). Fuite live réelle : `GET /organizations` énumère **toutes** les orgs du créateur, `POST /organizations` en crée. Fix : gate central des routes collection quand `api_key_org_id` est set. `apps/organizations/infra/context.py:62-69` + `router.py:157,198-207`.
 
 ## issues
 
+- [ ] **Deux doctrines pour « la dépendance externe est injoignable »** (relevé passe apps/issues 2026-08-19). `apps/shared/persistence/settings_store.py:104,131` tranche explicitement — `log.error` sans `exc_info`, donc **pas** d'issue : « panne d'infra sérieuse, pas un bug de notre code ». `apps/auth/infra/router.py:274,593` attrape exactement la même classe (GoTrue injoignable, un 5xx, une erreur réseau) en `log.exception`, donc **une** issue. Et `apps/auth/infra/security.py:144-149` en donne une troisième réponse, un helper qui sépare les 4xx du reste. Coût : pendant une panne du fournisseur, l'écran issues soit se remplit (auth) soit ne dit rien (settings), selon le module traversé — et personne n'a pris la décision deux fois. Remède : un seul prédicat (« est-ce *notre* code qui a échoué, ou une dépendance ? ») appliqué aux quatre sites, vraisemblablement en remontant la forme de `_log_gotrue_failure` dans shared. Décision de doctrine, pas un nettoyage : ça définit ce qu'est une issue pour toute la base.
+- [ ] **Le triplet de corrélation traverse le contrat timeline↔issues en kwargs libres.** `apps/timeline/infra/repository.py:237-241` construit `_issue_kwargs` en partant de `_event_kwargs` puis en `del`-ant deux clés, pour tomber sur les 7 paramètres nommés de `search_issue_occurrences` (`apps/issues/contract/queries.py:24`). `TimelineFilter` **est** déjà cet objet côté appelant : il est aplati, puis re-rétréci par source en supprimant des clés de dict. Coût : ajouter un filtre = éditer la dataclass, `_event_kwargs`, trois listes de `del` et la signature de chaque requête de contrat ; un `del` sur une clé que l'autre requête n'a plus est un `KeyError` au runtime, pas au type-check. Remède : un `OccurrenceFilter` gelé dans le contrat (les quatre clés qu'issues supporte réellement), que la timeline construit explicitement.
+- [ ] **`issue_occurrences` corrèle dans le JSONB, sans index qui le serve.** `apps/issues/contract/queries.py:44-52` filtre sur `context['org_id'].astext` (idem user_id, request_id) et fait un `ilike` sur `cast(context as text)` ; la table ne porte qu'un index, `(issue_id, id desc)` (`supabase/migrations/20260818000007_issues.sql:49`). Coût : chaque lecture corrélée de la Timeline scanne séquentiellement, et seule la purge de rétention borne le volume. Les colonnes existent sur `business_events` ; issues a choisi le JSONB. Remède : promouvoir les trois clés de corrélation en vraies colonnes (le contexte de capture les porte déjà quand elles sont liées). Migration + backfill.
+
 - [ ] **`MissingGreenlet` en fin de `make perf-smoke`** — bruit d'arrêt, non élucidé. Mesuré 2026-08-15 : **une** connexion, **une** fois par run, **sous charge seulement** (démarrer puis arrêter l'app sans charge : rien). Chaîne : `_do_return_conn` → pool plein (`QueueFull`) → `_close_connection` → `asyncpg.close()` hors greenlet. **Aucune frame applicative** dans la trace → déclenché depuis un finaliseur, pas depuis notre code. Sans conséquence : émis par le processus qui meurt, n'a jamais fait tomber un run. Écartés, chacun corrigé sans que la trace bouge : (a) pools jamais disposés à l'arrêt → `dispose_engines` ; (b) task détachée collectée en vol → référence tenue, puis l'écriture détachée entièrement supprimée (2026-08-16). Le motif « une seule connexion sur 833 requêtes » contredit d'ailleurs une fuite par GC, qui en produirait plusieurs. Piste non explorée : `echo_pool` sur un run de perf-smoke pour lire la séquence checkout/checkin réelle.
-- [x] id as uuid, not str or int
 - [ ] aire passer le chemin clé d'API par les identifiants Storage de l'app, en gardant l'épinglage d'org comme source unique du chemin. Le précédent existe déjà dans la base : l'upload d'avatar utilise admin_storage() pour un utilisateur authentifié.
 - [ ] _ENTITY_ROUTES in apps/organizations est un couplage
 - [ ] jinja_globals should live in host ??
@@ -23,7 +25,6 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 - [ ] réduire les "| None = None"
 - [ ] moins de str, plus de types
 - [ ] chasse aux N+1
-- [x] no more "audit event" > BusinessEvent, Issue or Log
 - [ ] no more todo_completion_stats > real time count (to generalyze to all apps)
 - [ ] split SQLAlchemy models in domain & Pydantic models in contract (all apps)
 - [ ] _ACTIVITY_PAGE and any other constants should become settongs (all apps)
@@ -37,9 +38,6 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 ### features
 
-- [x] console should list all business events from each app
-- [x] profile & dashboard should display the recent business events
-- [x] profile, dashboard & console should show a github like activity
 - [ ] console should show a dedicated growth activity report
 - [ ] `home.html` ignore `current_user` : un authentifié voit « Sign in » sur une instance sans org vedette
 - [ ] AARRR metrics
@@ -48,9 +46,6 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 ### technical
 
-- [x] **squash migrations** — 43 fichiers d'historique remplacés par un socle et un fichier par
-  bounded context, supprimable avec son app ; noms revus contre les conventions Postgres et leurs
-  homologues Python, parité ORM ↔ base tenue par `tests/test_schema_parity.py`.
 - [ ] Role-Based Access Control
 - [ ] dataclass or pydantic ?
 - [ ] multi processes ?
@@ -111,26 +106,6 @@ runtime, c'est le **chemin vers la prod et l'exploitation**.
 → implémenté 2026-07-12, runbook complet dans [docs/production.md](docs/production.md).
 Rebasé et vérifié 2026-08-15 : lint vert, `check_production` couvert par `apps/shared/tests/test_preflight.py`.
 
-- [x] **`docker/docker-compose.prod.yml`** — compose de prod : `restart: unless-stopped`,
-  `healthcheck` (python, pas curl — l'image slim n'a pas curl) sur `/health/ready`, limites
-  CPU/mémoire, `stop_grace_period: 30s`.
-- [x] **Terminaison TLS + reverse proxy** — `docker/Caddyfile` : Caddy devant, TLS auto
-  Let's Encrypt (`DOMAIN`/`ACME_EMAIL` en env). HSTS déjà côté app → reste à soumettre au
-  **preload** (opérationnel). (cf. Supabase « SSL enforcement » pour le lien app→DB.)
-- [x] **`make preflight`** — gate `apps/shared/preflight.py` : refuse de booter en prod
-  (`ENVIRONMENT`/`LABASE_ENV=production`) si `COOKIES_SECURE=false`, CORS `*`, DB en localhost,
-  secret trop court ; warnings sinon. Enforce au boot **et** en CLI. (Durcissement CSP → P1,
-  la CSP est une constante, pas un réglage.) = le `check --deploy` de cookiecutter.
-- [x] **Pooling via Supavisor** — documenté dans docs/production.md (URLs via le pooler en mode
-  transaction + sizing du pool asyncpg). Routage = config opérateur. (cf. « Supavisor » plus bas.)
-- [x] **Flux de migration en prod** — cadré dans docs/production.md : forward-only, discipline
-  expand→migrate→contract, `supabase db push` joué dans le pipeline, RLS dans la migration.
-- [x] **Backup du Storage** — `scripts/backup_storage.py` + `make backup-storage` : miroir complet
-  du bucket (récursif) sur disque. Reste à planifier (cron) + drill de restauration → P2.
-- [x] **Arrêt gracieux** — `--graceful-timeout` (Hypercorn) dans `entrypoint.sh` + `stop_grace_period`
-  compose ; le `TaskWorker` relâchait déjà ses locks proprement sur `stop()`.
-- [x] **Doc secrets prod** — docs/production.md : injection via `env_file`/secret store, table des
-  variables minimales (rappel : `.env` n'est **pas** commité, seul `.env.test` l'est).
 - [ ] **Le seuil `len(SUPABASE_SECRET_KEY) < 40` du preflight est une heuristique** — il bloque
   le boot, sans échappatoire. Les `service_role` hérités sont des JWT très longs et passent ;
   le format `sb_secret_…` est bien plus court et sa longueur réelle n'est pas vérifiée. Un faux

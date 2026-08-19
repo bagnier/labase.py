@@ -1,9 +1,10 @@
-"""Issues' business events — alerting *and* the journal, one typed vocabulary.
+"""The facts this context owns — what happened to an issue, never what was logged about one.
 
-``IssueOpened``/``IssueRegressed`` are the alerting signals (subscribers react without knowing the
-emitter); as :class:`~apps.shared.events.BusinessEvent` subclasses they also land on the shared
-journal — server-wide, so ``user_id``/``org_id`` stay ``None`` (console-only rows). A human
-resolving/reopening an issue is ``IssueStatusChanged``, carrying the acting admin as ``user_id``.
+A captured exception is not one of these: it is a technical sighting the drain folds into an
+occurrence. What reaches the journal is the issue's *lifecycle* — it opened, it came back on a
+later release, an admin triaged it. The first two are the tracker's own verdicts, server-wide, so
+``user_id``/``org_id`` stay ``None`` (console-only rows); ``IssueStatusChanged`` carries the
+acting admin. Alerting is one consumer of these facts, not their purpose.
 """
 
 import uuid

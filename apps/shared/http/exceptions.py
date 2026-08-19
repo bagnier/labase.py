@@ -37,11 +37,13 @@ async def handle_stale_data(request: Request, _exc: Exception) -> Response:
     return _html_error(request, 409, detail)
 
 
-async def handle_unhandled_error(request: Request, _exc: Exception) -> Response:
-    # ``log.exception`` (via sys.exc_info under the active except) *is* the capture seam: the
-    # capture processor queues this into an error group, so nothing has to emit one here.
+async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
+    # This line *is* the capture seam — the processor folds it into an issue, so nothing else
+    # has to. ``exc`` is passed rather than left to ``sys.exc_info()``: the seam then holds
+    # wherever the handler is called from, not only from inside a live ``except`` block.
     log.exception(
         "request.unhandled_error",
+        exc_info=exc,
         method=request.method,
         path=request.url.path,
     )

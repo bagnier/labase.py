@@ -57,6 +57,6 @@ async def search_issue_occurrences(
         query = query.where(Occurrence.created_at <= to_dt)
     rows = await session.execute(query)
     return [
-        IssueOccurrence(ts=event.created_at, title=title, context=event.context or {})
-        for event, title in rows.all()
+        IssueOccurrence(ts=occurrence.created_at, title=title, context=occurrence.context or {})
+        for occurrence, title in rows.all()
     ]

@@ -43,7 +43,8 @@ class IssuesApiMixin(ApiBase):
         self._issues_as_admin()
         issue = self._issue_by_title(title)
         assert issue["status"] == status, f"expected {status!r}, got {issue['status']!r}"
-        assert issue["occurrence_count"] == count, f"expected ×{count}, got ×{issue['count']}"
+        got = issue["occurrence_count"]
+        assert got == count, f"expected ×{count}, got ×{got}"
 
     def open_issue_detail(self, title: str) -> None:
         self._issues_as_admin()

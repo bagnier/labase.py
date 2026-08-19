@@ -170,7 +170,8 @@ async def accept_invitation(
                 {"state": "invalid", "token": str(token), "org_name": "", "email": ""},
                 status_code=404,
             )
-        log.exception("invitation.accept_error")
+        # Re-raised, so the 500 handler captures it — and it is the only one that should: a
+        # ``log.exception`` here would fold a second occurrence into the same issue per failure.
         raise
 
     await events.emit(

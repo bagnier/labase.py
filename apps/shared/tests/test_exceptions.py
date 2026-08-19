@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from apps.shared.http.exceptions import handle_http_error, handle_rate_limit, handle_unhandled_error
 from apps.shared.http.limiter import RateLimitExceeded
+from apps.shared.observability import capture
 
 
 def _mock_request(headers: dict | None = None, scope_extras: dict | None = None) -> Request:
@@ -102,3 +103,16 @@ async def test_handle_http_error_403_html():
     resp = await handle_http_error(req, exc)
     assert isinstance(resp, HTMLResponse)
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_the_error_page_captures_the_exception_it_was_handed(log_chain):
+    """The capture seam must not depend on the frame the handler runs under: called anywhere
+    ``sys.exc_info()`` is empty, a 500 that resolved the exception implicitly would open no
+    issue at all — and the handler is holding the exception the whole time."""
+    capture._QUEUE.clear()
+    boom = RuntimeError("the request blew up")
+
+    await handle_unhandled_error(_mock_request(), boom)
+
+    assert [captured.exc for captured in capture._QUEUE] == [boom]

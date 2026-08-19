@@ -67,9 +67,9 @@ class IssueRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def list_issues(self, status: str = "", limit: int = 100) -> list[Issue]:
+    async def list_issues(self, status: IssueStatus | None = None, limit: int = 100) -> list[Issue]:
         query = select(Issue).order_by(Issue.last_seen.desc()).limit(limit)
-        if status:
+        if status is not None:
             query = query.where(Issue.status == status)
         return list(await self.session.scalars(query))
 

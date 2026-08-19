@@ -1,7 +1,7 @@
 Feature: Error tracking
   As a server admin
   I want captured errors grouped into issues with a lifecycle
-  So that thousands of events read as a short, triageable list
+  So that thousands of occurrences read as a short, triageable list
 
   Background:
     Given a captured error "ValueError: capture boom" with 3 occurrences
@@ -22,13 +22,13 @@ Feature: Error tracking
     When the admin resolves the issue "ValueError: capture boom"
     Then the issue "ValueError: capture boom" is listed with status "resolved" and 3 occurrences
 
-  Scenario: An event from another version reopens a resolved issue as regressed
+  Scenario: An occurrence from another version reopens a resolved issue as regressed
     Given a server admin is signed in as "root@example.com"
     When the admin resolves the issue "ValueError: capture boom"
     And another occurrence of "ValueError: capture boom" arrives from version "v2"
     Then the issue "ValueError: capture boom" is listed with status "regressed" and 4 occurrences
 
-  Scenario: Ignored issues stay ignored when new events arrive
+  Scenario: Ignored issues stay ignored when new occurrences arrive
     Given a server admin is signed in as "root@example.com"
     When the admin ignores the issue "ValueError: capture boom"
     And another occurrence of "ValueError: capture boom" arrives from version "v2"

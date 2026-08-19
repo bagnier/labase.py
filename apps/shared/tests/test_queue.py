@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
+from apps.shared.observability import capture
 from apps.shared.persistence import database as db
 from apps.shared.queue import (
     TaskWorker,
@@ -173,3 +174,39 @@ async def test_recurring_task_reenqueues_next_run():
             {"topic": topic},
         )
     assert pending == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failure_the_queue_will_retry_is_not_captured_as_a_bug(log_chain):
+    """A retry is the queue's own lifecycle, not a defect: capturing it opens an issue on every
+    transient blip, and nothing closes that issue when the very next attempt succeeds."""
+    topic = f"test.retry_{uuid.uuid4().hex}"
+
+    async def handler(session, payload):
+        raise RuntimeError("boom")
+
+    register_task_handler(topic, handler)
+    await _enqueue_committed(topic, max_attempts=2)
+    capture._QUEUE.clear()
+
+    await TaskWorker(interval_seconds=1).tick()
+
+    assert list(capture._QUEUE) == []
+
+
+@pytest.mark.asyncio
+async def test_a_task_parked_for_good_is_captured_as_a_bug(log_chain):
+    """Retries exhausted — nobody will ever run this task again, so the failure is final and an
+    issue is the only place it still shows up."""
+    topic = f"test.parked_{uuid.uuid4().hex}"
+
+    async def handler(session, payload):
+        raise RuntimeError("boom")
+
+    register_task_handler(topic, handler)
+    await _enqueue_committed(topic, max_attempts=1)
+    capture._QUEUE.clear()
+
+    await TaskWorker(interval_seconds=1).tick()
+
+    assert [type(captured.exc) for captured in capture._QUEUE] == [RuntimeError]

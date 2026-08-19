@@ -41,7 +41,6 @@ class ExceptionCaptured:
     """What the processor hands the drain: the live exception and what was true around it."""
 
     exc: BaseException
-    scope: str  # where it was born: "request" (a request was in flight) | "process"
     context: dict[str, Any] = field(default_factory=dict)
 
 
@@ -49,8 +48,20 @@ class ExceptionCaptured:
 # the oldest instead of growing without limit.
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
 
-# Set while the drain is delivering, so the capture path's own logs (``issue.seen``, and
-# ``issues.tracker_failed`` when a tracker raises) never re-enter the capture processor.
+
+@dataclass
+class _Overflow:
+    """What the bounded queue shed before any drain could take it — an exception nobody will
+    ever see. Counted here and reported by the drain, because the processor runs inside the
+    logging chain, where a line of its own would re-enter capture."""
+
+    dropped: int = 0
+
+
+_overflow = _Overflow()
+
+# Set while the drain is delivering, so the capture path's own logs — a tracker's, and
+# ``capture.tracker_failed`` when one raises — never re-enter the capture processor.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
 # An exception tracker, registered directly at mount by whoever tracks them (``apps/issues``) rather
@@ -63,11 +74,6 @@ _trackers: list[ExceptionTracker] = []
 def on_captured(tracker: ExceptionTracker) -> None:
     """Subscribe ``tracker`` to captured exceptions — the drain calls it per exception, isolated."""
     _trackers.append(tracker)
-
-
-def reset_trackers() -> None:
-    """Clear the tracker registry — for test isolation."""
-    _trackers.clear()
 
 
 _SCALARS = (str, int, float, bool, type(None))
@@ -108,14 +114,14 @@ def capture_processor(
     exc = _exc_from(event_dict.get("exc_info"))
     if exc is None:
         return event_dict
+    # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
+    # timeline joins on — and whether a request was in flight is read off request_id itself.
     context = {
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
-    # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
-    # timeline joins on. ``scope`` only says whether a request was in flight — it is not the
-    # timeline's ``source``, which names the system a row came from, and never one of its values.
-    context["scope"] = "request" if context.get("request_id") else "process"
-    _QUEUE.append(ExceptionCaptured(exc=exc, scope=str(context["scope"]), context=context))
+    if len(_QUEUE) == _QUEUE.maxlen:
+        _overflow.dropped += 1
+    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
     return event_dict
 
 
@@ -142,6 +148,9 @@ class CaptureDrain:
             self._task = None
 
     async def tick(self) -> None:
+        dropped, _overflow.dropped = _overflow.dropped, 0
+        if dropped:
+            log.warning("capture.overflowed", dropped=dropped)
         # Snapshot the current length so appends arriving mid-drain wait for the next tick.
         for _ in range(len(_QUEUE)):
             try:
@@ -156,7 +165,7 @@ class CaptureDrain:
                     except Exception:
                         # Log-and-skip: a failing tracker must never worsen the exception it tracks,
                         # nor abort the others. Logged under the guard, so it does not re-capture.
-                        log.exception("issues.tracker_failed", tracker=repr(tracker))
+                        log.exception("capture.tracker_failed", tracker=repr(tracker))
             finally:
                 _capturing.reset(token)
 
@@ -168,4 +177,4 @@ class CaptureDrain:
             except Exception:
                 # A drain failure is degraded-but-manageable — and must NOT log.exception, which
                 # would re-enter capture. Warn and retry next tick.
-                log.warning("issues.capture_drain_failed")
+                log.warning("capture.drain_failed")

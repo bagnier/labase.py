@@ -1,12 +1,9 @@
-"""How the issues context (issue tracking) plugs into the running app.
+"""How the issues context plugs into the running app.
 
-Registers an ``ExceptionCaptured`` tracker with the capture module (500 handler +
-event-bus failures), folds occurrences into issues by stack fingerprint, and serves the console
-screen. Best-effort doctrine verbatim: the capture drain fans out with log-and-skip
-isolation — a failing tracker never worsens the failure it is tracking.
-
-NOTE: mounted BEFORE the console context so its /console/issues routes register
-ahead of the console's /console/{app} catch-all.
+Registers a tracker with the capture module — which hands it every ``log.exception``, whatever
+raised it — folds each one into an issue by stack fingerprint, and serves the console screen.
+The drain fans out with log-and-skip isolation, so a failing tracker never worsens the failure
+it is tracking.
 """
 
 import uuid
@@ -60,9 +57,7 @@ def mount(host: Host) -> None:
     host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
     register_task_handler(PURGE_TOPIC, _purge)
     host.on_startup(_plant_purge)
-    # Every ``log.exception`` is queued by the capture processor; this drains it into issues.
-    drain = CaptureDrain(CAPTURE_DRAIN_SECONDS)
-    host.run_background(drain)
+    host.run_background(CaptureDrain(CAPTURE_DRAIN_SECONDS))
 
 
 def _declare_settings() -> SettingsDeclaration:
@@ -78,40 +73,36 @@ def _declare_settings() -> SettingsDeclaration:
     )
 
 
-async def _track(event: ExceptionCaptured) -> None:
-    """Fold a captured exception into its issue, emitting the journal fact on the same transaction
-    (atomic with the write); runs under collect(): best-effort."""
+async def _track(captured: ExceptionCaptured) -> None:
+    """Fold a captured exception into its issue, and record the fact that opens or reopens it on
+    the very same transaction — so the fact lands iff the occurrence does."""
     version = get_technical_settings().app_version
-    context = {
-        **event.context,
-        "scope": event.scope,
-        "stack": service.formatted_stack(event.exc),
-    }
+    context = {**captured.context, "stack": service.formatted_stack(captured.exc)}
     async with admin_session_factory()() as session:
         seen = await see_occurrence(
             session,
-            fingerprint=service.fingerprint(event.exc),
-            title=service.title_for(event.exc),
+            fingerprint=service.fingerprint(captured.exc),
+            title=service.title_for(captured.exc),
             version=version,
             context=context,
         )
         issue_id, title = seen.issue.id, seen.issue.title
-        # Emit on the same session — IssueOpened/Regressed lands iff the issue commits.
         # ``_track`` is only subscribed when the app is enabled (see ``mount``), so reaching the
         # bus here is unconditional — no mount-state guard needed.
         if seen.opened:
-            opened = IssueOpened(entity_id=issue_id, entity_name=title)
-            await events.emit(opened, session)
+            await events.emit(IssueOpened(entity_id=issue_id, entity_name=title), session)
         if seen.regressed:
-            regressed = IssueRegressed(
-                entity_id=issue_id,
-                entity_name=title,
-                resolved_in_release=seen.issue.resolved_in_release,
-                seen_version=version,
+            await events.emit(
+                IssueRegressed(
+                    entity_id=issue_id,
+                    entity_name=title,
+                    resolved_in_release=seen.issue.resolved_in_release,
+                    seen_version=version,
+                ),
+                session,
             )
-            await events.emit(regressed, session)
         await session.commit()
-    log.info("issue.seen", issue_id=issue_id, opened=seen.opened)
+    log.info("issues.occurrence_recorded", issue_id=str(issue_id), opened=seen.opened)
 
 
 async def _alert_opened(session: AsyncSession, event: IssueOpened) -> None:
@@ -132,10 +123,10 @@ async def _send_alert(session: AsyncSession, subject: str, issue_id: uuid.UUID) 
     try:  # alerting is best-effort: a failing enqueue never worsens the tracked failure
         await enqueue_email(session, email)
     except Exception:
-        log.warning("issues.alert_enqueue_failed", issue_id=issue_id)
+        log.warning("issues.alert_enqueue_failed", issue_id=str(issue_id))
 
 
-async def _purge(session, _payload: dict) -> None:
+async def _purge(session: AsyncSession, _payload: dict) -> None:
     deleted = await purge_old_occurrences(session, int(get_settings("issues").retention_days))
     log.info("issues.purged", deleted=deleted)
 

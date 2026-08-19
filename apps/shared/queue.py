@@ -192,10 +192,23 @@ class TaskWorker:
         try:
             await self._run_handler(handler, payload, task["user_id"])
         except Exception as exc:
-            log.exception("queue.task_failed", topic=task["topic"], task_id=task["id"])
             if task["attempts"] >= task["max_attempts"]:
+                # Retries exhausted: nobody will run this task again, so the failure is final —
+                # ``log.exception`` is the capture seam, and an issue is where it stays visible.
+                log.exception(
+                    "queue.task_failed", exc_info=exc, topic=task["topic"], task_id=task["id"]
+                )
                 await self._fail(task, repr(exc))
             else:
+                # The queue's own retry is a lifecycle, not a defect: capturing here would open
+                # an issue per transient blip, and close none when the next attempt succeeds.
+                log.warning(
+                    "queue.task_retrying",
+                    topic=task["topic"],
+                    task_id=task["id"],
+                    attempt=task["attempts"],
+                    error=repr(exc),
+                )
                 await self._retry(task, repr(exc))
         else:
             await self._complete(task)

@@ -23,6 +23,27 @@ _TRIAGE_STATUSES = {IssueStatus.resolved, IssueStatus.ignored, IssueStatus.unres
 _SPARK_DAYS = 14
 
 
+def _known_status(raw: str, allowed: set[IssueStatus]) -> IssueStatus:
+    """Narrow a raw query/form value to the enum, or refuse it here.
+
+    Both inputs end up compared against the Postgres ``issue_status`` column, where an unknown
+    value raises down in the driver — a 500, and an issue about the crafted request itself.
+    """
+    if raw not in {s.value for s in allowed}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status")
+    return IssueStatus(raw)
+
+
+def _status_filter(raw: str) -> IssueStatus | None:
+    """The console dropdown's value; empty is its "all" option, and means no filter."""
+    return _known_status(raw, set(IssueStatus)) if raw else None
+
+
+def _triage_status(raw: str) -> IssueStatus:
+    """The status a human may set. ``new`` and ``regressed`` are the tracker's own verdicts."""
+    return _known_status(raw, _TRIAGE_STATUSES)
+
+
 async def _issue_or_404(repo: IssueRepository, issue_id: uuid.UUID) -> Issue:
     issue = await repo.get(issue_id)
     if issue is None:
@@ -37,9 +58,10 @@ async def list_issues(
     session: AdminSession,
     status_filter: str = "",
 ) -> Response:
+    selected = _status_filter(status_filter)
     issues = [
         IssueRead.model_validate(i)
-        for i in await IssueRepository(session).list_issues(status=status_filter)
+        for i in await IssueRepository(session).list_issues(status=selected)
     ]
     if wants_json(request):
         return JSONResponse([i.model_dump(mode="json") for i in issues])
@@ -102,10 +124,7 @@ async def set_issue_status(
     session: AdminSession,
 ) -> Response:
     body = await parse_body(request)
-    raw = str(body.get("status", ""))
-    if raw not in {s.value for s in _TRIAGE_STATUSES}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status")
-    new_status = IssueStatus(raw)
+    new_status = _triage_status(str(body.get("status", "")))
     repo = IssueRepository(session)
     issue = await _issue_or_404(repo, issue_id)
     await repo.set_status(issue, new_status, get_technical_settings().app_version)

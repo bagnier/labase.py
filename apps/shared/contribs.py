@@ -42,10 +42,10 @@ class Contribs:
     async def collect(self, query: object) -> list[Any]:
         """Run every provider for this query type; log and skip failing providers.
 
-        A provider failure is a bug: ``log.exception`` feeds it to the error tracker through the
-        capture processor (``event_type`` names the failing query so it survives into the issue
-        context). The capture drain runs recording under a reentrancy guard, so a tracker
-        provider that itself fails here cannot recurse.
+        A provider failure is a bug: ``log.exception`` feeds it to the capture seam, which folds
+        it into an issue (``query_type`` names the query so it survives into the issue's
+        context). The drain delivers under a reentrancy guard, so a tracker that is itself a
+        failing provider here cannot recurse.
         """
         results: list[Any] = []
         for provider in self._providers[type(query)]:
@@ -53,9 +53,9 @@ class Contribs:
                 results.append(await provider(query))
             except Exception:
                 log.exception(
-                    "query.handler_failed",
-                    handler=repr(provider),
-                    event_type=type(query).__name__,
+                    "query.provider_failed",
+                    provider=repr(provider),
+                    query_type=type(query).__name__,
                 )
         return results
 

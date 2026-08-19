@@ -1,4 +1,4 @@
-"""Integration: the capture seam really lands occurrences — log.exception, bus failures."""
+"""Integration: a log.exception really lands as an occurrence, wherever it was written."""
 
 import uuid
 from dataclasses import dataclass
@@ -95,7 +95,7 @@ async def test_an_occurrence_keeps_the_logger_that_raised():
 
 
 @pytest.mark.asyncio
-async def test_failing_bus_handler_is_tracked_as_an_issue():
+async def test_a_failing_contribution_provider_is_tracked_as_an_issue():
     marker = f"capture-test-{uuid.uuid4().hex}"
 
     async def boom(query: _DummyQuery) -> None:
@@ -103,24 +103,24 @@ async def test_failing_bus_handler_is_tracked_as_an_issue():
 
     host.contribs.provide(_DummyQuery, boom)
     try:
-        # collect() logs "query.handler_failed" (log.exception) → the processor enqueues it.
+        # collect() logs "query.provider_failed" (log.exception) → the processor enqueues it.
         await host.contribs.collect(_DummyQuery(marker))  # must not raise: log-and-skip
     finally:
         host.contribs._providers[_DummyQuery].remove(boom)
 
     await CaptureDrain(0).tick()
     issue = await _issue_titled(marker)
-    assert issue is not None, "the failing handler should have landed in issues"
+    assert issue is not None, "the failing provider should have landed in issues"
     assert issue.status == IssueStatus.new
     assert issue.occurrence_count == 1
 
 
 @pytest.mark.asyncio
-async def test_drain_does_not_recurse_when_a_tracker_handler_fails():
-    """The reentrancy guard: a failing ExceptionCaptured handler must not re-enqueue itself."""
+async def test_drain_does_not_recurse_when_a_tracker_fails():
+    """The reentrancy guard: a failing tracker must not re-enqueue its own failure."""
     marker = f"capture-test-{uuid.uuid4().hex}"
 
-    async def failing_tracker(_event: ExceptionCaptured) -> None:
+    async def failing_tracker(_captured: ExceptionCaptured) -> None:
         raise RuntimeError("tracker itself is down")
 
     capture.on_captured(failing_tracker)
@@ -136,7 +136,7 @@ async def test_drain_does_not_recurse_when_a_tracker_handler_fails():
     finally:
         capture._trackers.remove(failing_tracker)
 
-    # The real _record still ran alongside the failing handler, so the issue landed.
+    # The real tracker still ran alongside the failing one, so the issue landed.
     assert await _issue_titled(marker) is not None
 
 
