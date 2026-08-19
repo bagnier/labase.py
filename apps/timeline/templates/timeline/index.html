@@ -121,6 +121,18 @@
         </span>
       {% endcall %}
       {% if entries %}
+        {# Only the default ts sort orders the whole window: the reader takes each source's own
+           newest rows, so any other column orders that sample and not the timeline. Say it rather
+           than let the header imply otherwise. #}
+        {% if sort != 'ts' %}
+          <p class="px-3 pt-3 text-xs text-base-content/60" data-sort-scope>
+            <i class="ph ph-info" aria-hidden="true"></i>
+            Sorted within the loaded page — only time orders the whole window.
+            <a class="link"
+               href="/console/timeline?bucket={{ grain }}{{ '&' ~ export_qs if export_qs }}">Back to
+              newest first</a>, or narrow with a filter to sort a smaller set exactly.
+          </p>
+        {% endif %}
         <div class="overflow-x-auto">
           <table class="table table-sm">
             <thead>

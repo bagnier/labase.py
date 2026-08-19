@@ -71,6 +71,16 @@ Feature: Unified timeline
     Then the entry "todo.created" is listed
     And the entry "request.finished" is not listed
 
+  # A fact pins the name of what it concerns, so that is what an admin searches for — not the
+  # dotted kind, which they would have to know already.
+  Scenario: An admin searches the timeline by the name of the thing that changed
+    Given a business event "todo.created" about "Buy oat milk" in org "Acme"
+    And a business event "todo.deleted" about "Renew the domain" in org "Acme"
+    And a server admin is signed in as "root@example.com"
+    When the admin searches the timeline for "oat milk"
+    Then the entry "todo.created" is listed
+    And the entry "todo.deleted" is not listed
+
   Scenario: An admin filters the timeline by user
     Given a business event "todo.created" attributed to "alice@example.com"
     And a business event "todo.deleted" attributed to "bob@example.com"

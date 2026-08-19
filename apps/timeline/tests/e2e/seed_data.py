@@ -57,6 +57,7 @@ def event_model(
     when: datetime | None = None,
     request_id: str | None = None,
     request_name: str | None = None,
+    entity_name: str | None = None,
 ) -> BusinessEventRecord:
     """A ready-to-``add`` business-event row — the same model ``emit`` writes, with an
     explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate).
@@ -72,6 +73,8 @@ def event_model(
         org_id=_uuid(org),
         request_id=_uuid(request_id),
         request_name=request_name,
+        entity_id=uuid.uuid7() if entity_name else None,
+        entity_name=entity_name,
     )
 
 

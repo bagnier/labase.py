@@ -317,18 +317,32 @@ and an internal issue has no business in someone's activity feed.
 **What counts as a bug.** A call outside the process fails two ways that look alike: the dependency
 *answered no* — a 4xx, a wrong password, an expired link — which is an ordinary outcome at `info`;
 or it is *broken* — unreachable, a 5xx, a client raising something of its own — which is an issue.
-One verdict (`apps/shared/observability/dependency.py`) for GoTrue, Postgres, Storage and SMTP
-alike, so an outage does not fill the issues screen or stay silent depending on the module it was
-reached through.
+One verdict (`apps/shared/observability/dependency.py`) for GoTrue, Postgres and Storage alike, so
+an outage does not fill the issues screen or stay silent depending on the module it was reached
+through — and a status the client kept as text counts, since Storage sends its own that way. SMTP
+is the one reached through the queue instead: a send that keeps failing retries, then parks, and
+the park is what opens the issue.
+
+**A failure that repeats is one bug.** The five lifespan workers catch everything, so one bad tick
+never ends a loop — which is exactly how a task worker that stopped claiming, or a listener that
+stopped delivering, used to leave nothing but a `warning`. They tick once a second, so the level
+follows the *transition*, not the tick (`apps/shared/observability/loop.py`): falling over opens
+one issue, the ticks after it warn with how many, coming back says what the outage cost. The
+readiness probe is on the same verdict, being polled the same way. A bare `log.error` is
+deliberately not the seam — `request.finished` writes one on every 5xx to state the outcome — so a
+site that means *this is a bug* raises an exception of its own to be seen.
 
 **The Timeline reads all three.** `apps/timeline` writes nothing: its console screen merges the
 journal (`business`), the firehose window (`logs`) and issue occurrences (`issue`) into one view,
 filterable by those three sources and
 correlated on four keys — **user**, **org**, **request**, and the concerned **entity**. A fact
-carries them in its own columns, plus the handle and org name as they read *then*, so a deletion or
-RLS cannot hide _who_ and _where_ later; lines and occurrences inherit them from contextvars bound
-by the request / auth / org-scope layers. Only a fact knows an entity, hence the per-entity filter
-narrows to the journal alone.
+carries them in its own columns, plus the handle, org name and the **subject's own name** as they
+read *then*, so a deletion or RLS cannot hide _who_, _where_ and _what_ later; those pinned names
+are shown on the row and are what free text searches, alongside the payload. Lines and occurrences
+inherit the ids from contextvars bound by the request / auth / org-scope layers. Only a fact knows
+an entity, hence the per-entity filter narrows to the journal alone. Sorting is newest-first over
+the whole window; any other column orders the loaded page only — each source is asked for its own
+newest rows — and the screen says so rather than pass a sample off as an ordering.
 
 **Load metrics.** Every request feeds a shared accumulator, exposed as a Prometheus `/metrics`
 endpoint and persisted per minute by `apps/metrics`; the console **Load** screen graphs it, and a

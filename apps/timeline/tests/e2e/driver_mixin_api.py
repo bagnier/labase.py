@@ -29,6 +29,11 @@ class TimelineApiMixin(ApiBase):
     def seed_event_by_user(self, event: str, email: str) -> None:
         self._add_event(seed_data.event_model(event, user=timeline_user_id(email)))
 
+    def seed_event_about(self, event: str, org: str, subject: str) -> None:
+        """A fact whose subject has a readable name — a todo's title, an org's. What the journal
+        pins at write time and the timeline has to be searchable by."""
+        self._add_event(seed_data.event_model(event, org=timeline_org_id(org), entity_name=subject))
+
     def _append_request(
         self,
         event: str,

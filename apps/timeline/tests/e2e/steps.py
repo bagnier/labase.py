@@ -18,6 +18,11 @@ def step_seed_event_org_dated(driver, event, org, date):
     driver.seed_event_from_org(event, org, when=_date(date))
 
 
+@given(parsers.parse('a business event "{event}" about "{subject}" in org "{org}"'))
+def step_seed_event_about(driver, event, subject, org):
+    driver.seed_event_about(event, org, subject)
+
+
 @given(parsers.parse('a business event "{event}" attributed to "{email}"'))
 def step_seed_event_user(driver, event, email):
     driver.seed_event_by_user(event, email)

@@ -12,12 +12,20 @@
     <td class="font-mono text-xs">{{ e.name }}</td>
     <td class="font-mono text-xs text-base-content/60"
         title="{{ e.user_id }}">{{ labels.user.get(e.user_id) if e.user_id else "—" }}</td>
-    <td class="font-mono text-xs text-base-content/60"
-        title="{{ e.entity_id }}">
+    {# The name the fact pinned when it happened, falling back to the id when the subject had
+       none (an account or membership action, whose subject is only an id). The id stays in the
+       tooltip: it is what the filter matches on, and what a reader copies. #}
+    <td class="text-xs text-base-content/60" title="{{ e.entity_id }}">
       {% if e.entity_id %}
         <a class="link link-hover"
            href="/console/timeline?entity_id={{ e.entity_id | urlencode }}"
-           title="Every event for this entity">{{ e.entity_id[:12] }}</a>
+           title="Every event for this entity">
+          {% if e.entity_name %}
+            {{ e.entity_name }}
+          {% else %}
+            <span class="font-mono">{{ e.entity_id[:12] }}</span>
+          {% endif %}
+        </a>
       {% else %}
         —
       {% endif %}

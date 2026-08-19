@@ -311,9 +311,17 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
             query = query.where(BusinessEventRecord.app_name == app)
         if text:
             like = f"%{text}%"
+            # The four pinned names are searched alongside the payload, because they were *lifted
+            # out* of it (see LIFTED_COLUMNS): searching the residual payload alone meant the
+            # journal could not be searched for the very thing a fact is about — the todo's title,
+            # the org's name, the route the request took.
             query = query.where(
                 or_(
                     BusinessEventRecord.kind.ilike(like),
+                    BusinessEventRecord.entity_name.ilike(like),
+                    BusinessEventRecord.user_name.ilike(like),
+                    BusinessEventRecord.org_name.ilike(like),
+                    BusinessEventRecord.request_name.ilike(like),
                     cast(BusinessEventRecord.payload, Text).ilike(like),
                 )
             )

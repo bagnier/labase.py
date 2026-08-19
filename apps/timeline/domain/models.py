@@ -40,6 +40,9 @@ class TimelineEntry(BaseModel):
     org_id: str | None = None
     user_id: str | None = None
     entity_id: str | None = None
+    # The subject's name as it read *then*, pinned on the fact by the write path. Only a business
+    # fact has one: a log line and an occurrence are about a moment, not about a thing.
+    entity_name: str | None = None
     request_id: str | None = None
     request_name: str | None = None  # "GET /profile" — carried by the source, not resolved at read
     payload: dict[str, Any] = Field(default_factory=dict)
