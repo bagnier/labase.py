@@ -70,7 +70,7 @@ xfail_strict = true
 # A deprecation the suite swallows is the one nobody ever sees: `pip-audit` reads the lockfile,
 # not the calls. Promoted to an error, the suite becomes the gate — with a named exception per
 # third-party warning we cannot fix at the source (no app code triggers any of them):
-# - supabase-py forwards deprecated timeout/verify to SyncPostgrestClient;
+# - postgrest and storage3 warn on the timeout/verify supabase-py forwards to them;
 # - supabase_auth's Timer still calls asyncio.iscoroutinefunction (removed in 3.16);
 # - fastapi's TestClient re-exports starlette's, which wants httpx2;
 # - gherkin (under pytest-bdd) passes `maxsplit` positionally to `re.split`, which 3.14
@@ -87,7 +87,6 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = ["apps"]
-omit = ["apps/templates/*"]
 data_file = ".cache/cov/.coverage"
 
 [tool.coverage.report]
@@ -98,7 +97,8 @@ skip_covered = false
 # One config, three readers — `make lint`, Claude Code (via .claude/plugins/pyright-lsp/) and
 # VS Code's Pylance — so the gate holds the verdict the agent and the editor are shown.
 # Alongside `ty`, not instead: at 0.0.x most of its rules are still to come.
-# `standard`, not `strict`: strict reports 4801, nearly all `Unknown` from untyped third parties.
+# `standard`, not `strict`: strict's extra reports are almost all `Unknown` from untyped
+# third parties.
 typeCheckingMode = "standard"
 pythonVersion = "3.14"
 venvPath = "."
@@ -120,9 +120,9 @@ cache-dir = ".cache/ruff"
 extend-exclude = ["*.md", ".claude"]
 
 [tool.ruff.lint]
-# `extend-select`, never `select`: a `select` *replaces* ruff 0.16's 400+ default rules
-# instead of adding to them. Families are listed whole — the defaults carry only a subset of
-# each (B 29/39, SIM 21/30, UP 42/47), so relying on them silently drops B904, B905, SIM108…
+# `extend-select`, never `select`: a `select` *replaces* ruff's default rules instead of
+# adding to them. Families are listed whole — the defaults carry only a subset of each, so
+# relying on them silently drops B904, B905, SIM108…
 extend-select = [
     "A",
     "ARG",  # dead code: arguments nobody reads
@@ -162,7 +162,7 @@ ignore = [
     "B008",    # FastAPI Depends() in function signatures is intentional
     "N818",    # our business ValueErrors read fine without an `Error` suffix
     "PLR2004", # a literal in a comparison is usually clearer than a named constant
-    "S101",    # the four in app code narrow a type for `ty`, each with the reason written above it
+    "S101",    # in app code it narrows a type for `ty`, with the reason written above it
     # `default=lambda: clock.now()` is load-bearing, not a redundant wrapper: the suite freezes
     # time with `monkeypatch.setattr("apps.shared.clock.now", …)`, and only a lambda looks the
     # attribute up per call. Inlining it to `default=clock.now` would bind the original at import
@@ -181,9 +181,6 @@ ignore = [
 allowed-confusables = ["×", "–"]
 
 [tool.ruff.lint.per-file-ignores]
-# A `contract/` package re-exports its context's public surface, and `X as X` is how a
-# re-export is declared explicitly — the very mechanism the importlinter contracts below
-# rely on for cross-context traffic. PLC0414 reads the idiom as a useless alias.
 # A provider callback keeps the registry's signature whether it reads the query or not —
 # same shape as a `Depends` guard pulled in for its effect only.
 "apps/*/contract/*.py" = ["ARG001"]
@@ -198,7 +195,7 @@ allowed-confusables = ["×", "–"]
 # allowlists its schema name (`re.fullmatch` + `sys.exit`) before any interpolation.
 "scripts/**" = ["S105", "S106", "S603", "S607", "S608", "T201"]
 # A route handler's parameters *are* its HTTP contract — path params, `Form` fields and the
-# `Depends` injections. 98 of the 134 argument-count hits sit here, and bundling them into a
+# `Depends` injections. Most of the argument-count hits sit here, and bundling them into a
 # model would hide the contract FastAPI reads off the signature.
 "**/*router.py" = [
     # A `Depends` guard is requested for its side effect — it authorizes, it returns nothing
@@ -227,9 +224,6 @@ allowed-confusables = ["×", "–"]
     "S101",    # asserting is the point
     "S105",    # the suite's own throwaway credentials and fake tokens
     "S106",
-    "S108",
-    "S603",   # the e2e drivers spawn real processes (app, browsers)
-    "S607",
     "S608",   # test SQL built from literals to seed and inspect fixtures
     "SLF001", # a test inspects the internals of what it verifies
 ]
@@ -238,14 +232,13 @@ allowed-confusables = ["×", "–"]
 # The two argument rules are split on purpose, because only one of them is about readability.
 # `max-positional-args` is the real guard — an unlabelled positional says nothing at the call site.
 # `max-args` counts keyword-only parameters too, where the argument *is* labelled.
-# Both sit on today's worst outside the routers, ceilings to ratchet down: 7 positional; 10 total,
-# held by the metrics and trail queries (a filter per parameter) and `responses.py`'s renderer.
+# Both are set on today's worst outside the routers — ceilings to ratchet down, not targets.
 max-positional-args = 7
 max-args = 10
 
 [tool.ruff.lint.mccabe]
-# Ceiling to ratchet down, not a target: `read_firehose` (12) is the one function holding it up,
-# `create_invitation` (11) the runner-up. Ruff's own default is 10.
+# Ceiling to ratchet down, not a target: set on the one function holding it up, above ruff's
+# own default.
 max-complexity = 12
 
 # Architecture contracts (README "Principles", mechanically verified by `make lint`):
@@ -253,7 +246,7 @@ max-complexity = 12
 # - apps/shared/ sits below every context and imports none of them;
 # - a context's internals (domain/, infra/, private modules) are importable only from
 #   inside that context — cross-context traffic goes through its contract/ package.
-#   Tests are exempt: the given_helpers cross-import question is tracked in ROADMAP.md.
+#   Tests are exempt: a context's suite reuses another's `given_helpers` to arrange state.
 [tool.importlinter]
 root_packages = ["apps"]
 exclude_type_checking_imports = true
@@ -286,6 +279,7 @@ forbidden_modules = [
     "apps.pages",
     "apps.profile",
     "apps.public",
+    "apps.timeline",
     "apps.todo",
 ]
 
@@ -393,8 +387,7 @@ allowed_importers = ["apps.todo.**", "apps.*.tests.**"]
 profile = "jinja"
 indent = 2
 max_line_length = 120
-# Rules that don't fit a FastAPI + HTMX + Tailwind app:
-# H006 img dims, H021 inline styles, H023 entity refs (used in aria-labels);
-# J004/J018 url_for (Flask/Django-only); T003 named endblock (stylistic);
-# H030/H031 meta description/keywords (SEO hints; keywords is obsolete).
-ignore = "H006,H021,H023,J004,J018,T003,H030,H031"
+# Rules that don't fit a FastAPI + HTMX + Tailwind app: H021 inline styles,
+# H023 entity refs (used in aria-labels), J018 url_for (Flask/Django-only),
+# H030 meta description (an SEO hint).
+ignore = "H021,H023,J018,H030"
