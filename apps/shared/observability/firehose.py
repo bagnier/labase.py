@@ -21,7 +21,7 @@ import asyncio
 import contextlib
 import json
 from collections import defaultdict, deque
-from collections.abc import MutableMapping
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -148,6 +148,53 @@ def _recent_files(floor: datetime) -> list[Path]:
     return files
 
 
+def _records(paths: list[Path]) -> Iterator[tuple[str, LogLine]]:
+    """Every well-formed record in these day files, paired with the raw text a text search reads.
+
+    A blank or truncated line is skipped rather than raised on: the firehose is appended to by a
+    process that may die mid-write, and one bad line must not blind the reader to the rest."""
+    for path in paths:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            serialized = raw.strip()
+            if not serialized:
+                continue
+            try:
+                line = _parse(json.loads(serialized))
+            except json.JSONDecodeError:
+                continue
+            yield serialized, line
+
+
+@dataclass(frozen=True)
+class _LineFilter:
+    """The per-line criteria of a read, combined with AND. An unset one matches everything —
+    empty, not just ``None``, because these arrive from URL query params where an untouched
+    field is ``""``."""
+
+    floor: datetime
+    to_dt: datetime | None
+    level: str | None
+    org_id: str | None
+    user_id: str | None
+    request_id: str | None
+    needle: str | None
+
+    def keeps(self, line: LogLine, serialized: str) -> bool:
+        """``serialized`` is the raw line: a text search scans the whole record, payload
+        included, not just the fields promoted to columns."""
+        return (
+            self._in_window(line.ts)
+            and (not self.level or line.level.lower() == self.level.lower())
+            and (not self.org_id or line.org_id == self.org_id)
+            and (not self.user_id or line.user_id == self.user_id)
+            and (not self.request_id or line.request_id == self.request_id)
+            and (not self.needle or self.needle in serialized.lower())
+        )
+
+    def _in_window(self, ts: datetime) -> bool:
+        return ts >= self.floor and (not self.to_dt or ts <= self.to_dt)
+
+
 def read_firehose(
     *,
     level: str | None = None,
@@ -167,30 +214,16 @@ def read_firehose(
     floor = clock.now() - window
     if from_dt and from_dt > floor:
         floor = from_dt
-    needle = text.lower() if text else None
-    lines: list[LogLine] = []
-    for path in _recent_files(floor):
-        for raw in path.read_text(encoding="utf-8").splitlines():
-            serialized = raw.strip()
-            if not serialized:
-                continue
-            try:
-                line = _parse(json.loads(serialized))
-            except json.JSONDecodeError:
-                continue
-            if line.ts < floor or (to_dt and line.ts > to_dt):
-                continue
-            if level and line.level.lower() != level.lower():
-                continue
-            if org_id and line.org_id != org_id:
-                continue
-            if user_id and line.user_id != user_id:
-                continue
-            if request_id and line.request_id != request_id:
-                continue
-            if needle and needle not in serialized.lower():
-                continue
-            lines.append(line)
+    keep = _LineFilter(
+        floor=floor,
+        to_dt=to_dt,
+        level=level,
+        org_id=org_id,
+        user_id=user_id,
+        request_id=request_id,
+        needle=text.lower() if text else None,
+    )
+    lines = [line for raw, line in _records(_recent_files(floor)) if keep.keeps(line, raw)]
     lines.sort(key=lambda entry: entry.ts, reverse=True)
     return lines[:limit]
 

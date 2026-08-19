@@ -236,11 +236,6 @@ allowed-confusables = ["×", "–"]
 max-positional-args = 7
 max-args = 10
 
-[tool.ruff.lint.mccabe]
-# Ceiling to ratchet down, not a target: set on the one function holding it up, above ruff's
-# own default.
-max-complexity = 12
-
 # Architecture contracts (README "Principles", mechanically verified by `make lint`):
 # - domain/ never imports infra/ (hexagonal direction);
 # - apps/shared/ sits below every context and imports none of them;
