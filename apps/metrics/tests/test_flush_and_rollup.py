@@ -74,6 +74,21 @@ async def test_flusher_persists_deltas_and_merges_within_a_minute():
 
 
 @pytest.mark.asyncio
+async def test_stopping_the_flusher_persists_the_interval_it_was_holding():
+    """SIGTERM is how every deploy ends a process, so the traffic since the last tick is what a
+    deploy routinely costs the Load screen — a visible dip at exactly the moment worth watching.
+    The firehose writer already drained on its way out; this one dropped its interval."""
+    route = f"{MARKER_ROUTE}-shutdown"
+    flusher = MetricsFlusher(interval_seconds=0)  # never started: nothing ticks on its own
+    flusher._previous = accumulator.snapshot()
+    accumulator.observe("GET", route, 200, 40)
+
+    await flusher.stop()
+
+    assert [(row.route, row.requests) for row in await _rows(route)] == [(route, 1)]
+
+
+@pytest.mark.asyncio
 async def test_rollup_downsamples_old_minute_rows_then_purge_applies_retention():
     route = f"{MARKER_ROUTE}-rollup"
     old = clock.now() - timedelta(days=10)

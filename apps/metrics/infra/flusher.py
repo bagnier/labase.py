@@ -41,6 +41,13 @@ class MetricsFlusher:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+        # Without this the Load screen dips at every deploy, by the traffic since the last tick.
+        # Guarded like the periodic run: at shutdown the database may already be going, and a
+        # lost interval of metrics must not be what fails the stop.
+        try:
+            await self.tick()
+        except Exception as exc:
+            log.warning("metrics.flush_failed", exc_info=exc)
 
     async def tick(self) -> None:
         snapshot = accumulator.snapshot()

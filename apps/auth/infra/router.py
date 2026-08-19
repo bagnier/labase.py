@@ -67,6 +67,7 @@ from apps.shared.http import parse_body, wants_json
 from apps.shared.http.addressing import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
+from apps.shared.observability.dependency import log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsView
 
@@ -111,17 +112,14 @@ def _friendly_auth_error(e: AuthApiError) -> str:
 
 
 def _log_gotrue_failure(event: str, exc: Exception, **kw: object) -> None:
-    """Log an auth-flow failure at the level its nature warrants.
+    """Log an auth-flow failure at the level its nature warrants — GoTrue is a dependency like
+    any other, so the verdict is the base's (:mod:`apps.shared.observability.dependency`).
 
-    A 4xx GoTrue ``AuthApiError`` (expired/single-use link, wrong password, already-confirmed,
-    rate-limited) is a normal user outcome → ``log.info``. Anything else (GoTrue unreachable, a
-    5xx, an unexpected error) is a bug → ``log.exception``, which the capture seam tracks as an
-    issue. Call from inside the ``except`` block so ``log.exception`` sees the live exception.
+    A 4xx ``AuthApiError`` (expired/single-use link, wrong password, already-confirmed,
+    rate-limited) is GoTrue answering no: a normal user outcome. Anything else — unreachable, a
+    5xx, an unexpected error — is a bug the capture seam tracks as an issue.
     """
-    if isinstance(exc, AuthApiError) and 400 <= exc.status < 500:
-        log.info(event, **kw)
-    else:
-        log.exception(event, **kw)
+    log_dependency_failure(log, event, exc, **kw)
 
 
 _INFO_MESSAGES: dict[str, str] = {
@@ -251,9 +249,8 @@ async def login_endpoint(
         return resp
     except AuthApiError as e:
         # Not a business fact: nothing happened, and the subject may not even be an account.
-        # ``warning``, not ``info``: this is a signal about a *caller* (a run of these is what
-        # brute-force looks like), and the deployed log level is WARNING — an info line would be
-        # filtered out, leaving the attempt no trace at all.
+        # ``warning``, not the ``info`` a refusal would otherwise earn: this is a signal about a
+        # *caller*, and a run of these is what brute force looks like.
         log.warning("auth.login_failed", email=email, ip=ip)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
@@ -270,8 +267,12 @@ async def login_endpoint(
             next=next,
             resend_email=offer_resend and email,
         )
-    except Exception:
-        log.exception("auth.login_error", ip=ip, email=email)
+    except Exception as exc:
+        # Not the dependency verdict, unlike the thin GoTrue wrappers below: this ``try`` holds
+        # the whole sign-in — the journal write, the cookies, the redirect — so what lands here is
+        # as likely to be our own code as GoTrue's. Judging it by "did the dependency refuse?"
+        # would let an exception that happens to carry a 4xx pass as an ordinary outcome.
+        log.exception("auth.login_error", exc_info=exc, ip=ip, email=email)
         return _error_response(
             request,
             "login.html",
@@ -589,8 +590,9 @@ async def register_endpoint(request: Request, admin_session: AdminSession) -> Re
         error = _friendly_auth_error(e)
         log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
 
-    except Exception:
-        log.exception("auth.register_error", ip=ip, email=email)
+    except Exception as exc:
+        # Our own code as much as GoTrue's, like login above — always an issue, never a refusal.
+        log.exception("auth.register_error", exc_info=exc, ip=ip, email=email)
         error = "An unexpected error occurred."
     return _error_response(
         request, "register.html", error, status.HTTP_400_BAD_REQUEST, email=email, next=next

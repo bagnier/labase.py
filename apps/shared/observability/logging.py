@@ -118,6 +118,12 @@ def _on_process_exception(exc_type: type[BaseException], exc: BaseException, tb:
         return
     _log_escaped("process.crashed", exc)
     # The writer task is gone by now, so nothing else would ever take this line to disk.
+    #
+    # The firehose line is all this crash leaves: the capture queue holds it too, but the drain
+    # that would fold it into an issue needs a running loop and a database, and by here there is
+    # neither. Deliberately not patched with an ``asyncio.run`` during interpreter shutdown —
+    # the accepted shape is that a graceful stop drains (``CaptureDrain.stop``) and a process
+    # dying on its own leaves a line to read rather than an issue to triage.
     flush_firehose()
 
 

@@ -40,10 +40,17 @@ class LifespanTask(Protocol):
 
     Five of them exist — the task worker, the event listener, the firehose writer, the metrics
     flusher, the capture drain — and they agree on exactly this much: ``start`` is idempotent,
-    ``stop`` cancels and awaits. What each does per tick, and whether that tick is sync or
-    async, is its own business (the firehose writes to disk, so its tick blocks and the loop
-    hands it to a thread). This states the shared half so :meth:`Host.run_background` can take
-    any of them, and so a new one cannot drift into a different lifecycle by accident.
+    ``stop`` cancels, awaits, **and drains once more**. What each does per tick, and whether that
+    tick is sync or async, is its own business (the firehose writes to disk, so its tick blocks
+    and the loop hands it to a thread). This states the shared half so
+    :meth:`Host.run_background` can take any of them, and so a new one cannot drift into a
+    different lifecycle by accident.
+
+    The final drain is the half that is easy to leave out, and the one a deploy makes routine:
+    SIGTERM is how every process ends, so whatever a worker is holding at that moment is the
+    *normal* amount to lose — the last exceptions before a restart, the traffic since the last
+    flush. A worker whose queue is durable elsewhere (the task worker and the event listener read
+    Postgres, which keeps their work across the restart) has nothing to drain and simply stops.
     """
 
     async def start(self) -> None: ...

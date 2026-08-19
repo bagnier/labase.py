@@ -15,6 +15,13 @@ The doctrine it enforces is the one written in ``apps/shared/observability/captu
 A *narrow* ``except`` is out of scope by construction: ``except TotpError`` is a wrong code, a
 refusal the code already named, and its traceback is noise.
 
+The second rule here guards the near miss that the first one invites. Reaching for ``exc_info``
+and writing ``log.exception("auth.login_error", exc)`` looks right and silently is not: structlog
+hands positional arguments to its ``%``-formatter, so the exception is consumed as a format
+argument and the traceback is dropped — the very thing the rule above exists to keep. No line in
+the base uses ``%``-formatting, so "the event name is the only positional" costs nothing and
+makes that spelling impossible.
+
 Same shape and same reason as ``test_log_vocabulary`` and ``test_emit_sites``: these choices live
 at call sites, so nothing but an AST walk enumerates them.
 """
@@ -77,3 +84,19 @@ def test_a_broad_except_never_logs_without_its_traceback():
 def test_the_walk_actually_finds_the_call_sites():
     # Guards the guard: an AST shape that matched nothing would make the assertion vacuous.
     assert len(_broad_handler_logs()) > 10
+
+
+def _positional_log_calls() -> list[str]:
+    """Every ``log.<level>(...)`` under ``apps/`` passing more than the event name positionally."""
+    return [
+        f"{path.relative_to(_APPS.parent)}:{call.lineno}"
+        for path in _APPS.rglob("*.py")
+        if "/tests/" not in path.as_posix()
+        for call in _log_calls(ast.parse(path.read_text()))
+        if len(call.args) > 1
+    ]
+
+
+def test_a_log_line_passes_nothing_but_its_name_positionally():
+    """``log.exception("x", exc)`` reads as "log this exception" and does the opposite."""
+    assert _positional_log_calls() == []

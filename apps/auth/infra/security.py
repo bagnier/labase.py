@@ -14,7 +14,6 @@ from fastapi import (
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
-from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
@@ -22,6 +21,7 @@ from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared.config import get_technical_settings
 from apps.shared.contribs import contribs
+from apps.shared.observability.dependency import log_dependency_failure
 from apps.shared.persistence.database import get_admin_session
 
 log = structlog.get_logger(__name__)
@@ -133,20 +133,14 @@ async def get_current_user(
     )
 
 
-def _is_expected_refresh_failure(exc: Exception) -> bool:
-    """A stale, rotated, or absent refresh token is GoTrue answering a routine 'no' (a 4xx
-    ``AuthApiError``) — the everyday end of a session, not a bug. Everything else (GoTrue
-    unreachable, a 5xx, a network error, our own ``ValueError``) is a genuine failure."""
-    return isinstance(exc, AuthApiError) and 400 <= exc.status < 500
-
-
 def _report_refresh_failure(exc: Exception) -> None:
-    """Log the lapse at the right level; ``log.exception`` is the capture seam for the rest."""
-    if _is_expected_refresh_failure(exc):
-        # A normal end-of-session — expected/operational, not degraded.
-        log.info("auth.token_refresh_rejected", detail=str(exc))
-        return
-    log.exception("auth.token_refresh_failed")
+    """Log the lapse at the level its nature warrants — the base's verdict, not a second copy.
+
+    A stale, rotated or absent refresh token is GoTrue answering a routine 'no' (a 4xx): the
+    everyday end of a session. Everything else — GoTrue unreachable, a 5xx, a network error, our
+    own ``ValueError`` — is a broken dependency, which the capture seam tracks as an issue.
+    """
+    log_dependency_failure(log, "auth.token_refresh_failed", exc, detail=str(exc))
 
 
 async def get_current_admin(

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.shared.config import get_technical_settings
+from apps.shared.observability.dependency import log_dependency_failure
 from apps.shared.persistence.base import Base, Timestamped, Versioned
 from apps.shared.persistence.database import admin_url, search_path_connect_args
 
@@ -98,12 +99,11 @@ def read_values(app: str) -> dict[str, str]:
     try:
         return asyncio.run(_on_throwaway_engine(_work))
     except Exception as exc:
-        # A DB unreachable at mount is a broken dependency, and a broken dependency is an issue —
-        # the same verdict auth reaches for an unreachable GoTrue. The app then runs on defaults
-        # and every request that needed a stored value is silently wrong, which is precisely the
-        # kind of failure that must not read as "nothing happened". Tests/probes boot DB-less and
-        # see it too; a mount that cannot reach its database is worth saying out loud.
-        log.exception("settings.read_values_failed", exc_info=exc, app=app)
+        # A database unreachable at mount is a broken dependency, and the base has one verdict for
+        # those. The app then runs on defaults and every request that needed a stored value is
+        # silently wrong, which is precisely the kind of failure that must not read as "nothing
+        # happened". Tests and probes boot DB-less and see it too.
+        log_dependency_failure(log, "settings.read_values_failed", exc, app=app)
         return {}
 
 
@@ -128,6 +128,6 @@ def seed_values(app: str, initial: dict[str, str]) -> None:
     try:
         asyncio.run(_on_throwaway_engine(_work))
     except Exception as exc:
-        # Broken dependency at mount — an issue, like read_values above: the declared settings
-        # never reached the table, so the console shows an app whose rows do not exist.
-        log.exception("settings.seed_values_failed", exc_info=exc, app=app)
+        # Broken dependency at mount, like read_values above: the declared settings never reached
+        # the table, so the console shows an app whose rows do not exist.
+        log_dependency_failure(log, "settings.seed_values_failed", exc, app=app)

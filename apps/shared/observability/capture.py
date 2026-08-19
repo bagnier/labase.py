@@ -76,6 +76,17 @@ def on_captured(tracker: ExceptionTracker) -> None:
     _trackers.append(tracker)
 
 
+# Stamped on an exception the moment it is queued, so the *same failure* is never folded in
+# twice. It is logged more than once on its way out: Starlette's ServerErrorMiddleware calls the
+# 500 handler — this seam — and then re-raises, so the ASGI server catches the very same object
+# and logs it again through stdlib ``logging``, which the chain now joins. Measured on a real
+# hypercorn server, one unhandled 500 reached here twice.
+#
+# The mark rides the instance rather than a set of seen exceptions: nothing to size, nothing to
+# evict, and it dies with the object. Per instance and not per type or message, because two
+# requests failing the same way *are* two occurrences — that count is what an issue is for.
+_CAPTURED = "_labase_captured"
+
 _SCALARS = (str, int, float, bool, type(None))
 # Render-noise keys that carry no correlation value into a stored issue.
 _DROP_KEYS = frozenset({"exc_info", "exception", "timestamp", "level"})
@@ -103,7 +114,8 @@ def capture_processor(
     """structlog processor: enqueue every ``log.exception`` for capture, pass the event through.
 
     Must sit before ``format_exc_info`` (needs the live exception) and returns ``event_dict``
-    unchanged so the firehose still renders the line for the logs viewer.
+    unchanged so the firehose still renders the line for the logs viewer — every line is written,
+    including the second one about an exception already captured; only the *issue* is deduped.
 
     The filtering bound logger routes ``.exception()`` through ``.error()`` with
     ``exc_info=True``, so the seam is "error level carrying an exception" — that is precisely
@@ -112,8 +124,11 @@ def capture_processor(
     if method_name != "error" or _capturing.get():
         return event_dict
     exc = _exc_from(event_dict.get("exc_info"))
-    if exc is None:
+    if exc is None or getattr(exc, _CAPTURED, False):
         return event_dict
+    # A C-level or ``__slots__`` exception takes no marks; capture it anyway, at the risk of twice.
+    with contextlib.suppress(AttributeError, TypeError):
+        setattr(exc, _CAPTURED, True)
     # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
     # timeline joins on — and whether a request was in flight is read off request_id itself.
     context = {
@@ -128,7 +143,7 @@ def capture_processor(
 class CaptureDrain:
     """Lifespan task that folds queued exceptions into their issues.
 
-    Same shape as ``MetricsFlusher`` — idempotent ``start``, cancel-and-await ``stop``, and a
+    Same shape as ``MetricsFlusher`` — idempotent ``start``, cancel-and-drain ``stop``, and a
     ``tick`` that tests drive by hand with ``interval_seconds=0``.
     """
 
@@ -146,6 +161,7 @@ class CaptureDrain:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+        await self.tick()  # the exceptions before a restart are the ones that explain it
 
     async def tick(self) -> None:
         dropped, _overflow.dropped = _overflow.dropped, 0

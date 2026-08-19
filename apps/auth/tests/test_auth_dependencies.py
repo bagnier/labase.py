@@ -247,11 +247,18 @@ async def test_expired_token_unexpected_refresh_failure_logs_exception(client):
         response = await client.get("/me")
 
     assert response.status_code == 401
-    log.exception.assert_called_once_with("auth.token_refresh_failed")
+    # The exception is handed to the line rather than resolved from the frame, so the capture
+    # seam holds wherever the report is written from.
+    log.exception.assert_called_once_with(
+        "auth.token_refresh_failed", exc_info=boom, detail=str(boom)
+    )
     log.info.assert_not_called()
 
 
-def test_log_gotrue_failure_picks_level_by_nature():
+def test_auth_takes_its_level_from_the_bases_verdict():
+    """The rule itself — a 4xx is the dependency refusing, anything else is it breaking — lives in
+    ``apps/shared/observability/dependency`` and is pinned by its own tests. What this holds is
+    auth's end of the wiring: the GoTrue seam asks for that verdict instead of judging again."""
     from apps.auth.infra.router import _log_gotrue_failure
 
     with patch("apps.auth.infra.router.log") as log:  # 4xx AuthApiError = normal user outcome
@@ -259,12 +266,7 @@ def test_log_gotrue_failure_picks_level_by_nature():
         log.info.assert_called_once()
         log.exception.assert_not_called()
 
-    with patch("apps.auth.infra.router.log") as log:  # 5xx AuthApiError = a bug → captured
-        _log_gotrue_failure("auth.x", AuthApiError("gotrue down", 500, None))
-        log.exception.assert_called_once()
-        log.info.assert_not_called()
-
-    with patch("apps.auth.infra.router.log") as log:  # any other error = a bug → captured
+    with patch("apps.auth.infra.router.log") as log:  # GoTrue unreachable = a bug → captured
         _log_gotrue_failure("auth.x", RuntimeError("boom"))
         log.exception.assert_called_once()
         log.info.assert_not_called()
