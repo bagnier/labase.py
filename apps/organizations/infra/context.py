@@ -9,7 +9,7 @@ from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.slug_registry import is_reserved
 
-log = structlog.get_logger("labase.organizations.context")
+log = structlog.get_logger(__name__)
 
 
 async def get_current_org(

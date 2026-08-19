@@ -22,7 +22,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.persistence.base import Base, Timestamped, Versioned
 from apps.shared.persistence.database import admin_url, search_path_connect_args
 
-log = structlog.get_logger("labase.settings.store")
+log = structlog.get_logger(__name__)
 
 # The stored form of a boolean setting value.
 BOOL_TRUE = "true"

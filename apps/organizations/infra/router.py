@@ -85,7 +85,7 @@ COMMON_TIMEZONES: tuple[str, ...] = (
     "Pacific/Auckland",
 )
 
-log = structlog.get_logger("labase.organizations.router")
+log = structlog.get_logger(__name__)
 
 # The collection router — multi-org, not scoped by a handle, mounted at the root.
 router = APIRouter(prefix="/organizations", tags=["organizations"])

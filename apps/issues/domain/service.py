@@ -1,4 +1,4 @@
-"""Pure error-tracking domain logic — fingerprinting and lifecycle.
+"""Pure issue-tracking domain logic — fingerprinting and lifecycle.
 
 The value is not capture (trivial) but *grouping*: the fingerprint hashes the
 exception type plus the top in-app frames normalized to ``file:function`` —

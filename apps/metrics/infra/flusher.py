@@ -21,7 +21,7 @@ from apps.shared.observability.metrics import (
 )
 from apps.shared.persistence.database import admin_session_factory
 
-log = structlog.get_logger("labase.metrics.flush")
+log = structlog.get_logger(__name__)
 
 
 class MetricsFlusher:

@@ -26,7 +26,7 @@ from apps.timeline.infra.router import router
 
 PHASE = MountPhase.CONSOLE_SCREEN
 
-log = structlog.get_logger("labase.timeline")
+log = structlog.get_logger(__name__)
 
 TIMELINE_APP = "timeline"
 LOG_LEVEL_KEY = "log_level"

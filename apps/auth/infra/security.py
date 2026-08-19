@@ -24,7 +24,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.contribs import contribs
 from apps.shared.persistence.database import get_admin_session
 
-log = structlog.get_logger("labase.auth.security")
+log = structlog.get_logger(__name__)
 
 
 def _bearer_token(authorization: str | None) -> str | None:

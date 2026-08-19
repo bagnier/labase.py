@@ -1,4 +1,4 @@
-from apps.issues.infra.repository import record_occurrence
+from apps.issues.infra.repository import see_occurrence
 from tests.e2e.drivers.browser_base import BrowserBase
 
 
@@ -9,7 +9,7 @@ class IssuesBrowserMixin(BrowserBase):
 
         async def _do(s):
             for _ in range(count):
-                await record_occurrence(
+                await see_occurrence(
                     s,
                     fingerprint=f"seed-{title}",
                     title=title,

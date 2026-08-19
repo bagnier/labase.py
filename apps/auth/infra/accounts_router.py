@@ -30,7 +30,7 @@ from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import get_admin_supabase
 from apps.shared.settings import get_settings
 
-log = structlog.get_logger("labase.auth.accounts")
+log = structlog.get_logger(__name__)
 
 accounts_router = APIRouter(tags=["accounts"])
 

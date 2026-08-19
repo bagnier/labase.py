@@ -25,7 +25,7 @@ from typing import Any, TypeVar
 
 import structlog
 
-log = structlog.get_logger("labase.shared.contribs")
+log = structlog.get_logger(__name__)
 
 Q = TypeVar("Q")
 

@@ -7,7 +7,7 @@ Pure middleware logic — no DB, no running app: the decision is exercised throu
 
 import uuid
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Response
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
@@ -29,13 +29,15 @@ def _req(path: str, *, referer: str | None = None, host: str = "example.com") ->
     return Request(scope)
 
 
-def _decision(monkeypatch, path: str, status: int, referer: str | None) -> str:
-    calls: dict[str, bool] = {}
-    monkeypatch.setattr(request.log, "warning", lambda *a, **k: calls.setdefault("warning", True))
-    monkeypatch.setattr(request.log, "error", lambda *a, **k: calls.setdefault("error", True))
-    monkeypatch.setattr(request, "read_request_stats", lambda: None)
-    request.RequestLogger._log_if_failed(_req(path, referer=referer), status, 12.3)
-    return "error" if "error" in calls else "warning" if "warning" in calls else "none"
+def _levels_for(log_chain, path: str, status: int, referer: str | None = None) -> list[str]:
+    """The levels of the lines a served exchange leaves behind — driven through the real
+    middleware and read back out of the real firehose, so the policy is observed, not mocked."""
+    app = FastAPI()
+    app.get("/{whole_path:path}")(lambda: Response(status_code=status))
+    app.add_middleware(request.RequestLogger)
+    headers = {"referer": referer} if referer else {}
+    TestClient(app, base_url="https://example.com").get(path, headers=headers)
+    return [line.level for line in log_chain()]
 
 
 def test_is_asset_matches_favicon_static_and_extensions():
@@ -52,25 +54,32 @@ def test_internal_referer_is_same_host_only():
     assert not request._is_internal_referer(_req("/x", referer=None))
 
 
-def test_favicon_404_stays_silent_even_from_our_page(monkeypatch):
-    assert _decision(monkeypatch, "/favicon.ico", 404, "https://example.com/home") == "none"
+def test_a_successful_request_is_traced_at_info(log_chain):
+    assert _levels_for(log_chain, "/console/timeline", 200, "https://example.com/") == ["info"]
 
 
-def test_internal_dead_link_404_logs_a_warning(monkeypatch):
-    assert _decision(monkeypatch, "/acme/missing", 404, "https://example.com/acme/") == "warning"
+def test_an_internal_dead_link_404_is_traced_at_warning(log_chain):
+    assert _levels_for(log_chain, "/acme/missing", 404, "https://example.com/acme/") == ["warning"]
 
 
-def test_external_or_refererless_404_stays_silent(monkeypatch):
-    assert _decision(monkeypatch, "/wp-login.php", 404, None) == "none"
+def test_a_bot_scan_404_is_still_traffic_and_traced_at_info(log_chain):
+    """A scan is a served exchange like any other — the level says it was nothing to fix.
+    It stays out of the load metrics, which is where flooding would actually hurt."""
+    assert _levels_for(log_chain, "/wp-login.php", 404) == ["info"]
 
 
-def test_every_5xx_logs_an_error_regardless_of_referer(monkeypatch):
-    assert _decision(monkeypatch, "/api/x", 500, None) == "error"
-    assert _decision(monkeypatch, "/static/x.js", 503, None) == "error"
+def test_a_5xx_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/api/x", 500) == ["error"]
 
 
-def test_successful_request_leaves_no_row(monkeypatch):
-    assert _decision(monkeypatch, "/console/timeline", 200, "https://example.com/") == "none"
+def test_a_5xx_on_an_asset_is_traced_too(log_chain):
+    """The only thing that brings an asset back into the timeline: a 5xx is ours to fix,
+    whoever asked for the file."""
+    assert _levels_for(log_chain, "/static/x.js", 503) == ["error"]
+
+
+def test_an_asset_the_browser_fetched_itself_leaves_no_line(log_chain):
+    assert _levels_for(log_chain, "/favicon.ico", 404, "https://example.com/home") == []
 
 
 # The load metrics count the same universe the timeline shows: our own traffic and our own
@@ -104,9 +113,13 @@ def test_well_known_probe_is_an_infra_probe():
     assert not request._is_infra_probe("/acme/missing")
 
 
-def test_well_known_probe_stays_silent_even_from_our_page(monkeypatch):
+def test_well_known_probe_stays_silent_even_from_our_page(log_chain):
     path = "/.well-known/appspecific/com.chrome.devtools.json"
-    assert _decision(monkeypatch, path, 404, "https://example.com/home") == "none"
+    assert _levels_for(log_chain, path, 404, "https://example.com/home") == []
+
+
+def test_well_known_probe_stays_out_of_the_load_metrics():
+    path = "/.well-known/appspecific/com.chrome.devtools.json"
     assert not request._feeds_load_metrics(_req(path, referer="https://example.com/home"), 404)
 
 
@@ -151,3 +164,25 @@ def test_the_metric_label_carries_the_router_prefix():
 
 def test_the_metric_label_of_a_prefix_only_route_is_the_prefix():
     assert _label_for("/console") == "/console"
+
+
+# One line per served request, under one name: ``request.finished``, whose *level* carries the
+# outcome. That is the name the timeline feature, its mockup and both e2e drivers already read.
+
+
+def _explode() -> None:
+    raise RuntimeError("the handler gave up")
+
+
+def _serving_app() -> FastAPI:
+    app = FastAPI()
+    app.get("/console/timeline")(lambda: {"ok": True})
+    app.get("/boom")(_explode)
+    app.add_middleware(request.RequestLogger)
+    return app
+
+
+def test_a_served_request_leaves_one_finished_line(log_chain):
+    TestClient(_serving_app()).get("/console/timeline")
+    lines = log_chain()
+    assert [(line.name, line.level) for line in lines] == [("request.finished", "info")]

@@ -10,7 +10,7 @@ from starlette.responses import Response
 from apps.shared.observability.metrics import accumulator
 from apps.shared.observability.sql import read_request_stats, start_request_stats
 
-log = structlog.get_logger("labase.http")
+log = structlog.get_logger(__name__)
 
 _SKIP_PATHS = {"/health/live", "/health/ready"}
 _INFRA_PROBE_PREFIXES = ("/.well-known/",)
@@ -82,6 +82,15 @@ def _is_internal_dead_link(request: Request, status: int) -> bool:
     )
 
 
+def _is_traced(request: Request, status: int) -> bool:
+    """Whether this exchange earns a timeline line. Everything the *user* asked for does; what
+    the browser fetched on its own — a static bundle, the favicon, a ``/.well-known`` probe —
+    does not, since a row per image would bury the traffic it sits between. A 5xx is our fault
+    whoever asked, so it is traced regardless."""
+    path = request.url.path
+    return status >= 500 or not (_is_asset(path) or _is_infra_probe(path))
+
+
 def _feeds_load_metrics(request: Request, status: int) -> bool:
     """Which requests count toward ``/console/load``. Same universe as the timeline: our own
     traffic and our own failures, never the noise. 2xx/3xx and every 5xx always count; a 4xx
@@ -106,12 +115,15 @@ def new_request_id() -> str:
 class RequestLogger(BaseHTTPMiddleware):
     """Per-request correlation and telemetry (README: observability is built in).
 
-    Binds a short ``request_id`` in a contextvar so every log line of the request correlates, times
-    the request, and feeds the load metrics. It logs **once per request, and only on failure worth
-    an admin's eyes**: every 5xx (our own bug), and a 4xx only when it's a *dead link from
-    ourselves* — a same-host ``Referer`` to a non-asset path. Successful requests leave no timeline
-    row; they still feed ``/console/load`` and correlate through the shared ``request_id``.
-    Liveness/readiness probes are skipped entirely.
+    Binds a ``request_id`` in a contextvar so every log line of the request correlates, times the
+    request, and feeds the load metrics. It logs **once per served request**, under one name —
+    ``request.finished`` — whose *level* carries the outcome: ``error`` on a 5xx (our own bug),
+    ``warning`` on a dead link from one of our own pages, ``info`` on everything else. This is the
+    ``http`` source of the timeline, and the only one: a line written anywhere else is ``app``.
+
+    What the browser fetches on its own leaves nothing behind — static assets, the favicon and
+    ``/.well-known`` probes — unless it 5xx'd, which is our fault whatever asked for it.
+    Liveness/readiness probes are skipped before any of this.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
@@ -153,22 +165,21 @@ class RequestLogger(BaseHTTPMiddleware):
                     unmatched=True,
                 )
 
-        self._log_if_failed(request, response.status_code, duration_ms)
+        self._log_finished(request, response.status_code, duration_ms)
         response.headers["X-Request-ID"] = request_id
         return response
 
     @staticmethod
-    def _log_if_failed(request: Request, status: int, duration_ms: float) -> None:
-        """Emit the single ``request.failed`` line, or nothing. 5xx logs at ``error`` (a server
-        fault, correlated with its captured issue); an internal dead-link 4xx at ``warning``."""
-        server_error = status >= 500
-        internal_dead_link = _is_internal_dead_link(request, status)
-        if not (server_error or internal_dead_link):
+    def _log_finished(request: Request, status: int, duration_ms: float) -> None:
+        """Emit the request's single line, or nothing when the browser asked for it itself."""
+        if not _is_traced(request, status):
             return
         db = read_request_stats()
-        log_at = log.error if server_error else log.warning
+        log_at = log.error if status >= 500 else log.info
+        if _is_internal_dead_link(request, status):
+            log_at = log.warning
         log_at(
-            "request.failed",
+            "request.finished",
             method=request.method,
             path=request.url.path,
             status=status,

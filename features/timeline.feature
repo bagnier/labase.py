@@ -3,10 +3,11 @@ Feature: Unified timeline
   I want every source in one filterable, exportable timeline
   So that I can trace what happened across the server without juggling three screens
 
-  # The timeline gathers three sources into one append-only stream:
-  #   - http     : the structlog firehose (failed requests — dead links & 5xx), gated by the log level
+  # The timeline gathers three systems into one append-only stream:
+  #   - logs     : the structlog firehose — requests, background work and libraries alike,
+  #                gated by the log level
   #   - business : the business-events journal (contributes regardless of the firehose level)
-  #   - error    : occurrences of tracked errors (contributes regardless of the log level)
+  #   - issue    : occurrences of tracked issues (contributes regardless of the log level)
   # Every entry carries org_id / user_id / request_id, so the timeline filters and correlates.
   # The screen is server-wide and admin-only, like the rest of the console.
 
@@ -19,8 +20,8 @@ Feature: Unified timeline
     And a server admin is signed in as "root@example.com"
     When the admin opens the timeline
     Then the entry "todo.created" is listed with source "business"
-    And the entry "request.finished" is listed with source "http"
-    And the entry "ValueError: boom" is listed with source "error"
+    And the entry "request.finished" is listed with source "logs"
+    And the entry "ValueError: boom" is listed with source "issue"
 
   Scenario: The timeline shows an empty state when nothing matches the filter
     Given the current date is "2026-06-26"
@@ -164,7 +165,7 @@ Feature: Unified timeline
     And an error log entry "ValueError: boom" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the timeline
-    Then the activity for "2026-06-26" shows 2 business, 1 http, and 1 error
+    Then the activity for "2026-06-26" shows 2 business, 1 logs, and 1 issue
 
   Scenario: The activity graph re-buckets by the selected grain
     # Current month sits after the seeded event so the admin's own sign-in business
@@ -173,7 +174,7 @@ Feature: Unified timeline
     And a business event "todo.created" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin views the activity by "month"
-    Then the activity for "2026-06" shows 1 business, 0 http, and 0 error
+    Then the activity for "2026-06" shows 1 business, 0 logs, and 0 issue
 
   Scenario: The activity graph follows the organisation filter
     Given the current date is "2026-06-26"
@@ -181,7 +182,7 @@ Feature: Unified timeline
     And a business event "todo.deleted" from org "Globex" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin filters the timeline by org "Acme"
-    Then the activity for "2026-06-26" shows 1 business, 0 http, and 0 error
+    Then the activity for "2026-06-26" shows 1 business, 0 logs, and 0 issue
 
   Scenario: The graph and table stay in sync on the selected period
     # Current day sits just past the filter window so the admin's own sign-in business
@@ -193,7 +194,7 @@ Feature: Unified timeline
     When the admin filters the timeline to dates from "2026-06-25" to "2026-06-26"
     Then the entry "todo.deleted" is listed
     And the entry "todo.created" is not listed
-    And the activity for "2026-06-26" shows 1 business, 0 http, and 0 error
+    And the activity for "2026-06-26" shows 1 business, 0 logs, and 0 issue
 
   # Recent window
 
@@ -203,7 +204,7 @@ Feature: Unified timeline
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the timeline
-    Then 1 http entry is listed
+    Then 1 logs entry is listed
 
   # Access
 

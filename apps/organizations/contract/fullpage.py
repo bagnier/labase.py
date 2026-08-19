@@ -21,7 +21,7 @@ from apps.organizations.contract.queries import get_user_orgs
 from apps.shared.contribs import contribs
 from apps.shared.page import FullpageQuery
 
-log = structlog.get_logger("labase.organizations.fullpage")
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)

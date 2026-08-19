@@ -1,4 +1,4 @@
-"""How the issues context (error tracking) plugs into the running app.
+"""How the issues context (issue tracking) plugs into the running app.
 
 Registers an ``ExceptionCaptured`` tracker with the capture module (500 handler +
 event-bus failures), folds occurrences into issues by stack fingerprint, and serves the console
@@ -20,15 +20,14 @@ from apps.issues.domain import service
 from apps.issues.infra.repository import (
     IssueRepository,
     purge_old_occurrences,
-    record_occurrence,
+    see_occurrence,
 )
 from apps.issues.infra.router import router
 from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.events.bus import events
 from apps.shared.host import Host, MountPhase
-from apps.shared.observability.capture import CaptureDrain, on_captured
-from apps.shared.observability.errors import ExceptionCaptured
+from apps.shared.observability.capture import CaptureDrain, ExceptionCaptured, on_captured
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.queue import ensure_scheduled, register_task_handler
 from apps.shared.settings import (
@@ -41,7 +40,7 @@ from apps.shared.settings import (
 
 PHASE = MountPhase.CONSOLE_SCREEN
 
-log = structlog.get_logger("labase.issues")
+log = structlog.get_logger(__name__)
 
 PURGE_TOPIC = "issues.purge"
 PURGE_EVERY_SECONDS = 86400
@@ -55,7 +54,7 @@ def mount(host: Host) -> None:
     if not settings.enabled:
         return
     host.app.include_router(router, prefix="/console/issues")
-    on_captured(_record)  # error capture is delivered off the bus, observability → issues
+    on_captured(_track)  # exception capture is delivered off the bus, observability → issues
     host.events.declare(IssueOpened, IssueRegressed, IssueStatusChanged)
     host.events.on(IssueOpened, _alert_opened, name="alert_opened", app="issues")
     host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
@@ -72,7 +71,7 @@ def _declare_settings() -> SettingsDeclaration:
         app_name="issues",
         defs=[
             feature_switch(),
-            SettingDef("retention_days", "number", "30", "Days of error events to keep"),
+            SettingDef("retention_days", "number", "30", "Days of occurrences to keep"),
             SettingDef("alerting_enabled", "boolean", "false", "Email on new/regressed issues"),
             SettingDef("alert_email", "string", "", "Where issue alerts are sent"),
         ],
@@ -80,40 +79,40 @@ def _declare_settings() -> SettingsDeclaration:
     )
 
 
-async def _record(event: ExceptionCaptured) -> None:
+async def _track(event: ExceptionCaptured) -> None:
     """Fold a captured exception into its issue, emitting the journal fact on the same transaction
-    (atomic with the recording); runs under collect(): best-effort."""
+    (atomic with the write); runs under collect(): best-effort."""
     version = get_technical_settings().app_version
     context = {
         **event.context,
-        "source": event.source,
+        "scope": event.scope,
         "stack": service.formatted_stack(event.exc),
     }
     async with admin_session_factory()() as session:
-        recorded = await record_occurrence(
+        seen = await see_occurrence(
             session,
             fingerprint=service.fingerprint(event.exc),
             title=service.title_for(event.exc),
             version=version,
             context=context,
         )
-        issue_id, title = recorded.issue.id, recorded.issue.title
-        # Emit on the recording session — IssueOpened/Regressed lands iff the issue commits.
-        # ``_record`` is only subscribed when the app is enabled (see ``mount``), so reaching the
+        issue_id, title = seen.issue.id, seen.issue.title
+        # Emit on the same session — IssueOpened/Regressed lands iff the issue commits.
+        # ``_track`` is only subscribed when the app is enabled (see ``mount``), so reaching the
         # bus here is unconditional — no mount-state guard needed.
-        if recorded.opened:
+        if seen.opened:
             opened = IssueOpened(entity_id=issue_id, entity_name=title)
             await events.emit(opened, session)
-        if recorded.regressed:
+        if seen.regressed:
             regressed = IssueRegressed(
                 entity_id=issue_id,
                 entity_name=title,
-                resolved_in_release=recorded.issue.resolved_in_release,
+                resolved_in_release=seen.issue.resolved_in_release,
                 seen_version=version,
             )
             await events.emit(regressed, session)
         await session.commit()
-    log.info("issue.recorded", issue_id=issue_id, opened=recorded.opened)
+    log.info("issue.seen", issue_id=issue_id, opened=seen.opened)
 
 
 async def _alert_opened(session: AsyncSession, event: IssueOpened) -> None:

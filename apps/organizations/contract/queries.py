@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.organizations.domain.models import Membership, Organization, OrganizationRead, OrgRole
 from apps.shared.config import get_technical_settings
 
-log = structlog.get_logger("labase.organizations.seeding")
+log = structlog.get_logger(__name__)
 
 
 async def org_handle_taken(

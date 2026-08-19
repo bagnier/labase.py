@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from apps.shared.http import is_htmx, wants_json
 from apps.shared.http.templates import templates
 
-log = structlog.get_logger("labase.app")
+log = structlog.get_logger(__name__)
 
 _ERROR_TEMPLATES: dict[int, str] = {
     403: "errors/403.html",

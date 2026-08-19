@@ -32,7 +32,7 @@ from apps.shared.settings import (
 
 PHASE = MountPhase.CONSOLE_SCREEN
 
-log = structlog.get_logger("labase.metrics")
+log = structlog.get_logger(__name__)
 
 ROLLUP_TOPIC = "metrics.rollup"
 ROLLUP_EVERY_SECONDS = 86400

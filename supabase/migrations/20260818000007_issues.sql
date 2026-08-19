@@ -1,4 +1,4 @@
--- Error tracking (Sentry-as-Postgres): thousands of occurrences deduped into few issues by stack
+-- Issue tracking (Sentry-as-Postgres): thousands of occurrences deduped into few issues by stack
 -- fingerprint, each with a lifecycle.
 --
 -- Server-level admin data: no grants to `authenticated`, RLS on with no policy — the same posture

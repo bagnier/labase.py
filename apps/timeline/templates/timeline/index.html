@@ -16,7 +16,7 @@
   <div class="space-y-6">
     {# Export is a page-level action on the current filtered view — kept away from the filters. #}
     {% call page_header('Timeline',
-      'One timeline across every source — the structlog firehose, the business-events journal and
+      'One timeline across all three sources — the structlog firehose, the business-events journal and
       tracked issues — server-wide. Correlate by request id.') %}
       <a class="btn btn-sm btn-ghost"
          aria-label="Export NDJSON"
@@ -31,17 +31,18 @@
     {% endcall %}
     {# overflow-visible so the combobox popovers can escape the card (matches the mockup). #}
     <div class="card-panel overflow-visible">
-      {# ── Activity: the shared ApexCharts stack; the JSON attribute stays the
-         machine-readable contract the drivers assert on. #}
-      <div class="p-4 border-b border-base-300"
-           data-activity='{{ activity | tojson }}'
-           data-grain="{{ grain }}">
+      {# ── Activity: the shared ApexCharts stack. What the drivers read is what the reader
+         sees — the legend below and the series in [data-chart-config], which is the same JSON
+         charts.js draws from. #}
+      <div class="p-4 border-b border-base-300" data-grain="{{ grain }}">
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-1">
           <span class="eyebrow">Activity</span>
-          <span class="flex gap-3 text-xs text-base-content/60">
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span>HTTP</span>
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>Business</span>
-            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span>Error</span>
+          {# One swatch per chart series, in series order — the colours match `_SOURCE_SERIES`.
+             Class names stay literal: Tailwind only emits what it can see in the markup. #}
+          <span class="flex gap-3 text-xs text-base-content/60" data-activity-legend>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span><span data-legend-label>Logs</span></span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span><span data-legend-label>Business</span></span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span><span data-legend-label>Issue</span></span>
           </span>
           {# Grain toggle — a chart-only control; keeps the current filters and table sort. #}
           <span class="join ml-auto" role="group" aria-label="Activity grain">

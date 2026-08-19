@@ -40,7 +40,7 @@ from apps.shared.text import pluralize
 
 PHASE = MountPhase.ORG
 
-log = structlog.get_logger("labase.organizations.integration")
+log = structlog.get_logger(__name__)
 
 # Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
 # contexts last (see apps.main) so fixed-prefix routers (e.g. /console) are never shadowed.

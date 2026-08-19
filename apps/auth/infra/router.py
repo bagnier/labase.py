@@ -70,7 +70,7 @@ from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsView
 
-log = structlog.get_logger("labase.auth.router")
+log = structlog.get_logger(__name__)
 
 router = APIRouter()
 

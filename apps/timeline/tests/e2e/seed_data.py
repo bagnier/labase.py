@@ -25,6 +25,11 @@ from apps.shared.events.models import BusinessEventRecord
 # a real org/user row (the timeline filters by the raw id it stored).
 _NS = uuid.UUID("00000000-0000-0000-0000-00000000da7a")
 
+# The scenarios call these "request log entries", so they are seeded under the logger the
+# request tracer really writes with — stated here rather than imported, since production has
+# no reason to export it: the timeline reads the name only for a line's app axis.
+_REQUEST_LOGGER = "apps.shared.observability.request"
+
 
 def timeline_org_id(name: str) -> str:
     return str(uuid.uuid5(_NS, f"org:{name}"))
@@ -70,7 +75,7 @@ def event_model(
     )
 
 
-def firehose_record(
+def firehose_line(
     event: str,
     *,
     org: str | None = None,
@@ -82,6 +87,7 @@ def firehose_record(
     return {
         "timestamp": (when or clock.now()).isoformat(),
         "level": level,
+        "logger": _REQUEST_LOGGER,
         "event": event,
         "org_id": org,
         "user_id": user,

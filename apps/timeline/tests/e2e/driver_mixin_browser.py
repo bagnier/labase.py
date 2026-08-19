@@ -55,7 +55,7 @@ class TimelineBrowserMixin(BrowserBase):
         self, event: str, org: str, *, level: str = "info", when: datetime | None = None
     ) -> None:
         append_firehose(
-            seed_data.firehose_record(event, org=timeline_org_id(org), level=level, when=when)
+            seed_data.firehose_line(event, org=timeline_org_id(org), level=level, when=when)
         )
 
     def seed_error_from_org(self, title: str, org: str, *, when: datetime | None = None) -> None:
@@ -68,9 +68,7 @@ class TimelineBrowserMixin(BrowserBase):
     def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
         # All three sources must key on the same value for the timeline to correlate them.
         oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
-        append_firehose(
-            seed_data.firehose_record("request.finished", org=oid, request_id=request_id)
-        )
+        append_firehose(seed_data.firehose_line("request.finished", org=oid, request_id=request_id))
         self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
         self._insert_error(error, org=oid, request_id=request_id)
 
@@ -209,12 +207,19 @@ class TimelineBrowserMixin(BrowserBase):
         missing = [e for e in events if e not in listed]
         assert not missing, f"{missing!r} not all listed in {listed}"
 
-    def assert_activity(self, date: str, business: int, http: int, error: int) -> None:
-        raw = self.page.locator("[data-activity]").first.get_attribute("data-activity")
-        act = json.loads(raw or "{}").get(date, {})
-        assert act.get("business", 0) == business, f"activity {date} business: {act}"
-        assert act.get("http", 0) == http, f"activity {date} http: {act}"
-        assert act.get("error", 0) == error, f"activity {date} error: {act}"
+    def assert_activity(self, date: str, business: int, logs: int, issue: int) -> None:
+        """What the reader sees: the on-screen legend, in series order, against the bars drawn
+        for that bucket. Read from ``[data-chart-config]`` — the very JSON charts.js draws
+        from — so a source renamed on one side alone shows up here instead of silently
+        flattening a series to zero."""
+        config = json.loads(self.page.locator("[data-chart-config]").first.text_content() or "{}")
+        # A column's label is always a fragment of its bucket key ("06-26" of "2026-06-26",
+        # "W26" of "2026-W26"), so the column is found without re-deriving the axis format.
+        labels = config["options"]["xaxis"]["categories"]
+        column = next(i for i, label in enumerate(labels) if label in date)
+        legend = self.page.locator("[data-activity-legend] [data-legend-label]").all_text_contents()
+        drawn = dict(zip(legend, [s["data"][column] for s in config["series"]], strict=True))
+        assert drawn == {"Logs": logs, "Business": business, "Issue": issue}
 
     def assert_export_contains(self, needle: str) -> None:
         assert needle in self._export_text, f"{needle!r} not in export:\n{self._export_text}"

@@ -41,7 +41,7 @@ from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaratio
 
 PHASE = MountPhase.CONSOLE
 
-log = structlog.get_logger("labase.console.integration")
+log = structlog.get_logger(__name__)
 
 
 def mount(host: Host) -> None:

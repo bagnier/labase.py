@@ -11,7 +11,7 @@ import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-logger = structlog.get_logger("labase.shared.security")
+log = structlog.get_logger(__name__)
 
 
 def cors_config(origins: list[str]) -> dict[str, Any]:
@@ -29,7 +29,7 @@ def cors_config(origins: list[str]) -> dict[str, Any]:
     if "*" in origins:
         # Wildcard grants public, credential-less reads only. Pairing "*" with credentials would
         # let any site read cookie-authenticated responses, so credentials are dropped here.
-        logger.warning("cors.wildcard_without_credentials")
+        log.warning("cors.wildcard_without_credentials")
         return {
             "allow_origins": ["*"],
             "allow_credentials": False,
@@ -88,7 +88,7 @@ def _is_cross_site(request: Request) -> bool:
 async def csrf_protect(request: Request, call_next) -> Response:  # type: ignore[no-untyped-def]
     """Reject unsafe cross-site requests (see :func:`_is_cross_site`)."""
     if request.method not in _SAFE_METHODS and _is_cross_site(request):
-        logger.warning(
+        log.warning(
             "csrf.rejected",
             path=request.url.path,
             method=request.method,

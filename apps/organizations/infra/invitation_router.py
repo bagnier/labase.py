@@ -16,7 +16,7 @@ from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import auth_user_exists
 
-log = structlog.get_logger("labase.organizations.invitations")
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 

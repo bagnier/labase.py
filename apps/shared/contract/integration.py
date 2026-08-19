@@ -26,10 +26,12 @@ from apps.shared.http.limiter import (
 from apps.shared.http.security import cors_config, csrf_protect, security_headers
 from apps.shared.http.static import CachingStaticFiles
 from apps.shared.observability.firehose import FirehoseWriter
-from apps.shared.observability.logging import setup_logging
+from apps.shared.observability.logging import catch_loop_exceptions, setup_logging
 from apps.shared.observability.request import RequestLogger
 from apps.shared.preflight import enforce_at_boot
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
+
+log = structlog.get_logger(__name__)
 
 PHASE = MountPhase.FOUNDATION
 
@@ -52,6 +54,10 @@ def mount(host: Host) -> None:
     app.middleware("http")(csrf_protect)
     app.add_middleware(RequestLogger)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
+
+    # The three process-wide hooks go in with setup_logging; the loop's only exists once
+    # there is a loop to install it on.
+    host.on_startup(catch_loop_exceptions)
 
     _start_task_worker(host, settings)
     _start_event_listener(host, settings)
@@ -100,4 +106,4 @@ async def _plant_recurring_tasks() -> None:
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
     except Exception:
-        structlog.get_logger("labase.shared.queue").warning("queue.plant_recurring_failed")
+        log.warning("queue.plant_recurring_failed")

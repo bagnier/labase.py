@@ -40,7 +40,7 @@ _GRAINS = ("hour", "day", "week", "month")
 # ``(source value, human series label)`` — the label rides the ApexCharts tooltip, and the colors
 # mirror the template's legend swatches (info/secondary/error), which is why the chart's own legend
 # stays off.
-_SOURCE_SERIES = (("http", "HTTP"), ("business", "Business"), ("error", "Error"))
+_SOURCE_SERIES = (("logs", "Logs"), ("business", "Business"), ("issue", "Issue"))
 
 # How many buckets the x-axis shows per grain — a *fixed* count ending at the current period, so the
 # axis width is stable and bounded however the data clusters. Aligned with the data windows in

@@ -40,7 +40,7 @@ from apps.shared.host import host
 if TYPE_CHECKING:
     from apps.auth.contract.user import AuthenticatedUser
 
-log = structlog.get_logger("labase.shared.page")
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)

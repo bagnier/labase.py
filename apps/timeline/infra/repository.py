@@ -77,11 +77,21 @@ class TimelineFilter:
 
 
 def _key_app(name: str) -> str:
-    """The owning app of a *keyed* source — the first dotted segment of its name
-    (``request.failed`` → ``request``). Only the firehose and issue occurrences need this: a
-    business fact states its app on its own column. Issues carry a bare title, which collapses to
-    its full name."""
+    """The owning app of an issue occurrence — the first dotted segment of its title. A business
+    fact states its app on its own column, and a firehose line reads it off its logger; only an
+    issue carries a bare title, which collapses to its full name."""
     return name.split(".", 1)[0]
+
+
+def _app_of(logger: str) -> str:
+    """The app a line belongs to, read off the logger that wrote it: the package under ``apps.``
+    for our own code, the top-level distribution for a library's (``sqlalchemy.pool`` →
+    ``sqlalchemy``). Reading it off the *event name* instead would guess, and guess wrong —
+    ``invitation.accept_error`` belongs to organizations, ``page.provider_failed`` to shared."""
+    head, _, rest = logger.partition(".")
+    if head == "apps" and rest:
+        return rest.partition(".")[0]
+    return head
 
 
 class TimelineReader:
@@ -90,9 +100,9 @@ class TimelineReader:
 
     async def search(self, flt: TimelineFilter, *, limit: int = 100) -> list[TimelineEntry]:
         entries: list[TimelineEntry] = []
-        # The firehose is a synchronous read of local files — the HTTP diagnostics stream
-        # (request.failed), level-gated at write time; the durable sources below carry full history.
-        if flt.wants(TimelineSource.http):
+        # The firehose is a synchronous read of local files, level-gated at write time; the
+        # durable sources below carry full history whatever the level.
+        if flt.wants(TimelineSource.logs):
             entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
         # A business fact has no severity of its own — it is a domain event, not a log line. The
         # viewer needs one axis across its three sources, so it reads them all at BUSINESS_LEVEL;
@@ -101,7 +111,7 @@ class TimelineReader:
             rows = await EventRepository(self.session).search(**_business_kwargs(flt, limit))
             entries += [_from_event(r) for r in rows]
         # Issue occurrences are always level "error"; a stricter level filter excludes them.
-        if flt.wants(TimelineSource.error) and flt.level in (None, "error"):
+        if flt.wants(TimelineSource.issue) and flt.level in (None, "error"):
             rows = await search_issue_occurrences(self.session, **_issue_kwargs(flt, limit))
             entries += [_from_issue(r) for r in rows]
         # The app filter narrows the merged timeline to one app's event key prefix — applied in
@@ -242,10 +252,10 @@ def _firehose_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
 def _from_firehose(line: LogLine) -> TimelineEntry:
     return TimelineEntry(
         ts=line.ts,
-        source=TimelineSource.http,
+        source=TimelineSource.logs,
         level=line.level,
-        name=line.event,  # structlog's own key for the trace name — the library's word, not ours
-        app=_key_app(line.event),
+        name=line.name,
+        app=_app_of(line.logger),
         org_id=line.org_id,
         user_id=line.user_id,
         request_id=line.request_id,
@@ -275,7 +285,7 @@ def _from_issue(occurrence: IssueOccurrence) -> TimelineEntry:
     ctx = occurrence.context
     return TimelineEntry(
         ts=occurrence.ts,
-        source=TimelineSource.error,
+        source=TimelineSource.issue,
         level="error",
         name=occurrence.title,
         app=_key_app(occurrence.title),

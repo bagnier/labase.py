@@ -32,7 +32,7 @@ async def search_issue_occurrences(
     to_dt: datetime | None = None,
     limit: int = 100,
 ) -> list[IssueOccurrence]:
-    """Newest-first, bounded read of error occurrences. Org/user/request are matched inside the
+    """Newest-first, bounded read of issue occurrences. Org/user/request are matched inside the
     JSONB ``context`` (issues has no dedicated columns); the issue supplies the title."""
     query = (
         select(Occurrence, Issue.title)

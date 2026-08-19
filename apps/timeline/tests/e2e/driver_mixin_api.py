@@ -41,7 +41,7 @@ class TimelineApiMixin(ApiBase):
         # The firehose's own writer, bypassing the live level gate the runtime path is subject
         # to (a seeded 'info' line must survive a WARNING process level).
         append_firehose(
-            seed_data.firehose_record(event, org=org, level=level, when=when, request_id=request_id)
+            seed_data.firehose_line(event, org=org, level=level, when=when, request_id=request_id)
         )
 
     def seed_request_from_org(
@@ -178,11 +178,11 @@ class TimelineApiMixin(ApiBase):
         assert b in events, f"{b!r} not listed: {events}"
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
-    def assert_activity(self, date: str, business: int, http: int, error: int) -> None:
+    def assert_activity(self, date: str, business: int, logs: int, issue: int) -> None:
         act = self.response.json()["activity"].get(date, {})
         assert act.get("business", 0) == business, f"activity {date} business: {act}"
-        assert act.get("http", 0) == http, f"activity {date} http: {act}"
-        assert act.get("error", 0) == error, f"activity {date} error: {act}"
+        assert act.get("logs", 0) == logs, f"activity {date} logs: {act}"
+        assert act.get("issue", 0) == issue, f"activity {date} issue: {act}"
 
     def assert_export_contains(self, needle: str) -> None:
         body = self.export_response.text

@@ -33,7 +33,7 @@ from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsChanged, SettingsDeclaration
 from apps.shared.supabase_studio import studio_link
 
-log = structlog.get_logger("labase.console.router")
+log = structlog.get_logger(__name__)
 
 
 router = APIRouter(tags=["console"])

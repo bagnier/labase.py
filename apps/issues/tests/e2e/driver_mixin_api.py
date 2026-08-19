@@ -1,4 +1,4 @@
-from apps.issues.infra.repository import record_occurrence
+from apps.issues.infra.repository import see_occurrence
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.api_base import ApiBase
 
@@ -7,7 +7,7 @@ class IssuesApiMixin(ApiBase):
     def seed_captured_error(self, title: str, count: int, version: str = "dev") -> None:
         async def _do(s):
             for _ in range(count):
-                await record_occurrence(
+                await see_occurrence(
                     s,
                     fingerprint=f"seed-{title}",
                     title=title,

@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.config import get_technical_settings
 from apps.shared.queue import enqueue
 
-log = structlog.get_logger("labase.shared.email")
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)

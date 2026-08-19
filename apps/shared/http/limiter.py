@@ -21,7 +21,7 @@ from apps.shared.config import get_technical_settings
 from apps.shared.http.addressing import client_ip
 from apps.shared.persistence.database import admin_session_factory
 
-log = structlog.get_logger("labase.shared.limiter")
+log = structlog.get_logger(__name__)
 
 _PERIOD_SECONDS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400}
 

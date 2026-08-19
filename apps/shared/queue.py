@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.persistence.rls import clear_rls_context, set_rls_context
 
-log = structlog.get_logger("labase.shared.queue")
+log = structlog.get_logger(__name__)
 
 TaskHandler = Callable[[AsyncSession, dict[str, Any]], Awaitable[None]]
 

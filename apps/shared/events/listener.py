@@ -34,7 +34,7 @@ from apps.shared.events.wiring import wiring as process_wiring
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 
-log = structlog.get_logger("labase.shared.listener")
+log = structlog.get_logger(__name__)
 
 NOTIFY_CHANNEL = "business_event"
 

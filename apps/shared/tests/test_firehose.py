@@ -63,7 +63,7 @@ async def test_tick_drains_the_queue_to_the_file():
     enqueue_firehose({"event": "a.two", "timestamp": "2026-07-12T10:00:01", "level": "info"})
     writer.tick()
     assert not firehose._QUEUE, "tick must drain the queue"
-    events = {r.event for r in read_firehose()}
+    events = {r.name for r in read_firehose()}
     assert events == {"a.one", "a.two"}
 
 
@@ -90,7 +90,7 @@ async def test_stop_flushes_what_the_loop_left_behind():
     writer = FirehoseWriter(interval_seconds=0)
     enqueue_firehose({"event": "tail.line", "timestamp": "2026-07-12T10:00:00", "level": "info"})
     await writer.stop()  # never started, but stop must still drain
-    assert {r.event for r in read_firehose()} == {"tail.line"}
+    assert {r.name for r in read_firehose()} == {"tail.line"}
 
 
 def test_end_to_end_through_structlog(monkeypatch):
@@ -99,7 +99,7 @@ def test_end_to_end_through_structlog(monkeypatch):
     firehose_processor(None, "info", {"event": "http.request", "timestamp": "2026-07-12T09:00:00"})
     assert not read_firehose(), "still queued, nothing drained yet"
     FirehoseWriter(interval_seconds=0).tick()
-    assert any(r.event == "http.request" for r in read_firehose())
+    assert any(r.name == "http.request" for r in read_firehose())
 
 
 def test_line_is_valid_json_on_disk():

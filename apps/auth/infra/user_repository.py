@@ -6,7 +6,7 @@ import structlog
 
 from apps.shared.persistence.supabase import get_admin_supabase
 
-log = structlog.get_logger("labase.auth.directory")
+log = structlog.get_logger(__name__)
 
 _ADMIN_ROLE = "admin"
 _PAGE_SIZE = 1000

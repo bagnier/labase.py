@@ -1,9 +1,10 @@
 """The unified timeline entry — one envelope over three sources.
 
-``apps/timeline`` is a pure reader: it writes nothing. It merges, at read time, the structlog
-firehose (a rotated JSON file), the business-events journal (``business_events``) and issue
-occurrences (``issue_occurrences``) into this single shape, keyed for correlation by
-``request_id`` / ``org_id`` / ``user_id`` / ``entity_id`` (the concerned entity).
+``apps/timeline`` is a pure reader: it writes nothing. It merges, at read time, the three
+systems that record anything — the structlog firehose (a rotated JSON file), the business-events
+journal (``business_events``) and issue occurrences (``issue_occurrences``) — into this single
+shape, keyed for correlation by ``request_id`` / ``org_id`` / ``user_id`` / ``entity_id`` (the
+concerned entity).
 """
 
 from datetime import datetime
@@ -16,10 +17,9 @@ from apps.shared.vocabulary import AppName
 
 
 class TimelineSource(StrEnum):
-    http = "http"  # per-request firehose lines (request.failed — dead links & 5xx)
-    app = "app"  # non-request structlog lines (queue, background…)
+    logs = "logs"  # the structlog firehose — requests, background work, libraries alike
     business = "business"  # the append-only business-events journal
-    error = "error"  # occurrences of tracked errors
+    issue = "issue"  # occurrences of tracked issues
 
 
 class TimelineEntry(BaseModel):

@@ -4,16 +4,18 @@ Doctrine (three levels):
 
 - ``log.info`` — expected/operational (a normal outcome; nothing is wrong).
 - ``log.warning`` — degraded but manageable (something failed but was handled/retried).
-- ``log.exception`` — a bug; captured here and folded into an error group by ``apps/issues``.
+- ``log.exception`` — a bug; captured here and folded into an issue by ``apps/issues``.
 
 A structlog processor (:func:`capture_processor`, wired into the chain *before*
 ``format_exc_info`` so the live exception is still present) tees every ``log.exception`` call
 into a bounded in-memory queue. A background :class:`CaptureDrain` — the ``MetricsFlusher``
-lifespan-task shape — pops the queue and hands each exception to whoever tracks errors. Trackers
-register directly here via :func:`on_captured` (``apps/issues`` subscribes its recorder at mount);
+lifespan-task shape — pops the queue and hands each one to whoever tracks exceptions. Trackers
+register directly here via :func:`on_captured` (``apps/issues`` subscribes its own at mount);
 the drain fans each exception out to them with log-and-skip isolation, so a failing tracker never
-worsens the error it tracks. This seam is deliberately off the event bus — ``ExceptionCaptured`` is
-technical observability, not a persisted business fact.
+worsens the exception it tracks. That isolation IS the doctrine: best-effort, never blocking, and a
+tracker that must never itself fail — so deleting the issues context simply leaves the exception
+untracked. The seam is deliberately off the event bus: an ``ExceptionCaptured`` is technical
+observability, not a persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
@@ -26,23 +28,32 @@ import sys
 from collections import deque
 from collections.abc import Awaitable, Callable, MutableMapping
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 
-from apps.shared.observability.errors import ExceptionCaptured
+log = structlog.get_logger(__name__)
 
-log = structlog.get_logger("labase.issues.capture")
+
+@dataclass(frozen=True)
+class ExceptionCaptured:
+    """What the processor hands the drain: the live exception and what was true around it."""
+
+    exc: BaseException
+    scope: str  # where it was born: "request" (a request was in flight) | "process"
+    context: dict[str, Any] = field(default_factory=dict)
+
 
 # Bounded so that with the issues app disabled — no drain running — the queue self-caps by dropping
 # the oldest instead of growing without limit.
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
 
-# Set while the drain is recording, so the capture path's own logs (``issue.recorded``, and
+# Set while the drain is delivering, so the capture path's own logs (``issue.seen``, and
 # ``issues.tracker_failed`` when a tracker raises) never re-enter the capture processor.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
-# An error tracker, registered directly at mount by whoever tracks errors (``apps/issues``) rather
+# An exception tracker, registered directly at mount by whoever tracks them (``apps/issues``) rather
 # than through the event bus — the drain fans each captured exception out to them. One event type
 # only, hence a plain list and no MRO or type-key dispatch.
 ExceptionTracker = Callable[[ExceptionCaptured], Awaitable[None]]
@@ -101,14 +112,15 @@ def capture_processor(
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
     # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
-    # unified logs viewer joins on; ``source`` only sorts request work from the rest.
-    context["source"] = "http" if context.get("request_id") else "app"
-    _QUEUE.append(ExceptionCaptured(exc=exc, source=str(context["source"]), context=context))
+    # timeline joins on. ``scope`` only says whether a request was in flight — it is not the
+    # timeline's ``source``, which names the system a row came from, and never one of its values.
+    context["scope"] = "request" if context.get("request_id") else "process"
+    _QUEUE.append(ExceptionCaptured(exc=exc, scope=str(context["scope"]), context=context))
     return event_dict
 
 
 class CaptureDrain:
-    """Lifespan task that folds queued exceptions into their error groups.
+    """Lifespan task that folds queued exceptions into their issues.
 
     Same shape as ``MetricsFlusher`` — idempotent ``start``, cancel-and-await ``stop``, and a
     ``tick`` that tests drive by hand with ``interval_seconds=0``.
@@ -142,7 +154,7 @@ class CaptureDrain:
                     try:
                         await tracker(captured)
                     except Exception:
-                        # Log-and-skip: a failing tracker must never worsen the error it tracks,
+                        # Log-and-skip: a failing tracker must never worsen the exception it tracks,
                         # nor abort the others. Logged under the guard, so it does not re-capture.
                         log.exception("issues.tracker_failed", tracker=repr(tracker))
             finally:

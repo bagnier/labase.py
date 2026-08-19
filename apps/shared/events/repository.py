@@ -28,7 +28,7 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.types import BusinessEvent, OrgScoped, _is_secret_field_name
 from apps.shared.persistence.repository import BaseRepository
 
-log = structlog.get_logger("labase.business_events")
+log = structlog.get_logger(__name__)
 
 # The base ``BusinessEvent`` fields stored in their own indexed column rather than in the JSON
 # ``payload`` — which is what lets RLS, the timeline and full-text search reach them directly.

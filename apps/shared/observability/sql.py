@@ -27,7 +27,7 @@ import structlog
 from sqlalchemy import Engine, event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-log = structlog.get_logger("labase.db")
+log = structlog.get_logger(__name__)
 
 # Sync engines already carrying our listeners — what keeps ``instrument_engine`` idempotent without
 # stamping an attribute onto SQLAlchemy's ``Engine``. Weak, so a disposed engine can be collected.

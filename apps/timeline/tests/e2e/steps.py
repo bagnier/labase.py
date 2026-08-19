@@ -166,9 +166,9 @@ def step_correlated_all_listed(driver, event, error):
     driver.assert_all_listed("request.finished", event, error)
 
 
-@then(parsers.parse("{n:d} http entry is listed"))
+@then(parsers.parse("{n:d} logs entry is listed"))
 def step_request_count(driver, n):
-    driver.assert_source_count("http", n)
+    driver.assert_source_count("logs", n)
 
 
 @then(parsers.parse('the export contains "{needle}"'))
@@ -188,11 +188,11 @@ def step_csv_export(driver, needle):
 
 @then(
     parsers.parse(
-        'the activity for "{date}" shows {business:d} business, {http:d} http, and {error:d} error'
+        'the activity for "{date}" shows {business:d} business, {logs:d} logs, and {issue:d} issue'
     )
 )
-def step_activity(driver, date, business, http, error):
-    driver.assert_activity(date, business, http, error)
+def step_activity(driver, date, business, logs, issue):
+    driver.assert_activity(date, business, logs, issue)
 
 
 # ── Access + empty state ─────────────────────────────────────────────────────

@@ -15,20 +15,20 @@ OPEN_STATUSES = (IssueStatus.new, IssueStatus.unresolved, IssueStatus.regressed)
 
 
 @dataclass(frozen=True)
-class RecordedOccurrence:
+class SeenOccurrence:
     issue: Issue
     opened: bool  # the first occurrence ever for this fingerprint
     regressed: bool  # this occurrence flipped a resolved issue back open
 
 
-async def record_occurrence(
+async def see_occurrence(
     session: AsyncSession,
     *,
     fingerprint: str,
     title: str,
     version: str,
     context: dict[str, Any],
-) -> RecordedOccurrence:
+) -> SeenOccurrence:
     """Fold one occurrence into its issue (creating it) and append the occurrence."""
     now = clock.now()
     opened = regressed = False
@@ -58,7 +58,7 @@ async def record_occurrence(
     await session.flush()
     session.add(Occurrence(issue_id=issue.id, created_at=now, context=context))
     await session.flush()
-    return RecordedOccurrence(issue=issue, opened=opened, regressed=regressed)
+    return SeenOccurrence(issue=issue, opened=opened, regressed=regressed)
 
 
 class IssueRepository:

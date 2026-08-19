@@ -43,7 +43,7 @@ from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
 from apps.shared.settings import SettingsView, get_settings
 
-log = structlog.get_logger("labase.files.router")
+log = structlog.get_logger(__name__)
 
 
 router = APIRouter(prefix="/files", tags=["files"])

@@ -9,13 +9,19 @@ import structlog
 from sqlalchemy import select
 
 import apps.main  # noqa: F401 — mounts every context, including issues' subscriber
+from apps.issues.contract.queries import search_issue_occurrences
 from apps.issues.domain.models import Issue, IssueStatus
-from apps.issues.infra.repository import record_occurrence
+from apps.issues.infra.repository import see_occurrence
 from apps.shared.host import host
 from apps.shared.observability import capture
-from apps.shared.observability.capture import CaptureDrain
-from apps.shared.observability.errors import ExceptionCaptured
+from apps.shared.observability.capture import CaptureDrain, ExceptionCaptured
 from apps.shared.persistence import database as db
+
+# The line these tests fabricate stands in for ordinary application code — the doctrine is
+# "any log.exception", not "one written here". Stated rather than taken from ``__name__``
+# because the logger name is an input now: it picks the timeline source and the app axis, and
+# it is stored in the occurrence's context.
+_PROBE_LOGGER = "apps.todo.infra.router"
 
 
 @dataclass(frozen=True)
@@ -52,9 +58,9 @@ async def _issue_titled(fragment: str) -> Issue | None:
 
 @pytest.mark.asyncio
 async def test_log_exception_is_captured():
-    """The doctrine: any log.exception is queued and drained into an error issue."""
+    """The doctrine: any log.exception is queued and drained into an issue."""
     marker = f"capture-test-{uuid.uuid4().hex}"
-    log = structlog.get_logger("labase.test.capture")
+    log = structlog.get_logger(_PROBE_LOGGER)
     try:
         raise ValueError(marker)
     except ValueError:
@@ -71,7 +77,25 @@ async def test_log_exception_is_captured():
 
 
 @pytest.mark.asyncio
-async def test_failing_bus_handler_is_recorded_as_an_issue():
+async def test_an_occurrence_keeps_the_logger_that_raised():
+    """The pivot back to the firehose: an occurrence and the line that produced it correlate on
+    the logger, which is what tells a reader *where* in the code the issue came from."""
+    marker = f"capture-test-{uuid.uuid4().hex}"
+    log = structlog.get_logger(_PROBE_LOGGER)
+    try:
+        raise ValueError(marker)
+    except ValueError:
+        log.exception("test.capture_probe")
+    await CaptureDrain(0).tick()
+
+    async with db.admin_session_factory()() as session:
+        found = await search_issue_occurrences(session, text=marker)
+
+    assert [o.context.get("logger") for o in found] == [_PROBE_LOGGER]
+
+
+@pytest.mark.asyncio
+async def test_failing_bus_handler_is_tracked_as_an_issue():
     marker = f"capture-test-{uuid.uuid4().hex}"
 
     async def boom(query: _DummyQuery) -> None:
@@ -101,7 +125,7 @@ async def test_drain_does_not_recurse_when_a_tracker_handler_fails():
 
     capture.on_captured(failing_tracker)
     try:
-        log = structlog.get_logger("labase.test.capture")
+        log = structlog.get_logger(_PROBE_LOGGER)
         try:
             raise ValueError(marker)
         except ValueError:
@@ -122,7 +146,7 @@ async def test_occurrences_group_by_fingerprint_and_regress_after_resolve():
 
     async def record(version: str) -> Issue:
         async with db.admin_session_factory()() as session:
-            recorded = await record_occurrence(
+            seen = await see_occurrence(
                 session,
                 fingerprint=marker,
                 title=f"ValueError: {marker}",
@@ -130,7 +154,7 @@ async def test_occurrences_group_by_fingerprint_and_regress_after_resolve():
                 context={},
             )
             await session.commit()
-            return recorded.issue
+            return seen.issue
 
     await record("v1")
     issue = await record("v1")

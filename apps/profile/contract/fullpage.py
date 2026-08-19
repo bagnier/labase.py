@@ -13,7 +13,7 @@ from apps.profile.domain.models import Profile
 from apps.shared.page import FullpageQuery
 from apps.shared.settings import get_settings
 
-log = structlog.get_logger("labase.profile.fullpage")
+log = structlog.get_logger(__name__)
 
 
 async def provide_profile_handle(query: FullpageQuery) -> dict:

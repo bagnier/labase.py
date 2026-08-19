@@ -69,7 +69,7 @@ console, declares its admin-tunable settings there, and can be switched on or of
 (applied on restart) — a disabled app drops its routes, nav and dashboard card but 
 keeps its console tile (and still reserves its URL slugs) so admins can re-enable it.
 Beyond per-app stats, the console ships the operational screens: accounts (disable,
-delete, impersonate — bannered and recorded), the unified **Timeline**, error issues,
+delete, impersonate — bannered and recorded), the unified **Timeline**, issues,
 load metrics, and the runtime firehose level.
 
 **The database enforces isolation.** Row-level security, versioned as plain SQL
@@ -221,7 +221,7 @@ test over its call sites holds the rule: each one records a sign-in, except the 
 Technical error capture is *not* on the bus: an `ExceptionCaptured` (not a business fact) is fanned
 out to its trackers by the capture drain with log-and-skip isolation, directly between the
 `observability` and `issues` contexts (see Observability), so a failing tracker never worsens the
-error it tracks.
+exception it tracks.
 
 **`host.contribs` — pull.** A registry of contribution providers (an extension point),
 declared at mount and read synchronously on the request path — *not* events:
@@ -285,12 +285,19 @@ and no PostgREST client can forge one. Reads are RLS-scoped; the **profile** and
 request's critical path. A fact has no severity: it happened. `emit` logs nothing of its own, so
 an action shows up once, not twice.
 
-**The firehose — a trace of the machinery.** `structlog.get_logger("labase.<context>.<subject>")`,
-dotted `snake_case` names with kwargs, never f-strings or `print`. Rendered to stdout (JSON in
-production, pretty console in dev) and teed to per-day JSON Lines files, which is what lets a reader
-scroll a recent window back. The request path only enqueues; a background `FirehoseWriter` batches
-to disk, so a dropped line never costs the action that wrote it. Its level (`timeline.log_level`) is
-admin-tunable from the console and applies live, no restart.
+**The firehose — a trace of the machinery.** `structlog.get_logger(__name__)`, dotted
+`snake_case` names with kwargs, never f-strings or `print`. Every line carries its logger, and that
+name is the `app` axis the Timeline reads. Rendered to stdout (JSON in production, pretty console
+in dev) and teed to per-day JSON Lines files a reader can scroll back. The request path only
+enqueues; a background `FirehoseWriter` batches to disk, so a dropped line never costs the action
+that wrote it. Its level (`timeline.log_level`) is admin-tunable from the console, live.
+
+**Nothing escapes it.** The libraries' stdlib `logging` joins the same chain at `WARNING` and above
+— a library is there for its degradations, not its chatter — and so do `warnings.warn` and the four
+exits an exception can take without meeting an `except`: a bare task, a thread, `__del__`, the
+interpreter on its way out. Every served request leaves one `request.finished` line whose *level*
+carries the outcome — `error` on a 5xx, `warning` on a dead link of ours, `info` otherwise; what
+the browser fetched by itself leaves nothing unless it 5xx'd.
 
 **Issues — a bug, with a lifecycle.** Every `log.exception` is teed to a bounded queue and folded,
 by stack fingerprint, into an `Issue` that opens, resolves, and regresses on a later version. Each
@@ -299,7 +306,8 @@ fans out with log-and-skip isolation, so a failing tracker never worsens what it
 regressing are themselves facts (`issues.opened`, `issues.regressed`).
 
 **The Timeline reads all three.** `apps/timeline` writes nothing: its console screen merges the
-journal, the firehose window and issue occurrences into one view, filterable by source and
+journal (`business`), the firehose window (`logs`) and issue occurrences (`issue`) into one view,
+filterable by those three sources and
 correlated on four keys — **user**, **org**, **request**, and the concerned **entity**. A fact
 carries them in its own columns, plus the handle and org name as they read *then*, so a deletion or
 RLS cannot hide _who_ and _where_ later; lines and occurrences inherit them from contextvars bound

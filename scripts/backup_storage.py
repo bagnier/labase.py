@@ -14,11 +14,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import structlog
-
 from apps.shared.persistence.storage import admin_storage, bucket
-
-log = structlog.get_logger("labase.scripts.backup_storage")
 
 
 async def _walk(store: Any, prefix: str) -> list[str]:
@@ -47,7 +43,6 @@ async def backup(dest: Path) -> int:
         out = root / path
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(data)
-    log.info("storage.backup_done", bucket=bucket_name, objects=len(paths), dest=str(root))
     return len(paths)
 
 

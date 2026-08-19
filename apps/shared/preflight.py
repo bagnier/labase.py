@@ -13,7 +13,7 @@ import structlog
 
 from apps.shared.config import TechnicalSettings, get_technical_settings
 
-log = structlog.get_logger("labase.shared.preflight")
+log = structlog.get_logger(__name__)
 
 # Hosts that must never appear in a production database URL.
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "host.docker.internal")
