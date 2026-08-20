@@ -257,7 +257,7 @@ async def test_expired_token_unexpected_refresh_failure_logs_exception(client):
 
 def test_auth_takes_its_level_from_the_bases_verdict():
     """The rule itself — a 4xx is the dependency refusing, anything else is it breaking — lives in
-    ``apps/shared/observability/dependency`` and is pinned by its own tests. What this holds is
+    ``apps/shared/logs/dependency`` and is pinned by its own tests. What this holds is
     auth's end of the wiring: the GoTrue seam asks for that verdict instead of judging again."""
     from apps.auth.infra.router import _log_gotrue_failure
 

@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from apps.shared.observability import capture
+from apps.shared.logs import capture
 from apps.shared.persistence import database as db
 from apps.shared.queue import (
     TaskWorker,

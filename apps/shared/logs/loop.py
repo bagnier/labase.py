@@ -1,6 +1,6 @@
 """One verdict for a background loop whose tick failed: a blip, or the machinery is down.
 
-The twin of :mod:`apps.shared.observability.dependency`, which judges a failed call *out* of the
+The twin of :mod:`apps.shared.logs.dependency`, which judges a failed call *out* of the
 process. This one judges a failed tick *inside* it — the five lifespan workers (task queue, event
 listener, log drain, metrics flusher, capture drain), which by construction catch everything
 so that one bad tick never ends the loop.

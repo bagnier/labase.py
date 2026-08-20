@@ -66,7 +66,7 @@ from apps.shared.http import parse_body, wants_json
 from apps.shared.http.addressing import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
-from apps.shared.observability.dependency import log_dependency_failure
+from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingsView
 
@@ -112,7 +112,7 @@ def _friendly_auth_error(e: AuthApiError) -> str:
 
 def _log_gotrue_failure(event: str, exc: Exception, **kw: object) -> None:
     """Log an auth-flow failure at the level its nature warrants — GoTrue is a dependency like
-    any other, so the verdict is the base's (:mod:`apps.shared.observability.dependency`).
+    any other, so the verdict is the base's (:mod:`apps.shared.logs.dependency`).
 
     A 4xx ``AuthApiError`` (expired/single-use link, wrong password, already-confirmed,
     rate-limited) is GoTrue answering no: a normal user outcome. Anything else — unreachable, a

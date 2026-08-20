@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
 from apps.shared.config import get_technical_settings
-from apps.shared.observability.dependency import log_dependency_failure
+from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.base import Base, Timestamped, Versioned
 from apps.shared.persistence.database import admin_url, search_path_connect_args
 

@@ -3,8 +3,8 @@ from datetime import datetime
 
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.observability.logging import apply_log_level
-from apps.shared.observability.repository import LogRepository
+from apps.shared.logs.chain import apply_log_level
+from apps.shared.logs.repository import LogRepository
 from apps.timeline.tests.e2e import seed_data
 from apps.timeline.tests.e2e.seed_data import timeline_org_id, timeline_request_id, timeline_user_id
 from tests.e2e.drivers import api_transaction as db

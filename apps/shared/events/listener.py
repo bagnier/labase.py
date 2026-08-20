@@ -31,7 +31,7 @@ from apps.shared.events.repository import EventRepository, task_payload
 from apps.shared.events.types import BusinessEvent
 from apps.shared.events.wiring import EventWiring
 from apps.shared.events.wiring import wiring as process_wiring
-from apps.shared.observability.loop import LoopHealth
+from apps.shared.logs.loop import LoopHealth
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.queue import enqueue
 

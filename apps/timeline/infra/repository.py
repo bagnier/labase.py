@@ -3,7 +3,7 @@ the business-events journal, issue occurrences and the firehose.
 
 It never touches another context's tables: business events are read through the shared
 ``events.EventRepository`` (shared infra), the firehose through
-``observability.firehose.read_firehose`` (shared infra too), issues through
+``logs.LogRepository`` (shared infra too), issues through
 ``issues.contract.queries.search_issue_occurrences``.
 
 All three now answer on the same session, which is what makes the ``logs`` source global rather
@@ -25,8 +25,8 @@ from apps.issues.contract.queries import IssueOccurrence, search_issue_occurrenc
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
-from apps.shared.observability.models import LogLine
-from apps.shared.observability.repository import LogRepository
+from apps.shared.logs.models import LogLine
+from apps.shared.logs.repository import LogRepository
 from apps.timeline.domain.models import TimelineEntry, TimelineSource
 
 _SORT_KEYS = {"ts", "source", "level", "org", "name", "user", "entity", "request"}

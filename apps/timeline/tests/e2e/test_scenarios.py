@@ -1,8 +1,8 @@
 import pytest
 from pytest_bdd import scenarios
 
-from apps.shared.observability.logging import apply_log_level
-from apps.shared.observability.sink import clear_log_sink
+from apps.shared.logs.chain import apply_log_level
+from apps.shared.logs.sink import clear_log_sink
 from apps.timeline.contract.integration import DEFAULT_LOG_LEVEL
 from tests.e2e import cleanup
 

@@ -25,8 +25,8 @@ from typing import Any
 import structlog
 
 from apps.shared.config import get_technical_settings
-from apps.shared.observability.capture import capture_processor
-from apps.shared.observability.sink import flush_to_files, log_processor
+from apps.shared.logs.capture import capture_processor
+from apps.shared.logs.sink import flush_to_files, log_processor
 
 log = structlog.get_logger(__name__)
 

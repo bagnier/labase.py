@@ -220,7 +220,7 @@ test over its call sites holds the rule: each one records a sign-in, except the 
 
 Technical error capture is *not* on the bus: an `ExceptionCaptured` (not a business fact) is fanned
 out to its trackers by the capture drain with log-and-skip isolation, directly between the
-`observability` and `issues` contexts (see Observability), so a failing tracker never worsens the
+`logs` and `issues` contexts (see Observability), so a failing tracker never worsens the
 exception it tracks.
 
 **`host.contribs` — pull.** A registry of contribution providers (an extension point),
@@ -337,7 +337,7 @@ and an internal issue has no business in someone's activity feed.
 **What counts as a bug.** A call outside the process fails two ways that look alike: the dependency
 *answered no* — a 4xx, a wrong password, an expired link — which is an ordinary outcome at `info`;
 or it is *broken* — unreachable, a 5xx, a client raising something of its own — which is an issue.
-One verdict (`apps/shared/observability/dependency.py`) for GoTrue, Postgres and Storage alike, so
+One verdict (`apps/shared/logs/dependency.py`) for GoTrue, Postgres and Storage alike, so
 an outage does not fill the issues screen or stay silent depending on the module it was reached
 through — and a status the client kept as text counts, since Storage sends its own that way. SMTP
 is the one reached through the queue instead: a send that keeps failing retries, then parks, and
@@ -346,7 +346,7 @@ the park is what opens the issue.
 **A failure that repeats is one bug.** The five lifespan workers catch everything, so one bad tick
 never ends a loop — which is exactly how a task worker that stopped claiming, or a listener that
 stopped delivering, used to leave nothing but a `warning`. They tick once a second, so the level
-follows the *transition*, not the tick (`apps/shared/observability/loop.py`): falling over opens
+follows the *transition*, not the tick (`apps/shared/logs/loop.py`): falling over opens
 one issue, the ticks after it warn with how many, coming back says what the outage cost. The
 readiness probe is on the same verdict, being polled the same way. A bare `log.error` is
 deliberately not the seam — `request.finished` writes one on every 5xx to state the outcome — so a
@@ -454,7 +454,8 @@ labase.py/
 │   │                      #   Contribs (contribs.py), Host (host.py), task queue (queue.py),
 │   │                      #   Mailer (email.py),
 │   │                      #   contract/integration.py (middleware/CORS/static),
-│   │                      #   persistence, http, observability, templates/
+│   │                      #   logs/ (chain, sink, repository, capture, request, verdicts),
+│   │                      #   persistence, http, templates/
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies
 │   ├── api_keys/          # Per-org machine credentials for the JSON API (Bearer)
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations

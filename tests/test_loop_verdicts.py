@@ -7,7 +7,7 @@ firehose window that rolls over in two days, so the console showed a healthy ser
 durable half of the event system was dead.
 
 Three of the five now put that failure through the verdict in
-``apps.shared.observability.loop`` — the transition into failure is a bug, the ticks after it are
+``apps.shared.logs.loop`` — the transition into failure is a bug, the ticks after it are
 the same outage, the recovery carries the toll. The other two are excluded *on purpose* and stay
 at ``warning``: the firehose writer and the capture drain are the machinery the seam itself runs
 on, so an ``exception`` from either would re-enter the queue it just failed to drain.

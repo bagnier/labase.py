@@ -13,8 +13,8 @@ long), and coming back says what it cost.
 
 import structlog
 
-from apps.shared.observability import capture
-from apps.shared.observability.loop import LoopHealth
+from apps.shared.logs import capture
+from apps.shared.logs.loop import LoopHealth
 
 _PROBE_LOGGER = "apps.todo.infra.router"
 

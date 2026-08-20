@@ -17,7 +17,7 @@ import pytest_asyncio
 from sqlalchemy import text as sql_text
 
 from apps.shared import clock
-from apps.shared.observability.repository import LogRepository
+from apps.shared.logs.repository import LogRepository
 from apps.shared.persistence import database as db
 
 _NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)

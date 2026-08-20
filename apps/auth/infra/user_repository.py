@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import structlog
 
-from apps.shared.observability.dependency import is_refusal, log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.supabase import get_admin_supabase
 
 log = structlog.get_logger(__name__)

@@ -14,8 +14,8 @@ import structlog
 
 from apps.metrics.infra.repository import add_deltas
 from apps.shared import clock
-from apps.shared.observability.loop import LoopHealth
-from apps.shared.observability.metrics import (
+from apps.shared.logs.loop import LoopHealth
+from apps.shared.metrics import (
     MetricsSnapshot,
     accumulator,
     snapshot_deltas,

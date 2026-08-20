@@ -30,9 +30,9 @@ from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.contract import integration as shared_integration
 from apps.shared.host import Host
-from apps.shared.observability import capture, sink
-from apps.shared.observability.capture import CaptureDrain
-from apps.shared.observability.sink import LogDrain
+from apps.shared.logs import capture, sink
+from apps.shared.logs.capture import CaptureDrain
+from apps.shared.logs.sink import LogDrain
 from apps.shared.persistence import database as db
 from apps.timeline.domain.models import TimelineSource
 from apps.timeline.infra.repository import TimelineFilter

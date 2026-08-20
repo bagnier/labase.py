@@ -8,8 +8,8 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from apps.shared.observability.metrics import accumulator
-from apps.shared.observability.sql import (
+from apps.shared.metrics import accumulator
+from apps.shared.persistence.sql_stats import (
     read_request_stats,
     report_heavy_request,
     start_request_stats,

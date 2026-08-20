@@ -15,8 +15,8 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared import clock
-from apps.shared.observability.models import LogLine
-from apps.shared.observability.repository import LogRepository
+from apps.shared.logs.models import LogLine
+from apps.shared.logs.repository import LogRepository
 
 
 async def seed_log_line(

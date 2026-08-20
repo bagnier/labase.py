@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.http.addressing import client_ip
-from apps.shared.observability.dependency import log_dependency_failure
+from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger(__name__)

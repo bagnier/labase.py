@@ -2,7 +2,7 @@
 
 One data structure, no behaviour — the twin of :mod:`apps.shared.events.models` for the technical
 side. :class:`LogLine` is the ORM mapping of ``log_lines``: what
-:class:`~apps.shared.observability.repository.LogRepository` writes *and* what it hands back, the
+:class:`~apps.shared.logs.repository.LogRepository` writes *and* what it hands back, the
 way ``BusinessEventRecord`` is both on the journal side (sessions keep ``expire_on_commit=False``,
 so a read row stays usable past its session).
 

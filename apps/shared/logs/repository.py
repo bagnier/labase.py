@@ -1,7 +1,7 @@
 """The log repository — the one owner of ``log_lines``.
 
 :class:`LogRepository` is :class:`~apps.shared.persistence.repository.BaseRepository` over
-:class:`~apps.shared.observability.models.LogLine`, and holds every query against the table
+:class:`~apps.shared.logs.models.LogLine`, and holds every query against the table
 in one place: the batch append the sink's drain performs, the filtered read the console Timeline
 merges with its two other sources, and the retention purge.
 
@@ -18,7 +18,7 @@ from sqlalchemy import String, Text, cast, insert, or_, select
 from sqlalchemy import text as sql_text  # aliased: ``search`` takes a ``text`` filter of its own
 
 from apps.shared import clock
-from apps.shared.observability.models import LogLine
+from apps.shared.logs.models import LogLine
 from apps.shared.persistence.repository import BaseRepository
 
 # How far back the Timeline reads by default. Not retention — the table keeps whatever the purge
@@ -73,7 +73,7 @@ class LogRepository(BaseRepository[LogLine]):
     technical side.
 
     Append, search, purge: the three things a log store owes. Nothing about *how* lines get here,
-    which is the sink's business (:mod:`apps.shared.observability.sink`).
+    which is the sink's business (:mod:`apps.shared.logs.sink`).
     """
 
     model: ClassVar[type[LogLine]] = LogLine

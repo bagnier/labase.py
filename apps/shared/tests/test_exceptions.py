@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from apps.shared.http.exceptions import handle_http_error, handle_rate_limit, handle_unhandled_error
 from apps.shared.http.limiter import RateLimitExceeded
-from apps.shared.observability import capture
+from apps.shared.logs import capture
 
 
 def _mock_request(headers: dict | None = None, scope_extras: dict | None = None) -> Request:

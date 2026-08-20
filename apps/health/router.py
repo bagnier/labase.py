@@ -3,7 +3,7 @@
 ``/health/ready`` answers the one question an orchestrator asks on a timer: can this process
 reach its database? Because it is polled — the container healthcheck every ten seconds — a
 database it cannot reach is a *repeated* failure, so the probe puts it through the same verdict
-as the background loops (:mod:`apps.shared.observability.loop`): the transition into degraded is
+as the background loops (:mod:`apps.shared.logs.loop`): the transition into degraded is
 the bug the console has to show, the probes after it are the same outage still running.
 
 Both paths are in ``RequestLogger``'s skip list — a probe every ten seconds would otherwise be
@@ -15,7 +15,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from apps.shared.observability.loop import LoopHealth
+from apps.shared.logs.loop import LoopHealth
 from apps.shared.persistence.database import _admin_engine
 
 router = APIRouter(prefix="/health", tags=["health"])

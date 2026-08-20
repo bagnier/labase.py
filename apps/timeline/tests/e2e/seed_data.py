@@ -28,7 +28,7 @@ _NS = uuid.UUID("00000000-0000-0000-0000-00000000da7a")
 # The scenarios call these "request log entries", so they are seeded under the logger the
 # request tracer really writes with — stated here rather than imported, since production has
 # no reason to export it: the timeline reads the name only for a line's app axis.
-_REQUEST_LOGGER = "apps.shared.observability.request"
+_REQUEST_LOGGER = "apps.shared.logs.request"
 
 
 def timeline_org_id(name: str) -> str:

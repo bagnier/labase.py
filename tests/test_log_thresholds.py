@@ -2,7 +2,7 @@
 
 ``tests/test_log_vocabulary`` pins what a line is called, ``tests/test_capture_sites`` what a
 broad ``except`` may leave out. This one pins the doctrine's own arithmetic
-(:mod:`apps.shared.observability.capture`): two levels and a seam, and nothing underneath them.
+(:mod:`apps.shared.logs.capture`): two levels and a seam, and nothing underneath them.
 
 ``error`` is the level the seam reads — but only carrying a live exception, since
 ``capture_processor`` fires on "error level with ``exc_info``" and on nothing else. A bare
@@ -78,11 +78,11 @@ _THE_SURPRISES = {
     "create_personal_org.actor_gone (apps/organizations/contract/integration.py)",
     # A dependency that answered *no*: the ordinary half of the verdict, whose other half is an
     # issue. The name comes from the caller, so the walk cannot read it off the constant.
-    "<caller-supplied> (apps/shared/observability/dependency.py)",
+    "<caller-supplied> (apps/shared/logs/dependency.py)",
     # The log store taking lines again, carrying what the outage cost.
-    "log_sink.write_recovered (apps/shared/observability/sink.py)",
+    "log_sink.write_recovered (apps/shared/logs/sink.py)",
     # A request whose SQL crossed a threshold, naming the statements that cost the time.
-    "db.heavy_request (apps/shared/observability/sql.py)",
+    "db.heavy_request (apps/shared/persistence/sql_stats.py)",
 }
 
 

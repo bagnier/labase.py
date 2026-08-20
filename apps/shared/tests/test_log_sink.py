@@ -17,9 +17,9 @@ import pytest_asyncio
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability import sink
-from apps.shared.observability.repository import LogRepository
-from apps.shared.observability.sink import (
+from apps.shared.logs import sink
+from apps.shared.logs.repository import LogRepository
+from apps.shared.logs.sink import (
     LogDrain,
     clear_log_sink,
     enqueue_line,

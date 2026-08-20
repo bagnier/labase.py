@@ -3,7 +3,7 @@
 ``apps/timeline`` is the single observability *read* context: it merges the firehose (a rotated
 JSON file), the business-events journal (``business_events``) and issue occurrences
 (``issue_occurrences``) into one admin-only timeline, with an activity graph and structured export.
-The *write* primitives stay in ``apps/shared/observability`` — a foundation every app imports down.
+The *write* primitives stay in ``apps/shared/logs`` — a foundation every app imports down.
 
 NOTE: mounted BEFORE the console context so its /console/timeline routes register ahead of the
 console's /console/{app} catch-all.
@@ -17,9 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
-from apps.shared.observability.logging import apply_log_level
-from apps.shared.observability.repository import LogRepository
-from apps.shared.observability.sql import (
+from apps.shared.logs.chain import apply_log_level
+from apps.shared.logs.repository import LogRepository
+from apps.shared.persistence.sql_stats import (
     DEFAULT_HEAVY_MS,
     DEFAULT_HEAVY_QUERIES,
     apply_heavy_request_thresholds,

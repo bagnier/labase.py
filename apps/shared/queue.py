@@ -29,7 +29,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.observability.loop import LoopHealth
+from apps.shared.logs.loop import LoopHealth
 from apps.shared.persistence.database import _user_engine, admin_session_factory
 from apps.shared.persistence.rls import clear_rls_context, set_rls_context
 

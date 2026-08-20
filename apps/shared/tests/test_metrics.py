@@ -1,4 +1,4 @@
-from apps.shared.observability.metrics import (
+from apps.shared.metrics import (
     BUCKET_BOUNDS_MS,
     UNMATCHED_LABEL_CAP,
     UNMATCHED_ROUTE,

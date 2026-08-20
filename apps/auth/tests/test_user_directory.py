@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 from supabase_auth.errors import AuthApiError
 
 from apps.auth.infra.user_repository import resolve_user_emails
-from apps.shared.observability import capture
+from apps.shared.logs import capture
 
 
 class _RequiresIdentityData(BaseModel):

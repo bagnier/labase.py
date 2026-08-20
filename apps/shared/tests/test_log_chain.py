@@ -16,8 +16,8 @@ import warnings
 import pytest
 import structlog
 
-from apps.shared.observability.logging import catch_loop_exceptions
-from apps.shared.observability.sink import fallback_dir
+from apps.shared.logs.chain import catch_loop_exceptions
+from apps.shared.logs.sink import fallback_dir
 
 
 def test_a_line_carries_the_name_of_the_logger_that_wrote_it(log_chain):
@@ -57,7 +57,7 @@ def test_an_exception_escaping_a_thread_reaches_the_sink(log_chain):
     thread.join()
     lines = log_chain()
     assert [(line.logger, line.name, line.level) for line in lines] == [
-        ("apps.shared.observability.logging", "process.thread_crashed", "error")
+        ("apps.shared.logs.chain", "process.thread_crashed", "error")
     ]
 
 

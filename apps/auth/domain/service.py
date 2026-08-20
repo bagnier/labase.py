@@ -12,7 +12,7 @@ import structlog
 from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
 
 from apps.shared.config import get_technical_settings
-from apps.shared.observability.dependency import log_dependency_failure
+from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.supabase import get_user_supabase
 
 log = structlog.get_logger(__name__)

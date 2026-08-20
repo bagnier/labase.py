@@ -18,7 +18,7 @@ import pytest_asyncio
 from apps.issues.contract.queries import IssueOccurrence
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability import sink
+from apps.shared.logs import sink
 from apps.shared.tests.log_seed import clear_log_lines, seed_log_line
 from apps.timeline.infra.repository import TimelineFilter, _from_issue
 

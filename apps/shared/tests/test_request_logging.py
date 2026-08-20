@@ -15,8 +15,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from apps.shared.http.exceptions import handle_http_error, handle_stale_data
-from apps.shared.observability import request
-from apps.shared.observability.metrics import accumulator
+from apps.shared.logs import request
+from apps.shared.metrics import accumulator
 
 
 def _req(path: str, *, referer: str | None = None, host: str = "example.com") -> Request:

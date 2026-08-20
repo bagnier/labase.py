@@ -19,7 +19,7 @@ from apps.shared.contribs import Contribs, contribs
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.wiring import EventWiring
-from apps.shared.observability.capture import drain_once
+from apps.shared.logs.capture import drain_once
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,
@@ -249,7 +249,7 @@ def _reported(handler: Callable[[], Awaitable[None]]) -> Callable[[], Awaitable[
     Draining here works because of *when* it is: the loop is up, and the trackers subscribed at
     **mount**, not at startup — so whichever hook failed, there is someone to hand the exception
     to. That is the difference with a dying interpreter, which keeps its line and gets no issue on
-    purpose (``observability.logging``): there, no loop and no pool are left to reach a store on.
+    purpose (``logs.chain``): there, no loop and no pool are left to reach a store on.
 
     The exception is re-raised: a hook that failed must still fail the boot. Nothing about the
     outcome changes — only that it stops being silent.

@@ -7,7 +7,7 @@ Both are plain ASGI middleware rather than ``BaseHTTPMiddleware`` dispatch funct
 here needs the difference, but they sit *under* ``RequestLogger``, and that base runs what it
 wraps in a child task whose context never rejoins the parent's — one of these in the stack is
 enough to strip the request's ``user_id``/``org_id`` off the finished line
-(see :class:`~apps.shared.observability.request.RequestLogger`).
+(see :class:`~apps.shared.logs.request.RequestLogger`).
 """
 
 from typing import Any

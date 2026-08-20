@@ -15,7 +15,7 @@ from collections import deque
 import pytest
 import structlog
 
-from apps.shared.observability import capture
+from apps.shared.logs import capture
 
 _PROBE_LOGGER = "apps.todo.infra.router"
 

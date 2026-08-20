@@ -5,7 +5,7 @@ what it means there is the whole write-side apparatus: the entry point, the buff
 and the fallback — not the storage itself. Here that is the structlog processor, the bounded queue
 between the request path and the writer, the background :class:`LogDrain`, and the day files.
 
-The storage is :mod:`apps.shared.observability.repository`, whose ``LogRepository`` owns the SQL
+The storage is :mod:`apps.shared.logs.repository`, whose ``LogRepository`` owns the SQL
 against ``log_lines`` — the house word for "the object that holds a table's queries", and the twin
 of ``EventRepository`` on the journal side.
 
@@ -49,7 +49,7 @@ import structlog
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability.repository import LogRepository
+from apps.shared.logs.repository import LogRepository
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger(__name__)
@@ -203,7 +203,7 @@ def log_processor(
 ) -> MutableMapping[str, Any]:
     """structlog processor: enqueue the line for the sink, pass it through.
 
-    Sits in the terminal chain (see :mod:`apps.shared.observability.logging`), after the shared
+    Sits in the terminal chain (see :mod:`apps.shared.logs.chain`), after the shared
     processors have given the line its timestamp, level, logger and correlation ids, and before the
     renderer — so it sees a plain dict, whoever wrote it. Enqueue only: the write happens off the
     request path in :class:`FirehoseWriter`. A snapshot (``dict(event_dict)``) is queued because

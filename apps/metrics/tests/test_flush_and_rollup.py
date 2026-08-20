@@ -10,7 +10,7 @@ from apps.metrics.domain.models import MetricResolution, RequestMetric
 from apps.metrics.infra.flusher import MetricsFlusher
 from apps.metrics.infra.repository import purge, rollup
 from apps.shared import clock
-from apps.shared.observability.metrics import BUCKET_BOUNDS_MS, accumulator
+from apps.shared.metrics import BUCKET_BOUNDS_MS, accumulator
 from apps.shared.persistence import database as db
 
 MARKER_ROUTE = "/metrics-flush-test"

@@ -215,7 +215,7 @@ allowed-confusables = ["×", "–"]
 "apps/shared/tests/test_request_logging.py" = ["PIE807"]
 # SQLAlchemy hands its event listeners a fixed signature (conn, cursor, statement, parameters,
 # context, executemany); a hook reads the two it needs and keeps the rest to stay bindable.
-"apps/shared/observability/sql.py" = ["ARG001"]
+"apps/shared/persistence/sql_stats.py" = ["ARG001"]
 "**/tests/**" = [
     "ARG001", # fixture requested for its side effect only
     "ARG002",

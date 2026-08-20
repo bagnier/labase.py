@@ -22,7 +22,7 @@ Doctrine — two levels, and the seam:
 **No debug tier, and no trace tier.** A per-statement or per-step firehose answers "what did it
 do", which the exchange line and the journal answer already; the one thing it uniquely bought —
 *which* statement was slow — is written instead as the surprise it is (``db.heavy_request``,
-:mod:`apps.shared.observability.sql`). ``tests/test_log_thresholds`` holds both halves: no
+:mod:`apps.shared.persistence.sql_stats`). ``tests/test_log_thresholds`` holds both halves: no
 ``debug`` call survives, and the ``info`` sites stay countable on one screen.
 
 A bare ``log.error`` — ``error`` level carrying no exception — is deliberately **not** the seam,
@@ -35,7 +35,7 @@ gets a log line that rolls out of its window and nothing else. Such a site raise
 exception of its own to be seen — ``UnroutableFact`` in the event listener, ``UnlimitedEndpoint``
 in the rate limiter, ``MaskedSecret`` on the journal's write path — caught immediately, purely so
 the seam has something to fingerprint on. And a failure that *repeats* (a background loop, a
-readiness probe) goes through :mod:`apps.shared.observability.loop` instead, which files the
+readiness probe) goes through :mod:`apps.shared.logs.loop` instead, which files the
 transition and not every tick.
 
 A structlog processor (:func:`capture_processor`, wired into the chain *before*
@@ -181,7 +181,7 @@ async def drain_once() -> None:
     exception that explains why still sitting in it.
 
     Not the answer for a dying interpreter — ``sys.excepthook`` runs with no loop and no pool, and
-    writes its line to disk instead (see :mod:`apps.shared.observability.logging`).
+    writes its line to disk instead (see :mod:`apps.shared.logs.chain`).
     """
     await CaptureDrain(interval_seconds=0).tick()
 

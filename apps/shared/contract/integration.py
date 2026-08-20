@@ -25,9 +25,9 @@ from apps.shared.http.limiter import (
 )
 from apps.shared.http.security import CsrfProtect, SecurityHeaders, cors_config
 from apps.shared.http.static import CachingStaticFiles
-from apps.shared.observability.logging import catch_loop_exceptions, setup_logging
-from apps.shared.observability.request import RequestLogger
-from apps.shared.observability.sink import LogDrain
+from apps.shared.logs.chain import catch_loop_exceptions, setup_logging
+from apps.shared.logs.request import RequestLogger
+from apps.shared.logs.sink import LogDrain
 from apps.shared.preflight import enforce_at_boot
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
 

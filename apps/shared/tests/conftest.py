@@ -17,11 +17,11 @@ import structlog
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability import sink
-from apps.shared.observability.logging import setup_logging
-from apps.shared.observability.models import LogLine
-from apps.shared.observability.repository import _columns
-from apps.shared.observability.sink import clear_log_sink
+from apps.shared.logs import sink
+from apps.shared.logs.chain import setup_logging
+from apps.shared.logs.models import LogLine
+from apps.shared.logs.repository import _columns
+from apps.shared.logs.sink import clear_log_sink
 
 # Pinned so a test that reasons about the window has fixed ends. These tests are about the chain,
 # not about retention.

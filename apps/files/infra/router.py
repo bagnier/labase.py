@@ -38,7 +38,7 @@ from apps.shared.http import (
     wants_json,
 )
 from apps.shared.http.templates import templates
-from apps.shared.observability.dependency import is_refusal, log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
@@ -51,7 +51,7 @@ def storage_failure(event: str, exc: StorageApiError, **context: object) -> HTTP
     """One verdict for a failed Storage call, and the answer the caller is owed.
 
     Storage is a dependency like GoTrue or Postgres, so the level is the base's
-    (:mod:`apps.shared.observability.dependency`) — a 4xx is Storage answering no (a name already
+    (:mod:`apps.shared.logs.dependency`) — a 4xx is Storage answering no (a name already
     taken, an object that isn't there), anything else is Storage being broken, which the capture
     seam tracks as an issue. Logged with *this* module's logger, so the issue and the lines around
     it file under ``files`` rather than under ``shared``.

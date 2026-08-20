@@ -13,7 +13,7 @@ import pytest_asyncio
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability import sink
+from apps.shared.logs import sink
 from apps.shared.tests.log_seed import clear_log_lines, seed_log_line
 from apps.timeline.domain.models import TimelineSource
 from apps.timeline.infra.repository import TimelineFilter
@@ -50,7 +50,7 @@ def _shown(entries) -> list[tuple[TimelineSource, str, str]]:
 
 @pytest.mark.asyncio
 async def test_a_request_trace_is_a_log_like_any_other(reader):
-    await _seed(reader, "apps.shared.observability.request", "request.finished")
+    await _seed(reader, "apps.shared.logs.request", "request.finished")
     entries = await reader.search(TimelineFilter(source="logs"))
     assert _shown(entries) == [(TimelineSource.logs, "shared", "request.finished")]
 

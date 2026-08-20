@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from apps.shared.http import is_htmx, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.request import note_rejection
+from apps.shared.logs.request import note_rejection
 
 log = structlog.get_logger(__name__)
 

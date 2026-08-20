@@ -12,7 +12,7 @@ from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
-from apps.shared.observability.metrics import accumulator
+from apps.shared.metrics import accumulator
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.metrics.domain.models import MetricResolution, RequestMetric
 from apps.shared import clock
-from apps.shared.observability.metrics import MetricsSnapshot
+from apps.shared.metrics import MetricsSnapshot
 
 
 async def _merge_row(

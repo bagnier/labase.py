@@ -14,7 +14,7 @@ from apps.auth.domain.service import (
 )
 from apps.auth.tests.given_helpers import delete_user, find_users
 from apps.shared.events import BusinessEvent
-from apps.shared.observability import capture
+from apps.shared.logs import capture
 from apps.shared.persistence.supabase import get_admin_supabase
 
 

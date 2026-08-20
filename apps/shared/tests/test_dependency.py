@@ -15,8 +15,8 @@ from types import SimpleNamespace
 import pytest
 import structlog
 
-from apps.shared.observability import capture
-from apps.shared.observability.dependency import is_refusal, log_dependency_failure
+from apps.shared.logs import capture
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 
 _CALLER = "apps.auth.infra.router"
 

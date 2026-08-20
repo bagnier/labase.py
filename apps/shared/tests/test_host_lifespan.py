@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.shared.host import Host
-from apps.shared.observability import capture
+from apps.shared.logs import capture
 
 
 @dataclass
@@ -44,7 +44,7 @@ def test_a_background_task_is_started_and_stopped_by_the_lifespan():
 
 
 # The interpreter dying on its own leaves a line and no issue, on purpose (see
-# ``observability.logging``): there is no loop left to reach a database on. A failing *startup* is
+# ``logs.chain``): there is no loop left to reach a database on. A failing *startup* is
 # the opposite case — the loop is up, the trackers subscribed at mount — and it was going the same
 # silent way.
 

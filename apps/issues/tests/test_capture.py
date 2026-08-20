@@ -14,8 +14,8 @@ from apps.issues.domain.models import Issue, IssueStatus
 from apps.issues.infra.repository import see_occurrence
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.host import host
-from apps.shared.observability import capture
-from apps.shared.observability.capture import CaptureDrain, ExceptionCaptured
+from apps.shared.logs import capture
+from apps.shared.logs.capture import CaptureDrain, ExceptionCaptured
 from apps.shared.persistence import database as db
 
 # The line these tests fabricate stands in for ordinary application code — the doctrine is

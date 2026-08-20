@@ -6,7 +6,7 @@ caller down" — and precisely because it names nothing, the exception itself is
 says what did go wrong. A line that drops it leaves an event name and no message, no type and no
 stack: enough to know something failed, never enough to know what.
 
-The doctrine it enforces is the one written in ``apps/shared/observability/capture``:
+The doctrine it enforces is the one written in ``apps/shared/logs/capture``:
 
 - ``log.exception`` — a bug; the capture seam folds it into an issue (``exc_info`` implicit).
 - ``log.warning(..., exc_info=exc)`` — degraded but handled; the stack reaches the firehose and
@@ -96,7 +96,7 @@ def test_the_walk_actually_finds_the_call_sites():
 # the drain has just failed to empty, so the outage is announced outside the handler instead
 # (``report_write_outage``, once per transition). Same argument, same shape as the two loops
 # ``tests/test_loop_verdicts`` excludes by name.
-_LETS_IT_GO = ("apps/shared/observability/sink.py", "tick")
+_LETS_IT_GO = ("apps/shared/logs/sink.py", "tick")
 
 
 def _broad_handlers(node: ast.AST, path: str, function: str):

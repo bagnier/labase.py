@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError
 from structlog.testing import capture_logs
 
 from apps.health import router
-from apps.shared.observability.loop import LoopHealth
+from apps.shared.logs.loop import LoopHealth
 
 
 def test_liveness_returns_200(driver):
