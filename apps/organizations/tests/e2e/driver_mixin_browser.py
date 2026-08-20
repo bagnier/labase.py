@@ -169,6 +169,12 @@ class OrgBrowserMixin(BrowserBase):
         names = [o["name"] for o in self._read_org_cards_from_profile(self.page)]
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
+    def assert_org_absent_for(self, email: str, org_name: str) -> None:
+        """Named observer: the org is gone for someone *other* than whoever acted last — which is
+        the whole point when the actor deleted their own account."""
+        names = [o["name"] for o in self._fetch_orgs_for(email)]
+        assert org_name not in names, f"{org_name!r} should be absent for {email}, got: {names}"
+
     def rename_org(self, new_name: str) -> None:
         slug = self._active_slug()
         self.page.goto(f"{self.base_url}/{slug}/settings", wait_until="load")

@@ -68,6 +68,7 @@ class ProfileApiMixin(ApiBase):
             json={"current_password": password},
             headers={"accept": "text/html"},
         )
+        self.drain_task_queue()  # run UserDeleted's reactions (reap the orgs, forget the profile)
 
     def assert_account_deletion_rejected(self) -> None:
         assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"

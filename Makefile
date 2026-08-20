@@ -208,7 +208,7 @@ coverage-erase:
 # The floor gates `ci`, not `test`: it judges the combined figure, and a single lane cannot be
 # held to it — two floors would be two numbers to keep honest. Raise COV_MIN when the real
 # number moves up, never lower it to fit.
-COV_MIN ?= 48
+COV_MIN ?= 90
 coverage-report:
 	uv run coverage combine
 	uv run coverage report --fail-under=$(COV_MIN)

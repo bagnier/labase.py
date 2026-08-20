@@ -11,6 +11,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from apps.shared.settings.live import restore_settings, settings_snapshot
 from tests.e2e import cleanup
 from tests.e2e.drivers.api import ApiDriver
 from tests.e2e.drivers.browser import BrowserDriver
@@ -37,8 +38,14 @@ def db_rollback(driver: ApiDriver | BrowserDriver):
     reset_session() then clears the (session-scoped) driver's per-scenario state —
     client/cookies, browser context, acting-as user — so every scenario starts
     clean without each entry @given having to remember to do it.
+
+    The settings snapshot is the half neither driver can roll back: a scenario that edits a
+    setting from the console re-points the in-memory handles too (``SettingsChanged`` travels by
+    ``spread``), and that copy outlives both the transaction and the truncation.
     """
+    settings = settings_snapshot()
     driver.setup_test()
     driver.reset_session()
     yield
     driver.teardown_test()
+    restore_settings(settings)

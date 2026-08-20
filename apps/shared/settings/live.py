@@ -243,6 +243,15 @@ class AppSettings:
         loop; :func:`read_values` drives :func:`asyncio.run`, which can't run inside it)."""
         self._raw = read_values(self._declaration.app_name)
 
+    def snapshot(self) -> dict[str, str]:
+        """This handle's values, copied — the in-memory half of a rollback. See
+        :func:`settings_snapshot`."""
+        return dict(self._raw)
+
+    def restore(self, raw: dict[str, str]) -> None:
+        """Re-point this handle at a :meth:`snapshot`, no I/O. See :func:`settings_snapshot`."""
+        self._raw = raw
+
     @property
     def values(self) -> dict[str, SettingValue]:
         if self._typed is None:
@@ -318,6 +327,26 @@ def get_settings(app_name: str) -> AppSettings:
         return _registry[app_name]
     except KeyError:
         raise KeyError(f"no settings registered for app '{app_name}' — is it mounted?") from None
+
+
+def settings_snapshot() -> dict[str, dict[str, str]]:
+    """Every registered handle's values, copied.
+
+    A console edit does two things: it writes the ``app_settings`` row *and* re-points these
+    in-memory handles, because ``SettingsChanged`` fans out through ``spread``. A test that rolls
+    its transaction back undoes the row but not the handle — so a scenario turning a feature off
+    leaves every scenario after it in the process running on that value. Snapshot before, restore
+    after, and the two halves come back together.
+    """
+    return {name: handle.snapshot() for name, handle in _registry.items()}
+
+
+def restore_settings(snapshot: dict[str, dict[str, str]]) -> None:
+    """Re-point every handle at a :func:`settings_snapshot`."""
+    for name, raw in snapshot.items():
+        handle = _registry.get(name)
+        if handle is not None:
+            handle.restore(raw)
 
 
 def bind_settings(declaration: SettingsDeclaration) -> AppSettings:

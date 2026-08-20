@@ -25,3 +25,12 @@ Feature: Account deletion
     And a server admin is signed in as "root@example.com"
     When the admin sets the "profile" setting "account_deletion_enabled" to "false"
     Then the account deletion option is not offered
+
+  # Alice is its only owner, so her departure would leave it unmanageable: it is reaped whole
+  # rather than left ownerless, and Bob — still a member — sees it gone from his own list.
+  Scenario: Deleting the last owner's account reaps the organisation for its members too
+    Given a user is signed in as "alice@example.com" as owner of "Acme"
+    And they invite "bob@example.com" to the organisation with role "member"
+    And "bob@example.com" accepts the invitation
+    When "alice@example.com" deletes their account
+    Then "Acme" no longer appears in "bob@example.com"'s organisation list

@@ -43,6 +43,11 @@ def step_assert_org_absent(driver, org_name):
     driver.assert_org_absent(org_name)
 
 
+@then(parsers.parse('"{org_name}" no longer appears in "{email}"\'s organisation list'))
+def step_assert_org_absent_for(driver, org_name, email):
+    driver.assert_org_absent_for(email, org_name)
+
+
 @when(parsers.parse('they rename the active organisation to "{new_name}"'))
 def step_rename_org(driver, new_name):
     driver.rename_org(new_name)
@@ -104,6 +109,7 @@ def step_leave_org(driver):
     driver.leave_org()
 
 
+@given(parsers.parse('they invite "{email}" to the organisation with role "{role}"'))
 @when(parsers.parse('they invite "{email}" to the organisation with role "{role}"'))
 def step_invite_member(driver, email, role):
     driver.invite_member(email, role)
@@ -143,6 +149,7 @@ def step_register_via_invitation(driver, email):
     driver.register_via_invitation_and_accept(email)
 
 
+@given(parsers.parse('"{email}" accepts the invitation'))
 @when(parsers.parse('"{email}" accepts the invitation'))
 def step_accept_invitation(driver, email):
     driver.accept_invitation(email)

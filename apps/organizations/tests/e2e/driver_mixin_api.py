@@ -92,6 +92,13 @@ class OrgApiMixin(ApiBase):
         names = [o["name"] for o in orgs]
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
+    def assert_org_absent_for(self, email: str, org_name: str) -> None:
+        """Named observer: the org is gone for someone *other* than whoever acted last — which is
+        the whole point when the actor deleted their own account."""
+        orgs = self.client_for(email).get("/organizations").json()
+        names = [o["name"] for o in orgs]
+        assert org_name not in names, f"{org_name!r} should be absent for {email}, got: {names}"
+
     def rename_org(self, new_name: str) -> None:
         self.response = self.client().patch(f"/{self._handle()}", json={"name": new_name})
 
