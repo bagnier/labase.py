@@ -10,10 +10,13 @@ console's /console/{app} catch-all.
 """
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.host import Host, MountPhase
 from apps.shared.observability.logging import apply_log_level
+from apps.shared.observability.repository import LogRepository
+from apps.shared.queue import ensure_scheduled, register_task_handler
 from apps.shared.settings import (
     SettingDef,
     SettingsChanged,
@@ -39,6 +42,9 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 # never depend on this level (each has its own write path).
 DEFAULT_LOG_LEVEL = "INFO"
 
+PURGE_TOPIC = "timeline.purge"
+PURGE_EVERY_SECONDS = 86400
+
 
 def mount(host: Host) -> None:
     settings = host.register_settings(_declare_settings())
@@ -50,6 +56,8 @@ def mount(host: Host) -> None:
     host.events.spread(SettingsChanged, _reload_level)
     host.contribs.provide(ConsoleOverviewQuery, _overview)
     host.app.include_router(router, prefix="/console/timeline")
+    register_task_handler(PURGE_TOPIC, _purge)
+    host.on_startup(_plant_purge)
 
 
 async def _reload_level(event: SettingsChanged) -> None:
@@ -57,6 +65,22 @@ async def _reload_level(event: SettingsChanged) -> None:
     the event's own values, independent of registry-reload ordering on the bus)."""
     if event.target_app == TIMELINE_APP:
         apply_log_level(str(event.values.get(LOG_LEVEL_KEY) or DEFAULT_LOG_LEVEL))
+
+
+async def _purge(session: AsyncSession, _payload: dict) -> None:
+    """Retention consumer. The firehose is one row per line, so this is the counterweight that
+    makes a table viable where ``request_metrics`` uses aggregation instead — and the delete the
+    per-day files promised ("retention is a plain file delete") and never performed."""
+    retention = int(get_settings(TIMELINE_APP).retention_days)
+    deleted = await LogRepository(session).purge(retention_days=retention)
+    log.info("timeline.purged", deleted=deleted)
+
+
+async def _plant_purge() -> None:
+    try:
+        await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
+    except Exception as exc:
+        log.warning("timeline.plant_purge_failed", exc_info=exc)
 
 
 async def _overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
@@ -84,6 +108,7 @@ def _declare_settings() -> SettingsDeclaration:
                 DEFAULT_LOG_LEVEL,
                 "Firehose log level for structlog and stdlib — applies live, no restart",
             ),
+            SettingDef("retention_days", "number", "30", "Days of firehose lines to keep"),
         ],
-        supabase=SupabaseLink("Browse the business events in Supabase", table="business_events"),
+        supabase=SupabaseLink("Browse the log lines in Supabase", table="log_lines"),
     )

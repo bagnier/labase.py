@@ -30,9 +30,9 @@ from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.contract import integration as shared_integration
 from apps.shared.host import Host
-from apps.shared.observability import capture, firehose
+from apps.shared.observability import capture, sink
 from apps.shared.observability.capture import CaptureDrain
-from apps.shared.observability.firehose import FirehoseWriter
+from apps.shared.observability.sink import LogDrain
 from apps.shared.persistence import database as db
 from apps.timeline.domain.models import TimelineSource
 from apps.timeline.infra.repository import TimelineFilter
@@ -49,19 +49,19 @@ def _a_private_chain(tmp_path, monkeypatch):
     takes, needed here because the whole point is to run the real chain."""
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
-    monkeypatch.setattr(firehose, "get_technical_settings", lambda: settings)
+    monkeypatch.setattr(sink, "get_technical_settings", lambda: settings)
     monkeypatch.setattr(clock, "now", lambda: _NOW)
     saved_config = structlog.get_config()
     saved_hooks = (threading.excepthook, sys.excepthook, sys.unraisablehook)
     saved_showwarning = warnings.showwarning
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
-    firehose.clear_firehose()
+    sink.clear_log_sink()
     capture._QUEUE.clear()
 
     yield
 
-    firehose.clear_firehose()
+    sink.clear_log_sink()
     capture._QUEUE.clear()
     structlog.configure(**saved_config)
     threading.excepthook, sys.excepthook, sys.unraisablehook = saved_hooks
@@ -127,7 +127,7 @@ async def failing_request():
     response = TestClient(host.app, raise_server_exceptions=False).get("/acme/explode")
 
     assert response.status_code == 500
-    FirehoseWriter(interval_seconds=0).tick()  # the line reaches disk off the request path
+    await LogDrain(interval_seconds=0).tick()  # the lines reach the store, off the request path
     await CaptureDrain(0).tick()  # the exception becomes an occurrence, and a fact
     yield response.headers["X-Request-ID"]
 

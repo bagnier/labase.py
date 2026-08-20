@@ -84,8 +84,8 @@ def test_a_second_failure_of_the_same_kind_is_still_its_own_capture(log_chain):
 
 
 # Shutdown is not a special case: SIGTERM is how every deploy ends a process, so whatever sits in
-# the queue at that moment is the *normal* amount to lose, not an edge one. The firehose writer
-# already drained on its way out; this one dropped the exceptions it was holding.
+# the queue at that moment is the *normal* amount to lose, not an edge one. The log drain
+# already emptied on its way out; this one dropped the exceptions it was holding.
 
 
 @pytest.mark.asyncio

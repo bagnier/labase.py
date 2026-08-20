@@ -3,7 +3,7 @@
 Everything that logs in this process converges here: our own ``structlog`` calls and whatever
 the libraries emit through stdlib ``logging``. The two meet inside
 :class:`structlog.stdlib.ProcessorFormatter`, whose terminal chain is the one point both flows
-cross — so the firehose and capture tees sit there, and nowhere else. Ours traverse two processor
+cross — so the log-sink and capture tees sit there, and nowhere else. Ours traverse two processor
 lists and a library's only one, so a tee in the structlog list would count our lines twice.
 
 The level starts from the environment but is admin-tunable from the console and applies
@@ -21,7 +21,7 @@ import structlog
 
 from apps.shared.config import get_technical_settings
 from apps.shared.observability.capture import capture_processor
-from apps.shared.observability.firehose import firehose_processor, flush_firehose
+from apps.shared.observability.sink import flush_to_files, log_processor
 
 log = structlog.get_logger(__name__)
 
@@ -119,12 +119,12 @@ def _on_process_exception(exc_type: type[BaseException], exc: BaseException, tb:
     _log_escaped("process.crashed", exc)
     # The writer task is gone by now, so nothing else would ever take this line to disk.
     #
-    # The firehose line is all this crash leaves: the capture queue holds it too, but the drain
+    # The log line is all this crash leaves: the capture queue holds it too, but the drain
     # that would fold it into an issue needs a running loop and a database, and by here there is
     # neither. Deliberately not patched with an ``asyncio.run`` during interpreter shutdown —
     # the accepted shape is that a graceful stop drains (``CaptureDrain.stop``) and a process
     # dying on its own leaves a line to read rather than an issue to triage.
-    flush_firehose()
+    flush_to_files()
 
 
 def _on_unraisable(args: Any) -> None:
@@ -190,13 +190,13 @@ def setup_logging() -> None:
             foreign_pre_chain=shared,
             processors=[
                 # The plumbing keys go first: everything after this line is teed or
-                # rendered, and neither the firehose nor a stored issue wants them.
+                # rendered, and neither the sink nor a stored issue wants them.
                 structlog.stdlib.ProcessorFormatter.remove_processors_meta,
                 # Capture reads the *live* exception, so it precedes ``format_exc_info``
-                # — which then leaves the firehose a rendered traceback to store.
+                # — which then leaves the sink a rendered traceback to store.
                 capture_processor,
                 structlog.processors.format_exc_info,
-                firehose_processor,
+                log_processor,
                 _renderer(),
             ],
         )

@@ -13,27 +13,34 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
+import pytest_asyncio
 
 from apps.issues.contract.queries import IssueOccurrence
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability import firehose
-from apps.shared.observability.firehose import append_firehose
+from apps.shared.observability import sink
+from apps.shared.tests.log_seed import clear_log_lines, seed_log_line
 from apps.timeline.infra.repository import TimelineFilter, _from_issue
 
 _NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
-_THEN = "2026-07-12T10:00:00"
+_THEN = datetime(2026, 7, 12, 10, 0, tzinfo=UTC)
 
 
 @pytest.fixture(autouse=True)
-def _isolate_firehose(tmp_path, monkeypatch):
+def _pin_the_clock(tmp_path, monkeypatch):
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
-    monkeypatch.setattr(firehose, "get_technical_settings", lambda: settings)
+    monkeypatch.setattr(sink, "get_technical_settings", lambda: settings)
     monkeypatch.setattr(clock, "now", lambda: _NOW)
-    firehose.clear_firehose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _only_my_lines(reader):
+    """The store is shared and committed — the day files this replaced gave each test a scratch
+    directory. These tests assert over *every* ``logs`` entry, so they start from empty."""
+    await clear_log_lines(reader.session)
     yield
-    firehose.clear_firehose()
+    await clear_log_lines(reader.session)
 
 
 def _occurrence(title: str, logger: str) -> IssueOccurrence:
@@ -72,12 +79,8 @@ async def test_the_app_pill_offers_every_app_the_filter_accepts(reader):
     """The filter runs over all three sources; a facet counting only business rows left ``shared``
     and every library filterable but unlisted — reachable by hand-editing the URL and no other way.
     """
-    append_firehose(
-        {"timestamp": _THEN, "level": "error", "logger": "apps.shared.queue", "event": "q.failed"}
-    )
-    append_firehose(
-        {"timestamp": _THEN, "level": "error", "logger": "sqlalchemy.pool", "event": "pool gone"}
-    )
+    await seed_log_line(reader.session, "q.failed", logger="apps.shared.queue", ts=_THEN)
+    await seed_log_line(reader.session, "pool gone", logger="sqlalchemy.pool", ts=_THEN)
 
     # A facet clears the categorical filters on purpose (every pill offers all its values), so
     # the date window is what keeps the shared journal's rows out of this assertion.

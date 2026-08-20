@@ -12,7 +12,7 @@ the *outcome* of the exchange, while the exception itself is captured once by th
 Opening an issue on level alone would double every 500.
 
 The consequence is a trap worth naming: a site that means "this is a bug" and writes ``log.error``
-gets a firehose line that rolls out of its window and nothing else. Such a site raises an
+gets a log line that rolls out of its window and nothing else. Such a site raises an
 exception of its own to be seen — ``UnroutableFact`` in the event listener, ``UnlimitedEndpoint``
 in the rate limiter, ``MaskedSecret`` on the journal's write path — caught immediately, purely so
 the seam has something to fingerprint on. And a failure that *repeats* (a background loop, a
@@ -127,7 +127,7 @@ def capture_processor(
     """structlog processor: enqueue every ``log.exception`` for capture, pass the event through.
 
     Must sit before ``format_exc_info`` (needs the live exception) and returns ``event_dict``
-    unchanged so the firehose still renders the line for the logs viewer — every line is written,
+    unchanged so the sink still records the line for the logs viewer — every line is written,
     including the second one about an exception already captured; only the *issue* is deduped.
 
     The filtering bound logger routes ``.exception()`` through ``.error()`` with

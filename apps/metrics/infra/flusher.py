@@ -68,7 +68,7 @@ class MetricsFlusher:
     async def guarded_tick(self) -> None:
         """One flush, and the verdict its outcome earns. Split out of ``_run`` so the failure
         path is drivable — and so a flusher that has stopped persisting says so in the console
-        rather than in a firehose window that rolls over."""
+        rather than in a log window that rolls over."""
         try:
             await self.tick()
         except Exception as exc:

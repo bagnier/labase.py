@@ -20,8 +20,10 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture
 async def reader():
-    # Cleared on the way *out* only: another fixture in the same test may already have opened a
-    # session on this loop, and dropping the cache from under it would orphan a live pool.
+    # Cleared on the way *in* as well as out. Out alone was enough while the reader only touched
+    # the two DB sources; now the ``logs`` source is a table too, so a driver-based test running
+    # before this one leaves a pool bound to its dead loop and the read fails at teardown.
+    _clear_engine_caches()
     async with db.admin_session_factory()() as session:
         yield TimelineReader(session)
     await db._admin_engine().dispose()

@@ -1,7 +1,7 @@
 """Shared arrangement for the tests that exercise the live logging chain.
 
 ``setup_logging`` reconfigures structlog, the root logger and Python's exception hooks
-process-wide, so a test that wants a real log line must both isolate its firehose and put
+process-wide, so a test that wants a real log line must both isolate its log sink and put
 everything back afterwards — otherwise every later test inherits the reconfiguration.
 """
 
@@ -17,46 +17,47 @@ import structlog
 
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
-from apps.shared.observability import firehose
-from apps.shared.observability.firehose import (
-    FirehoseWriter,
-    LogLine,
-    clear_firehose,
-    read_firehose,
-)
+from apps.shared.observability import sink
 from apps.shared.observability.logging import setup_logging
+from apps.shared.observability.models import LogLine
+from apps.shared.observability.repository import _columns
+from apps.shared.observability.sink import clear_log_sink
 
-# Pinned in the past so the firehose's two-day read window can never exclude a line written at
-# the real clock: these tests are about the chain, not about retention.
-_WINDOW_FLOOR_ANCHOR = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
+# Pinned so a test that reasons about the window has fixed ends. These tests are about the chain,
+# not about retention.
+_ANCHOR = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
 def log_chain(tmp_path, monkeypatch) -> Iterator[Callable[[], list[LogLine]]]:
-    """A private firehose and a pristine chain; yields the firehose's own round trip.
+    """A pristine chain; yields what it produced, in the shape a reader receives.
 
-    Calling the yielded reader ticks the writer once and reads the lines back — what the
-    timeline would see for the lines the test just caused.
+    Reads the *queue* rather than the store: these tests ask what the chain wrote — a level, a
+    name, a traceback that survived — and the trip through Postgres is neither what they are about
+    nor available to them (no loop, no session). ``apps/shared/tests/test_log_repository`` owns
+    that trip. The fallback dir is still redirected because the file writer and
+    ``clear_log_sink`` touch it.
     """
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
-    monkeypatch.setattr(firehose, "get_technical_settings", lambda: settings)
-    monkeypatch.setattr(clock, "now", lambda: _WINDOW_FLOOR_ANCHOR)
+    monkeypatch.setattr(sink, "get_technical_settings", lambda: settings)
+    monkeypatch.setattr(clock, "now", lambda: _ANCHOR)
     saved_config = structlog.get_config()
     saved_hooks = (threading.excepthook, sys.excepthook, sys.unraisablehook)
     saved_showwarning = warnings.showwarning
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
-    clear_firehose()
+    clear_log_sink()
     setup_logging()
 
-    def drained() -> list[LogLine]:
-        FirehoseWriter(interval_seconds=0).tick()
-        return read_firehose()
+    def written() -> list[LogLine]:
+        """Newest first, like every read of the store — the queue fills oldest first."""
+        lines = [LogLine(**_columns(one, "test")) for one in sink._drain_queue()]
+        return list(reversed(lines))
 
-    yield drained
+    yield written
 
-    clear_firehose()
+    clear_log_sink()
     structlog.configure(**saved_config)
     threading.excepthook, sys.excepthook, sys.unraisablehook = saved_hooks
     logging.captureWarnings(capture=False)

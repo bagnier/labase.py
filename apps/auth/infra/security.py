@@ -122,7 +122,7 @@ async def get_current_user(
         ) from exc
     is_admin = payload.get("app_metadata", {}).get("role") == "admin"
     # Correlate every log line of this request with who made it — the unified logs viewer
-    # filters the firehose by user_id (request_id is already bound by RequestLogger).
+    # filters the log sink by user_id (request_id is already bound by RequestLogger).
     structlog.contextvars.bind_contextvars(user_id=payload["sub"])
     return AuthenticatedUser(
         id=uuid.UUID(payload["sub"]),

@@ -22,7 +22,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 log = structlog.get_logger(__name__)
 
-# One per process, like the firehose's write outage: the state *is* "has this process been unable
+# One per process, like the log sink's write outage: the state *is* "has this process been unable
 # to reach its database", which is a property of the process and not of one probe.
 _health = LoopHealth(log, "health.ready")
 

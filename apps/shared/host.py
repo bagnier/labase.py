@@ -38,11 +38,11 @@ _Registrations = Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]]
 class LifespanTask(Protocol):
     """What every background worker of the base looks like from the outside.
 
-    Five of them exist — the task worker, the event listener, the firehose writer, the metrics
+    Five of them exist — the task worker, the event listener, the log drain, the metrics
     flusher, the capture drain — and they agree on exactly this much: ``start`` is idempotent,
-    ``stop`` cancels, awaits, **and drains once more**. What each does per tick, and whether that
-    tick is sync or async, is its own business (the firehose writes to disk, so its tick blocks
-    and the loop hands it to a thread). This states the shared half so
+    ``stop`` cancels, awaits, **and drains once more**. What each does per tick is its own
+    business — the log drain batches to Postgres and falls back to disk when it cannot. This
+    states the shared half so
     :meth:`Host.run_background` can take any of them, and so a new one cannot drift into a
     different lifecycle by accident.
 

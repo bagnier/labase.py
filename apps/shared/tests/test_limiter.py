@@ -143,7 +143,7 @@ async def test_missing_request_param_fails_open_but_opens_an_issue(rate_limiting
     """A handler without a `request` param can't be limited — it must not silently pass.
 
     "Loudly" used to mean ``log.error`` with no exception, which is the one level the capture
-    seam ignores: the line went to the firehose, rolled out of its window two days later, and an
+    seam ignores: the line went to the sink, rolled out of its window two days later, and an
     endpoint stayed unlimited with nothing on the issues screen ever saying so. The seam reads
     "error carrying a live exception", so the wiring bug raises one to be seen.
     """

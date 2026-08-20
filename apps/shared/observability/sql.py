@@ -6,7 +6,9 @@ async greenlet boundary):
 
 - ``db.query`` — one DEBUG line per statement with its truncated text and ``duration_ms``.
   Silenced unless the log level is DEBUG (``observability.log_level`` in the console), so
-  it costs nothing in production but is one console toggle away.
+  it costs nothing in production but is one console toggle away — and silenced outright
+  inside :func:`without_query_logging`, which the log drain needs so its own INSERT
+  does not log a line that the next drain then inserts.
 - a per-request tally (:func:`start_request_stats` / :func:`read_request_stats`) folded
   into ``request.finished`` as ``db_queries`` / ``db_ms`` — the always-on signal that
   answers "did this endpoint multiply queries?" without turning on per-query logs.
@@ -19,6 +21,8 @@ holder object by reference, so in-place mutation there is visible back in the re
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from weakref import WeakSet
@@ -45,6 +49,28 @@ class QueryStats:
 
 
 _stats: ContextVar[QueryStats | None] = ContextVar("db_query_stats", default=None)
+
+# Set while a caller is running statements whose own ``db.query`` line must not be written.
+# Read from the listener's greenlet, which gets a *copy* of the context: a value bound before
+# entering travels with the copy, which is all this needs (unlike the stats holder, which is
+# mutated from there and so has to be an object shared by reference).
+_muted: ContextVar[bool] = ContextVar("db_query_muted", default=False)
+
+
+@contextmanager
+def without_query_logging() -> Iterator[None]:
+    """Silence ``db.query`` for the statements run inside.
+
+    One caller needs this, and needs it absolutely: the log drain. Its INSERT is a statement
+    like any other, so at DEBUG level it logs a line — which is enqueued, inserted by the next
+    drain, and logs another. Not a burst but a floor: the queue would never reach empty again, and
+    the store would fill with the record of its own writes.
+    """
+    token = _muted.set(True)
+    try:
+        yield
+    finally:
+        _muted.reset(token)
 
 
 def start_request_stats() -> None:
@@ -83,4 +109,7 @@ def instrument_engine(engine: AsyncEngine) -> None:
         if stats is not None:
             stats.count += 1
             stats.total_ms += elapsed_ms
-        log.debug("db.query", statement=_squash(statement), duration_ms=elapsed_ms)
+        # Counted even when muted: the tally is what ``request.finished`` reports, and a muted
+        # statement is still a query the request paid for.
+        if not _muted.get():
+            log.debug("db.query", statement=_squash(statement), duration_ms=elapsed_ms)

@@ -25,9 +25,9 @@ from apps.shared.http.limiter import (
 )
 from apps.shared.http.security import CsrfProtect, SecurityHeaders, cors_config
 from apps.shared.http.static import CachingStaticFiles
-from apps.shared.observability.firehose import FirehoseWriter
 from apps.shared.observability.logging import catch_loop_exceptions, setup_logging
 from apps.shared.observability.request import RequestLogger
+from apps.shared.observability.sink import LogDrain
 from apps.shared.preflight import enforce_at_boot
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
 
@@ -65,7 +65,7 @@ def mount(host: Host) -> None:
 
     _start_task_worker(host, settings)
     _start_event_listener(host, settings)
-    _start_firehose_writer(host, settings)
+    _start_log_drain(host, settings)
 
     app.mount(
         "/static",
@@ -96,10 +96,10 @@ def _start_event_listener(host: Host, settings: TechnicalSettings) -> None:
     host.run_background(listener)
 
 
-def _start_firehose_writer(host: Host, settings: TechnicalSettings) -> None:
-    """Keeps the firehose off the request path: the log processor enqueues, this task writes."""
-    firehose_writer = FirehoseWriter(settings.firehose_flush_seconds)
-    host.run_background(firehose_writer)
+def _start_log_drain(host: Host, settings: TechnicalSettings) -> None:
+    """Keeps the log sink off the request path: the processor enqueues, this task writes."""
+    log_drain = LogDrain(settings.firehose_flush_seconds)
+    host.run_background(log_drain)
 
 
 async def _plant_recurring_tasks() -> None:

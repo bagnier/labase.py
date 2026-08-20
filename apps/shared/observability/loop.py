@@ -2,19 +2,19 @@
 
 The twin of :mod:`apps.shared.observability.dependency`, which judges a failed call *out* of the
 process. This one judges a failed tick *inside* it — the five lifespan workers (task queue, event
-listener, firehose writer, metrics flusher, capture drain), which by construction catch everything
+listener, log drain, metrics flusher, capture drain), which by construction catch everything
 so that one bad tick never ends the loop.
 
 Catching everything is what made them silent. A worker that stops claiming, or a listener that
 stops delivering, is not a degradation: nothing is retrying it, no fact is reaching its consumers,
-and the only trace was a ``warning`` inside a firehose window that rolls over in two days — so the
+and the only trace was a ``warning`` inside a log window that rolls over in two days — so the
 console showed a healthy server while the durable half of the event system was dead.
 
 Promoting every failed tick to ``log.exception`` is not the fix either: these loops tick once a
 second, so a single outage would file the same issue eighty-six thousand times a day and bury the
 screen it was meant to raise the alarm on.
 
-So the level follows the *transition*, not the tick — the same shape as the firehose's own
+So the level follows the *transition*, not the tick — the same shape as the log sink's own
 ``_Outage``, which reports a refusing disk once on the way in and once on the way out:
 
 - the tick that **breaks** the loop is the bug: ``log.exception``, which the capture seam folds

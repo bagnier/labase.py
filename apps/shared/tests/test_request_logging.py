@@ -32,7 +32,7 @@ def _req(path: str, *, referer: str | None = None, host: str = "example.com") ->
 
 def _levels_for(log_chain, path: str, status: int, referer: str | None = None) -> list[str]:
     """The levels of the lines a served exchange leaves behind — driven through the real
-    middleware and read back out of the real firehose, so the policy is observed, not mocked."""
+    middleware and read back out of the real log sink, so the policy is observed, not mocked."""
     app = FastAPI()
     app.get("/{whole_path:path}")(lambda: Response(status_code=status))
     app.add_middleware(request.RequestLogger)

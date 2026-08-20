@@ -16,9 +16,9 @@ This base exists for four reasons, in order:
    platform — database, auth, storage, migrations, and a growing feature catalog. On
    top of it, rather than bolting on Kafka, Elastic, Redis, or Mongo, the ambition is
    to rebuild those capabilities _on Postgres itself_. The first bricks have landed:
-   a durable task queue, error tracking, load metrics and rate limiting — plain
-   Postgres tables, no new infrastructure. Fulltext search, caching and document
-   storage are next.
+   a durable task queue, error tracking, log storage, load metrics and rate limiting
+   — plain Postgres tables, no new infrastructure. Fulltext search, caching and
+   document storage are next.
 
 3. **Agent-driven development.** The base is optimized to be developed by AI agents
    under human direction. The skills in `.claude/skills/` are executable specs (the
@@ -70,14 +70,14 @@ console, declares its admin-tunable settings there, and can be switched on or of
 keeps its console tile (and still reserves its URL slugs) so admins can re-enable it.
 Beyond per-app stats, the console ships the operational screens: accounts (disable,
 delete, impersonate — bannered and recorded), the unified **Timeline**, issues,
-load metrics, and the runtime firehose level.
+load metrics, and the runtime log level.
 
 **The database enforces isolation.** Row-level security, versioned as plain SQL
 migrations, is the single source of truth for who sees what. Python never re-implements
 isolation for authenticated access.
 
 **Observability is built in.** Domain facts go to an append-only journal, machine traces to the
-firehose, bugs to fingerprinted issues; the console's Timeline reads all three and correlates them
+log sink, bugs to fingerprinted issues; the console's Timeline reads all three and correlates them
 per user, org, request and entity. Only the journal is transactional — the rest never blocks, slows
 or fails the action it observes.
 
@@ -285,14 +285,21 @@ and no PostgREST client can forge one. Reads are RLS-scoped; the **profile** and
 request's critical path. A fact has no severity: it happened. `emit` logs nothing of its own, so
 an action shows up once, not twice.
 
-**The firehose — a trace of the machinery.** `structlog.get_logger(__name__)`, dotted
+**The log sink — a trace of the machinery.** `structlog.get_logger(__name__)`, dotted
 `snake_case` names with kwargs, never f-strings or `print`. Every line carries its logger, and that
 name is the `app` axis the Timeline reads. Rendered to stdout (JSON in production, pretty console
-in dev) and teed to per-day JSON Lines files a reader can scroll back. The request path only
-enqueues; a background `FirehoseWriter` batches to disk, so a dropped line never costs the action
-that wrote it — and when the disk refuses (a full volume, a read-only mount) it says so once on
-each transition rather than going quiet. Its level (`timeline.log_level`) defaults to `INFO`, so
-what the code states is what gets recorded, and is admin-tunable from the console, live.
+in dev) and appended to `log_lines` — one Postgres table the whole deployment shares, so the
+Timeline shows every instance's lines rather than whichever one answered the page. The request
+path only enqueues (a bounded deque); a background `LogDrain` batches to the table, so a dropped
+line never costs the action that wrote it. Volume is what a log table lives or dies on, so the
+table is `UNLOGGED` (no WAL at all — crash recovery empties it, which is the right trade for the
+one kind of data whose durable copy is already on stdout) and partitioned by day, and the write is
+one multi-row insert per drain with `synchronous_commit` off. Retention rolls those partitions
+(`timeline.retention_days`): a day past the window leaves as a `DROP`, instant and leaving nothing
+for VACUUM. When Postgres itself is what is down the batch falls back to per-day files — a database outage is exactly when an operator still
+wants the log — with the outage said once on each transition rather than going quiet. The level
+(`timeline.log_level`) defaults to `INFO`, so what the code states is what gets recorded, and is
+admin-tunable from the console, live.
 
 **Nothing escapes it.** The libraries' stdlib `logging` joins the same chain at `WARNING` and above
 — a library is there for its degradations, not its chatter — and so do `warnings.warn` and the four
@@ -307,7 +314,7 @@ and org the request bound below it.
 
 **Issues — a bug, with a lifecycle.** Every `log.exception` is teed to a bounded queue and folded,
 by stack fingerprint, into an `Issue` that opens, resolves, and regresses on a later version. Each
-sighting is an `Occurrence` carrying the JSONB context that pivots back to the firehose — one per
+sighting is an `Occurrence` carrying the JSONB context that pivots back to the log sink — one per
 failure, whatever else logs the same exception on its way out. The drain fans out with log-and-skip
 isolation, so a failing tracker never worsens what it tracks, and drains once more when the process
 is asked to stop. Opening and regressing are themselves facts (`issues.opened`, `issues.regressed`)
@@ -333,7 +340,7 @@ deliberately not the seam — `request.finished` writes one on every 5xx to stat
 site that means *this is a bug* raises an exception of its own to be seen.
 
 **The Timeline reads all three.** `apps/timeline` writes nothing: its console screen merges the
-journal (`business`), the firehose window (`logs`) and issue occurrences (`issue`) into one view,
+journal (`business`), the log sink (`logs`) and issue occurrences (`issue`) into one view,
 filterable by those three sources and
 correlated on four keys — **user**, **org**, **request**, and the concerned **entity**. A fact
 carries them in its own columns, plus the handle, org name and the **subject's own name** as they
@@ -441,7 +448,7 @@ labase.py/
 │   ├── profile/           # User profile
 │   ├── pages/             # Per-org Markdown pages with draft/members/public visibility + nav
 │   ├── console/           # SaaS admin console — server-wide stats, settings, admins, appearance
-│   ├── timeline/          # The unified read view: firehose + business journal + issue occurrences
+│   ├── timeline/          # The unified read view: log sink + business journal + issue occurrences
 │   ├── issues/            # Error tracking (Sentry-as-Postgres): fingerprint-grouped issues
 │   ├── metrics/           # Load metrics: /metrics Prometheus endpoint + console Load screen
 │   ├── public/            # Public landing pages + public org pages (/{org_handle}/{slug})

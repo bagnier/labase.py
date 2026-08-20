@@ -57,7 +57,7 @@ class TechnicalSettings(BaseSettings):
     # immutable regardless. 0 → always revalidate (dev).
     static_cache_seconds: int = 3600
     # At 0 the background writer stops, and the runtime log path drops lines rather than block.
-    firehose_flush_seconds: PollSeconds = 1.0  # drain of the log queue to the per-day files
+    firehose_flush_seconds: PollSeconds = 1.0  # drain of the log queue into ``log_lines``
     # Deployed version (git SHA in Docker); drives error-tracking regression detection.
     app_version: str = "dev"
     # These defaults target the local Supabase mail catcher (Mailpit); prod sets SMTP_* to any

@@ -1,7 +1,7 @@
 """Driver-agnostic seeding for the timeline scenarios.
 
 Two of the three sources are seeded through their real writers:
-- request lines → the firehose's own writer (``append_firehose``);
+- request lines → the log repository's own append (``LogRepository.append``);
 - business events → the shared ``BusinessEventRecord`` model.
 
 Issue occurrences are the exception. The production path — emitting ``ExceptionCaptured`` —
@@ -78,7 +78,7 @@ def event_model(
     )
 
 
-def firehose_line(
+def log_line(
     event: str,
     *,
     org: str | None = None,

@@ -52,7 +52,7 @@ Minimum production env:
 | `CORS_ORIGINS`                                     | explicit origins, **not** `*`                                         |
 | `TRUST_FORWARDED_FOR`                              | `true` — required behind Caddy, see [Behind a proxy](#behind-a-proxy) |
 | `SMTP_*`                                           | a real transactional provider (not the local Mailpit catcher)         |
-| `FIREHOSE_DIR`                                     | a real log volume path                                                |
+| `FIREHOSE_DIR`                                     | fallback log path, used only when Postgres refuses a batch            |
 
 ## Preflight — config safety gate
 

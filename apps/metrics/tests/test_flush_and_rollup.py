@@ -77,7 +77,7 @@ async def test_flusher_persists_deltas_and_merges_within_a_minute():
 async def test_stopping_the_flusher_persists_the_interval_it_was_holding():
     """SIGTERM is how every deploy ends a process, so the traffic since the last tick is what a
     deploy routinely costs the Load screen — a visible dip at exactly the moment worth watching.
-    The firehose writer already drained on its way out; this one dropped its interval."""
+    The log drain already emptied on its way out; this one dropped its interval."""
     route = f"{MARKER_ROUTE}-shutdown"
     flusher = MetricsFlusher(interval_seconds=0)  # never started: nothing ticks on its own
     flusher._previous = accumulator.snapshot()

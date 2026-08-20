@@ -1,11 +1,16 @@
-"""The merge reader — orchestrates the durable DB sources (business-events journal + issue
-occurrences) and (added in a later step) the firehose file into one timeline, applies sorting,
-and paginates over a bounded recent window.
+"""The merge reader — orchestrates the three stores behind the console Timeline into one list:
+the business-events journal, issue occurrences and the firehose.
 
 It never touches another context's tables: business events are read through the shared
-``events.EventRepository`` (shared infra), issues through
-``issues.contract.queries.search_issue_occurrences``. Sorting/pagination happen in memory over the
-merged window — the only way to order a file stream and two tables as one timeline.
+``events.EventRepository`` (shared infra), the firehose through
+``observability.firehose.read_firehose`` (shared infra too), issues through
+``issues.contract.queries.search_issue_occurrences``.
+
+All three now answer on the same session, which is what makes the ``logs`` source global rather
+than whatever the instance serving the page happened to have on its own disk. Sorting and the cut
+to the page size still happen in memory over the merged list: each source is asked for *its own*
+newest rows, which is exact for the default time order and a sample for any other column — the
+screen says so rather than imply otherwise.
 """
 
 import uuid
@@ -20,7 +25,8 @@ from apps.issues.contract.queries import IssueOccurrence, search_issue_occurrenc
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
-from apps.shared.observability.firehose import LogLine, read_firehose
+from apps.shared.observability.models import LogLine
+from apps.shared.observability.repository import LogRepository
 from apps.timeline.domain.models import TimelineEntry, TimelineSource
 
 _SORT_KEYS = {"ts", "source", "level", "org", "name", "user", "entity", "request"}
@@ -97,10 +103,11 @@ class TimelineReader:
 
     async def search(self, flt: TimelineFilter, *, limit: int = 100) -> list[TimelineEntry]:
         entries: list[TimelineEntry] = []
-        # The firehose is a synchronous read of local files, level-gated at write time; the
-        # durable sources below carry full history whatever the level.
+        # The firehose is level-gated at write time — what the level dropped was never
+        # recorded — while the two sources below carry full history whatever the level.
         if flt.wants(TimelineSource.logs):
-            entries += [_from_firehose(r) for r in read_firehose(**_firehose_kwargs(flt, limit))]
+            rows = await LogRepository(self.session).search(**_log_kwargs(flt, limit))
+            entries += [_from_log_line(r) for r in rows]
         # A business fact has no severity of its own — it is a domain event, not a log line. The
         # viewer needs one axis across its three sources, so it reads them all at BUSINESS_LEVEL;
         # a filter on any other level excludes the journal wholesale, as it does for issues.
@@ -238,15 +245,15 @@ def _issue_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     return kwargs
 
 
-def _firehose_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
-    # The firehose keeps its own retention window; it takes the same filters as the DB sources,
-    # minus entity_id — firehose lines aren't keyed to a domain entity (dropped in memory below).
+def _log_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
+    # The firehose takes the same filters as the other two, minus entity_id — a log line is not
+    # keyed to a domain entity (the merged list drops it in memory below).
     kwargs = _event_kwargs(flt, limit)
     del kwargs["entity_id"]
     return kwargs
 
 
-def _from_firehose(line: LogLine) -> TimelineEntry:
+def _from_log_line(line: LogLine) -> TimelineEntry:
     return TimelineEntry(
         ts=line.ts,
         source=TimelineSource.logs,

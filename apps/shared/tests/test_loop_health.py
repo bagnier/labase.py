@@ -1,7 +1,7 @@
 """One verdict for a background loop whose tick failed: a blip, or the machinery is down.
 
 The five lifespan workers all caught everything and warned — so a listener or a task worker
-that stopped delivering left nothing in the console at all, only warnings inside a firehose
+that stopped delivering left nothing in the console at all, only warnings inside a log
 window that rolls over in two days. The other half of the problem is why they warned: these
 loops tick once a second, so promoting every failed tick to ``log.exception`` would open the
 same issue eighty-six thousand times a day.
@@ -29,7 +29,7 @@ def _captured() -> list[tuple[str, str]]:
 
 
 def _lines(log_chain) -> list[tuple[str, str, dict]]:
-    """The probe's own lines, oldest first — the firehose reads newest first, and what these
+    """The probe's own lines, oldest first — the store reads newest first, and what these
     tests are about is the *order* an outage is told in. The rendered traceback is dropped: it
     is the exception's text, not this module's verdict."""
     return [
@@ -76,7 +76,7 @@ def test_a_loop_still_down_keeps_saying_so(log_chain):
 
 def test_a_loop_coming_back_says_what_the_outage_cost(log_chain):
     """The toll is only final once a tick succeeds, so the recovery line is the one that carries
-    it — the same reason the firehose reports its own write outage on the way out."""
+    it — the same reason the log sink reports its own write outage on the way out."""
     health = _health()
 
     health.tick_failed(RuntimeError("down"))

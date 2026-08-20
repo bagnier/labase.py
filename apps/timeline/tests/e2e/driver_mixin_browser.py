@@ -2,8 +2,8 @@ import json
 from datetime import datetime
 
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.observability.firehose import append_firehose
 from apps.shared.observability.logging import apply_log_level
+from apps.shared.observability.repository import LogRepository
 from apps.timeline.tests.e2e import seed_data
 from apps.timeline.tests.e2e.seed_data import timeline_org_id, timeline_request_id, timeline_user_id
 from tests.e2e.drivers.browser_base import BrowserBase
@@ -56,11 +56,20 @@ class TimelineBrowserMixin(BrowserBase):
         pins at write time and the timeline has to be searchable by."""
         self._add_event(seed_data.event_model(event, org=timeline_org_id(org), entity_name=subject))
 
+    def _append_log(self, line: dict) -> None:
+        """Straight into the store, bypassing the live level gate the runtime path is subject to
+        (a seeded 'info' line must survive a WARNING process level)."""
+
+        async def _do(s):
+            await LogRepository(s).append([line], instance="test")
+
+        self._run_seed(_do)
+
     def seed_request_from_org(
         self, event: str, org: str, *, level: str = "info", when: datetime | None = None
     ) -> None:
-        append_firehose(
-            seed_data.firehose_line(event, org=timeline_org_id(org), level=level, when=when)
+        self._append_log(
+            seed_data.log_line(event, org=timeline_org_id(org), level=level, when=when)
         )
 
     def seed_error_from_org(self, title: str, org: str, *, when: datetime | None = None) -> None:
@@ -73,7 +82,7 @@ class TimelineBrowserMixin(BrowserBase):
     def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
         # All three sources must key on the same value for the timeline to correlate them.
         oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
-        append_firehose(seed_data.firehose_line("request.finished", org=oid, request_id=request_id))
+        self._append_log(seed_data.log_line("request.finished", org=oid, request_id=request_id))
         self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
         self._insert_error(error, org=oid, request_id=request_id)
 
