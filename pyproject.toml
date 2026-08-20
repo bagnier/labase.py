@@ -278,6 +278,55 @@ forbidden_modules = [
     "apps.todo",
 ]
 
+# ── shared's own subsystems ───────────────────────────────────────────────────
+# One package per subsystem, and these four contracts are what keeps that true. A total
+# `layers` order is deliberately NOT attempted: `settings.env` (the environment) and
+# `logs.dependency` (the fault verdict) are transverse primitives, read by the very packages
+# that carry them, so any rank assigned to them would be arbitrary. What matters is not a
+# hierarchy but a handful of edges that must never appear — each below is verified to hold
+# today, so a failure is a real change of design, not a contract to relax.
+# All four are direct-imports-only: they govern who may *name* whom.
+
+[[tool.importlinter.contracts]]
+name = "the journal does not depend on the log sink"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["apps.shared.events"]
+forbidden_modules = ["apps.shared.logs"]
+# The one edge, and the reason it is not the sink: the listener is a background loop, so it
+# reads the *verdict* module — is a failed tick a blip or an outage — and nothing else in logs.
+# A second edge from events into logs would mean a fact's write path started tracing itself.
+ignore_imports = ["apps.shared.events.listener -> apps.shared.logs.loop"]
+
+[[tool.importlinter.contracts]]
+name = "the log sink does not depend on the journal, nor on the queue"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["apps.shared.logs"]
+# The twin of the contract above, closing the pair both ways: a trace is not a fact and must
+# never become one. The queue is forbidden for a sharper reason — the queue logs, so a drain
+# that enqueued would feed the thing it is draining.
+forbidden_modules = ["apps.shared.events", "apps.shared.queue"]
+
+[[tool.importlinter.contracts]]
+name = "persistence is the floor: it imports no subsystem built on it"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["apps.shared.persistence"]
+# Engines, sessions and ORM mixins are what the others are written against. The one edge that
+# used to point the other way — `database.py` reaching for the SQL tally — is why `sql_stats`
+# lives here rather than beside the log line it writes.
+forbidden_modules = ["apps.shared.logs", "apps.shared.events", "apps.shared.http"]
+
+[[tool.importlinter.contracts]]
+name = "the HTTP edge stays synchronous: no journal, no queue"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["apps.shared.http"]
+# A request/response helper answers now. Recording a fact or deferring work is the handler's
+# decision, taken in a bounded context — never something the edge does on its own behalf.
+forbidden_modules = ["apps.shared.events", "apps.shared.queue"]
+
 [[tool.importlinter.contracts]]
 name = "auth is a foundation: it never imports the organizations context"
 type = "forbidden"
