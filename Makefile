@@ -1,4 +1,4 @@
-.PHONY: check flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
+.PHONY: check flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-report coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -173,21 +173,22 @@ backup-storage:
 	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/backup_storage.py --dest $(if $(DEST),$(DEST),backups/storage)
 
 # --- Tests ---
-# The coverage floor lives here, not in pyproject: `--cov-append` is on for every run, so a
-# floor in the shared config makes any partial `pytest <one-file>` fail at 15% with all its
-# tests green. It only means something over the whole suite. Measured at 51% the day it
-# was wired in on an accumulated figure — the honest single-run number is 49.8%, which is
-# what this floor sits under. Raise it when the real number moves up, never lower it to fit.
+# Both lanes run under `coverage run`, never under pytest-cov: pytest loads `-p tests.plugin`
+# — which imports the whole `apps/` graph — before pytest-cov would start measuring, so every
+# module body read as missed and the figure was off by 44 points (see tests/test_config.py).
+# `--parallel-mode` gives each lane its own data file; `coverage-report` combines them.
 # No wall-clock guard here on purpose. There was one, warning past a threshold derived from a
 # duration measured once — and a duration in a Makefile rots: the suite tripled in test count and
 # the warning started firing on a healthy stack, which is how a guardrail becomes noise. What it
 # was a proxy for is measured directly and cannot go stale: `test_local_stack_is_responsive`
 # times each dependency on every run and fails the suite loudly when the stack is degraded.
 test: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest --cov-fail-under=48
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run coverage run --parallel-mode -m pytest
 
+# The browser lane counts too: its Hypercorn server runs in-process, so it is the only lane
+# that renders HTML — the api driver asks for JSON on every request.
 test-e2e: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run coverage run --parallel-mode -m pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
 
 # flakehunt: run the browser scenarios N times and aggregate failures per test — an
 # intermittent test fails a few runs out of N, where a single run only says "red" or "green".
@@ -204,6 +205,15 @@ perf-smoke: provision-test client-gen
 coverage-erase:
 	uv run coverage erase
 
+# The floor gates `ci`, not `test`: it judges the combined figure, and a single lane cannot be
+# held to it — two floors would be two numbers to keep honest. Raise COV_MIN when the real
+# number moves up, never lower it to fit.
+COV_MIN ?= 48
+coverage-report:
+	uv run coverage combine
+	uv run coverage report --fail-under=$(COV_MIN)
+
+# Both read what `coverage-report` combined — parallel mode leaves one file per lane until then.
 coverage-xml:
 	uv run coverage xml -o .cache/cov/coverage.xml
 
@@ -224,7 +234,7 @@ check: lint test
 # --keep-going: run every step even if one fails, so no failure is hidden
 # behind an earlier one; the sub-make exits non-zero if any step failed.
 ci:
-	$(MAKE) --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-xml
+	$(MAKE) --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-report coverage-xml
 
 # finalize: js-build + fix, then the full read-only gate and the suite. Run before committing.
 # Wider than `fix + test` on purpose: the wave that raised ruff shipped two regressions a

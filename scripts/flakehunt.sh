@@ -35,7 +35,7 @@ for i in $(seq 1 "$N"); do
     make provision-test > "$OUT/provision$i.log" 2>&1
     env --ignore-environment ENV_FILE=.env.test PATH="$PATH" \
         uv run pytest "${TARGET[@]}" \
-        -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov \
+        -k "test_scenarios or test_browser_isolation" --driver=browser \
         -q -rf > "$log" 2>&1
     ec=$?
     summary="$(grep -oE '[0-9]+ (passed|failed|error)[^$]*' "$log" | tail -1)"

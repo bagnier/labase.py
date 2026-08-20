@@ -145,7 +145,7 @@ annotation is wider than the truth.
 | **pre-commit**              | Git hooks — `ruff --fix`, `ruff format`, talisman on staged files                |
 | **pytest + pytest-asyncio** | Unit and integration tests                                                       |
 | **pytest-bdd + Playwright** | Functional BDD tests (Gherkin) — same scenarios run against API and real browser |
-| **pytest-cov**              | Code coverage (generates `.cache/cov/coverage.xml` for VS Code)                  |
+| **coverage**                | Code coverage — both lanes, combined (`.cache/cov/coverage.xml` for VS Code)     |
 
 ### Architecture
 

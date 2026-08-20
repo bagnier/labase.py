@@ -36,7 +36,6 @@ dev = [
     "pyright==1.1.411",
     "pytest-asyncio==1.4.0",
     "pytest-bdd==8.1.0",
-    "pytest-cov==7.1.0",
     "pytest-xdist==3.8.0",
     "pytest==9.1.1",
     "python-dotenv==1.2.2",
@@ -62,7 +61,12 @@ pythonpath = ["."]
 # solely through a browser (rendered chrome, DOM placement); such scenarios run
 # under the browser driver and are skipped elsewhere (see pytest_runtest_setup).
 markers = ["web: browser-only scenario — skipped by the api (and future cli) driver"]
-addopts = "-p tests.plugin --strict-config --cov=apps --cov-report=term-missing --cov-append --junitxml=.cache/cov/junit.xml"
+# pytest-cov is deliberately not installed: it starts measuring in `pytest_load_initial_conftests`,
+# which pytest reaches *after* loading `-p tests.plugin` — and that plugin imports the whole `apps/`
+# graph, so every module body would be traced too late and reported as missed. Coverage is started
+# from the outside instead: `coverage run -m pytest`, see the Makefile. Held by a test in
+# tests/test_config.py, since re-adding the flags breaks nothing — it only lies.
+addopts = "-p tests.plugin --strict-config --junitxml=.cache/cov/junit.xml"
 # An `xfail` that starts passing is a fixed bug nobody noticed: the test stays green and the one
 # meant to announce the fix says nothing. Strict by default; a marker that sets `strict=False`
 # explicitly (behaviour still undecided) keeps the last word.
@@ -88,6 +92,17 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["apps"]
 data_file = ".cache/cov/.coverage"
+# Both lanes measure — the api suite and the browser suite, whose Hypercorn server runs
+# in-process — so each writes a suffixed file and `make coverage-report` combines them. Without
+# the browser lane, two thirds of the `TemplateResponse` sites read as dead: the api driver asks
+# for JSON on every request, so it never renders the HTML face.
+parallel = true
+# A `wants_json(...)` fork taken one way only is not covered, and every route has one.
+# Python 3.14 measures branches on the sys.monitoring core, so this keeps the fast tracer.
+branch = true
+# The suite is half the statements in `apps/` and would drown the signal. Dead step definitions
+# are vulture's job (`make deadcode`).
+omit = ["apps/*/tests/*"]
 
 [tool.coverage.report]
 show_missing = true
