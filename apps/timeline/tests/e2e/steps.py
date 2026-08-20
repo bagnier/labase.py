@@ -199,9 +199,9 @@ def step_older_do_not_repeat(driver):
     driver.assert_older_entries_do_not_repeat()
 
 
-@then(parsers.parse("{n:d} logs entry is listed"))
-def step_request_count(driver, n):
-    driver.assert_source_count("logs", n)
+@then(parsers.parse('{n:d} logs entry from org "{org}" is listed'))
+def step_request_count(driver, n, org):
+    driver.assert_source_count("logs", n, org)
 
 
 @then(parsers.parse('the export contains "{needle}"'))

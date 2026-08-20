@@ -258,9 +258,17 @@ class TimelineBrowserMixin(BrowserBase):
         assert b in events, f"{b!r} not listed: {events}"
         assert events.index(a) < events.index(b), f"{a!r} not above {b!r}: {events}"
 
-    def assert_source_count(self, source: str, expected: int) -> None:
-        n = self.page.locator(f"tr[data-entry-source='{source}']").count()
-        assert n == expected, f"expected {expected} {source!r} entries, got {n}"
+    def assert_source_count(self, source: str, expected: int, org: str) -> None:
+        """How many of *this org's* rows one source contributed — read off the org cell's own
+        correlation link, which is the only ``org_id=`` href on a row.
+
+        Scoped, and not optionally: the store is shared with the running app, which writes its own
+        ``request.finished`` for every page this driver loads. An exhaustive count therefore raced
+        the log drain — the same assertion saw 1, 2 or 4 depending on when the batch landed.
+        """
+        rows = f"tr[data-entry-source='{source}']:has(a[href*='org_id={timeline_org_id(org)}'])"
+        n = self.page.locator(rows).count()
+        assert n == expected, f"expected {expected} {source!r} entries for {org!r}, got {n}"
 
     def assert_all_listed(self, *events: str) -> None:
         listed = self._events()

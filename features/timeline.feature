@@ -240,7 +240,7 @@ Feature: Unified timeline
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the timeline
-    Then 1 logs entry is listed
+    Then 1 logs entry from org "Acme" is listed
 
   # Without this, correlating an old request answered with the fact and the occurrence and no line
   # between them — the source that explains the other two, silent on the one question it exists for.

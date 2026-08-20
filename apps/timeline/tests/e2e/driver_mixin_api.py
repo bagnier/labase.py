@@ -208,8 +208,15 @@ class TimelineApiMixin(ApiBase):
             f"{event!r} source: expected {source!r}, got {found['source']!r}"
         )
 
-    def assert_source_count(self, source: str, expected: int) -> None:
-        n = sum(1 for e in self._entries() if e["source"] == source)
+    def assert_source_count(self, source: str, expected: int, org: str) -> None:
+        """How many of *this org's* rows one source contributed.
+
+        Scoped, and not optionally: the store is shared with the running app, which writes its own
+        ``request.finished`` for every page the driver loads. An exhaustive count therefore raced
+        the log drain — the same assertion saw 1, 2 or 4 depending on when the batch landed.
+        """
+        oid = timeline_org_id(org)
+        n = sum(1 for e in self._entries() if e["source"] == source and e["org_id"] == oid)
         assert n == expected, f"expected {expected} {source!r} entries, got {n}: {self._entries()}"
 
     def assert_all_listed(self, *events: str) -> None:
