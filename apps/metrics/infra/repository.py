@@ -8,9 +8,9 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.metrics.domain.accumulator import MetricsSnapshot
 from apps.metrics.domain.models import MetricResolution, RequestMetric
 from apps.shared import clock
-from apps.shared.metrics import MetricsSnapshot
 
 
 async def _merge_row(

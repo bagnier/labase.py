@@ -1,6 +1,6 @@
+from apps.metrics.domain.accumulator import BUCKET_BOUNDS_MS, bucket_index
 from apps.metrics.domain.models import MetricResolution, RequestMetric
 from apps.shared import clock
-from apps.shared.metrics import BUCKET_BOUNDS_MS, bucket_index
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.api_base import ApiBase
 

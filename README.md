@@ -364,9 +364,12 @@ an entity, hence the per-entity filter narrows to the journal alone. Sorting is 
 the whole window; any other column orders the loaded page only — each source is asked for its own
 newest rows — and the screen says so rather than pass a sample off as an ordering.
 
-**Load metrics.** Every request feeds a shared accumulator, exposed as a Prometheus `/metrics`
-endpoint and persisted per minute by `apps/metrics`; the console **Load** screen graphs it, and a
-daily rollup downsamples minute → hour and applies retention.
+**Load metrics.** `apps/metrics` owns the counter outright. The request middleware only *offers*
+what it measured — `on_request_measured`, the same shape as the capture seam feeding `apps/issues`
+— so the app subscribes at mount and shared never names it. Switch the app off and the offer finds
+nobody; delete it and nothing counts anywhere, which is the promise every app is meant to keep.
+What it does with the exchanges is its own: a Prometheus `/metrics` endpoint, per-minute rows, the
+console **Load** screen, and a daily rollup that downsamples minute → hour and applies retention.
 
 ### Conventions
 
@@ -459,7 +462,7 @@ labase.py/
 │   │   ├── integration/   #   the mount surface: Host, contribs registry, fullpage slices, slugs
 │   │   ├── contract/      #   integration.py — the foundation's own mount: middleware, CORS, static
 │   │   ├── templates/     #   the shared layout and macros every app's templates extend
-│   │   └── *.py           #   single-module bricks: queue, email, clock, charts, metrics…
+│   │   └── *.py           #   single-module bricks: queue, email, clock, charts, overview…
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies
 │   ├── api_keys/          # Per-org machine credentials for the JSON API (Bearer)
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations

@@ -7,6 +7,7 @@ Pure middleware logic — no DB, no running app: the decision is exercised throu
 
 import uuid
 
+import pytest
 import structlog
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response
 from fastapi.testclient import TestClient
@@ -16,7 +17,6 @@ from starlette.requests import Request
 
 from apps.shared.http.exceptions import handle_http_error, handle_stale_data
 from apps.shared.logs import request
-from apps.shared.metrics import accumulator
 
 
 def _req(path: str, *, referer: str | None = None, host: str = "example.com") -> Request:
@@ -207,34 +207,87 @@ def test_the_request_id_is_a_whole_uuid_not_a_prefix():
     assert len(rid) == 36
 
 
+# What the middleware measures is handed to whoever registered for it. The load-metrics
+# accumulator lives in ``apps/metrics``, a bounded context shared may not name, so the exchange is
+# offered rather than pushed — and an app that is switched off, or deleted, simply never registers.
+
+
+@pytest.fixture
+def measured(monkeypatch):
+    """Records what the middleware handed its observers.
+
+    A fake, not a mock: the seam *is* a callback, so the arguments it received are the observable
+    behaviour, compared with ``==`` after the act like any other value. Swapped in with
+    ``monkeypatch`` — as ``test_capture`` does for the twin seam — so the real subscription that
+    ``apps/metrics`` installs at mount is restored at teardown rather than lost for the run.
+    """
+    calls: list[tuple] = []
+
+    def _record(method, label, status_code, duration_ms, *, unmatched=False):
+        calls.append((method, label, status_code, duration_ms, unmatched))
+
+    monkeypatch.setattr(request, "_observers", [_record])
+    return calls
+
+
+def _serve(path: str, *, status: int = 200, referer: str | None = None) -> None:
+    """Drive one exchange through the real middleware, on a router mounted under a prefix.
+
+    ``lambda: {}`` and not ``dict`` (what PIE807 proposes): FastAPI introspects the endpoint
+    signature, and ``inspect.signature`` has none to give for a builtin type.
+    """
+    app = FastAPI()
+    router = APIRouter()
+    router.get("")(lambda: {})
+    router.get("/admins/{email}")(lambda email: Response(status_code=status))
+    app.include_router(router, prefix="/console")
+    app.add_middleware(request.RequestLogger)
+    TestClient(app).get(path, headers={"referer": referer} if referer else {})
+
+
+def test_a_served_request_reaches_the_observer_under_its_route_template(measured):
+    _serve("/console/admins/a@b.example")
+    assert [(m, label, s, u) for m, label, s, _ms, u in measured] == [
+        ("GET", "/console/admins/{email}", 200, False)
+    ]
+
+
+def test_an_exchange_is_served_when_nothing_is_measuring_it(log_chain, monkeypatch):
+    """The load-metrics app can be switched off, or deleted outright — then nobody registers, and
+    the request must not notice. This is the whole point of offering the measurement rather than
+    calling a counter shared would otherwise have to name."""
+    monkeypatch.setattr(request, "_observers", [])
+    app = FastAPI()
+    app.get("/console/admins/{email}")(lambda email: Response(status_code=200))
+    app.add_middleware(request.RequestLogger)
+    response = TestClient(app).get("/console/admins/a@b.example")
+    lines = [(line.name, line.level) for line in log_chain()]
+    assert (response.status_code, lines) == (200, [("request.finished", "info")])
+
+
+def test_a_dead_link_of_ours_reaches_the_observer_as_an_unmatched_real_path(measured):
+    """No route matched, so there is no template to label it with. The real path travels instead,
+    flagged — the counter is what decides how many such labels it will keep."""
+    _serve("/console/gone", referer="http://testserver/console")
+    assert [(m, label, s, u) for m, label, s, _ms, u in measured] == [
+        ("GET", "/console/gone", 404, True)
+    ]
+
+
 # The metrics label is the *matched template*, prefix included — `/console/admins/{email}`, never
 # the router-relative `/admins/{email}`. Since FastAPI 0.137 `include_router` keeps the child
 # router instead of cloning its routes under the prefix, so `scope["route"].path` is the path as
 # the child declared it; the full template lives on the effective route context.
 
 
-def _label_for(path: str) -> str:
-    app = FastAPI()
-    router = APIRouter()
-    # `lambda: {}` and not `dict` (what PIE807 proposes): FastAPI introspects the endpoint
-    # signature, and `inspect.signature` has none to give for a builtin type.
-    router.get("")(lambda: {})
-    router.get("/admins/{email}")(lambda email: {})
-    app.include_router(router, prefix="/console")
-    app.add_middleware(request.RequestLogger)
-    accumulator.reset()
-
-    TestClient(app).get(path)
-
-    return next(route for _method, route in accumulator.snapshot())
+def test_the_metric_label_carries_the_router_prefix(measured):
+    _serve("/console/admins/a@b.example")
+    assert [label for _m, label, *_rest in measured] == ["/console/admins/{email}"]
 
 
-def test_the_metric_label_carries_the_router_prefix():
-    assert _label_for("/console/admins/a@b.example") == "/console/admins/{email}"
-
-
-def test_the_metric_label_of_a_prefix_only_route_is_the_prefix():
-    assert _label_for("/console") == "/console"
+def test_the_metric_label_of_a_prefix_only_route_is_the_prefix(measured):
+    _serve("/console")
+    assert [label for _m, label, *_rest in measured] == ["/console"]
 
 
 # One line per served request, under one name: ``request.finished``, whose *level* carries the

@@ -15,11 +15,13 @@ from datetime import timedelta
 import structlog
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
+from apps.metrics.domain.accumulator import accumulator
 from apps.metrics.infra.flusher import MetricsFlusher
 from apps.metrics.infra.repository import purge, rollup, total_requests
 from apps.metrics.infra.router import WINDOW_HOURS, exposition_router, router
 from apps.shared import clock
 from apps.shared.integration.host import Host, MountPhase
+from apps.shared.logs.request import on_request_measured
 from apps.shared.queue import ensure_scheduled, register_task_handler
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.live import (
@@ -45,6 +47,10 @@ def mount(host: Host) -> None:
     host.reserve("metrics")
     if not settings.enabled:
         return
+    # Behind the gate on purpose: switched off, this app counts nothing, and ``apps/shared`` —
+    # which may not name a bounded context — simply keeps an empty observer list. Same shape as
+    # ``apps/issues`` subscribing to captured exceptions with ``on_captured``.
+    on_request_measured(accumulator.observe)
     host.app.include_router(exposition_router)
     host.app.include_router(router, prefix="/console/load")
     register_task_handler(ROLLUP_TOPIC, _rollup)

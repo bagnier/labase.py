@@ -1,4 +1,4 @@
-from apps.shared.metrics import (
+from apps.metrics.domain.accumulator import (
     BUCKET_BOUNDS_MS,
     UNMATCHED_LABEL_CAP,
     UNMATCHED_ROUTE,

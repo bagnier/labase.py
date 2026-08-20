@@ -14,6 +14,7 @@ whatever scanned us.
 import time
 import uuid
 from contextvars import ContextVar
+from typing import Protocol
 from urllib.parse import urlparse
 
 import structlog
@@ -21,7 +22,6 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from apps.shared.metrics import accumulator
 from apps.shared.persistence.sql_stats import (
     read_request_stats,
     report_heavy_request,
@@ -115,6 +115,38 @@ def _feeds_load_metrics(request: Request, status: int) -> bool:
     (all of ``unmatched`` — a 404 before routing — plus matched 4xx) counts only when it's a
     dead link from ourselves, so bot scans, the favicon probe and stray URLs stay out."""
     return status < 400 or status >= 500 or _is_internal_dead_link(request, status)
+
+
+class RequestObserver(Protocol):
+    """Whoever wants the exchanges this middleware measured, called once per counted request.
+
+    Positional-only up to ``unmatched``: the middleware never passes these by name, so a
+    subscriber is free to call its second parameter ``route`` where it only ever sees templates,
+    or ``label`` where it also sees the raw paths of what matched nothing.
+    """
+
+    def __call__(
+        self,
+        method: str,
+        label: str,
+        status_code: int,
+        duration_ms: float,
+        /,
+        *,
+        unmatched: bool = False,
+    ) -> None: ...
+
+
+# Registered at mount by the app that counts load (``apps/metrics``), the same way ``apps/issues``
+# subscribes to captured exceptions. Shared may not name a bounded context, so what it measures is
+# *offered*, not pushed: with that app switched off or deleted, this list is empty and the exchange
+# never notices. One shape only, hence a plain list and no type-key dispatch.
+_observers: list[RequestObserver] = []
+
+
+def on_request_measured(observer: RequestObserver) -> None:
+    """Subscribe ``observer`` to every exchange that counts as load."""
+    _observers.append(observer)
 
 
 # What refused this exchange, set by the exception handlers that shape the answer and read by the
@@ -241,13 +273,14 @@ class RequestLogger:
             return
         route = _route_template(request)
         if route is not None:
-            accumulator.observe(request.method, route, status, duration_ms)
+            for observe in _observers:
+                observe(request.method, route, status, duration_ms)
         else:
-            # No route matched: record the real path (bounded by the accumulator) rather
-            # than an opaque label, so a genuine dead link from ourselves is identifiable.
-            accumulator.observe(
-                request.method, request.url.path, status, duration_ms, unmatched=True
-            )
+            # No route matched, so there is no template: the real path travels instead, flagged,
+            # and the counter decides how many such labels it keeps before collapsing them — a
+            # genuine dead link of ours stays identifiable without the label set exploding.
+            for observe in _observers:
+                observe(request.method, request.url.path, status, duration_ms, unmatched=True)
 
     @staticmethod
     def _log_finished(request: Request, status: int, duration_ms: float) -> None:

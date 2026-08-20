@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
+from apps.metrics.domain.accumulator import BUCKET_BOUNDS_MS
 from apps.metrics.domain.models import MetricResolution, RequestMetric
 from apps.metrics.domain.service import aggregate, percentile_ms, timeseries
-from apps.shared.metrics import BUCKET_BOUNDS_MS
 
 
 def _buckets(**at_ms: int) -> list[int]:

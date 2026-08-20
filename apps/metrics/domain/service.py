@@ -9,8 +9,8 @@ every latency as one of 5/10/25/50/100/250/500…, and always the bucket ceiling
 
 from datetime import datetime
 
+from apps.metrics.domain.accumulator import BUCKET_BOUNDS_MS
 from apps.metrics.domain.models import LoadPoint, LoadTotals, RequestMetric, RouteLoad
-from apps.shared.metrics import BUCKET_BOUNDS_MS
 
 
 def percentile_ms(bucket_counts: list[int], quantile: float = 0.95) -> float | None:

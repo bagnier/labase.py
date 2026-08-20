@@ -12,14 +12,14 @@ import uuid
 
 import structlog
 
-from apps.metrics.infra.repository import add_deltas
-from apps.shared import clock
-from apps.shared.logs.loop import LoopHealth
-from apps.shared.metrics import (
+from apps.metrics.domain.accumulator import (
     MetricsSnapshot,
     accumulator,
     snapshot_deltas,
 )
+from apps.metrics.infra.repository import add_deltas
+from apps.shared import clock
+from apps.shared.logs.loop import LoopHealth
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger(__name__)
