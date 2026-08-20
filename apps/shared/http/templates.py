@@ -1,3 +1,15 @@
+"""The one Jinja environment, and the globals a template may rely on without a route saying so.
+
+Assembled by discovering each app's own ``templates/`` directory, so a context ships its markup
+beside its code and nothing central has to list them.
+
+There are no context processors, deliberately: a page's context is composed explicitly per route
+(:mod:`apps.shared.integration.fullpage`). A global render hook would inject data silently, and a
+template would then depend on something no route mentions. What *is* registered here is only what
+no route could supply — ``asset`` for cache-busting, plus safe defaults that the app owning each
+setting replaces at its own mount.
+"""
+
 from pathlib import Path
 from typing import cast
 

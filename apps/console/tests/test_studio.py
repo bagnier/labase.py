@@ -1,4 +1,4 @@
-from apps.shared.supabase_studio import studio_base_url, studio_link
+from apps.console.domain.studio import studio_base_url, studio_link
 
 
 def test_local_url_maps_to_local_studio() -> None:

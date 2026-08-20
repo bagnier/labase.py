@@ -1,6 +1,6 @@
 from fastapi import Request
 
-from apps.shared.http.addressing import client_ip
+from apps.shared.http.client_ip import client_ip
 from apps.shared.settings.env import get_technical_settings
 
 

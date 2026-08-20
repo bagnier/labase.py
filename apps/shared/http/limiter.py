@@ -19,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared import clock
-from apps.shared.http.addressing import client_ip
+from apps.shared.http.client_ip import client_ip
 from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings.env import get_technical_settings

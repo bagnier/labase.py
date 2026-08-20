@@ -1,3 +1,14 @@
+"""The repository bases every context inherits, and the counting helpers its cards ask for.
+
+A repository is where one table's queries live — the house rule being that no SQL against that
+table exists anywhere else. These bases hold what all of them would otherwise repeat: the CRUD,
+the org filter, and the ordering of a hand-sortable list.
+
+:class:`OrgScopedRepository` filters on ``org_id`` for ergonomics, never for safety. RLS decides
+who sees what; a Python filter that looked like the boundary would invite the next reader to trust
+it, and it would hold right up until someone wrote a query without it.
+"""
+
 import uuid
 from datetime import timedelta
 from operator import attrgetter

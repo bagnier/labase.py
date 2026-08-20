@@ -17,6 +17,7 @@ from apps.console.contract.overviews import SECTIONS, ConsoleOverview, ConsoleOv
 from apps.console.domain import admins, service, technical
 from apps.console.domain.admins import AdminNotFound, LastAdminViolation
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
+from apps.console.domain.studio import studio_link
 from apps.console.infra.repository import AppSettingRepository
 from apps.organizations.contract.queries import list_org_handles
 from apps.shared import clock
@@ -31,7 +32,6 @@ from apps.shared.integration.host import host
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.live import SettingsChanged, SettingsDeclaration
-from apps.shared.supabase_studio import studio_link
 
 log = structlog.get_logger(__name__)
 

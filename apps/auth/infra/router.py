@@ -62,7 +62,7 @@ from apps.auth.infra.security import decode_jwt
 from apps.auth.infra.user_repository import find_user_id_by_email
 from apps.shared.events.bus import events
 from apps.shared.http import parse_body, wants_json
-from apps.shared.http.addressing import client_ip
+from apps.shared.http.client_ip import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
 from apps.shared.logs.dependency import log_dependency_failure

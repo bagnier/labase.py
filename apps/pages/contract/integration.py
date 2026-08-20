@@ -30,9 +30,9 @@ from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.overview import overview_from_count
 from apps.shared.persistence.repository import count_all
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
-from apps.shared.text import overview_from_count
 
 PHASE = MountPhase.ORG
 

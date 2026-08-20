@@ -34,9 +34,9 @@ from apps.organizations.infra.repository import OrganizationRepository
 from apps.organizations.infra.router import org_router, router
 from apps.shared.events.bus import events
 from apps.shared.integration.host import Host, MountPhase, NavItem
+from apps.shared.overview import pluralize
 from apps.shared.persistence.repository import count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, get_settings
-from apps.shared.text import pluralize
 
 PHASE = MountPhase.ORG
 

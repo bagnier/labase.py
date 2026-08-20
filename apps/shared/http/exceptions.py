@@ -1,3 +1,14 @@
+"""Turning a failure into an answer, in whichever shape the caller asked for.
+
+Registered on the FastAPI app at the foundation's mount. Each handler answers the way the rest of
+the base does — JSON for an API caller, a redirect an HTMX swap can follow, or a rendered error
+page — so a failure still looks like the app that produced it rather than a framework default.
+
+None of them logs a line. The exchange is already stated once by ``request.finished``, and a
+handler writing its own would tell the same story twice; it calls
+:func:`~apps.shared.logs.request.note_rejection` instead, leaving the *reason* on that one line.
+"""
+
 import structlog
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response

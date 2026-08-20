@@ -25,9 +25,9 @@ from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared import clock
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.overview import overview_from_count
 from apps.shared.persistence.repository import count_all
 from apps.shared.settings.live import SettingsDeclaration, SupabaseLink, feature_switch
-from apps.shared.text import overview_from_count
 
 PHASE = MountPhase.ORG
 

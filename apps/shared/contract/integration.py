@@ -1,3 +1,20 @@
+"""The foundation's own ``mount(host)`` — the app that runs before any app.
+
+Every bounded context declares itself through the same call; this is the one that goes first
+(``MountPhase.FOUNDATION``) and puts in place what all the others already assume: the logging
+chain, the exception handlers, the middleware stack, the static mount, and the three background
+workers the base itself owns — the task worker, the event listener and the log drain.
+
+It is also where an unsafe production config stops the process instead of being served
+(:func:`~apps.shared.settings.preflight.enforce_at_boot`): a boot that refuses is the one failure
+mode an operator can act on.
+
+The middleware order is the delicate part, and is commented at the call site: they go in
+innermost-first, and all four are plain ASGI — a ``BaseHTTPMiddleware`` anywhere beneath
+``RequestLogger`` would run the rest in a child task and strip the request's correlation off its
+own finished line.
+"""
+
 from pathlib import Path
 
 import structlog

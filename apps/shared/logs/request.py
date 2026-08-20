@@ -1,3 +1,16 @@
+"""The request side of the sink: one line per exchange, and the ids that tie everything to it.
+
+:class:`RequestLogger` is the ASGI middleware every request passes through. It writes
+``request.finished`` — the single line stating the exchange, so nothing else has to — and binds the
+``request_id`` contextvar that the sink, the capture seam and the console Timeline all correlate on.
+
+Most of what is here is filtering, and that is the point: a line is worth writing only where a
+reader would learn something. What the browser fetched by itself, an infrastructure probe, a
+liveness check — none of them earn one unless they 5xx'd, which is our fault whatever asked. The
+same predicates decide what counts as *load*, so the metrics measure our own traffic rather than
+whatever scanned us.
+"""
+
 import time
 import uuid
 from contextvars import ContextVar

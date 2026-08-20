@@ -129,7 +129,7 @@ address (`apps/shared/http/limiter.py`), and behind a proxy the socket peer is C
 so every request would share one bucket, letting a single abuser exhaust the limit for
 everyone. Set `TRUST_FORWARDED_FOR=true`: `client_ip` then reads the left-most
 `X-Forwarded-For` entry, the client Caddy observed, instead of the peer
-(`apps/shared/http/addressing.py`).
+(`apps/shared/http/client_ip.py`).
 
 It is off by default on purpose — trusting that header when nothing upstream strips it
 lets any caller spoof their IP. Turn it on **only** because Caddy sets it and nothing
