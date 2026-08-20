@@ -70,6 +70,11 @@ def _a_private_chain(tmp_path, monkeypatch):
     root.handlers, root.level = saved_handlers, saved_level
 
 
+def _clear_engine_caches() -> None:
+    db._admin_engine.cache_clear()
+    db.admin_session_factory.cache_clear()
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _forget_the_issue_this_test_opens():
     """Drop the issue afterwards, so each run really *opens* one.
@@ -82,7 +87,15 @@ async def _forget_the_issue_this_test_opens():
     last), so it opens — and disposes — an engine of its own. Raw SQL because the ``issues``
     tables are private to that context and the import-linter contract forbids reaching for its
     models — the same reason ``tests/e2e/seed_data`` writes them by hand.
+
+    The caches are cleared on the way *in* as well as out, which is what makes this test
+    order-independent. ``admin_session_factory`` is lru_cached and its pool binds to whichever
+    loop first asked for one: any driver-based test running before this one leaves a pool bound
+    to a dead loop, and the capture drain then fails to write its occurrence — silently, because
+    the drain isolates its trackers by design. The symptom was this test's ``issue`` entry simply
+    missing, three fixtures away from the cause.
     """
+    _clear_engine_caches()
     yield
     async with db.admin_session_factory()() as session:
         await session.execute(
@@ -90,8 +103,7 @@ async def _forget_the_issue_this_test_opens():
         )
         await session.commit()
     await db._admin_engine().dispose()
-    db._admin_engine.cache_clear()
-    db.admin_session_factory.cache_clear()
+    _clear_engine_caches()
 
 
 @pytest_asyncio.fixture

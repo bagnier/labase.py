@@ -4,6 +4,7 @@
 into the issues tables directly (they're private to this context), so it calls this contract query.
 """
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -16,9 +17,16 @@ from apps.issues.domain.models import Issue, Occurrence
 
 @dataclass(frozen=True)
 class IssueOccurrence:
+    """One sighting, flattened for the timeline — with the issue it belongs to.
+
+    ``issue_id`` is what makes the timeline row a link: the row names the exception, while the
+    stack, the triage state and the other occurrences live on the issue's own screen. Without it
+    a reader had to go find that issue again by its title."""
+
     ts: datetime
     title: str
     context: dict[str, Any]
+    issue_id: uuid.UUID
 
 
 async def search_issue_occurrences(
@@ -35,7 +43,7 @@ async def search_issue_occurrences(
     """Newest-first, bounded read of issue occurrences. Org/user/request are matched inside the
     JSONB ``context`` (issues has no dedicated columns); the issue supplies the title."""
     query = (
-        select(Occurrence, Issue.title)
+        select(Occurrence, Issue.title, Issue.id)
         .join(Issue, Issue.id == Occurrence.issue_id)
         .order_by(Occurrence.id.desc())
         .limit(limit)
@@ -57,6 +65,11 @@ async def search_issue_occurrences(
         query = query.where(Occurrence.created_at <= to_dt)
     rows = await session.execute(query)
     return [
-        IssueOccurrence(ts=occurrence.created_at, title=title, context=occurrence.context or {})
-        for occurrence, title in rows.all()
+        IssueOccurrence(
+            ts=occurrence.created_at,
+            title=title,
+            context=occurrence.context or {},
+            issue_id=issue_id,
+        )
+        for occurrence, title, issue_id in rows.all()
     ]

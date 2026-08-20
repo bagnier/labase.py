@@ -9,6 +9,7 @@ The pill that offers the axis has to agree with the filter that applies it: a va
 accepts and the dropdown never lists is a filter an admin cannot reach.
 """
 
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -36,7 +37,9 @@ def _isolate_firehose(tmp_path, monkeypatch):
 
 
 def _occurrence(title: str, logger: str) -> IssueOccurrence:
-    return IssueOccurrence(ts=_NOW, title=title, context={"logger": logger, "stack": "…"})
+    return IssueOccurrence(
+        ts=_NOW, title=title, context={"logger": logger, "stack": "…"}, issue_id=uuid.uuid7()
+    )
 
 
 def test_an_occurrence_names_the_app_that_raised_not_its_own_title():
@@ -57,7 +60,9 @@ def test_an_occurrence_from_a_library_names_the_library():
 
 def test_an_occurrence_with_no_logger_claims_no_app():
     """A hand-inserted or legacy row has no logger to read; it must not invent one."""
-    entry = _from_issue(IssueOccurrence(ts=_NOW, title="ValueError: boom", context={}))
+    entry = _from_issue(
+        IssueOccurrence(ts=_NOW, title="ValueError: boom", context={}, issue_id=uuid.uuid7())
+    )
 
     assert entry.app == ""
 

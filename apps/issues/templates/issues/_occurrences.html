@@ -2,8 +2,12 @@
   <details class="card-panel" data-issue-occurrence="{{ o.id }}">
     <summary class="cursor-pointer p-4 text-sm flex items-center gap-3">
       <time datetime="{{ o.created_at.isoformat() }}">{{ o.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</time>
+      {# The way back out: this failure, the lines around it and the fact that it opened, gathered
+         in the timeline. Printing the id was the end of the trail. #}
       {% if o.context.request_id %}
-        <span class="font-mono text-xs text-base-content/70">request {{ o.context.request_id }}</span>
+        <a class="link link-hover font-mono text-xs text-base-content/70"
+           href="/console/timeline?request_id={{ o.context.request_id | urlencode }}"
+           title="Everything recorded for this request">request {{ o.context.request_id }}</a>
       {% endif %}
       {% if o.context.path %}
         <span class="font-mono text-xs text-base-content/70">{{ o.context.method }} {{ o.context.path }}</span>

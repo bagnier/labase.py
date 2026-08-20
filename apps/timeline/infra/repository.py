@@ -292,6 +292,7 @@ def _from_issue(occurrence: IssueOccurrence) -> TimelineEntry:
         org_id=ctx.get("org_id"),
         user_id=ctx.get("user_id"),
         request_id=ctx.get("request_id"),
+        issue_id=str(occurrence.issue_id),
         payload=ctx,
     )
 

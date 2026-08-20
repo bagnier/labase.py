@@ -45,4 +45,7 @@ class TimelineEntry(BaseModel):
     entity_name: str | None = None
     request_id: str | None = None
     request_name: str | None = None  # "GET /profile" — carried by the source, not resolved at read
+    # The issue an ``issue`` row is an occurrence of — its deep link. Only that source has one:
+    # a fact and a log line are not sightings of anything.
+    issue_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
