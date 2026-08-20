@@ -12,6 +12,7 @@ import structlog
 from supabase_auth.types import EmailOtpType, VerifyTokenHashParams
 
 from apps.shared.config import get_technical_settings
+from apps.shared.observability.dependency import log_dependency_failure
 from apps.shared.persistence.supabase import get_user_supabase
 
 log = structlog.get_logger(__name__)
@@ -58,7 +59,10 @@ async def logout(access_token: str) -> None:
                 headers=_auth_headers(access_token),
             )
     except Exception as exc:
-        log.warning("auth.signout_failed", exc_info=exc)
+        # Two failures wear the same coat here: the token was already expired — GoTrue answered,
+        # and the cookies come off regardless — or GoTrue is unreachable, in which case nobody's
+        # session is being revoked anywhere. The verdict is what tells them apart.
+        log_dependency_failure(log, "auth.signout_failed", exc)
 
 
 async def refresh_session(refresh_token: str) -> AuthTokens:

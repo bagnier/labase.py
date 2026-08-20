@@ -195,6 +195,21 @@ async def test_a_failure_the_queue_will_retry_is_not_captured_as_a_bug(log_chain
 
 
 @pytest.mark.asyncio
+async def test_a_topic_no_mount_handles_is_captured_as_a_bug(log_chain):
+    """A task nobody registered a handler for parks on its very first claim, and parking is as
+    final as exhausting the retries — but this path never raised, so it left a bare ``log.error``,
+    which is precisely the level the capture seam ignores. Disabling an app is enough to reach it:
+    its recurring rows outlive the mount that used to answer them."""
+    topic = f"test.orphan_{uuid.uuid4().hex}"
+    await _enqueue_committed(topic)
+    capture._QUEUE.clear()
+
+    await TaskWorker(interval_seconds=1).tick()
+
+    assert [type(captured.exc).__name__ for captured in capture._QUEUE] == ["UnhandledTopic"]
+
+
+@pytest.mark.asyncio
 async def test_a_task_parked_for_good_is_captured_as_a_bug(log_chain):
     """Retries exhausted — nobody will ever run this task again, so the failure is final and an
     issue is the only place it still shows up."""

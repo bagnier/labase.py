@@ -4,7 +4,9 @@ Replaces slowapi's in-memory store: with N app instances, each counted alone;
 here the hit count is one atomic upsert in a shared table (first
 Postgres-as-Redis brick). Fail-open by doctrine: if the store is unreachable
 the request goes through and the failure is logged — rate limiting must never
-take the product down.
+take the product down. Logged through the dependency verdict, so an unreachable
+store opens an issue rather than a line that rolls out of the window: failing
+open quietly is how a limiter stays off for good.
 """
 
 import functools
@@ -19,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared import clock
 from apps.shared.config import get_technical_settings
 from apps.shared.http.addressing import client_ip
+from apps.shared.observability.dependency import log_dependency_failure
 from apps.shared.persistence.database import admin_session_factory
 
 log = structlog.get_logger(__name__)
@@ -82,7 +85,12 @@ async def _increment(key: str, window_seconds: int) -> int | None:
             await session.commit()
             return int(hits or 0)
     except Exception as exc:
-        log.warning("rate_limit.store_failed", key=key, exc_info=exc)
+        # Fail-open stays: the limiter must never be what takes an endpoint down. What changes is
+        # the *level* — a store that never answered is a broken dependency, and the verdict makes
+        # that an issue. At ``warning`` it rolled out of the log window, and nobody learned the
+        # server had been unlimited since Tuesday. One issue however many requests hit it: same
+        # type, same frames, one fingerprint.
+        log_dependency_failure(log, "rate_limit.store_failed", exc, key=key)
         return None
 
 

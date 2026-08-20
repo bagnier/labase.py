@@ -43,6 +43,22 @@ _RETRY_BACKOFF_SECONDS = 60
 _VISIBILITY_TIMEOUT_SECONDS = 300  # a crashed worker's claim expires after this
 
 
+class UnhandledTopic(Exception):
+    """A claimed task whose topic no mount registered a handler for.
+
+    Raised only to give the capture seam a live exception to fingerprint on — caught immediately
+    and logged, exactly like the rate limiter's ``UnlimitedEndpoint`` and the listener's
+    ``UnroutableFact``. Parking is as final as exhausting the retries, but this path never raised,
+    so it left a bare ``log.error`` — precisely the level the seam ignores — and the hole rolled
+    out of the log window with no issue ever opened. Disabling an app is enough to reach it: its
+    recurring rows outlive the mount that used to answer them.
+
+    The fingerprint is the exception type plus the frames, never the message, so every orphaned
+    topic folds into *one* issue — the same trade ``UnroutableFact`` already makes. Which topic it
+    was rides in the occurrence's context, where an admin reads it.
+    """
+
+
 class ClaimedTask(TypedDict):
     """A claimed ``task_queue`` row — exactly ``_CLAIM``'s ``RETURNING`` columns. ``payload`` is
     left ``Any``: the jsonb decodes to a dict, but a replayed row can arrive as its JSON string,
@@ -198,6 +214,7 @@ class TaskWorker:
     async def _process(self, task: ClaimedTask) -> None:
         handler = _handlers.get(task["topic"])
         if handler is None:
+            self._report_unhandled_topic(task)
             await self._fail(task, "no handler registered")
             return
         payload = _payload_dict(task)
@@ -281,6 +298,14 @@ class TaskWorker:
                 {"id": task["id"], "error": error, "backoff": _RETRY_BACKOFF_SECONDS},
             )
         )
+
+    @staticmethod
+    def _report_unhandled_topic(task: ClaimedTask) -> None:
+        """Say that this topic has no handler, where an admin will still see it tomorrow."""
+        try:
+            raise UnhandledTopic(f"no handler registered for topic {task['topic']!r}")
+        except UnhandledTopic:
+            log.exception("queue.unhandled_topic", topic=task["topic"], task_id=str(task["id"]))
 
     async def _fail(self, task: ClaimedTask, error: str) -> None:
         log.error("queue.task_parked", topic=task["topic"], task_id=task["id"], error=error)

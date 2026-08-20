@@ -18,6 +18,7 @@ from apps.shared import clock
 from apps.shared.charts import chart_config
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
+from apps.shared.observability.repository import DEFAULT_WINDOW
 from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings import SettingRow, get_settings
@@ -28,6 +29,9 @@ router = APIRouter(tags=["timeline"])
 
 _TIMELINE_APP = "timeline"
 _LOG_LEVEL_KEY = "log_level"
+# How many rows one read of the screen answers with, and therefore what a full page looks like:
+# a page that comes back full is the signal there may be more below it.
+_PAGE_SIZE = 100
 
 
 def _settings_rows() -> list[SettingRow]:
@@ -142,9 +146,13 @@ class TimelineQuery:
     to_dt: str = ""
     sort: str = "ts"
     dir: str = "desc"
+    # The paging cursor: the ISO timestamp of the oldest row already shown.
+    before: str = ""
 
-    # sort/dir are the view's own state, not a filter: they ride their own params on a link.
-    _ORDERING: ClassVar[tuple[str, ...]] = ("sort", "dir")
+    # sort/dir/before are the view's own state, not filters: they ride their own params on a link.
+    # ``before`` especially — carried into an export or a re-sort it would silently cut the result
+    # off at whatever page the reader happened to have scrolled to.
+    _ORDERING: ClassVar[tuple[str, ...]] = ("sort", "dir", "before")
 
     def to_filter(self) -> TimelineFilter:
         """The reader's contract, where "no filter" is ``None`` — the one boundary conversion."""
@@ -159,6 +167,7 @@ class TimelineQuery:
             text=self.q or None,
             from_dt=_bound(self.from_dt),
             to_dt=_bound(self.to_dt),
+            before_ts=_bound(self.before),
             sort=self.sort or "ts",
             descending=(self.dir != "asc"),
         )
@@ -238,6 +247,21 @@ def _request_routes(facet: list[dict[str, Any]], entries: list[TimelineEntry]) -
     return routes
 
 
+def _next_cursor(entries: list[TimelineEntry], flt: TimelineFilter) -> str | None:
+    """The cursor for the page below this one, or ``None`` when there is nothing left to offer.
+
+    Only on the default newest-first order. Any other column sorts the *loaded page* and says so
+    (``data-sort-scope``) — offering to continue a sample would promise an ordering the reader
+    does not have, and each further page would be a sample of a sample.
+
+    A full page is the signal: the reader cannot tell "exactly a hundred left" from "a hundred and
+    more", and asking it to would cost a second query on every view to spare one empty click.
+    """
+    if len(entries) < _PAGE_SIZE or flt.sort != "ts" or not flt.descending:
+        return None
+    return entries[-1].ts.isoformat()
+
+
 @router.get("", response_model=None)
 async def timeline_screen(
     request: Request,
@@ -250,7 +274,7 @@ async def timeline_screen(
     org_id, user_id, request_id = filters.org_id, filters.user_id, filters.request_id
     grain = bucket if bucket in _GRAINS else "day"
     reader = TimelineReader(session)
-    entries = await reader.search(flt)
+    entries = await reader.search(flt, limit=_PAGE_SIZE)
     activity = await reader.activity(flt, grain=grain)
     facets = await reader.facets(flt)
 
@@ -277,6 +301,7 @@ async def timeline_screen(
         },
     }
     settings = _settings_rows()
+    next_before = _next_cursor(entries, flt)
     if wants_json(request):
         return JSONResponse(
             {
@@ -285,29 +310,45 @@ async def timeline_screen(
                 "activity": activity,
                 "facets": facets,
                 "settings": settings,
+                "next_before": next_before,
             }
         )
+    rows = {
+        "entries": entries,
+        "labels": row_labels,
+        "next_before": next_before,
+        "load_more_qs": filters.query_string(),
+        "grain": grain,
+    }
+    # A "load older" click asks for rows, not for a screen: the chart, the facets and the label
+    # lookups above are the page's, and re-rendering them would swap them out from under the
+    # reader. The button replaces itself with the next batch and its own successor.
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "timeline/_entries.html", rows)
     return templates.TemplateResponse(
         request,
         "timeline/index.html",
         {
+            **rows,
             "user": current_user,
-            "entries": entries,
             "activity": activity,
             "activity_chart": _activity_chart(activity, grain, clock.now()),
-            "grain": grain,
             "grains": _GRAINS,
             "facets": facets,
             "org_label": org_label,
             "user_label": user_label,
             "request_label": request_label,
-            "labels": row_labels,
             # Only the firehose level is tuned from the screen; the enabled switch stays on the
             # console's app page like every other app.
             "settings": [r for r in settings if r["key"] == _LOG_LEVEL_KEY],
             "filters": filters,
             "sort": flt.sort,
             "dir": "desc" if flt.descending else "asc",
+            # The three sources do not share a memory, and only one of them says so. Stated on
+            # screen rather than left to be discovered by a correlation that came back short —
+            # the same move as ``data-sort-scope`` one section down.
+            "log_window_days": DEFAULT_WINDOW.days,
+            "log_window_bounded": not flt.is_narrowed() and flt.from_dt is None,
             "export_qs": filters.query_string(),
             **await fullpage_context(session, current_user),
         },

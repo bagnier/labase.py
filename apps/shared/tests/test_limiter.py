@@ -10,6 +10,7 @@ from structlog.testing import capture_logs
 
 from apps.shared.config import get_technical_settings
 from apps.shared.http.limiter import RateLimitExceeded, UnlimitedEndpoint, rate_limit
+from apps.shared.observability import capture
 from apps.shared.persistence import database as db
 
 
@@ -94,6 +95,48 @@ async def test_rate_limit_fails_open_when_store_is_down(rate_limiting_enabled):
         ):
             for _ in range(3):
                 assert (await client.get("/ping")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_store_the_limiter_cannot_reach_is_a_bug(rate_limiting_enabled):
+    """Failing open is the doctrine; failing open *quietly* is how the limiter stays off for good.
+    A store that never answered is a broken dependency, and the verdict says that is an issue —
+    logged at ``warning``, it rolled out of the log window and nobody ever learned the server had
+    been unlimited since Tuesday. One issue, not one per request: same type, same frames."""
+    capture._QUEUE.clear()
+    async with AsyncClient(
+        transport=ASGITransport(app=_app("1/minute")), base_url="http://test"
+    ) as client:
+        with patch(
+            "apps.shared.http.limiter.admin_session_factory",
+            side_effect=RuntimeError("db down"),
+        ):
+            assert (await client.get("/ping")).status_code == 200  # still fails open
+
+    assert [type(captured.exc) for captured in capture._QUEUE] == [RuntimeError]
+
+
+class _Answered(Exception):
+    """A dependency that answered — the shape ``refused_status`` reads a status off."""
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"the store answered {status}")
+        self.status = status
+
+
+@pytest.mark.asyncio
+async def test_a_store_that_answers_no_is_not_a_bug(rate_limiting_enabled):
+    """The other half of the verdict: a dependency that *answered* said no, and saying no is an
+    ordinary outcome — never an issue, whatever the limiter then does about it."""
+    capture._QUEUE.clear()
+    refused = _Answered(429)
+    async with AsyncClient(
+        transport=ASGITransport(app=_app("1/minute")), base_url="http://test"
+    ) as client:
+        with patch("apps.shared.http.limiter.admin_session_factory", side_effect=refused):
+            assert (await client.get("/ping")).status_code == 200
+
+    assert list(capture._QUEUE) == []
 
 
 @pytest.mark.asyncio

@@ -39,7 +39,9 @@
         title="{{ e.user_id }}">{{ correlate('user_id', e.user_id, labels.user.get(e.user_id)) }}</td>
     {# The name the fact pinned when it happened, falling back to the id when the subject had none
        (an account or membership action, whose subject is only an id). #}
-    <td class="text-xs text-base-content/60" title="{{ e.entity_id }}">
+    <td class="text-xs text-base-content/60"
+        data-entry-entity
+        title="{{ e.entity_id }}">
       {{ correlate('entity_id', e.entity_id, e.entity_name or (e.entity_id[:12] if e.entity_id)) }}
     </td>
     <td class="font-mono text-xs text-base-content/60"
@@ -50,3 +52,17 @@
         title="{{ details }}">{{ details }}</td>
   </tr>
 {% endfor %}
+{# The way below the first page. A row rather than a button under the table, so it can replace
+   itself with the next batch — which ends with its own successor, or with nothing when the
+   timeline runs out. Offered only on the default newest-first order (see `_next_cursor`). #}
+{% if next_before %}
+  <tr data-load-more>
+    <td colspan="9" class="text-center">
+      <button type="button"
+              class="btn btn-sm btn-ghost"
+              hx-get="/console/timeline?bucket={{ grain }}{{ '&' ~ load_more_qs if load_more_qs }}&before={{ next_before | urlencode }}"
+              hx-target="closest tr"
+              hx-swap="outerHTML">Load older entries</button>
+    </td>
+  </tr>
+{% endif %}

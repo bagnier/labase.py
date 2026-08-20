@@ -6,17 +6,20 @@ production singleton; tests can build a fresh :class:`Host` in isolation.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
+import structlog
 from fastapi import FastAPI
 
 from apps.shared.contribs import Contribs, contribs
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.wiring import EventWiring
+from apps.shared.observability.capture import drain_once
 from apps.shared.settings import (
     AppSettings,
     SettingsChanged,
@@ -30,6 +33,8 @@ from apps.shared.vocabulary import PhosphorIcon
 
 if TYPE_CHECKING:
     from apps.shared.page import FullpageQuery
+
+log = structlog.get_logger(__name__)
 
 # The ``(query type, provider)`` pairs an app declares at mount, for the contribs registry.
 _Registrations = Sequence[tuple[type, Callable[[Any], Awaitable[Any]]]]
@@ -201,8 +206,9 @@ class Host:
         """Register an async startup hook from an app's :func:`mount`.
 
         Routed through the host so apps never touch ``host.app.router`` or FastAPI's lifespan
-        directly — used by the recurring-task planters, task workers and metrics flushers."""
-        self.app.router.add_event_handler("startup", handler)
+        directly — used by the recurring-task planters, task workers and metrics flushers. That
+        one seam is also what lets a boot failure be *seen*: see :func:`_reported`."""
+        self.app.router.add_event_handler("startup", _reported(handler))
 
     def run_background(self, task: LifespanTask) -> None:
         """Run ``task`` for the life of the app — the two halves registered together.
@@ -230,6 +236,39 @@ class Host:
         """The metadata ``app`` declared at mount, or ``None`` if it declared none."""
         handle = self.settings_handles.get(app)
         return handle.declaration if handle is not None else None
+
+
+def _reported(handler: Callable[[], Awaitable[None]]) -> Callable[[], Awaitable[None]]:
+    """Wrap a startup hook so a boot it kills leaves an issue behind, then still kills it.
+
+    A startup that raises is the one failure the capture seam could not deliver. The exception
+    reaches the chain and lands in the capture queue — but the ``CaptureDrain`` that would fold it
+    into an issue is itself a startup hook, and by then nothing more will run. So the queue died
+    with the process, and a server that refused to boot said it only on a console nobody kept.
+
+    Draining here works because of *when* it is: the loop is up, and the trackers subscribed at
+    **mount**, not at startup — so whichever hook failed, there is someone to hand the exception
+    to. That is the difference with a dying interpreter, which keeps its line and gets no issue on
+    purpose (``observability.logging``): there, no loop and no pool are left to reach a store on.
+
+    The exception is re-raised: a hook that failed must still fail the boot. Nothing about the
+    outcome changes — only that it stops being silent.
+    """
+
+    @functools.wraps(handler)
+    async def guarded() -> None:
+        try:
+            await handler()
+        except Exception as exc:
+            log.exception(
+                "host.startup_failed",
+                exc_info=exc,
+                hook=getattr(handler, "__qualname__", repr(handler)),
+            )
+            await drain_once()
+            raise
+
+    return guarded
 
 
 # The production composition: the process-wide registries, so runtime ``events.emit`` /

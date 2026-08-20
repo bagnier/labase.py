@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 
+from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.observability.logging import apply_log_level
 from apps.shared.observability.repository import LogRepository
@@ -48,6 +49,16 @@ class TimelineBrowserMixin(BrowserBase):
     def seed_event_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
         self._add_event(seed_data.event_model(event, org=timeline_org_id(org), when=when))
 
+    def seed_many_events(self, count: int, org: str) -> None:
+        """A run of facts long enough to overflow one page — added in a single transaction, since
+        a hundred round trips would be the slowest arrangement in the suite."""
+        models = seed_data.event_run(count, timeline_org_id(org), now=clock.now())
+
+        async def _do(s):
+            s.add_all(models)
+
+        self._run_seed(_do)
+
     def seed_event_by_user(self, event: str, email: str) -> None:
         self._add_event(seed_data.event_model(event, user=timeline_user_id(email)))
 
@@ -79,12 +90,16 @@ class TimelineBrowserMixin(BrowserBase):
         # The browser app runs in-process, so this is the live firehose level.
         apply_log_level(level)
 
-    def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
+    def seed_correlated_request(
+        self, request_id: str, org: str, event: str, error: str, *, when: datetime | None = None
+    ) -> None:
         # All three sources must key on the same value for the timeline to correlate them.
         oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
-        self._append_log(seed_data.log_line("request.finished", org=oid, request_id=request_id))
-        self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
-        self._insert_error(error, org=oid, request_id=request_id)
+        self._append_log(
+            seed_data.log_line("request.finished", org=oid, request_id=request_id, when=when)
+        )
+        self._add_event(seed_data.event_model(event, org=oid, request_id=request_id, when=when))
+        self._insert_error(error, org=oid, request_id=request_id, when=when)
 
     # ── navigation / filters (follow links, submit the real form) ─────────────
     def open_timeline(self) -> None:
@@ -145,6 +160,37 @@ class TimelineBrowserMixin(BrowserBase):
     def filter_timeline_by_dates(self, a: str, b: str) -> None:
         # The controls are <input type=datetime-local>; a bare date needs a midnight time.
         self._submit_filter(from_dt=f"{a}T00:00", to_dt=f"{b}T00:00")
+
+    # ── paging ───────────────────────────────────────────────────────────────
+    def _subjects(self) -> list[str]:
+        """What each visible row is *about*. A run of facts shares one kind, so the name column
+        cannot tell one page's rows from the next one's — the subject can."""
+        return [
+            cell.strip() for cell in self.page.locator("[data-entry-entity]").all_text_contents()
+        ]
+
+    def load_older_entries(self) -> None:
+        """Click the button and wait for what it loaded — no URL crafting."""
+        self._on_timeline()
+        self._first_page = self._subjects()
+        self.page.locator("[data-load-more] button").click()
+        # The row swaps itself out for the next batch, so the row count is what separates a
+        # finished click from a request still in flight.
+        self.page.wait_for_function(
+            "n => document.querySelectorAll('[data-entry-entity]').length > n",
+            arg=len(self._first_page),
+        )
+
+    def assert_offers_older_entries(self) -> None:
+        self._on_timeline()
+        assert self.page.locator("[data-load-more]").count() == 1, (
+            "expected the timeline to offer a next page"
+        )
+
+    def assert_older_entries_do_not_repeat(self) -> None:
+        added = self._subjects()[len(self._first_page) :]
+        assert added, "the second page came back empty"
+        assert not set(added) & set(self._first_page), "the second page repeats the first"
 
     def _sort_state(self) -> tuple[str, str]:
         return (

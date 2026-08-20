@@ -74,12 +74,32 @@ class TimelineFilter:
     text: str | None = None
     from_dt: datetime | None = None
     to_dt: datetime | None = None
+    # The paging cursor, and not a filter: the timestamp of the oldest row already shown, so the
+    # next read starts strictly below it. A *timestamp* because three sources have three id spaces
+    # and no order in common — time is the only key all three answer on.
+    before_ts: datetime | None = None
     sort: str = "ts"
     descending: bool = True
 
     def wants(self, source: TimelineSource) -> bool:
         """Whether this source can contribute given the source filter."""
         return self.source is None or self.source == source
+
+    def is_narrowed(self) -> bool:
+        """Whether this read is about a *subject* rather than about now.
+
+        Only the log store has a default lookback (the journal and the occurrences carry whatever
+        retention left them), and that asymmetry is invisible on screen: correlating a request from
+        last week returned the fact and the occurrence with no line between them. A window is the
+        right bound for the live screen and the wrong one the moment an admin names what they are
+        looking for — so naming a subject drops it.
+
+        ``source``/``app``/``level`` are not subjects: they narrow *what kind* of row shows, not
+        which thing it is about, and an unfiltered screen filtered down to errors is still a screen
+        about now. The date bounds are absent for the same reason inverted — ``from_dt`` already
+        replaces the window on its own, in the store's own read.
+        """
+        return any((self.org_id, self.user_id, self.entity_id, self.request_id, self.text))
 
 
 def _app_of(logger: str) -> str:
@@ -103,8 +123,10 @@ class TimelineReader:
 
     async def search(self, flt: TimelineFilter, *, limit: int = 100) -> list[TimelineEntry]:
         entries: list[TimelineEntry] = []
-        # The firehose is level-gated at write time — what the level dropped was never
-        # recorded — while the two sources below carry full history whatever the level.
+        # The log store is level-gated at write time — what the level dropped was never
+        # recorded — while the two sources below carry full history whatever the level. It is
+        # also the only one with a default lookback, which ``_log_kwargs`` drops for a read that
+        # names a subject.
         if flt.wants(TimelineSource.logs):
             rows = await LogRepository(self.session).search(**_log_kwargs(flt, limit))
             entries += [_from_log_line(r) for r in rows]
@@ -126,6 +148,14 @@ class TimelineReader:
         # issue sources outright, since neither carries an entity_id (only business events do).
         if flt.entity_id:
             entries = [e for e in entries if e.entity_id == flt.entity_id]
+        # The cursor is *strict* where the sources' ``to_dt`` bound is inclusive: the row it was
+        # read off is the last one already shown, and an inclusive bound would repeat it at the top
+        # of every page. The cost is stated rather than hidden — rows sharing the cursor's exact
+        # microsecond are dropped with it, so a page can come back short by however many the
+        # boundary instant held. Three sources stamped by three clocks make that vanishingly rare,
+        # and the alternative is showing a row twice, which a reader would have to catch.
+        if flt.before_ts:
+            entries = [e for e in entries if e.ts < flt.before_ts]
         return _sorted(entries, flt)[:limit]
 
     async def activity(
@@ -209,10 +239,22 @@ def _request_facet(entries: list[TimelineEntry]) -> list[dict[str, Any]]:
     return [{"value": rid, "count": count, "label": labels.get(rid, rid)} for rid, count in ranked]
 
 
+def _upper_bound(flt: TimelineFilter) -> datetime | None:
+    """The tighter of the reader's ``to_dt`` filter and the paging cursor — both are upper bounds
+    on time, and whichever is closer is the one that has to hold."""
+    bounds = [d for d in (flt.to_dt, flt.before_ts) if d is not None]
+    return min(bounds) if bounds else None
+
+
 def _event_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     # The shared str base for all three sources: issue occurrences match a JSONB ``context ->>``
     # (text) and firehose lines match file JSON — both keep the ids as strings. Only the business
     # journal's uuid columns need parsing, done in ``_business_kwargs``.
+    #
+    # The cursor rides in on ``to_dt`` rather than as a fourth parameter on three query
+    # signatures: it is an upper bound on time, which is exactly what ``to_dt`` already is, and
+    # the whichever-is-tighter of the two is the one that has to hold. The *strict* half of the
+    # cursor is then applied over the merged list, in ``search``.
     return {
         "level": flt.level,
         "org_id": flt.org_id,
@@ -221,7 +263,7 @@ def _event_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
         "request_id": flt.request_id,
         "text": flt.text,
         "from_dt": flt.from_dt,
-        "to_dt": flt.to_dt,
+        "to_dt": _upper_bound(flt),
         "limit": limit,
     }
 
@@ -246,10 +288,16 @@ def _issue_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
 
 
 def _log_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
-    # The firehose takes the same filters as the other two, minus entity_id — a log line is not
+    # The log store takes the same filters as the other two, minus entity_id — a log line is not
     # keyed to a domain entity (the merged list drops it in memory below).
+    #
+    # ``window`` is the one filter with no twin: it is the store's default lookback, and it is
+    # dropped whenever the read names a subject, so the source with the shortest memory stops
+    # being the one that goes quiet exactly when it is asked the most important question.
     kwargs = _event_kwargs(flt, limit)
     del kwargs["entity_id"]
+    if flt.is_narrowed():
+        kwargs["window"] = None
     return kwargs
 
 

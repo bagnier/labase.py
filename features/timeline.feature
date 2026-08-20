@@ -124,6 +124,28 @@ Feature: Unified timeline
     When the admin sorts the timeline by "name" ascending
     Then "todo.created" is listed above "todo.deleted"
 
+  # Paging
+
+  # The screen answers one page. Below it there used to be nothing — no cursor, no button — so the
+  # only way further back was to guess a filter narrow enough to fit.
+  #
+  # Comfortably more than one page, not one row more: each source is asked for its *own* newest
+  # page-worth, so a run sized exactly to the page leaves the second one holding whatever the
+  # merge happened to round off — a knife edge to assert on, and no more of a test for it.
+
+  Scenario: A full page offers the entries below it
+    Given the timeline holds 150 business events in org "Acme"
+    And a server admin is signed in as "root@example.com"
+    When the admin opens the timeline
+    Then the timeline offers to load older entries
+
+  Scenario: Loading older entries continues where the page stopped
+    Given the timeline holds 150 business events in org "Acme"
+    And a server admin is signed in as "root@example.com"
+    When the admin opens the timeline
+    And the admin loads older entries
+    Then the older entries continue the timeline without repeating it
+
   # Export
 
   Scenario: An admin exports the filtered timeline as NDJSON
@@ -208,13 +230,26 @@ Feature: Unified timeline
 
   # Recent window
 
-  Scenario: The firehose window only shows recent lines
+  # The three sources do not share a memory: the journal and the issues keep whatever retention
+  # left them, the log store answers a rolling window. That window is right for a screen about
+  # *now* — and wrong the moment an admin names what they are looking for.
+
+  Scenario: The log window only shows recent lines
     Given the current date is "2026-06-26"
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-23"
     And a request log entry "request.finished" from org "Acme" recorded on "2026-06-26"
     And a server admin is signed in as "root@example.com"
     When the admin opens the timeline
     Then 1 logs entry is listed
+
+  # Without this, correlating an old request answered with the fact and the occurrence and no line
+  # between them — the source that explains the other two, silent on the one question it exists for.
+  Scenario: Correlating an old request still shows the log lines that explain it
+    Given the current date is "2026-06-26"
+    And request "r-200" in org "Acme" recorded a request log, a business event "todo.created", and a captured error "ValueError: stale" on "2026-06-20"
+    And a server admin is signed in as "root@example.com"
+    When the admin filters the timeline by request "r-200"
+    Then the request entry, the business event "todo.created", and the error "ValueError: stale" are all listed
 
   # Access
 

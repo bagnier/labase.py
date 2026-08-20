@@ -60,14 +60,27 @@ def step_seed_error_leveled(driver, event, level, org):
     driver.seed_error_from_org(event, org)
 
 
-@given(
-    parsers.parse(
-        'request "{rid}" in org "{org}" recorded a request log, '
-        'a business event "{event}", and a captured error "{error}"'
-    )
+# Anchored regex, for the reason the request-log steps above are: the dated variant below adds a
+# trailing clause, and parse's greedy fields would let this sentence swallow it whole.
+_CORRELATED = (
+    r'request "(?P<rid>[^"]+)" in org "(?P<org>[^"]+)" recorded a request log, '
+    r'a business event "(?P<event>[^"]+)", and a captured error "(?P<error>[^"]+)"'
 )
+
+
+@given(parsers.re(_CORRELATED + "$"))
 def step_seed_correlated(driver, rid, org, event, error):
     driver.seed_correlated_request(rid, org, event, error)
+
+
+@given(parsers.re(_CORRELATED + r' on "(?P<date>[^"]+)"$'))
+def step_seed_correlated_dated(driver, rid, org, event, error, date):
+    driver.seed_correlated_request(rid, org, event, error, when=_date(date))
+
+
+@given(parsers.parse('the timeline holds {count:d} business events in org "{org}"'))
+def step_seed_many_events(driver, count, org):
+    driver.seed_many_events(count, org)
 
 
 @given(parsers.parse('the log level is "{level}"'))
@@ -136,6 +149,11 @@ def step_sort_asc(driver, column):
     driver.sort_timeline(column, "asc")
 
 
+@when("the admin loads older entries")
+def step_load_older(driver):
+    driver.load_older_entries()
+
+
 @when(parsers.parse('the admin views the activity by "{grain}"'))
 def step_view_activity_grain(driver, grain):
     driver.view_activity_by(grain)
@@ -169,6 +187,16 @@ def step_entry_above(driver, a, b):
 )
 def step_correlated_all_listed(driver, event, error):
     driver.assert_all_listed("request.finished", event, error)
+
+
+@then("the timeline offers to load older entries")
+def step_offers_older(driver):
+    driver.assert_offers_older_entries()
+
+
+@then("the older entries continue the timeline without repeating it")
+def step_older_do_not_repeat(driver):
+    driver.assert_older_entries_do_not_repeat()
 
 
 @then(parsers.parse("{n:d} logs entry is listed"))

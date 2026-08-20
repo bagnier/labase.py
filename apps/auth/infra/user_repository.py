@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import structlog
 
+from apps.shared.observability.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.supabase import get_admin_supabase
 
 log = structlog.get_logger(__name__)
@@ -70,23 +71,45 @@ async def find_user_id_by_email(email: str) -> uuid.UUID | None:
     return None
 
 
+def _report_lookup_failures(failures: list[BaseException], total: int) -> None:
+    """One verdict for the whole batch, never one per id.
+
+    The lookups gather concurrently, so a directory that is down fails all of them at once: a line
+    per id filed the same outage once per name on the screen, which on a busy timeline is sixty
+    occurrences against one issue for a single page view. Reported once, with how many of how many
+    failed — the shape a reader actually needs.
+
+    The batch is as broken as its *worst* answer. A refusal (an account that is gone, a stale id
+    off an old log line) is an ordinary outcome and must not speak for a batch that also hit a real
+    outage, so the report is given the first failure that was not a refusal, and falls back to the
+    refusal only when that is all there was.
+    """
+    if not failures:
+        return
+    worst = next((exc for exc in failures if not is_refusal(exc)), failures[0])
+    log_dependency_failure(log, "auth.user_lookup_failed", worst, failed=len(failures), total=total)
+
+
 async def resolve_user_emails(user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
     if not user_ids:
         return {}
     admin = get_admin_supabase().auth.admin
+    failures: list[BaseException] = []
 
     async def _get(uid: uuid.UUID) -> tuple[uuid.UUID, str]:
         # Best-effort, per id: the caller only wants a label, so an id the directory no longer
         # knows resolves to "" — and so does a record that cannot be read at all. Catching every
         # exception, not just AuthApiError: the batch gathers concurrently, so anything escaping
         # here fails the whole page, and a GoTrue record the SDK's own model rejects is enough.
+        # Kept, not logged: what it means is a property of the batch, judged once below.
         try:
             resp = await asyncio.to_thread(admin.get_user_by_id, str(uid))
         except Exception as exc:
-            log.warning("auth.user_lookup_failed", user_id=str(uid), exc_info=exc)
+            failures.append(exc)
             return uid, ""
         email = resp.user.email if resp.user else ""
         return uid, email or ""
 
     results = await asyncio.gather(*(_get(uid) for uid in user_ids))
+    _report_lookup_failures(failures, len(user_ids))
     return dict(results)

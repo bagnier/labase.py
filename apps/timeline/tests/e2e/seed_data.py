@@ -13,7 +13,7 @@ the one place a raw insert is warranted — it also lets a fixture backdate ``cr
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -76,6 +76,30 @@ def event_model(
         entity_id=uuid.uuid7() if entity_name else None,
         entity_name=entity_name,
     )
+
+
+def event_run(count: int, org: str, *, now: datetime) -> list[BusinessEventRecord]:
+    """``count`` facts of one org, a minute apart, **oldest first** — the order to add them in.
+
+    Oldest first is not cosmetic. The journal pages on ``id desc`` (a uuid7, minted by the insert)
+    while the timeline sorts on ``created_at``, and production keeps the two in step for free:
+    ``created_at`` is the column default, stamped by the very statement that mints the id. A
+    fixture that backdates ``created_at`` breaks that tie unless it inserts in the same order, and
+    what it then measures is a state the product cannot reach — the source handing back its
+    *oldest* rows as if they were its newest.
+
+    A distinct ``entity_name`` per row, because a paging assertion has to tell one row from the
+    next: every fact here is a ``todo.created``, so the kind cannot say which page a row came from.
+    """
+    return [
+        event_model(
+            "todo.created",
+            org=org,
+            when=now - timedelta(minutes=i),
+            entity_name=f"fact {i:03d}",
+        )
+        for i in reversed(range(count))
+    ]
 
 
 def log_line(

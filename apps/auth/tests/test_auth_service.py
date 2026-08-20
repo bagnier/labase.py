@@ -14,6 +14,7 @@ from apps.auth.domain.service import (
 )
 from apps.auth.tests.given_helpers import delete_user, find_users
 from apps.shared.events import BusinessEvent
+from apps.shared.observability import capture
 from apps.shared.persistence.supabase import get_admin_supabase
 
 
@@ -103,6 +104,43 @@ async def test_logout_network_error_does_not_raise():
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         await logout("some-token")  # must not raise
+
+
+# A sign-out reaches GoTrue, and that call fails two ways that look identical in the ``except``:
+# the token was already expired (GoTrue answered, and the disguise comes off anyway), or GoTrue is
+# unreachable (nobody is signing out anywhere). At ``warning`` both read the same.
+
+
+@pytest.mark.asyncio
+async def test_a_sign_out_gotrue_refuses_is_not_a_bug():
+    """An expired token is the ordinary way a sign-out ends — the cookies drop either way."""
+    capture._QUEUE.clear()
+    refused = AuthApiError("invalid token", 401, "bad_jwt")
+
+    with patch("apps.auth.domain.service.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = refused
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await logout("expired-token")
+
+    assert list(capture._QUEUE) == []
+
+
+@pytest.mark.asyncio
+async def test_a_sign_out_that_never_reached_gotrue_is_a_bug():
+    """Nobody's session is being revoked anywhere, and the only trace used to roll out of the log
+    window in two days."""
+    capture._QUEUE.clear()
+
+    with patch("apps.auth.domain.service.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = OSError("network down")
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        await logout("some-token")
+
+    assert [type(captured.exc) for captured in capture._QUEUE] == [OSError]
 
 
 @pytest.mark.asyncio

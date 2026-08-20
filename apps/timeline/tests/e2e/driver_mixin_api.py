@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 
+from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.observability.logging import apply_log_level
 from apps.shared.observability.repository import LogRepository
@@ -25,6 +26,16 @@ class TimelineApiMixin(ApiBase):
 
     def seed_event_from_org(self, event: str, org: str, when: datetime | None = None) -> None:
         self._add_event(seed_data.event_model(event, org=timeline_org_id(org), when=when))
+
+    def seed_many_events(self, count: int, org: str) -> None:
+        """A run of facts long enough to overflow one page — added in a single transaction, since
+        a hundred round trips would be the slowest arrangement in the suite."""
+        models = seed_data.event_run(count, timeline_org_id(org), now=clock.now())
+
+        async def _do(s):
+            s.add_all(models)
+
+        self.run(db.seed_fixtures(_do))
 
     def seed_event_by_user(self, event: str, email: str) -> None:
         self._add_event(seed_data.event_model(event, user=timeline_user_id(email)))
@@ -79,12 +90,14 @@ class TimelineApiMixin(ApiBase):
         # In-process: the API driver shares the running app, so this is the live firehose level.
         apply_log_level(level)
 
-    def seed_correlated_request(self, request_id: str, org: str, event: str, error: str) -> None:
+    def seed_correlated_request(
+        self, request_id: str, org: str, event: str, error: str, *, when: datetime | None = None
+    ) -> None:
         # All three sources must key on the same value for the timeline to correlate them.
         oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
-        self._append_request("request.finished", org=oid, request_id=request_id)
-        self._add_event(seed_data.event_model(event, org=oid, request_id=request_id))
-        self._insert_error(error, org=oid, request_id=request_id)
+        self._append_request("request.finished", org=oid, request_id=request_id, when=when)
+        self._add_event(seed_data.event_model(event, org=oid, request_id=request_id, when=when))
+        self._insert_error(error, org=oid, request_id=request_id, when=when)
 
     # ── reads ────────────────────────────────────────────────────────────────
     def _open_timeline(self, **params) -> None:
@@ -102,6 +115,30 @@ class TimelineApiMixin(ApiBase):
 
     def open_timeline(self) -> None:
         self._open_timeline()
+
+    # ── paging ───────────────────────────────────────────────────────────────
+    def _subjects(self) -> list[str]:
+        """What each entry is *about*. A run of facts shares one kind, so the name cannot tell
+        one page's rows from the next one's — the subject can."""
+        return [e["entity_name"] for e in self._entries() if e["entity_name"]]
+
+    def load_older_entries(self) -> None:
+        """Follow the cursor the screen just handed back — the API twin of clicking the button."""
+        self._first_page = self._subjects()
+        cursor = self.response.json()["next_before"]
+        assert cursor, "the timeline offered no next page to load"
+        self._open_timeline(**{**self._timeline_filter, "before": cursor})
+
+    def assert_offers_older_entries(self) -> None:
+        assert self.response.json()["next_before"], (
+            f"expected a next page after {len(self._entries())} entries"
+        )
+
+    def assert_older_entries_do_not_repeat(self) -> None:
+        added = self._subjects()
+        assert added, "the second page came back empty"
+        repeated = set(added) & set(self._first_page)
+        assert not repeated, f"the second page repeats {sorted(repeated)}"
 
     def filter_timeline_by_org(self, org: str) -> None:
         self._open_timeline(org_id=timeline_org_id(org))

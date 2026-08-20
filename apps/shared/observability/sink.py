@@ -93,6 +93,23 @@ class _Outage:
 _outage = _Outage()
 
 
+@dataclass
+class _Overflow:
+    """How many lines the bounded queue shed before any drain could take them — the twin of the
+    capture queue's counter, and for the same reason: a dropped line is one the Timeline will
+    never show, and silence there reads exactly like a quiet server.
+
+    Counted rather than logged where it happens: the shedding happens inside
+    :func:`enqueue_line`, on the log path itself, so a line of its own would feed the very queue
+    that is already full. The drain says it instead, once per tick.
+    """
+
+    dropped: int = 0
+
+
+_overflow = _Overflow()
+
+
 def fallback_dir() -> Path:
     """Where a batch goes when the store refuses it.
 
@@ -141,6 +158,13 @@ def _write_to_files(lines: list[dict[str, Any]]) -> None:
         _write_batch(path, batch)
 
 
+def report_overflow() -> None:
+    """Say what the queue shed since the last tick — once per tick, never once per lost line."""
+    dropped, _overflow.dropped = _overflow.dropped, 0
+    if dropped:
+        log.warning("log_sink.overflowed", dropped=dropped)
+
+
 def report_write_outage() -> None:
     """Say that the store stopped accepting lines, or started again — once per transition."""
     if _outage.refusing and not _outage.announced:
@@ -162,7 +186,12 @@ _QUEUE: deque[dict[str, Any]] = deque(maxlen=10000)
 
 def enqueue_line(line: dict[str, Any]) -> None:
     """Hand one line to the writer queue — a plain ``deque.append``, no I/O and no await, so it is
-    safe on the request's critical path, before the loop exists, and from worker threads."""
+    safe on the request's critical path, before the loop exists, and from worker threads.
+
+    A full queue displaces its oldest line; that one is tallied here and reported by the drain.
+    """
+    if len(_QUEUE) == _QUEUE.maxlen:
+        _overflow.dropped += 1
     _QUEUE.append(line)
 
 
@@ -207,6 +236,7 @@ def clear_log_sink() -> None:
     """Drop queued lines and delete every fallback file — test isolation between scenarios."""
     _QUEUE.clear()
     _outage.lines, _outage.refusing, _outage.announced = 0, False, False
+    _overflow.dropped = 0
     for path in fallback_dir().glob("firehose-*.jsonl"):
         path.unlink(missing_ok=True)
 
@@ -238,22 +268,24 @@ class LogDrain:
     async def tick(self) -> None:
         """Drain once: to the store, and to the day files if the store refuses."""
         lines = _drain_queue()
-        if not lines:
-            return
-        try:
-            async with admin_session_factory()() as session:
-                await LogRepository(session).append(lines)
-                await session.commit()
-        except Exception:
-            # No ``log.exception`` and no verdict here: the store being down is already said by
-            # ``report_write_outage``, once per transition, and an exception at this point would
-            # be one more line feeding the queue that cannot be drained.
-            _outage.refusing = True
-            _outage.lines += len(lines)
-            _write_to_files(lines)
-        else:
-            _outage.refusing = False
-        report_write_outage()
+        if lines:
+            try:
+                async with admin_session_factory()() as session:
+                    await LogRepository(session).append(lines)
+                    await session.commit()
+            except Exception:
+                # No ``log.exception`` and no verdict here: the store being down is already said by
+                # ``report_write_outage``, once per transition, and an exception at this point
+                # would be one more line feeding the queue that cannot be drained.
+                _outage.refusing = True
+                _outage.lines += len(lines)
+                _write_to_files(lines)
+            else:
+                _outage.refusing = False
+            report_write_outage()
+        # Outside the guard above: what the queue shed is owed whether or not this pass had
+        # anything left to write.
+        report_overflow()
 
     async def _run(self) -> None:
         while True:

@@ -120,6 +120,19 @@
           {% endif %}
         </span>
       {% endcall %}
+      {# The three sources do not share a memory: the journal and the issues keep whatever
+         retention left them, the log store answers a rolling window. Said out loud, because the
+         way it used to be discovered was a correlation that came back missing its lines. #}
+      <p class="px-3 pt-3 text-xs text-base-content/60" data-log-window>
+        <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
+        {% if log_window_bounded %}
+          Logs cover the last {{ log_window_days }} days here; facts and issues go back as far as
+          retention. Filter by org, user, request or text — or set a date — to read further back.
+        {% else %}
+          Logs are read as far back as retention, not just the last {{ log_window_days }} days:
+          the filter names a subject, so the window steps aside.
+        {% endif %}
+      </p>
       {% if entries %}
         {# Only the default ts sort orders the whole window: the reader takes each source's own
            newest rows, so any other column orders that sample and not the timeline. Say it rather

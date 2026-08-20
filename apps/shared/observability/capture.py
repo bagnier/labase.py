@@ -153,6 +153,20 @@ def capture_processor(
     return event_dict
 
 
+async def drain_once() -> None:
+    """Fold whatever is queued into its issues, now, on the caller's task.
+
+    For the one moment there is still an event loop but no drain running: a lifespan startup that
+    raised. The trackers subscribe at *mount*, so they are already there; only the background task
+    that would have emptied the queue never started, and the process is about to die with the
+    exception that explains why still sitting in it.
+
+    Not the answer for a dying interpreter — ``sys.excepthook`` runs with no loop and no pool, and
+    writes its line to disk instead (see :mod:`apps.shared.observability.logging`).
+    """
+    await CaptureDrain(interval_seconds=0).tick()
+
+
 class CaptureDrain:
     """Lifespan task that folds queued exceptions into their issues.
 

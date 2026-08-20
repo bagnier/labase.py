@@ -8,6 +8,7 @@ announced once rather than once per line.
 
 import json
 import uuid
+from collections import deque
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
@@ -97,6 +98,29 @@ async def test_stop_drains_what_the_loop_left_behind(store):
     await writer.stop()  # never started, but stop must still drain
 
     assert [line.name for line in await LogRepository(store).search(text=marker)] == [marker]
+
+
+# The queue is bounded, so under a burst it sheds — and a shed line is one the Timeline will never
+# show. Silence there reads exactly like a quiet server, which is the failure mode the whole sink
+# exists to avoid; the capture queue has said its shortfall since the day it was written.
+
+
+@pytest.mark.asyncio
+async def test_the_drain_reports_the_lines_the_queue_had_to_shed(log_chain, store, monkeypatch):
+    """Dropping the oldest in silence loses the very lines a reader is looking for, and the count
+    has to come from the drain: it is the only side of the sink that still has a voice once the
+    queue is full."""
+    monkeypatch.setattr(sink, "_QUEUE", deque(maxlen=2))
+
+    for i in range(5):
+        _enqueue(f"shed.{i}")
+    await LogDrain(interval_seconds=0).tick()
+
+    assert [
+        (line.name, line.payload.get("dropped"))
+        for line in log_chain()
+        if line.name == "log_sink.overflowed"
+    ] == [("log_sink.overflowed", 3)]
 
 
 # The store can refuse — Postgres down, a pool exhausted, a migration mid-flight. Swallowed, that
