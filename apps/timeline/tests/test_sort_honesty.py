@@ -5,7 +5,7 @@ to the page size. On the default ``ts`` sort that is exact: the newest hundred o
 come from the newest hundred of each source. On any other column it is not — sorting by name
 ascending returns the alphabetically first hundred *of a recent sample*, never of the timeline.
 
-Fixing that means sorting in each source, which the firehose (a file) cannot do without reading
+Fixing that means sorting in each source, which the log sink cannot do without reading
 all of it. Until the sources are one queryable store, the honest move is to keep the sort and say
 what it covers, rather than to present a sample as an ordering.
 """

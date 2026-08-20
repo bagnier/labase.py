@@ -338,7 +338,7 @@ async def timeline_screen(
             "org_label": org_label,
             "user_label": user_label,
             "request_label": request_label,
-            # Only the firehose level is tuned from the screen; the enabled switch stays on the
+            # Only the log level is tuned from the screen; the enabled switch stays on the
             # console's app page like every other app.
             "settings": [r for r in settings if r["key"] == _LOG_LEVEL_KEY],
             "filters": filters,

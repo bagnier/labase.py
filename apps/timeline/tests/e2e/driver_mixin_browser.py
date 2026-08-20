@@ -87,7 +87,7 @@ class TimelineBrowserMixin(BrowserBase):
         self._insert_error(title, org=timeline_org_id(org), when=when)
 
     def set_process_log_level(self, level: str) -> None:
-        # The browser app runs in-process, so this is the live firehose level.
+        # The browser app runs in-process, so this is the live log level.
         apply_log_level(level)
 
     def seed_correlated_request(

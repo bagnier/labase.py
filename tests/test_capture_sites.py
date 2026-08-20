@@ -9,7 +9,7 @@ stack: enough to know something failed, never enough to know what.
 The doctrine it enforces is the one written in ``apps/shared/logs/capture``:
 
 - ``log.exception`` — a bug; the capture seam folds it into an issue (``exc_info`` implicit).
-- ``log.warning(..., exc_info=exc)`` — degraded but handled; the stack reaches the firehose and
+- ``log.warning(..., exc_info=exc)`` — degraded but handled; the stack reaches the log sink and
   **no** issue opens, since the seam only fires on ``error`` level.
 
 The third rule is the floor under those two: a broad handler that says *nothing* — no line, no

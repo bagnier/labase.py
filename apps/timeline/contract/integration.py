@@ -101,7 +101,7 @@ async def _reload_observability(event: SettingsChanged) -> None:
 
 
 async def _purge(session: AsyncSession, _payload: dict) -> None:
-    """Retention consumer. The firehose is one row per line, so this is the counterweight that
+    """Retention consumer. The log sink is one row per line, so this is the counterweight that
     makes a table viable where ``request_metrics`` uses aggregation instead — and the delete the
     per-day files promised ("retention is a plain file delete") and never performed."""
     retention = int(get_settings(TIMELINE_APP).retention_days)
@@ -125,7 +125,7 @@ async def _overview(_query: ConsoleOverviewQuery) -> ConsoleOverview:
         title="Timeline",
         icon="scroll",
         section="operations",
-        data={"lines": [f"firehose level {get_settings(TIMELINE_APP).log_level}"]},
+        data={"lines": [f"log level {get_settings(TIMELINE_APP).log_level}"]},
     )
 
 
@@ -138,9 +138,9 @@ def _declare_settings() -> SettingsDeclaration:
                 LOG_LEVEL_KEY,
                 "string",
                 DEFAULT_LOG_LEVEL,
-                "Firehose log level for structlog and stdlib — applies live, no restart",
+                "Log level for structlog and stdlib — applies live, no restart",
             ),
-            SettingDef("retention_days", "number", "30", "Days of firehose lines to keep"),
+            SettingDef("retention_days", "number", "30", "Days of log lines to keep"),
             SettingDef(
                 HEAVY_QUERIES_KEY,
                 "number",

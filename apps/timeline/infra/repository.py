@@ -1,8 +1,8 @@
 """The merge reader — orchestrates the three stores behind the console Timeline into one list:
-the business-events journal, issue occurrences and the firehose.
+the business-events journal, issue occurrences and the log sink.
 
 It never touches another context's tables: business events are read through the shared
-``events.EventRepository`` (shared infra), the firehose through
+``events.EventRepository`` (shared infra), the log sink through
 ``logs.LogRepository`` (shared infra too), issues through
 ``issues.contract.queries.search_issue_occurrences``.
 
@@ -108,7 +108,7 @@ def _app_of(logger: str) -> str:
     ``sqlalchemy``). Reading it off the *event name* instead would guess, and guess wrong —
     ``invitation.accept_error`` belongs to organizations, ``page.provider_failed`` to shared.
 
-    Shared by the firehose and by issue occurrences, which carry the logger in their captured
+    Shared by the log sink and by issue occurrences, which carry the logger in their captured
     context: a failure and the lines around it must land under the same app, or the pivot from an
     issue back to the code that raised it stops working."""
     head, _, rest = logger.partition(".")
@@ -144,7 +144,7 @@ class TimelineReader:
         # memory over every source at once, the same seam sort/pagination already live in.
         if flt.app:
             entries = [e for e in entries if e.app == flt.app]
-        # Correlating by the concerned entity keeps only its rows — which excludes the firehose and
+        # Correlating by the concerned entity keeps only its rows — which excludes the log sink and
         # issue sources outright, since neither carries an entity_id (only business events do).
         if flt.entity_id:
             entries = [e for e in entries if e.entity_id == flt.entity_id]
@@ -214,8 +214,8 @@ def request_desc(entry: TimelineEntry) -> str | None:
     """The human label for a request: its ``METHOD /path``.
 
     A business row carries it on its own ``request_name`` column, pinned when the request ran — so
-    it stays legible long after the firehose window that produced the request has rolled over. A
-    firehose line still derives it from its payload, where the request source binds both."""
+    it stays legible long after the log window that produced the request has rolled over. A
+    log line still derives it from its payload, where the request source binds both."""
     if entry.request_name:
         return entry.request_name
     method, path = entry.payload.get("method"), entry.payload.get("path")
@@ -248,7 +248,7 @@ def _upper_bound(flt: TimelineFilter) -> datetime | None:
 
 def _event_kwargs(flt: TimelineFilter, limit: int) -> dict[str, Any]:
     # The shared str base for all three sources: issue occurrences match a JSONB ``context ->>``
-    # (text) and firehose lines match file JSON — both keep the ids as strings. Only the business
+    # (text) and log lines match file JSON — both keep the ids as strings. Only the business
     # journal's uuid columns need parsing, done in ``_business_kwargs``.
     #
     # The cursor rides in on ``to_dt`` rather than as a fourth parameter on three query
@@ -316,7 +316,7 @@ def _from_log_line(line: LogLine) -> TimelineEntry:
 
 
 def _from_event(record: BusinessEventRecord) -> TimelineEntry:
-    # TimelineEntry merges three sources (firehose ids are plain strings from JSON), so its ids
+    # TimelineEntry merges three sources (log ids are plain strings from JSON), so its ids
     # stay str: stringify the journal record's uuids at this boundary.
     return TimelineEntry(
         ts=record.created_at,

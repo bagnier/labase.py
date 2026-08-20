@@ -87,7 +87,7 @@ class TimelineApiMixin(ApiBase):
         self._insert_error(title, org=timeline_org_id(org), when=when)
 
     def set_process_log_level(self, level: str) -> None:
-        # In-process: the API driver shares the running app, so this is the live firehose level.
+        # In-process: the API driver shares the running app, so this is the live log level.
         apply_log_level(level)
 
     def seed_correlated_request(

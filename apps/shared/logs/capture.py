@@ -239,5 +239,5 @@ class CaptureDrain:
             except Exception as exc:
                 # A drain failure is degraded-but-manageable — and must NOT log.exception, which
                 # would re-enter capture. Warn and retry next tick. ``exc_info`` on a *warning* is
-                # how the stack still reaches the firehose: the seam only fires at ``error``.
+                # how the stack still reaches the log sink: the seam only fires at ``error``.
                 log.warning("capture.drain_failed", exc_info=exc)

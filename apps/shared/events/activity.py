@@ -5,7 +5,7 @@ show a member their own history: the profile / dashboard feed, and the contribut
 Every function is pure — no session, no I/O — and the raw ``kind``/payload never reach a member;
 only projected, safe fields do.
 
-Not :mod:`apps.timeline`, which is the console's unified read view over the firehose, the journal
+Not :mod:`apps.timeline`, which is the console's unified read view over the log sink, the journal
 *and* issue occurrences. This one owns no screen, reads one source, and knows nothing of the bus,
 the catalog, the wiring or the listener — only :class:`BusinessEventRecord`.
 """

@@ -1,7 +1,7 @@
 """The unified timeline entry — one envelope over three sources.
 
 ``apps/timeline`` is a pure reader: it writes nothing. It merges, at read time, the three
-systems that record anything — the structlog firehose (a rotated JSON file), the business-events
+systems that record anything — the log sink (one shared Postgres table), the business-events
 journal (``business_events``) and issue occurrences (``issue_occurrences``) — into this single
 shape, keyed for correlation by ``request_id`` / ``org_id`` / ``user_id`` / ``entity_id`` (the
 concerned entity).
@@ -17,7 +17,7 @@ from apps.shared.vocabulary import AppName
 
 
 class TimelineSource(StrEnum):
-    logs = "logs"  # the structlog firehose — requests, background work, libraries alike
+    logs = "logs"  # the log sink — requests, background work, libraries alike
     business = "business"  # the append-only business-events journal
     issue = "issue"  # occurrences of tracked issues
 
@@ -25,7 +25,7 @@ class TimelineSource(StrEnum):
 class TimelineEntry(BaseModel):
     """One entry of the unified timeline (a DTO, never an ORM row).
 
-    ``name`` is what its source calls it: a business ``kind``, a firehose trace name, or an issue
+    ``name`` is what its source calls it: a business ``kind``, a log trace name, or an issue
     title. One column, three vocabularies — the viewer names its sources, it never renames them.
 
     ``app`` is the per-app axis the console browses by. A business fact carries it as its own

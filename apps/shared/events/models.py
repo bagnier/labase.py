@@ -63,7 +63,7 @@ class BusinessEventRecord(Base, UUIDPk, Created):
     entity_name: Mapped[str | None] = mapped_column(default=None)
     request_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     # "GET /profile", bound at request time: without it the request id resolves only while the
-    # firehose still holds that request's lines, and would be opaque for good past that retention.
+    # log sink still holds that request's lines, and would be opaque for good past that retention.
     request_name: Mapped[str | None] = mapped_column(default=None)
     ip_address: Mapped[str | None] = mapped_column(default=None)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

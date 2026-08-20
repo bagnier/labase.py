@@ -40,7 +40,7 @@ class Issue(Base, UUIDPk, Versioned, Timestamped):
 
 
 class Occurrence(Base, UUIDPk, Created):
-    """One sighting of an issue, with the JSONB context that pivots to the firehose.
+    """One sighting of an issue, with the JSONB context that pivots to the log sink.
 
     ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so the newest-first cursor page
     (``order_by(id.desc())`` + ``id < before_id``) keeps working without a bigint sequence."""

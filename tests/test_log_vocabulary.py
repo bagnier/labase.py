@@ -1,6 +1,6 @@
 """One invariant over the *log line names*: a line never spells a fact, nor claims another app.
 
-``tests/test_event_vocabulary`` pins what the journal says. This pins what the firehose says, and
+``tests/test_event_vocabulary`` pins what the journal says. This pins what the log sink says, and
 the rule holding the two apart — because they meet again in the console's Timeline, where a reader
 tells a fact from a trace by its **source**, never by re-reading its name. A line spelling
 ``issues.opened`` would put one wording on both sides of that split: on the journal side something

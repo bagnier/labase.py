@@ -36,9 +36,10 @@ class TechnicalSettings(BaseSettings):
         validation_alias=AliasChoices("ENVIRONMENT", "LABASE_ENV"),
     )
     log_debug: bool = False
-    # structlog events are rendered to stdout AND appended to per-day JSON files here, which is
-    # what gives the unified logs viewer a recent window to read back. Production points this at a
-    # real log volume.
+    # Where a batch goes when Postgres refuses it: lines are rendered to stdout and appended to
+    # ``log_lines``, and only a failing write falls back to per-day JSON files here — a database
+    # outage is exactly when an operator still wants the log. Production points this at a real
+    # log volume. The env var keeps its FIREHOSE_ name, which a deploy already sets.
     firehose_dir: str = ".firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True

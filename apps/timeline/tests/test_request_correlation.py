@@ -1,6 +1,6 @@
 """The promise, end to end: one failed request leaves records in all three sources, all naming it.
 
-Every other test here seeds a source by hand — a firehose line written with the ids already on it,
+Every other test here seeds a source by hand — a log line written with the ids already on it,
 an occurrence inserted with a context. That is what let the correlation keys go missing in
 production while the suite stayed green: nothing drove a *real* request through the real chain and
 asked whether the records it leaves behind actually name the same request.

@@ -32,7 +32,7 @@ class UnlimitedEndpoint(Exception):
 
     Raised only to give the capture seam a live exception to fingerprint on — caught immediately
     and logged, exactly like the listener's ``UnroutableFact``. The seam reads "error carrying an
-    exception", so a bare ``log.error`` — which is what this used to be — reached the firehose and
+    exception", so a bare ``log.error`` — which is what this used to be — reached the log sink and
     nothing else: the hole rolled out of the two-day window with no issue ever opened.
     """
 

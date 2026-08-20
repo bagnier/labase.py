@@ -79,7 +79,7 @@ async def test_log_exception_is_captured():
 
 @pytest.mark.asyncio
 async def test_an_occurrence_keeps_the_logger_that_raised():
-    """The pivot back to the firehose: an occurrence and the line that produced it correlate on
+    """The pivot back to the log sink: an occurrence and the line that produced it correlate on
     the logger, which is what tells a reader *where* in the code the issue came from."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     log = structlog.get_logger(_PROBE_LOGGER)

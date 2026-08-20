@@ -206,7 +206,7 @@ def log_processor(
     Sits in the terminal chain (see :mod:`apps.shared.logs.chain`), after the shared
     processors have given the line its timestamp, level, logger and correlation ids, and before the
     renderer — so it sees a plain dict, whoever wrote it. Enqueue only: the write happens off the
-    request path in :class:`FirehoseWriter`. A snapshot (``dict(event_dict)``) is queued because
+    request path in :class:`LogDrain`. A snapshot (``dict(event_dict)``) is queued because
     the renderer mutates the live mapping. Below-level calls never reach here, so the sink is
     gated by the live log level without testing it.
     """

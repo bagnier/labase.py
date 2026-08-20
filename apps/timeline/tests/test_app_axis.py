@@ -59,7 +59,7 @@ def test_an_occurrence_names_the_app_that_raised_not_its_own_title():
 
 
 def test_an_occurrence_from_a_library_names_the_library():
-    """Same rule the firehose already follows, so both sources of a failure agree."""
+    """Same rule the log sink already follows, so both sources of a failure agree."""
     entry = _from_issue(_occurrence("TimeoutError: pool exhausted", "sqlalchemy.pool"))
 
     assert entry.app == "sqlalchemy"

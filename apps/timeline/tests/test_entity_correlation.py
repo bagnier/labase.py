@@ -28,5 +28,5 @@ def test_timeline_filter_by_entity_keeps_only_that_entitys_events(driver):
     assert "todo.created" in body  # the concerned entity's events…
     assert "todo.ticked" in body
     assert "calendar.event_created" not in body  # …and nothing from another entity
-    # The firehose/issue sources carry no entity, so an entity filter excludes them wholesale.
+    # The log/issue sources carry no entity, so an entity filter excludes them wholesale.
     assert "request.finished" not in body

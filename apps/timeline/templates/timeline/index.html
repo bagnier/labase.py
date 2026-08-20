@@ -16,7 +16,7 @@
   <div class="space-y-6">
     {# Export is a page-level action on the current filtered view — kept away from the filters. #}
     {% call page_header('Timeline',
-      'One timeline across all three sources — the structlog firehose, the business-events journal and
+      'One timeline across all three sources — the log sink, the business-events journal and
       tracked issues — server-wide. Correlate by request id.') %}
       <a class="btn btn-sm btn-ghost"
          aria-label="Export NDJSON"
@@ -181,9 +181,9 @@
       {% endif %}
     </div>
     <section aria-label="Timeline settings" class="max-w-2xl">
-      <h2 class="text-sm font-semibold mb-1">Firehose level</h2>
+      <h2 class="text-sm font-semibold mb-1">Log level</h2>
       <p class="text-xs text-base-content/70 mb-3">
-        Gates the request/app firehose. Business events and issues are recorded regardless.
+        Gates the request and app log lines. Business events and issues are recorded regardless.
         Applies live — no restart.
       </p>
       {% with app = "timeline", saved_key = none %}
