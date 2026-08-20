@@ -2,8 +2,9 @@
 
 Reachability alone is not health: a degraded Docker proxy (seen after an
 OrbStack freeze) still accepts TCP but multiplies every round-trip, silently
-turning the ~100s test suite into 8 minutes. Each check therefore reports its
-round-trip time and warns beyond `WARN_SECONDS`.
+stretching the test suite several-fold. Each check therefore reports its
+round-trip time and warns beyond `WARN_SECONDS` — a per-call budget, which is
+what stays true as the suite grows.
 
 Run host-side against the local stack: `make doctor` (ENV_FILE=.env.test).
 The guardrail test in tests/test_config.py reuses these checks so a degraded

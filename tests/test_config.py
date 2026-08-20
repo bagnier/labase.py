@@ -7,7 +7,7 @@ from `.env` would mask the one in `.env.test`.
 
 The second fails when the stack is *degraded* rather than down: a wedged Docker
 proxy keeps accepting TCP while multiplying every round-trip (~×5 on the whole
-suite). Better one loud failure here than 341 silently slow tests.
+suite). Better one loud failure here than a whole suite that is merely slow.
 """
 
 import pytest

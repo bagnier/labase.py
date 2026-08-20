@@ -178,16 +178,13 @@ backup-storage:
 # tests green. It only means something over the whole suite. Measured at 51% the day it
 # was wired in on an accumulated figure — the honest single-run number is 49.8%, which is
 # what this floor sits under. Raise it when the real number moves up, never lower it to fit.
-# The suite normally runs in ~100s; way beyond that means the environment is
-# degraded (not the tests) — say so instead of letting it pass silently slow.
+# No wall-clock guard here on purpose. There was one, warning past a threshold derived from a
+# duration measured once — and a duration in a Makefile rots: the suite tripled in test count and
+# the warning started firing on a healthy stack, which is how a guardrail becomes noise. What it
+# was a proxy for is measured directly and cannot go stale: `test_local_stack_is_responsive`
+# times each dependency on every run and fails the suite loudly when the stack is degraded.
 test: provision-test
-	@start=$$(date +%s); \
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest --cov-fail-under=48; rc=$$?; \
-	elapsed=$$(( $$(date +%s) - start )); \
-	if [ $$elapsed -gt 240 ]; then \
-		echo "⚠ pytest took $${elapsed}s (~100s expected) — run 'make doctor'"; \
-	fi; \
-	exit $$rc
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest --cov-fail-under=48
 
 test-e2e: provision-test
 	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser --no-cov
