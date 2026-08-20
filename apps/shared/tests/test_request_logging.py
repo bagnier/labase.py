@@ -8,10 +8,13 @@ Pure middleware logic — no DB, no running app: the decision is exercised throu
 import uuid
 
 import structlog
-from fastapi import APIRouter, Depends, FastAPI, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response
 from fastapi.testclient import TestClient
+from sqlalchemy.orm.exc import StaleDataError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
+from apps.shared.http.exceptions import handle_http_error, handle_stale_data
 from apps.shared.observability import request
 from apps.shared.observability.metrics import accumulator
 
@@ -53,6 +56,73 @@ def test_internal_referer_is_same_host_only():
     assert request._is_internal_referer(_req("/x", referer="https://example.com/page"))
     assert not request._is_internal_referer(_req("/x", referer="https://evil.com/page"))
     assert not request._is_internal_referer(_req("/x", referer=None))
+
+
+# ── One line, whatever refused the exchange ──────────────────────────────────────────────────
+#
+# A refusal used to leave two lines: ``request.rejected`` from the exception handler and
+# ``request.finished`` from the middleware, both about the same exchange — and the noisier of the
+# two also traced the asset 404s the quieter one deliberately skips. ``detail`` was the only thing
+# the second line held that the first did not, so it moved onto the first, and the level moved with
+# it: what the code could not carry through and answered with a 4xx is a warning.
+#
+# A 404 is the exception to that: "there is nothing here" is not a refusal, and a stray URL is not
+# ours to fix — so it stays at ``info`` unless it is a dead link from one of our own pages.
+
+
+def _refused(log_chain, path: str, raiser, *, referer: str | None = None):
+    """Serve one exchange whose handler raises, through the *real* exception handlers."""
+    app = FastAPI()
+    app.get("/{whole_path:path}")(raiser)
+    app.exception_handler(HTTPException)(handle_http_error)
+    app.exception_handler(StarletteHTTPException)(handle_http_error)
+    app.exception_handler(StaleDataError)(handle_stale_data)
+    app.add_middleware(request.RequestLogger)
+    headers = {"referer": referer} if referer else {}
+    TestClient(app, base_url="https://example.com").get(path, headers=headers)
+    return [(line.name, line.level, line.payload.get("detail")) for line in log_chain()]
+
+
+def _raise_http(status: int, detail: str):
+    def handler():
+        raise HTTPException(status_code=status, detail=detail)
+
+    return handler
+
+
+def test_a_refusal_leaves_one_line_carrying_what_it_refused(log_chain):
+    """Two lines said the same exchange twice; the second only ever added its ``detail``."""
+    lines = _refused(log_chain, "/acme/settings", _raise_http(403, "Owners only"))
+
+    assert lines == [("request.finished", "warning", "Owners only")]
+
+
+def test_a_stray_url_is_not_something_we_refused(log_chain):
+    """A 404 nobody linked to is a scan, not a failure of ours — the level says so."""
+    lines = _refused(log_chain, "/wp-login.php", _raise_http(404, "Not Found"))
+
+    assert lines == [("request.finished", "info", "Not Found")]
+
+
+def test_an_asset_the_browser_fetched_itself_still_leaves_nothing_when_refused(log_chain):
+    """What the rejected line used to trace and the finished line never did: a row per missing
+    image would bury the traffic it sits between."""
+    lines = _refused(log_chain, "/static/gone.css", _raise_http(404, "Not Found"))
+
+    assert lines == []
+
+
+def test_a_conflict_leaves_one_line_too(log_chain):
+    """``request.conflict`` was the same double, on the 409 an optimistic lock answers with."""
+
+    def stale():
+        raise StaleDataError("row changed under us")
+
+    lines = _refused(log_chain, "/acme/todos/1", stale)
+
+    assert lines == [
+        ("request.finished", "warning", "This was changed by someone else. Please retry.")
+    ]
 
 
 def test_a_successful_request_is_traced_at_info(log_chain):

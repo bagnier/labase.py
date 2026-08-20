@@ -1,4 +1,3 @@
-import contextlib
 import time
 import uuid
 
@@ -384,9 +383,13 @@ async def logout_endpoint(
         await logout(access_token)
         # Attribute the sign-out to the account holder — but the cookie may be expired by now, so
         # a failed decode must not turn a logout into a 500; record it with no actor instead.
+        # Said rather than suppressed: the sign-out lands on the journal attributed to nobody, and
+        # a `SignedOut` with no actor is exactly the row an admin would later call a mystery.
         user_id = None
-        with contextlib.suppress(Exception):
+        try:
             user_id = _sub_uuid(decode_jwt(access_token).get("sub"))
+        except Exception as exc:
+            log.warning("auth.logout_actor_unresolved", exc_info=exc)
         await events.emit(SignedOut(user_id=user_id), admin_session)
     resp = RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
     resp.delete_cookie("access_token")

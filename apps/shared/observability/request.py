@@ -1,5 +1,6 @@
 import time
 import uuid
+from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import structlog
@@ -8,7 +9,11 @@ from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from apps.shared.observability.metrics import accumulator
-from apps.shared.observability.sql import read_request_stats, start_request_stats
+from apps.shared.observability.sql import (
+    read_request_stats,
+    report_heavy_request,
+    start_request_stats,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -99,6 +104,33 @@ def _feeds_load_metrics(request: Request, status: int) -> bool:
     return status < 400 or status >= 500 or _is_internal_dead_link(request, status)
 
 
+# What refused this exchange, set by the exception handlers that shape the answer and read by the
+# one line that reports it. A contextvar rather than a return value because the two are three
+# layers apart: the handler runs under Starlette's ExceptionMiddleware, well below this one — and
+# on the *same* task, which is exactly what plain-ASGI middlewares buy (see the class docstring).
+_rejection: ContextVar[str | None] = ContextVar("labase_rejection", default=None)
+
+
+def note_rejection(detail: str) -> None:
+    """Record why this exchange was refused, for ``request.finished`` to carry.
+
+    Called instead of logging a line of its own: a refusal that wrote one left the timeline saying
+    the same exchange twice, once with the status and once with the reason.
+    """
+    _rejection.set(detail)
+
+
+def _refused_deliberately(status: int) -> bool:
+    """Whether a 4xx is something we refused rather than something that is simply not there.
+
+    Every 4xx but ``404``: a 401, a 403, a 409, a 422 all say *we would not do that*, which is the
+    warning half of the doctrine — the code could not carry the exchange through and answered with
+    something. A 404 says there is nothing at that address, which for a stray URL or a bot scan is
+    not ours to fix; ``_is_internal_dead_link`` is what promotes the ones that are.
+    """
+    return 400 <= status < 500 and status != 404
+
+
 def new_request_id() -> str:
     """A whole UUIDv7 for the request — the base's one key shape (the v4 carve-out is for security
     tokens, and this is not one: it is echoed back in ``X-Request-ID``).
@@ -118,9 +150,10 @@ class RequestLogger:
     Binds a ``request_id`` in a contextvar so every log line of the request correlates, times the
     request, and feeds the load metrics. It logs **once per served request**, under one name —
     ``request.finished`` — whose *level* carries the outcome: ``error`` on a 5xx (our own bug or an
-    exception nobody handled), ``warning`` on a dead link from one of our own pages, ``info`` on
-    everything else. This is the ``http`` source of the timeline, and the only one: a line written
-    anywhere else is ``app``.
+    exception nobody handled), ``warning`` on a refusal we made or a dead link from one of our own
+    pages, ``info`` on everything else. It carries the refusal's ``detail`` too, which is all a
+    second line about the same exchange ever added. This is the ``http`` source of the timeline,
+    and the only one: a line written anywhere else is ``app``.
 
     **A plain ASGI middleware, not a ``BaseHTTPMiddleware``.** That base runs the rest of the app
     in a *child task*, which gets a copy of the context — so the ``user_id``/``org_id`` that auth
@@ -157,6 +190,7 @@ class RequestLogger:
             request_name=f"{request.method} {request.url.path}",
         )
         start_request_stats()
+        _rejection.set(None)
 
         status = 500  # what Starlette answers if the app raises before saying otherwise
         start = time.perf_counter()
@@ -181,6 +215,9 @@ class RequestLogger:
     def _finish(self, request: Request, status: int, start: float) -> None:
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         self._observe(request, status, duration_ms)
+        # Before the exchange line, and only when there is a surprise: the elaboration comes
+        # first, the line that closes the exchange last.
+        report_heavy_request()
         self._log_finished(request, status, duration_ms)
 
     @staticmethod
@@ -205,8 +242,9 @@ class RequestLogger:
         if not _is_traced(request, status):
             return
         db = read_request_stats()
+        detail = _rejection.get()
         log_at = log.error if status >= 500 else log.info
-        if _is_internal_dead_link(request, status):
+        if _refused_deliberately(status) or _is_internal_dead_link(request, status):
             log_at = log.warning
         log_at(
             "request.finished",
@@ -217,4 +255,5 @@ class RequestLogger:
             referer=request.headers.get("referer"),
             db_queries=db.count if db else 0,
             db_ms=round(db.total_ms, 1) if db else 0.0,
+            **({"detail": detail} if detail is not None else {}),
         )

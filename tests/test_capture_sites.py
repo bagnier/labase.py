@@ -1,4 +1,4 @@
-"""One invariant over the *handlers*: a broad ``except`` never swallows its traceback.
+"""Two invariants over the *handlers*: a broad ``except`` speaks, and carries its traceback.
 
 ``tests/test_log_vocabulary`` pins what a line is *called*; this pins what it is allowed to leave
 out. ``except Exception`` is the base's way of saying "whatever went wrong here must not take the
@@ -11,6 +11,11 @@ The doctrine it enforces is the one written in ``apps/shared/observability/captu
 - ``log.exception`` — a bug; the capture seam folds it into an issue (``exc_info`` implicit).
 - ``log.warning(..., exc_info=exc)`` — degraded but handled; the stack reaches the firehose and
   **no** issue opens, since the seam only fires on ``error`` level.
+
+The third rule is the floor under those two: a broad handler that says *nothing* — no line, no
+re-raise, no exception handed on — loses the failure outright, and its ``return None`` is
+indistinguishable from a legitimate empty answer. Narrowing the clause is the way out as often as
+logging is: a decode that can only fail as a ``ValueError`` says so in its ``except``.
 
 A *narrow* ``except`` is out of scope by construction: ``except TotpError`` is a wrong code, a
 refusal the code already named, and its traceback is noise.
@@ -84,6 +89,66 @@ def test_a_broad_except_never_logs_without_its_traceback():
 def test_the_walk_actually_finds_the_call_sites():
     # Guards the guard: an AST shape that matched nothing would make the assertion vacuous.
     assert len(_broad_handler_logs()) > 10
+
+
+# The one broad handler allowed to let its exception go, and the reason it must: it *is* the log
+# drain's own write. Anything said inside it — a line, a verdict — is enqueued into the very queue
+# the drain has just failed to empty, so the outage is announced outside the handler instead
+# (``report_write_outage``, once per transition). Same argument, same shape as the two loops
+# ``tests/test_loop_verdicts`` excludes by name.
+_LETS_IT_GO = ("apps/shared/observability/sink.py", "tick")
+
+
+def _broad_handlers(node: ast.AST, path: str, function: str):
+    """Every broad ``except`` under ``node``, paired with the function that holds it."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            yield from _broad_handlers(child, path, child.name)
+            continue
+        if isinstance(child, ast.ExceptHandler) and _is_broad(child):
+            yield path, function, child
+        yield from _broad_handlers(child, path, function)
+
+
+def _keeps_the_exception(handler: ast.ExceptHandler) -> bool:
+    """Whether the failure goes anywhere at all: re-raised, logged, or handed on by its name.
+
+    Handing it on covers the two shapes the base already uses — a reporting helper that decides the
+    level (``log_dependency_failure``, ``_log_gotrue_failure``), and a verdict deferred to a batch
+    (``failures.append(exc)``, ``self._health.tick_failed(exc)``). All three are named in the
+    ``except`` clause, so the bound name being *used* is the honest test, and it needs no list of
+    blessed helper names to keep up to date.
+    """
+    if any(isinstance(node, ast.Raise) for node in ast.walk(handler)):
+        return True
+    if any(_log_calls(handler)):
+        return True
+    if handler.name is None:
+        return False
+    return any(isinstance(node, ast.Name) and node.id == handler.name for node in ast.walk(handler))
+
+
+def _mute_broad_handlers() -> set[str]:
+    """Every broad ``except`` where the exception simply vanishes."""
+    found = set()
+    for path in _APPS.rglob("*.py"):
+        if "/tests/" in path.as_posix():
+            continue
+        relative = str(path.relative_to(_APPS.parent))
+        for _, function, handler in _broad_handlers(ast.parse(path.read_text()), relative, ""):
+            if (relative, function) == _LETS_IT_GO or _keeps_the_exception(handler):
+                continue
+            found.add(f"{relative}:{handler.lineno} in {function}()")
+    return found
+
+
+def test_a_broad_except_never_loses_the_exception_entirely():
+    """The rule above says a handler that speaks must carry its traceback; this one says it has to
+    speak. ``except Exception: return None`` reads like handling and is the opposite: the failure
+    leaves no line, no issue and no return value distinguishable from a legitimate empty answer."""
+    lost = _mute_broad_handlers()
+
+    assert lost == set()
 
 
 def _positional_log_calls() -> list[str]:

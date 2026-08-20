@@ -298,8 +298,21 @@ one multi-row insert per drain with `synchronous_commit` off. Retention rolls th
 (`timeline.retention_days`): a day past the window leaves as a `DROP`, instant and leaving nothing
 for VACUUM. When Postgres itself is what is down the batch falls back to per-day files — a database outage is exactly when an operator still
 wants the log — with the outage said once on each transition rather than going quiet. The level
-(`timeline.log_level`) defaults to `INFO`, so what the code states is what gets recorded, and is
-admin-tunable from the console, live.
+(`timeline.log_level`) starts at `INFO`, which is the floor since nothing writes below it, and an
+admin can raise it to `WARNING` or `ERROR` to quiet an instance — live, from the console.
+
+**What earns a line.** A line says what no other record says already: the exchange is stated once
+by `request.finished`, a domain action once by its fact, and a line restating either says the same
+thing twice. Two levels carry the rest. `info` is **a point of surprise** — never the happy path:
+an outage that ended, an actor gone mid-flight, a dependency answering no, a request that cost
+forty queries. `warning` is **what the code could not carry through and absorbed** — the breakage
+taken on the chin (a retry, a fallback, a dropped batch) and the attempt refused (a wrong password,
+a non-owner on an owner-only route) alike; neither ran to completion, both were answered with
+something. `exception` is a bug, and that is the whole vocabulary: there is no `debug` tier, since
+the one thing a per-statement firehose bought is written as the surprise it is (`db.heavy_request`,
+when a request's query count or DB time crosses its tunable threshold). A healthy server at rest
+writes nothing at all, which is what makes its silence readable — and AST tests hold that rule the
+way they already hold the naming one.
 
 **Nothing escapes it.** The libraries' stdlib `logging` joins the same chain at `WARNING` and above
 — a library is there for its degradations, not its chatter — and so do `warnings.warn` and the four

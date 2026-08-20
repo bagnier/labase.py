@@ -56,7 +56,10 @@ def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]
             "APP_VERSION is 'dev' — set the git SHA so error-tracking regression detection works."
         )
     if settings.log_debug:
-        warnings.append("LOG_DEBUG is true — verbose debug logging in production.")
+        warnings.append(
+            "LOG_DEBUG is true — logs render as human-readable console text instead of the "
+            "JSON an aggregator can parse."
+        )
     if not settings.supabase_database_admin_url:
         warnings.append(
             "SUPABASE_DATABASE_ADMIN_URL is empty — event handlers and console queries need it."
@@ -74,9 +77,11 @@ def enforce_at_boot(settings: TechnicalSettings | None = None) -> None:
     for detail in warnings:
         log.warning("preflight.warning", detail=detail)
     if errors:
-        for detail in errors:
-            log.error("preflight.error", detail=detail)
+        # The details ride the exception rather than lines of their own. The process is about to
+        # die on it, so its message is what an operator reads — and a ``log.error`` carrying no
+        # exception is exactly the spelling the capture seam skips, which made the one report
+        # that mattered the one nothing could act on. A boot that succeeds says nothing at all.
         raise PreflightError(
-            f"production preflight failed with {len(errors)} blocking error(s); refusing to boot"
+            f"production preflight failed with {len(errors)} blocking error(s); "
+            f"refusing to boot: {'; '.join(errors)}"
         )
-    log.info("preflight.ok")

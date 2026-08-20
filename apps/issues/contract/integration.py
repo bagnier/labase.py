@@ -121,7 +121,6 @@ async def _track(captured: ExceptionCaptured) -> None:
                     session,
                 )
         await session.commit()
-    log.info("issues.occurrence_recorded", issue_id=str(issue_id), opened=seen.opened)
 
 
 async def _alert_opened(session: AsyncSession, event: IssueOpened) -> None:
@@ -146,8 +145,7 @@ async def _send_alert(session: AsyncSession, subject: str, issue_id: uuid.UUID) 
 
 
 async def _purge(session: AsyncSession, _payload: dict) -> None:
-    deleted = await purge_old_occurrences(session, int(get_settings("issues").retention_days))
-    log.info("issues.purged", deleted=deleted)
+    await purge_old_occurrences(session, int(get_settings("issues").retention_days))
 
 
 async def _plant_purge() -> None:

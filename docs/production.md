@@ -53,6 +53,7 @@ Minimum production env:
 | `TRUST_FORWARDED_FOR`                              | `true` — required behind Caddy, see [Behind a proxy](#behind-a-proxy) |
 | `SMTP_*`                                           | a real transactional provider (not the local Mailpit catcher)         |
 | `FIREHOSE_DIR`                                     | fallback log path, used only when Postgres refuses a batch            |
+| `LOG_DEBUG`                                        | leave unset: `true` renders logs as console text instead of JSON      |
 
 ## Preflight — config safety gate
 
@@ -65,8 +66,9 @@ make preflight ENV_FILE=.env.production
 
 Blocking errors: `COOKIES_SECURE=false`, `CORS_ORIGINS` containing `*`, either the user
 or the admin database URL pointing at a local host, an unset/too-short secret key.
-Warnings: a non-production `ENVIRONMENT`, `APP_VERSION=dev`, `LOG_DEBUG=true`, missing
-admin URL.
+Warnings: a non-production `ENVIRONMENT`, `APP_VERSION=dev`, `LOG_DEBUG=true` (logs would
+render as human-readable console text rather than the JSON an aggregator parses — it no
+longer selects a level, since nothing is written below `INFO`), missing admin URL.
 
 The same checks run **at boot** when `ENVIRONMENT=production`
 (`apps/shared/preflight.py::enforce_at_boot`): a blocking error raises and the

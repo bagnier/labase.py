@@ -96,15 +96,9 @@ async def _increment(key: str, window_seconds: int) -> int | None:
 
 async def purge_counters(session: AsyncSession, _payload: dict[str, Any]) -> None:
     """Recurring queue consumer: drop windows old enough to be outside any limit."""
-    deleted = await session.scalar(
-        text(
-            "WITH purged AS ("
-            "  DELETE FROM rate_limit_counters"
-            "  WHERE window_start < now() - interval '1 day' RETURNING 1"
-            ") SELECT count(*) FROM purged"
-        )
+    await session.execute(
+        text("DELETE FROM rate_limit_counters WHERE window_start < now() - interval '1 day'")
     )
-    log.info("rate_limit.purged", deleted=int(deleted or 0))
 
 
 def rate_limit(limit_string: str) -> Callable[[Any], Any]:

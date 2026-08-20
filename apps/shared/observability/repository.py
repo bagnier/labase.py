@@ -19,7 +19,6 @@ from sqlalchemy import text as sql_text  # aliased: ``search`` takes a ``text`` 
 
 from apps.shared import clock
 from apps.shared.observability.models import LogLine
-from apps.shared.observability.sql import without_query_logging
 from apps.shared.persistence.repository import BaseRepository
 
 # How far back the Timeline reads by default. Not retention — the table keeps whatever the purge
@@ -92,17 +91,13 @@ class LogRepository(BaseRepository[LogLine]):
         best-effort, stdout carries the durable copy). ``LOCAL``, so it dies with the transaction
         and never leaks onto a caller that meant to be durable.
 
-        The insert's own ``db.query`` line is muted. Left on, at DEBUG level it feeds the very
-        queue that produced it: the statement logs a line, the line is enqueued, the next drain
-        inserts it and logs another, and the queue never reaches empty again.
+        Nothing here has to silence itself any more: with no per-statement line, this INSERT
+        writes nothing that the next drain would insert and log again.
         """
         if not lines:
             return
-        with without_query_logging():
-            await self.session.execute(sql_text("SET LOCAL synchronous_commit = off"))
-            await self.session.execute(
-                insert(LogLine), [_columns(line, instance) for line in lines]
-            )
+        await self.session.execute(sql_text("SET LOCAL synchronous_commit = off"))
+        await self.session.execute(insert(LogLine), [_columns(line, instance) for line in lines])
 
     async def roll(self, *, today: date, retention_days: int) -> int:
         """Create the day partitions just ahead of ``today`` and drop those past retention;
@@ -142,16 +137,15 @@ class LogRepository(BaseRepository[LogLine]):
         one clock, here as everywhere, which is also what lets a test pin it.
         """
         now = clock.now()
-        with without_query_logging():
-            await self.roll(today=now.date(), retention_days=retention_days)
-            deleted = await self.session.scalar(
-                sql_text(
-                    "WITH purged AS ("
-                    "  DELETE FROM log_lines WHERE ts < :floor RETURNING 1"
-                    ") SELECT count(*) FROM purged"
-                ),
-                {"floor": now - timedelta(days=retention_days)},
-            )
+        await self.roll(today=now.date(), retention_days=retention_days)
+        deleted = await self.session.scalar(
+            sql_text(
+                "WITH purged AS ("
+                "  DELETE FROM log_lines WHERE ts < :floor RETURNING 1"
+                ") SELECT count(*) FROM purged"
+            ),
+            {"floor": now - timedelta(days=retention_days)},
+        )
         return int(deleted or 0)
 
     async def search(

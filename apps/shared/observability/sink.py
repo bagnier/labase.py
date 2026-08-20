@@ -169,7 +169,10 @@ def report_write_outage() -> None:
     """Say that the store stopped accepting lines, or started again — once per transition."""
     if _outage.refusing and not _outage.announced:
         _outage.announced = True
-        log.error("log_sink.write_failed")
+        # ``warning``, not ``error``: the batch is not lost, it went to the day files. What the
+        # code could not carry through and absorbed is precisely the warning half of the doctrine
+        # — and ``error`` with no exception behind it is the one level the capture seam skips.
+        log.warning("log_sink.write_failed")
     elif not _outage.refusing and _outage.announced:
         _outage.announced = False
         log.info("log_sink.write_recovered", lines=_outage.lines)

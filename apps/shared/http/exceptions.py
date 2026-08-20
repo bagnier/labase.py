@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from apps.shared.http import is_htmx, wants_json
 from apps.shared.http.templates import templates
+from apps.shared.observability.request import note_rejection
 
 log = structlog.get_logger(__name__)
 
@@ -30,8 +31,8 @@ async def handle_rate_limit(_request: Request, exc: Exception) -> Response:
 
 
 async def handle_stale_data(request: Request, _exc: Exception) -> Response:
-    log.warning("request.conflict", method=request.method, path=request.url.path)
     detail = "This was changed by someone else. Please retry."
+    note_rejection(detail)
     if wants_json(request):
         return JSONResponse({"detail": detail}, status_code=409)
     return _html_error(request, 409, detail)
@@ -68,17 +69,12 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:
-    # Every rejected request lands here — a generic, cheap trace even for routes that emit no
-    # business event of their own. Security-relevant rejections emit a typed BusinessEvent from
-    # their own call site (persisted to the business-events store); this is the catch-all.
-    log_fn = log.error if exc.status_code >= 500 else log.warning
-    log_fn(
-        "request.rejected",
-        status_code=exc.status_code,
-        method=request.method,
-        path=request.url.path,
-        detail=str(exc.detail),
-    )
+    # Every rejected request lands here, and none of them writes a line: ``request.finished``
+    # already reports this exchange once, with its status and now with this reason. A second line
+    # said the same thing twice — and, unlike the first, traced the asset 404s the browser fetches
+    # on its own. Security-relevant rejections still emit their typed BusinessEvent from their own
+    # call site; this is only the shape of the answer.
+    note_rejection(str(exc.detail))
     if exc.status_code == 401:
         if is_htmx(request):
             r = Response(status_code=status.HTTP_204_NO_CONTENT)

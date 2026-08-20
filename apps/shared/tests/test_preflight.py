@@ -93,9 +93,18 @@ def test_an_unset_app_version_only_warns():
     ]
 
 
-def test_debug_logging_only_warns():
+def test_console_rendering_only_warns():
+    """``LOG_DEBUG`` no longer picks a level — with no ``debug`` tier there is none to pick. What
+    it still decides is the renderer, and a production server rendering console text is one whose
+    aggregator has nothing to parse. Warned, not blocked: the logs are readable either way."""
     _, warnings = check_production(_settings(log_debug=True))
-    assert warnings == ["LOG_DEBUG is true — verbose debug logging in production."]
+
+    assert warnings == [
+        (
+            "LOG_DEBUG is true — logs render as human-readable console text instead of the "
+            "JSON an aggregator can parse."
+        )
+    ]
 
 
 def test_a_missing_admin_database_only_warns():

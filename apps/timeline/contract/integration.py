@@ -9,13 +9,21 @@ NOTE: mounted BEFORE the console context so its /console/timeline routes registe
 console's /console/{app} catch-all.
 """
 
+from typing import cast
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.host import Host, MountPhase
+from apps.shared.http.templates import templates
 from apps.shared.observability.logging import apply_log_level
 from apps.shared.observability.repository import LogRepository
+from apps.shared.observability.sql import (
+    DEFAULT_HEAVY_MS,
+    DEFAULT_HEAVY_QUERIES,
+    apply_heavy_request_thresholds,
+)
 from apps.shared.queue import ensure_scheduled, register_task_handler
 from apps.shared.settings import (
     SettingDef,
@@ -33,14 +41,15 @@ log = structlog.get_logger(__name__)
 
 TIMELINE_APP = "timeline"
 LOG_LEVEL_KEY = "log_level"
-LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
-# The firehose defaults to INFO, so every technical fact the code states is actually recorded —
-# a served request, a drained task, an occurrence folded into its issue. At WARNING those lines
-# were written in the code and dropped by the filter, which made the timeline's `logs` source
-# empty on a healthy server: only failures had ever happened. An admin can still raise the level
-# to quiet a noisy instance, or lower it to DEBUG for per-query traces. The other two sources
-# never depend on this level (each has its own write path).
+# INFO is the floor, not a middle setting: nothing in the codebase writes below it, so the three
+# levels are the whole scale. Raising it to WARNING quiets an instance down to what it could not
+# carry through; ERROR leaves only the bugs. The other two sources never depend on this level
+# (each has its own write path).
+LOG_LEVELS = ("INFO", "WARNING", "ERROR")
 DEFAULT_LOG_LEVEL = "INFO"
+
+HEAVY_QUERIES_KEY = "heavy_request_queries"
+HEAVY_MS_KEY = "heavy_request_ms"
 
 PURGE_TOPIC = "timeline.purge"
 PURGE_EVERY_SECONDS = 86400
@@ -48,23 +57,47 @@ PURGE_EVERY_SECONDS = 86400
 
 def mount(host: Host) -> None:
     settings = host.register_settings(_declare_settings())
+    # Before the enabled gate, like the console tile: the levels this app accepts are what the
+    # settings screen offers, and that screen is reachable while the app is switched off.
+    cast("dict[str, object]", templates.env.globals)["log_levels"] = lambda: LOG_LEVELS
     if not settings.enabled:
         return
     # Align the live process with the persisted level at mount, then keep it in step as the
     # console edits it.
-    apply_log_level(str(settings.log_level))
-    host.events.spread(SettingsChanged, _reload_level)
+    _apply_observability(
+        level=str(settings.log_level),
+        queries=int(settings.heavy_request_queries),
+        ms=int(settings.heavy_request_ms),
+    )
+    host.events.spread(SettingsChanged, _reload_observability)
     host.contribs.provide(ConsoleOverviewQuery, _overview)
     host.app.include_router(router, prefix="/console/timeline")
     register_task_handler(PURGE_TOPIC, _purge)
     host.on_startup(_plant_purge)
 
 
-async def _reload_level(event: SettingsChanged) -> None:
-    """Re-point the live loggers when this app's firehose level is edited (self-contained: reads
-    the event's own values, independent of registry-reload ordering on the bus)."""
-    if event.target_app == TIMELINE_APP:
-        apply_log_level(str(event.values.get(LOG_LEVEL_KEY) or DEFAULT_LOG_LEVEL))
+def _apply_observability(*, level: str, queries: int, ms: int) -> None:
+    """Push this app's settings down onto the write primitives in ``apps/shared``.
+
+    Both travel the same way and for the same reason: ``apps/shared`` is a foundation, so it may
+    not read a feature's settings by name — the feature that owns them tells it instead. What is
+    tuned here is only *what gets recorded*; the three sources of the Timeline are read back
+    regardless (a fact and an occurrence never depend on the level).
+    """
+    apply_log_level(level)
+    apply_heavy_request_thresholds(queries=queries, ms=ms)
+
+
+async def _reload_observability(event: SettingsChanged) -> None:
+    """Re-point the live process when these settings are edited (self-contained: reads the event's
+    own values, independent of registry-reload ordering on the bus)."""
+    if event.target_app != TIMELINE_APP:
+        return
+    _apply_observability(
+        level=str(event.values.get(LOG_LEVEL_KEY) or DEFAULT_LOG_LEVEL),
+        queries=int(event.values.get(HEAVY_QUERIES_KEY) or DEFAULT_HEAVY_QUERIES),
+        ms=int(event.values.get(HEAVY_MS_KEY) or DEFAULT_HEAVY_MS),
+    )
 
 
 async def _purge(session: AsyncSession, _payload: dict) -> None:
@@ -72,8 +105,7 @@ async def _purge(session: AsyncSession, _payload: dict) -> None:
     makes a table viable where ``request_metrics`` uses aggregation instead — and the delete the
     per-day files promised ("retention is a plain file delete") and never performed."""
     retention = int(get_settings(TIMELINE_APP).retention_days)
-    deleted = await LogRepository(session).purge(retention_days=retention)
-    log.info("timeline.purged", deleted=deleted)
+    await LogRepository(session).purge(retention_days=retention)
 
 
 async def _plant_purge() -> None:
@@ -109,6 +141,18 @@ def _declare_settings() -> SettingsDeclaration:
                 "Firehose log level for structlog and stdlib — applies live, no restart",
             ),
             SettingDef("retention_days", "number", "30", "Days of firehose lines to keep"),
+            SettingDef(
+                HEAVY_QUERIES_KEY,
+                "number",
+                str(DEFAULT_HEAVY_QUERIES),
+                "Queries above which a request names its slowest statements",
+            ),
+            SettingDef(
+                HEAVY_MS_KEY,
+                "number",
+                str(DEFAULT_HEAVY_MS),
+                "Milliseconds in the database above which it does the same",
+            ),
         ],
         supabase=SupabaseLink("Browse the log lines in Supabase", table="log_lines"),
     )

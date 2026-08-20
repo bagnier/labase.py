@@ -240,8 +240,10 @@ class TaskWorker:
                 )
                 await self._retry(task, repr(exc))
         else:
+            # No receipt: a task that ran is already recorded, by ``done_at`` on its own row and by
+            # whatever fact the handler emitted. A line per task is a line per second on a busy
+            # queue, saying what two other stores say better.
             await self._complete(task)
-            log.info("queue.task_done", topic=task["topic"], task_id=task["id"])
 
     async def _run_handler(
         self, handler: TaskHandler, payload: dict[str, Any], user_id: uuid.UUID | None
@@ -308,7 +310,9 @@ class TaskWorker:
             log.exception("queue.unhandled_topic", topic=task["topic"], task_id=str(task["id"]))
 
     async def _fail(self, task: ClaimedTask, error: str) -> None:
-        log.error("queue.task_parked", topic=task["topic"], task_id=task["id"], error=error)
+        # Silent on purpose: both callers have just written the failure at ``exception`` level —
+        # ``queue.task_failed`` with the exception itself, ``queue.unhandled_topic`` with the
+        # orphaned topic — so a line here would say a third time what the seam already captured.
         await self._admin_exec(
             (
                 text(

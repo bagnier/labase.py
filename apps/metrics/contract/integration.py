@@ -65,9 +65,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _rollup(session, _payload: dict) -> None:
-    removed, merged = await rollup(session, minute_retention_days=MINUTE_RETENTION_DAYS)
-    purged = await purge(session, int(get_settings("metrics").retention_days))
-    log.info("metrics.rolled_up", minute_rows=removed, hour_rows=merged, purged=purged)
+    await rollup(session, minute_retention_days=MINUTE_RETENTION_DAYS)
+    await purge(session, int(get_settings("metrics").retention_days))
 
 
 async def _plant_rollup() -> None:

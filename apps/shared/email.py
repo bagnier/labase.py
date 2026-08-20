@@ -112,4 +112,3 @@ async def deliver_queued_email(_session: AsyncSession, payload: dict[str, Any]) 
     """``email.send`` task handler — raises on failure so the queue retries, then parks."""
     email = Email(**payload)
     await get_mailer().send(email)
-    log.info("email.sent", to=email.to, subject=email.subject)

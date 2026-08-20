@@ -6,9 +6,14 @@ the libraries emit through stdlib ``logging``. The two meet inside
 cross — so the log-sink and capture tees sit there, and nowhere else. Ours traverse two processor
 lists and a library's only one, so a tee in the structlog list would count our lines twice.
 
-The level starts from the environment but is admin-tunable from the console and applies
-live, with no restart (README: observability). Loggers are not cached so every call re-reads
-the current level.
+The level starts at ``INFO`` — the floor, since nothing writes below it — and is admin-tunable
+from the console up to ``WARNING`` or ``ERROR``, live and with no restart (README: observability).
+Loggers are not cached so every call re-reads the current level.
+
+``LOG_DEBUG`` no longer picks a level: with no ``debug`` tier there is none to pick. It selects the
+*renderer* — the human-readable console one in development, JSON in production, which is what an
+aggregator reads — and the name is kept because it is deployment-visible, exactly like
+``FIREHOSE_DIR``.
 """
 
 import asyncio
@@ -25,17 +30,18 @@ from apps.shared.observability.sink import flush_to_files, log_processor
 
 log = structlog.get_logger(__name__)
 
+# No ``DEBUG`` entry, and that is the point: nothing in the codebase writes below ``INFO``
+# (``tests/test_log_thresholds`` holds it), so offering the level would only promise a verbosity
+# that does not exist. ``apply_log_level`` ignores a name it does not know, so a stored ``DEBUG``
+# from before simply leaves the level where it is.
 _LEVELS = {
-    "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
     "WARNING": logging.WARNING,
     "ERROR": logging.ERROR,
 }
 
-
-def default_log_level() -> str:
-    """The env-driven starting level — also the seed of the console's `log_level` setting."""
-    return "DEBUG" if get_technical_settings().log_debug else "INFO"
+# The floor, not a default among several: ``INFO`` is the lowest level any line is written at.
+DEFAULT_LEVEL = "INFO"
 
 
 def apply_log_level(name: str) -> None:
@@ -85,6 +91,7 @@ class _ForeignFloor(logging.Filter):
 
 
 def _renderer() -> structlog.types.Processor:
+    """Human-readable in development, JSON in production — the only thing ``LOG_DEBUG`` decides."""
     if get_technical_settings().log_debug:
         return structlog.dev.ConsoleRenderer()
     return structlog.processors.JSONRenderer()
@@ -162,7 +169,7 @@ def _catch_escaping_exceptions() -> None:
 
 
 def setup_logging() -> None:
-    level = _LEVELS[default_log_level()]
+    level = _LEVELS[DEFAULT_LEVEL]
     shared = _shared_processors()
 
     structlog.configure(

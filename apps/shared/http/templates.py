@@ -22,6 +22,9 @@ templates = Jinja2Templates(
 )
 _globals = cast("dict[str, object]", templates.env.globals)
 _globals["asset"] = asset
-# Safe defaults; the console mount (apps.console) overrides these with the live app-wide theme.
+# Safe defaults; the console mount (apps.console) overrides these with the live app-wide theme,
+# and the timeline mount (apps.timeline) with the log levels it actually accepts — an option list
+# belongs to the app that owns the setting, not to the console page that renders it.
 _globals["app_theme"] = lambda: "light"
 _globals["app_themes"] = list
+_globals["log_levels"] = list

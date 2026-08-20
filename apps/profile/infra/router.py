@@ -111,9 +111,16 @@ def _encode_enrollment(enrollment: TotpEnrollment) -> str:
 
 
 def _decode_enrollment(raw: str) -> dict | None:
+    """The enrollment handed back by the form, or ``None`` when it is not one.
+
+    ``ValueError`` and nothing wider: bad base64 (``binascii.Error``), undecodable bytes
+    (``UnicodeDecodeError``) and malformed JSON (``JSONDecodeError``) are all subclasses of it, so
+    the narrow clause covers every way a tampered or stale cookie can fail — while an
+    ``AttributeError`` from a bug of ours goes on raising instead of reading as "malformed".
+    """
     try:
         return json.loads(base64.urlsafe_b64decode(raw.encode()).decode())
-    except Exception:
+    except ValueError:
         return None
 
 

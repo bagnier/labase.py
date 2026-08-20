@@ -222,7 +222,11 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
                     {"u": user_id, "o": org_id},
                 )
             ).first()
-        except Exception:
+        except Exception as exc:
+            # The fact is still written, without the names — which is the right trade on the
+            # request's critical path, and a loss that is permanent: the journal outlives the
+            # profile and the org, so nothing can pin them later. Absorbed, hence a warning.
+            log.warning("business_event.names_unpinned", exc_info=exc)
             return None, None
         return (names[0], names[1]) if names else (None, None)
 

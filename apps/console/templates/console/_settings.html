@@ -25,7 +25,7 @@
         </label>
       {% elif app == "timeline" and s.key == "log_level" %}
         <select name="value" class="select w-full" aria-label="{{ s.key }}">
-          {% for lvl in ["DEBUG", "INFO", "WARNING", "ERROR"] %}
+          {% for lvl in log_levels() %}
             <option value="{{ lvl }}" {% if s.value == lvl %}selected{% endif %}>{{ lvl }}</option>
           {% endfor %}
         </select>
