@@ -1,7 +1,7 @@
 """Mount-time CRUD for per-app settings — the console's settings repository at startup.
 
 Apps **declare** their settings and **read** their values inside ``mount()`` (sync, before the
-serving loop), via :mod:`apps.shared.settings`. This module owns the persisted tables and the
+serving loop), via :mod:`apps.shared.settings.live`. This module owns the persisted tables and the
 concrete DB plumbing for that moment: a throwaway engine driven by :func:`asyncio.run`.
 
 The lru_cached admin engine must not be touched here, or its asyncpg pool would bind to this
@@ -18,10 +18,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
-from apps.shared.config import get_technical_settings
 from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.base import Base, Timestamped, Versioned
 from apps.shared.persistence.database import admin_url, search_path_connect_args
+from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 

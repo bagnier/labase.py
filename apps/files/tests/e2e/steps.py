@@ -1,6 +1,6 @@
 from pytest_bdd import given, parsers, then, when
 
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 
 
 @given(parsers.parse('the current date is "{date}"'))

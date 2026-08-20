@@ -7,8 +7,8 @@ Exits non-zero if any blocking error is found, so it can gate a deploy pipeline.
 
 import sys
 
-from apps.shared.config import get_technical_settings
-from apps.shared.preflight import check_production
+from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.preflight import check_production
 
 
 def main() -> int:

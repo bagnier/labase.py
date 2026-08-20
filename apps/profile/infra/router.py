@@ -56,7 +56,6 @@ from apps.profile.contract.events import AccountDeleted, AvatarUpdated, HandleCh
 from apps.profile.domain.models import ProfileRead, ProfileUpdate
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
 from apps.shared.events.activity import (
     activity_entries,
     activity_stats,
@@ -68,11 +67,12 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.integration.slugs import validate_handle
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
-from apps.shared.settings import SettingsView, get_settings
-from apps.shared.slug_registry import validate_handle
+from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.live import SettingsView, get_settings
 
 router = APIRouter()
 

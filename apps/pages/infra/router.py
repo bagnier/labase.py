@@ -43,9 +43,9 @@ from apps.shared.http import (
     with_etag,
 )
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.integration.slugs import slugify
 from apps.shared.persistence.database import AdminSession
-from apps.shared.slug_registry import slugify
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 public_router = APIRouter(tags=["pages"])

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from apps.files.domain.models import OrgFile, OrgFileShareToken
 from apps.shared import clock
 from apps.shared.persistence.repository import BaseRepository, OrgScopedRepository
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 
 
 class OrgFileRepository(OrgScopedRepository[OrgFile]):

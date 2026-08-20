@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from playwright.sync_api import BrowserContext, Page
 
 from apps.auth.tests.given_helpers import find_users
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 

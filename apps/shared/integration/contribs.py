@@ -14,7 +14,7 @@ must never break the page that gathers it (a dashboard renders without the down 
 whereas an *event* handler failure is a real fault the emitter may need to compensate for.
 
 Runtime collectors import the process-wide :data:`contribs` singleton directly — a focused
-collaborator, not the whole :class:`~apps.shared.host.Host`. Mount wires providers onto
+collaborator, not the whole :class:`~apps.shared.integration.host.Host`. Mount wires providers onto
 ``host.contribs``, which *is* this same ``contribs`` in production, so registration and
 dispatch share one registry.
 """

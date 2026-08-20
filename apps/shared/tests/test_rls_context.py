@@ -13,8 +13,8 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from apps.shared.config import get_technical_settings
 from apps.shared.persistence.rls import set_rls_context
+from apps.shared.settings.env import get_technical_settings
 
 _UID = "00000000-0000-0000-0000-000000000009"
 

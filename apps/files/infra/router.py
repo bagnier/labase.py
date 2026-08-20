@@ -38,11 +38,11 @@ from apps.shared.http import (
     wants_json,
 )
 from apps.shared.http.templates import templates
+from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.dependency import is_refusal, log_dependency_failure
-from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket, user_storage_client
-from apps.shared.settings import SettingsView, get_settings
+from apps.shared.settings.live import SettingsView, get_settings
 
 log = structlog.get_logger(__name__)
 

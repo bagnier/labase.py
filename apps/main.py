@@ -1,7 +1,7 @@
 """The composition root: each context's ``mount()`` wires its routers, events and claimed slugs.
 
 FastAPI matches routes in registration order, so registration follows each module's declared
-``PHASE`` (:class:`apps.shared.host.MountPhase`); ties keep the listing order below.
+``PHASE`` (:class:`apps.shared.integration.host.MountPhase`); ties keep the listing order below.
 """
 
 from apps.api_keys.contract import integration as api_keys
@@ -18,7 +18,7 @@ from apps.pages.contract import integration as pages
 from apps.profile.contract import integration as profile
 from apps.public.contract import integration as public
 from apps.shared.contract import integration as shared
-from apps.shared.host import host
+from apps.shared.integration.host import host
 from apps.shared.persistence.database import dispose_engines
 from apps.timeline.contract import integration as timeline
 from apps.todo.contract import integration as todo

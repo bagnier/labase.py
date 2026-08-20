@@ -11,7 +11,7 @@ from unittest.mock import patch
 from supabase_auth.errors import AuthApiError
 
 from apps.auth.domain.service import AuthTokens
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 
 _TOKENS = AuthTokens(access_token="the-access-token", refresh_token="the-refresh-token")
 

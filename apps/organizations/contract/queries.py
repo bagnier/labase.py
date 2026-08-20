@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.domain.models import Membership, Organization, OrganizationRead, OrgRole
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 

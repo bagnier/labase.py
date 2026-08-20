@@ -16,8 +16,8 @@ from apps.shared.http import (
     wants_full_page,
     wants_json,
 )
-from apps.shared.page import fullpage_context
-from apps.shared.settings import SettingsView
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.settings.live import SettingsView
 from apps.todo.contract.current import TodoSettings
 from apps.todo.contract.events import (
     TodoCreated,

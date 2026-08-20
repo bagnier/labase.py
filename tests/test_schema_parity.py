@@ -19,13 +19,13 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from apps.shared.config import get_technical_settings
 from apps.shared.persistence.base import Base
 from apps.shared.persistence.database import admin_url, search_path_connect_args
+from apps.shared.settings.env import get_technical_settings
 
 _EXTRA_MODEL_MODULES = (
     "apps.shared.events.models",
-    "apps.shared.persistence.settings_store",
+    "apps.shared.settings.store",
 )
 
 

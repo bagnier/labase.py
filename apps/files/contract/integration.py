@@ -24,9 +24,9 @@ from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
-from apps.shared.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.persistence.storage import admin_storage, bucket
-from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
+from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.shared.text import pluralize
 
 PHASE = MountPhase.ORG

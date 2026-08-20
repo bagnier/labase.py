@@ -7,6 +7,6 @@ from typing import Annotated
 from fastapi import Depends
 
 from apps.organizations.contract.current import app_settings
-from apps.shared.settings import SettingsView
+from apps.shared.settings.live import SettingsView
 
 FilesSettings = Annotated[SettingsView, Depends(app_settings("files"))]

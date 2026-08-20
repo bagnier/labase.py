@@ -27,8 +27,8 @@ from apps.auth.infra.accounts_router import accounts_router
 from apps.auth.infra.router import router
 from apps.auth.infra.user_repository import list_server_admins
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.shared.host import Host, MountPhase
-from apps.shared.settings import ConsoleLink, SettingDef, SettingsDeclaration, SupabaseLink
+from apps.shared.integration.host import Host, MountPhase
+from apps.shared.settings.live import ConsoleLink, SettingDef, SettingsDeclaration, SupabaseLink
 
 PHASE = MountPhase.FOUNDATION
 

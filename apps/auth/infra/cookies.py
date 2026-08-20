@@ -1,7 +1,7 @@
 from fastapi import Response
 
-from apps.shared.config import get_technical_settings
-from apps.shared.settings import get_settings
+from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.live import get_settings
 
 
 def set_auth_cookies(

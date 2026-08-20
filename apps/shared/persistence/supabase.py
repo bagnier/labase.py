@@ -8,7 +8,7 @@ from functools import lru_cache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 from supabase import AsyncClient, Client, acreate_client, create_client
 
 

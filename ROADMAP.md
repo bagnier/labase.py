@@ -7,7 +7,7 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 
 - [ ] **[BY-DESIGN · 🟡 moyenne] Couper `two_factor_enabled` bypasse le TOTP des enrôlés.** Confirmé : `login` reçoit une session AAL1 complète, le challenge n'est déclenché que `if users_settings.two_factor_enabled` (setting **global** serveur), et GoTrue ne backstoppe pas l'usage général AAL1. **Mais volontaire** : kill-switch admin documenté (`two_factor.py:4-6`) pour authenticator perdu. Vrai défaut = granularité (global, tout-ou-rien, tout admin console peut le flip). Fix : reset per-user au lieu d'un toggle global. `apps/auth/infra/router.py:229-232`.
 - [ ] **[LATENT · 🟢 basse] Redaction business-events = match sur le *nom* du champ** (denylist de fragments : `token|password|secret|apikey|otp|…`). Le champ de portée a rétréci depuis l'audit : la denylist s'applique désormais **à la définition de la classe** (`BusinessEvent.__init_subclass__` lève un `TypeError` et nomme l'alternative), le masque au write path (`_fact_payload`) n'étant plus qu'un filet de dernier recours qui log en `error` s'il tire. Reste que la denylist ne couvre pas un secret nommé hors fragments. Elle ne concerne **que** `business_events`, jamais les logs. Fix : allowlist au lieu de denylist. `apps/shared/events/types.py:64-86`, `apps/shared/events/repository.py:77-96`.
-- [ ] **[LATENT · 🟡 basse] Setting `"number"` mal typé silencieusement** — `_coerce` fait `int(raw)` et sur `ValueError` renvoie la *string* brute ; `"1.5"` relu comme `str`, floats non supportés. **Mais aucun setting déclaré n'utilise de défaut décimal** et le write path (`_normalise`) rejette les non-int → non atteignable aujourd'hui. `apps/shared/settings.py:117-125`.
+- [ ] **[LATENT · 🟡 basse] Setting `"number"` mal typé silencieusement** — `_coerce` fait `int(raw)` et sur `ValueError` renvoie la *string* brute ; `"1.5"` relu comme `str`, floats non supportés. **Mais aucun setting déclaré n'utilise de défaut décimal** et le write path (`_normalise`) rejette les non-int → non atteignable aujourd'hui. `apps/shared/settings/live.py:117-125`.
 - [ ] **[LATENT · 🟡 moyenne] Résolution templates = glob trié, pas de namespace par app** — mécanisme first-match-wins alphabétique confirmé, mais **aucune collision réelle** aujourd'hui (les apps se namespacent en sous-dossier). Latent : le jour où deux apps posent un `base.html`/`errors/404.html` racine. Fix : imposer la convention sous-dossier / namespacer le loader. `apps/shared/http/templates.py:20-22`.
 - [ ] **[PARTIEL · 🟡 basse-moyenne] Scope « une clé API = une org » = check Python, pas RLS** — la clé s'authentifie comme son créateur ; RLS seule verrait toutes ses orgs. Routes handle-scopées **protégées** par `_ensure_api_key_scope` dans `get_current_org` ; le bypass `{org_id}`+`require_owner` est **dormant** (non câblé). Fuite live réelle : `GET /organizations` énumère **toutes** les orgs du créateur, `POST /organizations` en crée. Fix : gate central des routes collection quand `api_key_org_id` est set. `apps/organizations/infra/context.py:62-69` + `router.py:157,198-207`.
 
@@ -69,6 +69,7 @@ Trouvés par lecture du code. **Enquête bouclée 2026-07-21** : chaque candidat
 - [ ] prod deployment doc (secrets, env)
 - [ ] https://12factor.net
 - [ ] https://w.pitula.me/fintech-engineering-handbook/
+- [ ] https://datacater.io/blog/2021-09-02/postgresql-cdc-complete-guide.html
 - [ ] **i18n** — JHipster ships 45+ languages with a navbar switcher; all our UI
   strings are hardcoded English. Jinja2 route: Babel/gettext extraction, per-request
   locale (cookie or `Accept-Language`), catalogs per context. Expensive to retrofit
@@ -109,7 +110,7 @@ Rebasé et vérifié 2026-08-15 : lint vert, `check_production` couvert par `app
   le boot, sans échappatoire. Les `service_role` hérités sont des JWT très longs et passent ;
   le format `sb_secret_…` est bien plus court et sa longueur réelle n'est pas vérifiée. Un faux
   positif verrouille la prod dehors. Trancher : mesurer les deux formats et valider un préfixe
-  plutôt qu'une longueur, ou rétrograder en warning. `apps/shared/preflight.py`.
+  plutôt qu'une longueur, ou rétrograder en warning. `apps/shared/settings/preflight.py`.
 
 #### P1 — juste après le premier deploy
 

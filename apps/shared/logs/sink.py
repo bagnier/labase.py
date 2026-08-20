@@ -48,9 +48,9 @@ from typing import Any
 import structlog
 
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
 from apps.shared.logs.repository import LogRepository
 from apps.shared.persistence.database import admin_session_factory
+from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 

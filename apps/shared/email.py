@@ -19,8 +19,8 @@ import aiosmtplib
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.config import get_technical_settings
 from apps.shared.queue import enqueue
+from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 

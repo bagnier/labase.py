@@ -32,7 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.events import BusinessEvent
-from apps.shared.persistence.settings_store import (
+from apps.shared.settings.store import (
     BOOL_TRUE,
     ENABLED_KEY,
     OrgAppSetting,

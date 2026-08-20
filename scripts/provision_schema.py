@@ -20,7 +20,7 @@ import re
 import subprocess
 import sys
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 
 def _db_container() -> str:

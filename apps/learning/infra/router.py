@@ -28,8 +28,8 @@ from apps.shared import clock
 from apps.shared.events.bus import events
 from apps.shared.http import or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
-from apps.shared.settings import SettingsView
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.settings.live import SettingsView
 
 router = APIRouter(prefix="/learning", tags=["learning"])
 

@@ -7,10 +7,8 @@ from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
 
-from apps.shared.config import TechnicalSettings, get_technical_settings
 from apps.shared.email import EMAIL_SEND_TOPIC, deliver_queued_email
 from apps.shared.events.listener import EventListener
-from apps.shared.host import Host, MountPhase
 from apps.shared.http.exceptions import (
     handle_http_error,
     handle_rate_limit,
@@ -25,11 +23,13 @@ from apps.shared.http.limiter import (
 )
 from apps.shared.http.security import CsrfProtect, SecurityHeaders, cors_config
 from apps.shared.http.static import CachingStaticFiles
+from apps.shared.integration.host import Host, MountPhase
 from apps.shared.logs.chain import catch_loop_exceptions, setup_logging
 from apps.shared.logs.request import RequestLogger
 from apps.shared.logs.sink import LogDrain
-from apps.shared.preflight import enforce_at_boot
 from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
+from apps.shared.settings.env import TechnicalSettings, get_technical_settings
+from apps.shared.settings.preflight import enforce_at_boot
 
 log = structlog.get_logger(__name__)
 

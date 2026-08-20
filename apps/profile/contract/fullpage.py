@@ -1,8 +1,9 @@
 """Profile's fullpage-context slice: the current user's handle.
 
 Registered as a fullpage provider at profile's ``mount()`` and collected by
-:func:`apps.shared.page.fullpage_context`. The page-assembly mechanism itself lives in
-:mod:`apps.shared.page` — no global render hook injects data silently (a Jinja
+:func:`apps.shared.integration.fullpage.fullpage_context`. The page-assembly mechanism
+itself lives in
+:mod:`apps.shared.integration.fullpage` — no global render hook injects data silently (a Jinja
 "context processor" or middleware would, proscribed by the *Page composition* principle).
 """
 
@@ -10,8 +11,8 @@ import structlog
 from sqlalchemy import select
 
 from apps.profile.domain.models import Profile
-from apps.shared.page import FullpageQuery
-from apps.shared.settings import get_settings
+from apps.shared.integration.fullpage import FullpageQuery
+from apps.shared.settings.live import get_settings
 
 log = structlog.get_logger(__name__)
 

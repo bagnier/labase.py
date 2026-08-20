@@ -3,8 +3,8 @@ validates a written value against its declared type."""
 
 from typing import TypedDict
 
-from apps.shared.persistence.settings_store import BOOL_FALSE, BOOL_TRUE
-from apps.shared.settings import SettingDef, SettingsDeclaration, SettingType
+from apps.shared.settings.live import SettingDef, SettingsDeclaration, SettingType
+from apps.shared.settings.store import BOOL_FALSE, BOOL_TRUE
 
 
 class UnknownSetting(Exception):

@@ -9,8 +9,8 @@ from apps.organizations.domain.models import (
     OrgInvitation,
     OrgRole,
 )
+from apps.shared.integration.slugs import handle_is_available, slugify, unique_handle
 from apps.shared.persistence.repository import BaseRepository
-from apps.shared.slug_registry import handle_is_available, slugify, unique_handle
 
 
 class OrganizationRepository(BaseRepository[Organization]):

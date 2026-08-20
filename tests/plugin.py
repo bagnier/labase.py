@@ -44,7 +44,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import tests.e2e.clock as test_clock
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 from tests.e2e import cleanup
 
 # Clear feature-switch overrides before pytest imports the nested plugins below — which pull in

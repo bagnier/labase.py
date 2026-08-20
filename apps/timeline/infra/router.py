@@ -18,10 +18,10 @@ from apps.shared import clock
 from apps.shared.charts import chart_config
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
+from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import DEFAULT_WINDOW
-from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
-from apps.shared.settings import SettingRow, get_settings
+from apps.shared.settings.live import SettingRow, get_settings
 from apps.timeline.domain.models import TimelineEntry
 from apps.timeline.infra.repository import TimelineFilter, TimelineReader, request_desc
 

@@ -404,7 +404,7 @@ branching. Fragments are standalone valid markup (they're swapped into the live 
 
 **Page composition.** A full page's context is assembled from _slices_, each owned by
 the app that knows it. Apps register a provider at mount time with declared, prefixed
-keys (collisions rejected at startup); the ownerless collector in `apps/shared/page.py`
+keys (collisions rejected at startup); the ownerless collector in `apps/shared/integration/fullpage.py`
 merges them — called explicitly, never injected silently.
 
 **Time.** `clock.now()` is the single source of time. Never call `datetime.now()`.
@@ -450,12 +450,16 @@ allowed to know several contexts at once: `main.py`.
 labase.py/
 ├── apps/
 │   ├── main.py            # FastAPI app, mounts every context in phase order (catch-alls last)
-│   ├── shared/            # Cross-context infra: events/ (types, catalog, wiring, bus, repository, listener),
-│   │                      #   Contribs (contribs.py), Host (host.py), task queue (queue.py),
-│   │                      #   Mailer (email.py),
-│   │                      #   contract/integration.py (middleware/CORS/static),
-│   │                      #   logs/ (chain, sink, repository, capture, request, verdicts),
-│   │                      #   persistence, http, templates/
+│   ├── shared/            # Cross-context infra — one package per subsystem, one module per brick:
+│   │   ├── events/        #   business facts: the journal, its catalog, the bus and the listener
+│   │   ├── logs/          #   technical traces: the chain, the sink, the capture seam, the verdicts
+│   │   ├── settings/      #   every value the code reads, by lifetime — env (boot) vs live (console)
+│   │   ├── persistence/   #   engines, sessions, RLS context, ORM mixins, SQL instrumentation
+│   │   ├── http/          #   the request/response edge: negotiation, security, rate limiting
+│   │   ├── integration/   #   the mount surface: Host, contribs registry, fullpage slices, slugs
+│   │   ├── contract/      #   integration.py — the foundation's own mount: middleware, CORS, static
+│   │   ├── templates/     #   the shared layout and macros every app's templates extend
+│   │   └── *.py           #   single-module bricks: queue, email, clock, charts, metrics…
 │   ├── auth/              # Authentication — current user, RLS sessions, cookies
 │   ├── api_keys/          # Per-org machine credentials for the JSON API (Bearer)
 │   ├── organizations/     # Multi-tenant orgs, memberships, invitations

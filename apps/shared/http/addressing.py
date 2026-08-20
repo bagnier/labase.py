@@ -9,7 +9,7 @@ default: trusting the header when nothing upstream strips it lets any caller spo
 
 from fastapi import Request
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 
 def client_ip(request: Request) -> str | None:

@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 
 def _engine():

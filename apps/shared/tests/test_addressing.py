@@ -1,7 +1,7 @@
 from fastapi import Request
 
-from apps.shared.config import get_technical_settings
 from apps.shared.http.addressing import client_ip
+from apps.shared.settings.env import get_technical_settings
 
 
 def _request(headers: dict[str, str], peer: str | None = "10.0.0.1"):

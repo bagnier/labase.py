@@ -15,24 +15,24 @@ from typing import TYPE_CHECKING, Any, Protocol
 import structlog
 from fastapi import FastAPI
 
-from apps.shared.contribs import Contribs, contribs
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus, events
 from apps.shared.events.wiring import EventWiring
+from apps.shared.integration.contribs import Contribs, contribs
+from apps.shared.integration.slugs import OpenListChecker
+from apps.shared.integration.slugs import register_open_list as _register_open_list
+from apps.shared.integration.slugs import reserve as _reserve_slugs
 from apps.shared.logs.capture import drain_once
-from apps.shared.settings import (
+from apps.shared.settings.live import (
     AppSettings,
     SettingsChanged,
     SettingsDeclaration,
     bind_settings,
 )
-from apps.shared.slug_registry import OpenListChecker
-from apps.shared.slug_registry import register_open_list as _register_open_list
-from apps.shared.slug_registry import reserve as _reserve_slugs
 from apps.shared.vocabulary import PhosphorIcon
 
 if TYPE_CHECKING:
-    from apps.shared.page import FullpageQuery
+    from apps.shared.integration.fullpage import FullpageQuery
 
 log = structlog.get_logger(__name__)
 
@@ -126,8 +126,9 @@ class NavItem:
 class FullpageProvider:
     """A fullpage-context slice an app contributes from its :func:`mount`.
 
-    ``fn`` produces a ``dict`` from a :class:`~apps.shared.page.FullpageQuery`; each key
-    it returns is namespaced as ``f"{name}_{key}"`` (e.g. name ``profile`` returning
+    ``fn`` produces a ``dict`` from a
+    :class:`~apps.shared.integration.fullpage.FullpageQuery`; each key it returns is
+    namespaced as ``f"{name}_{key}"`` (e.g. name ``profile`` returning
     ``handle`` lands in the context as ``profile_handle``).
     """
 
@@ -150,7 +151,7 @@ class Host:
 
     def reserve(self, *slugs: str) -> None:
         """Claim URL slugs so no org handle can shadow them
-        (see :mod:`apps.shared.slug_registry`).
+        (see :mod:`apps.shared.integration.slugs`).
 
         One rule: an app reserves a slug iff it routes that *top-level* path
         (``/files/share/…``, ``/metrics``). Org-scoped routers live under
@@ -159,7 +160,7 @@ class Host:
 
     def register_open_list(self, name: str, checker: OpenListChecker) -> None:
         """Register a handle namespace to check for cross-context slug uniqueness
-        (see :mod:`apps.shared.slug_registry`) — the flip side of :meth:`reserve`,
+        (see :mod:`apps.shared.integration.slugs`) — the flip side of :meth:`reserve`,
         routed through the host so mounts touch one slug surface."""
         _register_open_list(name, checker)
 
@@ -225,8 +226,9 @@ class Host:
     def register_settings(self, declaration: SettingsDeclaration) -> AppSettings:
         """Bring an app's settings live in one call from ``mount()``: record the declaration for
         the console to render, seed and read values, register the handle in the process registry
-        (:func:`~apps.shared.settings.get_settings`), and subscribe it to :class:`SettingsChanged`.
-        Returns the live handle, so ``if not settings.enabled`` works immediately."""
+        (:func:`~apps.shared.settings.live.get_settings`), and subscribe it to
+        :class:`SettingsChanged`. Returns the live handle, so ``if not settings.enabled`` works
+        immediately."""
         settings = bind_settings(declaration)
         self.settings_handles[declaration.app_name] = settings
         self.events.spread(SettingsChanged, settings.reload)

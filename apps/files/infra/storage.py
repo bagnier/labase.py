@@ -6,7 +6,7 @@ from urllib.parse import urlparse, urlunparse
 
 from storage3.types import SignedUrlResponse
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 
 def rewrite_signed_url(signed_url: str) -> str:

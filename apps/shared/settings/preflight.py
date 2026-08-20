@@ -11,7 +11,7 @@ Two entry points share one rule set:
 
 import structlog
 
-from apps.shared.config import TechnicalSettings, get_technical_settings
+from apps.shared.settings.env import TechnicalSettings, get_technical_settings
 
 log = structlog.get_logger(__name__)
 

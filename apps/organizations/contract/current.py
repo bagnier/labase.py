@@ -27,7 +27,7 @@ from apps.organizations.infra.context import (
     require_current_owner,
     require_owner,
 )
-from apps.shared.settings import SettingsView, get_settings
+from apps.shared.settings.live import SettingsView, get_settings
 
 CurrentOrg = Annotated[UUID, Depends(get_current_org)]
 CurrentOrgModel = Annotated[Organization, Depends(get_current_org_model)]

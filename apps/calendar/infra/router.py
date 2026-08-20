@@ -16,7 +16,7 @@ from apps.shared import clock
 from apps.shared.events.bus import events
 from apps.shared.http import delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
+from apps.shared.integration.fullpage import fullpage_context
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 

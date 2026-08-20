@@ -16,7 +16,6 @@ import pytest
 import pytest_asyncio
 
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
 from apps.shared.logs import sink
 from apps.shared.logs.repository import LogRepository
 from apps.shared.logs.sink import (
@@ -27,6 +26,7 @@ from apps.shared.logs.sink import (
     log_processor,
 )
 from apps.shared.persistence import database as db
+from apps.shared.settings.env import get_technical_settings
 
 _NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
 

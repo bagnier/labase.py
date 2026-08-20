@@ -9,12 +9,12 @@ from apps.metrics.domain import service
 from apps.metrics.domain.models import LoadPoint
 from apps.metrics.infra.repository import window_rows
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
 from apps.shared.http import wants_json
 from apps.shared.http.templates import templates
+from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.metrics import accumulator
-from apps.shared.page import fullpage_context
 from apps.shared.persistence.database import AdminSession
+from apps.shared.settings.env import get_technical_settings
 
 router = APIRouter(tags=["metrics"])
 exposition_router = APIRouter(tags=["metrics"])

@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared import slug_registry as _svc
-from apps.shared.slug_registry import is_reserved, is_valid_handle, slugify
+from apps.shared.integration import slugs as _svc
+from apps.shared.integration.slugs import is_reserved, is_valid_handle, slugify
 
 _SESSION: AsyncSession = cast(AsyncSession, object())  # fake session; checkers never use it
 

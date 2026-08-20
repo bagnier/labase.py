@@ -1,5 +1,5 @@
 from apps.auth.tests.given_helpers import user_id_for_email
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
 

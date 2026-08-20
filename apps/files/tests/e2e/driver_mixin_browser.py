@@ -15,7 +15,7 @@ from apps.organizations.tests.given_helpers import (
     orgs_for_user,
     set_membership_role,
 )
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 

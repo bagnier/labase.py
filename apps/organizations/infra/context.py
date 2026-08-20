@@ -7,7 +7,7 @@ from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.auth.contract.user import AuthenticatedUser
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.slug_registry import is_reserved
+from apps.shared.integration.slugs import is_reserved
 
 log = structlog.get_logger(__name__)
 

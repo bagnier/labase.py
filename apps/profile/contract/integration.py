@@ -12,9 +12,9 @@ from apps.profile.contract.fullpage import provide_profile_handle
 from apps.profile.contract.queries import profile_handle_taken
 from apps.profile.domain.models import Profile
 from apps.profile.infra.router import router
-from apps.shared.host import Host, MountPhase
+from apps.shared.integration.host import Host, MountPhase
 from apps.shared.persistence.repository import count_created_per_day, count_where
-from apps.shared.settings import SettingDef, SettingsDeclaration, SupabaseLink
+from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink
 
 PHASE = MountPhase.FOUNDATION
 

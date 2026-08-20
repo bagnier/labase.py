@@ -23,7 +23,7 @@ from apps.auth.tests.given_helpers import (
     set_admin_role,
 )
 from apps.organizations.infra.repository import OrganizationRepository
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 from apps.todo.domain.models import Todo
 
 _DEFAULT_EMAIL = "dev@labase.dev"

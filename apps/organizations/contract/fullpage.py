@@ -1,7 +1,8 @@
 """Organizations' fullpage-context slice: the user's orgs, each with its org-specific nav.
 
 Registered as a fullpage provider at organizations' ``mount()`` and collected by
-:func:`apps.shared.page.fullpage_context`. For each org, :func:`provide_org_nav` fires
+:func:`apps.shared.integration.fullpage.fullpage_context`. For each org,
+:func:`provide_org_nav` fires
 :class:`OrgNavQuery` — "collect this org's specific nav items" — and any app can answer
 via ``host.contribs.provide(OrgNavQuery, handler)``, returning a list of :class:`OrgNavItem`
 (e.g. ``pages`` returns the org's published pages).
@@ -18,8 +19,8 @@ import structlog
 
 from apps.organizations.contract.collect import OrgMemberQuery
 from apps.organizations.contract.queries import get_user_orgs
-from apps.shared.contribs import contribs
-from apps.shared.page import FullpageQuery
+from apps.shared.integration.contribs import contribs
+from apps.shared.integration.fullpage import FullpageQuery
 
 log = structlog.get_logger(__name__)
 

@@ -45,7 +45,7 @@ def create_org_for_user(name: str, user_id: str) -> dict:
     Committed outside any transaction — Supabase Storage RLS needs the org in the committed DB.
     Returns {"id": str, "handle": str}.
     """
-    from apps.shared.slug_registry import slugify
+    from apps.shared.integration.slugs import slugify
 
     handle = slugify(name) or "org"
     run_sql("delete from organizations where handle = :handle", {"handle": handle})

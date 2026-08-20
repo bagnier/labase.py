@@ -22,9 +22,9 @@ from apps.organizations.contract.settings_sections import (
     OrgSettingsSection,
     OrgSettingsSectionQuery,
 )
-from apps.shared.host import AppManifest, Host, MountPhase
+from apps.shared.integration.host import AppManifest, Host, MountPhase
 from apps.shared.persistence.repository import count_where
-from apps.shared.settings import SettingsDeclaration, SupabaseLink, feature_switch
+from apps.shared.settings.live import SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
 

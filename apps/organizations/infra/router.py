@@ -46,7 +46,6 @@ from apps.organizations.domain.service import ensure_no_pending_invitation, ensu
 from apps.organizations.infra.emails import invitation_email
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared import clock
-from apps.shared.contribs import contribs
 from apps.shared.email import enqueue_email
 from apps.shared.events.activity import (
     activity_entries,
@@ -59,8 +58,9 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
-from apps.shared.slug_registry import validate_handle
+from apps.shared.integration.contribs import contribs
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.integration.slugs import validate_handle
 
 # A curated shortlist for the org timezone picker: any IANA zone is accepted by the endpoint, which
 # validates against ``zoneinfo`` — this only keeps the dropdown scannable.

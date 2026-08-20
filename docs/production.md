@@ -71,7 +71,7 @@ render as human-readable console text rather than the JSON an aggregator parses 
 longer selects a level, since nothing is written below `INFO`), missing admin URL.
 
 The same checks run **at boot** when `ENVIRONMENT=production`
-(`apps/shared/preflight.py::enforce_at_boot`): a blocking error raises and the
+(`apps/shared/settings/preflight.py::enforce_at_boot`): a blocking error raises and the
 process refuses to start rather than serving traffic with dev defaults.
 
 ## Connection pooling (Supavisor)

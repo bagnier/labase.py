@@ -1,7 +1,7 @@
 """Generate a local .env from `supabase status -o env`.
 
 Maps the Supabase CLI variable names to the names expected by
-``apps.shared.config.TechnicalSettings`` and rewrites the local DB URLs to the
+``apps.shared.settings.env.TechnicalSettings`` and rewrites the local DB URLs to the
 asyncpg driver, splitting the user (app_user, RLS) and service (postgres)
 connections. Host-side scripts and the Docker app both reach the stack through
 ``host.docker.internal`` (see comments in .env.example).

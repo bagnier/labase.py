@@ -14,8 +14,8 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from apps.shared.config import TechnicalSettings, get_technical_settings
 from apps.shared.persistence.sql_stats import instrument_engine
+from apps.shared.settings.env import TechnicalSettings, get_technical_settings
 
 
 def search_path_connect_args(settings: TechnicalSettings) -> dict:

@@ -8,7 +8,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 _TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local"]
 
@@ -122,7 +122,7 @@ def reset_app_switches() -> None:
     """Clears persisted ``enabled`` overrides so feature switches don't leak across runs.
 
     Each app's ``mount()`` reads its ``enabled`` switch once, at process start (see
-    apps.shared.settings) — there's no live unmount. So a leftover ``enabled = false`` in the
+    apps.shared.settings.live) — there's no live unmount. So a leftover ``enabled = false`` in the
     shared dev/test DB would keep an app unmounted for the whole suite, until the next process
     start. Called from ``pytest_configure``, before any test module imports ``apps.main``.
     """

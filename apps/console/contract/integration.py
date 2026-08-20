@@ -35,9 +35,9 @@ from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuer
 from apps.console.contract.technical import overview as technical_overview
 from apps.console.infra.router import router
 from apps.shared.events.wiring import wiring
-from apps.shared.host import Host, MountPhase
 from apps.shared.http.templates import templates
-from apps.shared.settings import SettingDef, SettingsChanged, SettingsDeclaration
+from apps.shared.integration.host import Host, MountPhase
+from apps.shared.settings.live import SettingDef, SettingsChanged, SettingsDeclaration
 
 PHASE = MountPhase.CONSOLE
 

@@ -9,7 +9,7 @@ from apps.public.contract.current import PublicSettings
 from apps.shared.http import with_etag
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
-from apps.shared.settings import SettingsView
+from apps.shared.settings.live import SettingsView
 
 router = APIRouter(tags=["public"])
 

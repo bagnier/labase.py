@@ -16,7 +16,7 @@ from typing import TypedDict
 import psutil
 
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 _SENSITIVE_SUBSTRINGS = ("secret", "password", "token", "key", "credential", "private", "auth")
 

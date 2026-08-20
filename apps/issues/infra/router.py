@@ -10,12 +10,12 @@ from apps.issues.domain.models import Issue, IssueRead, IssueStatus, OccurrenceR
 from apps.issues.infra.repository import IssueRepository
 from apps.shared import clock
 from apps.shared.charts import last_days, sparkline
-from apps.shared.config import get_technical_settings
 from apps.shared.events.bus import events
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
+from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
+from apps.shared.settings.env import get_technical_settings
 
 router = APIRouter(tags=["issues"])
 

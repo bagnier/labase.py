@@ -8,10 +8,10 @@ from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 from structlog.testing import capture_logs
 
-from apps.shared.config import get_technical_settings
 from apps.shared.http.limiter import RateLimitExceeded, UnlimitedEndpoint, rate_limit
 from apps.shared.logs import capture
 from apps.shared.persistence import database as db
+from apps.shared.settings.env import get_technical_settings
 
 
 @pytest_asyncio.fixture(autouse=True)

@@ -2,8 +2,8 @@
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.public.infra.router import router
-from apps.shared.host import Host, MountPhase
-from apps.shared.settings import SettingDef, SettingsDeclaration, get_settings
+from apps.shared.integration.host import Host, MountPhase
+from apps.shared.settings.live import SettingDef, SettingsDeclaration, get_settings
 
 PHASE = MountPhase.PUBLIC
 

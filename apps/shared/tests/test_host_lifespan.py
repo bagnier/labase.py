@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.shared.host import Host
+from apps.shared.integration.host import Host
 from apps.shared.logs import capture
 
 

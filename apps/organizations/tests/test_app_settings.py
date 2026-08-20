@@ -7,10 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-import apps.shared.settings as shared_settings
+import apps.shared.settings.live as shared_settings
 from apps.organizations.contract import current
 from apps.organizations.contract.current import app_settings
-from apps.shared.settings import AppSettings, SettingDef, SettingsDeclaration
+from apps.shared.settings.live import AppSettings, SettingDef, SettingsDeclaration
 
 _DECLARATION = SettingsDeclaration("demo", [SettingDef("limit", "number", "10", "A number")])
 

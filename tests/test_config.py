@@ -12,7 +12,7 @@ suite). Better one loud failure here than a whole suite that is merely slow.
 
 import pytest
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 from scripts.doctor import CHECKS, WARN_SECONDS, timed
 
 

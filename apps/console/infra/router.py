@@ -21,16 +21,16 @@ from apps.console.infra.repository import AppSettingRepository
 from apps.organizations.contract.queries import list_org_handles
 from apps.shared import clock
 from apps.shared.charts import day_buckets_series
-from apps.shared.config import get_technical_settings
-from apps.shared.contribs import contribs
 from apps.shared.events.bus import events
 from apps.shared.events.wiring import wiring
-from apps.shared.host import host
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
+from apps.shared.integration.contribs import contribs
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.integration.host import host
 from apps.shared.persistence.database import AdminSession
-from apps.shared.settings import SettingsChanged, SettingsDeclaration
+from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.live import SettingsChanged, SettingsDeclaration
 from apps.shared.supabase_studio import studio_link
 
 log = structlog.get_logger(__name__)

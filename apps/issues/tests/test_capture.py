@@ -13,7 +13,7 @@ from apps.issues.contract.queries import search_issue_occurrences
 from apps.issues.domain.models import Issue, IssueStatus
 from apps.issues.infra.repository import see_occurrence
 from apps.shared.events.models import BusinessEventRecord
-from apps.shared.host import host
+from apps.shared.integration.host import host
 from apps.shared.logs import capture
 from apps.shared.logs.capture import CaptureDrain, ExceptionCaptured
 from apps.shared.persistence import database as db

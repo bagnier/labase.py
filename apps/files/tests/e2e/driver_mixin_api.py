@@ -7,7 +7,7 @@ from apps.organizations.tests.given_helpers import (
     delete_org,
     set_membership_role,
 )
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 from tests.e2e.drivers.api_base import VISITOR, ApiBase
 
 _PASSWORD = "Secret1!"

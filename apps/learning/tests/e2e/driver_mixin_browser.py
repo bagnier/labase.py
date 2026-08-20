@@ -9,7 +9,7 @@ from sqlalchemy.pool import NullPool
 import tests.e2e.clock as test_clock
 from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
 from apps.organizations.tests.given_helpers import orgs_for_user
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 from tests.e2e.drivers.browser_base import BrowserBase
 
 from . import setup

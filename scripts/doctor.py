@@ -18,7 +18,7 @@ from collections.abc import Awaitable, Callable
 import asyncpg
 import httpx
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 WARN_SECONDS = 0.5
 TIMEOUT_SECONDS = 5.0

@@ -14,7 +14,7 @@ services:
     env_file:
       - ${ENV_FILE:-../.env.production}
     environment:
-      # Activates the boot-time preflight gate (apps/shared/preflight.py).
+      # Activates the boot-time preflight gate (apps/shared/settings/preflight.py).
       ENVIRONMENT: production
       # Safe here and only here: the app is `expose`d, not published, so Caddy is the
       # sole ingress and its X-Forwarded-For can be trusted to key the rate limiter.

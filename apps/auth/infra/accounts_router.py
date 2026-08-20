@@ -25,10 +25,10 @@ from apps.auth.contract.events import (
 from apps.shared.events.bus import events
 from apps.shared.http import wants_full_page, wants_json
 from apps.shared.http.templates import templates
-from apps.shared.page import fullpage_context
+from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import get_admin_supabase
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 
 log = structlog.get_logger(__name__)
 

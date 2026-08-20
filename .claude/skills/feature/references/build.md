@@ -81,7 +81,7 @@ Expose what other apps need via `contract/current.py` (dependencies), `contract/
 
 Push (a fact happened) and pull (who contributes to this?) are different animals, so they are
 different objects — `host.events` (`apps/shared/events/`) and `host.contribs`
-(`apps/shared/contribs.py`). Both key handlers by the Python type they carry.
+(`apps/shared/integration/contribs.py`). Both key handlers by the Python type they carry.
 
 | Primitive | Semantics | On failure | Use for |
 |-----------|-----------|------------|---------|

@@ -1,8 +1,8 @@
 """Process-wide technical settings, read once from the environment (``.env``).
 
-Infrastructure knobs — DB URLs, SMTP, cache TTLs — cached for the process lifetime.
-Distinct from :mod:`apps.shared.settings`, which holds the admin-tunable, per-app values
-editable from the console at runtime.
+Infrastructure knobs — DB URLs, SMTP, cache TTLs — cached for the process lifetime. Changing
+one takes a restart, which is what a deployment-owned value should cost. Its sibling
+:mod:`apps.shared.settings.live` holds the other lifetime: admin-tunable, per-app, reloaded live.
 """
 
 import os
@@ -30,7 +30,7 @@ class TechnicalSettings(BaseSettings):
     supabase_database_user_url: str
     supabase_database_admin_url: str = ""
     supabase_database_schema: str = "public"
-    # "production" activates the boot-time preflight gate (apps/shared/preflight.py).
+    # "production" activates the boot-time preflight gate (apps/shared/settings/preflight.py).
     environment: str = Field(
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "LABASE_ENV"),

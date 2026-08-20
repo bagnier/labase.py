@@ -4,7 +4,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.contract.queries import org_by_handle, org_handles
-from apps.shared.persistence.settings_store import AppSetting, OrgAppSetting, disabled_apps_select
+from apps.shared.settings.store import AppSetting, OrgAppSetting, disabled_apps_select
 
 
 class AppSettingRepository:

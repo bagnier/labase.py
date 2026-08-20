@@ -22,14 +22,14 @@ from apps.issues.infra.repository import (
     see_occurrence,
 )
 from apps.issues.infra.router import router
-from apps.shared.config import get_technical_settings
 from apps.shared.email import Email, enqueue_email
 from apps.shared.events.bus import events
-from apps.shared.host import Host, MountPhase
+from apps.shared.integration.host import Host, MountPhase
 from apps.shared.logs.capture import CaptureDrain, ExceptionCaptured, on_captured
 from apps.shared.persistence.database import admin_session_factory
 from apps.shared.queue import ensure_scheduled, register_task_handler
-from apps.shared.settings import (
+from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.live import (
     SettingDef,
     SettingsDeclaration,
     SupabaseLink,

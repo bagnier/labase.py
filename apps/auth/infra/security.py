@@ -19,10 +19,10 @@ from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
-from apps.shared.config import get_technical_settings
-from apps.shared.contribs import contribs
+from apps.shared.integration.contribs import contribs
 from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.database import get_admin_session
+from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 

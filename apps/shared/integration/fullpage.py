@@ -2,7 +2,7 @@
 
 A full HTML page's template context is composed of *slices*, each owned by the app
 that knows it. An app registers a *fullpage provider* at its ``mount()`` via
-:meth:`~apps.shared.host.Host.register_fullpage_provider`, passing a ``name`` and a
+:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`, passing a ``name`` and a
 function that returns raw keys — the collector namespaces them as ``f"{name}_{key}"``
 (name ``profile`` returning ``handle`` lands in the context as ``profile_handle``).
 Keys stay flat — no nested sub-dicts — so templates read ``{{ profile_handle }}``.
@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.host import host
+from apps.shared.integration.host import host
 
 if TYPE_CHECKING:
     from apps.auth.contract.user import AuthenticatedUser

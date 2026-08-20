@@ -5,7 +5,7 @@ Promoted from apps/files when profile avatars became the second consumer.
 
 from storage3 import AsyncStorageClient
 
-from apps.shared.config import get_technical_settings
+from apps.shared.settings.env import get_technical_settings
 
 
 def bucket() -> str:

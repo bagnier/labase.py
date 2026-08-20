@@ -16,7 +16,7 @@ def asset(path: str) -> str:
 
 
 # No context processors: page context (incl. the fullpage slices — display name +
-# nav orgs) is composed explicitly per route via apps.shared.page.
+# nav orgs) is composed explicitly per route via apps.shared.integration.fullpage.
 templates = Jinja2Templates(
     directory=[str(p) for p in sorted(_BASE.glob("*/templates")) if p.is_dir()],
 )

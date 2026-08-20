@@ -12,8 +12,8 @@ import pytest
 import pytest_asyncio
 
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
 from apps.shared.logs import sink
+from apps.shared.settings.env import get_technical_settings
 from apps.shared.tests.log_seed import clear_log_lines, seed_log_line
 from apps.timeline.domain.models import TimelineSource
 from apps.timeline.infra.repository import TimelineFilter

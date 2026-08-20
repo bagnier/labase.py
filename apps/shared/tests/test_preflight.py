@@ -1,7 +1,7 @@
 import pytest
 
-from apps.shared.config import TechnicalSettings
-from apps.shared.preflight import PreflightError, check_production, enforce_at_boot
+from apps.shared.settings.env import TechnicalSettings
+from apps.shared.settings.preflight import PreflightError, check_production, enforce_at_boot
 
 _REMOTE_DB = "postgresql+asyncpg://user@db.abcdefgh.supabase.co:6543/postgres"
 _EXPLICIT_ORIGINS = ["https://app.example.com"]

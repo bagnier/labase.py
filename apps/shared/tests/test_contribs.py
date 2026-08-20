@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from apps.shared.contribs import Contribs
+from apps.shared.integration.contribs import Contribs
 
 
 @dataclass(frozen=True)

@@ -27,13 +27,13 @@ from sqlalchemy import text
 
 import apps.main  # noqa: F401 — mounts every context, so issues subscribes its tracker
 from apps.shared import clock
-from apps.shared.config import get_technical_settings
 from apps.shared.contract import integration as shared_integration
-from apps.shared.host import Host
+from apps.shared.integration.host import Host
 from apps.shared.logs import capture, sink
 from apps.shared.logs.capture import CaptureDrain
 from apps.shared.logs.sink import LogDrain
 from apps.shared.persistence import database as db
+from apps.shared.settings.env import get_technical_settings
 from apps.timeline.domain.models import TimelineSource
 from apps.timeline.infra.repository import TimelineFilter
 

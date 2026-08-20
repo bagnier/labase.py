@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.shared.settings import SettingsView, get_settings
+from apps.shared.settings.live import SettingsView, get_settings
 
 
 def _users_settings() -> SettingsView:

@@ -1,7 +1,7 @@
 import pytest
 
-import apps.shared.settings as shared_settings
-from apps.shared.settings import (
+import apps.shared.settings.live as shared_settings
+from apps.shared.settings.live import (
     AppSettings,
     SettingDef,
     SettingsChanged,

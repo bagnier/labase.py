@@ -8,7 +8,7 @@ mount, next to ``asset``), kept fresh by the ``SettingsChanged`` event like any 
 """
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
-from apps.shared.settings import get_settings
+from apps.shared.settings.live import get_settings
 
 THEME_APP = "appearance"
 THEME_KEY = "theme"
