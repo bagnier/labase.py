@@ -99,7 +99,9 @@ provision-test:
 # droast, which runs as a self-contained GitHub Action in CI (see .github/workflows/ci.yml).
 # All Python linters are pinned dev-deps in pyproject.toml, so they resolve once in uv.lock
 # and run straight from the project env — no per-invocation resolution.
-lint:
+# Depends on client-gen because client/ is generated and gitignored: pyright resolves
+# scripts/smoke.py's import through it, so a tree that never generated it lints red.
+lint: client-gen
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run lint-imports --cache-dir .cache/import-linter
@@ -199,8 +201,6 @@ flakehunt:
 
 # Perf smoke: boots the app on the test schema, drives it with Locust through
 # the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
-# Depends on client-gen because client/ is generated (gitignored), so CI — which
-# checks out a fresh tree — must build it before the smoke can import it.
 perf-smoke: provision-test client-gen
 	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
 
