@@ -7,7 +7,6 @@ from apps.organizations.tests.given_helpers import (
     delete_org,
     set_membership_role,
 )
-from apps.shared.settings.live import get_settings
 from tests.e2e.drivers.api_base import VISITOR, ApiBase
 
 _PASSWORD = "Secret1!"
@@ -31,7 +30,6 @@ class OrgFileApiMixin(ApiBase):
         self.primary_email = ""
         self.active_org_handle = ""
         self.last_registered_email = None
-        get_settings("files")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _cleanup_committed_data(self) -> None:

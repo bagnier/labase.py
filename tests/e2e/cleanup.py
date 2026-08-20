@@ -4,11 +4,13 @@ import asyncio
 import threading
 
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.store import BOOL_FALSE, AppSetting
 
 _TEST_EMAIL_DOMAINS = ["test.local", "example.com", "rls.local"]
 
@@ -137,6 +139,36 @@ def reset_app_switches() -> None:
             await engine.dispose()
 
     _run_blocking(_reset)
+
+
+_SEEDING_KEY = "seed_welcome_content"
+
+
+def disable_welcome_seeding() -> None:
+    """Turn welcome seeding off for the whole run, the way an admin would.
+
+    Starter rows in every new organisation would break the assertions of every scenario that
+    counts what it created itself, so the suite runs with them off — and the scenarios that
+    observe the seeding chain turn it back on from the console. Called from ``pytest_configure``,
+    before any test module imports ``apps.main``: ``mount()`` reads the value once, and this
+    write has to already be there.
+    """
+
+    async def _disable() -> None:
+        engine = _service_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    insert(AppSetting)
+                    .values(app_name="organizations", key=_SEEDING_KEY, value=BOOL_FALSE)
+                    .on_conflict_do_update(
+                        index_elements=["app_name", "key"], set_={"value": BOOL_FALSE}
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    _run_blocking(_disable)
 
 
 async def purge_leftover_test_data() -> None:

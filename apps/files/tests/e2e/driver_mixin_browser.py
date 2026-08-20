@@ -15,7 +15,6 @@ from apps.organizations.tests.given_helpers import (
     orgs_for_user,
     set_membership_role,
 )
-from apps.shared.settings.live import get_settings
 from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 
@@ -37,7 +36,6 @@ class OrgFileBrowserMixin(BrowserBase):
         self.last_registered_email = None
         self.secondary_handles = {}
         self._share_link_url = None
-        get_settings("files")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _files_url(self, slug: str | None = None) -> str:

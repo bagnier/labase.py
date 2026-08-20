@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.domain.models import Membership, Organization, OrganizationRead, OrgRole
-from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.live import get_settings
 
 log = structlog.get_logger(__name__)
 
@@ -30,10 +30,15 @@ async def get_org_owner_id(session: AsyncSession, org_id: uuid.UUID) -> uuid.UUI
 
 
 def seeding_enabled() -> bool:
-    """Welcome seeding runs everywhere except the test schemas, where the browser E2E driver
-    truncates app tables between scenarios and starter rows would break their assertions.
-    Matches the plain ``test`` schema and every per-xdist-worker clone (``test_gw0``, …)."""
-    return not get_technical_settings().supabase_database_schema.startswith("test")
+    """Whether a new organisation gets its welcome content — an admin-tunable setting.
+
+    It used to be a check on the schema name (off wherever the schema was called ``test*``,
+    because starter rows would break the other scenarios' assertions). That made a documented
+    behaviour — the whole sign-up seeding chain — unreachable by any test in either lane, through
+    a branch of production code that existed only for the suite. The suite now turns it off the
+    way an admin would, and back on for the scenarios that observe it.
+    """
+    return get_settings("organizations").seed_welcome_content
 
 
 async def seed_org_welcome(

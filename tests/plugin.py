@@ -52,6 +52,7 @@ from tests.e2e import cleanup
 # ``enabled = false`` (e.g. from manual dev testing on the shared DB) would otherwise unmount an
 # app for the whole run.
 cleanup.reset_app_switches()
+cleanup.disable_welcome_seeding()
 
 pytest_plugins = [
     "tests.e2e.plugin",

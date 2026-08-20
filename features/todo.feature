@@ -69,3 +69,13 @@ Feature: Todo list
     Given they have a todo item "Buy groceries"
     When they mark the todo item "Buy groceries" as done
     Then the todo dashboard card shows "1 completed"
+
+  # The welcome tasks are seeded by a durable consumer of OrganizationCreated, off the journal.
+  # Seeding is off by default under test — starter rows would break every other scenario's
+  # assertions — so this one turns it on to observe the behaviour the README advertises.
+  Scenario: A new organisation starts with its welcome tasks
+    Given a server admin is signed in as "root@example.com"
+    And the admin sets the "organizations" setting "seed_welcome_content" to "true"
+    And a user is signed in as "newcomer@example.com"
+    When they view their todo list
+    Then the items appear in order: "Invite a teammate to this organisation", "Upload your first file", "Try the spaced-repetition learning decks"

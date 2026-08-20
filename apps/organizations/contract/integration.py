@@ -91,6 +91,12 @@ def _declare_settings() -> SettingsDeclaration:
                 "Create a personal organisation on sign-up",
             ),
             SettingDef(
+                "seed_welcome_content",
+                "boolean",
+                "true",
+                "Seed welcome content in new organisations",
+            ),
+            SettingDef(
                 "max_invitations_per_org",
                 "number",
                 "-1",

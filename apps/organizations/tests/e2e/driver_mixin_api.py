@@ -1,5 +1,4 @@
 from apps.auth.tests.given_helpers import user_id_for_email
-from apps.shared.settings.live import get_settings
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.api_base import ApiBase
 
@@ -11,7 +10,6 @@ class OrgApiMixin(ApiBase):
 
     def reset_session(self) -> None:
         self._org_list_response = None
-        get_settings("organizations")._raw = {}  # restore declared defaults between scenarios
         super().reset_session()
 
     def _fetch_org_list(self) -> list[dict]:
