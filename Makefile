@@ -212,14 +212,16 @@ coverage-erase:
 # The floor gates `ci`, not `test`: it judges the combined figure, and a single lane cannot be
 # held to it — two floors would be two numbers to keep honest. Raise COV_MIN when the real
 # number moves up, never lower it to fit.
-# `--sort=miss --skip-covered` because an average hides: the total says how the repo is doing,
-# and these two say which file to open. Sorted by dead statements rather than by percentage,
-# which ranks by module size as much as by neglect — 9 dead lines in a 60-statement file read
-# worse than 111 in an 862-statement one.
+# `--sort=-miss --skip-covered` because an average hides: the total says how the repo is doing,
+# and these two say which file to open first. The leading minus is not a typo — `--sort=miss`
+# ascends, and would head the list with the files that need nothing. Ranked by dead statements
+# rather than by percentage, which ranks by module size as much as by neglect: 9 dead lines in a
+# 60-statement file read worse than 111 in an 862-statement one.
+# Neither flag touches the verdict — the total is computed over every file, skipped ones included.
 COV_MIN ?= 90
 coverage-report:
 	uv run coverage combine
-	uv run coverage report --sort=miss --skip-covered --fail-under=$(COV_MIN)
+	uv run coverage report --sort=-miss --skip-covered --fail-under=$(COV_MIN)
 
 # Both read what `coverage-report` combined — parallel mode leaves one file per lane until then.
 coverage-xml:
