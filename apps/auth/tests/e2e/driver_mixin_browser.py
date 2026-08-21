@@ -55,6 +55,9 @@ class AuthBrowserMixin(BrowserBase):
         if resp.status == 303 or resp.headers.get("hx-redirect"):
             self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
             self.adopt_current_context(email)
+            # Same as the api driver does on sign-in: whoever just authenticated brings their own
+            # org, and a stale handle from the previous actor would send every later step to it.
+            self._store_active_org_handle()
         else:
             self.page.wait_for_load_state("domcontentloaded")
 
@@ -89,10 +92,20 @@ class AuthBrowserMixin(BrowserBase):
         self.register(email, password)
 
     def _store_active_org_handle(self) -> None:
-        """Read the handle off the org card link — the caller leaves the page on /profile."""
+        """Read the handle off the org card link — the caller leaves the page on /profile.
+
+        Not every signed-in user has one: an account whose personal org does not exist yet renders
+        the organisations panel with no card in it. So anchor on the panel's own create form —
+        same server-rendered response as the cards, present either way — and read the cards only
+        once it is attached. Absence is then a settled fact rather than a race, which is what a
+        bounded timeout here could never tell apart: it would leave the previous actor's handle in
+        place and send the rest of the scenario to the wrong organisation, silently.
+        """
+        self.page.get_by_label("Organisation name").wait_for(state="attached")
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
-        href = link.get_attribute("href") or ""
-        handle = href.strip("/").split("/")[0]
+        if link.count() == 0:
+            return
+        handle = (link.get_attribute("href") or "").strip("/").split("/")[0]
         if handle:
             self.active_org_handle = handle
 

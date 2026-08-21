@@ -229,7 +229,6 @@ Feature: spaced repetition
   Scenario: A new organisation starts with its welcome deck
     Given a server admin is signed in as "root@example.com"
     And the admin sets the "organizations" setting "seed_welcome_content" to "true"
-    And a user is signed in as "newcomer@example.com"
     And "newcomer" wants to learn the deck "Welcome"
     When "newcomer" starts a review session
     Then "newcomer" sees 2 cards to learn
