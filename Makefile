@@ -1,4 +1,4 @@
-.PHONY: check flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-report coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
+.PHONY: check meta flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-report coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
 
 # Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
 # Compose is isolated per checkout so several `make dev` can run at once.
@@ -193,6 +193,12 @@ test: provision-test
 # that renders HTML — the api driver asks for JSON on every request.
 test-e2e: provision-test
 	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
+
+# meta: the README's own lane — every claim the front page makes, each one held by a test or
+# waived in writing (tests/meta/claims.py). Worth running on a README edit rather than on a code
+# edit: reword a sentence a test holds and this is what says so, by name.
+meta: provision-test
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST) tests/meta
 
 # flakehunt: run the browser scenarios N times and aggregate failures per test — an
 # intermittent test fails a few runs out of N, where a single run only says "red" or "green".

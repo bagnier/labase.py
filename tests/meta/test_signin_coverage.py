@@ -14,7 +14,7 @@ show.
 import ast
 from pathlib import Path
 
-_APPS = Path(__file__).resolve().parent.parent / "apps"
+_APPS = Path(__file__).resolve().parents[2] / "apps"
 
 _REISSUES = {
     "get_current_user",  # refreshes the caller's own expiring session on an ExpiredSignatureError

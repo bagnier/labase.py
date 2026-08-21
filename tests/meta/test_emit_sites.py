@@ -1,6 +1,6 @@
 """One invariant over the *call sites*: no fact gives up its transaction.
 
-``tests/test_event_vocabulary`` walks the catalog — every event **class**, enumerable because a
+``tests/meta/test_event_vocabulary`` walks the catalog — every event **class**, enumerable because a
 class registers itself at import. Nothing enumerated the **emit sites**, and that is where the
 divergence lived: two facts about one action, in one handler, could carry different durability
 guarantees with nothing saying so.
@@ -17,7 +17,7 @@ This is the ratchet on that: an escape hatch is easy to reintroduce and much har
 import ast
 from pathlib import Path
 
-_APPS = Path(__file__).resolve().parent.parent / "apps"
+_APPS = Path(__file__).resolve().parents[2] / "apps"
 
 
 def _emit_variants() -> set[str]:

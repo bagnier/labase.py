@@ -22,8 +22,8 @@ Doctrine — two levels, and the seam:
 **No debug tier, and no trace tier.** A per-statement or per-step firehose answers "what did it
 do", which the exchange line and the journal answer already; the one thing it uniquely bought —
 *which* statement was slow — is written instead as the surprise it is (``db.heavy_request``,
-:mod:`apps.shared.persistence.sql_stats`). ``tests/test_log_thresholds`` holds both halves: no
-``debug`` call survives, and the ``info`` sites stay countable on one screen.
+:mod:`apps.shared.persistence.sql_stats`). No ``debug`` call survives anywhere, and the ``info``
+sites stay countable on one screen.
 
 A bare ``log.error`` — ``error`` level carrying no exception — is deliberately **not** the seam,
 and that is not an oversight: ``request.finished`` is written at ``error`` on every 5xx to state

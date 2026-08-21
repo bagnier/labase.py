@@ -12,9 +12,8 @@ the same outage, the recovery carries the toll. The other two are excluded *on p
 at ``warning``: the log writer and the capture drain are the machinery the seam itself runs
 on, so an ``exception`` from either would re-enter the queue it just failed to drain.
 
-This lives at the root rather than in ``apps/shared/tests`` for the reason
-``test_event_vocabulary`` does: shared may not import a bounded context, and one of the three
-loops is ``apps.metrics``'.
+This lives in ``tests/meta`` for the reason ``test_event_vocabulary`` does: shared may not
+import a bounded context, and one of the three loops is ``apps.metrics``'.
 """
 
 import pytest

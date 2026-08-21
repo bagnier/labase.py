@@ -6,7 +6,8 @@ deep links read ``entity_id``, the timeline's *detail* reads ``entity_name``. An
 its subject under a private name (``group_id``, ``passkey_id``…) is therefore invisible to the
 filter and renders without a detail, however carefully it was declared.
 
-This lives at the root rather than in ``apps/shared/tests`` because it is a cross-app invariant:
+This lives in ``tests/meta`` rather than in ``apps/shared/tests`` because it is a cross-app
+invariant:
 shared may not import a bounded context, so only the composition root may see every vocabulary at
 once (the same reason ``test_listener`` checks topics by string).
 """

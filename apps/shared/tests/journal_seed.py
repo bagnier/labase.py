@@ -7,8 +7,8 @@ the timeline, the logs viewer and the listener all need history that no test act
 
 So this writes the columns directly, through the same ``record_business_event`` SECURITY DEFINER
 function the real write path uses. It lives **in tests** on purpose: a way to record a fact on no
-transaction at all is exactly what ``tests/test_emit_sites`` keeps out of ``apps/``, and it stays
-out by not being importable from there.
+transaction at all is exactly what ``tests/meta/test_emit_sites`` keeps out of ``apps/``, and
+it stays out by not being importable from there.
 
 The record *is* the argument: :class:`BusinessEventRecord` already names every column, so the
 seeder never re-lists them.

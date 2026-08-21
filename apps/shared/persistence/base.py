@@ -11,8 +11,7 @@ from apps.shared import clock
 # Postgres' own auto-naming, spelled out — so a constraint the ORM declares and the same constraint
 # written in a migration land on the very same name, by construction rather than by vigilance.
 # SQLAlchemy issues no DDL here (the schema is versioned as plain SQL under
-# ``supabase/migrations/``), so this is what keeps the two halves able to talk about one object;
-# ``tests/test_schema_parity.py`` is what checks they still do.
+# ``supabase/migrations/``), so this is what keeps the two halves able to talk about one object.
 NAMING_CONVENTION = {
     "pk": "%(table_name)s_pkey",
     "uq": "%(table_name)s_%(column_0_N_name)s_key",

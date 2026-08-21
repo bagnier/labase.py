@@ -1,7 +1,7 @@
 """One invariant over the *levels*: what the capture seam can see, and what it cannot.
 
-``tests/test_log_vocabulary`` pins what a line is called, ``tests/test_capture_sites`` what a
-broad ``except`` may leave out. This one pins the doctrine's own arithmetic
+``tests/meta/test_log_vocabulary`` pins what a line is called, ``tests/meta/test_capture_sites``
+what a broad ``except`` may leave out. This one pins the doctrine's own arithmetic
 (:mod:`apps.shared.logs.capture`): two levels and a seam, and nothing underneath them.
 
 ``error`` is the level the seam reads — but only carrying a live exception, since
@@ -22,7 +22,7 @@ an AST walk enumerates them.
 import ast
 from pathlib import Path
 
-_APPS = Path(__file__).resolve().parent.parent / "apps"
+_APPS = Path(__file__).resolve().parents[2] / "apps"
 
 
 def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:

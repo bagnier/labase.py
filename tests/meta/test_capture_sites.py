@@ -1,10 +1,10 @@
 """Two invariants over the *handlers*: a broad ``except`` speaks, and carries its traceback.
 
-``tests/test_log_vocabulary`` pins what a line is *called*; this pins what it is allowed to leave
-out. ``except Exception`` is the base's way of saying "whatever went wrong here must not take the
-caller down" — and precisely because it names nothing, the exception itself is the only thing that
-says what did go wrong. A line that drops it leaves an event name and no message, no type and no
-stack: enough to know something failed, never enough to know what.
+``tests/meta/test_log_vocabulary`` pins what a line is *called*; this pins what it is allowed to
+leave out. ``except Exception`` is the base's way of saying "whatever went wrong here must not
+take the caller down" — and precisely because it names nothing, the exception itself is the only
+thing that says what did go wrong. A line that drops it leaves an event name and no message, no
+type and no stack: enough to know something failed, never enough to know what.
 
 The doctrine it enforces is the one written in ``apps/shared/logs/capture``:
 
@@ -34,7 +34,7 @@ at call sites, so nothing but an AST walk enumerates them.
 import ast
 from pathlib import Path
 
-_APPS = Path(__file__).resolve().parent.parent / "apps"
+_APPS = Path(__file__).resolve().parents[2] / "apps"
 # ``log.exception`` sets ``exc_info=True`` itself, so only the levels that must ask carry the rule.
 _MUST_CARRY = {"debug", "info", "warning", "error"}
 
@@ -95,7 +95,7 @@ def test_the_walk_actually_finds_the_call_sites():
 # drain's own write. Anything said inside it — a line, a verdict — is enqueued into the very queue
 # the drain has just failed to empty, so the outage is announced outside the handler instead
 # (``report_write_outage``, once per transition). Same argument, same shape as the two loops
-# ``tests/test_loop_verdicts`` excludes by name.
+# ``tests/meta/test_loop_verdicts`` excludes by name.
 _LETS_IT_GO = ("apps/shared/logs/sink.py", "tick")
 
 

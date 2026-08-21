@@ -30,10 +30,10 @@ from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 
-# No ``DEBUG`` entry, and that is the point: nothing in the codebase writes below ``INFO``
-# (``tests/test_log_thresholds`` holds it), so offering the level would only promise a verbosity
-# that does not exist. ``apply_log_level`` ignores a name it does not know, so a stored ``DEBUG``
-# from before simply leaves the level where it is.
+# No ``DEBUG`` entry, and that is the point: nothing in the codebase writes below ``INFO``, so
+# offering the level would only promise a verbosity that does not exist. ``apply_log_level``
+# ignores a name it does not know, so a stored ``DEBUG`` from before simply leaves the level
+# where it is.
 _LEVELS = {
     "INFO": logging.INFO,
     "WARNING": logging.WARNING,

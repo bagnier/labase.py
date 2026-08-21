@@ -67,7 +67,7 @@ class EventCatalog:
 
     def kinds(self) -> dict[str, type[BusinessEvent]]:
         """Every registered kind and its class — a copy, so a reader cannot edit the catalog by
-        holding it. This is what pins the shipped vocabulary in ``tests/test_event_vocabulary``."""
+        holding it."""
         return dict(self._by_kind)
 
 

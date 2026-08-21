@@ -1,8 +1,8 @@
 """One invariant over the *log line names*: a line never spells a fact, nor claims another app.
 
-``tests/test_event_vocabulary`` pins what the journal says. This pins what the log sink says, and
-the rule holding the two apart — because they meet again in the console's Timeline, where a reader
-tells a fact from a trace by its **source**, never by re-reading its name. A line spelling
+``tests/meta/test_event_vocabulary`` pins what the journal says. This pins what the log sink says,
+and the rule holding the two apart — because they meet again in the console's Timeline, where a
+reader tells a fact from a trace by its **source**, never by re-reading its name. A line spelling
 ``issues.opened`` would put one wording on both sides of that split: on the journal side something
 that happened and correlates, on the technical side something that merely got written.
 
@@ -21,7 +21,7 @@ from pathlib import Path
 import apps.main  # noqa: F401  — mounting every app fills the catalog
 from apps.shared.events.catalog import catalog
 
-_APPS = Path(__file__).resolve().parent.parent / "apps"
+_APPS = Path(__file__).resolve().parents[2] / "apps"
 _LEVELS = {"debug", "info", "warning", "error", "exception"}
 
 
