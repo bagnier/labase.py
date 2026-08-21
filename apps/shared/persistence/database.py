@@ -3,7 +3,8 @@
 Two engines: user-role (RLS enforced) and BYPASSRLS admin, each pinned to the worktree's
 schema via ``search_path`` and instrumented for the per-query SQL tally. Request sessions
 commit before the response is sent; ``AdminSession`` is the BYPASSRLS session reserved for
-event handlers, console queries and anonymous public surfaces (README: three DB sessions).
+event handlers, console queries and anonymous public surfaces
+(README: three DB session dependencies).
 """
 
 from collections.abc import AsyncGenerator

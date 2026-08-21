@@ -6,9 +6,8 @@ the libraries emit through stdlib ``logging``. The two meet inside
 cross — so the log-sink and capture tees sit there, and nowhere else. Ours traverse two processor
 lists and a library's only one, so a tee in the structlog list would count our lines twice.
 
-The level starts at ``INFO`` — the floor, since nothing writes below it — and is admin-tunable
-from the console up to ``WARNING`` or ``ERROR``, live and with no restart (README: observability).
-Loggers are not cached so every call re-reads the current level.
+The level is settled once (README: observability). Loggers are not cached here, which is what
+makes it live: every call re-reads the current one.
 
 ``LOG_DEBUG`` no longer picks a level: with no ``debug`` tier there is none to pick. It selects the
 *renderer* — the human-readable console one in development, JSON in production, which is what an

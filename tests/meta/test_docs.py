@@ -13,7 +13,7 @@ adding a tool to the table without saying where it lives fails here.
 import re
 from pathlib import Path
 
-from tests.meta.readme import diagram_containing, text
+from tests.meta.readme import diagram_containing, normalised, text
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -166,3 +166,21 @@ def test_the_test_environment_file_is_committed_and_local():
         False,
         False,
     )
+
+
+def test_every_readme_pointer_names_something_the_readme_says():
+    """`(README: the log sink)` in a module docstring is a promise that the README carries the rule
+    this file only applies. The pointer is prose, so a reworded heading leaves it pointing at
+    nothing and the module quietly becomes the only statement again — which is the duplication the
+    pointers were introduced to end."""
+    readme = normalised(text()).lower()
+
+    dangling = {
+        f"{path.relative_to(_ROOT)}: {claim}"
+        for path in sorted(_ROOT.glob("apps/**/*.py"))
+        if "/tests/" not in path.as_posix()
+        for claim in re.findall(r"\(README:\s*([^)]+)\)", " ".join(path.read_text().split()))
+        if claim.strip().rstrip(".").lower() not in readme
+    }
+
+    assert dangling == set()

@@ -1,34 +1,9 @@
 """The capture seam: every ``log.exception`` becomes a tracked issue.
 
-**What earns a line at all.** A line is written for what no other record already says. The HTTP
-exchange is stated once by ``request.finished``, a domain action once by its ``BusinessEvent`` —
-a line restating either says the same thing twice, and the second telling is the one that buries
-the timeline. So the question is never "should this be logged?" but "what would a reader learn
-here that neither the exchange nor the journal tells them?". On a healthy server at rest the
-answer is nothing and the sink is silent, which is what makes the silence readable.
-
-Doctrine — two levels, and the seam:
-
-- ``log.info`` — **a point of surprise**. Never the happy path, which the exchange line and the
-  journal already carry: the thing a reader would not have predicted. An outage that ended, an
-  actor that vanished mid-flight, a dependency that answered no, a request that cost forty
-  queries.
-- ``log.warning`` — **what the code could not carry through, and absorbed**. One rule with two
-  faces: the breakage taken on the chin (a retry, a fallback, a dropped batch) and the attempt
-  refused (a wrong password, a non-owner on an owner-only route, a rejected cross-site mutation).
-  Neither ran to completion; both were answered with something.
-- ``log.exception`` — a bug; captured here and folded into an issue by ``apps/issues``.
-
-**No debug tier, and no trace tier.** A per-statement or per-step firehose answers "what did it
-do", which the exchange line and the journal answer already; the one thing it uniquely bought —
-*which* statement was slow — is written instead as the surprise it is (``db.heavy_request``,
-:mod:`apps.shared.persistence.sql_stats`). No ``debug`` call survives anywhere, and the ``info``
-sites stay countable on one screen.
-
-A bare ``log.error`` — ``error`` level carrying no exception — is deliberately **not** the seam,
-and that is not an oversight: ``request.finished`` is written at ``error`` on every 5xx to state
-the *outcome* of the exchange, while the exception itself is captured once by the 500 handler.
-Opening an issue on level alone would double every 500.
+Which calls earn a line at all, and at which level, is settled once (README: what earns a line):
+two levels and this seam, no debug tier, and a bare ``log.error`` deliberately not the seam. What
+that leaves to decide *here* is the question at the call site — never "should this be logged?" but
+"what would a reader learn that neither the exchange nor the journal already tells them?".
 
 The consequence is a trap worth naming: a site that means "this is a bug" and writes ``log.error``
 gets a log line that rolls out of its window and nothing else. Such a site raises an

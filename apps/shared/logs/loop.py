@@ -5,23 +5,12 @@ process. This one judges a failed tick *inside* it — the five lifespan workers
 listener, log drain, metrics flusher, capture drain), which by construction catch everything
 so that one bad tick never ends the loop.
 
-Catching everything is what made them silent. A worker that stops claiming, or a listener that
-stops delivering, is not a degradation: nothing is retrying it, no fact is reaching its consumers,
-and the only trace was a ``warning`` inside a log window that rolls over in two days — so the
-console showed a healthy server while the durable half of the event system was dead.
-
-Promoting every failed tick to ``log.exception`` is not the fix either: these loops tick once a
-second, so a single outage would file the same issue eighty-six thousand times a day and bury the
-screen it was meant to raise the alarm on.
-
-So the level follows the *transition*, not the tick — the same shape as the log sink's own
-``_Outage``, which reports a refusing disk once on the way in and once on the way out:
-
-- the tick that **breaks** the loop is the bug: ``log.exception``, which the capture seam folds
-  into one issue;
-- the ticks that follow are the same outage still running: a ``warning`` carrying how many, so a
-  reader can tell an outage that is over from one that is not;
-- the tick that **recovers** carries the toll, which is only final once a tick succeeds again.
+Which level a failing tick earns is settled once (README: a failure that repeats is one bug):
+the level
+follows the *transition*, not the tick — the same shape as the log sink's own ``_Outage``. The
+arithmetic is what forced it: these loops tick once a second, so promoting every failed tick to
+``log.exception`` would file one issue eighty-six thousand times a day and bury the screen it was
+meant to raise the alarm on.
 
 A failure that is *not* a loop — a queued task exhausting its retries, a spread handler refusing a
 config reload — is a defect of its own and logs at ``exception`` directly. This is only for what

@@ -1,13 +1,9 @@
 """One verdict for a failed call to something outside this process: refusal, or breakage.
 
-The base reaches four dependencies — GoTrue, Postgres, Storage, SMTP — and every call to one of
-them can fail two ways that look alike in an ``except`` block and mean opposite things:
-
-- **It answered no.** A wrong password, an expired confirmation link, a rate limit, a row that
-  isn't there. The dependency did its job; the outcome is ordinary, and belongs at ``info``.
-- **It is broken.** Unreachable, a 5xx, a client library raising something of its own. Nothing
-  about the request explains it, nobody is coming to fix it on their own, and the capture seam
-  turns it into an issue.
+Which of the two a failure is, and what each earns, is settled once (README: what counts as a
+bug): one
+verdict for GoTrue, Postgres and Storage alike, so an outage does not fill the issues screen or
+stay silent depending on the module it was reached through.
 
 An HTTP status is what tells the two apart, and each client library keeps it in a place of its
 own — hence :func:`refused_status` rather than a table of exception classes to maintain. Shared

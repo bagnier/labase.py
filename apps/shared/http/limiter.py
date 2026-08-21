@@ -2,11 +2,9 @@
 
 Replaces slowapi's in-memory store: with N app instances, each counted alone;
 here the hit count is one atomic upsert in a shared table (first
-Postgres-as-Redis brick). Fail-open by doctrine: if the store is unreachable
-the request goes through and the failure is logged — rate limiting must never
-take the product down. Logged through the dependency verdict, so an unreachable
-store opens an issue rather than a line that rolls out of the window: failing
-open quietly is how a limiter stays off for good.
+Postgres-as-Redis brick). Fail-open, and loudly so (README: HTTP
+security): the unreachable store goes through the dependency verdict, which is
+what turns it into an issue rather than a line that rolls out of its window.
 """
 
 import functools

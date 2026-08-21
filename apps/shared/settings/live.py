@@ -8,8 +8,9 @@ their defaults, and registers the app's live :class:`AppSettings` handle in the 
 registry (:func:`get_settings`). The ``enabled`` gate a toggleable app checks right after is
 just a declared setting (via :func:`feature_switch`), read off the returned handle.
 
-A contract never exports a handle. There are three sanctioned reads, chosen by *how the org
-is known*:
+A contract never exports a handle (README: a contract never exports a settings handle).
+Three
+sanctioned reads, chosen by *how the org is known*:
 
 - **Request under** ``/{org_handle}`` — the ``app_settings(name)`` dependency
   (:mod:`apps.organizations.contract.current`): server values overlaid with the URL org's

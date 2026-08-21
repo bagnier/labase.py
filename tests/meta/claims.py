@@ -25,6 +25,14 @@ from apps.shared.tests.test_emit_durability import (
     test_a_fact_is_rolled_back_by_a_handler_that_raises,
     test_a_fact_survives_a_handler_that_returns_an_error_response,
 )
+from apps.shared.tests.test_limiter import (
+    test_a_store_the_limiter_cannot_reach_is_a_bug,
+    test_rate_limit_fails_open_when_store_is_down,
+)
+from apps.shared.tests.test_listener import (
+    test_a_second_tick_does_not_refan_a_dispatched_fact,
+    test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
+)
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_browser_isolation import test_distinct_emails_get_isolated_contexts
 from tests.meta.test_capture_sites import test_a_broad_except_never_logs_without_its_traceback
@@ -96,6 +104,13 @@ Holder = Callable[..., object]
 
 @dataclass(frozen=True)
 class Claim:
+    """A sentence the README asserts, and what stands behind it: a test, or a written waiver.
+
+    Exactly one of the two — ``test_claims`` refuses both and neither. ``quote`` is the README's
+    own words (whitespace-normalised, so it may span wrapped lines); ``held_by`` holds the test
+    functions themselves, so a rename or a deletion breaks the import rather than rotting.
+    """
+
     name: str
     quote: str
     held_by: tuple[Holder, ...] = ()
@@ -103,12 +118,14 @@ class Claim:
 
 
 def held(name: str, quote: str, *by: Holder) -> Claim:
+    """Bind a claim to the tests that prove it — some only in part, which the holder's own
+    docstring says. Held is not the same as fully proven."""
     return Claim(name=name, quote=quote, held_by=by)
 
 
 def waived(name: str, quote: str, reason: str) -> Claim:
-    """A claim nothing proves yet. The reason says what would have to be built, not that it is
-    hard — a waiver is a piece of the backlog, and a backlog item nobody can pick up is noise."""
+    """Record a claim nothing proves yet. The reason says what would have to be built, not that it
+    is hard — and names the ratchet where the distance is already a number."""
     return Claim(name=name, quote=quote, waiver=reason)
 
 
@@ -240,7 +257,7 @@ CLAIMS = [
     ),
     waived(
         "first-user-is-admin",
-        "**First signed-up user is admin** and can then promote any other user as admin.",
+        "First signed-up user is admin",
         "a scenario covers it; nothing ties it to this sentence",
     ),
     held(
@@ -320,7 +337,7 @@ CLAIMS = [
     ),
     waived(
         "contract-never-exports-a-settings-handle",
-        "**A contract never exports a settings handle.**",
+        "A contract never exports a settings handle",
         "an AST check over each contract package's public names",
     ),
     waived(
@@ -456,6 +473,19 @@ CLAIMS = [
         "`enqueue()` writes through the caller's session, so a task exists iff the business "
         "transaction commits (outbox semantics)",
         "the queue is well tested; this exact sentence — the rollback case — is not",
+    ),
+    held(
+        "the-limiter-fails-open",
+        "The limiter fails open: a store it cannot reach lets the request through, because rate "
+        "limiting must never be what takes an endpoint down",
+        test_rate_limit_fails_open_when_store_is_down,
+        test_a_store_the_limiter_cannot_reach_is_a_bug,
+    ),
+    held(
+        "a-fact-is-fanned-out-once",
+        "It claims what it dispatches in the transaction that stamps it",
+        test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
+        test_a_second_tick_does_not_refan_a_dispatched_fact,
     ),
     waived(
         "csrf-without-tokens",

@@ -9,30 +9,25 @@ The storage is :mod:`apps.shared.logs.repository`, whose ``LogRepository`` owns 
 against ``log_lines`` — the house word for "the object that holds a table's queries", and the twin
 of ``EventRepository`` on the journal side.
 
-12-factor: every line is still rendered to stdout, which is what an aggregator reads. In addition
-each one is appended to ``log_lines``, giving the console Timeline a queryable window it can
-filter, correlate and page over alongside the journal and the issues.
-
-**Why a table.** This used to be per-day JSON Lines on local disk. With one instance that reads
-fine; with two it makes the Timeline lie by omission — the journal and the issues are in Postgres
-and therefore global, so an admin correlating a request saw the fact and the occurrence and missed
-every line between them, depending on which instance answered the page. Retention had the mirror
-problem: per-day rotation was supposed to make it "a plain file delete", and nothing ever deleted.
+Where a line goes, and the fallback when Postgres refuses a batch, are stated once (README: the
+log sink). What only this module can say is *why a table*: per-day JSON Lines on local disk read
+fine with one instance, and with two they made the Timeline lie by omission — the journal and the
+issues live in Postgres and are therefore global, so an admin correlating a request saw the fact
+and the occurrence and missed every line between them, depending on which instance answered the
+page. Retention had the mirror problem: per-day rotation was supposed to make it "a plain file
+delete", and nothing ever deleted.
 
 **The two words.** A *sink* is where log lines land — the term dedicated tooling uses (Serilog,
 Vector, OpenTelemetry). A *drain* here is what this codebase already means by it: a lifespan task
 that empties a bounded queue into whoever consumes it, exactly like ``CaptureDrain``. Not Heroku's
 sense of the word, and internal consistency wins — the shape is already familiar.
 
-**The files survive, as the fallback.** When the sink itself is what is down, a batch Postgres
-refuses is written to its day file instead: a database outage is precisely when an operator still
-wants to read the log. The dying-process hook writes there too — it runs during interpreter
-shutdown, with no loop and no pool left to await on.
+**The day files.** The dying-process hook writes there too, not only the refused batch — it runs
+during interpreter shutdown, with no loop and no pool left to await on.
 
-**Non-blocking by doctrine.** The runtime log path touches neither disk nor database: the structlog
-processor only *enqueues* the line (a plain :meth:`deque.append`, atomic under the GIL — safe
-before the event loop exists and from worker threads, exactly like the capture queue), and the
-background :class:`LogDrain` batches the queue to the sink.
+**Non-blocking (README: the log sink).** The runtime path touches neither disk nor database: the
+processor only *enqueues* — a plain :meth:`deque.append`, atomic under the GIL, so it is safe
+before the event loop exists and from worker threads, exactly like the capture queue.
 """
 
 import asyncio
