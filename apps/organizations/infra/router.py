@@ -56,7 +56,14 @@ from apps.shared.events.activity import (
 from apps.shared.events.bus import events
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
-from apps.shared.http import delete_response, mutation_response, or_404, parse_body, wants_json
+from apps.shared.http import (
+    JSON_AND_HTML,
+    delete_response,
+    mutation_response,
+    or_404,
+    parse_body,
+    wants_json,
+)
 from apps.shared.http.templates import templates
 from apps.shared.integration.contribs import contribs
 from apps.shared.integration.fullpage import fullpage_context
@@ -279,7 +286,7 @@ async def _activity_context(
     }
 
 
-@org_router.get("/dashboard", response_class=HTMLResponse)
+@org_router.get("/dashboard", responses=JSON_AND_HTML)
 async def org_dashboard(
     request: Request,
     current_user: CurrentUser,
@@ -287,7 +294,7 @@ async def org_dashboard(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentMembership,
-) -> HTMLResponse:
+) -> Response:
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle)
@@ -305,7 +312,7 @@ async def org_dashboard(
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 
-@org_router.get("/dashboard/activity", response_model=None)
+@org_router.get("/dashboard/activity", responses=JSON_AND_HTML)
 async def org_dashboard_activity(
     request: Request,
     session: RlsSession,
@@ -317,7 +324,7 @@ async def org_dashboard_activity(
     from_dt: str = "",
     to_dt: str = "",
     limit: int = _ACTIVITY_PAGE,
-) -> HTMLResponse | JSONResponse:
+) -> Response:
     """The org's day-grouped activity feed as an HTMX fragment — search, type filter, date range
     and Load-older all re-render it. API callers get the same feed as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
@@ -369,7 +376,7 @@ async def _settings_context(
     return ctx
 
 
-@org_router.get("/settings", response_class=HTMLResponse)
+@org_router.get("/settings", responses=JSON_AND_HTML)
 async def org_settings(
     request: Request,
     current_user: CurrentUser,
@@ -377,7 +384,7 @@ async def org_settings(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-):
+) -> Response:
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await _settings_context(
@@ -387,7 +394,7 @@ async def org_settings(
     return templates.TemplateResponse(request, "organizations/settings.html", ctx)
 
 
-@org_router.get("/members", response_class=HTMLResponse)
+@org_router.get("/members", responses=JSON_AND_HTML)
 async def list_members(
     request: Request,
     current_user: CurrentUser,
@@ -395,7 +402,7 @@ async def list_members(
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentMembership,
-):
+) -> Response:
     org = or_404(await repo.get(org_id))
     members = await _build_members(repo, org_id)
     if wants_json(request):

@@ -35,6 +35,7 @@ from apps.pages.infra.repository import (
 )
 from apps.shared.events.bus import events
 from apps.shared.http import (
+    JSON_AND_HTML,
     delete_response,
     mutation_response,
     or_404,
@@ -314,7 +315,7 @@ async def _get_nav_repo(session: RlsSession, org_id: CurrentOrg) -> PageNavRepos
 PageNavRepo = Annotated[PageNavRepository, Depends(_get_nav_repo)]
 
 
-@router.get("/nav", response_class=HTMLResponse)
+@router.get("/nav", responses=JSON_AND_HTML)
 async def nav_manager(
     request: Request,
     current_user: CurrentUser,
@@ -406,7 +407,7 @@ async def reorder_nav(
 # ── public-capable routes (root-mounted; serve members and anon visitors) ──────
 
 
-@public_router.get("/{org_handle}/pages", response_class=HTMLResponse)
+@public_router.get("/{org_handle}/pages", responses=JSON_AND_HTML)
 async def list_pages(
     request: Request,
     org_handle: str,

@@ -30,6 +30,7 @@ from apps.organizations.contract.current import (
 from apps.shared.clock import now
 from apps.shared.events.bus import events
 from apps.shared.http import (
+    JSON_AND_HTML,
     delete_response,
     or_404,
     parse_field,
@@ -122,7 +123,7 @@ async def _render(
     )
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", responses=JSON_AND_HTML)
 async def file_list(
     request: Request,
     current_user: CurrentUser,
@@ -130,7 +131,7 @@ async def file_list(
     org: CurrentOrgModel,
     repo: FileRepo,
     settings: FilesSettings,
-):
+) -> Response:
     files = await repo.all()
     return await _render(request, session, current_user, files, org, settings)
 

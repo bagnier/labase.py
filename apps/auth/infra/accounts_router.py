@@ -23,7 +23,7 @@ from apps.auth.contract.events import (
     UserDeleted,
 )
 from apps.shared.events.bus import events
-from apps.shared.http import wants_full_page, wants_json
+from apps.shared.http import JSON_AND_HTML, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -75,7 +75,7 @@ def _is_banned(user: Any) -> bool:
     return bool(banned_until)
 
 
-@accounts_router.get("", response_model=None)
+@accounts_router.get("", responses=JSON_AND_HTML)
 async def list_accounts(
     request: Request, current_user: CurrentAdmin, session: AdminSession, q: str = ""
 ) -> Response:

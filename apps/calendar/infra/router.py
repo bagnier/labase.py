@@ -14,7 +14,7 @@ from apps.calendar.infra.repository import CalendarEventRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.events.bus import events
-from apps.shared.http import delete_response, or_404, parse_body, wants_json
+from apps.shared.http import JSON_AND_HTML, delete_response, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 
@@ -162,7 +162,7 @@ def _shift_month(ref: date, months: int) -> str:
 # ── routes (org-scoped, RLS, member-only) ──────────────────────────────────────
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", responses=JSON_AND_HTML)
 async def list_events(
     request: Request,
     current_user: CurrentUser,
@@ -308,7 +308,7 @@ async def create_event(
     return RedirectResponse(f"/{org.handle}/calendar/{event.id}", status_code=303)
 
 
-@router.get("/{event_id}", response_class=HTMLResponse)
+@router.get("/{event_id}", responses=JSON_AND_HTML)
 async def view_event(
     request: Request,
     event_id: uuid.UUID,

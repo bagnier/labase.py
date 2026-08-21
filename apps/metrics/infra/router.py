@@ -10,7 +10,7 @@ from apps.metrics.domain.accumulator import accumulator
 from apps.metrics.domain.models import LoadPoint
 from apps.metrics.infra.repository import window_rows
 from apps.shared import clock
-from apps.shared.http import wants_json
+from apps.shared.http import JSON_AND_HTML, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -30,7 +30,7 @@ async def metrics_exposition(current_user: CurrentAdmin) -> PlainTextResponse:
     )
 
 
-@router.get("", response_model=None)
+@router.get("", responses=JSON_AND_HTML)
 async def load_screen(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:

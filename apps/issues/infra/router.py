@@ -11,7 +11,7 @@ from apps.issues.infra.repository import IssueRepository
 from apps.shared import clock
 from apps.shared.charts import last_days, sparkline
 from apps.shared.events.bus import events
-from apps.shared.http import parse_body, wants_json
+from apps.shared.http import JSON_AND_HTML, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -51,7 +51,7 @@ async def _issue_or_404(repo: IssueRepository, issue_id: uuid.UUID) -> Issue:
     return issue
 
 
-@router.get("", response_model=None)
+@router.get("", responses=JSON_AND_HTML)
 async def list_issues(
     request: Request,
     current_user: CurrentAdmin,
@@ -78,7 +78,7 @@ async def list_issues(
     )
 
 
-@router.get("/{issue_id}", response_model=None)
+@router.get("/{issue_id}", responses=JSON_AND_HTML)
 async def issue_detail(
     request: Request,
     issue_id: uuid.UUID,

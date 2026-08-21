@@ -24,7 +24,7 @@ from apps.shared import clock
 from apps.shared.charts import day_buckets_series
 from apps.shared.events.bus import events
 from apps.shared.events.wiring import wiring
-from apps.shared.http import parse_body, wants_json
+from apps.shared.http import JSON_AND_HTML, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.contribs import contribs
 from apps.shared.integration.fullpage import fullpage_context
@@ -193,7 +193,7 @@ async def _supabase_link(
     return {"label": link.label, "href": href}
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", responses=JSON_AND_HTML)
 async def get_console(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -240,7 +240,7 @@ def _admins_partial(
 
 
 # Registered before "/{app}" so "admins" is not captured as an app slug.
-@router.get("/admins", response_class=HTMLResponse)
+@router.get("/admins", responses=JSON_AND_HTML)
 async def get_admins(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -315,7 +315,7 @@ async def update_admin(
     return _admins_partial(request, rows)
 
 
-@router.get("/settings", response_class=HTMLResponse)
+@router.get("/settings", responses=JSON_AND_HTML)
 async def get_settings_page(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -351,7 +351,7 @@ async def get_settings_page(
     )
 
 
-@router.get("/events", response_class=HTMLResponse)
+@router.get("/events", responses=JSON_AND_HTML)
 async def get_events(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -366,7 +366,7 @@ async def get_events(
     )
 
 
-@router.get("/{app}", response_class=HTMLResponse)
+@router.get("/{app}", responses=JSON_AND_HTML)
 async def get_app(
     request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:

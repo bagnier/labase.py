@@ -46,6 +46,12 @@ class LoopHealth:
         self._recovered_event = f"{name}_recovered"
         self._failures = 0
 
+    @property
+    def failures(self) -> int:
+        """Consecutive failing ticks — ``0`` when healthy. What the loop already knows, said out
+        loud so a screen can render it without a second source of truth."""
+        return self._failures
+
     def tick_failed(self, exc: BaseException, **context: object) -> None:
         """Record a tick that raised, at the level its place in the outage warrants."""
         self._failures += 1

@@ -65,7 +65,7 @@ from apps.shared.events.activity import (
 from apps.shared.events.bus import events
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
-from apps.shared.http import parse_body, wants_json
+from apps.shared.http import JSON_AND_HTML, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.integration.slugs import validate_handle
@@ -286,14 +286,14 @@ async def _profile_error(
     return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
 
 
-@router.get("/profile", response_model=None)
+@router.get("/profile", responses=JSON_AND_HTML)
 async def profile_page(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
+) -> Response:
     if wants_json(request):
         profile = await repo.get_with_auto_handle(
             current_user.id, current_user.email, handle_enabled=profile_settings.handle_enabled
@@ -317,7 +317,7 @@ async def profile_page(
     return response
 
 
-@router.get("/profile/activity", response_model=None)
+@router.get("/profile/activity", responses=JSON_AND_HTML)
 async def profile_activity(
     request: Request,
     current_user: CurrentUser,
@@ -327,7 +327,7 @@ async def profile_activity(
     from_dt: str = "",
     to_dt: str = "",
     limit: int = _ACTIVITY_PAGE,
-) -> HTMLResponse | JSONResponse:
+) -> Response:
     """The day-grouped activity feed as an HTMX fragment — search, type filter, date range and
     Load-older all re-render it. API callers get the same feed as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))

@@ -27,6 +27,14 @@ log = structlog.get_logger(__name__)
 _health = LoopHealth(log, "health.ready")
 
 
+def readiness_failures() -> int:
+    """Consecutive failed readiness probes on *this* process — what the console tile reads.
+
+    Per-process on purpose, like the state it reports: a probe is answered by one instance and
+    says nothing about the others, so the tile names the instance rather than the deployment."""
+    return _health.failures
+
+
 @router.get("/live")
 async def liveness() -> JSONResponse:
     return JSONResponse({"status": "ok"})

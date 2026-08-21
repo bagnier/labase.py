@@ -8,6 +8,7 @@ from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSessio
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared.events.bus import events
 from apps.shared.http import (
+    JSON_AND_HTML,
     delete_response,
     or_404,
     parse_body,
@@ -62,7 +63,7 @@ async def _render(
     )
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", responses=JSON_AND_HTML)
 async def todo_list(
     request: Request,
     current_user: CurrentUser,
@@ -70,7 +71,7 @@ async def todo_list(
     repo: TodoRepo,
     org: CurrentOrgModel,
     settings: TodoSettings,
-):
+) -> Response:
     return await _render(request, session, current_user, repo, org, settings)
 
 

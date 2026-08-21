@@ -16,7 +16,7 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.organizations.contract.queries import org_handles
 from apps.shared import clock
 from apps.shared.charts import chart_config
-from apps.shared.http import wants_json
+from apps.shared.http import JSON_AND_HTML, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import DEFAULT_WINDOW
@@ -262,7 +262,7 @@ def _next_cursor(entries: list[TimelineEntry], flt: TimelineFilter) -> str | Non
     return entries[-1].ts.isoformat()
 
 
-@router.get("", response_model=None)
+@router.get("", responses=JSON_AND_HTML)
 async def timeline_screen(
     request: Request,
     current_user: CurrentAdmin,

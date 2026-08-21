@@ -13,6 +13,26 @@ from pydantic import BaseModel
 from apps.shared.http.content_type import is_htmx, wants_json
 from apps.shared.http.templates import templates
 
+# What a negotiating handler answers, said where the schema can read it.
+#
+# `response_class=` cannot say this. FastAPI reads exactly one media type off it
+# (`current_response_class.media_type`, openapi/utils.py) and that single type becomes the
+# success response's whole content — `application/json` by default, `text/html` under
+# `response_class=HTMLResponse`. A handler that answers both therefore describes one of them,
+# whichever it happened to name. Its other job is a runtime one: it wraps a handler that
+# returns a bare value, and is never used by a handler returning its own Response.
+#
+# `responses=` is the documentation lever, merged over whatever the response class produced —
+# so naming both media types here is right whichever one the route already declared.
+#
+# Two types, three audiences: a fragment and a full page are both `text/html`, and which one
+# a request gets is `is_htmx`, not a media type. The schema has nothing finer to say.
+# It matters beyond the docs page: `client/` is generated from this schema, so a face the
+# schema omits is a face no external caller can reach.
+JSON_AND_HTML: dict[int | str, dict[str, Any]] = {
+    200: {"content": {"application/json": {}, "text/html": {}}}
+}
+
 
 def or_404[T](entity: T | None) -> T:
     if entity is None:

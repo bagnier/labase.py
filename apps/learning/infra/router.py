@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
@@ -26,7 +26,7 @@ from apps.learning.infra.repository import CatalogRow, LearningRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.events.bus import events
-from apps.shared.http import or_404, parse_body, wants_json
+from apps.shared.http import JSON_AND_HTML, or_404, parse_body, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.settings.live import SettingsView
@@ -125,7 +125,7 @@ async def subscribe(
     return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
-@router.get("/sessions", response_model=None)
+@router.get("/sessions", responses=JSON_AND_HTML)
 async def today(
     request: Request,
     current_user: CurrentUser,
@@ -133,18 +133,18 @@ async def today(
     repo: LearningRepo,
     org: CurrentOrgModel,
     settings: LearningSettings,
-):
+) -> Response:
     rows = _due_rows(await repo.catalog(), clock.now().date())
     return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
-@router.get("/cards/{external_id}", response_class=HTMLResponse)
+@router.get("/cards/{external_id}", responses=JSON_AND_HTML)
 async def card_detail(
     request: Request,
     external_id: str,
     current_user: CurrentUser,
     repo: LearningRepo,
-):
+) -> Response:
     card = or_404(await repo.get_card_by_external(external_id))
     state = await repo.get_state(card.id)
     if wants_json(request):
@@ -205,14 +205,14 @@ async def mark_card(
     return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
-@router.get("/resources", response_class=HTMLResponse)
+@router.get("/resources", responses=JSON_AND_HTML)
 async def resources(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
     repo: LearningRepo,
     org: CurrentOrgModel,
-):
+) -> Response:
     rows = await repo.catalog()
     needing = [r for r in rows if needs_resources(_card_level(r))]
     pairs = compute_resources(

@@ -3,7 +3,7 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.exc import DBAPIError
 
 from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSession
@@ -11,7 +11,7 @@ from apps.organizations.contract.events import MemberJoined
 from apps.organizations.domain.models import InvitationRead, InvitationStatus
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.events.bus import events
-from apps.shared.http import wants_json
+from apps.shared.http import JSON_AND_HTML, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import auth_user_exists
@@ -45,14 +45,14 @@ async def _dashboard_redirect(request, rls_repo, org_id):
     )
 
 
-@router.get("/{token}", response_model=None)
+@router.get("/{token}", responses=JSON_AND_HTML)
 async def get_invitation(
     request: Request,
     token: uuid.UUID,
     admin_session: AdminSession,
     repo: AdminOrgRepo,
     current_user: OptionalCurrentUser,
-):
+) -> Response:
     invitation = await repo.get_invitation_by_token(token)
 
     if wants_json(request):
@@ -66,14 +66,19 @@ async def get_invitation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=_NOT_FOUND_DETAIL,
             )
-        return InvitationRead(
-            id=invitation["id"],
-            org_id=invitation["org_id"],
-            email=invitation["email"],
-            role=invitation["role"],
-            token=invitation["token"],
-            status=InvitationStatus(invitation["status"]),
-            created_at=invitation["created_at"],
+        # Serialized here rather than handed back as a model: every negotiating handler in the
+        # base returns its own Response, which is what lets the annotation say `-> Response` and
+        # FastAPI skip building a response model it would only use on one of the two branches.
+        return JSONResponse(
+            InvitationRead(
+                id=invitation["id"],
+                org_id=invitation["org_id"],
+                email=invitation["email"],
+                role=invitation["role"],
+                token=invitation["token"],
+                status=InvitationStatus(invitation["status"]),
+                created_at=invitation["created_at"],
+            ).model_dump(mode="json")
         )
 
     if invitation is None:

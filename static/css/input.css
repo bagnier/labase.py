@@ -310,6 +310,9 @@
 .ph.ph-gauge:before {
   content: "\e628";
 }
+.ph.ph-heartbeat:before {
+  content: "\e2ac";
+}
 .ph.ph-clock:before {
   content: "\e19a";
 }

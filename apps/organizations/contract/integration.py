@@ -70,7 +70,10 @@ def mount(host: Host) -> None:
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
     )
-    host.reserve("invitations")
+    # Both top-level paths this context routes: `/organizations` (the list) and
+    # `/invitations/{token}` (the accept link). An org handle taking either would leave one of
+    # the two unreachable — the list is the one it would shadow at its own name.
+    host.reserve("organizations", "invitations")
     host.register_open_list("organizations", org_handle_taken)
 
 
