@@ -168,7 +168,7 @@ class AuthBrowserMixin(BrowserBase):
         self.page.get_by_role("tab", name="Authentication", exact=True).check()
 
     def change_password(self, current_password: str, new_password: str) -> None:
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_auth_tab()
         self.page.get_by_label("Current password").fill(current_password)
         self.page.get_by_label("New password").fill(new_password)
@@ -233,7 +233,7 @@ class AuthBrowserMixin(BrowserBase):
     def enroll_totp(self) -> None:
         import pyotp
 
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_auth_tab()
         self.page.locator("[data-twofa]").get_by_role("button", name="Enable two-factor").click()
         self.page.wait_for_selector("[data-totp-secret]", timeout=5000)
@@ -268,8 +268,9 @@ class AuthBrowserMixin(BrowserBase):
         alert.wait_for(timeout=5000)
 
     def assert_twofa_not_offered(self, email: str) -> None:
+        # Their own page, read from the server: the option was turned off after it rendered.
         self.set_acting_email(email)
-        self.follow_to_profile()
+        self.reach_profile(fresh=True)
         assert self.page.locator("[data-twofa]").count() == 0, (
             "two-factor section should be hidden when the option is off"
         )
@@ -341,7 +342,7 @@ class AuthBrowserMixin(BrowserBase):
     def add_passkey(self) -> None:
         page = self.page
         client, authenticator_id = self._attach_virtual_authenticator(page)
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_auth_tab()
         page.locator("[data-passkey-register]").click()
         # passkeys.js reloads the page once GoTrue accepted the attestation; the

@@ -14,7 +14,11 @@ class ApiKeysBrowserMixin(BrowserBase):
 
     def _open_keys_panel(self) -> None:
         """The keys section sits in the org settings page's "API keys" tab (client-side daisyUI
-        tabs): in by the sidebar's owner-only Settings entry, then check the tab's radio."""
+        tabs): in by the sidebar's owner-only Settings entry, then check the tab's radio.
+
+        Entered afresh every time, never reused where it already stands: the settings page an
+        org rename leaves behind is mid-swap, and its Create key button detaches under the click.
+        """
         self.follow_org_nav(getattr(self, "active_org_handle", ""), "settings")
         self.page.get_by_role("tab", name="API keys", exact=True).check()
 

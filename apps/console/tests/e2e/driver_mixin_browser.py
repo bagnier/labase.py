@@ -91,6 +91,13 @@ class ConsoleBrowserMixin(BrowserBase):
     def open_console_settings(self, app: str) -> None:
         self.open_console_link(f"/console/{app}")
 
+    def _on_console_settings(self, app: str, *, fresh: bool = False) -> None:
+        """On an app's settings screen, two loads away from anywhere else and none away from
+        itself. ``fresh`` for reading a setting back: the fields auto-save through HTMX, so what
+        stands in one is what was typed until the server says otherwise."""
+        self._as_admin()
+        self.be_on(f"/console/{app}", lambda: self.open_console_settings(app), fresh=fresh)
+
     def _setting_locator(self, key: str):
         return self.page.locator(f"[data-setting-key='{key}']")
 
@@ -101,7 +108,7 @@ class ConsoleBrowserMixin(BrowserBase):
         return row.get_by_label(key)
 
     def set_org_override(self, app: str, key: str, value: str) -> None:
-        self.open_console_settings(app)
+        self._on_console_settings(app)
         handle = getattr(self, "active_org_handle", "")
         self.page.get_by_label("Organisation handle").fill(handle)
         self.page.get_by_label("Setting key").select_option(key)
@@ -124,7 +131,7 @@ class ConsoleBrowserMixin(BrowserBase):
 
     def set_console_setting(self, app: str, key: str, value: str) -> None:
         # Settings auto-save: changing a field fires hx-trigger="change" — no Save button.
-        self.open_console_settings(app)
+        self._on_console_settings(app)
         row = self._setting_locator(key)
         kind = row.get_attribute("data-setting-type")
         field = self._field(row, key)
@@ -172,7 +179,7 @@ class ConsoleBrowserMixin(BrowserBase):
         )
 
     def assert_console_setting_shown(self, app: str, key: str, value: str) -> None:
-        self.open_console_settings(app)
+        self._on_console_settings(app, fresh=True)
         row = self._setting_locator(key)
         kind = row.get_attribute("data-setting-type")
         field = self._field(row, key)
@@ -183,7 +190,8 @@ class ConsoleBrowserMixin(BrowserBase):
         assert actual == value, f"setting {key!r}: expected {value!r}, got {actual!r}"
 
     def assert_console_supabase_link(self, app: str, fragment: str) -> None:
-        self.open_console_settings(app)
+        # Nothing under test moves this link, so the screen already open is answer enough.
+        self._on_console_settings(app)
         link = self.page.locator(f"[data-supabase-app='{app}']")
         href = link.get_attribute("href")
         assert href is not None, f"no Supabase link for {app!r}"
@@ -241,18 +249,24 @@ class ConsoleBrowserMixin(BrowserBase):
         resp = page.request.fetch(f"{self.base_url}/console", method="GET")
         assert resp.status == 404, f"Expected 404, got {resp.status}"
 
-    def _goto_admins(self) -> Page:
+    def _walk_to_admins(self) -> None:
         """Console → the Users tile → its “Manage admins” link, the path the console lays out."""
         self.open_console_settings("users")
         with self.page.expect_navigation(wait_until="load"):
             self.page.locator("a[href='/console/admins']").first.click()
+
+    def _goto_admins(self, *, fresh: bool = False) -> Page:
+        """On the admins screen — three loads in from elsewhere, none from itself. ``fresh`` says
+        the list has to come from the server, the promotion under test included."""
+        self._as_admin()
+        self.be_on("/console/admins", self._walk_to_admins, fresh=fresh)
         return self.page
 
     def open_admins_page(self) -> None:
         self._goto_admins()
 
     def assert_admin_list_status(self, email: str, *, is_admin: bool) -> None:
-        page = self._goto_admins()
+        page = self._goto_admins(fresh=True)
         row = page.query_selector(f"[data-admin-email='{email}']")
         assert row is not None, f"{email!r} not found on admins page"
         actual = row.get_attribute("data-admin-status")
@@ -260,7 +274,7 @@ class ConsoleBrowserMixin(BrowserBase):
         assert actual == expected, f"{email!r}: expected {expected!r}, got {actual!r}"
 
     def assert_email_absent_from_admin_list(self, email: str) -> None:
-        page = self._goto_admins()
+        page = self._goto_admins(fresh=True)
         row = page.query_selector(f"[data-admin-email='{email}']")
         assert row is None, f"{email!r} unexpectedly on admins page"
 

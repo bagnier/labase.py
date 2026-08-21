@@ -46,6 +46,12 @@ class OrgFileBrowserMixin(BrowserBase):
         """Into the file list by the sidebar entry — the only way in that a person has."""
         self.follow_org_nav(self.active_org_handle, "files")
 
+    def _on_files(self, *, fresh: bool = False) -> None:
+        """On the file list, without walking back to it when it is already the page shown.
+        ``fresh`` for what is read as evidence: uploads and renames swap rows in place, and the
+        swap is the app's word, not the server's."""
+        self.reach_org_nav(self.active_org_handle, "files", fresh=fresh)
+
     def _dom_file_rows(self) -> list:
         return self.page.locator("#file-list > li[data-file-id]").all()
 
@@ -66,7 +72,7 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def upload_file(self, filename: str, content: bytes = b"dummy content") -> None:
         slug = self.active_org_handle
-        self._goto_files()
+        self._on_files()
         with self.page.expect_file_chooser(timeout=5000) as fc_info:
             self.page.click("input[type=file][name=file]")
         fc_info.value.set_files(
@@ -84,16 +90,16 @@ class OrgFileBrowserMixin(BrowserBase):
         with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
             tmp.write(b"\x00" * (size_mb * 1024 * 1024))
             tmp_path = tmp.name
-        self._goto_files()
+        self._on_files()
         self.page.set_input_files("input[type=file][name=file]", tmp_path)
         upload = self.page.get_by_role("button", name="Upload")
         self.last_response = self.click_and_capture(self.page, upload, "POST", f"/{slug}/files")
 
     def view_file_list(self) -> None:
-        self._goto_files()
+        self._on_files(fresh=True)
 
     def download_file(self, filename: str) -> None:
-        self._goto_files()
+        self._on_files()
         file_id = self._dom_file_id_by_name(filename)
         url = f"{self._files_url()}/{file_id}/download"
         # The endpoint returns 302 → Supabase signed URL → browser starts a file download.
@@ -109,7 +115,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self.last_response = resp_info.value
 
     def delete_file(self, filename: str) -> None:
-        self._goto_files()
+        self._on_files()
         file_id = self._dom_find_file_id(filename)
         assert file_id is not None, f"File '{filename}' not found in DOM"
         delete_btn = self.page.get_by_role("button", name=f"Delete {filename}")
@@ -121,7 +127,7 @@ class OrgFileBrowserMixin(BrowserBase):
         )
 
     def rename_file(self, old_filename: str, new_filename: str) -> None:
-        self._goto_files()
+        self._on_files()
         file_id = self._dom_find_file_id(old_filename)
         assert file_id is not None, f"File '{old_filename}' not found in DOM"
         row = self.page.locator(f"[data-file-id='{file_id}']")
@@ -223,7 +229,7 @@ class OrgFileBrowserMixin(BrowserBase):
         set_membership_role(self._primary_org_id(), user_id_for_email(self.primary_email), "member")
 
     def generate_share_link(self, filename: str) -> None:
-        self._goto_files()
+        self._on_files()
         file_id = self._dom_file_id_by_name(filename)
         share_btn = self.page.get_by_role("button", name=f"Share {filename}")
         self.click_and_capture(
@@ -288,7 +294,7 @@ class OrgFileBrowserMixin(BrowserBase):
         if last_names is not None:
             self._last_file_names = None
             return last_names
-        self._goto_files()
+        self._on_files(fresh=True)
         return self._dom_file_names()
 
     def assert_file_visible(self, filename: str) -> None:
@@ -315,7 +321,7 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def upload_file_with_raw_filename(self, filename: str) -> None:
         slug = self.active_org_handle
-        self._goto_files()
+        self._on_files()
         self.page.set_input_files(
             "input[type=file][name=file]",
             {"name": filename, "mimeType": "application/octet-stream", "buffer": b"content"},
@@ -330,7 +336,7 @@ class OrgFileBrowserMixin(BrowserBase):
         )
 
     def assert_file_metadata(self, filename: str, size: str, email: str, date: str) -> None:
-        self._goto_files()
+        self._on_files(fresh=True)
         for row in self._dom_file_rows():
             if row.get_by_role("link").inner_text().strip() == filename:
                 meta = row.locator(".file-meta").inner_text()  # KEEP: text read, no ARIA action

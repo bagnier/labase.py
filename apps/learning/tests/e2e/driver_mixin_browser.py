@@ -98,7 +98,11 @@ class LearningBrowserMixin(BrowserBase):
         return f"{self.base_url}/{self._learn_handle[key]}/learning{path}"
 
     def _goto_today(self, key: str):
-        """Into today's session by the sidebar entry — the only way in that a learner has."""
+        """Into today's session by the sidebar entry — the only way in that a learner has.
+
+        Entered afresh every time, never reused where it already stands: the session is a
+        one-card-at-a-time stepper that only steps forward, so a helper landing on a page already
+        advanced past its card could never reach it."""
         page = self._lpage(key)
         self.follow_org_nav(self._learn_handle[key], "learning/sessions", page)
         return page

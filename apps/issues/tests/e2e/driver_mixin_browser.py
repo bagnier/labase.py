@@ -27,8 +27,14 @@ class IssuesBrowserMixin(BrowserBase):
     def _issue_row(self, title: str):
         return self.page.locator("[data-issue]", has_text=title).first
 
+    def _on_issues(self, *, fresh: bool = False) -> None:
+        """On the issues list, without going round by the console when it is already open.
+        ``fresh`` re-reads it: triage changes rows, and the row about to be clicked has to be
+        the one the server holds."""
+        self.be_on("/console/issues", self.open_issues_screen, fresh=fresh)
+
     def open_issue_detail(self, title: str) -> None:
-        self.open_issues_screen()
+        self._on_issues(fresh=True)
         self._issue_row(title).click()
         self.page.wait_for_selector("#triage", timeout=5000)
 

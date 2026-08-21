@@ -15,6 +15,14 @@ class CalendarBrowserMixin(BrowserBase):
         """Into the calendar by the sidebar entry — the only way in that a person has."""
         self.follow_org_nav(handle or getattr(self, "active_org_handle", ""), "calendar")
 
+    def _cal_on(self, handle: str | None = None, *, fresh: bool = False) -> None:
+        """On the calendar, without walking back to it when it is already the page shown.
+        ``fresh`` for whoever reads the events off it, rather than only heading somewhere from
+        there."""
+        self.reach_org_nav(
+            handle or getattr(self, "active_org_handle", ""), "calendar", fresh=fresh
+        )
+
     def _cal_time_fields(self, start: str, end: str) -> dict[str, str]:
         start_date, start_time = start.split(" ")
         end_date, end_time = end.split(" ")
@@ -26,7 +34,7 @@ class CalendarBrowserMixin(BrowserBase):
         }
 
     def _cal_open_new_form(self) -> None:
-        self._cal_goto()
+        self._cal_on()
         self.page.get_by_role("link", name="New event").click()
         self.page.get_by_label("Title").wait_for()
 
@@ -41,7 +49,7 @@ class CalendarBrowserMixin(BrowserBase):
         ]
 
     def _cal_titles(self) -> list[str]:
-        self._cal_goto(self._cal_acting_handle())
+        self._cal_on(self._cal_acting_handle(), fresh=True)
         return self._cal_titles_on_page()
 
     # ── given / actions ──────────────────────────────────────────────────────--
@@ -81,7 +89,9 @@ class CalendarBrowserMixin(BrowserBase):
         )
 
     def open_event(self, title: str) -> None:
-        self._cal_goto()
+        # From the list as the server renders it now: the row clicked has to be the one the last
+        # action left, and what the detail then shows is read as the stored event.
+        self._cal_on(fresh=True)
         self.page.locator(
             "#event-list a.event-title", has_text=re.compile(rf"^{re.escape(title)}$")
         ).first.click()
@@ -108,14 +118,14 @@ class CalendarBrowserMixin(BrowserBase):
             self.page.get_by_role("button", name="Delete").click()
 
     def view_calendar(self) -> None:
-        self._cal_goto()
+        self._cal_on(fresh=True)
 
     def view_calendar_as(self, email: str) -> None:
         handle = getattr(self, "secondary_handles", {}).get(email) or getattr(
             self, "active_org_handle", ""
         )
         self.set_acting_email(email)
-        self._cal_goto(handle)
+        self._cal_on(handle, fresh=True)
 
     # ── assertions ───────────────────────────────────────────────────────────--
     def assert_no_events(self) -> None:

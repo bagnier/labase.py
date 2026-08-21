@@ -26,6 +26,14 @@ class PagesBrowserMixin(BrowserBase):
         # The list is an Alpine component; it flags itself ready once rendered.
         self.page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
 
+    def _on_list(self, handle: str | None = None, *, fresh: bool = False) -> None:
+        """On the pages list, without walking back to it when it is already the page shown.
+        ``fresh`` for the assertions: what the server lists now, not what was listed before the
+        action under test."""
+        path = f"/{handle or self._handle()}/pages"
+        self.be_on(path, lambda: self._goto_list(handle), fresh=fresh)
+        self.page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
+
     def _row_titles(self) -> list[str]:
         return [
             el.inner_text().strip()
@@ -40,7 +48,7 @@ class PagesBrowserMixin(BrowserBase):
 
     # ── actions ────────────────────────────────────────────────────────────────
     def _create_via_form(self, title: str, slug: str | None, content: str) -> None:
-        self._goto_list()
+        self._on_list()
         self.page.click('a[href$="/pages/new/edit"]')
         self.page.wait_for_selector("#edit-page-form", timeout=5000)
         if content:
@@ -49,12 +57,12 @@ class PagesBrowserMixin(BrowserBase):
         self.submit_labelled_form(self.page, fields, self.page.get_by_role("button", name="Save"))
 
     def open_new_page_form(self) -> None:
-        self._goto_list()
+        self._on_list()
         self.page.click('a[href$="/pages/new/edit"]')
         self.page.wait_for_selector("#edit-page-form", timeout=5000)
 
     def assert_pages_list_empty(self) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
         slugs = self._row_slugs()
         assert slugs == [], f"expected an empty pages list, got: {slugs}"
 
@@ -69,32 +77,36 @@ class PagesBrowserMixin(BrowserBase):
         self._set_visibility_via_form(slug, visibility)
 
     def _goto_edit(self, slug: str) -> None:
-        self._goto_list()
+        self._on_list()
         self.page.click(f"#pages-list .page-row[data-slug='{slug}'] .page-edit-link")
         self.page.wait_for_load_state("load")
+
+    def _on_edit(self, slug: str) -> None:
+        """On that page's edit form — already open on it, the form is theirs to keep filling."""
+        self.be_on(f"/{self._handle()}/pages/{slug}/edit", lambda: self._goto_edit(slug))
 
     def _submit_edit_form(self) -> None:
         self.submit_labelled_form(self.page, {}, self.page.get_by_role("button", name="Save"))
 
     def change_slug(self, slug: str, new_slug: str) -> None:
-        self._goto_edit(slug)
+        self._on_edit(slug)
         self.submit_labelled_form(
             self.page, {"Slug": new_slug}, self.page.get_by_role("button", name="Save")
         )
 
     def update_content(self, slug: str, content: str) -> None:
-        self._goto_edit(slug)
+        self._on_edit(slug)
         self.page.fill(".cm-content", _decode(content))
         self._submit_edit_form()
 
     def delete_page(self, slug: str) -> None:
-        self._goto_edit(slug)
+        self._on_edit(slug)
         self.page.on("dialog", lambda d: d.accept())
         with self.page.expect_navigation(wait_until="load"):
             self.page.get_by_role("button", name="Delete page").click()
 
     def _set_visibility_via_form(self, slug: str, visibility: str) -> None:
-        self._goto_edit(slug)
+        self._on_edit(slug)
         self.page.get_by_label("Visibility").select_option(visibility)
         self._submit_edit_form()
 
@@ -118,12 +130,13 @@ class PagesBrowserMixin(BrowserBase):
         self._set_visibility_via_form(slug, "members")
 
     def view_page(self, slug: str) -> None:
-        self._goto_list()
+        # From the list as it stands now: the row clicked has to be the one the last action left.
+        self._on_list(fresh=True)
         self.page.click(f"#pages-list .page-row[data-slug='{slug}'] .page-title-link")
         self.page.wait_for_load_state("load")
 
     def view_pages_list(self) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
 
     def visitor_open(self, slug: str, _org_name: str) -> None:
         page = self.page_for(_VISITOR)
@@ -139,12 +152,12 @@ class PagesBrowserMixin(BrowserBase):
 
     # ── assertions ──────────────────────────────────────────────────────────--
     def assert_page_in_list(self, title: str) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
         titles = self._row_titles()
         assert title in titles, f"'{title}' not found in pages list: {titles}"
 
     def assert_page_absent(self, title: str) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
         titles = self._row_titles()
         assert title not in titles, f"'{title}' should be absent: {titles}"
 
@@ -166,15 +179,15 @@ class PagesBrowserMixin(BrowserBase):
         assert title not in titles, f"'{title}' leaked into another tenant's pages list: {titles}"
 
     def assert_page_exists(self, slug: str) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
         assert slug in self._row_slugs(), f"page '{slug}' not found: {self._row_slugs()}"
 
     def assert_page_not_exists(self, slug: str) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
         assert slug not in self._row_slugs(), f"page '{slug}' should not exist"
 
     def assert_page_visibility(self, slug: str, visibility: str) -> None:
-        self._goto_list()
+        self._on_list(fresh=True)
         badge = self.page.locator(
             f"#pages-list .page-row[data-slug='{slug}'] .badge"
         ).get_attribute("data-visibility")
@@ -223,9 +236,15 @@ class PagesBrowserMixin(BrowserBase):
     def _goto_nav_manager(self) -> None:
         """Into the navigation manager the way its owner gets there: the pages list, then the
         link it offers."""
-        self._goto_list()
+        self._on_list()
         self.page.click('a[href$="/pages/nav"]')
         self.page.wait_for_load_state("load")
+
+    def _on_nav_manager(self, *, fresh: bool = False) -> None:
+        """On the navigation manager, two loads away from anywhere else and none away from
+        itself. ``fresh`` reloads it instead — checking a checkbox is a POST with no redirect,
+        so only a re-read says the choice was kept."""
+        self.be_on(f"/{self._handle()}/pages/nav", self._goto_nav_manager, fresh=fresh)
 
     def _candidate_row(self, title: str):
         return self.page.locator("#nav-list .nav-candidate").filter(has_text=title)
@@ -233,10 +252,10 @@ class PagesBrowserMixin(BrowserBase):
     # ── nav actions ────────────────────────────────────────────────────────────
 
     def open_nav_manager(self) -> None:
-        self._goto_nav_manager()
+        self._on_nav_manager()
 
     def given_in_nav(self, title: str) -> None:
-        self._goto_nav_manager()
+        self._on_nav_manager()
         row = self._candidate_row(title)
         cb = row.locator(".nav-checkbox")
         if not cb.is_checked():
@@ -273,17 +292,17 @@ class PagesBrowserMixin(BrowserBase):
     # ── nav assertions ─────────────────────────────────────────────────────────
 
     def assert_in_nav(self, title: str) -> None:
-        self._goto_nav_manager()
+        self._on_nav_manager(fresh=True)
         cb = self._candidate_row(title).locator(".nav-checkbox")
         expect(cb).to_be_checked()
 
     def assert_not_in_nav(self, title: str) -> None:
-        self._goto_nav_manager()
+        self._on_nav_manager(fresh=True)
         cb = self._candidate_row(title).locator(".nav-checkbox")
         expect(cb).not_to_be_checked()
 
     def assert_nav_order(self, a: str, b: str) -> None:
-        self._goto_nav_manager()
+        self._on_nav_manager(fresh=True)
         rows = self.page.locator("#nav-list .nav-candidate[data-in-nav='true']").all()
         titles = [r.inner_text().strip() for r in rows]
         a_idx = next((i for i, t in enumerate(titles) if a in t), None)
@@ -293,7 +312,7 @@ class PagesBrowserMixin(BrowserBase):
         assert a_idx < b_idx, f"expected '{a}' before '{b}', got: {titles}"
 
     def assert_not_nav_candidate(self, title: str) -> None:
-        self._goto_nav_manager()
+        self._on_nav_manager(fresh=True)
         rows = self.page.locator("#nav-list .nav-candidate").all()
         titles = [r.inner_text() for r in rows]
         assert not any(title in t for t in titles), (

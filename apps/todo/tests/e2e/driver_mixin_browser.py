@@ -23,11 +23,13 @@ class TodoBrowserMixin(BrowserBase):
             self.add_todo(title)
 
     def view_todo_list(self) -> None:
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
-    def _goto_todos(self) -> None:
-        """Into the list by the sidebar entry — the only way in that a person has."""
-        self.follow_org_nav(getattr(self, "active_org_handle", ""), "todos")
+    def _on_todos(self, *, fresh: bool = False) -> None:
+        """On the list, by the sidebar entry — the only way in that a person has — unless it is
+        already what they are looking at. ``fresh`` for the read-back after an action: what the
+        server stored, not what the swap left behind."""
+        self.reach_org_nav(getattr(self, "active_org_handle", ""), "todos", fresh=fresh)
 
     def try_add_todo(self, title: str) -> None:
         # HTMX drops 4xx swaps; fire the request the form would send and keep the
@@ -55,7 +57,7 @@ class TodoBrowserMixin(BrowserBase):
         )
 
     def add_todo(self, title: str) -> None:
-        self._goto_todos()
+        self._on_todos()
         form_path = f"/{getattr(self, 'active_org_handle', '')}/todos"
         self.submit_labelled_form(
             self.page,
@@ -64,10 +66,10 @@ class TodoBrowserMixin(BrowserBase):
             method="POST",
             path_token=form_path,
         )
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
     def mark_todo_done(self, title: str) -> None:
-        self._goto_todos()
+        self._on_todos()
         todo_id = self._dom_todo_id_by_title(title)
         self.row_action(
             self.page,
@@ -78,23 +80,23 @@ class TodoBrowserMixin(BrowserBase):
             "PATCH",
             f"/todos/{todo_id}",
         )
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
     def mark_todo_not_done(self, title: str) -> None:
         self.mark_todo_done(title)
 
     def rename_todo(self, title: str, new_title: str) -> None:
-        self._goto_todos()
+        self._on_todos()
         todo_id = self._dom_todo_id_by_title(title)
         self.page.evaluate(f"startEdit('{todo_id}')")
         form_input = self.page.locator(f"#rename-form-{todo_id} input[name=title]")
         form_input.wait_for(state="visible", timeout=5000)
         form_input.fill(new_title)
         self.wait_htmx(self.page, "PATCH", f"/todos/{todo_id}", lambda: form_input.press("Enter"))
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
     def delete_todo(self, title: str) -> None:
-        self._goto_todos()
+        self._on_todos()
         todo_id = self._dom_todo_id_by_title(title)
         self.row_action(
             self.page,
@@ -105,10 +107,10 @@ class TodoBrowserMixin(BrowserBase):
             "DELETE",
             f"/todos/{todo_id}",
         )
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
     def move_todo_above(self, title: str, above: str) -> None:
-        self._goto_todos()
+        self._on_todos()
         source_id = self._dom_todo_id_by_title(title)
         target_id = self._dom_todo_id_by_title(above)
         slug = getattr(self, "active_org_handle", "")
@@ -124,10 +126,10 @@ class TodoBrowserMixin(BrowserBase):
                 })""",
                 [url, target_id],
             )
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
     def move_todo_to_end(self, title: str) -> None:
-        self._goto_todos()
+        self._on_todos()
         source_id = self._dom_todo_id_by_title(title)
         rows = self._dom_todo_rows()
         last_row = rows[-1]
@@ -136,7 +138,7 @@ class TodoBrowserMixin(BrowserBase):
             lambda r: f"/todos/{source_id}/position" in r.url and r.request.method == "PUT"
         ):
             self.page.locator(source).drag_to(last_row, target_position={"x": 10, "y": 40})
-        self._goto_todos()
+        self._on_todos(fresh=True)
 
     def assert_todo_list_order(self, titles: list[str]) -> None:
         actual = self._dom_todo_titles()
@@ -189,6 +191,7 @@ class TodoBrowserMixin(BrowserBase):
     def assert_completion_badge(self, badge: str) -> None:
         # The counter is maintained by the durable async consumer of todo.ticked.
         self.drain_task_queue()
-        # The card sits on the org dashboard, one sidebar click from the list they ticked it in.
-        self.follow_org_nav(getattr(self, "active_org_handle", ""), "dashboard")
+        # The card sits on the org dashboard, one sidebar click from the list they ticked it in
+        # — and read after the drain, so the counter is the one the consumer just wrote.
+        self.reach_org_nav(getattr(self, "active_org_handle", ""), "dashboard", fresh=True)
         expect(self.page.locator('[data-overview="todo"]')).to_contain_text(badge)

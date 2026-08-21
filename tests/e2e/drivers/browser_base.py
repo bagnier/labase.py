@@ -5,6 +5,7 @@ assembles them."""
 
 import os
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 from playwright.sync_api import (
     APIResponse,
@@ -274,6 +275,52 @@ class BrowserBase:
         with target.expect_navigation(wait_until="load") as nav:
             target.locator("aside a[href='/profile']").first.click()
         return nav.value
+
+    # ── being somewhere, rather than travelling there ──────────────────────────
+    def showing(self, path: str, page: Page | None = None) -> bool:
+        """Whether the browser already has ``path`` on screen — query string included, since a
+        list carrying a filter or a sort is not the same page as the bare one."""
+        target = page if page is not None else self.page
+        current = urlsplit(target.url or "")
+        return current.path + (f"?{current.query}" if current.query else "") == path
+
+    def be_on(
+        self,
+        path: str,
+        arrive: Callable[[], object],
+        *,
+        fresh: bool = False,
+        page: Page | None = None,
+    ) -> None:
+        """Have ``path`` on screen, walking there only when it is not already the page shown.
+
+        Nobody re-enters the room they are standing in, and a driver that did paid a full render
+        for it. ``fresh`` is the caller stating it needs what the server holds rather than what a
+        swap left in the DOM: on the page already, it is loaded again; anywhere else, arriving is
+        that read. Say it wherever the answer would be wrong if the page were stale — an
+        assertion checking a change stuck, or a helper whose next act must start from stored
+        state.
+        """
+        target = page if page is not None else self.page
+        if not self.showing(path, target):
+            arrive()
+        elif fresh:
+            target.reload(wait_until="load")
+
+    def reach_org_nav(
+        self, handle: str, segment: str, page: Page | None = None, *, fresh: bool = False
+    ) -> None:
+        """``follow_org_nav``, minus the click when that section is already the page shown."""
+        self.be_on(
+            f"/{handle}/{segment}",
+            lambda: self.follow_org_nav(handle, segment, page),
+            fresh=fresh,
+            page=page,
+        )
+
+    def reach_profile(self, page: Page | None = None, *, fresh: bool = False) -> None:
+        """``follow_to_profile``, minus the click when the profile is already the page shown."""
+        self.be_on("/profile", lambda: self.follow_to_profile(page), fresh=fresh, page=page)
 
     # ── HTMX interaction helpers ───────────────────────────────────────────────
     def _arm_dialogs(self, page: Page) -> None:

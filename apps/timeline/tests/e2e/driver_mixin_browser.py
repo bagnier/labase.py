@@ -108,6 +108,10 @@ class TimelineBrowserMixin(BrowserBase):
         self.last_response = open_link("/console/timeline")
 
     def _on_timeline(self) -> None:
+        """On the timeline, whatever filter or sort it carries — deliberately looser than
+        ``be_on``, which counts a filtered list as another page. Callers here act *on the page
+        the scenario left*: re-entering by the console link would drop the filter they are
+        exporting or paging through."""
         if "/console/timeline" not in (self.page.url or ""):
             self.open_timeline()
 
@@ -118,6 +122,8 @@ class TimelineBrowserMixin(BrowserBase):
         so a Playwright ``fill()`` per field would navigate once per field and race the
         assertions. One silent set per field, then one ``requestSubmit()`` — the same
         submission path their onchange uses, exactly once."""
+        # Fresh timeline first, never the page a previous filter left: filters read off the
+        # displayed form, so applying one on top of another would stack them.
         self.open_timeline()
         control = None
         for name, value in fields.items():
@@ -131,6 +137,7 @@ class TimelineBrowserMixin(BrowserBase):
         """Drive a smart combobox pill: open it, click the option carrying the exact value.
         Selecting by ``data-value`` (not the visible label) keeps this decoupled from label
         resolution — a seeded org id has no real handle, so its label is a truncated uuid."""
+        # Fresh timeline first, for the same reason as ``_submit_filter``: one filter at a time.
         self.open_timeline()
         self.page.locator(f"[data-filter-toggle='{name}']").click()
         option = self.page.locator(f"[data-filter-pop='{name}'] [data-value='{value}']").first
@@ -199,14 +206,16 @@ class TimelineBrowserMixin(BrowserBase):
         )
 
     def view_activity_by(self, grain: str) -> None:
-        # Follow the grain toggle link above the chart — a real click, no URL crafting.
+        # Follow the grain toggle link above the chart — a real click, no URL crafting. From an
+        # unfiltered timeline, so the chart read afterwards covers everything seeded.
         self.open_timeline()
         with self.page.expect_navigation(wait_until="load"):
             self.page.locator(f"[data-grain-option='{grain}']").click()
 
     def sort_timeline(self, column: str, direction: str) -> None:
         # Follow the sortable column header link; one click toggles, so click until it lands on
-        # the requested (column, direction).
+        # the requested (column, direction). From an unfiltered timeline: the sort under test is
+        # over all the rows, and a leftover ``?sort=`` would change what the clicks toggle.
         self.open_timeline()
         for _ in range(3):
             if self._sort_state() == (column, direction):

@@ -15,9 +15,12 @@ class ProfileBrowserMixin(BrowserBase):
 
     def _look_at_own_profile(self, email: str) -> None:
         """A switch flipped by an admin is checked on the account it concerns, not on the admin's:
-        step onto that actor's browser and follow their own account link to their profile."""
+        step onto that actor's browser and follow their own account link to their profile.
+
+        Read from the server every time: the switch was flipped after this actor's page rendered,
+        and the whole question is whether their profile still offers what it withdrew."""
         self.set_acting_email(email)
-        self.follow_to_profile()
+        self.reach_profile(fresh=True)
 
     def _open_profile_tab(self, label: str) -> None:
         """Profile sections live in client-side daisyUI tabs; check the tab radio so
@@ -33,7 +36,7 @@ class ProfileBrowserMixin(BrowserBase):
         # change leaves the new address registered; GoTrue refuses reusing it.
         delete_user_if_exists(new_email)
         self._email_change_requested_at = datetime.now(UTC)
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_tab("Email")
         section = self.page.locator("[data-email-change]")
         section.get_by_label("New email").fill(new_email)
@@ -74,7 +77,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     # ── avatar & handle switches ──────────────────────────────────────────────
     def upload_avatar(self, filename: str, content: bytes, mime: str) -> None:
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_tab("Profile")
         self.page.set_input_files(
             "[data-avatar-upload] input[type=file]",
@@ -108,7 +111,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     # ── account deletion ──────────────────────────────────────────────────────
     def delete_account(self, password: str) -> None:
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_tab("Account")
         section = self.page.locator("[data-account-deletion]")
         section.get_by_label("Your password").fill(password)
@@ -127,7 +130,7 @@ class ProfileBrowserMixin(BrowserBase):
         )
 
     def update_handle(self, name: str) -> None:
-        self.follow_to_profile()
+        self.reach_profile()
         self._open_profile_tab("Profile")
         self.last_response = self.submit_labelled_form(
             self.page,

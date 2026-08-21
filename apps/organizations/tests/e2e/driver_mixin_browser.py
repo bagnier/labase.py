@@ -31,7 +31,9 @@ class OrgBrowserMixin(BrowserBase):
         super().reset_session()
 
     def _read_org_cards_from_profile(self, page: Page) -> list[dict]:
-        self.follow_to_profile(page)
+        # The org list is what the server holds now — a membership granted or an account deleted
+        # since this page rendered is exactly what these readers are looking for.
+        self.reach_profile(page, fresh=True)
         cards = page.locator("[data-organisation-card]").all()
         result = []
         for card in cards:
@@ -55,14 +57,25 @@ class OrgBrowserMixin(BrowserBase):
         self.active_org_handle = orgs[0]["handle"]
         return self.active_org_handle
 
-    def _goto_members(self, page: Page | None = None, handle: str | None = None) -> Page:
-        """Into the member list the way anyone in the org gets there: the org dashboard, then its
-        Members card — the one link to that screen, owner or not."""
-        target = page if page is not None else self.page
-        slug = handle or self._active_slug()
+    def _walk_to_members(self, slug: str, target: Page) -> None:
+        """The way anyone in the org gets to the member list: the org dashboard, then its Members
+        card — the one link to that screen, owner or not."""
         self.follow_org_nav(slug, "dashboard", target)
         with target.expect_navigation(wait_until="load"):
             target.locator(f"a[href='/{slug}/members']").first.click()
+
+    def _goto_members(self, page: Page | None = None, handle: str | None = None) -> Page:
+        """The member list as the server renders it, every time. Never the DOM a swap left: the
+        controls read here decide what this driver does next — a missing Remove means the server
+        is asked to refuse instead — and a stale row would send it down the wrong branch and pass.
+
+        Already on the list, that read is a reload; from anywhere else, the walk in is the read.
+        """
+        target = page if page is not None else self.page
+        slug = handle or self._active_slug()
+        self.be_on(
+            f"/{slug}/members", lambda: self._walk_to_members(slug, target), fresh=True, page=target
+        )
         return target
 
     def _user_id_for(self, email: str) -> str:
