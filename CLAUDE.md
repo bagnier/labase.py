@@ -21,11 +21,12 @@ Read `README.md` first.
 - import at top, refactor to make it possible.
 - Unless explicitly asked, the user commits, not the agent.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).
-- /research for codebase, web or documentation digging.
-- /obsidian-markdown for any markdown edition.
+- /analyse for codebase digging, /fetch for the web, context7 for library docs.
+- /markdown for any markdown edition.
 - when you think it's done, run `make finalize` as background task before you claim it.
 - render any UI change and look at a screenshot (Playwright or /run).
-- Docs by audience: README = functional/CLI, DEV.md = development, INSTALL.md = deployment. 
+- Docs by audience: README = functional/CLI and development, docs/ = one topic per file
+  (deployment: docs/production.md).
 - Describe the CURRENT state, never the history; prune, dense and short.
 
 <!-- charm:no-autocommit -->

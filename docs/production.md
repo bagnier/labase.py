@@ -1,8 +1,8 @@
 # Production deployment
 
-The road from `make dev` to a hardened, deployed instance. This covers the P0
-production-readiness items from [ROADMAP.md](../ROADMAP.md); the P1/P2 items
-(CI/CD, alerting, log shipping, runbooks) are tracked there.
+The road from `make dev` to a hardened, deployed instance. What is not covered here
+— deployment CI/CD, alerting, log shipping, runbooks — is tracked under production
+readiness in [ROADMAP.md](../ROADMAP.md).
 
 Already built into the app, so not repeated here: 4-layer observability, `health/`
 liveness/readiness probes, cross-instance rate limiting, RLS, security headers
