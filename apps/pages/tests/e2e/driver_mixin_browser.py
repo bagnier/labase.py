@@ -20,11 +20,11 @@ class PagesBrowserMixin(BrowserBase):
     def _pages_url(self, path: str = "", handle: str | None = None) -> str:
         return f"{self.base_url}/{handle or self._handle()}/pages{path}"
 
-    def _goto_list(self, handle: str | None = None):
-        resp = self.page.goto(self._pages_url(handle=handle), wait_until="load")
+    def _goto_list(self, handle: str | None = None) -> None:
+        """Into the pages list by the sidebar entry — the only way in that a person has."""
+        self.follow_org_nav(handle or self._handle(), "pages")
         # The list is an Alpine component; it flags itself ready once rendered.
         self.page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
-        return resp
 
     def _row_titles(self) -> list[str]:
         return [
@@ -154,7 +154,7 @@ class PagesBrowserMixin(BrowserBase):
         # own handle.
         page = self.page_for(email)
         slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
-        page.goto(self._pages_url(handle=slug), wait_until="load")
+        self.follow_org_nav(slug, "pages", page)
         page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
         self._viewed_page_titles = [
             el.inner_text().strip() for el in page.locator("#pages-list .page-title-link").all()
@@ -181,7 +181,7 @@ class PagesBrowserMixin(BrowserBase):
         assert badge == visibility, f"page '{slug}' visibility {badge!r}, expected {visibility!r}"
 
     def assert_view_contains(self, slug: str, text: str) -> None:
-        self.page.goto(self._pages_url(f"/{slug}"), wait_until="load")
+        self.view_page(slug)
         assert text in self.page.content(), f"'{text}' not found in rendered page"
 
     def assert_rendered_heading(self, text: str) -> None:
@@ -196,17 +196,14 @@ class PagesBrowserMixin(BrowserBase):
         assert self.page.locator("article").count() > 0, "rendered page article not found"
 
     def assert_cannot_edit(self, slug: str) -> None:
-        self.page.goto(self._pages_url(f"/{slug}"), wait_until="load")
         assert self.page.locator("a.edit-link").count() == 0, "an edit link is shown"
 
     def assert_visible_to_members(self, slug: str) -> None:
         self.assert_page_visibility(slug, "members")
 
-    def assert_visitor_can_view(self, slug: str, _org_name: str) -> None:
-        page = self.page_for(_VISITOR)
-        resp = page.goto(self._pages_url(f"/{slug}"), wait_until="load")
-        assert resp is not None, "visitor view got no response"
-        assert resp.status == 200, f"visitor view got {resp.status}"
+    def assert_visitor_allowed(self) -> None:
+        assert self.last_response is not None
+        assert self.last_response.status == 200, f"visitor view got {self.last_response.status}"
 
     def assert_visitor_forbidden(self) -> None:
         assert self.last_response is not None
@@ -223,11 +220,12 @@ class PagesBrowserMixin(BrowserBase):
 
     # ── nav helpers ────────────────────────────────────────────────────────────
 
-    def _nav_url(self, path: str = "") -> str:
-        return f"{self.base_url}/{self._handle()}/pages/nav{path}"
-
     def _goto_nav_manager(self) -> None:
-        self.page.goto(self._nav_url(), wait_until="load")
+        """Into the navigation manager the way its owner gets there: the pages list, then the
+        link it offers."""
+        self._goto_list()
+        self.page.click('a[href$="/pages/nav"]')
+        self.page.wait_for_load_state("load")
 
     def _candidate_row(self, title: str):
         return self.page.locator("#nav-list .nav-candidate").filter(has_text=title)
@@ -235,9 +233,7 @@ class PagesBrowserMixin(BrowserBase):
     # ── nav actions ────────────────────────────────────────────────────────────
 
     def open_nav_manager(self) -> None:
-        self._goto_list()
-        self.page.click('a[href$="/pages/nav"]')
-        self.page.wait_for_load_state("load")
+        self._goto_nav_manager()
 
     def given_in_nav(self, title: str) -> None:
         self._goto_nav_manager()

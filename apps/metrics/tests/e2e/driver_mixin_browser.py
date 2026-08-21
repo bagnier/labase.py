@@ -14,10 +14,9 @@ class MetricsBrowserMixin(BrowserBase):
         seed(_do)
 
     def open_load_screen(self) -> None:
-        as_admin = getattr(self, "_as_admin", None)  # console mixin
-        assert as_admin is not None
-        as_admin()
-        self.page.goto(f"{self.base_url}/console/load", wait_until="load")
+        open_link = getattr(self, "open_console_link", None)  # console mixin
+        assert open_link is not None
+        open_link("/console/load")  # the metrics tile points straight at the Load screen
 
     def _route_row(self, label: str):
         return self.page.locator(f"[data-load-route='{label}']")

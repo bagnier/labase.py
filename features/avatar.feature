@@ -17,4 +17,4 @@ Feature: Profile avatar
   Scenario: An admin can turn avatars off
     Given a server admin is signed in as "root@example.com"
     When the admin sets the "profile" setting "avatar_enabled" to "false"
-    Then the avatar option is not offered
+    Then the avatar option is not offered to "face@labase.dev"

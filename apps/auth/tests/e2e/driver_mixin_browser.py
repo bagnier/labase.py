@@ -28,9 +28,18 @@ class AuthBrowserMixin(BrowserBase):
     def visit(self, path: str) -> None:
         self.last_response = self.page.goto(f"{self.base_url}{path}", wait_until="load")
 
-    def assert_page_accessible(self, path: str, contains: str) -> None:
-        self.page.goto(f"{self.base_url}{path}", wait_until="load")
-        assert contains in self.page.content(), f"'{contains}' not found on {path}"
+    # The front door: a visitor arriving at sign-in or registration is the entry point the base
+    # blesses, not a deep link — and it is a `when`, so the assertions that follow read the page
+    # it opened rather than fetching one of their own.
+    def start_to_sign_in(self) -> None:
+        self.page_for(VISITOR).goto(f"{self.base_url}/auth/login", wait_until="load")
+
+    def start_to_register(self) -> None:
+        self.page_for(VISITOR).goto(f"{self.base_url}/auth/register", wait_until="load")
+
+    def assert_visitor_page_offers(self, contains: str) -> None:
+        content = self.page_for(VISITOR).content()
+        assert contains in content, f"'{contains}' not on the page the visitor opened"
 
     def assert_page_loaded(self) -> None:
         assert self.last_response is not None
@@ -117,10 +126,12 @@ class AuthBrowserMixin(BrowserBase):
         self._store_active_org_handle()
 
     def logout_action(self) -> None:
-        # Sign out the way a human does — no fetch(): from the profile's Account tab,
-        # submit the Sign out form. If the session is already gone, /profile bounces to
-        # the login page and there is nothing left to click.
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        # Sign out the way a human does — no fetch(): from the profile's Account tab, submit
+        # the Sign out form. If the session is already gone, the page holds no account link, or
+        # following it bounces to the sign-in page: either way there is nothing left to click.
+        if self.page.locator("aside a[href='/profile']").count() == 0:
+            return
+        self.follow_to_profile()
         if "/auth/login" in self.page.url:
             return
         self.page.get_by_role("tab", name="Account", exact=True).check()
@@ -157,7 +168,7 @@ class AuthBrowserMixin(BrowserBase):
         self.page.get_by_role("tab", name="Authentication", exact=True).check()
 
     def change_password(self, current_password: str, new_password: str) -> None:
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.follow_to_profile()
         self._open_profile_auth_tab()
         self.page.get_by_label("Current password").fill(current_password)
         self.page.get_by_label("New password").fill(new_password)
@@ -222,7 +233,7 @@ class AuthBrowserMixin(BrowserBase):
     def enroll_totp(self) -> None:
         import pyotp
 
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.follow_to_profile()
         self._open_profile_auth_tab()
         self.page.locator("[data-twofa]").get_by_role("button", name="Enable two-factor").click()
         self.page.wait_for_selector("[data-totp-secret]", timeout=5000)
@@ -236,7 +247,6 @@ class AuthBrowserMixin(BrowserBase):
         self.page.wait_for_selector("[data-twofa-active]", timeout=5000)
 
     def assert_twofa_enabled(self) -> None:
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
         self._open_profile_auth_tab()
         self.page.wait_for_selector("[data-twofa-active]", timeout=5000)
 
@@ -257,8 +267,9 @@ class AuthBrowserMixin(BrowserBase):
         alert = self.page.locator("[data-mfa-form] .alert", has_text="did not work")
         alert.wait_for(timeout=5000)
 
-    def assert_twofa_not_offered(self) -> None:
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+    def assert_twofa_not_offered(self, email: str) -> None:
+        self.set_acting_email(email)
+        self.follow_to_profile()
         assert self.page.locator("[data-twofa]").count() == 0, (
             "two-factor section should be hidden when the option is off"
         )
@@ -270,11 +281,9 @@ class AuthBrowserMixin(BrowserBase):
         return self.page_for(VISITOR).locator(f"[data-oauth-provider='{provider}']")
 
     def assert_oauth_offered(self, provider: str) -> None:
-        self.page_for(VISITOR).goto(f"{self.base_url}/auth/login", wait_until="load")
         self._oauth_button(provider).wait_for(timeout=5000)
 
     def assert_oauth_not_offered(self, provider: str) -> None:
-        self.page_for(VISITOR).goto(f"{self.base_url}/auth/login", wait_until="load")
         assert self._oauth_button(provider).count() == 0, f"unexpected {provider} button"
 
     def start_oauth(self, provider: str) -> None:
@@ -322,19 +331,17 @@ class AuthBrowserMixin(BrowserBase):
         return client, added["authenticatorId"]
 
     def assert_passkey_signin_offered(self) -> None:
-        page = self.page_for(VISITOR)
-        page.goto(f"{self.base_url}/auth/login", wait_until="load")
-        page.locator("[data-passkey-signin]").wait_for(timeout=5000)
+        self.page_for(VISITOR).locator("[data-passkey-signin]").wait_for(timeout=5000)
 
     def assert_passkey_signin_not_offered(self) -> None:
-        page = self.page_for(VISITOR)
-        page.goto(f"{self.base_url}/auth/login", wait_until="load")
-        assert page.locator("[data-passkey-signin]").count() == 0, "unexpected passkey button"
+        assert self.page_for(VISITOR).locator("[data-passkey-signin]").count() == 0, (
+            "unexpected passkey button"
+        )
 
     def add_passkey(self) -> None:
         page = self.page
         client, authenticator_id = self._attach_virtual_authenticator(page)
-        page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.follow_to_profile()
         self._open_profile_auth_tab()
         page.locator("[data-passkey-register]").click()
         # passkeys.js reloads the page once GoTrue accepted the attestation; the
@@ -350,7 +357,6 @@ class AuthBrowserMixin(BrowserBase):
         self._passkey_credential = credentials[0]
 
     def assert_passkey_listed(self) -> None:
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
         self._open_profile_auth_tab()
         self.page.locator("[data-passkey-name]").first.wait_for(timeout=5000)
 
@@ -376,18 +382,20 @@ class AuthBrowserMixin(BrowserBase):
         as_admin()
 
     def open_accounts_screen(self) -> None:
-        self._accounts_as_admin()
-        self.page.goto(f"{self.base_url}/console/accounts", wait_until="load")
+        """Console → the Users tile → its “Accounts” link, the path the console lays out."""
+        open_settings = getattr(self, "open_console_settings", None)  # console mixin
+        assert open_settings is not None
+        open_settings("users")
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.locator("a[href='/console/accounts']").first.click()
 
     def _account_row(self, email: str):
         return self.page.locator(f"[data-account='{email}']")
 
     def assert_account_listed(self, email: str) -> None:
-        self.open_accounts_screen()
         self._account_row(email).wait_for(timeout=5000)
 
     def assert_account_not_listed(self, email: str) -> None:
-        self.open_accounts_screen()
         assert self._account_row(email).count() == 0, f"{email!r} still listed"
 
     def filter_accounts(self, query: str) -> None:
@@ -443,7 +451,9 @@ class AuthBrowserMixin(BrowserBase):
     # ── impersonation ──────────────────────────────────────────────────────────
 
     def impersonate(self, email: str) -> None:
-        self.page.goto(f"{self.base_url}/console/admins", wait_until="load")
+        goto_admins = getattr(self, "_goto_admins", None)  # console mixin
+        assert goto_admins is not None
+        goto_admins()
         self.page.get_by_label("Impersonate email").fill(email)
         self.page.get_by_role("button", name="View as user").click()
         self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)

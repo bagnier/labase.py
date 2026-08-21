@@ -162,9 +162,10 @@ class PagesApiMixin(ApiBase):
         assert self.response.status_code == 200, f"publish failed: {self.response.status_code}"
         self.assert_page_visibility(slug, "members")
 
-    def assert_visitor_can_view(self, slug: str, _org_name: str) -> None:
-        resp = self.client_for(VISITOR).get(self._pages_url(f"/{slug}"))
-        assert resp.status_code == 200, f"visitor view got {resp.status_code}: {resp.text}"
+    def assert_visitor_allowed(self) -> None:
+        assert self.response.status_code == 200, (
+            f"visitor view got {self.response.status_code}: {self.response.text}"
+        )
 
     def assert_visitor_forbidden(self) -> None:
         assert self.response.status_code in (403, 404), (

@@ -103,8 +103,9 @@ class TimelineBrowserMixin(BrowserBase):
 
     # ── navigation / filters (follow links, submit the real form) ─────────────
     def open_timeline(self) -> None:
-        self._timeline_as_admin()
-        self.last_response = self.page.goto(f"{self.base_url}/console/timeline", wait_until="load")
+        open_link = getattr(self, "open_console_link", None)  # console mixin
+        assert open_link is not None
+        self.last_response = open_link("/console/timeline")
 
     def _on_timeline(self) -> None:
         if "/console/timeline" not in (self.page.url or ""):
@@ -182,7 +183,6 @@ class TimelineBrowserMixin(BrowserBase):
         )
 
     def assert_offers_older_entries(self) -> None:
-        self._on_timeline()
         assert self.page.locator("[data-load-more]").count() == 1, (
             "expected the timeline to offer a next page"
         )

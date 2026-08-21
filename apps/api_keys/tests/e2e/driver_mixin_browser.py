@@ -12,15 +12,10 @@ class ApiKeysBrowserMixin(BrowserBase):
         self._api_key_org_handle = ""
         super().reset_session()
 
-    def _keys_page_url(self) -> str:
-        # The keys panel lives on the org settings page (owner-only).
-        slug = getattr(self, "active_org_handle", "")
-        return f"{self.base_url}/{slug}/settings"
-
     def _open_keys_panel(self) -> None:
-        """The keys section sits in the settings page's "API keys" tab (client-side
-        daisyUI tabs); check its radio so the panel is visible."""
-        self.page.goto(self._keys_page_url(), wait_until="load")
+        """The keys section sits in the org settings page's "API keys" tab (client-side daisyUI
+        tabs): in by the sidebar's owner-only Settings entry, then check the tab's radio."""
+        self.follow_org_nav(getattr(self, "active_org_handle", ""), "settings")
         self.page.get_by_role("tab", name="API keys", exact=True).check()
 
     def create_api_key(self, name: str) -> None:
@@ -34,8 +29,8 @@ class ApiKeysBrowserMixin(BrowserBase):
     def assert_api_key_secret_revealed(self) -> None:
         assert self._api_key_secret is not None
         assert self._api_key_secret.startswith("lbk_"), self._api_key_secret
-        # After a reload the secret is gone for good — only the prefix remains.
-        self.page.goto(self._keys_page_url(), wait_until="load")
+        # Reloading the page they are on is what "once" means: the secret is gone for good.
+        self.page.reload(wait_until="load")
         assert self.page.locator("[data-api-key-secret]").count() == 0
 
     def _sessionless_get(self, path: str) -> httpx.Response:

@@ -73,7 +73,10 @@ from tests.meta.test_loop_verdicts import (
 )
 from tests.meta.test_ratchets import (
     test_dom_state_is_asserted_through_expect,
+    test_every_deep_link_is_an_arrival_from_outside,
     test_every_log_line_is_named_by_a_dotted_snake_case_literal,
+    test_every_request_the_driver_fires_itself_is_named,
+    test_no_assertion_step_reaches_a_page_by_url,
     test_no_compensating_assert_narrows_an_annotation,
     test_no_state_wait_is_a_sleep,
     test_nothing_reruns_a_failing_test,
@@ -243,12 +246,12 @@ CLAIMS = [
         "Nothing business-critical is mocked",
         "monkeypatch sites in the e2e lanes would have to be enumerated and named",
     ),
-    waived(
+    held(
         "goto-is-a-smell",
         "For browser testing, goto() or fetch() should be treated as possible code smells",
-        "39 of the driver's deep links sit under a `then`, listed one by one in "
-        "test_no_assertion_step_reaches_a_page_by_url; a `given` may navigate and a `when` may "
-        "when the URL is arrived at from outside, so that list is the whole backlog",
+        test_no_assertion_step_reaches_a_page_by_url,
+        test_every_deep_link_is_an_arrival_from_outside,
+        test_every_request_the_driver_fires_itself_is_named,
     ),
     waived(
         "personal-org-at-signup",
@@ -514,12 +517,12 @@ CLAIMS = [
         test_distinct_emails_get_isolated_sessions,
         test_distinct_emails_get_isolated_contexts,
     ),
-    waived(
+    held(
         "browser-navigates-like-a-human",
         "The browser driver navigates like a human: entry point, then links and forms — no deep "
         "URLs.",
-        "an assertion that navigates is the sharp case and has its own list; unjudged are "
-        "the 57 setup and action navigations, frozen as a total",
+        test_no_assertion_step_reaches_a_page_by_url,
+        test_every_deep_link_is_an_arrival_from_outside,
     ),
     held(
         "expect-not-is-visible",
@@ -576,4 +579,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 31
+UNHELD_TODAY = 29

@@ -20,10 +20,9 @@ class IssuesBrowserMixin(BrowserBase):
         seed(_do)
 
     def open_issues_screen(self) -> None:
-        as_admin = getattr(self, "_as_admin", None)  # console mixin
-        assert as_admin is not None
-        as_admin()
-        self.page.goto(f"{self.base_url}/console/issues", wait_until="load")
+        open_link = getattr(self, "open_console_link", None)  # console mixin
+        assert open_link is not None
+        open_link("/console/issues")
 
     def _issue_row(self, title: str):
         return self.page.locator("[data-issue]", has_text=title).first
@@ -39,8 +38,16 @@ class IssuesBrowserMixin(BrowserBase):
         self.page.get_by_role("button", name=button).click()
         self.page.wait_for_selector(f"[data-status-badge]:has-text('{status}')", timeout=5000)
 
+    def _back_to_the_list(self) -> None:
+        """Triage leaves the admin on an issue's detail page; the way back to the list is the
+        page's own link, which is also what a human would click."""
+        back = self.page.get_by_role("link", name="← Issues")
+        if back.count():
+            back.click()
+            self.page.wait_for_selector("[data-issue]", timeout=5000)
+
     def assert_issue_listed(self, title: str, status: str, count: int) -> None:
-        self.open_issues_screen()
+        self._back_to_the_list()
         row = self.page.locator(f"[data-issue-status='{status}']", has_text=title).first
         row.wait_for(timeout=5000)
         assert f"×{count}" in row.inner_text(), f"×{count} not in row: {row.inner_text()!r}"

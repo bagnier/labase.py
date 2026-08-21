@@ -11,4 +11,4 @@ Feature: Handle option
     Given a user is signed in as "plain@labase.dev"
     And a server admin is signed in as "root@example.com"
     When the admin sets the "profile" setting "handle_enabled" to "false"
-    Then the handle option is not offered
+    Then the handle option is not offered to "plain@labase.dev"

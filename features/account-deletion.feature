@@ -24,7 +24,7 @@ Feature: Account deletion
     Given a visitor signs in with email "leaving@labase.dev" and password "Test1234!"
     And a server admin is signed in as "root@example.com"
     When the admin sets the "profile" setting "account_deletion_enabled" to "false"
-    Then the account deletion option is not offered
+    Then the account deletion option is not offered to "leaving@labase.dev"
 
   # Alice is its only owner, so her departure would leave it unmanageable: it is reaped whole
   # rather than left ownerless, and Bob — still a member — sees it gone from his own list.

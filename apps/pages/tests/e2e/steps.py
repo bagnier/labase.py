@@ -126,9 +126,9 @@ def step_cannot_edit(driver, slug):
     driver.assert_cannot_edit(slug)
 
 
-@then(parsers.parse('a visitor can view "{slug}" under org "{org_name}"'))
-def step_visitor_can_view(driver, slug, org_name):
-    driver.assert_visitor_can_view(slug, org_name)
+@then("they are allowed to see it")
+def step_visitor_allowed(driver):
+    driver.assert_visitor_allowed()
 
 
 @when(parsers.parse('a visitor opens "{slug}" under org "{org_name}"'))

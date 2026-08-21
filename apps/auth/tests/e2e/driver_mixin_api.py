@@ -21,16 +21,32 @@ class AuthApiMixin(ApiBase):
         self._confirmation_requested_at: datetime | None = None
         self._totp_secret: str | None = None
         self._mfa_challenge: dict | None = None
+        self._visitor_page: str | None = None
         super().reset_session()
 
     # ── HTML page access (auth smoke flows) ────────────────────────────────────
     def visit(self, path: str) -> None:
         self.response = self.client().get(path, follow_redirects=True)
 
-    def assert_page_accessible(self, path: str, contains: str) -> None:
-        resp = self.client().get(path)
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-        assert contains in resp.text, f"'{contains}' not found in response"
+    # The front door — fetched once by the `when`, so the assertions that follow read the page
+    # the visitor opened rather than one of their own.
+    def start_to_sign_in(self) -> None:
+        self._visitor_page = self._visitor_get("/auth/login")
+
+    def start_to_register(self) -> None:
+        self._visitor_page = self._visitor_get("/auth/register")
+
+    def _visitor_get(self, path: str) -> str:
+        resp = self.client_for(VISITOR).get(path, headers={"accept": "text/html"})
+        assert resp.status_code == 200, f"GET {path}: {resp.status_code}"
+        return resp.text
+
+    def assert_visitor_page_offers(self, contains: str) -> None:
+        assert contains in self._visitor_html(), f"'{contains}' not on the page the visitor opened"
+
+    def _visitor_html(self) -> str:
+        assert self._visitor_page is not None, "the visitor opened no page"
+        return self._visitor_page
 
     def assert_page_loaded(self) -> None:
         assert self.response.status_code == 200, f"Expected 200, got {self.response.status_code}"
@@ -219,23 +235,20 @@ class AuthApiMixin(ApiBase):
     def assert_totp_rejected(self) -> None:
         assert self.response.status_code == 401, f"expected 401, got {self.response.status_code}"
 
-    def assert_twofa_not_offered(self) -> None:
-        resp = self.client().post("/profile/2fa/enroll", headers={"accept": "application/json"})
+    def assert_twofa_not_offered(self, email: str) -> None:
+        resp = self.client_for(email).post(
+            "/profile/2fa/enroll", headers={"accept": "application/json"}
+        )
         assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
 
     # ── OAuth social sign-in ───────────────────────────────────────────────────
-    def _login_page_html(self) -> str:
-        resp = self.client_for(VISITOR).get("/auth/login", headers={"accept": "text/html"})
-        assert resp.status_code == 200, f"GET /auth/login: {resp.status_code}"
-        return resp.text
-
     def assert_oauth_offered(self, provider: str) -> None:
-        assert f'data-oauth-provider="{provider}"' in self._login_page_html(), (
+        assert f'data-oauth-provider="{provider}"' in self._visitor_html(), (
             f"no {provider} button on the sign-in page"
         )
 
     def assert_oauth_not_offered(self, provider: str) -> None:
-        assert f'data-oauth-provider="{provider}"' not in self._login_page_html(), (
+        assert f'data-oauth-provider="{provider}"' not in self._visitor_html(), (
             f"unexpected {provider} button on the sign-in page"
         )
 
@@ -256,10 +269,10 @@ class AuthApiMixin(ApiBase):
 
     # ── Passkeys ───────────────────────────────────────────────────────────────
     def assert_passkey_signin_offered(self) -> None:
-        assert "data-passkey-signin" in self._login_page_html(), "no passkey button"
+        assert "data-passkey-signin" in self._visitor_html(), "no passkey button"
 
     def assert_passkey_signin_not_offered(self) -> None:
-        assert "data-passkey-signin" not in self._login_page_html(), "unexpected passkey button"
+        assert "data-passkey-signin" not in self._visitor_html(), "unexpected passkey button"
 
     def add_passkey(self) -> None:
         self._passkey_device = PasskeyDevice()

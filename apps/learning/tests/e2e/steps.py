@@ -117,7 +117,6 @@ def step_start_session(driver, name):
 
 @given(parsers.parse('"{name}" looks at today\'s cards'))
 @when(parsers.parse('"{name}" looks at today\'s cards'))
-@then(parsers.parse('"{name}" looks at today\'s cards'))
 def step_look_today(driver, name):
     driver.look_today(name)
 

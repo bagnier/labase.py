@@ -50,4 +50,4 @@ Feature: Two-factor authentication (TOTP)
     Given a visitor signs in with email "vault@labase.dev" and password "Test1234!"
     And a server admin is signed in as "root@example.com"
     When the admin sets the "users" setting "two_factor_enabled" to "false"
-    Then the two-factor option is not offered
+    Then the two-factor option is not offered to "vault@labase.dev"

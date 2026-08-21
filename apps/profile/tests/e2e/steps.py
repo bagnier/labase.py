@@ -91,9 +91,9 @@ def step_assert_email_change_rejected(driver):
     driver.assert_email_change_rejected()
 
 
-@then("the email change option is not offered")
-def step_assert_email_change_not_offered(driver):
-    driver.assert_email_change_not_offered()
+@then(parsers.parse('the email change option is not offered to "{email}"'))
+def step_assert_email_change_not_offered(driver, email):
+    driver.assert_email_change_not_offered(email)
 
 
 @when(parsers.parse('they delete their account confirming with password "{pw}"'))
@@ -114,9 +114,9 @@ def step_assert_deletion_rejected(driver):
     driver.assert_account_deletion_rejected()
 
 
-@then("the account deletion option is not offered")
-def step_assert_deletion_not_offered(driver):
-    driver.assert_account_deletion_not_offered()
+@then(parsers.parse('the account deletion option is not offered to "{email}"'))
+def step_assert_deletion_not_offered(driver, email):
+    driver.assert_account_deletion_not_offered(email)
 
 
 @when("they upload a PNG image as their avatar")
@@ -139,11 +139,11 @@ def step_assert_avatar_rejected(driver):
     driver.assert_avatar_rejected()
 
 
-@then("the avatar option is not offered")
-def step_assert_avatar_not_offered(driver):
-    driver.assert_avatar_not_offered()
+@then(parsers.parse('the avatar option is not offered to "{email}"'))
+def step_assert_avatar_not_offered(driver, email):
+    driver.assert_avatar_not_offered(email)
 
 
-@then("the handle option is not offered")
-def step_assert_handle_not_offered(driver):
-    driver.assert_handle_not_offered()
+@then(parsers.parse('the handle option is not offered to "{email}"'))
+def step_assert_handle_not_offered(driver, email):
+    driver.assert_handle_not_offered(email)

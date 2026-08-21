@@ -35,4 +35,4 @@ Feature: Email change
     Given a visitor signs in with email "moving@labase.dev" and password "Test1234!"
     And a server admin is signed in as "root@example.com"
     When the admin sets the "profile" setting "email_change_enabled" to "false"
-    Then the email change option is not offered
+    Then the email change option is not offered to "moving@labase.dev"

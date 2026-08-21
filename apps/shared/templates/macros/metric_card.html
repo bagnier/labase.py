@@ -1,4 +1,10 @@
-{% macro metric_card(label, icon, value=none, desc='') %}
+{% macro metric_card(label, icon, value=none, desc='', href=none) %}
+  {# `href` makes the figure the way into what it counts: a screen nothing links to is a screen
+     nobody reaches. Wrapped like the console's own cards, not restyled. #}
+  {% if href %}
+    <a href="{{ href }}"
+       class="block hover:-translate-y-0.5 transition-transform rounded-box">
+  {% endif %}
   <div class="stat bg-base-100 border border-base-300 rounded-box">
     <div class="stat-figure text-primary">
       <i class="ph ph-{{ icon }} ph-lg" aria-hidden="true"></i>
@@ -7,4 +13,5 @@
     <div class="stat-value">{{ value if value is not none else '—' }}</div>
     <div class="stat-desc">{{ desc if value is not none else 'No data yet' }}</div>
   </div>
+  {% if href %}</a>{% endif %}
 {% endmacro %}

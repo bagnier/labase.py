@@ -50,9 +50,10 @@ class ProfileApiMixin(ApiBase):
             f"expected 400, got {self.response.status_code} {self.response.text}"
         )
 
-    def assert_email_change_not_offered(self) -> None:
-        # REST face of "the option is gone": the endpoint itself answers 404.
-        resp = self.client().post(
+    def assert_email_change_not_offered(self, email: str) -> None:
+        # REST face of "the option is gone": the endpoint itself answers 404 — asked as the
+        # account the switch concerns, not as the admin who flipped it.
+        resp = self.client_for(email).post(
             "/profile/email",
             json={"new_email": "probe@labase.dev", "current_password": "x"},
             headers={"accept": "application/json"},
@@ -73,8 +74,8 @@ class ProfileApiMixin(ApiBase):
     def assert_account_deletion_rejected(self) -> None:
         assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
 
-    def assert_account_deletion_not_offered(self) -> None:
-        resp = self.client().request(
+    def assert_account_deletion_not_offered(self, email: str) -> None:
+        resp = self.client_for(email).request(
             "DELETE",
             "/profile",
             json={"current_password": "x"},
@@ -100,12 +101,16 @@ class ProfileApiMixin(ApiBase):
     def assert_avatar_rejected(self) -> None:
         assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
 
-    def assert_avatar_not_offered(self) -> None:
-        self.upload_avatar("probe.png", b"\x89PNG", "image/png")
-        assert self.response.status_code == 404, f"expected 404, got {self.response.status_code}"
+    def assert_avatar_not_offered(self, email: str) -> None:
+        resp = self.client_for(email).post(
+            "/profile/avatar",
+            files={"file": ("probe.png", b"\x89PNG", "image/png")},
+            headers={"accept": "application/json"},
+        )
+        assert resp.status_code == 404, f"expected 404, got {resp.status_code}"
 
-    def assert_handle_not_offered(self) -> None:
-        resp = self.client().post(
+    def assert_handle_not_offered(self, email: str) -> None:
+        resp = self.client_for(email).post(
             "/profile", json={"handle": "probe"}, headers={"accept": "application/json"}
         )
         assert resp.status_code == 404, f"expected 404, got {resp.status_code} {resp.text}"

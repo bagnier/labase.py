@@ -98,8 +98,9 @@ class LearningBrowserMixin(BrowserBase):
         return f"{self.base_url}/{self._learn_handle[key]}/learning{path}"
 
     def _goto_today(self, key: str):
+        """Into today's session by the sidebar entry — the only way in that a learner has."""
         page = self._lpage(key)
-        page.goto(self._url(key, "/sessions"), wait_until="load")
+        self.follow_org_nav(self._learn_handle[key], "learning/sessions", page)
         return page
 
     def _focus_card(self, page, ext: str) -> None:
@@ -232,19 +233,22 @@ class LearningBrowserMixin(BrowserBase):
         assert text == answer, f"answer {text!r} != {answer!r}"
 
     def look_resources(self, name: str) -> None:
-        key = self._user(name)
-        self._lpage(key).goto(self._url(key, "/resources"), wait_until="load")
-
-    # ── assertions ──────────────────────────────────────────────────────────────
-    def assert_due_count(self, name: str, n: int) -> None:
+        """The “Resources to review” button on today's session — where the learner finds them."""
         key = self._user(name)
         page = self._goto_today(key)
+        with page.expect_navigation(wait_until="load"):
+            page.get_by_role("link", name="Resources to review").click()
+
+    # ── assertions (on the page the session left behind) ────────────────────────
+    def assert_due_count(self, name: str, n: int) -> None:
+        key = self._user(name)
+        page = self._lpage(key)
         count = int(page.locator("#learning-session").get_attribute("data-due-count") or "0")
         assert count == n, f"expected {n} due cards, got {count}"
 
     def assert_first_card(self, name: str, ext: str, question: str) -> None:
         key = self._user(name)
-        page = self._goto_today(key)
+        page = self._lpage(key)
         first = page.locator(".lcard").first
         assert first.get_attribute("data-card-id") == ext
         text = (first.locator("[data-question]").text_content() or "").strip()
@@ -252,7 +256,7 @@ class LearningBrowserMixin(BrowserBase):
 
     def assert_order(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
-        page = self._goto_today(key)
+        page = self._lpage(key)
         cards = page.locator(".lcard").all()
         actual = [
             (c.get_attribute("data-card-id"), int(c.get_attribute("data-card-level") or "0"))
@@ -264,7 +268,6 @@ class LearningBrowserMixin(BrowserBase):
     def assert_resources(self, name: str, rows: list[dict]) -> None:
         key = self._user(name)
         page = self._lpage(key)
-        page.goto(self._url(key, "/resources"), wait_until="load")
         items = page.locator("#learning-resources > [data-resource-deck]").all()
         actual = [
             (
@@ -279,7 +282,6 @@ class LearningBrowserMixin(BrowserBase):
     def assert_no_resources(self, name: str) -> None:
         key = self._user(name)
         page = self._lpage(key)
-        page.goto(self._url(key, "/resources"), wait_until="load")
         assert page.locator("#learning-resources [data-empty]").count() == 1
 
     def _current(self) -> str:

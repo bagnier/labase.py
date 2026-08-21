@@ -15,7 +15,8 @@
     {% set week_desc = ('+' ~ wd ~ ' vs last week') if wd > 0
     else (wd ~ ' vs last week') if wd < 0 else 'same as last week' %}
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {{ metric_card('Members', 'users', value=member_count, desc='in ' ~ org.name) }}
+      {{ metric_card('Members', 'users', value=member_count, desc='in ' ~ org.name,
+        href='/' ~ org_handle ~ '/members') }}
       {{ metric_card('Pending invitations', 'envelope', value=pending_invitations,
         desc='awaiting an answer' if pending_invitations else 'none waiting') }}
       {{ metric_card('This week', 'pulse', value=activity_stats.this_week, desc=week_desc) }}

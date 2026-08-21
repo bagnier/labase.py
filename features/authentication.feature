@@ -7,9 +7,11 @@ Feature: Authentication
     Given a user is registered with email "test@labase.dev" and password "Test1234!"
 
   Scenario: A visitor can initiate sign-in
+    When a visitor starts to sign in
     Then the sign-in form is available
 
   Scenario: A visitor can initiate registration
+    When a visitor starts to register
     Then the registration form is available
 
   Scenario: A registered user can sign in

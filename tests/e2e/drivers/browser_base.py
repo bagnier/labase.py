@@ -140,7 +140,12 @@ class BrowserBase:
 
     # ── unified multi-user context management ──────────────────────────────────
     def _setup_context(self, ctx: BrowserContext, email: str) -> None:
-        """Register and login `email` in a fresh browser context."""
+        """Register and login `email` in a fresh browser context.
+
+        The page that signed in *becomes* that actor's page: a real sign-in leaves someone on
+        their landing page, sidebar and all, which is what lets every later move be a click on a
+        link rather than a URL typed for them.
+        """
         page = ctx.new_page()
         page.goto(f"{self.base_url}/auth/register")
         page.fill("input[name=email]", email)
@@ -155,7 +160,7 @@ class BrowserBase:
         page.fill("input[name=password]", _PASSWORD)
         page.click("button[type=submit]")
         page.wait_for_url("**/profile", timeout=10000)
-        page.close()
+        self._pages[email] = page
 
     def context_for(self, email: str) -> BrowserContext:
         """Get or create an isolated browser context (distinct cookie jar) for `email`.
@@ -234,6 +239,41 @@ class BrowserBase:
 
     def clear_acting_email(self) -> None:
         self._acting_email = _VISITOR
+
+    # ── navigating like a human ────────────────────────────────────────────────
+    def follow_org_nav(
+        self, handle: str, segment: str, page: Page | None = None
+    ) -> Response | None:
+        """Enter an org section the way a person does: the sidebar entry the app registered at
+        mount. Located by the link's own href — every org in the sidebar repeats the same labels
+        — and the sidebar folds every org but the current one, so unfold it first.
+        """
+        target = page if page is not None else self.page
+        link = f"a[href='/{handle}/{segment}']"
+        if target.locator(f"aside {link}").count() == 0:
+            # The sidebar lists the orgs known when the page rendered; a membership granted since
+            # only shows up on the next one. Load the page again, as its reader would.
+            target.reload(wait_until="load")
+        assert target.locator(f"aside {link}").count(), (
+            f"nothing in the sidebar leads to /{handle}/{segment} at {target.url!r} — "
+            "this actor is not in that org, is not offered that section, or never signed in"
+        )
+        if target.locator(f"aside details:not([open]) ul {link}").count():
+            # Another org's sections are folded away. Its name is the way in — and landing on its
+            # dashboard is what makes it the current org, whose sections the sidebar unfolds.
+            with target.expect_navigation(wait_until="load"):
+                target.locator(f"aside a[href='/{handle}/dashboard']").first.click()
+        with target.expect_navigation(wait_until="load") as nav:
+            target.locator(f"aside {link}").first.click()
+        return nav.value
+
+    def follow_to_profile(self, page: Page | None = None) -> Response | None:
+        """The account link in the sidebar footer, reachable from every signed-in page — how a
+        person gets to their own profile, and the only way this driver takes."""
+        target = page if page is not None else self.page
+        with target.expect_navigation(wait_until="load") as nav:
+            target.locator("aside a[href='/profile']").first.click()
+        return nav.value
 
     # ── HTMX interaction helpers ───────────────────────────────────────────────
     def _arm_dialogs(self, page: Page) -> None:

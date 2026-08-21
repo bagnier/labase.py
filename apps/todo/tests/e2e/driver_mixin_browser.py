@@ -5,10 +5,6 @@ from tests.e2e.drivers.browser_base import BrowserBase
 
 
 class TodoBrowserMixin(BrowserBase):
-    def _todos_url(self) -> str:
-        slug = getattr(self, "active_org_handle", "")
-        return f"{self.base_url}/{slug}/todos"
-
     def _dom_todo_rows(self) -> list:
         # :not([data-empty]) — an empty list renders the empty_state macro's <li>.
         return self.page.locator("#todo-list > li:not([data-empty])").all()
@@ -27,10 +23,11 @@ class TodoBrowserMixin(BrowserBase):
             self.add_todo(title)
 
     def view_todo_list(self) -> None:
-        self.last_response = self.page.goto(self._todos_url(), wait_until="load")
+        self._goto_todos()
 
     def _goto_todos(self) -> None:
-        self.page.goto(self._todos_url(), wait_until="load")
+        """Into the list by the sidebar entry — the only way in that a person has."""
+        self.follow_org_nav(getattr(self, "active_org_handle", ""), "todos")
 
     def try_add_todo(self, title: str) -> None:
         # HTMX drops 4xx swaps; fire the request the form would send and keep the
@@ -111,7 +108,7 @@ class TodoBrowserMixin(BrowserBase):
         self._goto_todos()
 
     def move_todo_above(self, title: str, above: str) -> None:
-        self.page.goto(self._todos_url(), wait_until="load")
+        self._goto_todos()
         source_id = self._dom_todo_id_by_title(title)
         target_id = self._dom_todo_id_by_title(above)
         slug = getattr(self, "active_org_handle", "")
@@ -127,10 +124,10 @@ class TodoBrowserMixin(BrowserBase):
                 })""",
                 [url, target_id],
             )
-        self.page.goto(self._todos_url(), wait_until="load")
+        self._goto_todos()
 
     def move_todo_to_end(self, title: str) -> None:
-        self.page.goto(self._todos_url(), wait_until="load")
+        self._goto_todos()
         source_id = self._dom_todo_id_by_title(title)
         rows = self._dom_todo_rows()
         last_row = rows[-1]
@@ -139,7 +136,7 @@ class TodoBrowserMixin(BrowserBase):
             lambda r: f"/todos/{source_id}/position" in r.url and r.request.method == "PUT"
         ):
             self.page.locator(source).drag_to(last_row, target_position={"x": 10, "y": 40})
-        self.page.goto(self._todos_url(), wait_until="load")
+        self._goto_todos()
 
     def assert_todo_list_order(self, titles: list[str]) -> None:
         actual = self._dom_todo_titles()
@@ -177,7 +174,7 @@ class TodoBrowserMixin(BrowserBase):
         slug = getattr(self, "secondary_handles", {}).get(
             email, getattr(self, "active_org_handle", "")
         )
-        page.goto(f"{self.base_url}/{slug}/todos", wait_until="load")
+        self.follow_org_nav(slug, "todos", page)
         self._viewed_todo_titles = [
             row.locator("[data-title-id]").inner_text().strip()
             for row in page.locator("#todo-list > li:not([data-empty])").all()
@@ -192,6 +189,6 @@ class TodoBrowserMixin(BrowserBase):
     def assert_completion_badge(self, badge: str) -> None:
         # The counter is maintained by the durable async consumer of todo.ticked.
         self.drain_task_queue()
-        slug = getattr(self, "active_org_handle", "")
-        self.page.goto(f"{self.base_url}/{slug}/dashboard", wait_until="load")
+        # The card sits on the org dashboard, one sidebar click from the list they ticked it in.
+        self.follow_org_nav(getattr(self, "active_org_handle", ""), "dashboard")
         expect(self.page.locator('[data-overview="todo"]')).to_contain_text(badge)

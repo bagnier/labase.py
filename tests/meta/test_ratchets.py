@@ -1,13 +1,13 @@
-"""Rules the README states as absolutes, held as counts that may only go down.
+"""Rules the README states as absolutes, held as the enumerated list of what is left.
 
 Some of the base's conventions are already true everywhere and need a guard so they stay that way;
 others are true almost everywhere, and the README states them anyway. Both are held the same way
 here — the sites are enumerated and frozen — because the two only differ by today's number.
 
-A frozen count is not a suppression. A suppression makes a rule stop applying to a site; a freeze
-makes the site *visible*, in one list, with the number that has to reach zero for the README's
-sentence to become plainly true. The tell is direction: nothing here may grow without an edit to
-this file, and every edit to these numbers is a decision someone made on purpose.
+A frozen list is not a suppression. A suppression makes a rule stop applying to a site; a freeze
+makes the site *visible*, in one place, next to the reason it is there. The tell is direction:
+nothing here may grow without an edit to this file, and every edit is a decision someone made on
+purpose.
 
 ``tests/meta/claims.py`` says which of these hold a README claim outright and which only measure
 the distance left — a claim whose ratchet is not yet at zero stays waived, and names its ratchet.
@@ -47,67 +47,66 @@ _DEFENSIVE_READS = {
     "apps/timeline/infra/repository.py": 1,
 }
 
-# Deep links the browser driver still takes instead of following a link or submitting a form,
-# split by the Gherkin step that reaches them — because the step is what decides whether a URL is
-# a shortcut or the scenario itself.
+# Every navigation the browser mixins still make by URL, and why each one is an *arrival* rather
+# than a deep link. The rule the list applies: a person reaches a page by following a link or
+# submitting a form, except when they arrive from outside the app entirely — the front door, a
+# mailed link, an invitation token, an address typed by someone who is not signed in, a machine
+# endpoint, a download. Everything else goes through the sidebar, a card or a button, like a human.
 #
-# A `given` may navigate: arranging a state is not what the scenario is about, and a driver that
-# clicked its way through five pages of setup would be testing the setup. A `when` may navigate
-# when the URL is genuinely where a person arrives from outside the app — a mailed confirmation
-# link, an OAuth callback, an invitation token, an anonymous visitor typing an address, a machine
-# endpoint. The base already reasons this way (`confirm_address_via_link` calls its own goto "the
-# one legitimate goto").
-#
-# A `then` may never navigate, and that is the list below. An assertion that fetches its own page
-# by URL asserts about a page nobody reached: it passes while the app's own route to that page is
-# broken, which is the failure the browser lane exists to catch. Thirty-nine methods, and the
-# only direction this set may move is smaller.
-_NAVIGATES_UNDER_AN_ASSERTION = {
-    "api_keys.assert_api_key_secret_revealed",
-    "auth.assert_oauth_not_offered",
-    "auth.assert_oauth_offered",
-    "auth.assert_page_accessible",
-    "auth.assert_passkey_listed",
-    "auth.assert_passkey_signin_not_offered",
-    "auth.assert_passkey_signin_offered",
-    "auth.assert_twofa_enabled",
-    "auth.assert_twofa_not_offered",
-    "auth.open_accounts_screen",
-    "calendar._cal_goto",
-    "console._goto_admins",
-    "console.assert_can_open_console",
-    "console.assert_refused_console",
-    "console.open_console_settings",
-    "files._goto_files",
-    "issues.open_issues_screen",
-    "learning._goto_today",
-    "learning.assert_no_resources",
-    "learning.assert_resources",
-    "organizations._goto_members",
-    "organizations._overview_text",
-    "organizations._read_org_cards_from_profile",
-    "organizations.assert_is_owner",
-    "organizations.assert_workspace_card",
-    "pages._goto_list",
-    "pages._goto_nav_manager",
-    "pages.assert_cannot_edit",
-    "pages.assert_view_contains",
-    "pages.assert_visitor_can_view",
-    "profile.assert_account_deletion_not_offered",
-    "profile.assert_avatar_not_offered",
-    "profile.assert_avatar_shown",
-    "profile.assert_email_change_not_offered",
-    "profile.assert_email_read_only",
-    "profile.assert_handle",
-    "profile.assert_handle_not_offered",
-    "timeline.open_timeline",
-    "todo.assert_completion_badge",
+# A `then` may never navigate at all, whatever the reason: an assertion that fetches its own page
+# asserts about a page nobody reached, and keeps passing after the app's own way there breaks.
+# ``test_no_assertion_step_reaches_a_page_by_url`` holds that half; this list holds the other.
+_ARRIVES_FROM_OUTSIDE = {
+    # ── the front door: the sign-in and registration pages ──────────────────────────────────────
+    "auth.start_to_sign_in": "a visitor sets out to sign in",
+    "auth.start_to_register": "a visitor sets out to register",
+    "auth.sign_in": "the sign-in page — twice, since an already-signed-in context is dropped first",
+    "auth.register": "the registration page",
+    "auth.ensure_registered": "the registration page, for a user a scenario needs to exist",
+    "auth.start_oauth": "the sign-in page, to click the provider button on it",
+    "auth.request_password_reset": 'the sign-in page, to follow its "Forgot password?" link',
+    "auth.sign_in_with_passkey": "the sign-in page, to run the WebAuthn ceremony from it",
+    "console.sign_in_as_admin": "the sign-in page, on the admin's own context",
+    "console._login": "the sign-in page, to re-issue a token carrying a fresh claim",
+    # ── a link someone was sent ─────────────────────────────────────────────────────────────────
+    "auth.reset_password_via_email": "the recovery link, read from the mail catcher",
+    "auth.confirm_address_via_link": "the confirmation link, read from the mail catcher",
+    "profile.confirm_email_change": "the email-change link, read from the mail catcher",
+    "organizations._open_invitation_page": "an invitation token, as its recipient received it",
+    "organizations._accept_invitation_as": "an invitation token, as its recipient received it",
+    "organizations._follow_accept_to_registration": "an invitation token, by someone with no "
+    "account yet",
+    # ── an address typed by someone the app does not know ───────────────────────────────────────
+    "auth.visit": "the address a scenario says is typed",
+    "profile.visit_profile_unauthenticated": "a protected address, with no session",
+    "console.visit_console_unauthenticated": "a protected address, with no session",
+    "console.try_open_console": "a protected address, by a user who is not an admin",
+    "organizations.visit_org_dashboard_unauthenticated": "a protected address, with no session",
+    "pages.visitor_open": "a public page's address, by an anonymous visitor",
+    "pages.visitor_open_list": "an org's public listing, by an anonymous visitor",
+    "pages.visitor_view_public_page": "the featured org's public page, by an anonymous visitor",
+    # ── what a browser fetches rather than renders ──────────────────────────────────────────────
+    "files.download_file": "the download URL the file row carries",
+    "files._goto_and_capture_download": "a share token's download URL",
+    "metrics.fetch_metrics_exposition": "the Prometheus endpoint, which no page links to",
 }
 
-# Deep links reached only from `given` and `when`. Frozen as a total rather than a list: each one
-# is a case-by-case judgement (is this URL arrived at from outside?), so the number is here to
-# stop the count growing while the set above is worked down.
-_DEEP_LINKS_ELSEWHERE = 57
+# Requests the driver fires itself instead of clicking. Five of the six are the base's own answer
+# to "hiding the control is not proof": the affordance is absent for this actor, so the request it
+# would have sent is fired from their own authenticated context and the server has to be the one
+# refusing. The sixth is the smell the README warns about, written down rather than left implicit.
+_ASKS_THE_SERVER_DIRECTLY = {
+    "organizations._probe_blocked": "the shared probe: the hidden control's own request, so a "
+    "refusal is the server's and not the template's",
+    "organizations.try_create_org": "the create request, so the owned-org limit is enforced by "
+    "the server",
+    "pages.try_publish_to_members": "the visibility request a member has no control for",
+    "console.try_set_console_setting": "the settings request a non-admin has no control for",
+    "console.assert_refused_console": "the console request the missing button would have sent",
+    "todo.move_todo_above": "the reorder PUT, fired by hand: this one stands in for an "
+    "interaction the driver never managed to drive — SortableJS's drop-above — where its "
+    "neighbour move_todo_to_end really drags. The one site here that is a smell",
+}
 
 # The driver substrate's own navigations, outside any mixin: the entry point each scenario starts
 # from, and the isolation tests that assert two contexts really are two.
@@ -281,15 +280,54 @@ def test_no_assertion_step_reaches_a_page_by_url():
         method for method, (kinds, _) in _mixin_navigations().items() if "then" in kinds
     }
 
-    assert under_assertion == _NAVIGATES_UNDER_AN_ASSERTION
+    assert under_assertion == set()
 
 
-def test_the_deep_links_outside_assertions_do_not_grow():
-    """Setup and action navigations, counted rather than listed: each is its own judgement about
-    whether a person would really arrive at that URL from outside the app."""
-    elsewhere = sum(count for kinds, count in _mixin_navigations().values() if "then" not in kinds)
+def test_every_deep_link_is_an_arrival_from_outside():
+    """The other half: what is left may only be someone coming in from outside the app. A new
+    name here is a claim that a person really arrives at that URL — the reason is written next to
+    it, and nothing else navigates by URL at all."""
+    navigating = set(_mixin_navigations())
 
-    assert elsewhere == _DEEP_LINKS_ELSEWHERE
+    assert navigating == set(_ARRIVES_FROM_OUTSIDE)
+
+
+def _fires_its_own_request(fn: ast.AST) -> bool:
+    """Does this method send a request rather than click? Either through Playwright's own
+    ``fetch``, or through a ``fetch(`` written into a script it evaluates in the page."""
+    return any(
+        (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "fetch"
+        )
+        or (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and "fetch(" in node.value
+        )
+        for node in ast.walk(fn)
+    )
+
+
+def test_every_request_the_driver_fires_itself_is_named():
+    """The other half of the README's sentence: ``fetch()`` is a smell too. Firing a request the
+    UI would not let this actor send is how the base proves the *server* refuses — but each site
+    has to say so, and the one that only stands in for an interaction says that instead."""
+    firing = set()
+    for mixin in sorted(_APPS.glob("*/tests/e2e/driver_mixin_browser.py")):
+        app = mixin.relative_to(_APPS).parts[0]
+        for cls in ast.parse(mixin.read_text()).body:
+            if not isinstance(cls, ast.ClassDef):
+                continue
+            firing |= {
+                f"{app}.{fn.name}"
+                for fn in cls.body
+                if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef)
+                and _fires_its_own_request(fn)
+            }
+
+    assert firing == set(_ASKS_THE_SERVER_DIRECTLY)
 
 
 def test_the_driver_substrate_navigates_only_where_a_scenario_starts():

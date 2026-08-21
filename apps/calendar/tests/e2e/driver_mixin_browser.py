@@ -11,11 +11,9 @@ class CalendarBrowserMixin(BrowserBase):
             self, "active_org_handle", ""
         )
 
-    def _cal_url(self, handle: str | None = None) -> str:
-        return f"{self.base_url}/{handle or getattr(self, 'active_org_handle', '')}/calendar"
-
     def _cal_goto(self, handle: str | None = None) -> None:
-        self.page.goto(self._cal_url(handle), wait_until="load")
+        """Into the calendar by the sidebar entry — the only way in that a person has."""
+        self.follow_org_nav(handle or getattr(self, "active_org_handle", ""), "calendar")
 
     def _cal_time_fields(self, start: str, end: str) -> dict[str, str]:
         start_date, start_time = start.split(" ")

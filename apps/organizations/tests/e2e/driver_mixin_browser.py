@@ -31,7 +31,7 @@ class OrgBrowserMixin(BrowserBase):
         super().reset_session()
 
     def _read_org_cards_from_profile(self, page: Page) -> list[dict]:
-        page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.follow_to_profile(page)
         cards = page.locator("[data-organisation-card]").all()
         result = []
         for card in cards:
@@ -44,11 +44,8 @@ class OrgBrowserMixin(BrowserBase):
     def _fetch_orgs_for(self, email: str) -> list[dict]:
         if email == getattr(self, "primary_email", ""):
             return self._read_org_cards_from_profile(self.page)
-        page = self.context_for(email).new_page()
-        try:
-            return self._read_org_cards_from_profile(page)
-        finally:
-            page.close()
+        # That actor's own browser, left on the page their sign-in landed on.
+        return self._read_org_cards_from_profile(self.page_for(email))
 
     def _active_slug(self) -> str:
         if self.active_org_handle:
@@ -58,11 +55,15 @@ class OrgBrowserMixin(BrowserBase):
         self.active_org_handle = orgs[0]["handle"]
         return self.active_org_handle
 
-    def _goto_members(self) -> Page:
-        """Navigate the acting user's page to the active org's members page."""
-        page = self.page
-        page.goto(f"{self.base_url}/{self._active_slug()}/members", wait_until="load")
-        return page
+    def _goto_members(self, page: Page | None = None, handle: str | None = None) -> Page:
+        """Into the member list the way anyone in the org gets there: the org dashboard, then its
+        Members card — the one link to that screen, owner or not."""
+        target = page if page is not None else self.page
+        slug = handle or self._active_slug()
+        self.follow_org_nav(slug, "dashboard", target)
+        with target.expect_navigation(wait_until="load"):
+            target.locator(f"a[href='/{slug}/members']").first.click()
+        return target
 
     def _user_id_for(self, email: str) -> str:
         users = find_users(email)
@@ -93,8 +94,8 @@ class OrgBrowserMixin(BrowserBase):
     def assert_is_owner(self) -> None:
         email = getattr(self, "last_registered_email", None)
         assert email, "No registered email stored"
-        self.page.goto(f"{self.base_url}/{self._active_slug()}/members", wait_until="load")
-        el = self.page.query_selector(f"[data-member-email='{email}'][data-member-role='owner']")
+        page = self._goto_members()
+        el = page.query_selector(f"[data-member-email='{email}'][data-member-role='owner']")
         assert el is not None, f"{email!r} is not shown as owner on members page"
 
     def view_org_list_as(self, email: str) -> None:
@@ -109,11 +110,12 @@ class OrgBrowserMixin(BrowserBase):
 
     def join_org_as_member(self, org_name: str, email: str) -> None:
         slug = org_name.lower().replace(" ", "-")
-        owner_page = self.context_for(f"owner-{slug}@example.com").new_page()
+        owner = f"owner-{slug}@example.com"
+        self.context_for(owner)
+        owner_page = self.page_for(owner)  # their own browser, where their sign-in left it
         handle = self._own_org_handle(owner_page, slug)
         self._rename_org(owner_page, handle, org_name)
         token = self._invite_and_read_token(owner_page, handle, email)
-        owner_page.close()
         self._accept_invitation_as(email, token)
 
     def _own_org_handle(self, owner_page: Page, slug: str) -> str:
@@ -122,7 +124,7 @@ class OrgBrowserMixin(BrowserBase):
         return orgs[0]["handle"]
 
     def _rename_org(self, owner_page: Page, handle: str, org_name: str) -> None:
-        owner_page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
+        self.follow_org_nav(handle, "settings", owner_page)
         save = owner_page.locator("form:has(input[name=name])").get_by_role("button", name="Save")
         self.submit_labelled_form(
             owner_page,
@@ -133,7 +135,7 @@ class OrgBrowserMixin(BrowserBase):
         )
 
     def _invite_and_read_token(self, owner_page: Page, handle: str, email: str) -> str:
-        owner_page.goto(f"{self.base_url}/{handle}/members", wait_until="load")
+        self._goto_members(owner_page, handle)
         owner_page.click("[data-invite-toggle]")
         self.submit_labelled_form(
             owner_page,
@@ -175,11 +177,12 @@ class OrgBrowserMixin(BrowserBase):
 
     def rename_org(self, new_name: str) -> None:
         slug = self._active_slug()
-        self.page.goto(f"{self.base_url}/{slug}/settings", wait_until="load")
-        # The editable name form is owner-only; absent for members (settings is 403).
-        if self.page.get_by_label("Organisation name").count() == 0:
+        # Settings is owner-only, sidebar entry included: a member is offered no way in, so the
+        # server itself has to be the one refusing the request the form would have sent.
+        if self.page.locator(f"aside a[href='/{slug}/settings']").count() == 0:
             self._probe_blocked("PATCH", f"/{slug}", form={"name": new_name})
             return
+        self.follow_org_nav(slug, "settings")
         save = self.page.locator("form:has(input[name=name])").get_by_role("button", name="Save")
         self.last_response = self.submit_labelled_form(
             self.page,
@@ -203,8 +206,17 @@ class OrgBrowserMixin(BrowserBase):
     def view_member_list(self) -> None:
         self._goto_members()
 
+    def _the_member_list(self):
+        """The member list is the org's, and the account that can always read it is the one that
+        owns it — a member who just left cannot, and an assertion read off their 403 would pass
+        for the wrong reason."""
+        owner = getattr(self, "primary_email", "")
+        if owner:
+            self.set_acting_email(owner)
+        return self._goto_members()
+
     def assert_member_with_role(self, email: str, role: str) -> None:
-        page = self._goto_members()
+        page = self._the_member_list()
         selector = f"[data-member-email='{email}'][data-member-role='{role}']"
         el = page.query_selector(selector)
         member_list = page.query_selector("#member-list")
@@ -214,7 +226,7 @@ class OrgBrowserMixin(BrowserBase):
         )
 
     def assert_member_absent(self, email: str) -> None:
-        page = self._goto_members()
+        page = self._the_member_list()
         el = page.query_selector(f"[data-member-email='{email}']")
         assert el is None, f"{email!r} should be absent from members page but was found"
 
@@ -264,7 +276,6 @@ class OrgBrowserMixin(BrowserBase):
             page.wait_for_load_state("load")
 
     def assert_workspace_card(self, org_name: str) -> None:
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
         assert self.page.query_selector(f'[data-organisation-card="{org_name}"]') is not None, (
             f"Workspace card for {org_name!r} not found on dashboard"
         )
@@ -464,8 +475,7 @@ class OrgBrowserMixin(BrowserBase):
         assert message.lower() in detail.lower(), f"Expected error {message!r} in detail {detail!r}"
 
     def view_org_dashboard(self) -> None:
-        slug = self.active_org_handle
-        self.last_response = self.page.goto(f"{self.base_url}/{slug}/dashboard", wait_until="load")
+        self.last_response = self.follow_org_nav(self.active_org_handle, "dashboard")
 
     def assert_org_dashboard_visible(self) -> None:
         assert self.last_response is not None
@@ -478,8 +488,6 @@ class OrgBrowserMixin(BrowserBase):
 
     # ── Dashboard overviews (verified via the rendered web view) ─────────────────
     def _overview_text(self, key: str) -> str:
-        slug = self.active_org_handle
-        self.page.goto(f"{self.base_url}/{slug}/dashboard", wait_until="load")
         card = self.page.locator(f"[data-overview='{key}']")
         assert card.count() > 0, f"Overview {key!r} not found on dashboard"
         return card.inner_text()

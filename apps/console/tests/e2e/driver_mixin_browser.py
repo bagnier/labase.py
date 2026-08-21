@@ -1,3 +1,5 @@
+from playwright.sync_api import Page, Response
+
 from apps.auth.tests.given_helpers import (
     clear_all_admin_roles,
     create_user,
@@ -32,7 +34,9 @@ class ConsoleBrowserMixin(BrowserBase):
         setup_page.get_by_label("Password").fill(_ADMIN_PASSWORD)
         setup_page.get_by_role("button", name="Sign in").click()
         setup_page.wait_for_url("**/profile", timeout=10000)
-        setup_page.close()
+        # The page that signed in stays the admin's page: a real sign-in leaves them on their
+        # landing page, which is where every later click starts from.
+        self._pages[email] = setup_page
         self.set_acting_email(email)
 
     def _as_admin(self) -> None:
@@ -41,9 +45,17 @@ class ConsoleBrowserMixin(BrowserBase):
         assert self._admin_acting is not None
         self.set_acting_email(self._admin_acting)
 
+    def _open_console(self, page: Page | None = None) -> Response | None:
+        """The console button in the top bar, shown on every page to whoever may enter — the way
+        an admin gets there, and the only one this driver takes."""
+        target = page if page is not None else self.page
+        with target.expect_navigation(wait_until="load") as nav:
+            target.locator("a[href='/console']").first.click()
+        return nav.value
+
     def visit_console(self) -> None:
         self._as_admin()
-        self.last_response = self.page.goto(f"{self.base_url}/console", wait_until="load")
+        self.last_response = self._open_console()
 
     def visit_console_unauthenticated(self) -> None:
         self.last_response = self.page.goto(f"{self.base_url}/console", wait_until="load")
@@ -67,9 +79,17 @@ class ConsoleBrowserMixin(BrowserBase):
         assert text in card.inner_text(), f"{text!r} not in {key!r} overview"
 
     # ── settings ───────────────────────────────────────────────────────────────
-    def open_console_settings(self, app: str) -> None:
+    def open_console_link(self, href: str) -> Response | None:
+        """Console, then whatever it offers pointing at ``href`` — the tile of an app, or one of
+        the operational screens. 'Click an app to configure it', as the page says."""
         self._as_admin()
-        self.page.goto(f"{self.base_url}/console/{app}", wait_until="load")
+        self._open_console()
+        with self.page.expect_navigation(wait_until="load") as nav:
+            self.page.locator(f"a[href='{href}']").first.click()
+        return nav.value
+
+    def open_console_settings(self, app: str) -> None:
+        self.open_console_link(f"/console/{app}")
 
     def _setting_locator(self, key: str):
         return self.page.locator(f"[data-setting-key='{key}']")
@@ -206,20 +226,27 @@ class ConsoleBrowserMixin(BrowserBase):
         self.set_acting_email(email)
 
     def assert_can_open_console(self, email: str) -> None:
-        resp = self.page_for(email).goto(f"{self.base_url}/console", wait_until="load")
+        """Can open it: their own pages offer the way in, and following it lands on the console."""
+        page = self.page_for(email)
+        assert page.locator("a[href='/console']").count(), f"no console offered to {email!r}"
+        resp = self._open_console(page)
         assert resp is not None, "Expected 200, got no response"
         assert resp.status == 200, f"Expected 200, got {resp.status}"
 
     def assert_refused_console(self, email: str) -> None:
-        resp = self.page_for(email).goto(f"{self.base_url}/console", wait_until="load")
-        assert resp is not None, "Expected 404, got no response"
+        """Refused says two things, and hiding the button is only the first: the server itself
+        must answer no to the request the button would have sent."""
+        page = self.page_for(email)
+        assert page.locator("a[href='/console']").count() == 0, f"console offered to {email!r}"
+        resp = page.request.fetch(f"{self.base_url}/console", method="GET")
         assert resp.status == 404, f"Expected 404, got {resp.status}"
 
-    def _goto_admins(self):
-        self._as_admin()
-        page = self.page
-        page.goto(f"{self.base_url}/console/admins", wait_until="load")
-        return page
+    def _goto_admins(self) -> Page:
+        """Console → the Users tile → its “Manage admins” link, the path the console lays out."""
+        self.open_console_settings("users")
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.locator("a[href='/console/admins']").first.click()
+        return self.page
 
     def open_admins_page(self) -> None:
         self._goto_admins()

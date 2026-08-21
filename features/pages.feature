@@ -65,7 +65,8 @@ Feature: Org CMS pages
   Scenario: The owner publishes a page publicly
     Given a draft page titled "Welcome" with slug "welcome" and content "hi"
     When they publish the page "welcome" publicly
-    Then a visitor can view "welcome" under org "Acme"
+    And a visitor opens "welcome" under org "Acme"
+    Then they are allowed to see it
 
   Scenario: A visitor cannot view a draft page
     Given a draft page titled "Secret" with slug "secret" and content "hush"

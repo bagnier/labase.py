@@ -43,7 +43,8 @@ class OrgFileBrowserMixin(BrowserBase):
         return f"{self.base_url}/{s}/files"
 
     def _goto_files(self) -> None:
-        self.page.goto(self._files_url(), wait_until="load")
+        """Into the file list by the sidebar entry — the only way in that a person has."""
+        self.follow_org_nav(self.active_org_handle, "files")
 
     def _dom_file_rows(self) -> list:
         return self.page.locator("#file-list > li[data-file-id]").all()
@@ -140,7 +141,7 @@ class OrgFileBrowserMixin(BrowserBase):
         delete_user_if_exists(email)
         self.context_for(email)  # isolated context: registers + logs in via _setup_context
         self.set_acting_email(email)  # self.page → email's isolated context
-        self.page.goto(f"{self.base_url}/profile", wait_until="load")
+        self.follow_to_profile()
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
         handle = href.strip("/").split("/")[0]
@@ -151,7 +152,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self._rename_org_from_settings_page(self.page, handle, org_name)
 
     def _rename_org_from_settings_page(self, page: Page, handle: str, org_name: str) -> None:
-        page.goto(f"{self.base_url}/{handle}/settings", wait_until="load")
+        self.follow_org_nav(handle, "settings", page)
         page.fill("input[name=name]", org_name)
         with page.expect_response(lambda r: f"/{handle}" in r.url and r.request.method == "PATCH"):
             page.click("form:has(input[name=name]) button[type=submit]")
@@ -183,39 +184,28 @@ class OrgFileBrowserMixin(BrowserBase):
         self.secondary_handles[email] = self.active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
-        ctx = self.context_for(email)
         slug = self.secondary_handles.get(email, self.active_org_handle)
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
-        page = ctx.new_page()
-        try:
-            page.goto(f"{self.base_url}/{slug}/files", wait_until="load")
-            page.set_input_files(
-                "input[type=file][name=file]",
-                {"name": filename, "mimeType": "application/octet-stream", "buffer": content},
-            )
-            with page.expect_response(
-                lambda r: f"/{slug}/files" in r.url and r.request.method == "POST",
-                timeout=30000,
-            ):
-                page.get_by_role("button", name="Upload").click()
-        finally:
-            page.close()
+        page = self.page_for(email)  # that actor's own browser, where their sign-in left it
+        self.follow_org_nav(slug, "files", page)
+        page.set_input_files(
+            "input[type=file][name=file]",
+            {"name": filename, "mimeType": "application/octet-stream", "buffer": content},
+        )
+        with page.expect_response(
+            lambda r: f"/{slug}/files" in r.url and r.request.method == "POST",
+            timeout=30000,
+        ):
+            page.get_by_role("button", name="Upload").click()
 
     def create_user_in_org(self, email: str, org_name: str) -> None:
-        ctx = self.context_for(email)
-        page = ctx.new_page()
-        try:
-            orgs = self._read_org_cards_from_profile(page)
-            assert orgs, f"No org for {email}"
-            handle = orgs[0]["handle"]
-        finally:
-            page.close()
+        self.context_for(email)
+        page = self.page_for(email)  # their own browser, signed in and on their landing page
+        orgs = self._read_org_cards_from_profile(page)
+        assert orgs, f"No org for {email}"
+        handle = orgs[0]["handle"]
         self.secondary_handles[email] = handle
-        settings_page = ctx.new_page()
-        try:
-            self._rename_org_from_settings_page(settings_page, handle, org_name)
-        finally:
-            settings_page.close()
+        self._rename_org_from_settings_page(page, handle, org_name)
 
     def _primary_org_id(self) -> str:
         orgs = orgs_for_user(user_id_for_email(self.primary_email))
@@ -247,15 +237,12 @@ class OrgFileBrowserMixin(BrowserBase):
         self._share_link_url = url_input.input_value()
 
     def view_file_list_as(self, email: str) -> None:
-        ctx = self.context_for(email)
+        self.context_for(email)
         slug = self.secondary_handles.get(email, self.active_org_handle)
-        page = ctx.new_page()
-        try:
-            self.last_response = page.goto(f"{self.base_url}/{slug}/files", wait_until="load")
-            rows = page.locator("#file-list > li[data-file-id]").all()
-            self._last_file_names = [row.get_by_role("link").inner_text().strip() for row in rows]
-        finally:
-            page.close()
+        page = self.page_for(email)  # their own browser, following their own sidebar
+        self.last_response = self.follow_org_nav(slug, "files", page)
+        rows = page.locator("#file-list > li[data-file-id]").all()
+        self._last_file_names = [row.get_by_role("link").inner_text().strip() for row in rows]
 
     def _goto_and_capture_download(self, page, url: str) -> None:
         """Navigate to a URL that redirects to a storage download; capture the redirect response."""

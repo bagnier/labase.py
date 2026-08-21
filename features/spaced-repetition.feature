@@ -71,8 +71,8 @@ Feature: spaced repetition
     And "Alice" marks the card "PY001" as learned
     And "Alice" sees 9 cards to learn
     When 2 days pass
-    Then "Alice" looks at today's cards
-    And "Alice" sees 10 cards to learn
+    And "Alice" looks at today's cards
+    Then "Alice" sees 10 cards to learn
 
   Scenario: the first review interval is 1 day
     Given "Alice" starts a review session

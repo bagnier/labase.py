@@ -13,13 +13,19 @@ class ProfileBrowserMixin(BrowserBase):
     def _profile_url(self) -> str:
         return f"{self.base_url}/profile"
 
+    def _look_at_own_profile(self, email: str) -> None:
+        """A switch flipped by an admin is checked on the account it concerns, not on the admin's:
+        step onto that actor's browser and follow their own account link to their profile."""
+        self.set_acting_email(email)
+        self.follow_to_profile()
+
     def _open_profile_tab(self, label: str) -> None:
         """Profile sections live in client-side daisyUI tabs; check the tab radio so
         its panel is visible before interacting with the controls inside it."""
         self.page.get_by_role("tab", name=label, exact=True).check()
 
     def view_profile(self) -> None:
-        self.last_response = self.page.goto(self._profile_url(), wait_until="load")
+        self.last_response = self.follow_to_profile()
 
     # ── email change ──────────────────────────────────────────────────────────
     def request_email_change(self, new_email: str, password: str) -> None:
@@ -27,7 +33,7 @@ class ProfileBrowserMixin(BrowserBase):
         # change leaves the new address registered; GoTrue refuses reusing it.
         delete_user_if_exists(new_email)
         self._email_change_requested_at = datetime.now(UTC)
-        self.page.goto(self._profile_url(), wait_until="load")
+        self.follow_to_profile()
         self._open_profile_tab("Email")
         section = self.page.locator("[data-email-change]")
         section.get_by_label("New email").fill(new_email)
@@ -60,15 +66,15 @@ class ProfileBrowserMixin(BrowserBase):
         alert = self.page.locator(".alert-error", has_text="incorrect")
         alert.wait_for(timeout=5000)
 
-    def assert_email_change_not_offered(self) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+    def assert_email_change_not_offered(self, email: str) -> None:
+        self._look_at_own_profile(email)
         assert self.page.locator("[data-email-change]").count() == 0, (
             "email change form should be hidden when the option is off"
         )
 
     # ── avatar & handle switches ──────────────────────────────────────────────
     def upload_avatar(self, filename: str, content: bytes, mime: str) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+        self.follow_to_profile()
         self._open_profile_tab("Profile")
         self.page.set_input_files(
             "[data-avatar-upload] input[type=file]",
@@ -78,7 +84,6 @@ class ProfileBrowserMixin(BrowserBase):
         self.page.wait_for_load_state("load")
 
     def assert_avatar_shown(self) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
         self._open_profile_tab("Profile")
         self.page.wait_for_selector("[data-avatar]", timeout=5000)
 
@@ -89,21 +94,21 @@ class ProfileBrowserMixin(BrowserBase):
         alert = self.page.locator("[data-avatar-upload] .alert-error")
         alert.wait_for(timeout=5000)
 
-    def assert_avatar_not_offered(self) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+    def assert_avatar_not_offered(self, email: str) -> None:
+        self._look_at_own_profile(email)
         assert self.page.locator("[data-avatar-upload]").count() == 0, (
             "avatar upload should be hidden when the option is off"
         )
 
-    def assert_handle_not_offered(self) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+    def assert_handle_not_offered(self, email: str) -> None:
+        self._look_at_own_profile(email)
         assert self.page.locator("[data-handle-form]").count() == 0, (
             "handle form should be hidden when the option is off"
         )
 
     # ── account deletion ──────────────────────────────────────────────────────
     def delete_account(self, password: str) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+        self.follow_to_profile()
         self._open_profile_tab("Account")
         section = self.page.locator("[data-account-deletion]")
         section.get_by_label("Your password").fill(password)
@@ -115,14 +120,14 @@ class ProfileBrowserMixin(BrowserBase):
         alert = self.page.locator("[data-account-deletion] .alert-error", has_text="incorrect")
         alert.wait_for(timeout=5000)
 
-    def assert_account_deletion_not_offered(self) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+    def assert_account_deletion_not_offered(self, email: str) -> None:
+        self._look_at_own_profile(email)
         assert self.page.locator("[data-account-deletion]").count() == 0, (
             "danger zone should be hidden when the option is off"
         )
 
     def update_handle(self, name: str) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+        self.follow_to_profile()
         self._open_profile_tab("Profile")
         self.last_response = self.submit_labelled_form(
             self.page,
@@ -133,7 +138,9 @@ class ProfileBrowserMixin(BrowserBase):
         )
 
     def assert_handle(self, name: str | None) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
+        # What the *stored* handle is: a refused update leaves the typed value in the field, so
+        # reading it back means reloading the page they are on, as a person would.
+        self.page.reload(wait_until="load")
         self._open_profile_tab("Profile")
         value = self.page.get_by_label("Handle").input_value()
         if name:
@@ -148,7 +155,6 @@ class ProfileBrowserMixin(BrowserBase):
         )
 
     def assert_email_read_only(self) -> None:
-        self.page.goto(self._profile_url(), wait_until="load")
         self._open_profile_tab("Email")
         assert self.page.locator("input#email[disabled]").count() == 1, (
             "Expected the sign-in email to be shown as a read-only (disabled) field"
@@ -163,7 +169,7 @@ class ProfileBrowserMixin(BrowserBase):
         )
 
     def view_dashboard(self) -> None:
-        self.last_response = self.page.goto(self._profile_url(), wait_until="load")
+        self.last_response = self.follow_to_profile()
 
     def assert_link_to_todos(self) -> None:
         assert self.page.query_selector("a[href*='/todos']") is not None, (

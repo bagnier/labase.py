@@ -85,14 +85,24 @@ def step_change_password(driver, current, new):
     driver.change_password(current, new)
 
 
+@when("a visitor starts to sign in")
+def step_start_to_sign_in(driver):
+    driver.start_to_sign_in()
+
+
+@when("a visitor starts to register")
+def step_start_to_register(driver):
+    driver.start_to_register()
+
+
 @then("the sign-in form is available")
 def step_sign_in_form_available(driver):
-    driver.assert_page_accessible("/auth/login", "Sign in")
+    driver.assert_visitor_page_offers("Sign in")
 
 
 @then("the registration form is available")
 def step_registration_form_available(driver):
-    driver.assert_page_accessible("/auth/register", "Create an account")
+    driver.assert_visitor_page_offers("Create an account")
 
 
 @given("they are on their profile page")
@@ -343,6 +353,6 @@ def step_assert_code_rejected(driver):
     driver.assert_totp_rejected()
 
 
-@then("the two-factor option is not offered")
-def step_assert_twofa_not_offered(driver):
-    driver.assert_twofa_not_offered()
+@then(parsers.parse('the two-factor option is not offered to "{email}"'))
+def step_assert_twofa_not_offered(driver, email):
+    driver.assert_twofa_not_offered(email)

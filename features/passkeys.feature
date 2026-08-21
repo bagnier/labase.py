@@ -12,6 +12,7 @@ Feature: Passkeys (WebAuthn)
     Given the server already has an admin
 
   Scenario: Passkey sign-in stays hidden until enabled
+    When a visitor starts to sign in
     Then the sign-in page does not offer passkey sign-in
 
   Scenario: Enrolling a passkey and signing in with it
@@ -20,7 +21,8 @@ Feature: Passkeys (WebAuthn)
     Given a user is signed in as "peggy@example.com"
     When they add a passkey
     Then their passkey is listed on their profile
-    And the sign-in page offers passkey sign-in
+    When a visitor starts to sign in
+    Then the sign-in page offers passkey sign-in
     When they sign out
     And a visitor signs in with their passkey
     Then they are on their profile page
