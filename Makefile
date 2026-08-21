@@ -173,22 +173,26 @@ backup-storage:
 	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/backup_storage.py --dest $(if $(DEST),$(DEST),backups/storage)
 
 # --- Tests ---
-# Both lanes run under `coverage run`, never under pytest-cov: pytest loads `-p tests.plugin`
-# — which imports the whole `apps/` graph — before pytest-cov would start measuring, so every
-# module body read as missed and the figure was off by 44 points (see tests/test_config.py).
-# `--parallel-mode` gives each lane its own data file; `coverage-report` combines them.
+# Coverage wraps pytest from the outside, never from a plugin inside it — why, and what that
+# forbids, sits next to the flags themselves in pyproject's addopts. `--parallel-mode` gives each
+# lane its own data file, which `coverage-report` combines.
+# Off by default: the inner loop asks "did I break something", which coverage does not answer —
+# and a *one-lane* figure answers a different question badly, painting two thirds of the
+# TemplateResponse sites red because the api lane never renders HTML. `ci` sets COV=1; by hand:
+#   make test COV=1 test-e2e COV=1 coverage-report coverage-html
+PYTEST = $(if $(COV),uv run coverage run --parallel-mode -m pytest,uv run pytest)
 # No wall-clock guard here on purpose. There was one, warning past a threshold derived from a
 # duration measured once — and a duration in a Makefile rots: the suite tripled in test count and
 # the warning started firing on a healthy stack, which is how a guardrail becomes noise. What it
 # was a proxy for is measured directly and cannot go stale: `test_local_stack_is_responsive`
 # times each dependency on every run and fails the suite loudly when the stack is degraded.
 test: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run coverage run --parallel-mode -m pytest
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST)
 
 # The browser lane counts too: its Hypercorn server runs in-process, so it is the only lane
 # that renders HTML — the api driver asks for JSON on every request.
 test-e2e: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run coverage run --parallel-mode -m pytest apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
 
 # flakehunt: run the browser scenarios N times and aggregate failures per test — an
 # intermittent test fails a few runs out of N, where a single run only says "red" or "green".
@@ -208,10 +212,14 @@ coverage-erase:
 # The floor gates `ci`, not `test`: it judges the combined figure, and a single lane cannot be
 # held to it — two floors would be two numbers to keep honest. Raise COV_MIN when the real
 # number moves up, never lower it to fit.
+# `--sort=miss --skip-covered` because an average hides: the total says how the repo is doing,
+# and these two say which file to open. Sorted by dead statements rather than by percentage,
+# which ranks by module size as much as by neglect — 9 dead lines in a 60-statement file read
+# worse than 111 in an 862-statement one.
 COV_MIN ?= 90
 coverage-report:
 	uv run coverage combine
-	uv run coverage report --fail-under=$(COV_MIN)
+	uv run coverage report --sort=miss --skip-covered --fail-under=$(COV_MIN)
 
 # Both read what `coverage-report` combined — parallel mode leaves one file per lane until then.
 coverage-xml:
@@ -234,7 +242,7 @@ check: lint test
 # --keep-going: run every step even if one fails, so no failure is hidden
 # behind an earlier one; the sub-make exits non-zero if any step failed.
 ci:
-	$(MAKE) --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-report coverage-xml
+	$(MAKE) COV=1 --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-report coverage-xml
 
 # finalize: js-build + fix, then the full read-only gate and the suite. Run before committing.
 # Wider than `fix + test` on purpose: the wave that raised ruff shipped two regressions a
