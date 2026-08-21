@@ -1,5 +1,3 @@
-import re
-
 import httpx
 
 from tests.e2e.drivers.api_base import VISITOR, ApiBase
@@ -13,6 +11,8 @@ def _decode(content: str) -> str:
 class PagesApiMixin(ApiBase):
     def reset_session(self) -> None:
         self._pages_list: list[dict] | None = None
+        self._viewed_page: dict | None = None
+        self._public_page: dict | None = None
         super().reset_session()
 
     # ── helpers ────────────────────────────────────────────────────────────────
@@ -82,6 +82,7 @@ class PagesApiMixin(ApiBase):
 
     def view_page(self, slug: str) -> None:
         self.response = self.client().get(self._pages_url(f"/{slug}"))
+        self._viewed_page = self.response.json() if self.response.status_code == 200 else None
 
     def view_pages_list(self) -> None:
         self._pages_list = self._list()
@@ -91,6 +92,7 @@ class PagesApiMixin(ApiBase):
 
     def visitor_view_public_page(self, slug: str) -> None:
         self.response = self.client_for(VISITOR).get(f"/{slug}")
+        self._public_page = self.response.json() if self.response.status_code == 200 else None
 
     def visitor_open_list(self, _org_name: str) -> None:
         self._pages_list = self._list(client=self.client_for(VISITOR))
@@ -133,30 +135,40 @@ class PagesApiMixin(ApiBase):
             f"page '{slug}' visibility is {page['visibility']!r}, expected {visibility!r}"
         )
 
-    def assert_view_contains(self, slug: str, text: str) -> None:
-        resp = self.client().get(self._pages_url(f"/{slug}"))
+    def _page(self, slug: str, client: httpx.Client | None = None) -> dict:
+        """The page as its own document — the JSON face, not the markup the browser lane reads."""
+        resp = (client or self.client()).get(self._pages_url(f"/{slug}"))
         assert resp.status_code == 200, f"view got {resp.status_code}: {resp.text}"
-        assert text in resp.text, f"'{text}' not found in rendered page"
+        return resp.json()
+
+    def assert_view_contains(self, slug: str, text: str) -> None:
+        content = self._page(slug)["content"]
+        assert text in content, f"'{text}' not found in the page's content: {content!r}"
+
+    def _opened_page(self) -> dict:
+        page = getattr(self, "_viewed_page", None)
+        assert page is not None, "open the page first"
+        return page
 
     def assert_rendered_heading(self, text: str) -> None:
-        assert re.search(rf"<h1[^>]*>{re.escape(text)}</h1>", self.response.text), (
-            f"heading '{text}' not found in: {self.response.text}"
-        )
+        # The heading *is* the title: the template renders it, the Markdown engine never sees it
+        # (apps/pages/domain/render.py). The datum is what this lane can hold; the browser lane
+        # holds the <h1> itself.
+        title = self._opened_page()["title"]
+        assert title == text, f"page title is {title!r}, expected {text!r}"
 
     def assert_rendered_list_item(self, text: str) -> None:
-        assert f"<li>{text}</li>" in self.response.text, (
-            f"list item '{text}' not found in: {self.response.text}"
-        )
+        body = self._opened_page()["body_html"]
+        assert f"<li>{text}</li>" in body, f"list item '{text}' not in the rendered body: {body!r}"
 
     def assert_rendered_shown(self) -> None:
-        assert self.response.status_code == 200, (
-            f"expected 200, got {self.response.status_code}: {self.response.text}"
-        )
+        body = self._opened_page()["body_html"]
+        assert body, "the page came back with no rendered body"
 
     def assert_cannot_edit(self, slug: str) -> None:
-        resp = self.client().get(self._pages_url(f"/{slug}"))
-        assert resp.status_code == 200, f"view got {resp.status_code}"
-        assert f"/pages/{slug}/edit" not in resp.text, "an edit link is shown but should not be"
+        # The page says so itself, rather than the absence of a link in a template saying it for
+        # it — and the neighbouring scenario holds the server side of the same rule.
+        assert self._page(slug)["can_edit"] is False, f"page '{slug}' reports itself editable"
 
     def assert_visible_to_members(self, slug: str) -> None:
         assert self.response.status_code == 200, f"publish failed: {self.response.status_code}"
@@ -246,13 +258,15 @@ class PagesApiMixin(ApiBase):
         titles = [c["title"] for c in candidates]
         assert title not in titles, f"'{title}' should not be a nav candidate: {titles}"
 
+    def _public_nav_titles(self) -> list[str]:
+        page = getattr(self, "_public_page", None)
+        assert page is not None, "open the public page first"
+        return [item["title"] for item in page["nav"]]
+
     def assert_page_nav_shows(self, title: str) -> None:
-        assert title in self.response.text, f"nav link to '{title}' not found in page"
+        titles = self._public_nav_titles()
+        assert title in titles, f"nav link to '{title}' not offered: {titles}"
 
     def assert_page_nav_not_shows(self, title: str) -> None:
-        content = self.response.text
-        nav_start = content.find('aria-label="Page navigation"')
-        if nav_start == -1:
-            return
-        nav_section = content[nav_start : nav_start + 2000]
-        assert title not in nav_section, f"'{title}' should not appear in page nav"
+        titles = self._public_nav_titles()
+        assert title not in titles, f"'{title}' should not be in the page nav: {titles}"

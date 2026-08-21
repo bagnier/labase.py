@@ -61,6 +61,27 @@ class PageRead(BaseModel):
     created_at: datetime
 
 
+class PageDocumentRead(PageRead):
+    """A page as its own document — what the detail view knows and the list deliberately does not:
+    the Markdown a client would edit, the HTML the app rendered from it, and whether this reader
+    may change it. Rendering is the app's job, so a consumer never has to run a Markdown engine
+    to show a page, nor scrape one to learn it is read-only.
+    """
+
+    content: str
+    body_html: str
+    can_edit: bool
+
+    @classmethod
+    def of(cls, page: Page, *, body_html: str, can_edit: bool) -> PageDocumentRead:
+        return cls(
+            **PageRead.model_validate(page).model_dump(),
+            content=page.content,
+            body_html=body_html,
+            can_edit=can_edit,
+        )
+
+
 class PageNavItem(Base, UUIDPk, OrgScoped, Positioned, Versioned, Timestamped):
     __tablename__ = "page_nav_items"
     __table_args__ = (UniqueConstraint("org_id", "page_id"),)

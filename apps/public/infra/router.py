@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import OptionalCurrentUser
 from apps.organizations.contract.queries import OrganizationRead, org_by_handle
 from apps.pages.contract.public import get_public_nav, get_public_page, get_public_pages
 from apps.public.contract.current import PublicSettings
-from apps.shared.http import with_etag
+from apps.shared.http import JSON_AND_HTML, wants_json, with_etag
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings.live import SettingsView
@@ -55,7 +55,7 @@ async def index(
     )
 
 
-@router.get("/{slug}", response_class=HTMLResponse)
+@router.get("/{slug}", responses=JSON_AND_HTML)
 async def public_page(
     slug: str,
     request: Request,
@@ -69,18 +69,25 @@ async def public_page(
     org = await org_by_handle(admin, handle)
     if org is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    view = await get_public_page(admin, org.id, slug)
-    if view is None:
+    page = await get_public_page(admin, org.id, slug)
+    if page is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     nav_items = await get_public_nav(admin, org.id)
+    if wants_json(request):
+        return JSONResponse(
+            {
+                "page": page.model_dump(mode="json"),
+                "nav": [item.model_dump(mode="json") for item in nav_items],
+            }
+        )
     return with_etag(
         request,
         templates.TemplateResponse(
             request,
             "public_page.html",
             {
-                "page": view.page,
-                "body": view.body,
+                "page": page,
+                "body": page.body_html,
                 "org": org,
                 "page_nav": nav_items,
                 "current_user": current_user,

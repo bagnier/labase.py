@@ -25,7 +25,13 @@ from apps.pages.contract.events import (
     PageUnpublished,
     PageUpdated,
 )
-from apps.pages.domain.models import NavItemRead, Page, PageRead, PageVisibility
+from apps.pages.domain.models import (
+    NavItemRead,
+    Page,
+    PageDocumentRead,
+    PageRead,
+    PageVisibility,
+)
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
     PageNavRepository,
@@ -475,7 +481,7 @@ async def view_page_by_id(
     return RedirectResponse(f"/{org_handle}/pages/{page.slug}", status_code=307)
 
 
-@public_router.get("/{org_handle}/pages/{slug}", response_class=HTMLResponse)
+@public_router.get("/{org_handle}/pages/{slug}", responses=JSON_AND_HTML)
 async def view_page(
     request: Request,
     org_handle: str,
@@ -490,6 +496,10 @@ async def view_page(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
     can_edit = _can_edit_role(page.visibility, role)
     body = render_markdown(page.content)
+    if wants_json(request):
+        return JSONResponse(
+            PageDocumentRead.of(page, body_html=body, can_edit=can_edit).model_dump(mode="json")
+        )
     if current_user:
         ctx = await fullpage_context(
             rls,

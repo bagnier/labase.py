@@ -43,8 +43,8 @@ _JSON_ONLY_GETS = {
 }
 
 # HTML only: pages with no JSON caller. The unauthenticated forms (sign in, register, the two
-# password flows), the editor forms, and the public surfaces — a landing page and a published page,
-# read by a browser and a crawler, neither of which asks for JSON.
+# password flows), the editor forms, and the landing page — a form has no JSON meaning, and the
+# data behind each editor is its own route, which does have both faces.
 _HTML_ONLY_GETS = {
     "/",
     "/auth/forgot-password",
@@ -54,9 +54,7 @@ _HTML_ONLY_GETS = {
     "/{org_handle}/calendar/new",
     "/{org_handle}/calendar/{event_id}/edit",
     "/{org_handle}/pages/new/edit",
-    "/{org_handle}/pages/{slug}",
     "/{org_handle}/pages/{slug}/edit",
-    "/{slug}",
 }
 
 
