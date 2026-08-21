@@ -112,3 +112,14 @@ Feature: Org CMS pages
     When "carol@example.com" views their pages list
     Then "Roadmap" is not in that pages list
     And "Announce" is not in that pages list
+
+  # Seeded by a durable consumer of OrganizationCreated, off the journal. Seeding is off by
+  # default under test — starter rows would break every other scenario's assertions — so this
+  # one turns it on to observe the behaviour the README advertises.
+  Scenario: A new organisation starts with its public welcome page
+    Given a server admin is signed in as "root@example.com"
+    And the admin sets the "organizations" setting "seed_welcome_content" to "true"
+    And a user is signed in as "newcomer@example.com"
+    When they view the pages list
+    Then "Welcome" appears in the pages list
+    And "Welcome" appears in the navigation

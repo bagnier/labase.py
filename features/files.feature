@@ -112,3 +112,13 @@ Feature: Org file storage
     And they have generated a share link for "rapport.pdf"
     When a non-member accesses the share link
     Then the download succeeds
+
+  # Seeded by a durable consumer of OrganizationCreated, off the journal. Seeding is off by
+  # default under test — starter rows would break every other scenario's assertions — so this
+  # one turns it on to observe the behaviour the README advertises.
+  Scenario: A new organisation starts with its welcome file
+    Given a server admin is signed in as "root@example.com"
+    And the admin sets the "organizations" setting "seed_welcome_content" to "true"
+    And a user is signed in as "newcomer@example.com"
+    When they view the file list
+    Then "welcome.txt" appears in the file list

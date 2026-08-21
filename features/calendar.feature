@@ -101,3 +101,13 @@ Feature: Org calendar
     When the admin opens the console
     Then the "calendar" overview is visible on the console
     And the "calendar" console overview shows "2 events"
+
+  # Seeded by a durable consumer of OrganizationCreated, off the journal. Seeding is off by
+  # default under test — starter rows would break every other scenario's assertions — so this
+  # one turns it on to observe the behaviour the README advertises.
+  Scenario: A new organisation starts with its welcome event
+    Given a server admin is signed in as "root@example.com"
+    And the admin sets the "organizations" setting "seed_welcome_content" to "true"
+    And a user is signed in as "newcomer@example.com"
+    When they view the calendar
+    Then "Welcome to your team calendar" appears in the calendar

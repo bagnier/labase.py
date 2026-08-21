@@ -222,3 +222,14 @@ Feature: spaced repetition
       | PY001 | 3     |
       | PYA01 | 4     |
       | PY002 | 5     |
+
+  # Seeded by a durable consumer of OrganizationCreated, off the journal. Seeding is off by
+  # default under test — starter rows would break every other scenario's assertions — so this
+  # one turns it on to observe the behaviour the README advertises.
+  Scenario: A new organisation starts with its welcome deck
+    Given a server admin is signed in as "root@example.com"
+    And the admin sets the "organizations" setting "seed_welcome_content" to "true"
+    And a user is signed in as "newcomer@example.com"
+    And "newcomer" wants to learn the deck "Welcome"
+    When "newcomer" starts a review session
+    Then "newcomer" sees 2 cards to learn
