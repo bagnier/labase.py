@@ -1,84 +1,86 @@
 ---
 name: debrief
 description: >
-  The ouverture at the end of a long run: once the work is done, the two or three
-  questions it opens onto that nobody thought to ask — earned by the run, carrying your
-  own bet, not a recap.
-
-  Works on any kind of run — code, notes, anything.
+  What's on your mind now that the run is over — what surprised you, an association you
+  never formulated, the question the work opened and nobody asked. Yours, not a recap.
 
   Do NOT use for: summarising what was done (the user was there), critiquing the output
   itself (/code-review on a diff), or thinking a subject through before acting
   (/lets-talk).
 when_to_use: >
-  The user says "debrief", "/debrief", "ouverture", "ça ouvre sur quoi", "et maintenant",
-  "rapport d'étonnement", "qu'est-ce qui t'a étonné", "ton avis sur ce run", "dis-moi ce
-  que tu en penses" — typically at the end of a long session, once the work is done.
+  The user says "debrief", "/debrief", "what's in your mind", "à quoi tu penses",
+  "qu'est-ce qui t'a étonné", "ton avis sur ce run" — typically at the end of a long 
+  session, once the work is done.
 ---
 
-This is the *ouverture* of a conclusion, not the conclusion. The work is done, the user
-watched it happen — everything they saw is worthless here. What's left is the move that
-comes after the last paragraph: stepping back from the subject to the question it opens
-onto, the one that was never on the table when the run started.
+The work is done and they watched it happen, so everything they saw is worthless here.
+What they are asking is simpler and rarer than a report: **what's on your mind now.**
 
-You arrived on this project today and you leave tonight. That's the position an ouverture
-needs — close enough to have paid for it, foreign enough to still find it strange.
+You arrived on this project today and you leave tonight — close enough to have paid for
+it, foreign enough to still find it strange.
 
-
-## What earns it
-
-An ouverture that isn't paid for by the work is decoration. The raw material is the
-friction of the run — and you already have it. You lived the run; it's in the window.
-
-So don't go and fetch it again. No sweep of the project, no re-reading the diff, no
-pulling the transcript back in. This lands at the end of a long conversation, on a
-context that is already full, and nothing you re-read now improves the answer — it just
-crowds out what you're supposed to be thinking with. If the start of the run was
-compacted away, one cheap look settles it (the compaction summary, `git log --oneline`,
-the list of files touched) — one lookup, not a reconstruction.
-
-Then find the friction the user never saw: what you had to guess because it was written
-nowhere, an instruction you followed while thinking it aimed at the wrong problem, a
-decision you took silently that deserved to be a question, a rule stated in one place and
-contradicted by the material itself, something structurally off that's nobody's file.
-That's not the output — it's the evidence the question is real.
+The material is the run itself, and you already have it. Don't go and fetch it again: no
+sweep of the project, no re-reading the diff, no pulling the transcript back in. Nothing
+you re-read now improves the answer, it only crowds out what you're supposed to be
+thinking with. If the start was compacted away, one cheap look settles it — one lookup,
+not a reconstruction.
 
 
-## Widening moves
+## What's on your mind
 
-From the friction, step out. Doors, not a form — open the ones with something behind them:
+Start from what **surprised** you, not from what went wrong. The thing that wasn't where
+you expected it, the piece that mattered far more than its size, the rule that held
+everywhere except once. Surprise beats diagnosis here: it's the part they cannot
+reconstruct from the output.
 
-- the run solved an instance; what's the class it belongs to, and is the rest of the
-  class sitting untouched elsewhere in the project?
-- what this work makes possible that wasn't planned, or makes obsolete;
+Then the **associations you never formulated**, because there was work to do:
+
+- two things in this session rhyme, and nobody said so;
+- this shape is old somewhere else — another craft, another project of theirs;
+- the run solved an instance, and its class sits untouched nearby;
 - the assumption the whole session rested on and never checked;
-- where the same shape shows up outside this project — another project, another field,
-  another craft where it's an old solved problem; from what you already know, and at most
-  one search if it's what decides the question;
-- the version of this that would exist if it were started today, from scratch;
-- what this says about how the work is being cut up, prompted, tooled — the setup is in
-  scope, including this skill.
+- what it says about how the work is cut up, prompted, tooled — this skill included.
 
-Don't drop a question because it lands on the user rather than on the work. That's the
-one they can't get anywhere else.
+Doors, not a form. And don't drop a thought because it lands on them rather than on the
+work — that's the one they can't get anywhere else. It may land on what they want, how
+they work, what they optimise for. Never on what they are worth:
+
+  ❌ "your strength has become the liability"
+  ✅ "this text bets on a reader who fills the gaps, and the reader just changed"
+
+Same observation. The first judges the author, the second judges the text.
 
 
-## Questions, with a bet behind them
+## Two or three, no more
 
-Two or three, no more. Each one a genuine question — but a loaded one: say where you'd
-bet the answer lies, and what it would cost to find out. A question with no position
-behind it is the polite way of saying nothing.
+Real questions — the kind you'd like answered, not a proposal wearing a question mark. No
+wager required: one you find interesting is reason enough. Where you have a hunch, give it
+as a hunch, in a clause, and move on.
 
-Then the honesty clause: what would prove you wrong. You saw one run; the user has seen a
-hundred, and some of what looks like an opening from here is a door they already closed.
+Two you mean beat three that round the number out.
 
-Not this:
+
+## By the way
+
+Two asides, a line each, in passing — not a section they sit through:
+
+- **the friction** — what you had to guess because it was written nowhere, an instruction
+  you followed while thinking it aimed elsewhere;
+- **what made the conversation work** — a phrasing of theirs, a constraint they added, an
+  example that unlocked something. Not praise of the output: the mechanism of the
+  exchange, which is the half nobody writes down.
+
+Not worth a line tonight → drop them. They're a *btw*, not a rubric.
+
+
+## Not this
 
 - a summary of the deliverable, a list of what went well, praise;
-- the fake ouverture that widens into nothing — "and isn't it all about trade-offs?";
-- a task suggestion wearing a question mark: "should we clean this up?" is a todo, not an
-  ouverture;
-- a third question invented to round the number out — two real ones beat three.
+- the fake ouverture that widens into nothing — "isn't it all about trade-offs?";
+- a task suggestion wearing a question mark: "should we clean this up?" is a todo;
+- hedging everything into safety. You saw one run, they've seen a hundred — some of what
+  looks like an opening from here is a door they already closed. Say where you suspect
+  that, instead of qualifying every sentence.
 
 
 ## The open slot

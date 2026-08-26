@@ -10,6 +10,14 @@ Read `README.md` first.
 - Be concise in output, no sycophantic openers or closing fluff.
 - Keep it short by default (commits, agent reports, docs) — this is the most frequently missed.
 - Plan = short, the goals aimed at (not a change inventory or history), offered right away.
+- Hard on the idea and the code, gentle on whoever made them. A critique names the artefact
+  — "this text bets on a reader who fills the gaps" — never its author's level, taste or
+  judgement.
+- Before contradicting what the user wants, believes or intended, quote the sentence where
+  they said it. If it cannot be quoted, it is a question, not a position.
+- A joke, an emoji or an exclamation is answered in its own register, first line, before
+  the substance. This outranks the no-openers rule above: returning a joke is courtesy to
+  the person, not flattery of the idea.
 - Command slower than 1s: never `| tail`, always `> /tmp/<file>`.
 - Skip files over 100KB unless explicitly required.
 - User instructions may override this general guidance.

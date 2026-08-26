@@ -30,25 +30,6 @@
       "WebFetch"
     ]
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Agent|Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "in=$(cat); [ \"$(jq -r '.agent_id // \"null\"' <<<\"$in\")\" = null ] || { echo 'a sub-agent may not spawn a sub-agent' >&2; exit 2; }",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  },
-  "env": {
-    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
-  },
-  "model": "opus",
-  "effortLevel": "high",
   "extraKnownMarketplaces": {
     "labase": {
       "source": {
@@ -59,5 +40,29 @@
   },
   "enabledPlugins": {
     "pyright-lsp@labase": true
-  }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v jq >/dev/null || { echo 'REFUSED: agent-guard needs jq on the PATH to read the call (brew install jq). It refuses rather than let an unchecked agent through.' >&2; exit 2; }; in=$(cat); [ \"$(jq -r '.agent_id // \"null\"' <<<\"$in\")\" = null ] || { echo 'REFUSED: a sub-agent may not spawn a sub-agent. Nesting hides the cost — the run is billed and timed under yours while you can neither read its brief nor stop it. Do the work yourself, or hand the need back to the main thread.' >&2; exit 2; }",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "command -v jq >/dev/null || { echo 'REFUSED: agent-guard needs jq on the PATH to read the call (brew install jq). It refuses rather than let an unchecked agent through.' >&2; exit 2; }; in=$(cat); [ \"$(jq -r '.tool_input.run_in_background // \"unset\"' <<<\"$in\")\" = true ] || { echo 'REFUSED: an agent must be launched with run_in_background: true. In the foreground the whole conversation is frozen for the length of the run — several minutes, sometimes a hundred turns — and the user cannot say a word, not even to stop it. That your next sentence depends on the result is your impatience, not their need: launch it in the background and keep talking. Set run_in_background: true explicitly, never rely on the default.' >&2; exit 2; }",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "model": "opus",
+  "effortLevel": "high"
 }

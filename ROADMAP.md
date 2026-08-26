@@ -6,9 +6,6 @@
 
 ## issues
 
-What misbehaves today. The first five come from a reading audit, each traced end to end (code,
-Postgres roles, migrations, config); only their line references have moved since.
-
 - [ ] The "one API key, one org" scope is a Python check, not an RLS policy — the key authenticates
   as its creator, and RLS alone would see every org of theirs. Handle-scoped routes are covered by
   `_ensure_api_key_scope`; the `{org_id}` + `require_owner` bypass is dormant. The real leak:
@@ -17,34 +14,11 @@ Postgres roles, migrations, config); only their line references have moved since
   [context.py:61](apps/organizations/infra/context.py#L61),
   [router.py:168](apps/organizations/infra/router.py#L168),
   [router.py:210](apps/organizations/infra/router.py#L210)
-- [ ] Switching `two_factor_enabled` off bypasses TOTP for everyone enrolled — `login` receives a
-  full AAL1 session, the challenge only fires when the server-wide setting is true, and GoTrue does
-  not backstop general AAL1 use. Deliberate: it is the admin kill-switch for a lost authenticator.
-  The real flaw is granularity — global, all-or-nothing, flippable by any console admin. → a
-  per-user reset rather than a server toggle. [router.py:233](apps/auth/infra/router.py#L233)
-- [ ] Business-event redaction matches the field *name*, not its content — a denylist of fragments
-  (`token|password|secret|apikey|otp|…`). Its scope has narrowed: `__init_subclass__` now refuses
-  the field at class definition, and the write-path mask is only a net that logs at `error` when it
-  fires. A secret named outside the fragments still gets through. Applies to `business_events`
-  only, never to logs. → an allowlist. [types.py:63-88](apps/shared/events/types.py#L63),
-  [repository.py:99](apps/shared/events/repository.py#L99)
-- [ ] Template resolution is a sorted glob with no per-app namespace — first match wins,
-  alphabetically. No real collision today (apps namespace themselves in a subdirectory); latent the
-  day two apps drop a root `base.html`. → enforce the convention, or namespace the loader.
-  [templates.py:33](apps/shared/http/templates.py#L33)
-- [ ] A mistyped `"number"` setting silently falls back to `str` — `_coerce` calls `int(raw)` and
-  returns the raw string on `ValueError`; `"1.5"` reads back as `str`, and decimals are
-  unsupported. Unreachable today: no declared setting has a decimal default, and the write path
-  rejects non-integers. [live.py:125](apps/shared/settings/live.py#L125)
 - [ ] `home.html` ignores `current_user`: a signed-in user sees "Sign in" on an instance with no
   featured org. [router.py:37](apps/public/infra/router.py#L37)
-- [ ] `/console/users`: the Accounts button and the "13 users" badge are inert.
-- [ ] `MissingGreenlet` at the end of `make perf-smoke` — one connection, once per run, under load
-  only. The chain: `_do_return_conn` → full pool → `_close_connection` → `asyncpg.close()` outside
-  the greenlet, with no application frame at all, so it fires from a finaliser. Harmless, emitted
-  by the process on its way out. Two leads ruled out (undisposed pools, a detached task collected
-  in flight), each fixed without the trace moving. → `echo_pool` on one run, to read the real
-  checkout/checkin sequence.
+
+- [ ] 29 README sentences nothing proves. `UNHELD_TODAY` is the most honest backlog in the repo:
+  every waived claim names what would have to be built to hold it. [claims.py:582](tests/meta/claims.py#L582)
 
 
 ## features
@@ -54,13 +28,12 @@ Postgres roles, migrations, config); only their line references have moved since
 - [ ] `/console/organizations` should list organisations and give metrics.
 - [ ] AARRR metrics
 - [ ] Product tour
+- [ ] Role-Based Access Control, Named permissions — `owner`/`member` is binary.
 - [ ] Awareness, `@citation`, notification
 - [ ] ApexCharts heatmap → https://apexcharts.com/javascript-chart-demos/heatmap-charts/basic/
 
 
 ## technical opportunities
-
-The first ones have their diagnosis done and their remedy named; the rest are still questions.
 
 - [ ] The correlation triplet crosses the timeline↔issues contract as loose kwargs.
   `_issue_kwargs` starts from `_event_kwargs` then `del`s two keys to land on the seven named
@@ -77,9 +50,6 @@ The first ones have their diagnosis done and their remedy named; the rest are st
   read scans sequentially, and only retention purging bounds the volume. The columns exist on
   `business_events` — issues chose JSONB. → promote the three correlation keys to real columns,
   migration + backfill. [20260818000007_issues.sql:49](supabase/migrations/20260818000007_issues.sql#L49)
-- [ ] 29 README sentences nothing proves. `UNHELD_TODAY` is the most honest backlog in the repo:
-  every waived claim names what would have to be built to hold it. The number only goes down by a
-  decision. [claims.py:582](tests/meta/claims.py#L582)
 - [ ] `AppManifest` covers 6 apps out of 16 — the other ten re-spell the mount ceremony by hand.
   That is exactly the `integration-is-declarative` claim that stays unproven.
   [host.py:80](apps/shared/integration/host.py#L80)
@@ -94,17 +64,12 @@ The first ones have their diagnosis done and their remedy named; the rest are st
   through `admin_storage()` for an authenticated user.
 - [ ] Hunt the N+1s — the instrumentation now exists (`db.heavy_request` writes a line as soon as a
   request crosses its query-count or SQL-time threshold); what is left is opening what it reports.
-- [ ] DB indexes → `index_advisor` + `hypopg` (see extensions)
 - [ ] `_ENTITY_ROUTES` in `apps/organizations` is a coupling — an app is named there to earn a deep
   link. [entity_links.py:18](apps/organizations/contract/entity_links.py#L18)
 - [ ] Should `jinja_globals` live in the host?
-- [ ] Reduce the `| None = None` — 199 occurrences under `apps/`.
 - [ ] Split the SQLAlchemy models (`domain`) from the Pydantic models (`contract`), in every app.
 - [ ] `_ACTIVITY_PAGE` and the other pagination constants should become settings.
 - [ ] `todo_completion_stats` → a real-time count, generalisable to every app.
-- [ ] Role-Based Access Control — `owner`/`member` is binary.
-- [ ] Named permissions — a permission model beyond binary roles, worth keeping in mind for the
-  first client contract asking for custom roles.
 - [ ] Dataclass or Pydantic?
 - [ ] Multi-process? One Hypercorn today, and five background loops per process.
 - [ ] Command Query Responsibility Segregation?
@@ -137,7 +102,7 @@ The first ones have their diagnosis done and their remedy named; the rest are st
 ### production readiness
 
 Going from "it runs on my machine" to "shippable and operable". Already in place, not to be
-rebuilt — four-layer observability, `health/` probes, cross-instance rate limiting, RLS, security
+rebuilt — observability, `health/` probes, cross-instance rate limiting, RLS, security
 headers, `Sec-Fetch-Site` CSRF, backup docs. The gap is not the runtime, it is the path to
 production and its operation. Full runbook in [production.md](docs/production.md).
 
@@ -165,7 +130,7 @@ once it is running.
 - [ ] Automated restore drill, and written RTO/RPO targets — the drill is documented, not
   continuously tested.
 - [ ] Runbooks — deploy, incident, on-call; SLO and error-budget doc.
-- [ ] Horizontal scaling guide — the `TaskWorker` is already multi-instance safe; document
+- [~] Horizontal scaling guide — the `TaskWorker` is already multi-instance safe; document
   pooler/worker sizing and a load test beyond `perf-smoke`.
 
 
