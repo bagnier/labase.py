@@ -13,7 +13,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase_auth.errors import AuthApiError
 
-from apps.auth.contract.admin import count_server_admins, set_server_admin
+from apps.auth.contract.admin import list_server_admins, set_server_admin
 from apps.auth.contract.events import UserCreated
 from apps.console.contract.appearance import (
     DEFAULT_THEME,
@@ -107,11 +107,21 @@ def _declare_appearance_settings() -> SettingsDeclaration:
 
 async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> None:
     # Durable consumer of UserCreated; runs on the GoTrue admin API, not ``session``.
-    # UserCreated is an immutable fact: the actor may have self-deleted between emit and this
-    # delivery, so promoting a vanished user is a clean no-op (GoTrue 404), not a parked failure.
-    if await count_server_admins() != 0 or event.user_id is None:
+    # UserCreated is an immutable fact: by delivery the actor may be hard-deleted (gone from the
+    # directory) or soft-deleted (a tombstone the directory's live listing excludes). Only a user
+    # the admin count would see may be promoted — a claim on a tombstone counts for nothing, so
+    # the count stays at zero and every following fact promotes another. One listing answers both
+    # questions.
+    if event.user_id is None:
+        return
+    directory = await list_server_admins()
+    if any(u.is_admin for u in directory):
+        return
+    if all(u.user_id != event.user_id for u in directory):
+        log.info("bootstrap_first_admin.actor_gone", user_id=event.user_id)
         return
     try:
         await set_server_admin(event.user_id, is_admin=True)
     except AuthApiError:
+        # The race remains: hard-deleted between the listing and the write is a clean 404 no-op.
         log.info("bootstrap_first_admin.actor_gone", user_id=event.user_id)

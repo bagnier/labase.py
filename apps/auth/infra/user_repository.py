@@ -3,6 +3,7 @@ import uuid
 from dataclasses import dataclass
 
 import structlog
+from pydantic import ValidationError
 
 from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.supabase import get_admin_supabase
@@ -61,7 +62,15 @@ async def set_server_admin(user_id: uuid.UUID, *, is_admin: bool) -> None:
     """Set or clear the admin-only ``app_metadata.role`` claim. Effective on next sign-in."""
     admin = get_admin_supabase().auth.admin
     role = _ADMIN_ROLE if is_admin else None
-    await asyncio.to_thread(admin.update_user_by_id, str(user_id), {"app_metadata": {"role": role}})
+    try:
+        await asyncio.to_thread(
+            admin.update_user_by_id, str(user_id), {"app_metadata": {"role": role}}
+        )
+    except ValidationError:
+        # The SDK parses the response after the server applied it — a non-2xx raises AuthApiError
+        # before any parsing — so this can only mean the write landed and the returned record is
+        # unreadable (an anonymized identity missing ``identity_data``). The action succeeded.
+        log.info("set_server_admin.record_unreadable", user_id=str(user_id))
 
 
 async def find_user_id_by_email(email: str) -> uuid.UUID | None:

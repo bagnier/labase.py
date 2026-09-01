@@ -10,6 +10,7 @@ The mirror of :mod:`apps.shared.events.repository` for the technical side. How a
 business, not this module's.
 """
 
+import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
@@ -64,7 +65,12 @@ def _columns(line: dict[str, Any], instance: str) -> dict[str, Any]:
         "user_id": _as_text(line.get("user_id")),
         "request_id": _as_text(line.get("request_id")),
         "instance": instance,
-        "payload": {k: v for k, v in line.items() if k not in _RESERVED},
+        # ``default=str``, the same tolerance the day-file fallback has: the context carries
+        # whatever a caller bound — a UUID, an exception — and one such value must not cost the
+        # store the whole batch it rides in.
+        "payload": json.loads(
+            json.dumps({k: v for k, v in line.items() if k not in _RESERVED}, default=str)
+        ),
     }
 
 

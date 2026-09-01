@@ -16,10 +16,12 @@ own finished line.
 """
 
 from pathlib import Path
+from typing import Any
 
 import structlog
 from fastapi import HTTPException
 from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
@@ -44,7 +46,15 @@ from apps.shared.integration.host import Host, MountPhase
 from apps.shared.logs.chain import catch_loop_exceptions, setup_logging
 from apps.shared.logs.request import RequestLogger
 from apps.shared.logs.sink import LogDrain
-from apps.shared.queue import TaskWorker, ensure_scheduled, register_task_handler
+from apps.shared.queue import (
+    QUEUE_PURGE_EVERY_SECONDS,
+    QUEUE_PURGE_TOPIC,
+    QUEUE_RETENTION_DAYS,
+    TaskWorker,
+    ensure_scheduled,
+    purge_finished_tasks,
+    register_task_handler,
+)
 from apps.shared.settings.env import TechnicalSettings, get_technical_settings
 from apps.shared.settings.preflight import enforce_at_boot
 
@@ -100,6 +110,7 @@ def mount(host: Host) -> None:
 def _start_task_worker(host: Host, settings: TechnicalSettings) -> None:
     """The async substrate: one task worker per process, and the recurring jobs it plants."""
     register_task_handler(PURGE_TOPIC, purge_counters)
+    register_task_handler(QUEUE_PURGE_TOPIC, _purge_finished_tasks)
     register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
     worker = TaskWorker(settings.task_worker_interval_seconds)
     host.on_startup(_plant_recurring_tasks)
@@ -119,9 +130,14 @@ def _start_log_drain(host: Host, settings: TechnicalSettings) -> None:
     host.run_background(log_drain)
 
 
+async def _purge_finished_tasks(session: AsyncSession, _payload: dict[str, Any]) -> None:
+    await purge_finished_tasks(session, QUEUE_RETENTION_DAYS)
+
+
 async def _plant_recurring_tasks() -> None:
     """Best-effort: a missing DB at startup must not prevent serving (probes, unit runs)."""
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
+        await ensure_scheduled(QUEUE_PURGE_TOPIC, QUEUE_PURGE_EVERY_SECONDS)
     except Exception as exc:
         log.warning("queue.plant_recurring_failed", exc_info=exc)

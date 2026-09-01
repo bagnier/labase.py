@@ -63,6 +63,21 @@ async def test_a_line_one_instance_wrote_is_read_by_another(sessions):
 
 
 @pytest.mark.asyncio
+async def test_a_line_carrying_unserializable_values_still_lands(sessions):
+    """Regression: ``queue.task_retrying`` binds ``task_id`` as a ``UUID`` object; the engine's
+    default JSON encoding refused it, and the drain wrote the whole batch off to the day files —
+    the store missed exactly the tracebacks it exists to show."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+
+    line = _line(marker, task_id=uuid.uuid7(), seen_at=_NOW, exc=ValueError("boom"))
+    await LogRepository(writer).append([line], instance="gw0")
+    await writer.commit()
+
+    assert [found.name for found in await LogRepository(reader).search(text=marker)] == [marker]
+
+
+@pytest.mark.asyncio
 async def test_a_line_names_the_instance_that_wrote_it(sessions):
     """One store, N writers — a line that cannot say which process it came from makes an outage
     on a single instance indistinguishable from one everywhere."""

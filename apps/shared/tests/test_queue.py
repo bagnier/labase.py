@@ -11,6 +11,7 @@ from apps.shared.queue import (
     _handlers,
     enqueue,
     ensure_scheduled,
+    purge_finished_tasks,
     register_task_handler,
     reset_task_handlers,
 )
@@ -174,6 +175,36 @@ async def test_recurring_task_reenqueues_next_run():
             {"topic": topic},
         )
     assert pending == 1
+
+
+@pytest.mark.asyncio
+async def test_purge_drops_only_finished_tasks_past_retention():
+    """A done row is a receipt, not work — and nothing ever deleted them: a dev database grew
+    65k of them in two weeks. Pending and parked rows are still owed something (a run, a triage),
+    so age alone never removes those."""
+    async with db.admin_session_factory()() as session:
+        await session.execute(
+            text(
+                "INSERT INTO task_queue (topic, done_at, failed_at) VALUES "
+                "('test.purge.old_done', now() - interval '8 days', NULL), "
+                "('test.purge.fresh_done', now() - interval '6 days', NULL), "
+                "('test.purge.old_parked', NULL, now() - interval '8 days'), "
+                "('test.purge.pending', NULL, NULL)"
+            )
+        )
+        await session.commit()
+
+    async with db.admin_session_factory()() as session:
+        deleted = await purge_finished_tasks(session, retention_days=7)
+        await session.commit()
+
+    async with db.admin_session_factory()() as session:
+        topics = await session.scalars(text("SELECT topic FROM task_queue ORDER BY topic"))
+        survivors = list(topics)
+    assert (deleted, survivors) == (
+        1,
+        ["test.purge.fresh_done", "test.purge.old_parked", "test.purge.pending"],
+    )
 
 
 @pytest.mark.asyncio

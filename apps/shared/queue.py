@@ -42,6 +42,11 @@ _handlers: dict[str, TaskHandler] = {}
 _RETRY_BACKOFF_SECONDS = 60
 _VISIBILITY_TIMEOUT_SECONDS = 300  # a crashed worker's claim expires after this
 
+# The queue's own retention: done rows are receipts, and nothing else ever deletes them.
+QUEUE_PURGE_TOPIC = "task_queue.purge"
+QUEUE_PURGE_EVERY_SECONDS = 86400
+QUEUE_RETENTION_DAYS = 7
+
 
 class UnhandledTopic(Exception):
     """A claimed task whose topic no mount registered a handler for.
@@ -118,6 +123,24 @@ async def ensure_scheduled(topic: str, every_seconds: int) -> None:
             {"topic": topic, "every": every_seconds},
         )
         await session.commit()
+
+
+async def purge_finished_tasks(session: AsyncSession, retention_days: int) -> int:
+    """Retention consumer: drop done rows past the window; returns how many.
+
+    Done rows only — a pending row is still owed a run and a parked one a triage, so age alone
+    never removes those. Counted through a CTE, the shape ``purge_old_occurrences`` already uses.
+    """
+    deleted = await session.scalar(
+        text(
+            "WITH purged AS ("
+            "  DELETE FROM task_queue"
+            "  WHERE done_at < now() - make_interval(days => :days) RETURNING 1"
+            ") SELECT count(*) FROM purged"
+        ),
+        {"days": retention_days},
+    )
+    return int(deleted or 0)
 
 
 def _payload_dict(task: ClaimedTask) -> dict[str, Any]:

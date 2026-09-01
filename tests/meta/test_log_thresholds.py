@@ -76,6 +76,9 @@ _THE_SURPRISES = {
     # personal org, the first-admin grant. Rare, and it explains a missing row later.
     "bootstrap_first_admin.actor_gone (apps/console/contract/integration.py)",
     "create_personal_org.actor_gone (apps/organizations/contract/integration.py)",
+    # An admin-role write the server took whose echoed record the SDK could not parse (an
+    # anonymized identity): the action landed, and this explains the missing confirmation.
+    "set_server_admin.record_unreadable (apps/auth/infra/user_repository.py)",
     # A dependency that answered *no*: the ordinary half of the verdict, whose other half is an
     # issue. The name comes from the caller, so the walk cannot read it off the constant.
     "<caller-supplied> (apps/shared/logs/dependency.py)",
