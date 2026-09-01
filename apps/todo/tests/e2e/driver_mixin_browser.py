@@ -187,11 +187,7 @@ class TodoBrowserMixin(BrowserBase):
         assert titles is not None, "view the tenant's todo list first"
         assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"
 
-    # ── durable async completion counter ──────────────────────────────────────
     def assert_completion_badge(self, badge: str) -> None:
-        # The counter is maintained by the durable async consumer of todo.ticked.
-        self.drain_task_queue()
-        # The card sits on the org dashboard, one sidebar click from the list they ticked it in
-        # — and read after the drain, so the counter is the one the consumer just wrote.
+        # The card sits on the org dashboard, one sidebar click from the list they ticked it in.
         self.reach_org_nav(getattr(self, "active_org_handle", ""), "dashboard", fresh=True)
         expect(self.page.locator('[data-overview="todo"]')).to_contain_text(badge)

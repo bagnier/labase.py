@@ -127,10 +127,7 @@ class TodoApiMixin(ApiBase):
         assert titles is not None, "view the tenant's todo list first"
         assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"
 
-    # ── durable async completion counter ──────────────────────────────────────
     def assert_completion_badge(self, badge: str) -> None:
-        # The counter is maintained by the durable async consumer of todo.ticked.
-        self.drain_task_queue()
         slug = getattr(self, "active_org_handle", "")
         resp = self.client().get(f"/{slug}/dashboard/overviews.json")
         resp.raise_for_status()

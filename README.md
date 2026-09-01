@@ -258,6 +258,15 @@ Reactions treat the fact as immutable history: one that finds its subject alread
 no-op, never a compensation.
 
 
+#### An app may subscribe to its own business event
+
+The bus decouples twice: in **space** — the emitter never names its reactions — and in **time** — 
+the reaction runs after the producer's commit, in its own transaction. Only the first is about 
+boundaries, so an app reacting to itself is legitimate exactly when it needs the second: `issues` 
+alerts on its own `issues.opened` because a failing alert must never roll back the occurrence that 
+recorded the failure. Otherwise it is a function call written the long way round.
+
+
 #### Signing in is one fact
 
 A session delivered by a password, an OAuth round-trip, a passkey or a

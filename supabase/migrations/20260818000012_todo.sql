@@ -31,9 +31,15 @@ grant select, insert, update, delete on public.todos to authenticated;
 grant select, insert, update, delete on public.todos to service_role;
 
 
--- A server-owned aggregate maintained by a durable async consumer of `todo.ticked` — the demo of
--- outbox event fan-out. Members read their org's tally on the dashboard; only the consumer (admin
--- session) writes it, so there is no authenticated write grant and a member cannot inflate it.
+
+-- ── todo_completion_stats ───────────────────────────────────────────────────────────────────
+--
+-- Completions *ever*, per org — a cumulative tally, not the live `done` count: unticking or
+-- deleting a task never takes one back. It cannot be derived from `todos`, so it is materialised
+-- here and maintained by the trigger below, inside the very transaction that ticks the task.
+--
+-- Only the trigger writes it: no write grant to `authenticated`, so a member cannot inflate their
+-- org's tally by reaching the table directly.
 create table public.todo_completion_stats (
   org_id          uuid        primary key references public.organizations(id) on delete cascade,
   completed_count integer     not null default 0,
@@ -47,4 +53,26 @@ create policy "todo_completion_stats: member read"
   using (org_id in (select public.user_org_ids()));
 
 grant select on public.todo_completion_stats to authenticated;
-grant select, insert, update on public.todo_completion_stats to service_role;
+grant select on public.todo_completion_stats to service_role;
+
+-- `security definer` is what lets a member's own session bump the tally without ever holding a
+-- write grant on the table.
+create or replace function public.bump_todo_completion()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  insert into public.todo_completion_stats (org_id, completed_count)
+  values (new.org_id, 1)
+  on conflict (org_id) do update
+    set completed_count = public.todo_completion_stats.completed_count + 1,
+        updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger todos_bump_completion
+  after update of done on public.todos
+  for each row when (old.done is false and new.done is true)
+  execute procedure public.bump_todo_completion();

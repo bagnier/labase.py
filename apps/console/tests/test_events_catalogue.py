@@ -30,4 +30,4 @@ def test_app_page_shows_its_emitted_and_listened_events(driver):
     body = driver.client().get("/console/todo", headers={"accept": "text/html"}).text
     assert "data-events-panel" in body
     assert "todo.created" in body  # an emitted event
-    assert "completion_counter" in body  # todo reacts to its own TodoTicked
+    assert "todo_welcome" in body  # todo reacts to organizations.created

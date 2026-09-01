@@ -55,6 +55,10 @@ def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console/issues")
     on_captured(_track)  # exception capture is delivered off the bus, observability → issues
     host.events.declare(IssueOpened, IssueRegressed, IssueStatusChanged)
+    # Issues reacts to its own facts, and the bus is what makes that sound: ``_track`` emits inside
+    # the transaction that records the occurrence, so alerting from there could roll back the
+    # tracking of the very failure it announces. Off the journal it cannot (see README, "The bus
+    # decouples in space *and* in time").
     host.events.on(IssueOpened, _alert_opened, name="alert_opened", app="issues")
     host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
     register_task_handler(PURGE_TOPIC, _purge)

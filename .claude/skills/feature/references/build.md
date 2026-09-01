@@ -146,7 +146,7 @@ explicit `mount()` and calls the same primitives directly.
 
 ```python
 def mount(host: Host) -> None:
-    settings = host.register_app(
+    host.register_app(
         AppManifest(
             settings=_declare_settings(),
             provides=[(ConsoleOverviewQuery, _console_overview)],
@@ -157,9 +157,6 @@ def mount(host: Host) -> None:
             provides_when_enabled=[(OverviewQuery, _overview)],
         )
     )
-    if not settings.enabled:
-        return
-    host.events.on(TodoTicked, _bump_completed, name="completion_counter", app="todo")
 ```
 
 Source: `apps/todo/contract/integration.py`.
