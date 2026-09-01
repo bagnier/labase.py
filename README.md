@@ -363,10 +363,11 @@ table is `UNLOGGED` (no WAL at all — crash recovery empties it, which is the r
 one kind of data whose durable copy is already on stdout) and partitioned by day, and the write is
 one multi-row insert per drain with `synchronous_commit` off. Retention rolls those partitions
 (`timeline.retention_days`): a day past the window leaves as a `DROP`, instant and leaving nothing
-for VACUUM. When Postgres itself is what is down the batch falls back to per-day files — a database outage is exactly when an operator still
-wants the log — with the outage said once on each transition rather than going quiet. The level
-(`timeline.log_level`) starts at `INFO`, which is the floor since nothing writes below it, and an
-admin can raise it to `WARNING` or `ERROR` to quiet an instance — live, from the console.
+for VACUUM. When Postgres itself is what is down the batch falls back to per-day files — a database 
+outage is exactly when an operator still wants the log — with the outage said once on each transition 
+rather than going quiet. The level (`timeline.log_level`) starts at `INFO`, which is the floor since
+nothing writes below it, and an admin can raise it to `WARNING` or `ERROR` to quiet an instance —
+live, from the console.
 
 
 #### What earns a line
