@@ -1,4 +1,5 @@
 import uuid
+from typing import TypedDict
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request, status
@@ -171,6 +172,21 @@ def _event_graph() -> list[dict]:
         for event_type, reactions in wiring.reactions().items()
     ]
     return sorted(rows, key=lambda row: row["kind"])
+
+
+class EventsByApp(TypedDict):
+    """Every declared event kind for one app — the full catalogue, wired or not."""
+
+    app: str
+    kinds: list[str]
+
+
+def _events_by_app() -> list[EventsByApp]:
+    """Every declared event, grouped by owner app — the full catalogue, wired or not."""
+    return [
+        EventsByApp(app=app, kinds=sorted(e.kind for e in event_types))
+        for app, event_types in wiring.by_app().items()
+    ]
 
 
 async def _supabase_link(
@@ -357,12 +373,18 @@ async def get_events(
 ) -> Response:
     """The event → reaction graph across the whole system — what each app emits and who reacts."""
     graph = _event_graph()
+    by_app = _events_by_app()
     if wants_json(request):
-        return JSONResponse({"events": graph})
+        return JSONResponse({"events": graph, "by_app": by_app})
     return templates.TemplateResponse(
         request,
         "console/events.html",
-        {"user": current_user, "graph": graph, **await fullpage_context(session, current_user)},
+        {
+            "user": current_user,
+            "graph": graph,
+            "by_app": by_app,
+            **await fullpage_context(session, current_user),
+        },
     )
 
 

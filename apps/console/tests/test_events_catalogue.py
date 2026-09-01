@@ -31,3 +31,24 @@ def test_app_page_shows_its_emitted_and_listened_events(driver):
     assert "data-events-panel" in body
     assert "todo.created" in body  # an emitted event
     assert "todo_welcome" in body  # todo reacts to organizations.created
+
+
+def test_events_screen_json_groups_all_declared_events_by_app(driver):
+    driver.sign_in_as_admin("events-admin-by-app-json@example.com")
+    payload = driver.client().get("/console/events", headers={"accept": "application/json"}).json()
+    issues_row = next(row for row in payload["by_app"] if row["app"] == "issues")
+    # issues declares three events; only two (opened, regressed) have a durable reaction.
+    assert issues_row == {
+        "app": "issues",
+        "kinds": ["issues.opened", "issues.regressed", "issues.status_changed"],
+    }
+
+
+def test_events_screen_all_events_tab_lists_declared_events_with_no_reaction(driver):
+    driver.sign_in_as_admin("events-admin-by-app-html@example.com")
+    body = driver.client().get("/console/events", headers={"accept": "text/html"}).text
+    assert 'data-tab="all"' in body
+    assert 'data-tab="connected"' in body
+    # issues.status_changed has no durable reaction, so it never appears in the connected graph —
+    # its presence here proves the "All events" tab reads the full catalogue, not the graph.
+    assert "issues.status_changed" in body

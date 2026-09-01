@@ -8,35 +8,81 @@
 {% block content %}
   <div class="max-w-3xl space-y-6">
     {{ page_header("Events") }}
-    <p class="text-sm text-base-content/70">
-      Every business event with a durable reaction — <em>when this happens, that runs</em>. The
-      emitter never names its reactions; the event bus wires them at mount.
-    </p>
-    {% if graph %}
-      <ul class="space-y-3" data-event-graph>
-        {% for row in graph %}
-          <li class="card bg-base-100 border border-base-300">
-            <div class="card-body gap-3 p-4">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="badge badge-primary badge-sm">{{ row.owner }}</span>
-                <code class="text-sm font-medium">{{ row.kind }}</code>
-              </div>
-              <ul class="space-y-1 pl-1">
-                {% for reaction in row.reactions %}
-                  <li class="text-sm flex items-center gap-2 flex-wrap">
-                    <i class="ph ph-arrow-bend-down-right text-base-content/50"
-                       aria-hidden="true"></i>
-                    <span class="font-medium">{{ reaction.name }}</span>
-                    <span class="badge badge-ghost badge-sm">{{ reaction.app }}</span>
-                  </li>
-                {% endfor %}
-              </ul>
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="text-sm text-base-content/60">No durable reactions are registered.</p>
-    {% endif %}
+    <div role="tablist" class="tabs tabs-lift" data-hash-tabs>
+      {# ── All events ─────────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="events-tabs"
+             role="tab"
+             class="tab"
+             aria-label="All events"
+             data-tab="all"
+             checked />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <p class="text-sm text-base-content/70">Every business event each app declares — wired to a reaction or not.</p>
+          {% if by_app %}
+            <ul class="space-y-3">
+              {% for row in by_app %}
+                <li class="card bg-base-100 border border-base-300">
+                  <div class="card-body gap-3 p-4">
+                    <span class="badge badge-primary badge-sm">{{ row.app }}</span>
+                    <ul class="flex flex-wrap gap-2">
+                      {% for kind in row.kinds %}
+                        <li><code class="badge badge-ghost badge-sm">{{ kind }}</code></li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-sm text-base-content/60">No app declares any event.</p>
+          {% endif %}
+        </div>
+      </div>
+      {# ── Connected ──────────────────────────────────────────────────────── #}
+      <input type="radio"
+             name="events-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Connected"
+             data-tab="connected" />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <p class="text-sm text-base-content/70">
+            Every business event with a durable reaction — <em>when this happens, that runs</em>.
+            The emitter never names its reactions; the event bus wires them at mount.
+          </p>
+          {% if graph %}
+            <ul class="space-y-3" data-event-graph>
+              {% for row in graph %}
+                <li class="card bg-base-100 border border-base-300">
+                  <div class="card-body gap-3 p-4">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="badge badge-primary badge-sm">{{ row.owner }}</span>
+                      <code class="text-sm font-medium">{{ row.kind }}</code>
+                    </div>
+                    <ul class="space-y-1 pl-1">
+                      {% for reaction in row.reactions %}
+                        <li class="text-sm flex items-center gap-2 flex-wrap">
+                          <i class="ph ph-arrow-bend-down-right text-base-content/50"
+                             aria-hidden="true"></i>
+                          <span class="font-medium">{{ reaction.name }}</span>
+                          <span class="badge badge-ghost badge-sm">{{ reaction.app }}</span>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-sm text-base-content/60">No durable reactions are registered.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 {% endblock %}
