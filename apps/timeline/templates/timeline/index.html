@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "timeline/_combobox.html" import combobox %}
 {% from "macros/page_header.html" import page_header %}
+{% from "macros/live_state.html" import live_state %}
 {% from "macros/empty_state.html" import empty_state %}
 {% from "macros/data_table.html" import filter_bar %}
 {% from "macros/chart.html" import chart, chart_scripts %}
@@ -108,17 +109,7 @@
             <i class="ph ph-x" aria-hidden="true"></i>
           </a>
         {% endif %}
-        <span class="ml-auto inline-flex items-center gap-2 text-xs text-base-content/60"
-              data-live-state="{{ 'paused' if paused else 'live' }}">
-          {% if paused %}
-            <span class="w-2 h-2 rounded-full bg-warning"></span>
-            Paused — browsing a period
-            <a class="link link-primary" href="/console/timeline">↑ Back to live</a>
-          {% else %}
-            <span class="w-2 h-2 rounded-full bg-success"></span>
-            Live
-          {% endif %}
-        </span>
+        {{ live_state(paused, "/console/timeline") }}
       {% endcall %}
       {# The three sources do not share a memory: the journal and the issues keep whatever
          retention left them, the log store answers a rolling window. Said out loud, because the

@@ -12,10 +12,11 @@ business, not this module's.
 
 import json
 import uuid
+from collections.abc import Collection
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
-from sqlalchemy import String, Text, cast, insert, or_, select
+from sqlalchemy import String, Text, cast, extract, func, insert, or_, select
 from sqlalchemy import text as sql_text  # aliased: ``search`` takes a ``text`` filter of its own
 
 from apps.shared import clock
@@ -153,6 +154,36 @@ class LogRepository(BaseRepository[LogLine]):
             {"floor": now - timedelta(days=retention_days)},
         )
         return int(deleted or 0)
+
+    async def counted_by_payload_key(
+        self,
+        key: str,
+        *,
+        names: Collection[str],
+        since: datetime,
+        until: datetime,
+        bucket: int,
+    ) -> dict[tuple[str, datetime], int]:
+        """How many of the named lines each ``payload[key]`` wrote, per slot of time.
+
+        A caller drawing a whole window does not want the lines, it wants how many landed where:
+        the queue's history walks its own ``topic`` this way. Grouped in Postgres, so a window
+        holding tens of thousands of retries still answers in one bounded read.
+        """
+        if not names:
+            return {}
+        # Built through the expression API rather than raw SQL: the slot is both selected and
+        # grouped by, and a text clause cannot be aliased or reused as a grouping key.
+        # One expression object, used in both the select and the group by: spelling it twice
+        # makes two bind parameters, and Postgres then refuses to match them as the same grouping.
+        held = LogLine.payload[key].astext
+        slot = func.to_timestamp(func.floor(extract("epoch", LogLine.ts) / bucket) * bucket)
+        rows = await self.session.execute(
+            select(held, slot, func.count())
+            .where(LogLine.ts.between(since, until), LogLine.name.in_(list(names)))
+            .group_by(held, slot)
+        )
+        return {(k, slot_at): int(n) for k, slot_at, n in rows if k}
 
     async def search(
         self,

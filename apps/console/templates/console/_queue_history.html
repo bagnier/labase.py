@@ -1,0 +1,122 @@
+{% from "macros/live_state.html" import live_state %}
+{# The film strip: one lane per subject, time left to right. Recurring topics keep their lane
+   whatever the window holds; one-shots appear only if it caught them. #}
+{% macro lanes(rows) %}
+  <div class="relative">
+    <div class="absolute inset-0 flex" aria-hidden="true">
+      <div class="strip-name"></div>
+      <div class="strip-gridlines">
+        {% for tick in axis %}
+          <div class="strip-grid" style="left:{{ tick.left }}%"></div>
+        {% endfor %}
+      </div>
+      <div class="strip-tail"></div>
+    </div>
+    {% for lane in rows %}
+      <div class="strip-row">
+        <div class="strip-name">
+          <code class="text-xs block truncate" title="{{ lane.title }}">{{ lane.title }}</code>
+          {% if lane.subtitle %}
+            <div class="text-xs text-base-content/50 font-mono">{{ lane.subtitle }}</div>
+          {% endif %}
+        </div>
+        <div class="strip-lane">
+          {% for block in lane.segments %}
+            <a class="strip-block strip-{{ block.kind }}"
+               style="left:{{ block.left }}%;
+                      width:{{ block.width }}%;
+                      top:{{ block.top }}%;
+                      height:{{ block.height }}%"
+               aria-label="{{ block.label }}"
+               title="{{ block.label }}"
+               href="{{ block.href }}"></a>
+          {% endfor %}
+        </div>
+        <div class="strip-tail">
+          <span class="badge badge-sm {{ 'badge-error' if lane.state == 'parked' else 'badge-warning' if lane.state == 'retrying' else 'badge-ghost' }}">
+            {{ lane.badge or lane.state }}
+          </span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+<div class="space-y-5" id="queue-history">
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <p class="text-sm text-base-content/70 max-w-lg">
+      Each block is one slot of time on a lane, coloured by the worst thing that landed in it —
+      every run in the window is counted, none dropped. Recurring topics keep
+      their lane whether or not they ran; one-shots appear only if the window caught them.
+    </p>
+    <form hx-get="/console/queue"
+          hx-target="#queue-history"
+          hx-swap="outerHTML"
+          hx-trigger="change"
+          class="flex items-end gap-2">
+      <input type="hidden" name="panel" value="history" />
+      <label class="flex flex-col gap-1">
+        <span class="label-text text-xs">From (UTC)</span>
+        <input type="datetime-local"
+               name="from_dt"
+               value="{{ from_dt }}"
+               class="input input-bordered input-sm text-xs"
+               aria-label="History window start" />
+      </label>
+      <span class="text-base-content/50 pb-2">→</span>
+      <label class="flex flex-col gap-1">
+        <span class="label-text text-xs">To (UTC)</span>
+        <input type="datetime-local"
+               name="to_dt"
+               value="{{ to_dt }}"
+               class="input input-bordered input-sm text-xs"
+               aria-label="History window end" />
+      </label>
+      <span class="text-xs text-base-content/50 pb-2">now {{ now_utc }} UTC</span>
+      {{ live_state(from_dt or to_dt, "/console/queue#history", extra_class="pb-2") }}
+    </form>
+  </div>
+  <div class="flex text-xs text-base-content/50">
+    <div class="strip-name"></div>
+    <div class="strip-axis">
+      {% for tick in axis %}<span style="left:{{ tick.left }}%">{{ tick.label }}</span>{% endfor %}
+    </div>
+    <div class="strip-tail"></div>
+  </div>
+  {% if not has_runs %}
+    <p class="text-sm text-base-content/70" data-strip-empty>
+      {% if window_ahead %}
+        This window has not happened yet — the bounds are read as UTC, and it is
+        {{ now_utc }} UTC now.
+      {% else %}
+        Nothing ran in this window.
+      {% endif %}
+    </p>
+  {% endif %}
+  <div data-strip-recurring>
+    <p class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1">Recurring</p>
+    {% if recurring_lanes %}
+      {{ lanes(recurring_lanes) }}
+    {% else %}
+      <p class="text-sm text-base-content/60">No recurring task is registered.</p>
+    {% endif %}
+  </div>
+  <div data-strip-oneshot>
+    <p class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1 mt-4">One-shot</p>
+    {% if oneshot_lanes %}
+      {{ lanes(oneshot_lanes) }}
+    {% else %}
+      <p class="text-sm text-base-content/60">No one-shot task ran in this window.</p>
+    {% endif %}
+  </div>
+  <div class="flex flex-wrap items-center gap-4 text-xs">
+    <span><span class="strip-swatch strip-attempt"></span>failed tries</span>
+    <span><span class="strip-swatch strip-done"></span>done</span>
+    <span><span class="strip-swatch strip-parked"></span>parked</span>
+    <span><span class="strip-swatch strip-open"></span>nothing landed</span>
+  </div>
+  <p class="text-xs text-base-content/50">
+    Runs are counted from the queue itself; the failed tries inside them come from the log lines
+    each retry writes, so that half shows what was recorded — the sink is best-effort and rolls
+    over with its own retention. One block covers {{ bucket_seconds }}s of this window.
+  </p>
+</div>

@@ -64,7 +64,7 @@ async def _row(topic: str) -> dict:
             (
                 await session.execute(
                     text(
-                        "SELECT attempts, done_at, failed_at, last_error, run_at "
+                        "SELECT id, attempts, done_at, failed_at, last_error, run_at "
                         "FROM task_queue WHERE topic = :topic ORDER BY id DESC LIMIT 1"
                     ),
                     {"topic": topic},
@@ -256,3 +256,27 @@ async def test_a_task_parked_for_good_is_captured_as_a_bug(log_chain):
     await TaskWorker(interval_seconds=1).tick()
 
     assert [type(captured.exc) for captured in capture._QUEUE] == [RuntimeError]
+
+
+@pytest.mark.asyncio
+async def test_a_parked_task_names_itself_in_the_issue_it_opens(log_chain):
+    """The pivot off the issue and back to the row that is still owed.
+
+    ``task_id`` rode the line as a ``uuid.UUID``, and the capture processor keeps only scalars —
+    so the occurrence carried the topic and lost the one value that identifies *which* task. The
+    log line kept it (its payload encodes with ``default=str``), which is what made the gap read
+    like a rendering detail rather than a broken pivot.
+    """
+    topic = f"test.parked_{uuid.uuid4().hex}"
+
+    async def handler(session, payload):
+        raise RuntimeError("boom")
+
+    register_task_handler(topic, handler)
+    await _enqueue_committed(topic, max_attempts=1)
+    capture._QUEUE.clear()
+
+    await TaskWorker(interval_seconds=1).tick()
+
+    parked = await _row(topic)
+    assert [c.context.get("task_id") for c in capture._QUEUE] == [str(parked["id"])]

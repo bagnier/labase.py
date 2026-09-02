@@ -23,9 +23,11 @@ import contextlib
 import json
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any, TypedDict, cast
 
 import structlog
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -143,6 +145,151 @@ async def purge_finished_tasks(session: AsyncSession, retention_days: int) -> in
     return int(deleted or 0)
 
 
+# What a row *is* to a reader, derived rather than stored: the columns already say it, and a
+# status column would be a second truth for ``_retry``/``_fail`` to keep in step. ``done`` is
+# excluded from every read below — a done row is a receipt, and there are a week of them.
+_STATE = (
+    "CASE WHEN done_at IS NOT NULL THEN 'done' "
+    "     WHEN failed_at IS NOT NULL THEN 'parked' "
+    "     WHEN attempts > 0 THEN 'retrying' "
+    "     ELSE 'pending' END"
+)
+
+# What the history reads a row's moment as: when it landed, or when it is due if it has not.
+_MOMENT = "coalesce(done_at, failed_at, run_at)"
+
+TASK_STATES: tuple[str, ...] = ("parked", "retrying", "pending")
+
+
+class TaskBucket(BaseModel):
+    """Every run of one topic that landed in one slot of time, counted.
+
+    Counted in Postgres rather than read out and grouped in Python: a busy window holds tens of
+    thousands of rows, and the screen draws a few hundred blocks whatever it holds. Nothing is
+    capped and nothing is dropped — what a bucket costs is the ability to point at one run, which
+    the backlog screen and the log sink both still answer.
+    """
+
+    topic: str
+    slot: datetime
+    state: str
+    runs: int
+    recurring_seconds: int | None
+
+
+# Left as ``timestamptz``: the log sink's own bucketing keys on the same aware instant, and the
+# two are joined in Python on that key.
+_BUCKET_SLOT = "to_timestamp(floor(extract(epoch from {moment}) / :bucket) * :bucket)"
+
+
+def _bucketed(moment: str, family: str) -> str:
+    slot = _BUCKET_SLOT.format(moment=moment)
+    return (
+        f"SELECT topic, {slot} AS slot, {_STATE} AS state, count(*) AS runs, "
+        "  max(recurring_seconds) AS recurring_seconds "
+        "FROM task_queue "
+        f"WHERE recurring_seconds IS {family} NULL "
+        f"  AND {moment} BETWEEN :since AND :until "
+        "GROUP BY topic, slot, state ORDER BY topic, slot"
+    )
+
+
+async def bucketed_runs(
+    session: AsyncSession, *, since: datetime, until: datetime, bucket: int, recurring: bool
+) -> list[TaskBucket]:
+    """Every run in the window, folded into slots — one row per topic and slot, never per run."""
+    rows = await session.execute(
+        text(_bucketed(_MOMENT, "NOT" if recurring else "")),
+        {"since": since, "until": until, "bucket": bucket},
+    )
+    return [TaskBucket.model_validate(dict(row)) for row in rows.mappings()]
+
+
+async def live_recurring_topics(session: AsyncSession) -> dict[str, int]:
+    """The recurring topics that still have a pending singleton, and how often each comes round.
+
+    Read whatever the window holds: a recurring topic is a permanent fixture, and a lane that
+    vanishes on a quiet hour reads as the topic having been removed.
+    """
+    rows = await session.execute(
+        text(
+            "SELECT topic, max(recurring_seconds) AS every FROM task_queue "
+            "WHERE recurring_seconds IS NOT NULL AND done_at IS NULL AND failed_at IS NULL "
+            "GROUP BY topic ORDER BY topic"
+        )
+    )
+    return {row.topic: int(row.every) for row in rows}
+
+
+class QueuedTaskRead(BaseModel):
+    """One row of work the queue still owes, as the console reads it.
+
+    Deliberately not an issue: a hundred tasks failing the same way fold into one issue and stay a
+    hundred rows here, and resolving that issue runs none of them.
+    """
+
+    id: uuid.UUID
+    topic: str
+    state: str
+    attempts: int
+    max_attempts: int
+    run_at: datetime
+    failed_at: datetime | None
+    last_error: str | None
+    payload: dict[str, Any]
+    user_id: uuid.UUID | None
+    recurring_seconds: int | None
+
+
+async def list_unfinished_tasks(
+    session: AsyncSession, *, state: str = "", topic: str = "", limit: int = 200
+) -> list[QueuedTaskRead]:
+    """The tasks still owed, parked first — the order an admin reads them in.
+
+    ``topic`` matches a fragment, which is what makes the pivot off an issue work: the occurrence
+    keeps the topic, and the queue's topics are compound (``evt:auth.user_created:create_org``).
+    """
+    rows = await session.execute(
+        text(
+            f"SELECT id, topic, {_STATE} AS state, attempts, max_attempts, run_at, failed_at, "
+            "  last_error, payload, user_id, recurring_seconds "
+            "FROM task_queue "
+            "WHERE done_at IS NULL "
+            f"  AND (:state = '' OR {_STATE} = :state) "
+            "  AND (:topic = '' OR topic ILIKE '%' || :topic || '%') "
+            "ORDER BY failed_at DESC NULLS LAST, run_at DESC "
+            "LIMIT :limit"
+        ),
+        {"state": state, "topic": topic, "limit": limit},
+    )
+    return [QueuedTaskRead.model_validate(dict(row)) for row in rows.mappings()]
+
+
+async def unfinished_task_topics(session: AsyncSession) -> list[str]:
+    """The topics actually present, for the console's filter to offer.
+
+    A placeholder is a guess an admin has to already know the answer to; the list is what is
+    there — the same trade the org-handle datalist makes on the settings screen.
+    """
+    rows = await session.scalars(
+        text("SELECT DISTINCT topic FROM task_queue WHERE done_at IS NULL ORDER BY topic")
+    )
+    return list(rows)
+
+
+async def count_unfinished_tasks(session: AsyncSession) -> dict[str, int]:
+    """How many rows sit in each state — every state keyed, including the zeroes, so a caller
+    never has to spell the absence itself."""
+    rows = await session.execute(
+        text(
+            f"SELECT {_STATE} AS state, count(*) AS n "
+            "FROM task_queue WHERE done_at IS NULL GROUP BY 1"
+        )
+    )
+    counted = {row.state: int(row.n) for row in rows}
+    return {state: counted.get(state, 0) for state in TASK_STATES}
+
+
 def _payload_dict(task: ClaimedTask) -> dict[str, Any]:
     payload = task["payload"]
     return payload if isinstance(payload, dict) else json.loads(payload)
@@ -247,8 +394,11 @@ class TaskWorker:
             if task["attempts"] >= task["max_attempts"]:
                 # Retries exhausted: nobody will run this task again, so the failure is final —
                 # ``log.exception`` is the capture seam, and an issue is where it stays visible.
+                # ``str`` is not cosmetic: the capture processor keeps only scalars, so a raw
+                # ``UUID`` here reaches the log line and never the occurrence — leaving an issue
+                # that names the topic but not the row still owed.
                 log.exception(
-                    "queue.task_failed", exc_info=exc, topic=task["topic"], task_id=task["id"]
+                    "queue.task_failed", exc_info=exc, topic=task["topic"], task_id=str(task["id"])
                 )
                 await self._fail(task, repr(exc))
             else:
@@ -257,7 +407,7 @@ class TaskWorker:
                 log.warning(
                     "queue.task_retrying",
                     topic=task["topic"],
-                    task_id=task["id"],
+                    task_id=str(task["id"]),
                     attempt=task["attempts"],
                     exc_info=exc,
                 )

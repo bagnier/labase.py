@@ -76,6 +76,7 @@ _THE_SURPRISES = {
     # personal org, the first-admin grant. Rare, and it explains a missing row later.
     "bootstrap_first_admin.actor_gone (apps/console/contract/integration.py)",
     "create_personal_org.actor_gone (apps/organizations/contract/integration.py)",
+    "seed_org_welcome.actor_gone (apps/organizations/contract/queries.py)",
     # An admin-role write the server took whose echoed record the SDK could not parse (an
     # anonymized identity): the action landed, and this explains the missing confirmation.
     "set_server_admin.record_unreadable (apps/auth/infra/user_repository.py)",

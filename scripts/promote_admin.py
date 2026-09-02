@@ -12,10 +12,14 @@ which lands in the JWT on the user's next sign-in.
 import argparse
 import os
 import secrets
+import sys
+
+import httpx
 
 os.environ.setdefault("ENV_FILE", ".env")
 
 from apps.auth.tests.given_helpers import create_user, find_users, set_admin_role
+from apps.shared.settings.env import get_technical_settings
 
 
 def promote_admin(email: str, password: str | None) -> None:
@@ -32,6 +36,37 @@ def promote_admin(email: str, password: str | None) -> None:
 
     set_admin_role(uid)
     print(f"  → promoted {email} to server admin")
+    # The claim lives in ``app_metadata``, which GoTrue embeds in the *access token* — a session
+    # opened before this call carries none of it. Said here because "promoted" with no admin
+    # button in the app looks exactly like a promotion that failed.
+    print("  → sign out and back in: the claim only reaches the session on the next sign-in")
+
+
+def _unreachable(exc: httpx.ConnectError) -> None:
+    """Answer a host that does not resolve with the one line that fixes it.
+
+    A ``.env`` written for the app container points at ``host.docker.internal``, which resolves
+    only inside it — and this script runs on the host, where the same service is on localhost.
+    Without this, the failure is forty lines of httpx traceback naming neither the host nor the
+    way round it.
+    """
+    url = get_technical_settings().supabase_api_url
+    print(f"Cannot reach GoTrue at {url} ({exc}).", file=sys.stderr)
+    print(
+        "If that host only resolves inside the app container, point this run at the same "
+        "service on the host:\n"
+        "  SUPABASE_API_URL=http://127.0.0.1:54321 make promote-admin "
+        "ENV_FILE=.env EMAIL=you@example.com",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+
+def main_with_args(email: str, password: str | None) -> None:
+    try:
+        promote_admin(email, password)
+    except httpx.ConnectError as exc:
+        _unreachable(exc)
 
 
 def main() -> None:
@@ -40,7 +75,7 @@ def main() -> None:
     parser.add_argument("password", nargs="?", default=None)
     args = parser.parse_args()
 
-    promote_admin(args.email, args.password)
+    main_with_args(args.email, args.password)
 
 
 if __name__ == "__main__":

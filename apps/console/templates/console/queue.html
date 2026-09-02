@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "macros/page_header.html" import page_header %}
+{% block title %}Queue — Console{% endblock %}
+{% block breadcrumb %}
+  <li><a href="/console">Console</a></li>
+  <li>Queue</li>
+{% endblock %}
+{% block content %}
+  <div class="max-w-5xl space-y-6">
+    {{ page_header("Queue") }}
+    <p class="text-sm text-base-content/70">
+      The work the async substrate still owes — <em>parked</em> means the retries are spent and
+      nobody will run it again. A parked task also opens an issue; the issue says there is a bug,
+      this says what did not run.
+    </p>
+    <div role="tablist" class="tabs tabs-lift" data-hash-tabs>
+      {# ── Backlog: the present state ───────────────────────────────────── #}
+      <input type="radio"
+             name="queue-tabs"
+             role="tab"
+             class="tab"
+             aria-label="Backlog"
+             data-tab="backlog"
+             checked />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+        <div class="space-y-6">
+          <div class="stats stats-horizontal border border-base-300 bg-base-100">
+            {% for state in states %}
+              <div class="stat">
+                <div class="stat-title capitalize">{{ state }}</div>
+                <div class="stat-value text-2xl {% if state == 'parked' and counts[state] %}text-error{% endif %}">
+                  {{ counts[state] }}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <form role="search"
+                hx-get="/console/queue"
+                hx-target="#queue-tasks"
+                hx-swap="outerHTML"
+                hx-trigger="change, keyup changed delay:400ms from:input[type=search]"
+                class="flex flex-wrap items-end gap-3">
+            <label class="flex flex-col gap-1">
+              <span class="label-text text-xs">State</span>
+              <select name="state"
+                      aria-label="Filter by state"
+                      class="select select-bordered select-sm">
+                <option value="" {% if not state_filter %}selected{% endif %}>All</option>
+                {% for state in states %}
+                  <option value="{{ state }}" {% if state_filter == state %}selected{% endif %}>{{ state }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="flex flex-col gap-1">
+              <span class="label-text text-xs">Task</span>
+              <input type="search"
+                     name="topic"
+                     value="{{ topic_filter }}"
+                     list="queue-topic-options"
+                     autocomplete="off"
+                     placeholder="Any task"
+                     aria-label="Filter by task"
+                     class="input input-bordered input-sm w-72 font-mono" />
+              <datalist id="queue-topic-options">
+                {% for option in topics %}<option value="{{ option }}"></option>{% endfor %}
+              </datalist>
+            </label>
+          </form>
+          {% include "console/_queue_tasks.html" %}
+        </div>
+      </div>
+      {# ── History: what happened ───────────────────────────────────────── #}
+      <input type="radio"
+             name="queue-tabs"
+             role="tab"
+             class="tab"
+             aria-label="History"
+             data-tab="history" />
+      <div role="tabpanel"
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">{% include "console/_queue_history.html" %}</div>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}<script src="{{ asset('/static/js/hash-tabs.js') }}" defer></script>{% endblock %}

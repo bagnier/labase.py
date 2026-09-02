@@ -84,8 +84,9 @@ console, declares its admin-tunable settings there, and can be switched on or of
 (applied on restart) — a disabled app drops its routes, nav and dashboard card but 
 keeps its console tile (and still reserves its URL slugs) so admins can re-enable it.
 Beyond per-app stats, the console ships the operational screens: accounts (disable,
-delete, impersonate — bannered and recorded), the unified **Timeline**, issues,
-load metrics, and the runtime log level.
+delete, impersonate — bannered and recorded), the unified **Timeline**, issues, the
+queue (what it still owes, and a film strip of what it ran), load metrics, and the
+runtime log level.
 
 
 ### The database enforces isolation
@@ -497,7 +498,9 @@ Deferred work rides the durable Postgres task queue
 (`apps/shared/queue.py`): `enqueue()` writes through the caller's session, so a task
 exists iff the business transaction commits (outbox semantics); a per-process
 `TaskWorker` claims with `FOR UPDATE SKIP LOCKED` (safe across instances), retries with
-backoff, then parks failures for inspection. Recurring jobs (purges, rollups) re-enqueue
+backoff, then parks the failure — where the console's **Queue** screen lists it alongside
+what is late or being retried, since the issue a park opens says there is a bug and this
+says what did not run. Recurring jobs (purges, rollups) re-enqueue
 themselves on completion. Transactional email goes the same way: `enqueue_email()`
 behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in dev).
 Durable async event delivery rides the same queue: the event listener (`apps/shared/events/listener.py`,

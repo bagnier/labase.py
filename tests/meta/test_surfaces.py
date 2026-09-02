@@ -13,6 +13,7 @@ behaviour — that is what the rest of the suite is for.
 """
 
 import ast
+import re
 import tomllib
 from pathlib import Path
 
@@ -278,3 +279,72 @@ def test_the_reference_app_fills_every_surface():
     }
 
     assert missing == set()
+
+
+# The icon font shipped in `static/fonts/` is Phosphor's full regular set, but the CSS that names
+# its glyphs is curated by hand — a surface may therefore declare an icon the stylesheet has no
+# rule for, and the tile renders a blank square. Nothing fails, nothing logs; the tile is simply
+# mute, which is precisely the kind of decay a declaration-level walk exists to catch.
+_ICON_CSS = _ROOT / "static" / "css" / "input.css"
+
+
+def _icons_with_a_rule() -> set[str]:
+    return set(re.findall(r"\.ph\.ph-([a-z0-9-]+):before", _ICON_CSS.read_text()))
+
+
+def _icons_declared() -> dict[str, str]:
+    """Every ``icon="…"`` a surface passes, mapped to where it says it. Tests aside: a fixture may
+    name an icon nothing renders."""
+    found = {}
+    for path in sorted(_APPS.rglob("*.py")):
+        if "/tests/" in path.as_posix():
+            continue
+        for icon in re.findall(r'icon="([a-z0-9-]+)"', path.read_text()):
+            found[icon] = str(path.relative_to(_ROOT))
+    return found
+
+
+def test_every_icon_a_surface_declares_has_a_glyph_to_render():
+    """A tile whose icon has no CSS rule shows an empty box — and only a human looking at the
+    page ever finds out."""
+    declared = _icons_declared()
+
+    with_rule = _icons_with_a_rule()
+
+    mute = {f"{icon} ({site})" for icon, site in declared.items() if icon not in with_rule}
+
+    assert mute == set()
+
+
+def test_the_icon_walk_actually_finds_the_declarations():
+    # Guards the guard: a regex that matched nothing would make the assertion above vacuous.
+    assert len(_icons_declared()) > 10
+
+
+# ``data-hash-tabs`` is an opt-in: the markup asks for the behaviour, and the page has to load the
+# script that provides it. Forget the script and nothing breaks loudly — the tabs still switch,
+# they just stop surviving a reload and stop being linkable, which is exactly the kind of silence
+# a declaration-level walk is for.
+_TEMPLATES = sorted(_APPS.glob("*/templates/**/*.html"))
+_HASH_TABS_SCRIPT = "js/hash-tabs.js"
+
+
+def _pages_opting_into_hash_tabs() -> dict[str, str]:
+    return {
+        str(path.relative_to(_ROOT)): path.read_text()
+        for path in _TEMPLATES
+        if "data-hash-tabs" in path.read_text()
+    }
+
+
+def test_every_page_with_hash_tabs_loads_the_script_that_makes_them_work():
+    opted_in = _pages_opting_into_hash_tabs()
+
+    silent = {site for site, body in opted_in.items() if _HASH_TABS_SCRIPT not in body}
+
+    assert silent == set()
+
+
+def test_the_hash_tabs_walk_actually_finds_the_pages():
+    # Guards the guard: a glob that matched nothing would make the assertion above vacuous.
+    assert len(_pages_opting_into_hash_tabs()) > 1

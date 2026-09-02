@@ -3,13 +3,22 @@ from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.domain.models import Membership, Organization, OrganizationRead, OrgRole
 from apps.shared.settings.live import get_settings
 
 log = structlog.get_logger(__name__)
+
+
+async def user_exists(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Whether ``user_id`` still has a row in ``auth.users`` — the seat a reaction writes against
+    may have been deleted between the fact being emitted and this durable delivery."""
+    return bool(
+        await session.scalar(text("SELECT 1 FROM auth.users WHERE id = :id"), {"id": user_id})
+    )
 
 
 async def org_handle_taken(
@@ -58,7 +67,21 @@ async def seed_org_welcome(
     owner_id = await get_org_owner_id(session, org_id)
     if owner_id is None:
         return
-    await seed(session, org_id, owner_id)
+    if not await user_exists(session, owner_id):
+        log.info("seed_org_welcome.actor_gone", owner_id=str(owner_id))
+        return
+    try:
+        await seed(session, org_id, owner_id)
+    except IntegrityError:
+        # The owner can still vanish between the check above and the seeder's own write — the same
+        # race the check narrows but cannot close outright. Re-asking after the rollback is what
+        # keeps this clause to that one cause: an ``IntegrityError`` names a type, not a
+        # constraint, and an owner who never left means the seeder broke something else, which
+        # belongs in the worker's retry and eventual park rather than under an ``info`` line.
+        await session.rollback()
+        if await user_exists(session, owner_id):
+            raise
+        log.info("seed_org_welcome.actor_gone", owner_id=str(owner_id))
 
 
 @dataclass

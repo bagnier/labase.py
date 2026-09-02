@@ -64,9 +64,10 @@ async def test_a_line_one_instance_wrote_is_read_by_another(sessions):
 
 @pytest.mark.asyncio
 async def test_a_line_carrying_unserializable_values_still_lands(sessions):
-    """Regression: ``queue.task_retrying`` binds ``task_id`` as a ``UUID`` object; the engine's
-    default JSON encoding refused it, and the drain wrote the whole batch off to the day files —
-    the store missed exactly the tracebacks it exists to show."""
+    """Regression: a ``UUID`` bound into a line's context was refused by the engine's default JSON
+    encoding, and the drain wrote the whole batch off to the day files — the store missed exactly
+    the tracebacks it exists to show. Callers must not have to know which types survive: whatever a
+    site binds, the line lands."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
 

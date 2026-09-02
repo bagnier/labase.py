@@ -9,7 +9,8 @@ auth's ``UserCreated`` by creating the user's personal org then emitting ``Organ
 import uuid
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.events import UserCreated, UserDeleted
@@ -27,7 +28,7 @@ from apps.organizations.contract.events import (
     OrgHandleChanged,
 )
 from apps.organizations.contract.fullpage import provide_org_nav
-from apps.organizations.contract.queries import org_handle_taken
+from apps.organizations.contract.queries import org_handle_taken, user_exists
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.invitation_router import router as invitation_router
 from apps.organizations.infra.repository import OrganizationRepository
@@ -146,17 +147,29 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     # A business event is an immutable fact, not a saga step: the actor may be gone by the time this
     # durable consumer runs (self-deletion between emit and delivery). Seat off ``auth.users`` — no
     # user, no org — so a vanished subject is a clean no-op, not an FK crash + park.
-    exists = await session.scalar(text("SELECT 1 FROM auth.users WHERE id = :id"), {"id": user_id})
-    if not exists:
+    if not await user_exists(session, user_id):
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
     already_member = await count_where(session, Membership, Membership.user_id == user_id)
     if already_member:
         return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
-    org = await OrganizationRepository(session).create_with_owner(
-        name=event.email,
-        user_id=user_id,
-    )
+    try:
+        org = await OrganizationRepository(session).create_with_owner(
+            name=event.email,
+            user_id=user_id,
+        )
+    except IntegrityError:
+        # The race remains: gone between the check above and the membership insert. But the clause
+        # names a *type*, and an ``IntegrityError`` says nothing about which constraint broke — a
+        # handle collision and the last-owner trigger arrive spelled exactly the same. Asking the
+        # same question once the transaction is rolled back is what tells them apart; an actor who
+        # never left contradicts the no-op, so the failure goes back to the worker, whose park is
+        # what opens an issue.
+        await session.rollback()
+        if await user_exists(session, user_id):
+            raise
+        log.info("create_personal_org.actor_gone", user_id=str(user_id))
+        return
     await session.flush()  # assign org.id; the worker commits the whole unit
     await events.emit(
         OrganizationCreated(

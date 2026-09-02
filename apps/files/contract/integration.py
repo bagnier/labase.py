@@ -7,6 +7,7 @@ share router and the org-scoped router, claims the ``files`` slug, answers the d
 
 import uuid
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -134,10 +135,19 @@ async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid
     await (
         admin_storage().from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
     )
-    await OrgFileRepository(session, org_id).add(
-        uploaded_by=owner_id,
-        filename=_WELCOME_FILENAME,
-        storage_path=path,
-        content_type="text/plain",
-        size_bytes=len(_WELCOME_BODY),
-    )
+    try:
+        await OrgFileRepository(session, org_id).add(
+            uploaded_by=owner_id,
+            filename=_WELCOME_FILENAME,
+            storage_path=path,
+            content_type="text/plain",
+            size_bytes=len(_WELCOME_BODY),
+        )
+    except IntegrityError:
+        # Storage has no transaction to join: the rollback above this returns the row and leaves
+        # the object, at a ``uuid7`` path no row will ever name again — and the retry no-ops once
+        # the owner is confirmed gone, so nothing comes back for it. Undone here because the
+        # upload is this seeder's, and ``seed_org_welcome`` has no idea one happened. Re-raised
+        # unchanged: which failures are the vanished owner's is that caller's question, not ours.
+        await admin_storage().from_(bucket()).remove([path])
+        raise

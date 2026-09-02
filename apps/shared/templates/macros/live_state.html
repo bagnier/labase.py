@@ -1,0 +1,22 @@
+{# Whether a screen is showing a rolling window or a period someone asked for, and the way back.
+
+   Two screens answer this question — the Timeline and the queue's history — and a reader who
+   learns the green dot on one must not have to learn it again on the other. It lives here rather
+   than in either of them because the moment it was copied, the copies could drift: a different
+   word, a different dot, a "Back to live" that only one screen offers.
+
+   ``paused`` is the *query's* own emptiness, never a computed window: a screen that echoes its
+   resolved bounds back into its inputs reads as paused forever, with no way out. #}
+{% macro live_state(paused, back_href, extra_class="ml-auto") %}
+  <span class="{{ extra_class }} inline-flex items-center gap-2 text-xs text-base-content/60"
+        data-live-state="{{ 'paused' if paused else 'live' }}">
+    {% if paused %}
+      <span class="w-2 h-2 rounded-full bg-warning"></span>
+      Paused — browsing a period
+      <a class="link link-primary" href="{{ back_href }}">↑ Back to live</a>
+    {% else %}
+      <span class="w-2 h-2 rounded-full bg-success"></span>
+      Live
+    {% endif %}
+  </span>
+{% endmacro %}
