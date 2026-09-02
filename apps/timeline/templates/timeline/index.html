@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "timeline/_combobox.html" import combobox %}
 {% from "macros/page_header.html" import page_header %}
-{% from "macros/live_state.html" import live_state %}
+{% from "macros/live_state.html" import live_refresh, live_state %}
 {% from "macros/empty_state.html" import empty_state %}
 {% from "macros/data_table.html" import filter_bar %}
 {% from "macros/chart.html" import chart, chart_scripts %}
@@ -11,7 +11,7 @@
   <li>Timeline</li>
 {% endblock %}
 {% block content %}
-  {% set paused = filters.from_dt or filters.to_dt %}
+  {% set paused = filters.to_dt %}
   {# Full width (unlike the max-w-2xl console pages): the timeline is a wide, many-columned table
      that reads far better with room to breathe. #}
   <div class="space-y-6">
@@ -158,7 +158,13 @@
                 <th>Details</th>
               </tr>
             </thead>
-            <tbody id="timeline-entries">
+            {# Only the newest page on the default order refetches itself: a poll fetches the
+               top of the timeline, so it would throw away pages a reader loaded below and snap a
+               re-sorted view back to newest-first. The guard counts the rows on screen against
+               the page it was rendered with — the tbody's own attributes survive the swap, so the
+               number stays the first page's. #}
+            <tbody id="timeline-entries"
+                   {{ live_refresh(paused or sort != 'ts' or dir != 'desc' or filters.before, "/console/timeline?" ~ load_more_qs, "#timeline-entries", swap="innerHTML", unless="&&document.querySelectorAll('#timeline-entries tr[data-entry-name]').length<=" ~ entries | length) }}>
               {% include "timeline/_entries.html" %}
             </tbody>
           </table>

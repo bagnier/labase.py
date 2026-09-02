@@ -67,3 +67,24 @@ async def test_searching_for_text_reaches_past_it_too(reader):
     entries = await reader.search(TimelineFilter(source="logs", text="login_failed"))
 
     assert [e.name for e in entries] == ["auth.login_failed"]
+
+
+def test_a_live_timeline_refetches_itself_and_a_pinned_one_does_not(driver):
+    """Same rule and same period as the queue's history, from the same macro: what pauses a view is
+    naming the end of its window, and a view that is not paused has to refetch or "Live" is a word
+    it stops meaning a second after it is rendered."""
+    driver.sign_in_as_admin("timeline-live@example.com")
+
+    def page(**params) -> str:
+        return (
+            driver.client()
+            .get("/console/timeline", params=params, headers={"accept": "text/html"})
+            .text
+        )
+
+    assert [
+        "every 30s" in page(),
+        "every 30s" in page(from_dt="2026-09-02T03:00"),
+        "every 30s" in page(to_dt="2026-09-02T09:00"),
+        "every 30s" in page(sort="level"),
+    ] == [True, True, False, False]

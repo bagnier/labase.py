@@ -442,6 +442,12 @@ type = "protected"
 protected_modules = ["apps.todo.domain", "apps.todo.infra"]
 allowed_importers = ["apps.todo.**", "apps.*.tests.**"]
 
+[[tool.importlinter.contracts]]
+name = "tasks internals are private"
+type = "protected"
+protected_modules = ["apps.tasks.domain", "apps.tasks.infra"]
+allowed_importers = ["apps.tasks.**", "apps.*.tests.**"]
+
 [tool.djlint]
 profile = "jinja"
 indent = 2

@@ -20,6 +20,7 @@ from apps.public.contract import integration as public
 from apps.shared.contract import integration as shared
 from apps.shared.integration.host import host
 from apps.shared.persistence.database import dispose_engines
+from apps.tasks.contract import integration as tasks
 from apps.timeline.contract import integration as timeline
 from apps.todo.contract import integration as todo
 
@@ -32,6 +33,7 @@ _apps = sorted(
         issues,
         metrics,
         timeline,
+        tasks,
         console,
         organizations,
         api_keys,

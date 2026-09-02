@@ -205,20 +205,37 @@ async def bucketed_runs(
     return [TaskBucket.model_validate(dict(row)) for row in rows.mappings()]
 
 
-async def live_recurring_topics(session: AsyncSession) -> dict[str, int]:
-    """The recurring topics that still have a pending singleton, and how often each comes round.
+class RecurringTopic(BaseModel):
+    """A recurring topic's clock: how often it comes round, and when it next does.
+
+    There is no fixed hour to report. ``_complete`` enqueues the next row at ``now() + interval``
+    *when the last one finished*, so a daily chore drifts by however long each pass takes and by
+    whatever the worker's poll adds. ``next_run`` is the only honest answer to "when": the instant
+    this one is due, not a schedule it is held to.
+    """
+
+    every_seconds: int
+    next_run: datetime
+
+
+async def live_recurring_topics(session: AsyncSession) -> dict[str, RecurringTopic]:
+    """The recurring topics that still have a pending singleton, with their clock.
 
     Read whatever the window holds: a recurring topic is a permanent fixture, and a lane that
     vanishes on a quiet hour reads as the topic having been removed.
     """
     rows = await session.execute(
         text(
-            "SELECT topic, max(recurring_seconds) AS every FROM task_queue "
+            "SELECT topic, max(recurring_seconds) AS every, min(run_at) AS next_run "
+            "FROM task_queue "
             "WHERE recurring_seconds IS NOT NULL AND done_at IS NULL AND failed_at IS NULL "
             "GROUP BY topic ORDER BY topic"
         )
     )
-    return {row.topic: int(row.every) for row in rows}
+    return {
+        row.topic: RecurringTopic(every_seconds=int(row.every), next_run=row.next_run)
+        for row in rows
+    }
 
 
 class QueuedTaskRead(BaseModel):

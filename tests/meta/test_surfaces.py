@@ -22,6 +22,7 @@ from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.shared.events import BusinessEvent
 from apps.shared.events.catalog import catalog
 from apps.shared.logs.capture import ExceptionCaptured
+from apps.tasks.domain.strip import BANDS
 
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
@@ -348,3 +349,17 @@ def test_every_page_with_hash_tabs_loads_the_script_that_makes_them_work():
 def test_the_hash_tabs_walk_actually_finds_the_pages():
     # Guards the guard: a glob that matched nothing would make the assertion above vacuous.
     assert len(_pages_opting_into_hash_tabs()) > 1
+
+
+# The strip paints a block by class: `bucket_blocks` emits a `kind`, the template renders it as
+# `strip-<kind>`, and the stylesheet is what turns that into a colour. A kind the stylesheet never
+# heard of draws a transparent block — a run that happened, on a lane that says it happened, with
+# nothing on the film strip where it happened.
+
+
+def test_every_band_the_strip_can_draw_has_a_colour():
+    """The vocabulary is in one tuple (`_BAND_ORDER`); the colours are hand-written. Adding a state
+    to the first without the second loses runs off the picture, silently."""
+    painted = set(re.findall(r"\.strip-([a-z]+)\s*[,{]", _ICON_CSS.read_text()))
+
+    assert {kind for kind, _ in BANDS} - painted == set()

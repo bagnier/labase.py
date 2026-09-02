@@ -710,8 +710,13 @@
 .strip-parked {
   background: var(--color-error);
 }
-.strip-open,
-.strip-scheduled {
+/* Going wrong but not yet given up — solid where `.strip-attempt` is washed out, because one is
+   the try that failed and this is the task still owed after it. */
+.strip-retrying {
+  background: var(--color-warning);
+}
+/* Due, not run: hatched rather than filled, so an empty slot never reads as work that happened. */
+.strip-pending {
   background: repeating-linear-gradient(
     45deg,
     var(--color-base-300),
@@ -720,17 +725,70 @@
     var(--color-base-200) 8px
   );
 }
+/* Wide enough for a consumer name and the event under it, and no wider: the column used to hold
+   a whole `evt:<kind>:<consumer>` topic, and kept its width after the topic stopped being spelled
+   there — leaving a hand's breadth of nothing between the names and the film they label. */
+/* The lines under a task's name — what it reacts to or how often it runs, which row it is, whose
+   seat it runs under. Smaller than the name on purpose: the name is what a reader scans a column
+   for, the rest is what they check once they have stopped. */
+.task-sub {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-family: var(--font-mono);
+  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+}
 .strip-name {
-  width: 17rem;
+  width: 12rem;
   flex-shrink: 0;
   padding-right: 0.75rem;
   overflow: hidden;
 }
+/* The lanes sit under their family's heading rather than beside it. */
+.strip-group {
+  padding-left: 1rem;
+}
 .strip-tail {
-  width: 7rem;
+  width: 5.5rem;
   flex-shrink: 0;
   padding-left: 0.75rem;
   text-align: right;
+}
+/* One bar per lane, always the same width: it says how the window went for that lane, never how
+   much of it there was. The count beside it is what carries volume. */
+.task-bar {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  width: 4.5rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.task-bar > span {
+  height: 100%;
+  /* `.strip-attempt` carries a right border to mark where a try ended on the film; inside a bar
+     this narrow it would be a quarter of the segment. */
+  border-right: 0;
+}
+/* The count sits *on* the shares rather than beside them, so one object says both how many and how
+   they went. A white halo instead of a plate behind the digits, so the share the number describes
+   is not the share the number hides — and black rather than a theme colour, because it is read
+   against the bands and never against the page. */
+.task-total {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-base-content);
+  /* A grey halo rather than a white one: over the pale hatch of `pending` a white edge has nothing
+   to separate the digits from. Both tokens follow the theme, so this reads as black-on-grey on a
+   light one and flips on a dark one — the bands underneath stay saturated either way. */
+  text-shadow:
+    0 0 2px var(--color-base-300),
+    0 0 2px var(--color-base-300),
+    0 0 3px var(--color-base-300);
 }
 .strip-axis {
   position: relative;

@@ -1,0 +1,134 @@
+{% from "macros/live_state.html" import live_refresh, live_state %}
+{# The film strip: one lane per subject, time left to right. Recurring topics keep their lane
+   whatever the window holds; one-shots appear only if it caught them. #}
+{% macro lanes(rows) %}
+  <div class="strip-group">
+    <div class="relative">
+      <div class="absolute inset-0 flex" aria-hidden="true">
+        <div class="strip-name"></div>
+        <div class="strip-gridlines">
+          {% for tick in axis %}
+            <div class="strip-grid" style="left:{{ tick.left }}%"></div>
+          {% endfor %}
+        </div>
+        <div class="strip-tail"></div>
+      </div>
+      {% for lane in rows %}
+        <div class="strip-row">
+          <div class="strip-name">
+            <code class="text-xs block truncate">{{ lane.label.name }}</code>
+            {% if lane.label.kind or lane.cadence %}
+              <div class="task-sub">{{ lane.label.kind or lane.cadence }}</div>
+            {% endif %}
+          </div>
+          <div class="strip-lane">
+            {% for block in lane.segments %}
+              <a class="strip-block strip-{{ block.kind }}"
+                 style="left:{{ block.left }}%;
+                        width:{{ block.width }}%;
+                        top:{{ block.top }}%;
+                        height:{{ block.height }}%"
+                 aria-label="{{ block.caption }}"
+                 title="{{ block.caption }}"
+                 href="{{ block.href }}"></a>
+            {% endfor %}
+          </div>
+          {# How the window went for this lane: one fixed-width bar, shared out by band in the
+             colours the lane itself is drawn in, with the total written on it. #}
+          <div class="strip-tail">
+            {% if lane.counts %}
+              {% set tally = spell_tally(lane.counts) %}
+              <span class="task-bar" title="{{ tally }}" aria-label="{{ tally }}">
+                {% for kind, width in tally_bar(lane.counts) %}
+                  <span class="strip-{{ kind }}" style="width:{{ width }}%"></span>
+                {% endfor %}
+                <span class="task-total">{{ lane.counts.values() | sum }}</span>
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endmacro %}
+<div class="space-y-5"
+     id="task-history"
+     {{ live_refresh(to_dt, "/console/tasks?panel=history" ~ ("&from_dt=" ~ from_dt if from_dt else ""), "#task-history") }}>
+  <div class="flex items-end justify-end gap-4 flex-wrap">
+    {# `hx-push-url`: the window a reader chose belongs in the address, so it survives a reload and
+       can be sent to someone. It is also what makes "Back to live" below a navigation at all — a
+       link to the bare path is a no-op when the bare path is already what the URL says. #}
+    <form hx-get="/console/tasks"
+          hx-target="#task-history"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+          hx-trigger="change"
+          class="flex items-end gap-2">
+      <input type="hidden" name="panel" value="history" />
+      <label class="flex flex-col gap-1">
+        <span class="label-text text-xs">From (UTC)</span>
+        <input type="datetime-local"
+               name="from_dt"
+               value="{{ from_dt }}"
+               class="input input-bordered input-sm text-xs"
+               aria-label="History window start" />
+      </label>
+      <span class="text-base-content/50 pb-2">→</span>
+      <label class="flex flex-col gap-1">
+        <span class="label-text text-xs">To (UTC)</span>
+        <input type="datetime-local"
+               name="to_dt"
+               value="{{ to_dt }}"
+               class="input input-bordered input-sm text-xs"
+               aria-label="History window end" />
+      </label>
+      <span class="text-xs text-base-content/50 pb-2">now {{ now_utc }} UTC</span>
+      {{ live_state(to_dt, "/console/tasks#history", extra_class="pb-2") }}
+    </form>
+  </div>
+  <div class="flex text-xs text-base-content/50 strip-group">
+    <div class="strip-name"></div>
+    <div class="strip-axis">
+      {% for tick in axis %}<span style="left:{{ tick.left }}%">{{ tick.label }}</span>{% endfor %}
+    </div>
+    <div class="strip-tail"></div>
+  </div>
+  {% if not has_runs %}
+    <p class="text-sm text-base-content/70" data-strip-empty>
+      {% if window_ahead %}
+        This window has not happened yet — the bounds are read as UTC, and it is
+        {{ now_utc }} UTC now.
+      {% else %}
+        Nothing ran in this window.
+      {% endif %}
+    </p>
+  {% endif %}
+  <div data-strip-recurring>
+    <p class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1">Recurring</p>
+    {% if recurring_lanes %}
+      {{ lanes(recurring_lanes) }}
+    {% else %}
+      <p class="text-sm text-base-content/60">No recurring task is registered.</p>
+    {% endif %}
+  </div>
+  <div data-strip-oneshot>
+    <p class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1 mt-4">One-shot</p>
+    {% if oneshot_lanes %}
+      {{ lanes(oneshot_lanes) }}
+    {% else %}
+      <p class="text-sm text-base-content/60">No one-shot task ran in this window.</p>
+    {% endif %}
+  </div>
+  <div class="flex flex-wrap items-center gap-4 text-xs">
+    {% for kind, word in bands %}
+      <span><span class="strip-swatch strip-{{ kind }}"></span>{{ word }}</span>
+    {% endfor %}
+  </div>
+  <p class="text-xs text-base-content/50 max-w-3xl">
+    A block is one slot of a lane — {{ bucket_spelled }} here — stacking every outcome that landed
+    in it, worst first: nothing dropped, nothing hidden behind another. Recurring topics keep their
+    lane whether or not they ran; one-shots appear only if the window caught them. Runs come from
+    the queue, the failed tries inside them from the lines each retry logs — best-effort, and
+    bounded by the sink's own retention.
+  </p>
+</div>

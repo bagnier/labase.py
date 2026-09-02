@@ -37,7 +37,6 @@ from apps.console.infra.router import router
 from apps.shared.events.wiring import wiring
 from apps.shared.http.templates import templates
 from apps.shared.integration.host import Host, MountPhase
-from apps.shared.queue import TASK_STATES, count_unfinished_tasks
 from apps.shared.settings.live import SettingDef, SettingsChanged, SettingsDeclaration
 
 PHASE = MountPhase.CONSOLE
@@ -64,7 +63,6 @@ def mount(host: Host) -> None:
     host.register_settings(_declare_appearance_settings())
     host.contribs.provide(ConsoleOverviewQuery, appearance_overview)
     host.contribs.provide(ConsoleOverviewQuery, _events_overview)
-    host.contribs.provide(ConsoleOverviewQuery, _queue_overview)
 
     host.contribs.provide(ConsoleOverviewQuery, technical_overview)
 
@@ -90,23 +88,6 @@ async def _events_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         section="operations",
         href="/console/events",
         data={"lines": [f"{emitted} events", f"{reactions} reactions"]},
-    )
-
-
-async def _queue_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    """Console tile → the async substrate's backlog. Parked first, because that is the number that
-    means work nobody will redo: an issue was opened for the *bug*, and the row is still owed."""
-    counts = await count_unfinished_tasks(query.session)
-    # Every state that has rows, worst first — "nothing owed" is a claim about the whole queue,
-    # and a healthy server still holds the recurring singletons, which are owed like anything else.
-    lines = [f"{counts[state]} {state}" for state in TASK_STATES if counts[state]]
-    return ConsoleOverview(
-        key="queue",
-        title="Queue",
-        icon="stack",
-        section="operations",
-        href="/console/queue",
-        data={"lines": lines or ["Nothing owed"]},
     )
 
 

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% from "macros/page_header.html" import page_header %}
-{% block title %}Queue — Console{% endblock %}
+{% block title %}Tasks — Console{% endblock %}
 {% block breadcrumb %}
   <li><a href="/console">Console</a></li>
-  <li>Queue</li>
+  <li>Tasks</li>
 {% endblock %}
 {% block content %}
   <div class="max-w-5xl space-y-6">
-    {{ page_header("Queue") }}
+    {{ page_header("Tasks") }}
     <p class="text-sm text-base-content/70">
       The work the async substrate still owes — <em>parked</em> means the retries are spent and
       nobody will run it again. A parked task also opens an issue; the issue says there is a bug,
@@ -16,12 +16,12 @@
     <div role="tablist" class="tabs tabs-lift" data-hash-tabs>
       {# ── Backlog: the present state ───────────────────────────────────── #}
       <input type="radio"
-             name="queue-tabs"
+             name="task-tabs"
              role="tab"
              class="tab"
              aria-label="Backlog"
              data-tab="backlog"
-             checked />
+             {% if panel != "history" %}checked{% endif %} />
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
         <div class="space-y-6">
@@ -36,8 +36,8 @@
             {% endfor %}
           </div>
           <form role="search"
-                hx-get="/console/queue"
-                hx-target="#queue-tasks"
+                hx-get="/console/tasks"
+                hx-target="#task-backlog"
                 hx-swap="outerHTML"
                 hx-trigger="change, keyup changed delay:400ms from:input[type=search]"
                 class="flex flex-wrap items-end gap-3">
@@ -57,28 +57,31 @@
               <input type="search"
                      name="topic"
                      value="{{ topic_filter }}"
-                     list="queue-topic-options"
+                     list="task-options"
                      autocomplete="off"
                      placeholder="Any task"
                      aria-label="Filter by task"
                      class="input input-bordered input-sm w-72 font-mono" />
-              <datalist id="queue-topic-options">
-                {% for option in topics %}<option value="{{ option }}"></option>{% endfor %}
+              <datalist id="task-options">
+                {% for option in topics %}
+                  <option value="{{ option.name }}">{{ option.kind }}</option>
+                {% endfor %}
               </datalist>
             </label>
           </form>
-          {% include "console/_queue_tasks.html" %}
+          {% include "tasks/_backlog.html" %}
         </div>
       </div>
       {# ── History: what happened ───────────────────────────────────────── #}
       <input type="radio"
-             name="queue-tabs"
+             name="task-tabs"
              role="tab"
              class="tab"
              aria-label="History"
-             data-tab="history" />
+             data-tab="history"
+             {% if panel == "history" %}checked{% endif %} />
       <div role="tabpanel"
-           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">{% include "console/_queue_history.html" %}</div>
+           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">{% include "tasks/_history.html" %}</div>
     </div>
   </div>
 {% endblock %}

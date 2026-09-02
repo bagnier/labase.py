@@ -1,8 +1,8 @@
 {# The rows alone: the filter swaps this fragment in, the counters above it are unfiltered. #}
-<div id="queue-tasks">
+<div id="task-backlog">
   {% if tasks %}
     <div class="overflow-x-auto">
-      <table class="table table-sm" data-queue-tasks>
+      <table class="table table-sm" data-task-backlog>
         <thead>
           <tr>
             <th>State</th>
@@ -22,15 +22,16 @@
                 </span>
               </td>
               <td>
-                <code class="text-xs">{{ task.topic }}</code>
-                {% if task.recurring_seconds %}
-                  <span class="badge badge-ghost badge-xs">every {{ task.recurring_seconds }}s</span>
+                {% set label = labels[task.topic] %}
+                <code class="text-xs">{{ label.name }}</code>
+                {# What the row *is*, under its name — the event it answers, or the clock it runs
+                   on. Never both: a reaction is enqueued per fact, a chore per tick. #}
+                {% if label.kind or task.recurring_seconds %}
+                  <div class="task-sub">{{ label.kind or spell_cadence(task.recurring_seconds) }}</div>
                 {% endif %}
-                <div class="text-xs text-base-content/50 font-mono">{{ task.id }}</div>
+                <div class="task-sub">{{ task.id }}</div>
                 {% if task.user_id %}
-                  <div class="text-xs text-base-content/50">
-                    runs as <span class="font-mono">{{ task.user_id }}</span>
-                  </div>
+                  <div class="task-sub">runs as {{ task.user_id }}</div>
                 {% endif %}
               </td>
               <td class="whitespace-nowrap">{{ task.attempts }}/{{ task.max_attempts }}</td>
@@ -61,7 +62,7 @@
       </table>
     </div>
   {% else %}
-    <p class="text-sm text-base-content/60" data-queue-tasks>
+    <p class="text-sm text-base-content/60" data-task-backlog>
       {% if state_filter or topic_filter %}
         No task matches this filter.
       {% else %}

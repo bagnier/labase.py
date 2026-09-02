@@ -22,6 +22,7 @@ Percentages rather than pixels, computed here rather than in the template: an of
 width is a bug, and inside Jinja it reads as a rendering quirk nobody tests.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
@@ -32,13 +33,53 @@ from urllib.parse import urlencode
 _MIN_WIDTH = 0.4
 
 
+def _reaction_parts(topic: str) -> tuple[str, str] | None:
+    """``(kind, consumer)`` if this topic addresses a durable consumer, else ``None``.
+
+    A reaction is keyed ``evt:<kind>:<consumer>`` (``events.wiring``); a recurring chore is keyed by
+    a plain name. Everything that reads a topic for a human reads it through here.
+    """
+    parts = topic.split(":")
+    return (parts[1], parts[2]) if len(parts) == 3 and parts[0] == "evt" else None
+
+
+@dataclass(frozen=True)
+class TopicLabel:
+    """A topic split across the two lines a name gets: the consumer, and the event under it.
+
+    ``kind`` is empty for a topic that is nobody's reaction — a recurring chore has no event
+    behind it, and a second line repeating the first teaches nothing.
+    """
+
+    name: str
+    kind: str
+
+
+def topic_label(topic: str) -> TopicLabel:
+    """A queue topic, unstacked over two lines.
+
+    A topic is addressing, and addressing is repetitive on purpose: every reaction opens with the
+    same ``evt:`` and the consumer — the only half that differs between two lines — comes last. So
+    the consumer takes the line and the event it reacts to takes the dim one below.
+
+    Both stay on screen rather than one hiding behind a hover: these are read as a *column*, and a
+    column of names each holding half its meaning in a tooltip is a column nobody reads.
+
+    Consumer names are unique per event, not globally (``wiring.add_consumer``), so two reactions
+    to different events *could* shorten to the same word. The line below is what tells them apart,
+    and the JSON face still carries the topic whole.
+    """
+    reaction = _reaction_parts(topic)
+    return TopicLabel(name=reaction[1], kind=reaction[0]) if reaction else TopicLabel(topic, "")
+
+
 @dataclass(frozen=True)
 class StripSegment:
     """One block: where it sits in the window, and what it says.
 
     ``kind`` is the meaning, never the colour — ``attempt`` for a try that failed and was followed
-    by another, then how it ended: ``done``, ``parked``, ``open`` for a task the window closes on
-    before it finished, or ``scheduled`` for one that has not run yet.
+    by another, then where the slot left the task: ``done``, ``parked``, ``retrying`` for one still
+    owed after a failure, ``pending`` for one due but not yet run. The full vocabulary is ``BANDS``.
     """
 
     kind: str
@@ -57,7 +98,7 @@ class StripSegment:
     # What pointing at the block says. A block is a few pixels wide, so everything it knows has to
     # be reachable that way; built here and rendered as ``title`` + ``aria-label``, the shape the
     # activity heatmap already uses for its day cells.
-    label: str = ""
+    caption: str = ""
 
 
 @dataclass(frozen=True)
@@ -70,12 +111,17 @@ class StripLane:
     reader is looking for. One-shots have no such family — their lane is the task itself.
     """
 
-    key: str
-    title: str
-    subtitle: str
-    badge: str
+    topic: str
+    label: TopicLabel
+    # How often the lane comes round, for a recurring topic; empty for everything else. It shares
+    # the line under the name with ``label.kind``, and never collides with it: a topic is either a
+    # reaction to an event or a chore on a clock, never both.
+    cadence: str
     state: str
-    runs: int
+    # What the window holds for this lane, per band — the composition its right margin shows.
+    # Counts, never shares: one park among two thousand clean runs is the row this screen exists
+    # for, and its true proportion of the bar would be half a pixel.
+    counts: dict[str, int]
     segments: list[StripSegment]
 
 
@@ -159,15 +205,82 @@ def bucket_seconds(window_start: datetime, window_end: datetime) -> int:
     return next((s for s in _STEPS if span / s <= _MAX_BUCKETS), _STEPS[-1])
 
 
-# Worst first: the order the bands stack in, and the order a reader scans for.
-_BAND_ORDER = ("parked", "attempt", "retrying", "pending", "done")
-_BAND_WORDS = {
-    "parked": "parked",
-    "attempt": "failed tries",
-    "retrying": "retrying",
-    "pending": "pending",
-    "done": "done",
-}
+# Seconds are the queue's own unit; nothing on this screen is read in them. Both the bucket width
+# and a recurring topic's cadence come through here, so the same duration is never worded two ways.
+_UNITS = (("day", 86400), ("hour", 3600), ("min", 60))
+
+
+def _whole_unit(seconds: int) -> tuple[int, str]:
+    """The largest unit ``seconds`` divides into whole — ``(2, "hour")`` for 7200. Seconds
+    themselves when none does, rather than a rounding a reader cannot see."""
+    for unit, size in _UNITS:
+        if seconds >= size and seconds % size == 0:
+            return seconds // size, unit
+    return seconds, "second"
+
+
+def spell_duration(seconds: int) -> str:
+    """How long something lasts: ``"2 hours"``, ``"1 min"``."""
+    count, unit = _whole_unit(seconds)
+    return f"{count} {unit}" if count == 1 else f"{count} {unit}s"
+
+
+def spell_cadence(seconds: int | None, next_run: datetime | None = None) -> str:
+    """How often something comes round: ``"every hour"``, ``"every 2 hours"``, ``""`` for a topic
+    with no cadence at all. The count is dropped at one, which is how it is said.
+
+    With ``next_run``, the due instant is appended — "every day" answers how often and nothing at
+    all about when. It is written as *next*, not as an hour the chore keeps: the queue re-enqueues
+    from the moment the last pass ended (``queue._complete``), so the hour drifts and a fixed one
+    would be a schedule nothing honours.
+    """
+    if not seconds:
+        return ""
+    count, unit = _whole_unit(seconds)
+    every = f"every {unit}" if count == 1 else f"every {count} {unit}s"
+    return f"{every} · next {next_run:%H:%M}" if next_run else every
+
+
+# Worst first: the order the bands stack in, and the order a reader scans for. One tuple, read
+# three ways — the stacking order, the words a block says, and the legend under the strip. A band
+# added here is a band the legend names and the stylesheet must colour (``test_surfaces``).
+BANDS = (
+    ("parked", "parked"),
+    ("attempt", "failed tries"),
+    ("retrying", "retrying"),
+    ("pending", "pending"),
+    ("done", "done"),
+)
+_BAND_ORDER = tuple(kind for kind, _ in BANDS)
+_BAND_WORDS = dict(BANDS)
+
+
+# The floor a band gets in a lane's bar, in percent. A bar is drawn to be read as area, and area
+# is exactly what buries the interesting case: one park among two thousand clean runs is 0.05% of
+# the row. Same trade as ``_MIN_WIDTH`` on the film itself — a share below this is widened, and the
+# rest give up the difference, so the bar lies a little about proportion and not at all about
+# presence. The exact counts are written beside it.
+_MIN_SHARE = 6.0
+
+
+def spell_tally(counts: Mapping[str, int]) -> str:
+    """``"40 done · 2 parked"`` — the exact numbers the bar only shows the shape of."""
+    return " · ".join(f"{counts[kind]} {word}" for kind, word in BANDS if counts.get(kind))
+
+
+def tally_bar(counts: Mapping[str, int]) -> list[tuple[str, float]]:
+    """``(kind, width%)`` per band the window holds for one lane, worst first, summing to 100.
+
+    Empty for a lane the window caught nothing of — a recurring topic keeps its row whatever the
+    window holds, and a full-width bar of nothing would read as a run that happened.
+    """
+    present = [(kind, counts[kind]) for kind in _BAND_ORDER if counts.get(kind)]
+    if not present:
+        return []
+    total = sum(n for _, n in present)
+    floored = [(kind, max(n / total * 100, _MIN_SHARE)) for kind, n in present]
+    scale = 100 / sum(width for _, width in floored)
+    return [(kind, round(width * scale, 3)) for kind, width in floored]
 
 
 # The Timeline reads the same window from its own three sources; a block hands it the slot it
@@ -178,15 +291,14 @@ _TIMELINE = "/console/timeline"
 def _timeline_link(topic: str, slot_start: datetime, slot_end: datetime) -> str:
     """The Timeline, narrowed to this slot and to what ran in it.
 
-    The search term is the *event kind*, not the whole topic: a durable consumer's topic is
-    ``evt:<kind>:<consumer>`` (``events.wiring``), and only the kind in the middle is a word the
-    Timeline's other sources know — the journal records the fact under it, and a retry line
+    The search term is the *event kind*, not the whole topic: only the kind in the middle is a word
+    the Timeline's other sources know — the journal records the fact under it, and a retry line
     carries it inside its own topic. Searching the whole topic would find the log lines and miss
     every fact. A topic with no such shape searches for itself.
     """
-    parts = topic.split(":")
+    reaction = _reaction_parts(topic)
     query = {
-        "q": parts[1] if len(parts) == 3 and parts[0] == "evt" else topic,
+        "q": reaction[0] if reaction else topic,
         "from_dt": slot_start.strftime("%Y-%m-%dT%H:%M:%S"),
         "to_dt": slot_end.strftime("%Y-%m-%dT%H:%M:%S"),
     }
@@ -227,7 +339,7 @@ def bucket_blocks(
             height=round(share, 3),
             starts_at=slot_start,
             ends_at=slot_end,
-            label=f"{slot_start.strftime('%H:%M')} UTC · {held[state]} {_BAND_WORDS[state]}",
+            caption=f"{slot_start.strftime('%H:%M')} UTC · {held[state]} {_BAND_WORDS[state]}",
             href=href,
         )
         for index, state in enumerate(present)

@@ -5,8 +5,12 @@
    than in either of them because the moment it was copied, the copies could drift: a different
    word, a different dot, a "Back to live" that only one screen offers.
 
-   ``paused`` is the *query's* own emptiness, never a computed window: a screen that echoes its
-   resolved bounds back into its inputs reads as paused forever, with no way out. #}
+   ``paused`` is the query's own *upper* bound, and only that. A start with no end still closes on
+   ``now`` and keeps moving: it is a longer live window, not a period someone is browsing, and
+   "Back to live" there offers a way out of somewhere they never went.
+
+   Never a computed window either: a screen that echoes its resolved bounds back into its inputs
+   reads as paused forever, with no way out. #}
 {% macro live_state(paused, back_href, extra_class="ml-auto") %}
   <span class="{{ extra_class }} inline-flex items-center gap-2 text-xs text-base-content/60"
         data-live-state="{{ 'paused' if paused else 'live' }}">
@@ -19,4 +23,14 @@
       Live
     {% endif %}
   </span>
+{% endmacro %}
+{# The other half of the same claim. Saying "Live" and then not refetching is a promise the page
+   keeps for one second; a paused view cannot go stale, so polling it is pure churn.
+
+   ``target`` is a selector, used both to aim the swap and to stand the trigger down while the
+   reader's focus is inside it — landing a swap under someone mid-edit takes their edit away.
+   ``unless`` appends a further condition for a screen whose target holds state a refetch would
+   throw away (the timeline's older pages). One period, one guard, both screens. #}
+{% macro live_refresh(paused, href, target, swap="outerHTML", unless="") %}
+  {%- if not paused %} hx-get="{{ href }}" hx-target="{{ target }}" hx-swap="{{ swap }}" hx-trigger="every 30s[!document.activeElement||!document.activeElement.closest('{{ target }}'){{ unless }}]"{% endif -%}
 {% endmacro %}

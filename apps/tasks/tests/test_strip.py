@@ -20,7 +20,16 @@ here rather than inside a template where an off-by-one reads as a rendering quir
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
-from apps.console.domain.queue_strip import axis_ticks, bucket_blocks, bucket_seconds
+from apps.tasks.domain.strip import (
+    axis_ticks,
+    bucket_blocks,
+    bucket_seconds,
+    spell_cadence,
+    spell_duration,
+    spell_tally,
+    tally_bar,
+    topic_label,
+)
 
 _START = datetime(2026, 9, 2, 10, 0, tzinfo=UTC)
 _END = _START + timedelta(minutes=100)  # 100 minutes, so a minute is a percent
@@ -152,7 +161,7 @@ def test_a_slot_says_what_each_of_its_bands_holds():
         window_end=_END,
     )
 
-    assert [b.label for b in blocks] == [
+    assert [b.caption for b in blocks] == [
         "10:10 UTC · 1 parked",
         "10:10 UTC · 4 failed tries",
         "10:10 UTC · 12 done",
@@ -202,3 +211,85 @@ def test_the_link_searches_the_event_kind_rather_than_the_whole_topic():
     )
 
     assert parse_qs(urlparse(blocks[0].href).query)["q"] == ["rate_limit.purge"]
+
+
+# A topic is addressing, not prose: ``evt:<kind>:<consumer>`` is what the router matches on, and
+# reading a column of them means reading past the same six characters every line. The consumer is
+# the half that differs, so it takes the line; the event it reacts to goes to the dim line under it.
+
+
+def test_a_consumer_topic_reads_as_the_consumer_over_the_event():
+    label = topic_label("evt:organizations.created:todo_welcome")
+
+    assert (label.name, label.kind) == ("todo_welcome", "organizations.created")
+
+
+def test_a_topic_that_is_not_a_reaction_is_already_its_own_name():
+    """Recurring chores (``rate_limit.purge``) are addressed by a plain name — nothing to strip,
+    and no event behind them to name."""
+    label = topic_label("rate_limit.purge")
+
+    assert (label.name, label.kind) == ("rate_limit.purge", "")
+
+
+# Seconds are the queue's unit, not a reader's: 7200 and 86400 are both "a while" at a glance, and
+# telling them apart means dividing in your head. One speller, so the strip's footnote and the
+# cadence badge cannot word the same duration two ways.
+
+
+def test_a_duration_is_spelled_in_the_largest_unit_it_divides_into():
+    assert [spell_duration(s) for s in (60, 7200, 86400)] == ["1 min", "2 hours", "1 day"]
+
+
+def test_a_duration_no_unit_divides_stays_in_seconds():
+    assert spell_duration(90) == "90 seconds"
+
+
+def test_a_cadence_drops_the_count_when_it_is_one():
+    """ "every hour" is how it is said; "every 1 hour" is how a machine says it."""
+    assert [spell_cadence(s) for s in (3600, 7200, None)] == ["every hour", "every 2 hours", ""]
+
+
+# The lane's own bar: how the window went for it, at a glance. Shares, because that is what a bar
+# is for — but shares alone would draw one park among two thousand runs half a pixel wide, so a
+# present band never falls below a floor. The exact numbers live in the label beside it.
+
+
+def test_a_bar_gives_each_band_its_share():
+    assert tally_bar({"done": 3, "parked": 1}) == [("parked", 25.0), ("done", 75.0)]
+
+
+def test_a_single_failure_among_thousands_stays_visible():
+    """The row an admin opened this screen for cannot be the row too thin to see."""
+    bar = dict(tally_bar({"done": 2000, "parked": 1}))
+
+    assert bar["parked"] > 4
+
+
+def test_a_bar_is_drawn_worst_first():
+    ordered = [kind for kind, _ in tally_bar({"done": 1, "pending": 1, "parked": 1, "attempt": 1})]
+
+    assert ordered == ["parked", "attempt", "pending", "done"]
+
+
+def test_a_lane_the_window_caught_nothing_of_has_no_bar():
+    assert tally_bar({}) == []
+
+
+# "every day" says how often, never when. The queue has no fixed hour to report — `_complete`
+# enqueues the next row at now() + interval *when the last one finished*, so a daily chore drifts
+# by however long each pass takes. The due instant is the only honest answer.
+
+
+def test_a_cadence_says_when_it_next_comes_round():
+    at = datetime(2026, 9, 3, 3, 12, tzinfo=UTC)
+
+    assert spell_cadence(86400, at) == "every day · next 03:12"
+
+
+def test_a_cadence_with_no_next_run_says_only_how_often():
+    assert spell_cadence(86400) == "every day"
+
+
+def test_a_tally_spells_the_numbers_the_bar_only_shapes():
+    assert spell_tally({"done": 40, "parked": 2}) == "2 parked · 40 done"
