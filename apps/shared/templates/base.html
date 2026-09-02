@@ -64,7 +64,7 @@
           <aside aria-label="Sidebar"
                  class="flex h-full min-h-screen w-56 flex-col bg-base-100 border-r border-base-300">
             <!-- Logo -->
-            <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
+            <div class="flex h-14 flex-none items-center justify-between px-5 border-b border-base-300">
               <a href="/profile" class="flex items-center gap-2.5">
                 <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-content">
                   <i class="ph ph-lightning ph-sm" aria-hidden="true"></i>
@@ -117,9 +117,9 @@
               {% endfor %}
             </nav>
             <!-- User footer -->
-            <div class="border-t border-base-300 p-2">
+            <div class="flex h-14 flex-none items-center border-t border-base-300 px-2">
               <a href="/profile"
-                 class="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-base-200 transition-colors">
+                 class="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-base-200 transition-colors">
                 {% if profile_avatar_path %}
                   <div class="avatar">
                     <div class="w-8 rounded-full">
