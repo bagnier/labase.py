@@ -19,6 +19,26 @@
 
 - [ ] 29 README sentences nothing proves. `UNHELD_TODAY` is the most honest backlog in the repo:
   every waived claim names what would have to be built to hold it. [claims.py:582](tests/meta/claims.py#L582)
+- [ ] The files browser scenarios are intermittent: `make flakehunt N=5` on them failed 2 runs out
+  of 5 (2026-09-15), each a 30 s wait for the HTMX response of a row button — delete once, share
+  twice. Not dated: never compared against the tree before the dependency upgrade. → `flakehunt`
+  on that commit to date it, then whether the request leaves at all.
+  [browser_base.py:352](tests/e2e/drivers/browser_base.py#L352),
+  [driver_mixin_browser.py:122](apps/files/tests/e2e/driver_mixin_browser.py#L122),
+  [driver_mixin_browser.py:235](apps/files/tests/e2e/driver_mixin_browser.py#L235)
+- [ ] Test runs are not separated: any pytest session reaps the users of every other one.
+  `db_rollback` is autouse and needs the session `driver`, so every test — a pure one included —
+  starts a driver, and its teardown runs `purge_leftover_test_data`: `auth.users` on three hardcoded
+  domains, then every org left memberless. `auth.users` is shared by all schemas, so a session
+  ending anywhere deletes the users of a run still going — observed 2026-09-15, three browser
+  scenarios failing to the second a concurrent `pytest` ended; across worktrees it follows from the
+  code, not reproduced. The README says `make ci` "only purges its own test-email domains". → one
+  namespace per checkout and worker, email domain included, as the schema already is
+  (`test_<worker>`), with the purge bounded to it; the driver and its cleanup opt-in for the lanes
+  that drive the app, so a pure test starts nothing and one cleanup path is left.
+  [plugin.py:27](tests/e2e/plugin.py#L27), [plugin.py:30](tests/e2e/plugin.py#L30),
+  [cleanup.py:15](tests/e2e/cleanup.py#L15), [plugin.py:31](tests/plugin.py#L31),
+  [README.md:729](README.md#L729)
 
 
 ## features

@@ -172,7 +172,7 @@ annotation is wider than the truth.
 | **Biome**                   | JS + CSS + JSON linting/formatting (`biome.json`)                                |
 | **djlint**                  | Jinja2 template linting (configured in `pyproject.toml`)                         |
 | **sqlfluff**                | SQL migration linting — lint-light, no reformat (`scripts/.sqlfluff`, Postgres)  |
-| **gherkin-lint**            | BDD `.feature` structure linting (`scripts/.gherkin-lintrc`)                     |
+| **gplint**                  | BDD `.feature` structure linting (`scripts/.gplintrc`)                           |
 | **yamllint**                | YAML linting (`scripts/.yamllint`)                                               |
 | **validate-pyproject**      | `pyproject.toml` schema validation                                               |
 | **zizmor**                  | GitHub Actions security linting (`.github/zizmor.yml`)                           |
@@ -692,6 +692,11 @@ Notes:
   request.
 - **Migrations** — `supabase start` and `make db-reset` apply `supabase/migrations/`
   locally. `make migrate` (`supabase db push`) is for a linked **remote** project.
+- **Browser for e2e** — `playwright install` downloads Google's Chrome for Testing. To drive a
+  Chromium already on the machine instead, export `CHROMIUM_EXECUTABLE_PATH` (its binary, e.g.
+  `/Applications/Chromium.app/Contents/MacOS/Chromium`) and `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`;
+  `make test-e2e` and `make flakehunt` pass it to the driver, and the Playwright MCP reads the same
+  path from `PLAYWRIGHT_MCP_EXECUTABLE_PATH` (`.claude/settings.local.json`). CI leaves both unset.
 - **Python language server** — nothing to install: `pyright` is pinned in the dev group, so
   `make install` puts it in `.venv/`. The in-tree plugin `.claude/plugins/pyright-lsp/` points
   Claude Code at that binary; VS Code reaches the same engine through Pylance. Both read the
@@ -742,6 +747,7 @@ make db-reset     # Wipe and reset local DB
 make migrate      # Apply migrations (supabase db push)
 
 make env          # Write .env from `supabase status -o env`
+make upgrade      # Bump every Python dependency and re-pin (full pass: docs/upgrade.md)
 make upgrade-base # Product clones: merge the latest base (see docs/upgrade-base.md)
 make worktree NAME=x     # New git worktree with its own schema/bucket/port
 make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)

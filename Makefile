@@ -95,7 +95,7 @@ provision-test:
 # lint: read-only, fails on non-conforming code (used by `make ci`).
 # Per file type: ruff/ty/pyright (Python), sqlfluff (SQL migrations, lint-light — no reformat),
 # yamllint (YAML), validate-pyproject (pyproject schema), zizmor (GitHub Actions security),
-# biome (JS/CSS/JSON), gherkin-lint (.feature), djlint (Jinja2). Dockerfiles are linted by
+# biome (JS/CSS/JSON), gplint (.feature), djlint (Jinja2). Dockerfiles are linted by
 # droast, which runs as a self-contained GitHub Action in CI (see .github/workflows/ci.yml).
 # All Python linters are pinned dev-deps in pyproject.toml, so they resolve once in uv.lock
 # and run straight from the project env — no per-invocation resolution.
@@ -191,8 +191,10 @@ test: provision-test
 
 # The browser lane counts too: its Hypercorn server runs in-process, so it is the only lane
 # that renders HTML — the api driver asks for JSON on every request.
+# CHROMIUM_EXECUTABLE_PATH is the one outside variable let through: a Chromium installed on the
+# machine instead of Playwright's download (Google's Chrome for Testing). Unset, it arrives empty.
 test-e2e: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" CHROMIUM_EXECUTABLE_PATH="$(CHROMIUM_EXECUTABLE_PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
 
 # meta: the README's own lane — every claim the front page makes, each one held by a test or
 # waived in writing (tests/meta/claims.py). Worth running on a README edit rather than on a code

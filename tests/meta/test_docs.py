@@ -32,15 +32,15 @@ _STACK = {
     "**Python**": "3.14",
 }
 
-# Same shape for the quality tools. Several are not Python packages — Biome and gherkin-lint ride
-# npm, droast is a GitHub Action — so what is checked is that the repo still configures them
-# somewhere, which is the claim the table actually makes.
+# Same shape for the quality tools. Several are not Python packages — Biome and gplint ride npm,
+# droast is a GitHub Action — so what is checked is that the repo still configures them somewhere,
+# which is the claim the table actually makes.
 _TOOLS = {
     "**ruff**": "ruff",
     "**Biome**": "biome",
     "**djlint**": "djlint",
     "**sqlfluff**": "sqlfluff",
-    "**gherkin-lint**": "gherkin-lint",
+    "**gplint**": "gplint",
     "**yamllint**": "yamllint",
     "**validate-pyproject**": "validate-pyproject",
     "**zizmor**": "zizmor",

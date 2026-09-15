@@ -34,6 +34,7 @@ for i in $(seq 1 "$N"); do
     log="$OUT/run$i.log"
     make provision-test > "$OUT/provision$i.log" 2>&1
     env --ignore-environment ENV_FILE=.env.test PATH="$PATH" \
+        CHROMIUM_EXECUTABLE_PATH="${CHROMIUM_EXECUTABLE_PATH:-}" \
         uv run pytest "${TARGET[@]}" \
         -k "test_scenarios or test_browser_isolation" --driver=browser \
         -q -rf > "$log" 2>&1

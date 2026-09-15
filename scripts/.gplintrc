@@ -1,0 +1,28 @@
+{
+  "no-dupe-feature-names": "error",
+  "no-dupe-scenario-names": ["error", "in-feature"],
+  "no-empty-file": "error",
+  "no-files-without-scenarios": "error",
+  "no-scenario-outlines-without-examples": "error",
+  "no-unnamed-features": "error",
+  "no-unnamed-scenarios": "error",
+  "no-trailing-spaces": "error",
+  "no-multiple-empty-lines": "error",
+  "no-empty-background": "error",
+  "no-superfluous-tags": "error",
+  "no-homogenous-tags": "error",
+  "one-space-between-tags": "error",
+  "indentation": ["error", {
+    "Feature": 0,
+    "Background": 2,
+    "Scenario": 2,
+    "Step": 4,
+    "Examples": 4,
+    "example": 6,
+    "given": 4,
+    "when": 4,
+    "then": 4,
+    "and": 4,
+    "but": 4
+  }]
+}

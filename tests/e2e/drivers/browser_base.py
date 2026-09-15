@@ -5,6 +5,7 @@ assembles them."""
 
 import os
 from collections.abc import Callable
+from typing import TypedDict
 from urllib.parse import urlsplit
 
 from playwright.sync_api import (
@@ -31,6 +32,17 @@ VISITOR = _VISITOR  # public alias, mirroring api_base.VISITOR
 # never be allow-listed. ``LABASE_E2E_PORT`` overrides it when two checkouts run browser e2e at once
 # — passkey scenarios then need that origin allow-listed too.
 _E2E_PORT = 8801
+
+
+class LaunchOptions(TypedDict, total=False):
+    executable_path: str
+
+
+def launch_options() -> LaunchOptions:
+    """``CHROMIUM_EXECUTABLE_PATH`` names a Chromium installed on the machine; unset or empty, the
+    driver launches Playwright's own download, which is Google's Chrome for Testing."""
+    executable_path = os.environ.get("CHROMIUM_EXECUTABLE_PATH", "")
+    return {"executable_path": executable_path} if executable_path else {}
 
 
 class BrowserBase:
@@ -73,7 +85,7 @@ class BrowserBase:
             self.base_url = self._server.start(port=port)
 
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch()
+        self._browser = self._playwright.chromium.launch(**launch_options())
         self._open_context()
 
     @property

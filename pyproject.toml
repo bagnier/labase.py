@@ -2,7 +2,7 @@
 name = "labase"
 version = "0.1.0"
 description = "SaaS base — FastAPI + Supabase + HTMX"
-requires-python = "~=3.14.6"
+requires-python = "~=3.14.7"
 dependencies = [
     "aiosmtplib==5.1.3",
     "asyncpg==0.31.0",

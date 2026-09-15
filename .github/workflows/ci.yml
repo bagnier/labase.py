@@ -26,7 +26,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # We never push from CI, so don't persist the token in .git/config.
           persist-credentials: false
@@ -37,14 +37,15 @@ jobs:
       # (external-image `COPY --from`) and DF077 (docker/.dockerignore is not at the
       # build-context root, so Docker never reads it).
       - name: Lint Dockerfiles
-        uses: immanuwell/dockerfile-roast@1.5.1
+        uses: immanuwell/dockerfile-roast@1.7.0
         with:
           files: docker/Dockerfile*
           min-severity: error
           skip: DF049,DF077
 
+      # setup-uv publishes no major tag since v8 (immutable releases only), so the full version.
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.14"
           enable-cache: true
@@ -54,7 +55,7 @@ jobs:
         run: uv sync --all-groups
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version-file: package.json
           cache: npm
@@ -63,18 +64,18 @@ jobs:
         run: npm ci
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-1.60.0-chromium
+          key: playwright-1.62.0-chromium
 
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v2
+        uses: supabase/setup-cli@v3
         with:
-          version: 2.109.0
+          version: 2.117.0
 
       - name: Start Supabase local
         # Exclude services the app and test suite never touch (verified: avatars use

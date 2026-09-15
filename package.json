@@ -12,26 +12,26 @@
     "build:icons": "mkdir -p static/fonts && cp node_modules/@phosphor-icons/web/src/regular/Phosphor.woff2 static/fonts/",
     "build:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css --minify",
     "lint": "biome check",
-    "lint:gherkin": "gherkin-lint -c scripts/.gherkin-lintrc features/",
+    "lint:gherkin": "gplint -c scripts/.gplintrc features/",
     "format": "biome check --write"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.1",
-    "@tailwindcss/cli": "^4.3.1",
-    "daisyui": "^5.6.3",
-    "esbuild": "^0.28.0",
-    "gherkin-lint": "^4.2.4",
-    "tailwindcss": "^4.3.1"
+    "@biomejs/biome": "^2.5.13",
+    "@tailwindcss/cli": "^4.3.3",
+    "daisyui": "^5.7.38",
+    "esbuild": "^0.28.2",
+    "gplint": "^2.6.0",
+    "tailwindcss": "^4.3.3"
   },
   "dependencies": {
-    "@codemirror/lang-markdown": "^6.3.2",
-    "@codemirror/language": "^6.10.8",
-    "@fontsource/inter": "^5.2.8",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@fontsource/inter": "^5.3.0",
     "@phosphor-icons/web": "^2.1.2",
-    "alpinejs": "^3.15.12",
-    "apexcharts": "^6.8.0",
-    "codemirror": "^6.0.1",
-    "htmx.org": "^2.0.4",
+    "alpinejs": "^3.17.3",
+    "apexcharts": "^7.3.0",
+    "codemirror": "^6.0.2",
+    "htmx.org": "^2.0.10",
     "sortablejs": "^1.15"
   }
 }

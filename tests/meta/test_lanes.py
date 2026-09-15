@@ -74,7 +74,7 @@ def _tagged_scenarios() -> set[str]:
 def test_every_scenario_file_is_bound_exactly_once():
     """Bound twice is two runs of the same scenario; bound never is a feature file that describes
     behaviour nothing exercises — the failure this claim is most exposed to, since a `.feature`
-    with no test module still passes gherkin-lint and still reads as covered."""
+    with no test module still passes gplint and still reads as covered."""
     bindings = _scenario_bindings()
 
     unbound = {feature.name for feature in _FEATURES.glob("*.feature")} - set(bindings)
