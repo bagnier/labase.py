@@ -28,7 +28,8 @@
       "Task(claude)",
       "Task(Plan)",
       "WebFetch"
-    ]
+    ],
+    "defaultMode": "auto"
   },
   "extraKnownMarketplaces": {
     "labase": {
@@ -63,6 +64,9 @@
   "env": {
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
   },
-  "model": "opus",
-  "effortLevel": "high"
+  "model": "claude-opus-5",
+  "effortLevel": "high",
+  "attribution": {
+    "commit": ""
+  }
 }
