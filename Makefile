@@ -89,7 +89,8 @@ worktree-rm:
 	PYTHONPATH=. uv run python scripts/worktree.py remove $(NAME)
 
 # This checkout's own test stack (scripts/test_stack.py), on the ports .env.test points at:
-# started if needed, migrations applied. test-stack-rm removes it with its volumes.
+# started if needed, migrations applied. test-stack-rm removes it with its volumes, and the stacks
+# of worktrees whose directory is gone (git lists them as prunable).
 test-stack:
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/test_stack.py start
 

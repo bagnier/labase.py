@@ -9,7 +9,7 @@ description: >
   Do NOT use for: library or framework documentation (context7 instead), or a single URL you
   can read yourself in one call.
 
-  To call it: pass a JSON object, not prose:
+  To call it: invoke as a background agent and pass a JSON object, not prose:
   `{"question": str, "budget": int, "do_not_fetch": [url]}`, e.g.
   `{"question": "horaires du ferry Naples-Palerme", "budget": 25, "do_not_fetch": []}`.
   `budget` counts network retrievals (default 40, max 80); `do_not_fetch` holds URLs

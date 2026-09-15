@@ -13,10 +13,12 @@ The third holds the one bug none of the others can see, because it breaks nothin
 only lies. See its docstring.
 """
 
+import os
 import tomllib
 from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
 
 from apps.shared.settings.env import get_technical_settings
 from scripts.doctor import CHECKS, WARN_SECONDS, timed
@@ -26,8 +28,10 @@ COV_FLAGS = ("--cov", "--no-cov")
 
 def test_test_settings_are_loaded():
     settings = get_technical_settings()
-    # .env.test points to local Supabase; .env points to host.docker.internal.
-    assert settings.supabase_api_url == "http://127.0.0.1:54421", (
+    # .env.test points at the checkout's test stack (its port differs per worktree); .env points
+    # to host.docker.internal.
+    env_file_url = dotenv_values(os.environ["ENV_FILE"])["SUPABASE_API_URL"]
+    assert settings.supabase_api_url == env_file_url, (
         f"test config not loaded: supabase_api_url={settings.supabase_api_url!r} "
         "(the environment is likely overriding .env.test — check python.envFile)"
     )

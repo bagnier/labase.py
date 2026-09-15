@@ -12,6 +12,19 @@ def test_project_id_names_the_checkout():
     assert test_stack.project_id("labase.py") == "labase-labase-py-test"
 
 
+def test_prunable_worktrees_are_the_ones_whose_directory_is_gone():
+    porcelain = (
+        "worktree /code/labase.py\nHEAD a1\nbranch refs/heads/main\n\n"
+        "worktree /code/labase.py/worktrees/calendar\nHEAD b2\nbranch refs/heads/calendar\n\n"
+        "worktree /code/labase.py/worktrees/gone\nHEAD c3\nbranch refs/heads/gone\n"
+        "prunable gitdir file points to non-existent location\n\n"
+    )
+
+    names = test_stack.prunable_worktrees(porcelain)
+
+    assert names == ["gone"]
+
+
 def test_cli_ports_are_the_ones_the_test_settings_point_at():
     # A block no env file uses, so the values can only come from this object.
     settings = TechnicalSettings(

@@ -19,9 +19,13 @@ Read `README.md` first.
   the person, not flattery of the idea.
 - Command slower than 1s: never `| tail`, always `> /tmp/<file>`.
 - Command slower than 10s: never `timeout `, always run in background.
+- Never wait on background task — no `until`/`sleep`, the completion notification brings you 
+  back.
 - Skip files over 100KB unless explicitly required.
 - A file an instruction names is read whole: `Read`, not `cat | head`. Truncating to save
   context decides what matters before knowing what is there.
+- Any change to code starts from a failing test — the `tdd` loop, whether or not the request
+  says so.
 - User instructions may override this general guidance.
 <!-- /charm:general-guidance -->
 

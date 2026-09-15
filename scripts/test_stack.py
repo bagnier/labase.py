@@ -35,6 +35,16 @@ def cli_ports(settings: TechnicalSettings) -> dict[str, str]:
     }
 
 
+def prunable_worktrees(porcelain: str) -> list[str]:
+    """Names of the worktrees git still lists but whose directory is gone, from
+    `git worktree list --porcelain` — a record per worktree, `worktree <path>` first."""
+    return [
+        Path(lines[0].removeprefix("worktree ")).name
+        for lines in (record.splitlines() for record in porcelain.split("\n\n"))
+        if any(line.split(" ", 1)[0] == "prunable" for line in lines)
+    ]
+
+
 def _cli_env(checkout: str) -> dict[str, str]:
     return {
         **os.environ,
@@ -52,8 +62,17 @@ def start(checkout: str) -> None:
 
 
 def stop(checkout: str) -> None:
-    """Removes the stack with its volumes: the next start is a fresh database."""
+    """Removes the stack with its volumes — the next start is a fresh database — then the stacks
+    of worktrees deleted without `make worktree-rm`, which git still lists as prunable. A
+    `git worktree remove` leaves no such trace, so its stack is not found here."""
     subprocess.run(["supabase", "stop", "--no-backup"], env=_cli_env(checkout), check=True)
+    listing = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"], capture_output=True, text=True, check=True
+    ).stdout
+    for name in prunable_worktrees(listing):
+        orphan = {**os.environ, "SUPABASE_PROJECT_ID": project_id(name)}
+        subprocess.run(["supabase", "stop", "--no-backup"], env=orphan, check=True)
+        print(f"{project_id(name)} removed — its worktree directory is gone")
 
 
 def main() -> int:

@@ -760,7 +760,7 @@ make upgrade-base # Product clones: merge the latest base (see docs/upgrade-base
 make worktree NAME=x     # New git worktree with its own schema/bucket/port
 make worktree-rm NAME=x  # Remove it (worktree + schema + bucket + test stack)
 make test-stack   # This checkout's test stack, started if needed (every test lane runs it)
-make test-stack-rm       # Remove it with its volumes
+make test-stack-rm       # Remove it with its volumes, and those of worktrees deleted by hand
 
 make install      # Supabase + uv sync + pre-commit + npm install + .env + npm run build
 
