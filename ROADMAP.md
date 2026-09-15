@@ -26,19 +26,10 @@
   [browser_base.py:352](tests/e2e/drivers/browser_base.py#L352),
   [driver_mixin_browser.py:122](apps/files/tests/e2e/driver_mixin_browser.py#L122),
   [driver_mixin_browser.py:235](apps/files/tests/e2e/driver_mixin_browser.py#L235)
-- [ ] Test runs are not separated: any pytest session reaps the users of every other one.
-  `db_rollback` is autouse and needs the session `driver`, so every test — a pure one included —
-  starts a driver, and its teardown runs `purge_leftover_test_data`: `auth.users` on three hardcoded
-  domains, then every org left memberless. `auth.users` is shared by all schemas, so a session
-  ending anywhere deletes the users of a run still going — observed 2026-09-15, three browser
-  scenarios failing to the second a concurrent `pytest` ended; across worktrees it follows from the
-  code, not reproduced. The README says `make ci` "only purges its own test-email domains". → one
-  namespace per checkout and worker, email domain included, as the schema already is
-  (`test_<worker>`), with the purge bounded to it; the driver and its cleanup opt-in for the lanes
-  that drive the app, so a pure test starts nothing and one cleanup path is left.
-  [plugin.py:27](tests/e2e/plugin.py#L27), [plugin.py:30](tests/e2e/plugin.py#L30),
-  [cleanup.py:15](tests/e2e/cleanup.py#L15), [plugin.py:31](tests/plugin.py#L31),
-  [README.md:729](README.md#L729)
+- [ ] Two runs in the same checkout break each other: they share its test stack and its `test`
+  schema, which `make test` drops and rebuilds (`provision-test`) and the browser driver truncates
+  between scenarios. → one schema per run.
+  [provision_schema.py:189](scripts/provision_schema.py#L189), [cleanup.py:71](tests/e2e/cleanup.py#L71)
 
 
 ## features

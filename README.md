@@ -676,12 +676,13 @@ App: http://localhost:8000 · Swagger: http://localhost:8000/docs
 | File        | Used by                                 | Hosts                        |
 | ----------- | --------------------------------------- | ---------------------------- |
 | `.env`      | `docker compose` (app container)        | `host.docker.internal:543xx` |
-| `.env.test` | `make test` / `make test-e2e` (on host) | `localhost:543xx`            |
+| `.env.test` | `make test` / `make test-e2e` (on host) | `localhost:544xx`            |
 
 `make env` generates `.env` (mapping the Supabase CLI output to `SUPABASE_API_URL`,
 `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_DATABASE_USER_URL`,
 `SUPABASE_DATABASE_ADMIN_URL`, with the asyncpg driver and `host.docker.internal` host).
-`.env.test` is committed and uses `localhost`.
+`.env.test` is committed and uses `localhost`. It points at the checkout's test stack (543xx is
+the dev stack, 544xx the test one — see Parallel work below).
 
 Notes:
 
@@ -705,9 +706,16 @@ Notes:
 ### Parallel work: isolated worktrees
 
 To develop several features in parallel without their data colliding — and so `make ci`
-never wipes your `make dev` data — each git worktree gets its **own** Postgres schema,
-Storage bucket and app port, all on the **single** shared local Supabase stack (no second
-`supabase start`). This is also what makes parallel agent-driven development safe.
+never wipes your `make dev` data — `make dev` and the tests never share a stack. `make dev`
+runs on the local Supabase stack (543xx), where each git worktree gets its **own** Postgres
+schema, Storage bucket and app port. Each checkout's tests run on a stack of their **own**,
+`labase-<checkout>-test`, on the ports its `.env.test` names: 544xx for the main checkout, a
+block derived from the name for a worktree. `auth.users` and the mail catcher belong to a
+stack, so a test run never reaches another checkout's users. This is also what makes parallel
+agent-driven development safe.
+
+`make test-stack` starts it — idempotent, run by every test lane, ~30 s cold and ~600 MB with
+Studio, analytics and realtime left out — and `make test-stack-rm` removes it with its volumes.
 
 ```bash
 make worktree NAME=calendar     # creates worktrees/calendar
@@ -717,21 +725,21 @@ make worktree-rm NAME=calendar  # removes worktree + schema + bucket
 
 Per worktree `<name>`:
 
-| Resource  | Dev (`make dev`)    | Test (`make ci`)        |
-| --------- | ------------------- | ----------------------- |
-| DB schema | `wt_<name>`         | `wt_<name>_test`        |
-| Bucket    | `org-files-<name>`  | `org-files-<name>-test` |
-| App port  | derived from name   | in-process              |
-| Dev user  | `<name>@labase.dev` | —                       |
+| Resource  | Dev (`make dev`)    | Test (`make ci`)                |
+| --------- | ------------------- | ------------------------------- |
+| Stack     | the dev stack       | `labase-<name>-test`            |
+| API port  | 54321               | derived from name (54521-59421) |
+| DB schema | `wt_<name>`         | `test`                          |
+| Bucket    | `org-files-<name>`  | `org-files-test`                |
+| App port  | derived from name   | in-process                      |
+| Dev user  | `<name>@labase.dev` | —                               |
 
 The schema is a structural clone of `public` (`scripts/provision_schema.py` — a `pg_dump`
 of `public`, rewritten to the target schema, plus the Storage bucket/policies and a
-per-schema signup trigger). **Auth (GoTrue / `auth.users`) is shared**: isolation there is
-logical — the dev user is namespaced by email, and `make ci` only purges its own
-test-email domains. A `node_modules` symlink and `uv sync` mean a worktree needs no full
-reinstall. The same mechanism makes the main repo's own tests run in a real `test` schema
-(`make provision-test`, run automatically by `make test`), so they no longer touch
-`public` / your `make dev` data.
+per-schema signup trigger). On the dev stack, auth (GoTrue / `auth.users`) is shared by the
+worktrees — the dev user is namespaced by email. A `node_modules` symlink and `uv sync` mean
+a worktree needs no full reinstall. Tests run in a `test` schema cloned from their own stack's
+`public` (`make provision-test`, run automatically by `make test`).
 
 ### Commands
 
@@ -750,7 +758,9 @@ make env          # Write .env from `supabase status -o env`
 make upgrade      # Bump every Python dependency and re-pin (full pass: docs/upgrade.md)
 make upgrade-base # Product clones: merge the latest base (see docs/upgrade-base.md)
 make worktree NAME=x     # New git worktree with its own schema/bucket/port
-make worktree-rm NAME=x  # Remove it (worktree + schema + bucket)
+make worktree-rm NAME=x  # Remove it (worktree + schema + bucket + test stack)
+make test-stack   # This checkout's test stack, started if needed (every test lane runs it)
+make test-stack-rm       # Remove it with its volumes
 
 make install      # Supabase + uv sync + pre-commit + npm install + .env + npm run build
 

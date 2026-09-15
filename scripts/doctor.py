@@ -47,7 +47,7 @@ async def check_gotrue() -> None:
 async def check_mailpit_api() -> None:
     settings = get_technical_settings()
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"http://{settings.smtp_host}:54324/api/v1/messages")
+        resp = await client.get(f"{settings.mailpit_url}/api/v1/messages")
         resp.raise_for_status()
 
 

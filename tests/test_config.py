@@ -27,7 +27,7 @@ COV_FLAGS = ("--cov", "--no-cov")
 def test_test_settings_are_loaded():
     settings = get_technical_settings()
     # .env.test points to local Supabase; .env points to host.docker.internal.
-    assert settings.supabase_api_url == "http://127.0.0.1:54321", (
+    assert settings.supabase_api_url == "http://127.0.0.1:54421", (
         f"test config not loaded: supabase_api_url={settings.supabase_api_url!r} "
         "(the environment is likely overriding .env.test — check python.envFile)"
     )

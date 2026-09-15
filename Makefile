@@ -1,6 +1,7 @@
-.PHONY: check meta flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-report coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test deadcode doctor upgrade-base preflight backup-storage
+.PHONY: check meta flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-report coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test test-stack test-stack-rm deadcode doctor upgrade-base preflight backup-storage
 
-# Each worktree runs on the single shared Supabase stack but with its own schema/bucket/port.
+# Each worktree's `make dev` runs on the single dev Supabase stack with its own schema/bucket/port;
+# each checkout's tests run on a stack of their own (test-stack).
 # Compose is isolated per checkout so several `make dev` can run at once.
 # Docker compose project names allow only [a-z0-9_-], so sanitise the dir name (e.g. "labase.py").
 WORKTREE := $(subst .,-,$(notdir $(CURDIR)))
@@ -80,15 +81,23 @@ down:
 logs:
 	$(COMPOSE) logs --follow app
 
-# --- Worktrees (isolated schema/bucket/port on the shared Supabase) ---
+# --- Worktrees (schema/bucket/port on the dev stack, tests on their own stack) ---
 worktree:
-	uv run python scripts/worktree.py create $(NAME)
+	PYTHONPATH=. uv run python scripts/worktree.py create $(NAME)
 
 worktree-rm:
-	uv run python scripts/worktree.py remove $(NAME)
+	PYTHONPATH=. uv run python scripts/worktree.py remove $(NAME)
 
-# Clone the current public schema into this checkout's test schema (+ its bucket).
-provision-test:
+# This checkout's own test stack (scripts/test_stack.py), on the ports .env.test points at:
+# started if needed, migrations applied. test-stack-rm removes it with its volumes.
+test-stack:
+	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/test_stack.py start
+
+test-stack-rm:
+	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/test_stack.py stop
+
+# Clone the test stack's public schema into this checkout's test schema (+ its bucket).
+provision-test: test-stack
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/provision_schema.py --reset
 
 # --- Quality ---
@@ -157,7 +166,7 @@ upgrade-base:
 
 # doctor: reachability AND latency of the local stack (a wedged Docker proxy
 # accepts TCP but multiplies every round-trip — see scripts/doctor.py).
-doctor:
+doctor: test-stack
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/doctor.py
 
 # --- Production ---

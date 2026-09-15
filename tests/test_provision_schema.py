@@ -24,6 +24,12 @@ def guard_schema() -> Iterator[str]:
     ps.deprovision(GUARD_SCHEMA, GUARD_BUCKET)
 
 
+def test_db_port_is_the_host_port_of_the_database_url():
+    url = "postgresql+asyncpg://postgres:postgres@127.0.0.1:22622/postgres"
+
+    assert ps.db_port(url) == 22622
+
+
 def _count(container: str, sql: str) -> str:
     return ps._query(container, sql)
 

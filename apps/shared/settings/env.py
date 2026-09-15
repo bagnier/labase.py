@@ -70,6 +70,8 @@ class TechnicalSettings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_starttls: bool = False
+    # The catcher's HTTP API, beside its SMTP port: read by the e2e mailbox and `make doctor`.
+    mailpit_url: str = "http://127.0.0.1:54324"
 
     @model_validator(mode="after")
     def _default_storage_url(self) -> TechnicalSettings:

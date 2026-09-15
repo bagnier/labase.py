@@ -77,11 +77,11 @@ jobs:
         with:
           version: 2.117.0
 
-      - name: Start Supabase local
-        # Exclude services the app and test suite never touch (verified: avatars use
-        # raw Storage downloads not imgproxy; no edge functions; no realtime channels).
-        # Keeps db, auth, rest, storage, mailpit — everything the suite exercises.
-        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime
+      # The checkout's own test stack, on the ports .env.test points at (scripts/test_stack.py
+      # names the services it leaves out). `make ci` would start it anyway; its own step keeps
+      # the pull and boot time out of the suite's.
+      - name: Start the test stack
+        run: make test-stack
 
       - name: Run CI
         run: make ci

@@ -20,19 +20,40 @@ import re
 import subprocess
 import sys
 
+from sqlalchemy.engine import make_url
+
 from apps.shared.settings.env import get_technical_settings
 
 
+def db_port(database_url: str) -> int:
+    port = make_url(database_url).port
+    if port is None:
+        sys.exit(f"No port in the database URL: {database_url!r}")
+    return port
+
+
 def _db_container() -> str:
-    """Name of the local Supabase Postgres container (shared by all worktrees)."""
+    """The Postgres container of the stack the env file points to — a checkout's test stack and
+    the dev stack run side by side, so it is found by the host port it publishes."""
+    settings = get_technical_settings()
+    port = db_port(settings.supabase_database_admin_url or settings.supabase_database_user_url)
     out = subprocess.run(
-        ["docker", "ps", "--format", "{{.Names}}", "--filter", "name=supabase_db"],
+        [
+            "docker",
+            "ps",
+            "--format",
+            "{{.Names}}",
+            "--filter",
+            "name=supabase_db",
+            "--filter",
+            f"publish={port}",
+        ],
         capture_output=True,
         text=True,
         check=True,
     ).stdout.split()
     if not out:
-        sys.exit("No running supabase_db container found — run `make db-start` first.")
+        sys.exit(f"No supabase_db container publishes port {port} — is that stack running?")
     return out[0]
 
 

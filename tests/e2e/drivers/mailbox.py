@@ -1,9 +1,9 @@
 """Mailpit client — the HTTP face of the local Supabase mail catcher.
 
-One mailbox for everything: the app's SmtpMailer and GoTrue both deliver over
-SMTP (127.0.0.1:54325), both E2E drivers assert real deliveries through this
-API (127.0.0.1:54324). Assertions match on a per-scenario unique marker (an
-invitation token) so runs and worktrees sharing the catcher never collide.
+One mailbox per stack: the app's SmtpMailer and GoTrue both deliver over SMTP
+(``smtp_port``), both E2E drivers assert real deliveries through this API
+(``mailpit_url``). Assertions match on a per-scenario unique marker (an
+invitation token) so runs sharing the catcher never collide.
 """
 
 import re
@@ -12,7 +12,7 @@ from datetime import datetime
 
 import httpx
 
-MAILPIT_URL = "http://127.0.0.1:54324"
+from apps.shared.settings.env import get_technical_settings
 
 _TOKEN_HASH = re.compile(r"token_hash=([A-Za-z0-9_-]+)")
 
@@ -27,7 +27,8 @@ def wait_for_message(
     catcher accumulates across runs). Raises AssertionError on deadline.
     """
     deadline = time.monotonic() + timeout
-    with httpx.Client(base_url=MAILPIT_URL, timeout=5.0) as client:
+    mailpit_url = get_technical_settings().mailpit_url
+    with httpx.Client(base_url=mailpit_url, timeout=5.0) as client:
         while True:
             summaries = (
                 client.get("/api/v1/search", params={"query": f"to:{to}"})
