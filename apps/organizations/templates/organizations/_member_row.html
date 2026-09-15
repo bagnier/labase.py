@@ -23,7 +23,8 @@
     {% set is_self = m.email == current_user.email %}
     {% if caller_role == "owner" or is_self %}
       <div class="dropdown dropdown-end">
-        <button data-manage
+        <button type="button"
+                data-manage
                 aria-label="Manage {{ m.email }}"
                 aria-haspopup="true"
                 tabindex="0"
@@ -36,7 +37,8 @@
           {% if caller_role == "owner" and not is_self %}
             {% if m.role == "member" %}
               <li>
-                <button data-promote
+                <button type="button"
+                        data-promote
                         role="menuitem"
                         hx-patch="/{{ org_handle }}/members/{{ m.user_id }}"
                         hx-vals='{"role": "owner"}'
@@ -45,7 +47,8 @@
               </li>
             {% else %}
               <li>
-                <button data-demote
+                <button type="button"
+                        data-demote
                         role="menuitem"
                         hx-patch="/{{ org_handle }}/members/{{ m.user_id }}"
                         hx-vals='{"role": "member"}'
@@ -54,7 +57,8 @@
               </li>
             {% endif %}
             <li>
-              <button data-remove
+              <button type="button"
+                      data-remove
                       role="menuitem"
                       class="text-error"
                       hx-delete="/{{ org_handle }}/members/{{ m.user_id }}"
@@ -65,7 +69,8 @@
           {% endif %}
           {% if is_self %}
             <li>
-              <button data-leave
+              <button type="button"
+                      data-leave
                       role="menuitem"
                       class="text-error"
                       aria-label="Leave {{ org.name }}"

@@ -16,7 +16,8 @@
            class="text-sm text-base-content/70">{{ member_count }} member{{ 's' if member_count != 1 }}</p>
       </div>
       {% if caller_role == "owner" %}
-        <button data-invite-toggle
+        <button type="button"
+                data-invite-toggle
                 @click="inviting = !inviting"
                 class="btn btn-primary btn-sm">Invite a member</button>
       {% endif %}

@@ -20,7 +20,7 @@
           <input type="checkbox"
                  data-slug="{{ c.slug }}"
                  {% if c.in_nav %}checked{% endif %}
-                 aria-label="Include &ldquo;{{ c.title }}&rdquo; in navigation"
+                 aria-label="Include “{{ c.title }}” in navigation"
                  class="nav-checkbox checkbox checkbox-sm cursor-pointer flex-none" />
           <span class="flex-1 text-sm">{{ c.title }}</span>
           <span class="badge badge-sm {% if c.visibility == 'public' %}badge-success{% else %}badge-info{% endif %}">

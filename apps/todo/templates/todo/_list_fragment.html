@@ -8,7 +8,7 @@
     <input type="checkbox"
            data-todo-id="{{ todo.id }}"
            {% if todo.done %}checked{% endif %}
-           aria-label="Mark &ldquo;{{ todo.title }}&rdquo; as done"
+           aria-label="Mark “{{ todo.title }}” as done"
            hx-patch="/{{ org_handle }}/todos/{{ todo.id }}"
            hx-vals='js:{"done": event.target.checked}'
            hx-target="#todo-list"
@@ -18,13 +18,14 @@
           data-title-id="{{ todo.id }}">{{ todo.title }}</span>
     <button type="button"
             data-edit-id="{{ todo.id }}"
-            aria-label="Edit &ldquo;{{ todo.title }}&rdquo;"
+            aria-label="Edit “{{ todo.title }}”"
             onclick="startEdit('{{ todo.id }}')"
             class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary">
       <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
     </button>
-    <button data-delete-id="{{ todo.id }}"
-            aria-label="Delete &ldquo;{{ todo.title }}&rdquo;"
+    <button type="button"
+            data-delete-id="{{ todo.id }}"
+            aria-label="Delete “{{ todo.title }}”"
             hx-delete="/{{ org_handle }}/todos/{{ todo.id }}"
             hx-target="#todo-list"
             hx-swap="innerHTML"

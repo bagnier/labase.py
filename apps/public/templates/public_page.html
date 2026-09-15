@@ -26,7 +26,8 @@
             </div>
             <span class="font-semibold text-sm tracking-tight">{{ org.name }}</span>
           </a>
-          <button @click="navOpen = false"
+          <button type="button"
+                  @click="navOpen = false"
                   aria-label="Close navigation"
                   class="lg:hidden btn btn-ghost btn-sm btn-square">
             <i class="ph ph-x ph-sm" aria-hidden="true"></i>
@@ -59,7 +60,8 @@
       <div class="flex-1 flex flex-col min-w-0">
         <!-- Top bar -->
         <header class="navbar min-h-14 bg-base-100 border-b border-base-300 px-4 gap-3 flex-none">
-          <button @click="navOpen = true"
+          <button type="button"
+                  @click="navOpen = true"
                   aria-label="Open navigation"
                   :aria-expanded="navOpen"
                   class="flex-none btn btn-ghost btn-sm btn-square lg:hidden">

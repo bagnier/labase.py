@@ -14,11 +14,11 @@
       <p class="font-semibold mt-2">{{ message }}</p>
       {% if hint %}<p class="text-sm text-base-content/60 mt-1">{{ hint }}</p>{% endif %}
     </div>
-  {% elif tag == 'li' %}
+  {% elif tag == "li" %}
     <li class="px-4 py-6 text-sm text-center text-base-content/50"
         data-empty
         {{ attr }}>{{ message }}</li>
-  {% elif tag == 'td' %}
+  {% elif tag == "td" %}
     <td colspan="{{ colspan }}"
         class="px-4 py-6 text-sm text-center text-base-content/60"
         data-empty

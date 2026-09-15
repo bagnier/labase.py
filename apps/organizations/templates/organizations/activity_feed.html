@@ -5,7 +5,8 @@
 <div id="activity-feed">
   {{ activity_feed(activity_groups, empty="No activity matches — try another search or range.") }}
   {% if activity_has_more %}
-    <button class="btn btn-block btn-ghost btn-sm mt-4"
+    <button type="button"
+            class="btn btn-block btn-ghost btn-sm mt-4"
             hx-get="/{{ org_handle }}/dashboard/activity?limit={{ activity_next_limit }}{{ activity_query }}"
             hx-target="#activity-feed"
             hx-swap="outerHTML">Load older activity</button>

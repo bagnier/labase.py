@@ -318,7 +318,9 @@
               <div class="card-body">
                 <h2 class="card-title text-sm font-semibold mb-3">
                   Two-factor authentication
-                  {% if twofa_active %}<span class="badge badge-sm badge-success" data-twofa-active>enabled</span>{% endif %}
+                  {% if twofa_active %}
+                    <span class="badge badge-sm badge-success" data-twofa-active>enabled</span>
+                  {% endif %}
                 </h2>
                 {{ alert('error', twofa_error) }}
                 {{ alert('success', twofa_info) }}

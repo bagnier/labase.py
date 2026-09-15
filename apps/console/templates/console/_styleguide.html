@@ -208,30 +208,33 @@
     <section id="sg-buttons" aria-labelledby="sg-buttons-h" class="space-y-4">
       <h2 id="sg-buttons-h" class="section-title">Buttons</h2>
       <div class="flex flex-wrap gap-3">
-        <button class="btn">Default</button>
-        <button class="btn btn-primary">Primary</button>
-        <button class="btn btn-secondary">Secondary</button>
-        <button class="btn btn-accent">Accent</button>
-        <button class="btn btn-ghost">Ghost</button>
-        <button class="btn btn-link">Link</button>
+        <button type="button" class="btn">Default</button>
+        <button type="button" class="btn btn-primary">Primary</button>
+        <button type="button" class="btn btn-secondary">Secondary</button>
+        <button type="button" class="btn btn-accent">Accent</button>
+        <button type="button" class="btn btn-ghost">Ghost</button>
+        <button type="button" class="btn btn-link">Link</button>
       </div>
       <div class="flex flex-wrap gap-3">
-        <button class="btn btn-info">Info</button>
-        <button class="btn btn-success">Success</button>
-        <button class="btn btn-warning">Warning</button>
-        <button class="btn btn-error">Error</button>
-        <button class="btn btn-outline btn-primary">Outline</button>
+        <button type="button" class="btn btn-info">Info</button>
+        <button type="button" class="btn btn-success">Success</button>
+        <button type="button" class="btn btn-warning">Warning</button>
+        <button type="button" class="btn btn-error">Error</button>
+        <button type="button" class="btn btn-outline btn-primary">Outline</button>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <button class="btn btn-primary btn-xs">Xs</button>
-        <button class="btn btn-primary btn-sm">Sm</button>
-        <button class="btn btn-primary">Md</button>
-        <button class="btn btn-primary btn-lg">Lg</button>
-        <button class="btn btn-primary btn-square" aria-label="Lightning">
+        <button type="button" class="btn btn-primary btn-xs">Xs</button>
+        <button type="button" class="btn btn-primary btn-sm">Sm</button>
+        <button type="button" class="btn btn-primary">Md</button>
+        <button type="button" class="btn btn-primary btn-lg">Lg</button>
+        <button type="button"
+                class="btn btn-primary btn-square"
+                aria-label="Lightning">
           <i class="ph ph-lightning ph-md" aria-hidden="true"></i>
         </button>
-        <button class="btn btn-primary"><span class="loading loading-spinner loading-sm"></span>Loading</button>
-        <button class="btn btn-primary" disabled>Disabled</button>
+        <button type="button"
+                class="btn btn-primary"><span class="loading loading-spinner loading-sm"></span>Loading</button>
+        <button type="button" class="btn btn-primary" disabled>Disabled</button>
       </div>
     </section>
     <section id="sg-badges" aria-labelledby="sg-badges-h" class="space-y-4">
@@ -403,7 +406,7 @@
             <h3 class="card-title">Card title</h3>
             <p class="text-sm text-base-content/70">A card uses <code>card-body</code> for padding.</p>
             <div class="card-actions justify-end">
-              <button class="btn btn-primary btn-sm">Action</button>
+              <button type="button" class="btn btn-primary btn-sm">Action</button>
             </div>
           </div>
         </div>
@@ -540,14 +543,14 @@
       <h2 id="sg-feedback-h" class="section-title">Tooltip &amp; Indicator</h2>
       <div class="flex flex-wrap items-center gap-8 pt-2">
         <div class="tooltip" data-tip="Hello there">
-          <button class="btn">Hover me</button>
+          <button type="button" class="btn">Hover me</button>
         </div>
         <div class="tooltip tooltip-primary tooltip-right" data-tip="Right side">
-          <button class="btn btn-primary">Tooltip</button>
+          <button type="button" class="btn btn-primary">Tooltip</button>
         </div>
         <div class="indicator">
           <span class="indicator-item badge badge-primary">9</span>
-          <button class="btn">Inbox</button>
+          <button type="button" class="btn">Inbox</button>
         </div>
       </div>
     </section>
@@ -612,11 +615,11 @@
         </ul>
       </nav>
       <div class="join">
-        <button class="join-item btn">«</button>
-        <button class="join-item btn btn-active">1</button>
-        <button class="join-item btn">2</button>
-        <button class="join-item btn">3</button>
-        <button class="join-item btn">»</button>
+        <button type="button" class="join-item btn">«</button>
+        <button type="button" class="join-item btn btn-active">1</button>
+        <button type="button" class="join-item btn">2</button>
+        <button type="button" class="join-item btn">3</button>
+        <button type="button" class="join-item btn">»</button>
       </div>
     </section>
     <section id="sg-overlays" aria-labelledby="sg-overlays-h" class="space-y-4">
@@ -630,19 +633,19 @@
             <li><a>Second item</a></li>
           </ul>
         </div>
-        <button class="btn" onclick="sg_modal.showModal()">Open modal</button>
+        <button type="button" class="btn" onclick="sg_modal.showModal()">Open modal</button>
         <dialog id="sg_modal" class="modal">
           <div class="modal-box">
             <h3 class="section-title">Hello</h3>
             <p class="py-4 text-sm text-base-content/70">A native &lt;dialog&gt; styled by DaisyUI.</p>
             <div class="modal-action">
               <form method="dialog">
-                <button class="btn">Close</button>
+                <button type="submit" class="btn">Close</button>
               </form>
             </div>
           </div>
           <form method="dialog" class="modal-backdrop">
-            <button>close</button>
+            <button type="submit">close</button>
           </form>
         </dialog>
       </div>

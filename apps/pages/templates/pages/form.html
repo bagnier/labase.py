@@ -60,7 +60,7 @@
                     class="btn btn-error btn-ghost btn-sm"
                     aria-label="Delete page"
                     hx-delete="/{{ org_handle }}/pages/{{ page.slug }}"
-                    hx-confirm="Delete &ldquo;{{ page.title }}&rdquo;? This cannot be undone."
+                    hx-confirm="Delete “{{ page.title }}”? This cannot be undone."
                     hx-swap="none">Delete page</button>
           {% endif %}
         </div>
