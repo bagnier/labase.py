@@ -8,10 +8,11 @@ These tests read the catalog of the stack's ``public`` schema — the one PostgR
 
 from collections.abc import AsyncIterator
 
+import asyncpg
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from apps.shared.settings.env import get_technical_settings
@@ -126,6 +127,17 @@ async def test_every_public_table_enforces_row_level_security(admin_conn: AsyncC
     unprotected = set(rows.scalars())
 
     assert unprotected == set()
+
+
+@pytest.mark.asyncio
+async def test_the_app_user_role_opens_with_no_password_known_in_advance():
+    admin_url = make_url(get_technical_settings().supabase_database_admin_url)
+    dsn = admin_url.set(
+        drivername="postgresql", username="app_user", password="app_user_password"
+    ).render_as_string(hide_password=False)
+
+    with pytest.raises(asyncpg.InvalidAuthorizationSpecificationError):
+        await asyncpg.connect(dsn)
 
 
 def _as_anon(method: str, path: str, **kwargs) -> int:

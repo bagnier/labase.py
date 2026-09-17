@@ -46,7 +46,7 @@ Minimum production env:
 | `ENVIRONMENT`                                      | `production` — set by the compose file; activates the preflight gate  |
 | `SUPABASE_API_URL`                                 | project API URL                                                       |
 | `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` | project keys; keep the secret key server-side only                    |
-| `SUPABASE_DATABASE_USER_URL`                       | **via the Supavisor pooler** (see below), asyncpg driver              |
+| `SUPABASE_DATABASE_USER_URL`                       | `app_user` **via the Supavisor pooler** (see below), asyncpg driver   |
 | `SUPABASE_DATABASE_ADMIN_URL`                      | admin (BYPASSRLS) connection, also pooled                             |
 | `COOKIES_SECURE`                                   | `true` (the default) — required over HTTPS                            |
 | `CORS_ORIGINS`                                     | explicit origins, **not** `*`                                         |
@@ -54,6 +54,19 @@ Minimum production env:
 | `SMTP_*`                                           | a real transactional provider (not the local Mailpit catcher)         |
 | `FIREHOSE_DIR`                                     | fallback log path, used only when Postgres refuses a batch            |
 | `LOG_DEBUG`                                        | leave unset: `true` renders logs as console text instead of JSON      |
+
+### The `app_user` role
+
+The migrations create `app_user` unable to log in: a password in the repository would be known to
+every clone. Open it once per project, with a secret of its own, as `postgres` (SQL editor or
+`psql` on the admin URL), then put the same secret in `SUPABASE_DATABASE_USER_URL`:
+
+```sql
+alter role app_user login password '<generated secret>';
+```
+
+Whoever holds this URL can act as any user under RLS, since the app sets the JWT claims on the
+session itself: guard it like the admin URL, and keep the database port off the public network.
 
 ## Preflight — config safety gate
 

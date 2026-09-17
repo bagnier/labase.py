@@ -56,13 +56,18 @@ $$;
 
 -- The role the application's user connection logs in as: `authenticated`, so RLS applies to it,
 -- with no inherited privileges of its own. The admin connection uses `postgres` (BYPASSRLS).
+-- Closed here: a password in the repository is known to every clone. Each environment opens it
+-- with a secret of its own (`make env` locally, docs/production.md otherwise). A role outlives a
+-- database reset, hence the alter on an existing one too.
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'app_user') then
-    create role app_user noinherit login password 'app_user_password';
+    create role app_user;
   end if;
 end
 $$;
+
+alter role app_user noinherit nologin password null;
 
 grant authenticated to app_user;
 

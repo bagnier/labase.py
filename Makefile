@@ -42,13 +42,14 @@ db-start:
 	supabase start
 
 env:
-	uv run python scripts/gen_env.py
+	PYTHONPATH=. uv run python scripts/gen_env.py
 
 db-stop:
 	supabase stop
 
 db-reset:
 	supabase db reset
+	$(MAKE) env
 
 db-seed:
 	PYTHONPATH=. uv run python scripts/seed.py
