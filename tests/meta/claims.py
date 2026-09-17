@@ -101,7 +101,15 @@ from tests.meta.test_surfaces import (
     test_the_shared_foundation_is_forbidden_from_every_context,
     test_the_timeline_writes_nothing,
 )
-from tests.test_db_privileges import test_every_public_table_enforces_row_level_security
+from tests.test_authorization_rules import (
+    test_the_database_gives_each_rule_its_verdict,
+    test_the_route_gives_each_rule_its_verdict,
+)
+from tests.test_db_privileges import (
+    test_every_function_a_policy_calls_is_a_declared_guard,
+    test_every_public_table_enforces_row_level_security,
+    test_every_table_an_authorization_helper_guards_has_its_rules,
+)
 
 Holder = Callable[..., object]
 
@@ -221,6 +229,14 @@ CLAIMS = [
         "Row-level security, versioned as plain SQL migrations, is the single source of truth for "
         "who sees what.",
         test_every_public_table_enforces_row_level_security,
+    ),
+    held(
+        "authorization-rules-at-both-doors",
+        "Every authorization rule is stated once and checked at both the database and the route.",
+        test_every_function_a_policy_calls_is_a_declared_guard,
+        test_every_table_an_authorization_helper_guards_has_its_rules,
+        test_the_database_gives_each_rule_its_verdict,
+        test_the_route_gives_each_rule_its_verdict,
     ),
     waived(
         "python-never-reimplements-isolation",

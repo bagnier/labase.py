@@ -89,11 +89,16 @@ delete, impersonate — bannered and recorded), the unified **Timeline**, issues
 metrics, and the runtime log level.
 
 
-### The database enforces isolation
+### The database enforces isolation and authorization
 
 Row-level security, versioned as plain SQL
 migrations, is the single source of truth for who sees what. Python never re-implements
-isolation for authenticated access.
+isolation for authenticated access. A policy calls two kinds of helper: *isolation* (which org a
+row belongs to), held by SQL alone, and *authorization* (which role may act on it), which the
+route repeats — exactly, never stricter — so a refusal reads as a clean 403. Every authorization
+rule is stated once and checked at both the database and the route. SQL also holds the
+invariants, what must never become false whoever writes; decisions and derived values stay in
+Python.
 
 
 ### Observability is built in

@@ -16,6 +16,7 @@ from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from apps.shared.settings.env import get_technical_settings
+from tests.rulebooks import BOOKS
 
 _CRUD = ("SELECT", "INSERT", "UPDATE", "DELETE")
 
@@ -57,6 +58,11 @@ _FUNCTION_GRANTS = {
     ("authenticated", "uuidv7"),
 }
 
+# The helpers a policy may call, each in one list. Isolation says which org a row belongs to; only
+# SQL holds it. Authorization says which role may act on it; the route repeats it for a clean 403.
+_ISOLATION_HELPERS = {"user_org_ids"}
+_AUTHORIZATION_HELPERS = {"user_is_org_owner"}
+
 # Every relation, partitions included: PostgREST does not serve a partition, but a SQL session on
 # an API role reaches it directly, where the parent's RLS does not apply.
 _TABLE_GRANTS_SQL = """
@@ -79,6 +85,30 @@ select coalesce(r.rolname, 'PUBLIC'), p.proname
   left join pg_roles r on r.oid = a.grantee
  where n.nspname = 'public'
    and (a.grantee = 0 or r.rolname in ('anon', 'authenticated', 'app_rls'))
+"""
+
+# Postgres records each function a policy expression calls as a dependency of that policy. Every
+# table counts, storage.objects included: its policies call the same helpers.
+_POLICY_CALLS_SQL = """
+select distinct p.proname
+  from pg_policy pol
+  join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid
+                  and d.refclassid = 'pg_proc'::regclass
+  join pg_proc p on p.oid = d.refobjid
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+"""
+
+
+_GUARDED_TABLES_SQL = """
+select distinct c.relname
+  from pg_policy pol
+  join pg_class c on c.oid = pol.polrelid
+  join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid
+                  and d.refclassid = 'pg_proc'::regclass
+  join pg_proc p on p.oid = d.refobjid
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = any(:helpers)
 """
 
 
@@ -143,6 +173,30 @@ async def test_every_security_definer_function_pins_its_search_path(admin_conn: 
     unpinned = set(rows.scalars())
 
     assert unpinned == set()
+
+
+@pytest.mark.asyncio
+async def test_every_function_a_policy_calls_is_a_declared_guard(admin_conn: AsyncConnection):
+    rows = await admin_conn.execute(text(_POLICY_CALLS_SQL))
+
+    called = set(rows.scalars())
+
+    assert called == _ISOLATION_HELPERS | _AUTHORIZATION_HELPERS
+
+
+@pytest.mark.asyncio
+async def test_every_table_an_authorization_helper_guards_has_its_rules(
+    admin_conn: AsyncConnection,
+):
+    """Holds the reach of the rules, not their content: a table is covered by one rule, whatever
+    commands its policies guard, and an action no rule names can still differ between the doors."""
+    rows = await admin_conn.execute(
+        text(_GUARDED_TABLES_SQL), {"helpers": sorted(_AUTHORIZATION_HELPERS)}
+    )
+
+    unruled = set(rows.scalars()) - {rule.table for book in BOOKS for rule in book.rules}
+
+    assert unruled == set()
 
 
 @pytest.mark.asyncio
