@@ -130,6 +130,22 @@ async def test_every_public_table_enforces_row_level_security(admin_conn: AsyncC
 
 
 @pytest.mark.asyncio
+async def test_every_security_definer_function_pins_its_search_path(admin_conn: AsyncConnection):
+    # Unpinned, an unqualified name resolves on the caller's search_path, with the owner's rights.
+    rows = await admin_conn.execute(
+        text(
+            "select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace"
+            " where n.nspname = 'public' and p.prosecdef"
+            " and not coalesce(p.proconfig, '{}') @> array['search_path=\"\"']"
+        )
+    )
+
+    unpinned = set(rows.scalars())
+
+    assert unpinned == set()
+
+
+@pytest.mark.asyncio
 async def test_the_app_user_role_opens_with_no_password_known_in_advance():
     admin_url = make_url(get_technical_settings().supabase_database_admin_url)
     dsn = admin_url.set(

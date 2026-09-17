@@ -58,7 +58,7 @@ grant select, insert, update, delete on public.profiles to authenticated;
 -- own schema only — a cross-schema write would duplicate the fact, the journal having no
 -- unique key.
 create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.profiles (user_id, email, handle)
     values (new.id, new.email, null) on conflict do nothing;

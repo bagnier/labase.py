@@ -63,12 +63,12 @@ alter table public.memberships enable row level security;
 -- ── The RLS vocabulary ──────────────────────────────────────────────────────────────────────
 
 create or replace function public.user_org_ids()
-returns setof uuid language sql stable security definer as $$
+returns setof uuid language sql stable security definer set search_path = '' as $$
   select org_id from public.memberships where user_id = auth.uid()
 $$;
 
 create or replace function public.user_is_org_owner(p_org_id uuid)
-returns boolean language sql stable security definer as $$
+returns boolean language sql stable security definer set search_path = '' as $$
   select exists(
     select 1 from public.memberships
     where org_id = p_org_id
@@ -215,13 +215,13 @@ create policy "org_invitations: owner update"
 -- run as owner and answer on the token alone.
 create or replace function public.get_invitation_by_token(p_token uuid)
 returns setof public.org_invitations
-language sql stable security definer as $$
+language sql stable security definer set search_path = '' as $$
   select * from public.org_invitations where token = p_token limit 1;
 $$;
 
 create or replace function public.accept_org_invitation(p_token uuid)
 returns void
-language plpgsql security definer as $$
+language plpgsql security definer set search_path = '' as $$
 declare
   v_inv public.org_invitations;
   v_caller_email text;
