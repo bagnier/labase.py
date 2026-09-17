@@ -116,7 +116,7 @@ lint: client-gen
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run lint-imports --cache-dir .cache/import-linter
-	uv run ty check apps/
+	uv run ty check apps/ tests/
 	uv run pyright
 	uv run sqlfluff lint --config scripts/.sqlfluff supabase/migrations/
 	uv run yamllint -c scripts/.yamllint .github docker scripts
@@ -138,7 +138,7 @@ fix:
 	uv run ruff check --fix .
 	uv run ruff format .
 	uv run lint-imports --cache-dir .cache/import-linter
-	uv run ty check apps/
+	uv run ty check apps/ tests/
 	npm run format
 	uv run djlint apps --reformat
 

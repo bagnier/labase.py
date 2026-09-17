@@ -17,8 +17,8 @@ Two rules give the list its teeth, both enforced by ``tests/meta/test_claims.py`
 counted by ``UNHELD_TODAY``. That number is the backlog this package exists to lower.
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass
+from types import FunctionType
 
 from apps.shared.tests.test_bus import test_emit_refuses_an_undeclared_event
 from apps.shared.tests.test_emit_durability import (
@@ -111,7 +111,8 @@ from tests.test_db_privileges import (
     test_every_table_an_authorization_helper_guards_has_its_rules,
 )
 
-Holder = Callable[..., object]
+# A plain function, not any callable: the registry reads its name and module.
+Holder = FunctionType
 
 
 @dataclass(frozen=True)
