@@ -127,10 +127,10 @@ class TodoApiMixin(ApiBase):
         assert titles is not None, "view the tenant's todo list first"
         assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"
 
-    def assert_completion_badge(self, badge: str) -> None:
+    def assert_dashboard_badges(self, badges: list[str]) -> None:
         slug = getattr(self, "active_org_handle", "")
         resp = self.client().get(f"/{slug}/dashboard/overviews.json")
         resp.raise_for_status()
         todo = next((o for o in resp.json() if o["key"] == "todo"), None)
         assert todo is not None, "todo overview missing from the dashboard"
-        assert badge in todo["data"]["lines"], f"'{badge}' not in {todo['data']['lines']}"
+        assert todo["data"]["lines"] == badges, todo["data"]["lines"]

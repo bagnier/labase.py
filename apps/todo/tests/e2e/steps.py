@@ -96,9 +96,9 @@ def step_view_todo_list_as(driver, email):
     driver.view_todo_list_as(email)
 
 
-@then(parsers.parse('the todo dashboard card shows "{badge}"'))
-def step_assert_todo_completion_badge(driver, badge):
-    driver.assert_completion_badge(badge)
+@then(parsers.parse("the todo dashboard card reads {badges}"))
+def step_assert_todo_dashboard_badges(driver, badges):
+    driver.assert_dashboard_badges([b.strip().strip('"') for b in badges.split(",")])
 
 
 @then(parsers.parse('"{title}" is not in that todo list'))

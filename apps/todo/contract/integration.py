@@ -77,8 +77,6 @@ async def _overview(query: OverviewQuery) -> Overview:
     open_items = [t for t in items if not t.done]
     done = len(items) - len(open_items)
     lines = [f"{len(open_items)} open", f"{done} done"] if items else ["No tasks yet"]
-    # Completions ever — distinct from the live "N done", which unticking takes back.
-    lines.append(f"{await repo.completion_count()} completed")
     return Overview(
         key="todo",
         title="To-do",

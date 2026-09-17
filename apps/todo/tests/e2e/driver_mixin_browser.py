@@ -187,7 +187,7 @@ class TodoBrowserMixin(BrowserBase):
         assert titles is not None, "view the tenant's todo list first"
         assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"
 
-    def assert_completion_badge(self, badge: str) -> None:
+    def assert_dashboard_badges(self, badges: list[str]) -> None:
         # The card sits on the org dashboard, one sidebar click from the list they ticked it in.
         self.reach_org_nav(getattr(self, "active_org_handle", ""), "dashboard", fresh=True)
-        expect(self.page.locator('[data-overview="todo"]')).to_contain_text(badge)
+        expect(self.page.locator('[data-overview="todo"] .badge')).to_have_text(badges)

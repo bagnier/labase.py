@@ -65,10 +65,12 @@ Feature: Todo list
     Then "Buy groceries" is not in that todo list
     And "Call dentist" is not in that todo list
 
-  Scenario: Completing a todo raises the organisation's completion counter
-    Given they have a todo item "Buy groceries"
+  Scenario: The dashboard counts the todos done now, not the ticks ever made
+    Given they have todo items "Buy groceries", "Call dentist"
     When they mark the todo item "Buy groceries" as done
-    Then the todo dashboard card shows "1 completed"
+    And they mark the todo item "Buy groceries" as not done
+    And they mark the todo item "Call dentist" as done
+    Then the todo dashboard card reads "1 open", "1 done"
 
   # The welcome tasks are seeded by a durable consumer of OrganizationCreated, off the journal.
   # Seeding is off by default under test — starter rows would break every other scenario's

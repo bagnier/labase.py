@@ -45,7 +45,6 @@ _TABLE_GRANTS = {
     ("authenticated", "org_file_share_tokens", "SELECT"),
     ("authenticated", "organizations", "SELECT"),
     ("authenticated", "organizations", "UPDATE"),
-    ("authenticated", "todo_completion_stats", "SELECT"),
 }
 
 _FUNCTION_GRANTS = {
