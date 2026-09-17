@@ -10,18 +10,19 @@ Seeding stays feature-specific; only the identity switch and the visibility
 assertion live here.
 """
 
-from collections.abc import AsyncIterator, Iterable
+import json
+from collections.abc import AsyncGenerator, Iterable
 from contextlib import asynccontextmanager
 from typing import Any
 
-from sqlalchemy import Select
+from sqlalchemy import Select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.persistence.rls import clear_rls_context, set_rls_context
 
 
 @asynccontextmanager
-async def acting_as(session: AsyncSession, uid: str, **claims: Any) -> AsyncIterator[AsyncSession]:
+async def acting_as(session: AsyncSession, uid: str, **claims: Any) -> AsyncGenerator[AsyncSession]:
     """Run the block as authenticated user ``uid`` — RLS policies see ``auth.uid()``.
 
     Restores the bootstrap role on exit, so the caller can seed further rows or
@@ -29,6 +30,23 @@ async def acting_as(session: AsyncSession, uid: str, **claims: Any) -> AsyncIter
     payload verbatim (e.g. ``role=`` or ``app_metadata=`` overrides).
     """
     await set_rls_context(session, {"sub": uid, "role": "authenticated", **claims})
+    try:
+        yield session
+    finally:
+        await clear_rls_context(session)
+
+
+@asynccontextmanager
+async def as_api_client(session: AsyncSession, uid: str) -> AsyncGenerator[AsyncSession]:
+    """Run the block as PostgREST runs a request bearing ``uid``'s JWT: the ``authenticated``
+    role itself, not the server's own role that ``acting_as`` takes on."""
+    conn = await session.connection()
+    await conn.execute(
+        text(
+            "SELECT set_config('role', 'authenticated', true), "
+            "set_config('request.jwt.claims', :claims, true)"
+        ).bindparams(claims=json.dumps({"sub": uid, "role": "authenticated"}))
+    )
     try:
         yield session
     finally:

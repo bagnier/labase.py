@@ -29,7 +29,6 @@ _MEMBER_TABLES = (
     "memberships",
     "org_files",
     "org_invitations",
-    "organizations",
     "page_nav_items",
     "pages",
     "profiles",
@@ -37,21 +36,23 @@ _MEMBER_TABLES = (
 )
 
 _TABLE_GRANTS = {
-    ("anon", "pages", "SELECT"),
     *(("authenticated", table, p) for table in _MEMBER_TABLES for p in _CRUD),
     ("authenticated", "business_events", "SELECT"),
-    ("authenticated", "consumed_events", "INSERT"),
+    ("app_rls", "consumed_events", "INSERT"),
+    ("app_rls", "task_queue", "INSERT"),
     ("authenticated", "org_app_settings", "SELECT"),
     ("authenticated", "org_file_share_tokens", "INSERT"),
     ("authenticated", "org_file_share_tokens", "SELECT"),
-    ("authenticated", "task_queue", "INSERT"),
+    ("authenticated", "organizations", "SELECT"),
+    ("authenticated", "organizations", "UPDATE"),
     ("authenticated", "todo_completion_stats", "SELECT"),
 }
 
 _FUNCTION_GRANTS = {
     ("anon", "uuidv7"),
     ("authenticated", "accept_org_invitation"),
-    ("authenticated", "record_business_event"),
+    ("authenticated", "create_org_with_owner"),
+    ("app_rls", "record_business_event"),
     ("authenticated", "user_is_org_owner"),
     ("authenticated", "user_org_ids"),
     ("authenticated", "uuidv7"),
@@ -67,7 +68,7 @@ select r.rolname, c.relname, a.privilege_type
   join pg_roles r on r.oid = a.grantee
  where n.nspname = 'public'
    and c.relkind in ('r', 'p', 'v', 'm', 'f')
-   and r.rolname in ('anon', 'authenticated')
+   and r.rolname in ('anon', 'authenticated', 'app_rls')
 """
 
 # PUBLIC (grantee 0) is reported as such: it covers both API roles.
@@ -78,7 +79,7 @@ select coalesce(r.rolname, 'PUBLIC'), p.proname
   cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
   left join pg_roles r on r.oid = a.grantee
  where n.nspname = 'public'
-   and (a.grantee = 0 or r.rolname in ('anon', 'authenticated'))
+   and (a.grantee = 0 or r.rolname in ('anon', 'authenticated', 'app_rls'))
 """
 
 
@@ -171,6 +172,12 @@ def test_the_publishable_key_reads_public_pages():
     status = _as_anon("GET", "pages", params={"select": "slug"})
 
     assert status == httpx.codes.OK
+
+
+def test_the_publishable_key_cannot_read_which_org_a_page_belongs_to():
+    status = _as_anon("GET", "pages", params={"select": "org_id"})
+
+    assert status == httpx.codes.UNAUTHORIZED
 
 
 def test_the_publishable_key_cannot_list_share_tokens():

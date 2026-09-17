@@ -88,11 +88,6 @@ create policy "organizations: member read"
   on public.organizations for select
   using (id in (select public.user_org_ids()));
 
--- Any authenticated user may create an organization.
-create policy "organizations: authenticated insert"
-  on public.organizations for insert
-  with check (true);
-
 create policy "organizations: owner update"
   on public.organizations for update
   using (public.user_is_org_owner(id))
@@ -102,14 +97,11 @@ create policy "memberships: member read"
   on public.memberships for select
   using (org_id in (select public.user_org_ids()));
 
--- Also lets a user insert themselves as owner of a new org (bootstrap: an owner-only check alone
--- is a chicken-and-egg problem for the very first membership).
+-- Only an owner adds a member. The first owner comes with the org, from
+-- `create_org_with_owner`: a policy cannot tell a new org from an existing one.
 create policy "memberships: owner insert"
   on public.memberships for insert
-  with check (
-    (user_id = auth.uid() and role = 'owner')
-    or public.user_is_org_owner(org_id)
-  );
+  with check (public.user_is_org_owner(org_id));
 
 create policy "memberships: owner update"
   on public.memberships for update
@@ -124,8 +116,39 @@ create policy "memberships: self leave"
   on public.memberships for delete
   using (user_id = auth.uid());
 
-grant select, insert, update, delete on public.organizations to authenticated;
+grant select, update on public.organizations to authenticated;
 grant select, insert, update, delete on public.memberships   to authenticated;
+
+
+-- ── Creating an org ─────────────────────────────────────────────────────────────────────────
+-- The only way an org comes to exist, and it never exists ownerless. A session that took on an
+-- API role may only make itself the owner; the admin session, which takes on none, seats whoever
+-- it names. `role` is read rather than `current_user`, which is this function's owner here. The
+-- id and the stamp come from the app, which owns the key shape and the clock.
+create or replace function public.create_org_with_owner(
+  p_id uuid,
+  p_name text,
+  p_handle text,
+  p_owner uuid,
+  p_at timestamptz
+) returns void
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if current_setting('role') <> 'none' and p_owner is distinct from auth.uid() then
+    raise exception 'an org is created for its creator' using errcode = '42501';
+  end if;
+  insert into public.organizations (id, name, handle, created_at, updated_at)
+    values (p_id, p_name, p_handle, p_at, p_at);
+  insert into public.memberships (org_id, user_id, role, created_at, updated_at)
+    values (p_id, p_owner, 'owner', p_at, p_at);
+end;
+$$;
+
+grant execute on function public.create_org_with_owner(uuid, text, text, uuid, timestamptz)
+  to authenticated;
 grant select, insert, update, delete on public.organizations to service_role;
 grant select, insert, update, delete on public.memberships   to service_role;
 

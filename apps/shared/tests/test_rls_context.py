@@ -62,7 +62,7 @@ async def test_rls_context_does_not_leak_across_pooled_reuse(single_conn_engine)
     async with AsyncSession(single_conn_engine, expire_on_commit=False) as a:
         await set_rls_context(a, {"sub": _UID, "role": "authenticated"})
         pid_a, role_a, claims_a = await _identity(a)
-        assert role_a == "authenticated", "set_rls_context should switch the role"
+        assert role_a == "app_rls", "set_rls_context should switch the role"
         assert claims_a, "set_rls_context should set the JWT claims"
         assert _UID in claims_a, "set_rls_context should set the JWT claims"
         await a.commit()
@@ -73,5 +73,5 @@ async def test_rls_context_does_not_leak_across_pooled_reuse(single_conn_engine)
         await b.rollback()
 
     assert pid_a == pid_b, "test is only meaningful if the same backend is reused"
-    assert role_b != "authenticated", "role leaked onto the reused connection"
+    assert role_b != "app_rls", "role leaked onto the reused connection"
     assert not claims_b, "jwt claims leaked onto the reused connection"

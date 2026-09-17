@@ -481,7 +481,9 @@ Each context's FastAPI dependencies live in its own
 non-owners). Three DB session dependencies: `RlsSession` (default — RLS enforced),
 `get_user_session` (raw), `AdminSession` (BYPASSRLS — reserved for event handlers,
 console queries, and anonymous public surfaces such as share-token downloads, where no
-JWT exists and checks are explicit).
+JWT exists and checks are explicit). `RlsSession` runs on `app_rls`, a member of `authenticated`
+that alone may enqueue a task or record a fact: PostgREST serves a JWT on `authenticated`
+itself, so what is granted there is open to any account.
 
 
 #### Sign-in surface

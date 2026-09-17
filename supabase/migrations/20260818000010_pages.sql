@@ -35,14 +35,26 @@ create trigger pages_updated_at
 
 alter table public.pages enable row level security;
 
--- Members manage their org's pages (drafts are collaborative). Owner-only rules for published
--- pages are enforced in the application layer.
--- `to authenticated`: anon holds no EXECUTE on `user_org_ids`, and has no org anyway.
-create policy "pages: member all"
+-- Members read every page of their org and write its drafts (drafts are collaborative); an owner
+-- writes any page, which is what publishing, and changing what is published, takes. The routes
+-- answer the same rule with a clean 403.
+-- `to authenticated`: anon holds no EXECUTE on the helpers, and has no org anyway.
+create policy "pages: member read"
+  on public.pages for select
+  to authenticated
+  using (org_id in (select public.user_org_ids()));
+
+create policy "pages: member drafts, owner all"
   on public.pages for all
   to authenticated
-  using  (org_id in (select public.user_org_ids()))
-  with check (org_id in (select public.user_org_ids()));
+  using (
+    org_id in (select public.user_org_ids())
+    and (visibility = 'draft' or public.user_is_org_owner(org_id))
+  )
+  with check (
+    org_id in (select public.user_org_ids())
+    and (visibility = 'draft' or public.user_is_org_owner(org_id))
+  );
 
 -- Anonymous visitors may read pages explicitly published to the public.
 create policy "pages: anon read"
@@ -51,7 +63,8 @@ create policy "pages: anon read"
   using (visibility = 'public');
 
 grant select, insert, update, delete on public.pages to authenticated;
-grant select on public.pages to anon;
+-- Column by column: what a public page shows, not which org or author it belongs to.
+grant select (id, title, slug, content, visibility, created_at, updated_at) on public.pages to anon;
 grant select, insert, update, delete on public.pages to service_role;
 
 
@@ -74,10 +87,16 @@ create trigger page_nav_items_updated_at
 
 alter table public.page_nav_items enable row level security;
 
-create policy "page_nav_items: member all"
+create policy "page_nav_items: member read"
+  on public.page_nav_items for select
+  to authenticated
+  using (org_id in (select public.user_org_ids()));
+
+create policy "page_nav_items: owner all"
   on public.page_nav_items for all
-  using  (org_id in (select public.user_org_ids()))
-  with check (org_id in (select public.user_org_ids()));
+  to authenticated
+  using (public.user_is_org_owner(org_id))
+  with check (public.user_is_org_owner(org_id));
 
 grant select, insert, update, delete on public.page_nav_items to authenticated;
 grant select, insert, update, delete on public.page_nav_items to service_role;

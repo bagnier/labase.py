@@ -1,4 +1,5 @@
 import uuid
+from typing import cast
 
 from sqlalchemy import delete, func, select, text
 
@@ -9,6 +10,7 @@ from apps.organizations.domain.models import (
     OrgInvitation,
     OrgRole,
 )
+from apps.shared import clock
 from apps.shared.integration.slugs import handle_is_available, slugify, unique_handle
 from apps.shared.persistence.repository import BaseRepository
 
@@ -26,14 +28,13 @@ class OrganizationRepository(BaseRepository[Organization]):
         if not base:
             base = "org"
         handle = await unique_handle(base, self.session)
-        org = Organization(name=name, handle=handle)
-        self.session.add(org)
-        await self.session.flush()
-        membership = Membership(org_id=org.id, user_id=user_id, role=OrgRole.owner)
-        self.session.add(membership)
-        await self.session.flush()
-
-        return org
+        org_id = uuid.uuid7()
+        # One statement for both rows: the database hands out ownership only with a new org.
+        await self.session.execute(
+            text("SELECT create_org_with_owner(:id, :name, :handle, :owner, :at)"),
+            {"id": org_id, "name": name, "handle": handle, "owner": user_id, "at": clock.now()},
+        )
+        return cast(Organization, await self.session.get(Organization, org_id))
 
     async def count_owned_by(self, user_id: uuid.UUID) -> int:
         result = await self.session.execute(

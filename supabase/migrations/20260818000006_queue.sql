@@ -4,8 +4,9 @@
 -- ── task_queue ──────────────────────────────────────────────────────────────────────────────
 -- Claimed with FOR UPDATE SKIP LOCKED, so N app instances never double-process.
 --
--- Access: app roles may only enqueue (an outbox write inside their own business transaction, so
--- a task exists iff that transaction commits); claiming, completing and retrying are admin work.
+-- Access: the app's RLS session may only enqueue (an outbox write inside its own business
+-- transaction, so a task exists iff that transaction commits); claiming, completing and retrying
+-- are admin work. Never `authenticated`: a task picks its handler and the identity it runs as.
 
 create table public.task_queue (
   id                uuid        primary key default public.uuidv7(),
@@ -34,10 +35,10 @@ alter table public.task_queue enable row level security;
 
 -- id comes from the column default (execute on uuidv7 granted in the foundation) — no sequence
 -- to grant.
-grant insert on public.task_queue to authenticated;
+grant insert on public.task_queue to app_rls;
 
 create policy "task_queue: app enqueue"
-  on public.task_queue for insert to authenticated
+  on public.task_queue for insert to app_rls
   with check (true);
 
 
@@ -60,10 +61,10 @@ create table public.consumed_events (
 
 alter table public.consumed_events enable row level security;
 
-grant insert on public.consumed_events to authenticated;
+grant insert on public.consumed_events to app_rls;
 
 create policy "consumed_events: app mark"
-  on public.consumed_events for insert to authenticated
+  on public.consumed_events for insert to app_rls
   with check (true);
 
 

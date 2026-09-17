@@ -74,8 +74,9 @@ grant select, insert, update, delete on public.business_events to service_role;
 --
 -- The request path records a fact inside its OWN transaction, so the fact commits iff the
 -- mutation does. Routing that write through a SECURITY DEFINER function — rather than a raw
--- INSERT grant to `authenticated` — is what stops a PostgREST client on the same role from
--- forging a `todo.created` that the listener would then deliver to the real consumers.
+-- INSERT grant — and granting it to `app_rls` rather than `authenticated` is what stops a
+-- PostgREST client from forging a `todo.created` that the listener would then deliver to the real
+-- consumers.
 --
 -- The function does NOT re-check `user_id = auth.uid()`. That invariant cannot live here: a
 -- durable consumer legitimately re-emits on behalf of the original actor, a detached emit runs
@@ -119,14 +120,14 @@ begin
 end;
 $$;
 
--- Only the app's authenticated role may call it (the request path); anon has no business writing
--- the journal. The admin path reaches it through ownership.
+-- Only the app's RLS session may call it (the request path); a PostgREST client, on
+-- `authenticated`, may not. The admin path reaches it through ownership.
 revoke all on function public.record_business_event(
   text, text, text, uuid, text, uuid, text, uuid, text, uuid, text, text, jsonb
 ) from public;
 grant execute on function public.record_business_event(
   text, text, text, uuid, text, uuid, text, uuid, text, uuid, text, text, jsonb
-) to authenticated;
+) to app_rls;
 
 
 -- ── Waking the listener ─────────────────────────────────────────────────────────────────────

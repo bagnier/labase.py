@@ -54,8 +54,23 @@ begin
 end;
 $$;
 
--- The role the application's user connection logs in as: `authenticated`, so RLS applies to it,
--- with no inherited privileges of its own. The admin connection uses `postgres` (BYPASSRLS).
+-- The role the application's user connection takes on: `app_rls`, a member of `authenticated`, so
+-- every policy and grant written for `authenticated` applies to it too. PostgREST runs a signed-in
+-- request on `authenticated` itself, so what only the server may write (the queue, the journal) is
+-- granted to `app_rls` alone — a JWT can name `authenticated`, never `app_rls`. The admin connection
+-- uses `postgres` (BYPASSRLS), which may take it on for the RLS tests.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'app_rls') then
+    create role app_rls;
+  end if;
+end
+$$;
+
+grant authenticated to app_rls;
+grant app_rls to postgres;
+
+-- The role the application's user connection logs in as, with no inherited privileges of its own.
 -- Closed here: a password in the repository is known to every clone. Each environment opens it
 -- with a secret of its own (`make env` locally, docs/production.md otherwise). A role outlives a
 -- database reset, hence the alter on an existing one too.
@@ -69,6 +84,6 @@ $$;
 
 alter role app_user noinherit nologin password null;
 
-grant authenticated to app_user;
+grant app_rls to app_user;
 
 grant usage on schema public to authenticated;

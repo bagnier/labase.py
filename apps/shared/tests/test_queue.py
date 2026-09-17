@@ -146,7 +146,7 @@ async def test_task_with_user_id_runs_under_synthesized_rls_claims():
     await _enqueue_committed(topic, user_id=user_id)
     await TaskWorker(interval_seconds=1).tick()
 
-    assert observed["role"] == "authenticated"
+    assert observed["role"] == "app_rls"
     assert str(user_id) in observed["claims"]
 
 

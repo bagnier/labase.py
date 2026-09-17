@@ -21,7 +21,9 @@ async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> N
 
     ``claims`` is the verified JWT payload, passed through verbatim so policies can
     read any claim (auth.jwt(), auth.email(), app_metadata...). The Postgres role is
-    pinned server-side to ``authenticated`` and never driven by the token's role claim.
+    pinned server-side to ``app_rls`` and never driven by the token's role claim: a member of
+    ``authenticated``, plus the writes only the server makes (queue, journal), which PostgREST's
+    ``authenticated`` requests never get.
 
     Both are set **transaction-local** (``set_config(..., is_local=true)``), in a single
     round-trip: ``session.connection()`` has opened the request's transaction, and the
@@ -32,7 +34,7 @@ async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> N
     conn = await session.connection()
     await conn.execute(
         text(
-            "SELECT set_config('role', 'authenticated', true), "
+            "SELECT set_config('role', 'app_rls', true), "
             "set_config('request.jwt.claims', :claims, true)"
         ).bindparams(claims=json.dumps(claims))
     )
