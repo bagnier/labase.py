@@ -35,8 +35,8 @@ grant select, insert, update, delete on public.org_files to authenticated;
 grant select, insert, update, delete on public.org_files to service_role;
 
 
--- Immutable, and the token *is* the auth gate — hence uuid4 (unguessable, no embedded timestamp),
--- no version, no updated_at, no RLS.
+-- Immutable, and the token *is* the download gate — hence uuid4 (unguessable, no embedded
+-- timestamp), no version, no updated_at. The anonymous download reads it on the admin session.
 create table public.org_file_share_tokens (
   token      uuid        primary key default gen_random_uuid(),
   file_id    uuid        not null references public.org_files(id) on delete cascade,
@@ -45,7 +45,17 @@ create table public.org_file_share_tokens (
 
 create index org_file_share_tokens_file_id_idx on public.org_file_share_tokens (file_id);
 
-grant select, insert, update, delete on public.org_file_share_tokens to authenticated;
+alter table public.org_file_share_tokens enable row level security;
+
+-- Scoped through `org_files` under the caller's RLS: the foreign key alone is checked without it,
+-- so it would let anyone mint a token for a file they cannot see.
+create policy "org_file_share_tokens: member all"
+  on public.org_file_share_tokens for all
+  to authenticated
+  using  (file_id in (select id from public.org_files))
+  with check (file_id in (select id from public.org_files));
+
+grant select, insert on public.org_file_share_tokens to authenticated;
 grant select, insert, update, delete on public.org_file_share_tokens to service_role;
 
 

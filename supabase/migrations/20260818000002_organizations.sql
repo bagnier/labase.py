@@ -77,6 +77,10 @@ returns boolean language sql stable security definer as $$
   )
 $$;
 
+-- Policies run as the caller, so the caller needs EXECUTE on the helpers they call.
+grant execute on function public.user_org_ids() to authenticated;
+grant execute on function public.user_is_org_owner(uuid) to authenticated;
+
 
 -- ── Policies ────────────────────────────────────────────────────────────────────────────────
 
@@ -250,6 +254,9 @@ begin
   update public.org_invitations set status = 'accepted' where id = v_inv.id;
 end;
 $$;
+
+-- The invitee accepts on their own session; the lookup runs on the admin one only.
+grant execute on function public.accept_org_invitation(uuid) to authenticated;
 
 grant select, insert, update, delete on public.org_invitations to authenticated;
 grant select, insert, update, delete on public.org_invitations to service_role;

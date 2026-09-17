@@ -4,6 +4,17 @@
 -- because the RLS helpers it defines gate almost every table; `business_events` comes before
 -- `profiles` because the signup trigger that seeds a profile also writes the first fact.
 
+-- Nothing is granted by default. Supabase's default privileges hand `anon` and `authenticated`
+-- every privilege on each new table and EXECUTE on each new function in `public`, so the
+-- publishable key would reach whatever a migration forgets to lock. Revoked before the first
+-- object: the grants the migrations state are the whole of what an API role holds
+-- (tests/test_db_privileges.py). EXECUTE to PUBLIC is Postgres' own global default, which a
+-- per-schema revoke cannot lift.
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on functions from anon, authenticated;
+alter default privileges in schema public revoke all on sequences from anon, authenticated;
+alter default privileges revoke execute on functions from public;
+
 -- One key shape for the whole schema: a time-ordered UUIDv7. Every table's `id` defaults to it, so
 -- a primary key is globally unique (no shared sequence, safe across instances) *and* monotonic —
 -- which the append-only stores rely on as a cursor (the event listener claims on

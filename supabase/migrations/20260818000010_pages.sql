@@ -37,8 +37,10 @@ alter table public.pages enable row level security;
 
 -- Members manage their org's pages (drafts are collaborative). Owner-only rules for published
 -- pages are enforced in the application layer.
+-- `to authenticated`: anon holds no EXECUTE on `user_org_ids`, and has no org anyway.
 create policy "pages: member all"
   on public.pages for all
+  to authenticated
   using  (org_id in (select public.user_org_ids()))
   with check (org_id in (select public.user_org_ids()));
 

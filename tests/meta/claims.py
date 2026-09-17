@@ -101,6 +101,7 @@ from tests.meta.test_surfaces import (
     test_the_shared_foundation_is_forbidden_from_every_context,
     test_the_timeline_writes_nothing,
 )
+from tests.test_db_privileges import test_every_public_table_enforces_row_level_security
 
 Holder = Callable[..., object]
 
@@ -215,11 +216,11 @@ CLAIMS = [
         "still reserves its URL slugs)",
         "needs an app mounted twice, on and off, with both route tables compared",
     ),
-    waived(
+    held(
         "rls-is-the-single-source-of-truth",
         "Row-level security, versioned as plain SQL migrations, is the single source of truth for "
         "who sees what.",
-        "tests/rls.py exercises policies per table; nothing asserts every org-scoped table has one",
+        test_every_public_table_enforces_row_level_security,
     ),
     waived(
         "python-never-reimplements-isolation",
@@ -579,4 +580,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 29
+UNHELD_TODAY = 28
