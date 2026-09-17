@@ -36,7 +36,6 @@ Read `README.md` first.
 - Unless explicitly asked, the user commits, not the agent.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).
 - /analyse for codebase digging, /fetch for the web, context7 for library docs.
-- /markdown for any markdown edition.
 - when you think it's done, run `make finalize` as background task before you claim it.
 - render any UI change and look at a screenshot (Playwright or /run).
 - Docs by audience: README = functional/CLI and development, docs/ = one topic per file
