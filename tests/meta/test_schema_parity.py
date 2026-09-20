@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import Enum, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.shared.persistence.base import Base
@@ -38,9 +38,16 @@ def _import_every_model() -> None:
 
 
 class LiveSchema:
-    def __init__(self, columns: dict[tuple[str, str], bool], relation_names: set[str]) -> None:
+    def __init__(
+        self,
+        columns: dict[tuple[str, str], bool],
+        relation_names: set[str],
+        closed_sets: dict[tuple[str, str], list[str]],
+    ) -> None:
         self.columns = columns
         self.relation_names = relation_names
+        # Every column typed by a Postgres enum, with the labels it may hold, in order.
+        self.closed_sets = closed_sets
 
     @property
     def tables(self) -> set[str]:
@@ -80,12 +87,28 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
+            closed_sets = (
+                await conn.execute(
+                    text(
+                        "select c.table_name, c.column_name, "
+                        "array_agg(e.enumlabel order by e.enumsortorder) "
+                        "from information_schema.columns c "
+                        "join pg_namespace n on n.nspname = c.udt_schema "
+                        "join pg_type t on t.typnamespace = n.oid and t.typname = c.udt_name "
+                        "join pg_enum e on e.enumtypid = t.oid "
+                        "where c.table_schema = :schema "
+                        "group by c.table_name, c.column_name"
+                    ),
+                    {"schema": schema},
+                )
+            ).all()
     finally:
         await engine.dispose()
 
     return LiveSchema(
         columns={(table, column): nullable == "YES" for table, column, nullable in columns},
         relation_names={name for (name,) in relations},
+        closed_sets={(table, column): list(labels) for table, column, labels in closed_sets},
     )
 
 
@@ -132,3 +155,20 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
     missing = sorted(name for name in declared if name not in live_schema.relation_names)
 
     assert missing == []
+
+
+def test_every_closed_set_column_is_a_python_enum(live_schema: LiveSchema) -> None:
+    """ "A constraint the domain must uphold is expressed as a constrained type wherever it can
+    be" — a column the database closes over a set of labels is the case where it always can. So
+    every such column is mapped through a ``StrEnum`` spelling exactly those labels, in order,
+    and a fifth role or a sixth status is a type error before it is a constraint violation. The
+    converse holds too: an enum the ORM declares that the database does not close is a check
+    Python is keeping alone."""
+    declared = {
+        (table.name, column.name): [member.value for member in column.type.enum_class]
+        for table in Base.metadata.tables.values()
+        for column in table.columns
+        if isinstance(column.type, Enum) and column.type.enum_class is not None
+    }
+
+    assert declared == live_schema.closed_sets

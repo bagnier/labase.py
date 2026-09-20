@@ -23,10 +23,14 @@ from types import FunctionType
 from apps.console.tests.e2e.test_admins_scenarios import (
     test_the_first_registered_user_becomes_a_server_admin,
 )
+from apps.issues.tests.test_capture import (
+    test_the_fact_that_opens_an_issue_points_back_at_the_request,
+)
 from apps.organizations.tests.e2e.test_scenarios import (
     test_a_new_user_gets_a_personal_organisation_on_registration,
 )
 from apps.shared.tests.test_bus import test_emit_refuses_an_undeclared_event
+from apps.shared.tests.test_capture import test_the_drain_reports_the_captures_the_queue_had_to_shed
 from apps.shared.tests.test_emit_durability import (
     test_a_fact_is_rolled_back_by_a_handler_that_raises,
     test_a_fact_survives_a_handler_that_returns_an_error_response,
@@ -39,9 +43,13 @@ from apps.shared.tests.test_listener import (
     test_a_second_tick_does_not_refan_a_dispatched_fact,
     test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
 )
+from apps.shared.tests.test_log_sink import test_the_drain_reports_the_lines_the_queue_had_to_shed
 from apps.shared.tests.test_queue import (
     test_a_task_rolls_back_with_the_transaction_that_enqueued_it,
     test_worker_runs_enqueued_task,
+)
+from apps.shared.tests.test_request_logging import (
+    test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
 )
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_browser_isolation import test_distinct_emails_get_isolated_contexts
@@ -66,8 +74,11 @@ from tests.meta.test_docs import (
 )
 from tests.meta.test_emit_sites import test_the_only_way_to_record_a_fact_is_on_a_transaction
 from tests.meta.test_event_vocabulary import (
+    test_an_org_scoped_event_declares_its_org_as_required,
     test_every_event_names_both_of_its_halves,
     test_no_event_names_an_identity_outside_the_bases_slots,
+    test_only_what_happened_is_a_fact,
+    test_the_signup_trigger_spells_the_fact_its_class_derives,
     test_the_stored_vocabulary_is_exactly_what_history_expects,
 )
 from tests.meta.test_lanes import (
@@ -84,10 +95,12 @@ from tests.meta.test_log_thresholds import (
 from tests.meta.test_log_vocabulary import (
     test_no_context_writes_a_line_under_another_apps_name,
     test_no_log_line_spells_a_business_event_kind,
+    test_the_emit_path_says_nothing_of_its_own,
 )
 from tests.meta.test_loop_verdicts import (
     test_a_healthy_lifespan_loop_writes_nothing,
     test_a_lifespan_loop_that_falls_over_opens_an_issue,
+    test_a_loop_that_comes_back_says_what_the_outage_cost,
 )
 from tests.meta.test_middleware import (
     test_a_cross_site_mutation_is_rejected_by_the_assembled_app,
@@ -113,6 +126,7 @@ from tests.meta.test_routes import (
     test_no_org_handle_can_shadow_a_fixed_route,
     test_the_schema_describes_both_faces_of_every_page_but_the_named_ones,
 )
+from tests.meta.test_schema_parity import test_every_closed_set_column_is_a_python_enum
 from tests.meta.test_signin_coverage import test_every_delivered_session_is_recorded_as_a_sign_in
 from tests.meta.test_surfaces import (
     test_a_disabled_app_drops_everything_but_its_console_tile,
@@ -123,6 +137,8 @@ from tests.meta.test_surfaces import (
     test_no_contract_exports_a_settings_handle,
     test_no_shared_module_names_a_bounded_context,
     test_the_capture_seam_is_not_a_business_fact,
+    test_the_collaboration_registries_are_keyed_by_type_alone,
+    test_the_composition_root_is_the_only_module_that_mounts,
     test_the_composition_root_mounts_every_context,
     test_the_one_way_edge_out_of_auth_is_contracted,
     test_the_reference_app_fills_every_surface,
@@ -182,15 +198,17 @@ CLAIMS = [
         "demo-apps-are-disposable",
         "The demo apps are meant to be deleted when real work starts.",
         "no lane deletes an app and re-runs; the surface claims below are its decomposition, and "
-        "holding them all is what would make a deletion safe",
+        "test_the_modules_outside_a_demo_that_import_it_are_the_named_ones freezes the four "
+        "non-demo modules a deletion would break today — the claim holds when that list is empty",
     ),
     # ── Principles ──────────────────────────────────────────────────────────────────────────────
     waived(
         "apps-are-self-contained",
         "each owns its domain logic, routes, templates, tests and migrations, and can be added, "
         "disabled, or deleted without touching the others",
-        "needs a per-app inventory of the five directories and a check that nothing outside them "
-        "names the app",
+        "test_the_modules_outside_a_demo_that_import_it_are_the_named_ones inventories what "
+        "outside a demo imports it; what names one by string (a feed filter, a cleanup list) "
+        "has no inventory yet, and both must be empty for the sentence to hold",
     ),
     held(
         "boundaries-are-hard",
@@ -224,11 +242,11 @@ CLAIMS = [
         "fact",
         test_the_only_way_to_record_a_fact_is_on_a_transaction,
     ),
-    waived(
+    held(
         "only-what-happened-is-a-fact",
         "a refused attempt (a wrong password, a blocked last-owner change, a non-owner reaching an "
         "owner-only route) changed nothing, so it is a structured log line, not a fact",
-        "the vocabulary test pins the kinds that exist, not the refusals that must stay out of it",
+        test_only_what_happened_is_a_fact,
     ),
     held(
         "fact-commits-iff-the-mutation-does",
@@ -274,12 +292,13 @@ CLAIMS = [
         "be re-deciding what RLS should; holding the sentence needs the pages and avatar reads "
         "moved onto RLS policies first (ROADMAP)",
     ),
-    waived(
+    held(
         "only-the-journal-is-transactional",
         "Only the journal is transactional — the rest never blocks, slows or fails the action it "
         "observes.",
-        "the log sink and capture seam are queue-backed by construction; no test proves a full "
-        "queue leaves the request untouched",
+        test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+        test_the_drain_reports_the_lines_the_queue_had_to_shed,
+        test_the_drain_reports_the_captures_the_queue_had_to_shed,
     ),
     held(
         "scenarios-run-twice",
@@ -328,10 +347,11 @@ CLAIMS = [
         "test_the_classes_outside_the_component_layer_are_the_named_ones freezes the 36 plain-CSS "
         "classes that today beat the layer in the cascade; the claim holds when that set is empty",
     ),
-    waived(
+    held(
         "invariants-are-types",
         "A constraint the domain must uphold is expressed as a constrained type",
-        "a judgement call per constraint — the closest mechanical proxy is the claim below",
+        test_every_closed_set_column_is_a_python_enum,
+        test_an_org_scoped_event_declares_its_org_as_required,
     ),
     held(
         "none-means-optional",
@@ -394,11 +414,11 @@ CLAIMS = [
         "A contract never exports a settings handle",
         test_no_contract_exports_a_settings_handle,
     ),
-    waived(
+    held(
         "no-magic-strings-in-collaboration",
         "Both key handlers by the Python type they carry, so there are no magic strings and no "
         "shared imports.",
-        "the registries are typed; nothing forbids a string-keyed sibling being added",
+        test_the_collaboration_registries_are_keyed_by_type_alone,
     ),
     held(
         "signing-in-is-one-fact",
@@ -435,6 +455,7 @@ CLAIMS = [
         "verb, never hand-written",
         test_the_stored_vocabulary_is_exactly_what_history_expects,
         test_every_event_names_both_of_its_halves,
+        test_the_signup_trigger_spells_the_fact_its_class_derives,
     ),
     held(
         "entity-id-correlates",
@@ -446,6 +467,7 @@ CLAIMS = [
         "a-fact-is-said-once",
         "`emit` logs nothing of its own, so an action shows up once, not twice.",
         test_no_log_line_spells_a_business_event_kind,
+        test_the_emit_path_says_nothing_of_its_own,
     ),
     held(
         "a-line-carries-its-app",
@@ -478,6 +500,7 @@ CLAIMS = [
         "falling over opens one issue, the ticks after it warn with how many, coming back says "
         "what the outage cost.",
         test_a_lifespan_loop_that_falls_over_opens_an_issue,
+        test_a_loop_that_comes_back_says_what_the_outage_cost,
     ),
     held(
         "silence-at-rest",
@@ -505,6 +528,7 @@ CLAIMS = [
         "issues-name-the-request-never-its-user",
         "naming the request that tripped them, never its user",
         test_an_issue_fact_never_names_the_user_who_tripped_it,
+        test_the_fact_that_opens_an_issue_points_back_at_the_request,
     ),
     waived(
         "one-dependency-verdict",
@@ -599,11 +623,11 @@ CLAIMS = [
         "├── features/              # BDD Gherkin scenarios (plain text, no code)",
         test_every_path_the_structure_tree_draws_exists,
     ),
-    waived(
+    held(
         "one-composition-root",
         "One top-level module forms the composition root — the only place allowed to know several "
         "contexts at once: `main.py`.",
-        "import-linter forbids the edges; nothing names main.py as the only exception",
+        test_the_composition_root_is_the_only_module_that_mounts,
     ),
     waived(
         "client-is-generated",
@@ -632,4 +656,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 14
+UNHELD_TODAY = 9

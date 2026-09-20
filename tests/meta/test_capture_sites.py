@@ -57,6 +57,14 @@ def _log_calls(node: ast.AST):
             yield child
 
 
+def _carries_a_traceback(keyword: ast.keyword) -> bool:
+    """``exc_info=`` with something live behind it. ``exc_info=None`` or ``False`` is the keyword
+    present and the traceback gone — structlog then writes no ``exception`` key at all."""
+    if keyword.arg != "exc_info":
+        return False
+    return not (isinstance(keyword.value, ast.Constant) and not keyword.value.value)
+
+
 def _broad_handler_logs() -> list[tuple[str, str, bool]]:
     """Every ``(site, event name, carries the traceback)`` logged from a broad ``except``."""
     found = []
@@ -75,7 +83,7 @@ def _broad_handler_logs() -> list[tuple[str, str, bool]]:
                     else "?"
                 )
                 site = f"{path.relative_to(_APPS.parent)}:{call.lineno}"
-                found.append((site, str(name), any(k.arg == "exc_info" for k in call.keywords)))
+                found.append((site, str(name), any(map(_carries_a_traceback, call.keywords))))
     return found
 
 

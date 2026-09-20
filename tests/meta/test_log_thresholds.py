@@ -13,7 +13,8 @@ was about to raise anyway, a parked task the seam had just captured.
 
 The one deliberate ``error`` carrying no exception is ``request.finished`` on a 5xx, which states
 the *outcome* of an exchange rather than a defect. It is written through a bound alias
-(``log_at = log.error``), so it stays out of this walk by construction rather than by exemption.
+(``log_at = log.error``), so it stays out of this walk by construction rather than by exemption —
+the one shape the walk cannot read, since the level is not on the call.
 
 Same shape and same reason as its two siblings: these choices live at call sites, so nothing but
 an AST walk enumerates them.
@@ -22,11 +23,14 @@ an AST walk enumerates them.
 import ast
 from pathlib import Path
 
+from tests.meta.test_log_vocabulary import is_a_logger
+
 _APPS = Path(__file__).resolve().parents[2] / "apps"
 
 
 def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:
-    """Every ``(site, name, call)`` spelling ``log.<level>(…)`` under ``apps/``, tests aside."""
+    """Every ``(site, name, call)`` spelling ``<logger>.<level>(…)`` under ``apps/``, tests aside
+    — whatever the logger is called at that site."""
     found = []
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
@@ -36,8 +40,7 @@ def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr == level
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "log"
+                and is_a_logger(node.func.value)
             ):
                 continue
             first = node.args[0] if node.args else None
@@ -67,10 +70,9 @@ def test_the_walk_actually_finds_the_error_sites():
 # meaning anything. Adding one is a deliberate edit, argued here, rather than something that
 # happens while writing a handler.
 #
-# Two more are written through a bound alias and so fall outside this walk, both for the same
-# reason — their *level* is computed from an outcome: ``request.finished`` (``log_at``), which is
-# ``info`` only when the exchange did what was asked, and ``LoopHealth``'s ``…_recovered``
-# (``self._log``), which says what an outage cost once it is over.
+# One more is written through a bound alias and so falls outside this walk: ``request.finished``
+# (``log_at``), whose *level* is computed from the outcome and is ``info`` only when the exchange
+# did what was asked.
 _THE_SURPRISES = {
     # A reaction whose actor closed their account between the fact and its delivery — the
     # personal org, the first-admin grant. Rare, and it explains a missing row later.
@@ -85,6 +87,9 @@ _THE_SURPRISES = {
     "<caller-supplied> (apps/shared/logs/dependency.py)",
     # The log store taking lines again, carrying what the outage cost.
     "log_sink.write_recovered (apps/shared/logs/sink.py)",
+    # A lifespan loop ticking again after an outage, carrying how many ticks it lost — the name
+    # is derived from the loop's, so the walk cannot read it off the constant either.
+    "<caller-supplied> (apps/shared/logs/loop.py)",
     # A request whose SQL crossed a threshold, naming the statements that cost the time.
     "db.heavy_request (apps/shared/persistence/sql_stats.py)",
 }

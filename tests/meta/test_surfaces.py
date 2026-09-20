@@ -13,8 +13,10 @@ behaviour — that is what the rest of the suite is for.
 """
 
 import ast
+import inspect
 import re
 import tomllib
+import typing
 from pathlib import Path
 
 import pytest
@@ -25,7 +27,9 @@ from apps.console.contract.overviews import ConsoleOverviewQuery
 from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.shared.events import BusinessEvent
+from apps.shared.events.bus import EventBus
 from apps.shared.events.catalog import catalog
+from apps.shared.integration.contribs import Contribs
 from apps.shared.integration.host import Host
 from apps.shared.logs.capture import ExceptionCaptured
 from apps.shared.persistence.base import Base
@@ -571,3 +575,89 @@ def test_every_band_the_strip_can_draw_has_a_colour():
     painted = set(re.findall(r"\.strip-([a-z]+)\s*[,{]", _ICON_CSS.read_text()))
 
     assert {kind for kind, _ in BANDS} - painted == set()
+
+
+def _mount_surfaces_imported_by(path: Path) -> set[str]:
+    """The contexts whose ``contract/integration.py`` — the mount surface — this module imports,
+    whether as a module (``from apps.todo.contract import integration``) or from inside it."""
+    imported = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.ImportFrom):
+            modules = [f"{node.module or ''}.{alias.name}" for alias in node.names]
+        elif isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        else:
+            continue
+        for module in modules:
+            parts = module.split(".")
+            if parts[:1] == ["apps"] and parts[2:4] == ["contract", "integration"]:
+                imported.add(parts[1])
+    return imported
+
+
+def test_the_composition_root_is_the_only_module_that_mounts():
+    """ "The only place allowed to know several contexts at once: `main.py`" — a module knows a
+    context by importing it, and a feature importing a foundation's *contract* is the healthy
+    edge the README names two sections later. So the line is drawn at the mount surface: a second
+    module importing a `contract/integration.py` is a second composition root, and the one there
+    is imports every context's."""
+    importers = {
+        str(path.relative_to(_ROOT)): mounts
+        for path in sorted(_APPS.rglob("*.py"))
+        if "/tests/" not in path.as_posix() and (mounts := _mount_surfaces_imported_by(path))
+    }
+
+    assert importers == {"apps/main.py": _contexts() | {"shared"}}
+
+
+# The two collaboration objects and the methods that key a handler on them. ``collect`` takes an
+# instance and dispatches on its type, so it has nothing to annotate — it is walked for literals
+# with the others.
+_KEYED_REGISTRATIONS = {Contribs: ("provide",), EventBus: ("declare", "on", "spread")}
+_COLLABORATION_METHODS = {"provide", "declare", "on", "spread", "collect"}
+
+
+def _is_a_registry(receiver: ast.expr) -> bool:
+    return ast.unparse(receiver).split(".")[-1] in {"events", "contribs"}
+
+
+def test_the_collaboration_registries_are_keyed_by_type_alone():
+    """ "Both key handlers by the Python type they carry, so there are no magic strings" — held
+    at both ends. The host carries exactly the two objects; each registration parameter is
+    annotated as a type, so a string is a type error; and no call site under `apps/` passes a
+    literal where the type goes, which is the shape a string-keyed sibling would need."""
+    collaborators = {
+        name: hint
+        for name, hint in typing.get_type_hints(Host).items()
+        if hint in (EventBus, Contribs)
+    }
+    registrations = {
+        f"{cls.__name__}.{method}": typing.get_origin(
+            list(inspect.signature(getattr(cls, method)).parameters.values())[1].annotation
+        )
+        for cls, methods in _KEYED_REGISTRATIONS.items()
+        for method in methods
+    }
+    literal_keys = {
+        f"{path.relative_to(_ROOT)}:{node.lineno}"
+        for path in sorted(_APPS.rglob("*.py"))
+        if "/tests/" not in path.as_posix()
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _COLLABORATION_METHODS
+        and _is_a_registry(node.func.value)
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    }
+
+    assert (collaborators, registrations, literal_keys) == (
+        {"events": EventBus, "contribs": Contribs},
+        {
+            "Contribs.provide": type,
+            "EventBus.declare": type,
+            "EventBus.on": type,
+            "EventBus.spread": type,
+        },
+        set(),
+    )

@@ -18,8 +18,23 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from tests.meta.readme import text as readme
+
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
+
+# The demos are meant to be deleted, and these are the non-demo modules that would break the day
+# one is: the two e2e drivers composing every app's mixins, the rule books and the dev seed. Each
+# is a coupling the base has chosen over a registration; the list only shrinks, since a demo
+# deleted with any of these still in place takes the harness down with it. Two readers are left
+# out on purpose: the composition root, whose job is to mount every app, and this package, which
+# reads the reference app to hold the README's word on it.
+_REACHES_INTO_A_DEMO = {
+    "scripts/seed.py": {"todo"},
+    "tests/e2e/drivers/api.py": {"calendar", "files", "learning", "todo"},
+    "tests/e2e/drivers/browser.py": {"calendar", "files", "learning", "todo"},
+    "tests/rulebooks.py": {"files", "learning"},
+}
 
 # The clock's own module, and the six test-side stamps that record *when the test asked*, which is
 # a fact about the run and not about the domain — pinning them to the domain clock would make a
@@ -91,10 +106,11 @@ _ARRIVES_FROM_OUTSIDE = {
     "metrics.fetch_metrics_exposition": "the Prometheus endpoint, which no page links to",
 }
 
-# Requests the driver fires itself instead of clicking. Five of the six are the base's own answer
-# to "hiding the control is not proof": the affordance is absent for this actor, so the request it
-# would have sent is fired from their own authenticated context and the server has to be the one
-# refusing. The sixth is the smell the README warns about, written down rather than left implicit.
+# Requests the driver fires itself instead of clicking. Seven of the nine are the base's own answer
+# to "hiding the control is not proof": the affordance is absent or disabled for this actor, so the
+# request it would have sent is fired from their own authenticated context and the server has to
+# be the one refusing. The other two are the smell the README warns about, written down rather
+# than left implicit.
 _ASKS_THE_SERVER_DIRECTLY = {
     "organizations._probe_blocked": "the shared probe: the hidden control's own request, so a "
     "refusal is the server's and not the template's",
@@ -103,6 +119,11 @@ _ASKS_THE_SERVER_DIRECTLY = {
     "pages.try_publish_to_members": "the visibility request a member has no control for",
     "console.try_set_console_setting": "the settings request a non-admin has no control for",
     "console.assert_refused_console": "the console request the missing button would have sent",
+    "console.revoke_server_admin": "the revoke PUT the UI disables for the last admin, so the "
+    "guard is proven the server's and not the button's",
+    "console.try_designate_server_admin": "the grant PUT a non-admin has no control for",
+    "learning.want_to_learn": "the subscribe POST, fired by hand from a `given` arranging a "
+    "scenario about reviewing rather than about subscribing. The other site here that is a smell",
     "todo.move_todo_above": "the reorder PUT, fired by hand: this one stands in for an "
     "interaction the driver never managed to drive — SortableJS's drop-above — where its "
     "neighbour move_todo_to_end really drags. The one site here that is a smell",
@@ -199,6 +220,8 @@ _OUTSIDE_THE_COMPONENT_LAYER = {
 }
 
 _STEP_TYPES = {"given", "when", "then"}
+# What Playwright's request context can send: ``context.request.put(...)``, ``page.request.fetch``.
+_REQUEST_VERBS = {"fetch", "get", "post", "put", "patch", "delete", "head"}
 _LEVELS = {"debug", "info", "warning", "error", "exception"}
 _DOTTED_SNAKE = re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*(\.[a-z0-9]+(_[a-z0-9]+)*)*$")
 
@@ -364,12 +387,13 @@ def _called_attributes(fn: ast.AST) -> list[str]:
 
 
 def _mixin_methods(mixin: Path) -> tuple[dict[str, int], dict[str, set[str]]]:
-    """``({method: goto calls}, {method: methods it calls})`` for one browser mixin."""
+    """``({method: goto calls}, {method: methods it calls})`` for one browser mixin — its class
+    bodies and its module-level functions alike, since a helper hoisted out of the class navigates
+    just the same."""
     gotos, calls = {}, {}
-    for cls in ast.parse(mixin.read_text()).body:
-        if not isinstance(cls, ast.ClassDef):
-            continue
-        for fn in cls.body:
+    for node in ast.parse(mixin.read_text()).body:
+        functions = node.body if isinstance(node, ast.ClassDef) else [node]
+        for fn in functions:
             if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
                 attributes = _called_attributes(fn)
                 gotos[fn.name] = attributes.count("goto")
@@ -411,14 +435,38 @@ def _propagated(reached: dict[str, set[str]], calls: dict[str, set[str]]) -> dic
     return reached
 
 
+def _step_navigations(steps: Path) -> dict[str, tuple[set[str], int]]:
+    """``{steps.function: (its step types, goto calls)}`` — a step that navigates itself, without
+    going through the driver, is a navigation no mixin walk would ever see."""
+    found = {}
+    if not steps.exists():
+        return found
+    for fn in ast.walk(ast.parse(steps.read_text())):
+        if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        kinds = {
+            decorator.func.id
+            for decorator in fn.decorator_list
+            if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name)
+        } & _STEP_TYPES
+        if count := _called_attributes(fn).count("goto"):
+            found[f"steps.{fn.name}"] = (kinds, count)
+    return found
+
+
 def _mixin_navigations() -> dict[str, tuple[set[str], int]]:
-    """``{app.method: (step types that reach it, goto calls)}``, over every browser mixin."""
+    """``{app.method: (step types that reach it, goto calls)}``, over every browser mixin and
+    every step module beside one."""
     found = {}
     for mixin in sorted(_APPS.glob("*/tests/e2e/driver_mixin_browser.py")):
         app = mixin.relative_to(_APPS).parts[0]
         gotos, calls = _mixin_methods(mixin)
         reached = _propagated(_steps_reaching(mixin.parent / "steps.py"), calls)
         found |= {f"{app}.{name}": (reached[name], count) for name, count in gotos.items() if count}
+        found |= {
+            f"{app}.{name}": reach
+            for name, reach in _step_navigations(mixin.parent / "steps.py").items()
+        }
     return found
 
 
@@ -442,15 +490,25 @@ def test_every_deep_link_is_an_arrival_from_outside():
     assert navigating == set(_ARRIVES_FROM_OUTSIDE)
 
 
+def _is_a_request_call(node: ast.AST) -> bool:
+    """``….fetch(…)``, or any verb on a request context — ``context.request.put(…)``."""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+        return False
+    if node.func.attr == "fetch":
+        return True
+    return (
+        node.func.attr in _REQUEST_VERBS
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "request"
+    )
+
+
 def _fires_its_own_request(fn: ast.AST) -> bool:
     """Does this method send a request rather than click? Either through Playwright's own
-    ``fetch``, or through a ``fetch(`` written into a script it evaluates in the page."""
+    request context — ``fetch``, or a verb on ``….request`` — or through a ``fetch(`` written into
+    a script it evaluates in the page."""
     return any(
-        (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "fetch"
-        )
+        _is_a_request_call(node)
         or (
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
@@ -606,7 +664,59 @@ def test_the_classes_outside_the_component_layer_are_the_named_ones():
 
 def test_nothing_reruns_a_failing_test():
     """ "Everything else is strict, zero rerun" — kept true the cheap way: the plugin that could
-    rerun anything is not installed, so no suite can opt in by accident."""
+    rerun anything is not installed, no lane pulls it in at run time (`uv run --with`), and no
+    hook of ours takes over the run protocol, which is the one place a rerun could be written by
+    hand and reported as a pass."""
     pyproject = (_ROOT / "pyproject.toml").read_text()
+    lanes = "\n".join(
+        (_ROOT / name).read_text() for name in ("Makefile", ".github/workflows/ci.yml")
+    )
 
-    assert ("pytest-rerunfailures" in pyproject, "--reruns" in pyproject) == (False, False)
+    hooks = _sites(r"def pytest_runtest_protocol\b", _ROOT / "tests", _APPS)
+
+    assert (
+        "pytest-rerunfailures" in pyproject,
+        "--reruns" in pyproject,
+        "rerunfailures" in lanes,
+        "--reruns" in lanes,
+        hooks,
+    ) == (False, False, False, False, {})
+
+
+def _demos() -> set[str]:
+    """The contexts the README's demo table lists — what "meant to be deleted" applies to."""
+    table = readme()[readme().index("| Demo") :]
+    return set(re.findall(r"^\| `(\w+)/`", table[: table.index("\n\n")], re.MULTILINE))
+
+
+def _demos_imported_by(path: Path, demos: set[str]) -> set[str]:
+    imported = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.ImportFrom):
+            modules = [node.module or ""]
+        elif isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        else:
+            continue
+        for module in modules:
+            parts = module.split(".")
+            if parts[:1] == ["apps"] and len(parts) > 1 and parts[1] in demos:
+                imported.add(parts[1])
+    return imported
+
+
+def test_the_modules_outside_a_demo_that_import_it_are_the_named_ones():
+    """The ratchet the `demo-apps-are-disposable` and `apps-are-self-contained` waivers name: an
+    import of a demo from anywhere but the demo itself or the composition root is a module that
+    stops loading the day the demo is deleted. Frozen per module, and only the import edge — a
+    template hard-coding a demo's name is the half a walk over imports cannot see."""
+    demos = _demos()
+    reaching = {
+        relative: imported
+        for path, relative in _python_files(_APPS, _ROOT / "tests", _ROOT / "scripts")
+        if relative != "apps/main.py"
+        and not (path.is_relative_to(_APPS) and path.relative_to(_APPS).parts[0] in demos)
+        and (imported := _demos_imported_by(path, demos))
+    }
+
+    assert (demos, reaching) == ({"calendar", "files", "learning", "todo"}, _REACHES_INTO_A_DEMO)

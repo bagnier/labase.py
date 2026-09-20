@@ -6,6 +6,7 @@ Pure middleware logic — no DB, no running app: the decision is exercised throu
 """
 
 import uuid
+from collections import deque
 
 import pytest
 import structlog
@@ -16,7 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from apps.shared.http.exceptions import handle_http_error, handle_stale_data
-from apps.shared.logs import request
+from apps.shared.logs import capture, request, sink
+from apps.shared.logs.capture import ExceptionCaptured
 
 
 def _req(path: str, *, referer: str | None = None, host: str = "example.com") -> Request:
@@ -349,3 +351,45 @@ def test_the_finished_line_carries_what_the_request_bound_below_it(log_chain):
     assert [(line.name, line.user_id, line.org_id) for line in lines] == [
         ("request.finished", "u-1", "o-1")
     ]
+
+
+# The two queues between a request and its observers, both bounded and both able to fill — a storm
+# of exceptions, a drain that stopped. What happens to the request when they do is the whole of
+# "the rest never blocks, slows or fails the action it observes".
+
+
+def _logging_app() -> FastAPI:
+    log = structlog.get_logger("apps.todo.probe")
+
+    async def logs_and_answers() -> dict[str, bool]:
+        try:
+            raise ValueError("observed, not suffered")
+        except ValueError:
+            log.exception("todo.probe_failed")
+        return {"ok": True}
+
+    app = FastAPI()
+    app.get("/probe")(logs_and_answers)
+    app.add_middleware(request.RequestLogger)
+    return app
+
+
+def test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched(log_chain, monkeypatch):
+    """Both queues already full, one slot each: the exception line and the finished line each
+    displace the sink's one, the capture displaces the capture queue's one, and the request
+    answers as if nothing were watching. Only the tallies move."""
+    monkeypatch.setattr(sink, "_QUEUE", deque([{"event": "older"}], maxlen=1))
+    monkeypatch.setattr(
+        capture, "_QUEUE", deque([ExceptionCaptured(exc=RuntimeError("older"))], maxlen=1)
+    )
+    sink._overflow.dropped = 0
+    capture._overflow.dropped = 0
+
+    response = TestClient(_logging_app()).get("/probe")
+
+    assert (
+        response.status_code,
+        response.json(),
+        sink._overflow.dropped,
+        capture._overflow.dropped,
+    ) == (200, {"ok": True}, 2, 1)

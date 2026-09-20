@@ -12,14 +12,22 @@ shared may not import a bounded context, so only the composition root may see ev
 once (the same reason ``test_listener`` checks topics by string).
 """
 
+import ast
+import re
 from dataclasses import MISSING, fields
+from pathlib import Path
 
 import apps.main  # noqa: F401  — mounting every app fills the catalog
+from apps.auth.contract.events import UserCreated
 from apps.shared.events import BusinessEvent, OrgScoped
 from apps.shared.events.catalog import catalog
 
 # The base's own scoping slots — the only id-shaped fields an event may declare.
 _BASE_SLOTS = {"user_id", "org_id", "entity_id"}
+
+_ROOT = Path(__file__).resolve().parents[2]
+_APPS = _ROOT / "apps"
+_MIGRATIONS = _ROOT / "supabase" / "migrations"
 
 
 def _shipped_events() -> dict[str, type[BusinessEvent]]:
@@ -162,3 +170,70 @@ def test_only_org_scoped_events_carry_an_org_at_all():
         if not issubclass(cls, OrgScoped) and any(f.name == "org_id" for f in fields(cls))
     }
     assert strays == set()
+
+
+# What a refusal is called. A verb built on one of these names something that did not happen —
+# the wrong password, the blocked change, the denied route — which is a log line, not a fact.
+_REFUSAL_WORDS = {
+    "attempted",
+    "blocked",
+    "denied",
+    "failed",
+    "forbidden",
+    "invalid",
+    "refused",
+    "rejected",
+    "unauthorized",
+    "wrong",
+}
+
+
+def test_only_what_happened_is_a_fact():
+    """ "A refused attempt … changed nothing, so it is a structured log line, not a fact." A fact
+    about nothing takes two shapes, both absent: a verb that names the refusal, and an `emit`
+    written inside an `except` — the place a refusal is caught. Whether every emitted fact really
+    changed a row is the half no walk can read."""
+    refusing = {
+        kind for kind in _shipped_events() if set(kind.split(".")[1].split("_")) & _REFUSAL_WORDS
+    }
+    emitted_on_failure = {
+        f"{path.relative_to(_ROOT)}:{call.lineno}"
+        for path in sorted(_APPS.rglob("*.py"))
+        if "/tests/" not in path.as_posix()
+        for handler in ast.walk(ast.parse(path.read_text()))
+        if isinstance(handler, ast.ExceptHandler)
+        for call in ast.walk(handler)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr == "emit"
+    }
+
+    assert (refusing, emitted_on_failure) == (set(), set())
+
+
+def _signup_trigger_body() -> str:
+    """The last definition of `handle_new_user` across the migrations — a later one replaces it."""
+    bodies = [
+        body
+        for path in sorted(_MIGRATIONS.glob("*.sql"))
+        for body in re.findall(
+            r"function public\.handle_new_user\(\).*?\$\$;", path.read_text(), re.DOTALL
+        )
+    ]
+    return bodies[-1]
+
+
+def test_the_signup_trigger_spells_the_fact_its_class_derives():
+    """The one fact Python never emits: `UserCreated` is recorded by the signup trigger, on
+    GoTrue's own transaction, in SQL literals no derivation reaches. The class is what the
+    listener rebuilds the fact from, so a verb renamed on one side only lands every signup as an
+    unroutable fact — no personal org, no seeds — while the vocabulary tests stay green."""
+    written = re.search(
+        r"insert into public\.business_events \(app_name, verb, icon.*?"
+        r"values \('([\w-]+)', '([\w-]+)', '([\w-]+)'",
+        _signup_trigger_body(),
+        re.DOTALL,
+    )
+
+    assert written is not None
+    assert written.groups() == (UserCreated.app_name, UserCreated.verb, UserCreated.icon)
