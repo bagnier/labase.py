@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.tests.given_helpers import create_user, delete_user
 from apps.files.infra.repository import OrgFileRepository
+from apps.files.infra.storage import storage_path
 from apps.organizations.infra.repository import OrganizationRepository
 from tests.rls import acting_as
 
@@ -46,8 +47,14 @@ async def _a_file_and_a_stranger(session: AsyncSession) -> AsyncGenerator[Shared
                 org = await OrganizationRepository(session).create_with_owner(
                     f"Org {uuid.uuid4().hex[:8]}", uuid.UUID(member)
                 )
+                file_id = uuid.uuid7()
                 org_file = await OrgFileRepository(session, org.id).add(
-                    uuid.UUID(member), "secret.txt", f"{org.id}/secret.txt", "text/plain", 6
+                    file_id,
+                    uuid.UUID(member),
+                    "secret.txt",
+                    storage_path(org.id, file_id, "secret.txt"),
+                    "text/plain",
+                    6,
                 )
             yield SharedFile(member=member, stranger=stranger, file_id=org_file.id)
         finally:

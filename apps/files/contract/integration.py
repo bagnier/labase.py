@@ -137,6 +137,7 @@ async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid
     )
     try:
         await OrgFileRepository(session, org_id).add(
+            file_id=file_id,
             uploaded_by=owner_id,
             filename=_WELCOME_FILENAME,
             storage_path=path,

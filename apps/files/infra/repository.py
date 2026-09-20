@@ -26,6 +26,7 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
 
     async def add(
         self,
+        file_id: uuid.UUID,
         uploaded_by: uuid.UUID,
         filename: str,
         storage_path: str,
@@ -33,7 +34,10 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
         size_bytes: int,
         uploader_email: str = "",
     ) -> OrgFile:
+        """``file_id`` is the caller's, because the object is uploaded before the row exists and
+        its path carries that id — a row generating its own would name someone else's object."""
         org_file = OrgFile(
+            id=file_id,
             org_id=self.org_id,
             uploaded_by=uploaded_by,
             filename=filename,

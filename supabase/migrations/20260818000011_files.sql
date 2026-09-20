@@ -15,7 +15,12 @@ create table public.org_files (
   size_bytes     bigint      not null default 0,
   version        integer     not null default 1,
   created_at     timestamptz not null default now(),
-  updated_at     timestamptz not null default now()
+  updated_at     timestamptz not null default now(),
+  -- The share link and the download sign this path with the service key, so a row pointing at
+  -- another org's object would serve its bytes. The path is the row's own: its org's folder, and
+  -- its own id. The filename after it is free — a rename keeps the object where it is.
+  constraint org_files_own_object_check
+    check (starts_with(storage_path, org_id::text || '/' || id::text || '_'))
 );
 
 create index org_files_org_created_at_idx on public.org_files (org_id, created_at desc);
@@ -26,10 +31,23 @@ create trigger org_files_updated_at
 
 alter table public.org_files enable row level security;
 
-create policy "org_files: member all"
+create policy "org_files: member read"
+  on public.org_files for select
+  to authenticated
+  using (org_id in (select public.user_org_ids()));
+
+-- A file is collaborative to read and its uploader's to change; an owner changes any of them.
+create policy "org_files: uploader or owner all"
   on public.org_files for all
-  using  (org_id in (select public.user_org_ids()))
-  with check (org_id in (select public.user_org_ids()));
+  to authenticated
+  using (
+    org_id in (select public.user_org_ids())
+    and (uploaded_by = auth.uid() or public.user_is_org_owner(org_id))
+  )
+  with check (
+    org_id in (select public.user_org_ids())
+    and (uploaded_by = auth.uid() or public.user_is_org_owner(org_id))
+  );
 
 grant select, insert, update, delete on public.org_files to authenticated;
 grant select, insert, update, delete on public.org_files to service_role;

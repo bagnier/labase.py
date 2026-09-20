@@ -180,6 +180,7 @@ async def upload_file(
         raise storage_failure("files.upload_failed", exc, path=path) from exc
 
     org_file = await repo.add(
+        file_id=file_id,
         uploaded_by=current_user.id,
         filename=safe_name,
         storage_path=path,
