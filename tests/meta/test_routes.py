@@ -20,30 +20,53 @@ import apps.main
 from apps.shared.integration import slugs
 
 # The routes that answer one audience, split by which one — because "one face" says nothing about
-# which face is missing, and the two lists fail for opposite reasons.
+# which face is missing, and the two lists fail for opposite reasons. Every method: a mutation
+# that negotiates and declares one face is a mutation the generated client cannot send as JSON.
 
-# JSON only: nothing here is a document. A redirect (the OAuth round-trip, the mailed
-# confirmations, a permalink resolver), bytes (an avatar, a download, a share link), a machine
-# surface (the probes, `/metrics`, the dashboard's own `.json` fetch), or a JSON list with no page
-# of its own. `/{org_handle}/api-keys` does branch on the request, but answers HTML with a redirect
-# to the settings page — a destination, not a document.
-_JSON_ONLY_GETS = {
-    "/auth/callback",
-    "/auth/confirm",
-    "/auth/confirm-email",
-    "/auth/oauth/{provider}",
-    "/console/timeline/export",
-    "/files/share/{token}",
-    "/health/live",
-    "/health/ready",
-    "/metrics",
-    "/organizations",
-    "/profile/avatar/{user_id}",
-    "/{org_handle}/api-keys",
-    "/{org_handle}/dashboard/overviews.json",
-    "/{org_handle}/files/{file_id}/download",
-    "/{org_handle}/invitations",
-    "/{org_handle}/pages/by-id/{page_id}",
+# JSON only: nothing here is a document. Every mutation whose HTML answer is a redirect to the
+# page it changed (sign-in and its second factor, registration, impersonation, the account
+# deletions, an accepted invitation, the org and page edits), a machine surface (the probes,
+# the dashboard's own `.json` fetch, the WebAuthn ceremonies, the nav reorder PUT), a JSON list
+# with no page of its own, or a JSON mutation the page reaches by script (the pages CRUD, the
+# calendar writes). `/{org_handle}/api-keys` does branch on the request, but answers HTML with a
+# redirect to the settings page — a destination, not a document.
+_JSON_ONLY = {
+    "GET /health/live",
+    "GET /health/ready",
+    "GET /organizations",
+    "GET /{org_handle}/api-keys",
+    "GET /{org_handle}/dashboard/overviews.json",
+    "GET /{org_handle}/invitations",
+    "PATCH /{org_handle}",
+    "PATCH /{org_handle}/handle",
+    "PATCH /{org_handle}/timezone",
+    "DELETE /{org_handle}/members/me",
+    "POST /auth/impersonate",
+    "POST /auth/impersonate/stop",
+    "POST /auth/mfa",
+    "POST /invitations/{token}/accept",
+    "POST /profile/2fa/enroll",
+    "POST /auth/login",
+    "POST /auth/passkeys/options",
+    "POST /auth/passkeys/verify",
+    "POST /auth/register",
+    "POST /auth/reset-password",
+    "POST /organizations",
+    "DELETE /profile",
+    "POST /profile/delete",
+    "POST /profile/passkeys/options",
+    "POST /profile/passkeys/verify",
+    "POST /{org_handle}/calendar",
+    "DELETE /{org_handle}/calendar/{event_id}",
+    "PATCH /{org_handle}/calendar/{event_id}",
+    "POST /{org_handle}/calendar/{event_id}",
+    "POST /{org_handle}/pages",
+    "POST /{org_handle}/pages/nav",
+    "DELETE /{org_handle}/pages/nav/{slug}",
+    "PUT /{org_handle}/pages/nav/{slug}/position",
+    "PATCH /{org_handle}/pages/{slug}",
+    "DELETE /{org_handle}/pages/{slug}",
+    "POST /{org_handle}/pages/{slug}/visibility",
 }
 
 # HTML only: pages with no JSON caller. The unauthenticated forms (sign in, register, the two
@@ -51,18 +74,18 @@ _JSON_ONLY_GETS = {
 # data behind each editor is its own route, which does have both faces. The dashboard and the
 # settings page are composed documents on the same argument: their data is its own routes
 # (`overviews.json`, the activity feed, `/members`), each of which answers JSON.
-_HTML_ONLY_GETS = {
-    "/",
-    "/auth/forgot-password",
-    "/auth/login",
-    "/auth/register",
-    "/auth/reset-password",
-    "/{org_handle}/calendar/new",
-    "/{org_handle}/calendar/{event_id}/edit",
-    "/{org_handle}/dashboard",
-    "/{org_handle}/pages/new/edit",
-    "/{org_handle}/pages/{slug}/edit",
-    "/{org_handle}/settings",
+_HTML_ONLY = {
+    "GET /",
+    "GET /auth/forgot-password",
+    "GET /auth/login",
+    "GET /auth/register",
+    "GET /auth/reset-password",
+    "GET /{org_handle}/calendar/new",
+    "GET /{org_handle}/calendar/{event_id}/edit",
+    "GET /{org_handle}/dashboard",
+    "GET /{org_handle}/pages/new/edit",
+    "GET /{org_handle}/pages/{slug}/edit",
+    "GET /{org_handle}/settings",
 }
 
 
@@ -81,18 +104,24 @@ def _fixed_top_level_segments() -> set[str]:
 
 
 def _declared_content(operation: dict) -> set[str]:
-    """The media types the *success* response describes.
+    """The two faces the *success* responses describe — bytes, text and a redirect are no face.
 
-    Only the 2xx entry counts. FastAPI adds a `422` carrying `application/json` to any route with
+    Only the 2xx entries count. FastAPI adds a `422` carrying `application/json` to any route with
     something to validate, so reading every status code makes almost everything look two-faced —
-    the failure this walk was written with, and the reason it says `2` out loud.
+    the failure this walk was written with, and the reason it says `2` out loud. A `204` carries
+    no content by definition and is what a JSON caller gets from a deletion: it counts as the
+    JSON face.
     """
-    return {
+    faces = {
         media
         for code, response in (operation.get("responses") or {}).items()
         if code.startswith("2")
         for media in (response.get("content") or {})
+        if media in ("application/json", "text/html")
     }
+    if "204" in (operation.get("responses") or {}):
+        faces.add("application/json")
+    return faces
 
 
 def test_no_org_handle_can_shadow_a_fixed_route():
@@ -152,18 +181,100 @@ def _served_paths(route) -> set[str]:
 
 def test_the_schema_describes_both_faces_of_every_page_but_the_named_ones():
     """ "Because every business endpoint also speaks JSON, the OpenAPI schema is a full description
-    of the app" — and `client/` is generated from exactly this. Every GET route that is a document
-    describes both faces; the two sets below are the routes that are not one, each named."""
-    by_face = {"application/json": set(), "text/html": set()}
+    of the app" — and `client/` is generated from exactly this. Every route that serves a document,
+    reads or writes, describes both faces; the two sets above are the routes that are not one,
+    each named. A mutation is where the gap costs most: it negotiates at runtime, so a
+    `response_class` naming one face documents the other out of the client's reach."""
+    by_face = {"application/json": set(), "text/html": set(), "none": set()}
     for path, operations in _paths().items():
         for method, operation in operations.items():
-            if method.upper() != "GET":
-                continue
             declared = _declared_content(operation)
             if len(declared) == 1:
-                by_face[next(iter(declared))].add(path)
+                by_face[next(iter(declared))].add(f"{method.upper()} {path}")
+            elif not declared:
+                by_face["none"].add(f"{method.upper()} {path}")
 
-    assert (by_face["application/json"], by_face["text/html"]) == (
-        _JSON_ONLY_GETS,
-        _HTML_ONLY_GETS,
+    assert (by_face["application/json"], by_face["text/html"], by_face["none"]) == (
+        _JSON_ONLY,
+        _HTML_ONLY,
+        _NO_FACE,
     )
+
+
+# Mutations that carry no body: a verb on a resource the path already names — a deletion, a
+# toggle, a sign-out, a ceremony's opening request, a share link minted for the file in the URL.
+# Not `DELETE /profile`: deleting an account re-authenticates, so it reads a password.
+_BODYLESS_MUTATIONS = {
+    "DELETE /console/{app}/org-settings/{key}/{org_id}",
+    "DELETE /{org_handle}/api-keys/{key_id}",
+    "DELETE /{org_handle}/calendar/{event_id}",
+    "DELETE /{org_handle}/files/{file_id}",
+    "DELETE /{org_handle}/invitations/{invitation_id}",
+    "DELETE /{org_handle}/members/me",
+    "DELETE /{org_handle}/members/{user_id}",
+    "DELETE /{org_handle}/pages/nav/{slug}",
+    "DELETE /{org_handle}/pages/{slug}",
+    "DELETE /{org_handle}/todos/{todo_id}",
+    "POST /auth/impersonate/stop",
+    "POST /auth/logout",
+    "POST /auth/passkeys/options",
+    "POST /console/accounts/{user_id}/delete",
+    "POST /console/accounts/{user_id}/disable",
+    "POST /console/accounts/{user_id}/enable",
+    "POST /invitations/{token}/accept",
+    "POST /profile/2fa/enroll",
+    "POST /profile/passkeys/options",
+    "POST /profile/passkeys/{passkey_id}/delete",
+    "POST /{org_handle}/files/{file_id}/share",
+}
+
+# No face at all: a redirect (the OAuth round-trip, the mailed confirmations, sign-out, a
+# permalink resolver, a download through a signed URL), bytes (an avatar), text (the Prometheus
+# exposition, the timeline's CSV and NDJSON export). Declared as what they are, so the schema
+# stops promising a JSON document nobody serves.
+_NO_FACE = {
+    "GET /auth/callback",
+    "GET /auth/confirm",
+    "GET /auth/confirm-email",
+    "GET /auth/oauth/{provider}",
+    "POST /auth/logout",
+    "GET /console/timeline/export",
+    "GET /files/share/{token}",
+    "GET /metrics",
+    "GET /profile/avatar/{user_id}",
+    "GET /{org_handle}/files/{file_id}/download",
+    "GET /{org_handle}/pages/by-id/{page_id}",
+}
+
+
+def test_every_mutation_declares_the_body_it_reads():
+    """ "One implementation buys a documented REST API": a mutation is documented when the schema
+    says what it takes. A form is JSON at the door (`apps/shared/http/form.py`), so every handler
+    can declare its body as a Pydantic model and FastAPI writes the `requestBody` — a handler
+    still reading the request by hand is a mutation the client cannot call."""
+    undeclared = {
+        f"{method.upper()} {path}"
+        for path, operations in _paths().items()
+        for method, operation in operations.items()
+        if method.upper() != "GET" and "requestBody" not in operation
+    }
+
+    assert undeclared == _BODYLESS_MUTATIONS
+
+
+def test_every_json_face_declares_its_schema():
+    """The other half of "documented": what a JSON answer contains. `json_and_html(Model)` and
+    `response_model=` name it, the API lane checks every answer against it (see
+    `tests/e2e/drivers/conformance.py`), and this is what forbids the `{}` a face
+    declared without its model leaves behind."""
+    blank = {
+        f"{method.upper()} {path} {code}"
+        for path, operations in _paths().items()
+        for method, operation in operations.items()
+        for code, response in (operation.get("responses") or {}).items()
+        if code.startswith("2")
+        and "application/json" in (response.get("content") or {})
+        and not response["content"]["application/json"].get("schema")
+    }
+
+    assert blank == set()

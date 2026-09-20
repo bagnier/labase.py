@@ -2,7 +2,15 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.pages.domain.models import NavItemRead, Page, PageDocumentRead, PageVisibility
+from apps.pages.domain.models import (
+    NavItemRead,
+    Page,
+    PageDocumentRead,
+    PageVisibility,
+)
+from apps.pages.domain.models import (
+    PublicPage as PublicPage,
+)
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import PageNavRepository, PageRepository, visible_pages
 

@@ -21,17 +21,19 @@ This base exists for four reasons, in order:
    document storage are next.
 
 3. **Agent-driven development.** The base is optimized to be developed by AI agents
-   under human direction. The skills in `.claude/skills/` are executable specs (the
-   [`/feature`](.claude/skills/feature/SKILL.md) skill walks a full BDD workflow), the
-   principles below are mechanically verifiable, and the dual-driver BDD suite is the
-   verification substrate that makes agent-written features trustworthy. The ceremony
-   you'll notice throughout is priced against that model: humans write scenarios and
-   review diffs; agents write the plumbing; `make ci` arbitrates.
+   under human direction. The agent works from written procedures versioned with the 
+   code, the principles below are mechanically verifiable, and the dual-driver BDD 
+   suite is the verification substrate that makes agent-written features trustworthy. 
+   The ceremony you'll notice throughout is priced against that model: humans decide 
+   the scenarios and review the diffs; agents draft them and write the plumbing;
+   `make finalize` arbitrates.
 
 4. **Easy and confident new app creation.** The whole codebase should tend to ease the
    creation of any new app, CRUDished or HexArchished. Developers should be able to
    understand each line; conventions should be explicit, well named and documented.
    Integration with other apps should be intuitive and should not require modifying them.
+   The [`/feature`](.claude/skills/feature/SKILL.md) skill is the walkthrough: from
+   scenarios to code in four validated phases, for a feature or a whole new app.
 
 ## Principles
 
@@ -532,6 +534,17 @@ how a limiter stays off for good.
 `wants_json(request)` / `wants_full_page(request)` and the
 `render_list(...)` helper in `apps/shared/http/` centralize the JSON / fragment / page
 branching. Fragments are standalone valid markup (they're swapped into the live DOM).
+
+
+#### A form is JSON at the door
+
+The request side negotiates nothing: the innermost middleware (`apps/shared/http/form.py`)
+re-encodes a urlencoded form as JSON before routing, so every mutation declares one Pydantic body
+that FastAPI validates and documents, and nothing reads `request.form()` by hand — a multipart
+upload passes through untouched. Every JSON answer names its model the same way
+(`json_and_html(Model)`, `response_model=`), and the API lane validates each answer it receives
+against the schema its route declares (`tests/e2e/drivers/conformance.py`): the OpenAPI document
+is held by the scenarios that drive the routes, not by a promise.
 
 
 #### Page composition

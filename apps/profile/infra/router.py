@@ -3,7 +3,7 @@ import base64
 import json
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlencode
 
 from fastapi import (
@@ -14,7 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
@@ -53,10 +53,24 @@ from apps.auth.contract.two_factor import (
 from apps.organizations.contract.entity_links import entity_url
 from apps.profile.contract.current import ProfileSettings
 from apps.profile.contract.events import AccountDeleted, AvatarUpdated, HandleChanged
-from apps.profile.domain.models import ProfileRead, ProfileUpdate
+from apps.profile.domain.models import (
+    AccountDeletion,
+    EmailChange,
+    HandleUpdate,
+    PasskeyRegistered,
+    PasskeyRegistration,
+    PasswordChange,
+    ProfileRead,
+    ProfileStub,
+    ProfileUpdate,
+    TotpEnrolmentCheck,
+    TotpEnrolmentRead,
+)
 from apps.profile.infra.repository import ProfileRepository
 from apps.shared import clock
+from apps.shared.dto import Message
 from apps.shared.events.activity import (
+    ActivityFeedRead,
     activity_entries,
     activity_stats,
     group_activity_by_day,
@@ -65,7 +79,7 @@ from apps.shared.events.activity import (
 from apps.shared.events.bus import events
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
-from apps.shared.http import JSON_AND_HTML, parse_body, wants_json
+from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.integration.slugs import validate_handle
@@ -278,7 +292,7 @@ async def _profile_error(
     key: str,
     message: str,
     status_code: int = 400,
-) -> HTMLResponse | JSONResponse:
+) -> Response:
     if wants_json(request):
         return JSONResponse({"detail": message}, status_code=status_code)
     ctx = await _profile_context(request, session, current_user, repo)
@@ -286,7 +300,7 @@ async def _profile_error(
     return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
 
 
-@router.get("/profile", responses=JSON_AND_HTML)
+@router.get("/profile", responses=json_and_html(ProfileRead | ProfileStub))
 async def profile_page(
     request: Request,
     current_user: CurrentUser,
@@ -317,7 +331,7 @@ async def profile_page(
     return response
 
 
-@router.get("/profile/activity", responses=JSON_AND_HTML)
+@router.get("/profile/activity", responses=json_and_html(ActivityFeedRead))
 async def profile_activity(
     request: Request,
     current_user: CurrentUser,
@@ -342,16 +356,15 @@ async def profile_activity(
     return templates.TemplateResponse(request, "profile/activity_feed.html", ctx)
 
 
-@router.post("/profile/password", response_model=None)
+@router.post("/profile/password", responses=json_and_html(Message))
 async def password_change(
     request: Request,
+    body: PasswordChange,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
-    body = await parse_body(request)
-    current_password = str(body.get("current_password", ""))
-    new_password = str(body.get("new_password", ""))
+) -> Response:
+    current_password, new_password = body.current_password, body.new_password
     error: str | None = None
     if not current_password or not new_password:
         error = "Current and new password are required."
@@ -375,19 +388,19 @@ async def password_change(
     return _profile_redirect("password_changed")
 
 
-@router.post("/profile/email", response_model=None)
+@router.post("/profile/email", responses=json_and_html(Message))
 async def email_change(
     request: Request,
+    body: EmailChange,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
+) -> Response:
     if not profile_settings.email_change_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    body = await parse_body(request)
-    new_email = str(body.get("new_email", "")).strip().lower()
-    current_password = str(body.get("current_password", ""))
+    new_email = body.new_email.strip().lower()
+    current_password = body.current_password
     error: str | None = None
     if not new_email or not current_password:
         error = "New email and current password are required."
@@ -439,7 +452,7 @@ def _ensure_two_factor(users_settings: SettingsView, current_user: Authenticated
     return _session_token(current_user)
 
 
-@router.post("/profile/passkeys/options", response_model=None)
+@router.post("/profile/passkeys/options", response_model=dict[str, Any])
 async def passkey_options(
     current_user: CurrentUser,
     users_settings: UsersSettings,
@@ -451,18 +464,17 @@ async def passkey_options(
         return JSONResponse({"detail": str(e)}, status_code=400)
 
 
-@router.post("/profile/passkeys/verify", response_model=None)
+@router.post("/profile/passkeys/verify", response_model=PasskeyRegistered)
 async def passkey_verify(
     request: Request,
+    body: PasskeyRegistration,
     current_user: CurrentUser,
     users_settings: UsersSettings,
     session: RlsSession,
 ) -> JSONResponse:
     access_token = _ensure_passkeys(users_settings, current_user)
-    body = await parse_body(request)
-    challenge_id = str(body.get("challenge_id", ""))
-    credential = body.get("credential")
-    if not challenge_id or not isinstance(credential, dict):
+    challenge_id, credential = body.challenge_id, body.credential
+    if not challenge_id or not credential:
         return JSONResponse(
             {"detail": "challenge_id and credential are required."}, status_code=400
         )
@@ -474,7 +486,7 @@ async def passkey_verify(
     return JSONResponse({"message": "Passkey added.", "passkey": created})
 
 
-@router.post("/profile/passkeys/{passkey_id}/delete", response_model=None)
+@router.post("/profile/passkeys/{passkey_id}/delete", responses=json_and_html(Message))
 async def passkey_delete(
     request: Request,
     passkey_id: uuid.UUID,
@@ -482,7 +494,7 @@ async def passkey_delete(
     session: RlsSession,
     repo: ProfileRepo,
     users_settings: UsersSettings,
-) -> HTMLResponse | JSONResponse | Response:
+) -> Response:
     access_token = _ensure_passkeys(users_settings, current_user)
     try:
         await delete_passkey(access_token, str(passkey_id))
@@ -496,14 +508,14 @@ async def passkey_delete(
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/profile/2fa/enroll", response_model=None)
+@router.post("/profile/2fa/enroll", response_model=TotpEnrolmentRead)
 async def twofa_enroll(
     request: Request,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
     users_settings: UsersSettings,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
+) -> Response:
     access_token = _ensure_two_factor(users_settings, current_user)
     try:
         enrollment = await enroll_totp(access_token)
@@ -532,18 +544,17 @@ async def twofa_enroll(
     return response
 
 
-@router.post("/profile/2fa/verify", response_model=None)
+@router.post("/profile/2fa/verify", responses=json_and_html(Message))
 async def twofa_verify(
     request: Request,
+    body: TotpEnrolmentCheck,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
     users_settings: UsersSettings,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
+) -> Response:
     access_token = _ensure_two_factor(users_settings, current_user)
-    body = await parse_body(request)
-    factor_id = str(body.get("factor_id", ""))
-    code = str(body.get("code", "")).strip()
+    factor_id, code = body.factor_id, body.code.strip()
     try:
         challenge_id = await totp_challenge(access_token, factor_id)
         await verify_totp(access_token, factor_id, challenge_id, code)
@@ -558,10 +569,11 @@ async def twofa_verify(
     return _profile_redirect("twofa_enabled")
 
 
-@router.delete("/profile", response_model=None)
-@router.post("/profile/delete", response_model=None)
+@router.delete("/profile", response_model=Message)
+@router.post("/profile/delete", response_model=Message)
 async def account_delete(
     request: Request,
+    body: AccountDeletion,
     current_user: CurrentUser,
     admin_session: AdminSession,
     session: RlsSession,
@@ -570,8 +582,7 @@ async def account_delete(
 ) -> Response:
     if not profile_settings.account_deletion_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    body = await parse_body(request)
-    current_password = str(body.get("current_password", ""))
+    current_password = body.current_password
     error: str | None = None
     if not current_password:
         error = "Your password is required."
@@ -606,7 +617,7 @@ async def account_delete(
     return resp
 
 
-@router.post("/profile/avatar", response_model=None)
+@router.post("/profile/avatar", responses=json_and_html(Message))
 async def avatar_upload(
     request: Request,
     file: UploadFile,
@@ -614,7 +625,7 @@ async def avatar_upload(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
+) -> Response:
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     ext = _AVATAR_EXT.get(file.content_type or "")
@@ -642,7 +653,11 @@ async def avatar_upload(
     return _profile_redirect("avatar_updated")
 
 
-@router.get("/profile/avatar/{user_id}", response_model=None)
+@router.get(
+    "/profile/avatar/{user_id}",
+    response_class=Response,
+    responses={200: {"content": {"image/*": {}}}},
+)
 async def avatar_image(
     user_id: uuid.UUID,
     current_user: CurrentUser,
@@ -662,20 +677,19 @@ async def avatar_image(
     )
 
 
-@router.post("/profile", response_model=None)
+@router.post("/profile", responses=json_and_html(ProfileRead))
 async def profile_update(
     request: Request,
+    body: HandleUpdate,
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
-) -> HTMLResponse | JSONResponse | RedirectResponse:
+) -> Response:
     if not profile_settings.handle_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    body = await parse_body(request)
-    handle = str(body.get("handle", ""))
     profile = await repo.get_or_create(current_user.id, current_user.email)
-    handle = handle.strip().lower()
+    handle = body.handle.strip().lower()
 
     error = validate_handle(handle)
     if error is None and not await repo.is_handle_available(handle, profile.id):

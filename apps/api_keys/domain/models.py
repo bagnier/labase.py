@@ -32,6 +32,12 @@ class ApiKeyRead(BaseModel):
     revoked_at: datetime | None
 
 
+class ApiKeyCreate(BaseModel):
+    """A label for the key; blank gets the default name."""
+
+    name: str = ""
+
+
 class ApiKeyCreated(ApiKeyRead):
     """Creation response only: the one and only time the secret is readable."""
 

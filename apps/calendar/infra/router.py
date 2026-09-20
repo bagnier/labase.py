@@ -9,12 +9,18 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.calendar.contract.events import CalendarCreated, CalendarDeleted, CalendarUpdated
-from apps.calendar.domain.models import CalendarEvent, CalendarEventRead, format_event_time
+from apps.calendar.domain.models import (
+    CalendarEvent,
+    CalendarEventCreate,
+    CalendarEventPatch,
+    CalendarEventRead,
+    format_event_time,
+)
 from apps.calendar.infra.repository import CalendarEventRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.events.bus import events
-from apps.shared.http import JSON_AND_HTML, delete_response, or_404, parse_body, wants_json
+from apps.shared.http import delete_response, json_and_html, or_404, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 
@@ -162,7 +168,7 @@ def _shift_month(ref: date, months: int) -> str:
 # ── routes (org-scoped, RLS, member-only) ──────────────────────────────────────
 
 
-@router.get("", responses=JSON_AND_HTML)
+@router.get("", responses=json_and_html(list[CalendarEventRead]))
 async def list_events(
     request: Request,
     current_user: CurrentUser,
@@ -264,23 +270,24 @@ async def _reject(
     )
 
 
-@router.post("")
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=CalendarEventRead)
 async def create_event(
     request: Request,
+    form: CalendarEventCreate,
     current_user: CurrentUser,
     session: RlsSession,
     repo: CalendarRepo,
     org_id: CurrentOrg,
     org: CurrentOrgModel,
 ) -> Response:
-    body = await parse_body(request)
+    body = form.model_dump()
 
     async def reject(error: str) -> Response:
         return await _reject(
             request, session, current_user, org, body, event=body, action="calendar", error=error
         )
 
-    title = str(body.get("title", "")).strip()
+    title = form.title.strip()
     if not title:
         return await reject("A title is required")
     try:
@@ -292,8 +299,8 @@ async def create_event(
         title,
         start,
         end,
-        location=str(body.get("location", "")),
-        description=str(body.get("description", "")),
+        location=form.location,
+        description=form.description,
     )
     await events.emit(
         CalendarCreated(
@@ -308,7 +315,7 @@ async def create_event(
     return RedirectResponse(f"/{org.handle}/calendar/{event.id}", status_code=303)
 
 
-@router.get("/{event_id}", responses=JSON_AND_HTML)
+@router.get("/{event_id}", responses=json_and_html(CalendarEventRead))
 async def view_event(
     request: Request,
     event_id: uuid.UUID,
@@ -360,10 +367,11 @@ async def edit_event_form(
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
 
 
-@router.api_route("/{event_id}", methods=["PATCH", "POST"])
+@router.api_route("/{event_id}", methods=["PATCH", "POST"], response_model=CalendarEventRead)
 async def update_event(
     request: Request,
     event_id: uuid.UUID,
+    patch: CalendarEventPatch,
     current_user: CurrentUser,
     session: RlsSession,
     repo: CalendarRepo,
@@ -371,9 +379,9 @@ async def update_event(
     org: CurrentOrgModel,
 ) -> Response:
     event = or_404(await repo.get(event_id))
-    body = await parse_body(request)
-    if body.get("title") is not None:
-        title = str(body["title"]).strip()
+    body = {field: getattr(patch, field) for field in patch.model_fields_set}
+    if patch.sent("title"):
+        title = patch.title.strip()
         if title:
             event.title = title
     start_raw, end_raw = _combine(body, "start"), _combine(body, "end")
@@ -391,10 +399,10 @@ async def update_event(
                 action=f"calendar/{event.id}",
                 error=str(exc.detail),
             )
-    if body.get("location") is not None:
-        event.location = str(body["location"])
-    if body.get("description") is not None:
-        event.description = str(body["description"])
+    if patch.sent("location"):
+        event.location = patch.location
+    if patch.sent("description"):
+        event.description = patch.description
     await repo.save(event)
     await events.emit(
         CalendarUpdated(
@@ -410,7 +418,7 @@ async def update_event(
     return RedirectResponse(f"/{org.handle}/calendar/{event.id}", status_code=303)
 
 
-@router.delete("/{event_id}")
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(
     request: Request,
     event_id: uuid.UUID,

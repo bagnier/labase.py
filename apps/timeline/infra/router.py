@@ -16,13 +16,13 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.organizations.contract.queries import org_handles
 from apps.shared import clock
 from apps.shared.charts import chart_config
-from apps.shared.http import JSON_AND_HTML, wants_json
+from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import DEFAULT_WINDOW
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings.live import SettingRow, get_settings
-from apps.timeline.domain.models import TimelineEntry
+from apps.timeline.domain.models import TimelineEntry, TimelinePage
 from apps.timeline.infra.repository import TimelineFilter, TimelineReader, request_desc
 
 router = APIRouter(tags=["timeline"])
@@ -262,7 +262,7 @@ def _next_cursor(entries: list[TimelineEntry], flt: TimelineFilter) -> str | Non
     return entries[-1].ts.isoformat()
 
 
-@router.get("", responses=JSON_AND_HTML)
+@router.get("", responses=json_and_html(TimelinePage))
 async def timeline_screen(
     request: Request,
     current_user: CurrentAdmin,
@@ -371,7 +371,11 @@ def _csv(rows: list[dict[str, Any]]) -> str:
     return buffer.getvalue()
 
 
-@router.get("/export", response_model=None)
+@router.get(
+    "/export",
+    response_class=Response,
+    responses={200: {"content": {"application/x-ndjson": {}, "text/csv": {}}}},
+)
 async def export_timeline(
     current_user: CurrentAdmin,
     session: AdminSession,

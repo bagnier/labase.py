@@ -8,10 +8,10 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract.studio import studio_base_url
 from apps.metrics.domain import service
 from apps.metrics.domain.accumulator import accumulator
-from apps.metrics.domain.models import LoadPoint
+from apps.metrics.domain.models import LoadPage, LoadPoint
 from apps.metrics.infra.repository import window_rows
 from apps.shared import clock
-from apps.shared.http import JSON_AND_HTML, wants_json
+from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -23,7 +23,7 @@ exposition_router = APIRouter(tags=["metrics"])
 WINDOW_HOURS = 24
 
 
-@exposition_router.get("/metrics")
+@exposition_router.get("/metrics", response_class=PlainTextResponse)
 async def metrics_exposition(current_user: CurrentAdmin) -> PlainTextResponse:
     """Live Prometheus counters — the interop layer for real scrapers later."""
     return PlainTextResponse(
@@ -31,7 +31,7 @@ async def metrics_exposition(current_user: CurrentAdmin) -> PlainTextResponse:
     )
 
 
-@router.get("", responses=JSON_AND_HTML)
+@router.get("", responses=json_and_html(LoadPage))
 async def load_screen(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:

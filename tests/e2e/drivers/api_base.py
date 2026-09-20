@@ -20,8 +20,11 @@ from apps.shared.persistence.database import (
 from apps.shared.queue import TaskWorker
 from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.async_runner import AsyncRunner
+from tests.e2e.drivers.conformance import Conformance
 from tests.e2e.drivers.transport import ASGISyncTransport
 from tests.e2e.sql_setup import run_sql
+
+_conformance = Conformance(host.app.openapi())
 
 app = host.app
 
@@ -83,11 +86,14 @@ class ApiBase:
         return self._runner.run(coro)
 
     def _make_client(self) -> httpx.Client:
+        # Every JSON answer is checked against the schema its route declares, so each scenario
+        # also holds the documentation of the routes it drives (see ``conformance``).
         return httpx.Client(
             transport=ASGISyncTransport(self._runner),
             base_url="http://testserver",
             follow_redirects=False,
             headers={"accept": "application/json"},
+            event_hooks={"response": [_conformance.check]},
         )
 
     def client(self) -> httpx.Client:

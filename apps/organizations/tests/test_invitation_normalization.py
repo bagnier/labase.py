@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException, Request
 
 from apps.auth.contract.current import AuthenticatedUser
-from apps.organizations.domain.models import InvitationStatus
+from apps.organizations.domain.models import InvitationCreate, InvitationStatus
 from apps.organizations.infra.router import create_invitation
 
 
@@ -52,7 +52,8 @@ async def test_invite_dedup_uses_lowercased_email():
         pytest.raises(HTTPException) as exc,
     ):
         await create_invitation(
-            _json_request({"email": "  Foo@X.com "}),
+            _json_request({}),
+            InvitationCreate(email="  Foo@X.com "),
             current_user,
             repo,
             org_id,

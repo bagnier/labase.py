@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, computed_field
 from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from apps.shared.dto import Partial
 from apps.shared.persistence.base import Base, OrgScoped, Timestamped, UUIDPk, Versioned
 
 
@@ -36,6 +37,37 @@ def format_event_time(starts_at: datetime, ends_at: datetime) -> str:
     if starts_at.date() == ends_at.date():
         return f"{day(starts_at)}, {hm(starts_at)} – {hm(ends_at)}"
     return f"{day(starts_at)}, {hm(starts_at)} – {day(ends_at)}, {hm(ends_at)}"
+
+
+class CalendarEventCreate(BaseModel):
+    """What the new-event form or a JSON caller sends. A time comes either whole (``start``,
+    ``end`` — the JSON shape) or split into the form's date and time inputs; blanks are refused
+    by the handler with its own message, on the form."""
+
+    title: str = ""
+    start: str = ""
+    end: str = ""
+    start_date: str = ""
+    start_time: str = ""
+    end_date: str = ""
+    end_time: str = ""
+    location: str = ""
+    description: str = ""
+
+
+class CalendarEventPatch(Partial):
+    """A partial update: the editor sends the whole form, a JSON caller only what changed, and
+    the handler reads what was ``sent``."""
+
+    title: str = ""
+    start: str = ""
+    end: str = ""
+    start_date: str = ""
+    start_time: str = ""
+    end_date: str = ""
+    end_time: str = ""
+    location: str = ""
+    description: str = ""
 
 
 class CalendarEventRead(BaseModel):

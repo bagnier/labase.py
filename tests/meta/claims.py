@@ -35,6 +35,10 @@ from apps.shared.tests.test_emit_durability import (
     test_a_fact_is_rolled_back_by_a_handler_that_raises,
     test_a_fact_survives_a_handler_that_returns_an_error_response,
 )
+from apps.shared.tests.test_form_as_json import (
+    test_a_form_reaches_the_handler_as_its_declared_body,
+    test_a_multipart_upload_is_left_alone,
+)
 from apps.shared.tests.test_limiter import (
     test_a_store_the_limiter_cannot_reach_is_a_bug,
     test_rate_limit_fails_open_when_store_is_down,
@@ -53,6 +57,9 @@ from apps.shared.tests.test_request_logging import (
 )
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_browser_isolation import test_distinct_emails_get_isolated_contexts
+from tests.e2e.drivers.test_conformance import (
+    test_an_answer_straying_from_its_schema_is_named_by_its_operation,
+)
 from tests.meta.test_capture_sites import test_a_broad_except_never_logs_without_its_traceback
 from tests.meta.test_conventions import (
     test_every_mapped_primary_key_is_a_time_ordered_uuid7,
@@ -123,6 +130,8 @@ from tests.meta.test_ratchets import (
 )
 from tests.meta.test_routes import (
     test_every_fixed_route_wins_its_first_match,
+    test_every_json_face_declares_its_schema,
+    test_every_mutation_declares_the_body_it_reads,
     test_no_org_handle_can_shadow_a_fixed_route,
     test_the_schema_describes_both_faces_of_every_page_but_the_named_ones,
 )
@@ -224,6 +233,8 @@ CLAIMS = [
         "two-faces",
         "The same handler serves the JSON API and the HTML UI",
         test_the_schema_describes_both_faces_of_every_page_but_the_named_ones,
+        test_every_mutation_declares_the_body_it_reads,
+        test_an_answer_straying_from_its_schema_is_named_by_its_operation,
     ),
     waived(
         "integration-is-declarative",
@@ -579,6 +590,21 @@ CLAIMS = [
         test_no_fragment_response_starts_inside_a_table,
     ),
     held(
+        "a-form-is-json-at-the-door",
+        "re-encodes a urlencoded form as JSON before routing, so every mutation declares one "
+        "Pydantic body that FastAPI validates and documents, and nothing reads `request.form()` "
+        "by hand — a multipart upload passes through untouched.",
+        test_a_form_reaches_the_handler_as_its_declared_body,
+        test_a_multipart_upload_is_left_alone,
+        test_every_mutation_declares_the_body_it_reads,
+    ),
+    held(
+        "every-json-answer-names-its-model",
+        "the API lane validates each answer it receives against the schema its route declares",
+        test_every_json_face_declares_its_schema,
+        test_an_answer_straying_from_its_schema_is_named_by_its_operation,
+    ),
+    held(
         "never-call-datetime-now",
         "`clock.now()` is the single source of time. Never call `datetime.now()`.",
         test_time_comes_from_the_one_clock,
@@ -628,6 +654,12 @@ CLAIMS = [
         "One top-level module forms the composition root — the only place allowed to know several "
         "contexts at once: `main.py`.",
         test_the_composition_root_is_the_only_module_that_mounts,
+    ),
+    held(
+        "schema-is-a-full-description",
+        "the OpenAPI schema is a full description of the app",
+        test_every_mutation_declares_the_body_it_reads,
+        test_every_json_face_declares_its_schema,
     ),
     waived(
         "client-is-generated",

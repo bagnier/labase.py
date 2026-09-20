@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.current import OptionalCurrentUser
 from apps.organizations.contract.queries import OrganizationRead, org_by_handle
-from apps.pages.contract.public import get_public_nav, get_public_page, get_public_pages
+from apps.pages.contract.public import PublicPage, get_public_nav, get_public_page, get_public_pages
 from apps.public.contract.current import PublicSettings
-from apps.shared.http import JSON_AND_HTML, wants_json, with_etag
+from apps.shared.http import json_and_html, wants_json, with_etag
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings.live import SettingsView
@@ -55,7 +55,7 @@ async def index(
     )
 
 
-@router.get("/{slug}", responses=JSON_AND_HTML)
+@router.get("/{slug}", responses=json_and_html(PublicPage))
 async def public_page(
     slug: str,
     request: Request,

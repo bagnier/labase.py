@@ -36,11 +36,18 @@ from apps.organizations.domain.exceptions import (
     OrgLimitReached,
 )
 from apps.organizations.domain.models import (
+    InvitationCreate,
     InvitationRead,
     MemberRead,
+    MemberRoleUpdate,
+    OrganizationCreate,
+    OrganizationRename,
     OrganizationWithRoleRead,
+    OrgHandleUpdate,
     OrgInvitation,
     OrgRole,
+    OrgTimezoneUpdate,
+    OverviewCard,
 )
 from apps.organizations.domain.service import ensure_no_pending_invitation, ensure_not_last_owner
 from apps.organizations.infra.emails import invitation_email
@@ -48,6 +55,7 @@ from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared import clock
 from apps.shared.email import enqueue_email
 from apps.shared.events.activity import (
+    ActivityFeedRead,
     activity_entries,
     activity_stats,
     group_activity_by_day,
@@ -57,11 +65,11 @@ from apps.shared.events.bus import events
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.http import (
-    JSON_AND_HTML,
+    HTML_AFTER_DELETE,
     delete_response,
+    json_and_html,
     mutation_response,
     or_404,
-    parse_body,
     wants_json,
 )
 from apps.shared.http.templates import templates
@@ -164,15 +172,15 @@ async def _build_members(repo: OrganizationRepository, org_id: uuid.UUID) -> lis
 # ── Collection (multi-org) ─────────────────────────────────────────────────────
 
 
-@router.post("", response_model=None)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=OrganizationWithRoleRead)
 async def create_organization(
     request: Request,
+    body: OrganizationCreate,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_settings: OrganizationsSettings,
 ) -> Response:
-    body = await parse_body(request)
-    name = str(body.get("name", "")).strip()
+    name = body.name.strip()
     user_id = current_user.id
 
     max_orgs = org_settings.max_owned_orgs_per_user
@@ -314,7 +322,7 @@ async def org_dashboard(
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
 
 
-@org_router.get("/dashboard/activity", responses=JSON_AND_HTML)
+@org_router.get("/dashboard/activity", responses=json_and_html(ActivityFeedRead))
 async def org_dashboard_activity(
     request: Request,
     session: RlsSession,
@@ -342,7 +350,7 @@ async def org_dashboard_activity(
     return templates.TemplateResponse(request, "organizations/activity_feed.html", ctx)
 
 
-@org_router.get("/dashboard/overviews.json")
+@org_router.get("/dashboard/overviews.json", response_model=list[OverviewCard])
 async def org_dashboard_overviews(
     session: RlsSession,
     org_id: CurrentOrg,
@@ -398,7 +406,7 @@ async def org_settings(
     return templates.TemplateResponse(request, "organizations/settings.html", ctx)
 
 
-@org_router.get("/members", responses=JSON_AND_HTML)
+@org_router.get("/members", responses=json_and_html(list[MemberRead]))
 async def list_members(
     request: Request,
     current_user: CurrentUser,
@@ -432,17 +440,17 @@ async def list_members(
 # ── Settings mutations ──────────────────────────────────────────────────────────
 
 
-@org_router.patch("", response_class=HTMLResponse)
+@org_router.patch("", response_model=OrganizationWithRoleRead)
 async def rename_organization(
     request: Request,
+    body: OrganizationRename,
     current_user: CurrentUser,
     session: RlsSession,
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-):
-    body = await parse_body(request)
-    name = str(body.get("name", "")).strip()
+) -> Response:
+    name = body.name.strip()
     org = or_404(await repo.get(org_id))
     error = None
     if not name:
@@ -472,17 +480,17 @@ async def rename_organization(
     return RedirectResponse(url=f"/{org.handle}/settings?saved=1", status_code=303)
 
 
-@org_router.patch("/handle", response_class=HTMLResponse)
+@org_router.patch("/handle", response_model=OrganizationWithRoleRead)
 async def update_org_handle(
     request: Request,
+    body: OrgHandleUpdate,
     current_user: CurrentUser,
     session: RlsSession,
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-):
-    body = await parse_body(request)
-    handle = str(body.get("handle", "")).strip().lower()
+) -> Response:
+    handle = body.handle.strip().lower()
     org = or_404(await repo.get(org_id))
     validation_error = validate_handle(handle)
     error = validation_error[1] if validation_error else None
@@ -516,17 +524,17 @@ async def update_org_handle(
     return RedirectResponse(url=f"/{handle}/settings?saved=1", status_code=303)
 
 
-@org_router.patch("/timezone", response_class=HTMLResponse)
+@org_router.patch("/timezone", response_model=OrganizationWithRoleRead)
 async def update_org_timezone(
     request: Request,
+    body: OrgTimezoneUpdate,
     current_user: CurrentUser,
     session: RlsSession,
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
-):
-    body = await parse_body(request)
-    timezone = str(body.get("timezone", "")).strip()
+) -> Response:
+    timezone = body.timezone.strip()
     org = or_404(await repo.get(org_id))
     if timezone not in available_timezones():
         error = f"'{timezone}' is not a valid timezone."
@@ -549,7 +557,7 @@ async def update_org_timezone(
 # ── Members ─────────────────────────────────────────────────────────────────────
 
 
-@org_router.delete("/members/me", response_class=HTMLResponse)
+@org_router.delete("/members/me", status_code=status.HTTP_204_NO_CONTENT)
 async def leave_organization(
     request: Request,
     current_user: CurrentUser,
@@ -575,22 +583,18 @@ async def leave_organization(
     return delete_response(request, htmx_redirect_url="/profile")
 
 
-@org_router.patch("/members/{user_id}", response_class=HTMLResponse)
+@org_router.patch("/members/{user_id}", responses=json_and_html(MemberRead))
 async def update_member_role(
     request: Request,
     user_id: uuid.UUID,
+    body: MemberRoleUpdate,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
 ) -> Response:
-    body = await parse_body(request)
-    role = str(body.get("role", ""))
     org = or_404(await repo.get(org_id))
-    try:
-        new_role = OrgRole(role)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY) from exc
+    new_role = body.role
     if new_role != OrgRole.owner:
         try:
             await ensure_not_last_owner(repo, org_id, user_id)
@@ -636,7 +640,9 @@ async def update_member_role(
     )
 
 
-@org_router.delete("/members/{user_id}", response_class=HTMLResponse)
+@org_router.delete(
+    "/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT, responses=HTML_AFTER_DELETE
+)
 async def remove_member(
     request: Request,
     user_id: uuid.UUID,
@@ -697,19 +703,24 @@ async def _issue_invitation(
     )
 
 
-@org_router.post("/invitations", response_class=HTMLResponse)
+@org_router.post(
+    "/invitations",
+    status_code=status.HTTP_201_CREATED,
+    response_model=InvitationRead,
+    responses=HTML_AFTER_DELETE,
+)
 async def create_invitation(
     request: Request,
+    body: InvitationCreate,
     current_user: CurrentUser,
     repo: OrgRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
     org_settings: OrganizationsSettings,
 ) -> Response:
-    body = await parse_body(request)
     # Canonicalise once: the accept RPC matches case-insensitively (lower()), so without this
     # `Foo@x.com` and `foo@x.com` slip past the pending-dedup and both stay acceptable.
-    email = str(body.get("email", "")).strip().lower()
+    email = body.email.strip().lower()
 
     try:
         invitation = await _issue_invitation(
@@ -765,7 +776,11 @@ async def list_invitations(
     return [InvitationRead.model_validate(inv) for inv in invitations]
 
 
-@org_router.delete("/invitations/{invitation_id}", response_class=HTMLResponse)
+@org_router.delete(
+    "/invitations/{invitation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=HTML_AFTER_DELETE,
+)
 async def revoke_invitation(
     request: Request,
     invitation_id: uuid.UUID,

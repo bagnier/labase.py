@@ -11,10 +11,13 @@ from apps.learning.contract.events import CardReviewed
 from apps.learning.domain.exceptions import DailyLimitReached
 from apps.learning.domain.models import (
     CardResource,
+    CardStateRead,
     DueCard,
-    Outcome,
     ResourceRead,
     ReviewCardRead,
+    ReviewCreate,
+    SessionRead,
+    SubscriptionCreate,
 )
 from apps.learning.domain.service import (
     compute_resources,
@@ -26,7 +29,7 @@ from apps.learning.infra.repository import CatalogRow, LearningRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.events.bus import events
-from apps.shared.http import JSON_AND_HTML, or_404, parse_body, wants_json
+from apps.shared.http import json_and_html, or_404, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.settings.live import SettingsView
@@ -106,9 +109,10 @@ async def _render_session(
     return templates.TemplateResponse(request, template, ctx)
 
 
-@router.post("/subscriptions", response_model=None)
+@router.post("/subscriptions", responses=json_and_html(SessionRead))
 async def subscribe(
     request: Request,
+    body: SubscriptionCreate,
     current_user: CurrentUser,
     session: RlsSession,
     repo: LearningRepo,
@@ -117,15 +121,13 @@ async def subscribe(
 ):
     if not settings.sharing_enabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Deck sharing is disabled")
-    body = await parse_body(request)
-    deck = str(body.get("deck", ""))
-    found = or_404(await repo.get_deck_by_name(deck))
+    found = or_404(await repo.get_deck_by_name(body.deck))
     await repo.subscribe(found.id)
     rows = _due_rows(await repo.catalog(), clock.now().date())
     return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
-@router.get("/sessions", responses=JSON_AND_HTML)
+@router.get("/sessions", responses=json_and_html(SessionRead))
 async def today(
     request: Request,
     current_user: CurrentUser,
@@ -138,7 +140,7 @@ async def today(
     return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
-@router.get("/cards/{external_id}", responses=JSON_AND_HTML)
+@router.get("/cards/{external_id}", responses=json_and_html(CardStateRead))
 async def card_detail(
     request: Request,
     external_id: str,
@@ -170,10 +172,11 @@ async def card_detail(
     )
 
 
-@router.post("/cards/{external_id}/reviews", response_model=None)
+@router.post("/cards/{external_id}/reviews", responses=json_and_html(SessionRead))
 async def mark_card(
     request: Request,
     external_id: str,
+    body: ReviewCreate,
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
@@ -181,8 +184,7 @@ async def mark_card(
     org: CurrentOrgModel,
     settings: LearningSettings,
 ):
-    body = await parse_body(request)
-    outcome = Outcome(str(body.get("outcome", "")))
+    outcome = body.outcome
     card = or_404(await repo.get_card_by_external(external_id))
     today_date = clock.now().date()
     try:
@@ -205,7 +207,7 @@ async def mark_card(
     return await _render_session(request, session, current_user, rows, org, repo, settings)
 
 
-@router.get("/resources", responses=JSON_AND_HTML)
+@router.get("/resources", responses=json_and_html(list[ResourceRead]))
 async def resources(
     request: Request,
     current_user: CurrentUser,

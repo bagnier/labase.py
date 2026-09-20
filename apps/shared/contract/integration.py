@@ -34,6 +34,7 @@ from apps.shared.http.exceptions import (
     handle_stale_data,
     handle_unhandled_error,
 )
+from apps.shared.http.form import FormAsJson
 from apps.shared.http.limiter import (
     PURGE_EVERY_SECONDS,
     PURGE_TOPIC,
@@ -78,9 +79,10 @@ def mount(host: Host) -> None:
     app.exception_handler(StarletteHTTPException)(handle_http_error)
 
     # Added innermost-first: each ``add_middleware`` wraps what is already there, so CORS ends up
-    # outermost and the hardening headers closest to the router. All four are plain ASGI — a
+    # outermost and the form re-encoder closest to the router. All five are plain ASGI — a
     # ``BaseHTTPMiddleware`` anywhere under ``RequestLogger`` would run the rest in a child task
     # and strip the request's correlation off the finished line (see ``RequestLogger``).
+    app.add_middleware(FormAsJson)
     app.add_middleware(SecurityHeaders)
     app.add_middleware(CsrfProtect)
     app.add_middleware(RequestLogger)

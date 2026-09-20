@@ -26,11 +26,17 @@ from apps.pages.contract.events import (
     PageUpdated,
 )
 from apps.pages.domain.models import (
+    NavAdd,
+    NavCandidate,
     NavItemRead,
+    NavMove,
     Page,
+    PageCreate,
     PageDocumentRead,
+    PagePatch,
     PageRead,
     PageVisibility,
+    PageVisibilityUpdate,
 )
 from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
@@ -41,11 +47,10 @@ from apps.pages.infra.repository import (
 )
 from apps.shared.events.bus import events
 from apps.shared.http import (
-    JSON_AND_HTML,
     delete_response,
+    json_and_html,
     mutation_response,
     or_404,
-    parse_body,
     wants_json,
     with_etag,
 )
@@ -86,13 +91,6 @@ def _require_nav_owner(membership: Membership) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can manage navigation")
 
 
-def _parse_visibility(value: str) -> PageVisibility:
-    try:
-        return PageVisibility(value)
-    except ValueError:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid visibility") from None
-
-
 async def _resolve_org_role(
     admin: AsyncSession,
     rls: AsyncSession,
@@ -110,21 +108,21 @@ async def _resolve_org_role(
 # ── authed management routes (mounted under /{org_handle}, RLS) ────────────────
 
 
-@router.post("")
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=PageRead)
 async def create_page(
     request: Request,
+    body: PageCreate,
     current_user: CurrentUser,
     membership: CurrentMembership,
     repo: PageRepo,
     org_id: CurrentOrg,
     org: CurrentOrgModel,
 ) -> Response:
-    body = await parse_body(request)
-    title = str(body.get("title", "")).strip()
+    title = body.title.strip()
     if not title:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title is required")
-    content = str(body.get("content", ""))
-    slug = slugify(str(body.get("slug", "")) or title) or "page"
+    content = body.content
+    slug = slugify(body.slug or title) or "page"
     if await repo.slug_taken(slug):
         raise HTTPException(status.HTTP_409_CONFLICT, "A page with this slug already exists")
     page = await repo.add(current_user.id, title, slug, content)
@@ -188,10 +186,11 @@ async def edit_page(
     return templates.TemplateResponse(request, "pages/form.html", ctx)
 
 
-@router.patch("/{slug}")
+@router.patch("/{slug}", response_model=PageRead)
 async def update_page(
     request: Request,
     slug: str,
+    body: PagePatch,
     current_user: CurrentUser,
     membership: CurrentMembership,
     repo: PageRepo,
@@ -199,11 +198,9 @@ async def update_page(
     org: CurrentOrgModel,
 ) -> Response:
     page = await _editable_page(repo, slug, membership)
-    body = await parse_body(request)
     event_cls: type[PageEvent] = PageUpdated
-    new_slug = body.get("slug")
-    if new_slug is not None:
-        normalized = slugify(str(new_slug)) or page.slug
+    if body.sent("slug"):
+        normalized = slugify(body.slug) or page.slug
         if normalized != page.slug:
             if await repo.slug_taken(normalized, exclude_id=page.id):
                 raise HTTPException(
@@ -211,12 +208,12 @@ async def update_page(
                 )
             page.slug = normalized
             event_cls = PageSlugChanged
-    if body.get("content") is not None:
-        page.content = str(body["content"])
-    if body.get("title") is not None:
-        page.title = str(body["title"]).strip() or page.title
-    if body.get("visibility") is not None:
-        visibility = _parse_visibility(str(body["visibility"]))
+    if body.sent("content"):
+        page.content = body.content
+    if body.sent("title"):
+        page.title = body.title.strip() or page.title
+    if body.sent("visibility"):
+        visibility = body.visibility
         if visibility != page.visibility:
             if membership.role != OrgRole.owner:
                 raise HTTPException(
@@ -245,7 +242,7 @@ async def update_page(
     )
 
 
-@router.delete("/{slug}")
+@router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_page(
     request: Request,
     slug: str,
@@ -282,10 +279,11 @@ _PUBLISH_EVENT: dict[PageVisibility, type[PageEvent]] = {
 }
 
 
-@router.post("/{slug}/visibility")
+@router.post("/{slug}/visibility", response_model=PageRead)
 async def set_visibility(
     request: Request,
     slug: str,
+    body: PageVisibilityUpdate,
     current_user: CurrentUser,
     membership: CurrentMembership,
     repo: PageRepo,
@@ -295,8 +293,7 @@ async def set_visibility(
     if membership.role != OrgRole.owner:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only owners can change a page's visibility")
     page = or_404(await repo.by_slug(slug))
-    body = await parse_body(request)
-    visibility = _parse_visibility(str(body.get("visibility")))
+    visibility = body.visibility
     page.visibility = visibility
     await repo.save(page)
     await events.emit(
@@ -321,7 +318,7 @@ async def _get_nav_repo(session: RlsSession, org_id: CurrentOrg) -> PageNavRepos
 PageNavRepo = Annotated[PageNavRepository, Depends(_get_nav_repo)]
 
 
-@router.get("/nav", responses=JSON_AND_HTML)
+@router.get("/nav", responses=json_and_html(list[NavCandidate]))
 async def nav_manager(
     request: Request,
     current_user: CurrentUser,
@@ -344,17 +341,17 @@ async def nav_manager(
     return templates.TemplateResponse(request, "pages/nav.html", ctx)
 
 
-@router.post("/nav")
+@router.post("/nav", status_code=status.HTTP_201_CREATED, response_model=NavItemRead)
 async def add_to_nav(
     request: Request,
+    body: NavAdd,
     membership: CurrentMembership,
     repo: PageRepo,
     nav_repo: PageNavRepo,
     org: CurrentOrgModel,
 ) -> Response:
     _require_nav_owner(membership)
-    body = await parse_body(request)
-    slug = str(body.get("slug", "")).strip()
+    slug = body.slug.strip()
     page = or_404(await repo.by_slug(slug))
     if page.visibility == PageVisibility.draft:
         raise HTTPException(
@@ -369,7 +366,7 @@ async def add_to_nav(
     )
 
 
-@router.delete("/nav/{slug}")
+@router.delete("/nav/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_from_nav(
     request: Request,
     slug: str,
@@ -386,21 +383,20 @@ async def remove_from_nav(
     return RedirectResponse(f"/{org.handle}/pages/nav", status_code=303)
 
 
-@router.put("/nav/{slug}/position")
+@router.put("/nav/{slug}/position", response_model=NavItemRead)
 async def reorder_nav(
     request: Request,
     slug: str,
+    body: NavMove,
     membership: CurrentMembership,
     repo: PageRepo,
     nav_repo: PageNavRepo,
 ) -> Response:
     _require_nav_owner(membership)
-    body = await parse_body(request)
     page = or_404(await repo.by_slug(slug))
-    above_slug = body.get("above_slug")
     above_id: uuid.UUID | None = None
-    if above_slug:
-        above_page = await repo.by_slug(str(above_slug))
+    if body.above_slug:
+        above_page = await repo.by_slug(body.above_slug)
         if above_page:
             above_id = above_page.id
     await nav_repo.move_above(page.id, above_id)
@@ -413,7 +409,7 @@ async def reorder_nav(
 # ── public-capable routes (root-mounted; serve members and anon visitors) ──────
 
 
-@public_router.get("/{org_handle}/pages", responses=JSON_AND_HTML)
+@public_router.get("/{org_handle}/pages", responses=json_and_html(list[PageRead]))
 async def list_pages(
     request: Request,
     org_handle: str,
@@ -463,7 +459,11 @@ async def list_pages(
     return with_etag(request, templates.TemplateResponse(request, "pages/pages.html", ctx))
 
 
-@public_router.get("/{org_handle}/pages/by-id/{page_id}")
+@public_router.get(
+    "/{org_handle}/pages/by-id/{page_id}",
+    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    response_class=RedirectResponse,
+)
 async def view_page_by_id(
     org_handle: str,
     page_id: uuid.UUID,
@@ -481,7 +481,7 @@ async def view_page_by_id(
     return RedirectResponse(f"/{org_handle}/pages/{page.slug}", status_code=307)
 
 
-@public_router.get("/{org_handle}/pages/{slug}", responses=JSON_AND_HTML)
+@public_router.get("/{org_handle}/pages/{slug}", responses=json_and_html(PageDocumentRead))
 async def view_page(
     request: Request,
     org_handle: str,

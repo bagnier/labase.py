@@ -51,6 +51,12 @@ class Occurrence(Base, UUIDPk, Created):
     context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
 
+class IssueStatusUpdate(BaseModel):
+    """A triage verdict; the tracker's own statuses (``new``, ``regressed``) are refused."""
+
+    status: str = ""
+
+
 class IssueRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,3 +77,11 @@ class OccurrenceRead(BaseModel):
     id: uuid.UUID
     created_at: datetime
     context: dict[str, Any]
+
+
+class IssueDetail(BaseModel):
+    """An issue with a page of its occurrences, newest first, and the cursor to the next page."""
+
+    issue: IssueRead
+    occurrences: list[OccurrenceRead]
+    next_before_id: str | None

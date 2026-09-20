@@ -5,14 +5,19 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from apps.api_keys.contract.events import ApiKeyIssued, ApiKeyRevoked
-from apps.api_keys.domain.models import ApiKeyCreated, ApiKeyRead
+from apps.api_keys.domain.models import ApiKeyCreate, ApiKeyCreated, ApiKeyRead
 from apps.api_keys.domain.service import generate_key
 from apps.api_keys.infra.repository import ApiKeyRepository
 from apps.auth.contract.current import CurrentUser, RlsSession
 from apps.organizations.contract.current import CurrentOrg, CurrentOwnerMembership
 from apps.shared import clock
 from apps.shared.events.bus import events
-from apps.shared.http import delete_response, or_404, parse_body, wants_json
+from apps.shared.http import (
+    HTML_AFTER_DELETE,
+    delete_response,
+    or_404,
+    wants_json,
+)
 from apps.shared.http.templates import templates
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
@@ -42,7 +47,7 @@ async def _render(
     return templates.TemplateResponse(request, "api_keys/_keys.html", ctx)
 
 
-@router.get("", response_model=None)
+@router.get("", response_model=list[ApiKeyRead])
 async def list_keys(
     request: Request,
     repo: KeyRepo,
@@ -56,16 +61,21 @@ async def list_keys(
     return RedirectResponse(f"/{org_handle}/settings", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("", response_model=None)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ApiKeyCreated,
+    responses=HTML_AFTER_DELETE,
+)
 async def create_key(
     request: Request,
+    body: ApiKeyCreate,
     current_user: CurrentUser,
     repo: KeyRepo,
     org_id: CurrentOrg,
     membership: CurrentOwnerMembership,
 ) -> Response:
-    body = await parse_body(request)
-    name = str(body.get("name", "")).strip() or "unnamed key"
+    name = body.name.strip() or "unnamed key"
     material = generate_key()
     key = await repo.save(
         repo.model(
@@ -86,7 +96,7 @@ async def create_key(
     return await _render(request, repo, new_key=created)
 
 
-@router.delete("/{key_id}", response_model=None)
+@router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT, responses=HTML_AFTER_DELETE)
 async def revoke_key(
     request: Request,
     key_id: uuid.UUID,

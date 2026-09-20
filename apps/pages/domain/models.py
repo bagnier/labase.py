@@ -8,6 +8,7 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
+from apps.shared.dto import Partial
 from apps.shared.persistence.base import (
     Base,
     OrgScoped,
@@ -100,6 +101,38 @@ class NavCandidate(BaseModel):
     position: int | None
 
 
+class PageCreate(BaseModel):
+    """Blank title is refused by the handler with its own message; a blank slug is derived."""
+
+    title: str = ""
+    content: str = ""
+    slug: str = ""
+
+
+class PagePatch(Partial):
+    """A partial update: the editor sends the whole form, a JSON caller only what changed, and
+    the handler reads what was ``sent``."""
+
+    title: str = ""
+    content: str = ""
+    slug: str = ""
+    visibility: PageVisibility = PageVisibility.draft
+
+
+class PageVisibilityUpdate(BaseModel):
+    visibility: PageVisibility
+
+
+class NavAdd(BaseModel):
+    slug: str = ""
+
+
+class NavMove(BaseModel):
+    """A drop: the page now sits above ``above_slug``, or at the end when it names nothing."""
+
+    above_slug: str | None = None
+
+
 class NavItemRead(BaseModel):
     """A page currently in the nav, in order."""
 
@@ -107,3 +140,10 @@ class NavItemRead(BaseModel):
     slug: str
     title: str
     visibility: PageVisibility
+
+
+class PublicPage(BaseModel):
+    """A public page with the org's public nav around it."""
+
+    page: PageRead
+    nav: list[NavItemRead]

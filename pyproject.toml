@@ -28,6 +28,7 @@ dev = [
     "cryptography==50.0.1",
     "djlint==1.46.1",
     "import-linter==2.15",
+    "jsonschema==4.26.0",
     "openapi-python-client==0.29.1",
     "pip-audit==2.10.1",
     "playwright==1.62.0",
@@ -392,7 +393,7 @@ allowed_importers = ["apps.files.**", "apps.*.tests.**"]
 [[tool.importlinter.contracts]]
 name = "health internals are private"
 type = "protected"
-protected_modules = ["apps.health.router"]
+protected_modules = ["apps.health.models", "apps.health.router"]
 allowed_importers = ["apps.health.**", "apps.*.tests.**"]
 
 [[tool.importlinter.contracts]]

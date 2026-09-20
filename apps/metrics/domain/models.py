@@ -67,3 +67,11 @@ class LoadPoint(BaseModel):
     bucket_start: datetime
     requests: int
     errors: int
+
+
+class LoadPage(BaseModel):
+    """The console Load screen: totals, the busiest routes, and the series behind the chart."""
+
+    totals: LoadTotals
+    routes: list[RouteLoad]
+    series: list[LoadPoint]

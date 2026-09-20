@@ -17,7 +17,7 @@ from apps.files.contract.events import (
     FileShareLinkCreated,
     FileUploaded,
 )
-from apps.files.domain.models import OrgFileRead
+from apps.files.domain.models import FileRename, OrgFileRead, ShareLink, UploadedFile
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.storage import signed_redirect_url, storage_path
 from apps.organizations.contract.current import (
@@ -30,10 +30,10 @@ from apps.organizations.contract.current import (
 from apps.shared import clock
 from apps.shared.events.bus import events
 from apps.shared.http import (
-    JSON_AND_HTML,
+    HTML_AFTER_DELETE,
     delete_response,
+    json_and_html,
     or_404,
-    parse_field,
     render_list,
     wants_full_page,
     wants_json,
@@ -123,7 +123,7 @@ async def _render(
     )
 
 
-@router.get("", responses=JSON_AND_HTML)
+@router.get("", responses=json_and_html(list[OrgFileRead]))
 async def file_list(
     request: Request,
     current_user: CurrentUser,
@@ -136,7 +136,12 @@ async def file_list(
     return await _render(request, session, current_user, files, org, settings)
 
 
-@router.post("", response_class=HTMLResponse)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=UploadedFile,
+    responses=HTML_AFTER_DELETE,
+)
 async def upload_file(
     request: Request,
     file: UploadFile,
@@ -214,7 +219,9 @@ async def upload_file(
     return await _render(request, session, current_user, files, org, settings)
 
 
-@router.get("/{file_id}/download")
+@router.get(
+    "/{file_id}/download", status_code=status.HTTP_302_FOUND, response_class=RedirectResponse
+)
 async def download_file(
     file_id: uuid.UUID,
     current_user: CurrentUser,
@@ -229,7 +236,7 @@ async def download_file(
     return RedirectResponse(url=signed_redirect_url(result), status_code=302)
 
 
-@router.delete("/{file_id}", response_class=HTMLResponse)
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, responses=HTML_AFTER_DELETE)
 async def delete_file(
     request: Request,
     file_id: uuid.UUID,
@@ -264,10 +271,11 @@ async def delete_file(
     return await _render(request, session, current_user, files, org, settings)
 
 
-@router.patch("/{file_id}", response_class=HTMLResponse)
+@router.patch("/{file_id}", responses=json_and_html(list[OrgFileRead]))
 async def rename_file(
     request: Request,
     file_id: uuid.UUID,
+    body: FileRename,
     current_user: CurrentUser,
     session: RlsSession,
     org_id: CurrentOrg,
@@ -276,7 +284,7 @@ async def rename_file(
     repo: FileRepo,
     settings: FilesSettings,
 ):
-    filename = await parse_field(request, "filename")
+    filename = body.filename
 
     try:
         safe_name = _sanitize_filename(filename)
@@ -311,7 +319,7 @@ async def rename_file(
     return await _render(request, session, current_user, files, org, settings)
 
 
-@router.post("/{file_id}/share")
+@router.post("/{file_id}/share", responses=json_and_html(ShareLink))
 async def generate_share_link(
     request: Request,
     file_id: uuid.UUID,
@@ -339,7 +347,9 @@ async def generate_share_link(
     )
 
 
-@public_router.get("/share/{token}")
+@public_router.get(
+    "/share/{token}", status_code=status.HTTP_302_FOUND, response_class=RedirectResponse
+)
 async def public_share_download(
     token: uuid.UUID,
     admin_session: AdminSession,

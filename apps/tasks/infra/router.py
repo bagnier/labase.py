@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
 from apps.shared import clock
-from apps.shared.http import JSON_AND_HTML, wants_full_page, wants_json
+from apps.shared.http import json_and_html, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import LogRepository
@@ -33,6 +33,7 @@ from apps.shared.queue import (
     live_recurring_topics,
     unfinished_task_topics,
 )
+from apps.tasks.domain.screen import TasksPage
 from apps.tasks.domain.strip import (
     BANDS,
     StripLane,
@@ -212,7 +213,7 @@ async def _history(session: AdminSession, from_dt: str, to_dt: str) -> dict[str,
     }
 
 
-@router.get("", responses=JSON_AND_HTML)
+@router.get("", responses=json_and_html(TasksPage))
 async def get_tasks(
     request: Request,
     current_user: CurrentAdmin,

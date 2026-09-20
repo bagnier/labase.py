@@ -22,8 +22,10 @@ from apps.auth.contract.events import (
     AccountEnabled,
     UserDeleted,
 )
+from apps.auth.domain.models import AccountList
+from apps.shared.dto import Message
 from apps.shared.events.bus import events
-from apps.shared.http import JSON_AND_HTML, wants_full_page, wants_json
+from apps.shared.http import json_and_html, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -75,7 +77,7 @@ def _is_banned(user: Any) -> bool:
     return bool(banned_until)
 
 
-@accounts_router.get("", responses=JSON_AND_HTML)
+@accounts_router.get("", responses=json_and_html(AccountList))
 async def list_accounts(
     request: Request, current_user: CurrentAdmin, session: AdminSession, q: str = ""
 ) -> Response:
@@ -116,7 +118,7 @@ def _done(request: Request, message: str) -> Response:
 # The gating mutation itself lives in GoTrue, so these handlers hold no transaction of their own —
 # but they take one anyway, for the fact: on a session the write either lands or fails loudly with
 # the request, instead of being swallowed by a detached best-effort task.
-@accounts_router.post("/{user_id}/disable", response_model=None)
+@accounts_router.post("/{user_id}/disable", responses=json_and_html(Message))
 async def disable_user(
     request: Request, user_id: str, current_user: CurrentAdmin, admin_session: AdminSession
 ) -> Response:
@@ -130,7 +132,7 @@ async def disable_user(
     return _done(request, "Account disabled.")
 
 
-@accounts_router.post("/{user_id}/enable", response_model=None)
+@accounts_router.post("/{user_id}/enable", responses=json_and_html(Message))
 async def enable_user(
     request: Request, user_id: str, current_user: CurrentAdmin, admin_session: AdminSession
 ) -> Response:
@@ -143,7 +145,7 @@ async def enable_user(
     return _done(request, "Account enabled.")
 
 
-@accounts_router.post("/{user_id}/delete", response_model=None)
+@accounts_router.post("/{user_id}/delete", responses=json_and_html(Message))
 async def delete_user(
     request: Request,
     user_id: str,

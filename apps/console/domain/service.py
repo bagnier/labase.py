@@ -1,9 +1,8 @@
 """Settings domain logic — framework-free. Pairs a declared setting with its stored value and
 validates a written value against its declared type."""
 
-from typing import TypedDict
-
-from apps.shared.settings.live import SettingDef, SettingsDeclaration, SettingType
+from apps.console.domain.models import SettingView
+from apps.shared.settings.live import SettingDef, SettingsDeclaration
 from apps.shared.settings.store import BOOL_FALSE, BOOL_TRUE
 
 
@@ -13,21 +12,6 @@ class UnknownSetting(Exception):
 
 class InvalidSettingValue(Exception):
     """A written value does not match the setting's declared type."""
-
-
-class SettingView(TypedDict):
-    """A declared setting paired with its stored value, for rendering the admin page."""
-
-    key: str
-    type: SettingType
-    label: str
-    value: str
-    org_overridable: bool
-
-
-def coerce_bool(raw: object) -> bool:
-    """Interpret an HTTP form/JSON value as a boolean (``True`` or the string ``"true"``)."""
-    return raw is True or str(raw).lower() == BOOL_TRUE
 
 
 def settings_view(group: SettingsDeclaration, values: dict[str, str]) -> list[SettingView]:

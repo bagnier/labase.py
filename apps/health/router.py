@@ -15,6 +15,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from apps.health.models import Probe
 from apps.shared.logs.loop import LoopHealth
 from apps.shared.persistence.database import _admin_engine
 
@@ -35,12 +36,12 @@ def readiness_failures() -> int:
     return _health.failures
 
 
-@router.get("/live")
+@router.get("/live", response_model=Probe)
 async def liveness() -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
-@router.get("/ready")
+@router.get("/ready", response_model=Probe)
 async def readiness() -> JSONResponse:
     try:
         async with _admin_engine().connect() as conn:

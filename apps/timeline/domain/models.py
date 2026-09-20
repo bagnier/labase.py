@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from apps.shared.settings.live import SettingRow
 from apps.shared.vocabulary import AppName
 
 
@@ -49,3 +50,15 @@ class TimelineEntry(BaseModel):
     # a fact and a log line are not sightings of anything.
     issue_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TimelinePage(BaseModel):
+    """The console Timeline screen: the rows, the activity chart, the filter facets, the app's
+    own settings, and the cursor to load older rows."""
+
+    app: str
+    entries: list[TimelineEntry]
+    activity: dict[str, Any]
+    facets: dict[str, Any]
+    settings: list[SettingRow]
+    next_before: str | None

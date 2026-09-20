@@ -10,8 +10,9 @@ from apps.auth.contract.current import CurrentUser, OptionalCurrentUser, RlsSess
 from apps.organizations.contract.events import MemberJoined
 from apps.organizations.domain.models import InvitationRead, InvitationStatus
 from apps.organizations.infra.repository import OrganizationRepository
+from apps.shared.dto import Redirect
 from apps.shared.events.bus import events
-from apps.shared.http import JSON_AND_HTML, wants_json
+from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import auth_user_exists
@@ -45,7 +46,7 @@ async def _dashboard_redirect(request, rls_repo, org_id):
     )
 
 
-@router.get("/{token}", responses=JSON_AND_HTML)
+@router.get("/{token}", responses=json_and_html(InvitationRead))
 async def get_invitation(
     request: Request,
     token: uuid.UUID,
@@ -113,7 +114,7 @@ async def get_invitation(
     )
 
 
-@router.post("/{token}/accept", status_code=status.HTTP_200_OK, response_model=None)
+@router.post("/{token}/accept", status_code=status.HTTP_200_OK, response_model=Redirect)
 async def accept_invitation(
     request: Request,
     token: uuid.UUID,

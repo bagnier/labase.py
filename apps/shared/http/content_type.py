@@ -2,25 +2,11 @@
 
 The request's ``Accept`` and ``HX-Request`` headers pick the face; these predicates
 let a single handler branch without a separate frontend (README: every business
-endpoint has two faces).
+endpoint has two faces). The request side needs no predicate: a form is JSON at the door
+(:mod:`apps.shared.http.form`), so a handler declares its body once, as a Pydantic model.
 """
 
 from fastapi import Request
-
-
-def _has_json_body(request: Request) -> bool:
-    return "application/json" in request.headers.get("content-type", "")
-
-
-async def parse_body(request: Request) -> dict:
-    if _has_json_body(request):
-        return await request.json()
-    return dict(await request.form())
-
-
-async def parse_field(request: Request, field: str) -> str:
-    body = await parse_body(request)
-    return str(body.get(field, ""))
 
 
 def wants_json(request: Request) -> bool:

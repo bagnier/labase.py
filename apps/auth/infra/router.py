@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 import structlog
 from fastapi import (
@@ -34,6 +35,18 @@ from apps.auth.contract.impersonation import (
     impersonation_tokens,
 )
 from apps.auth.contract.settings import UsersSettings
+from apps.auth.domain.models import (
+    Credentials,
+    EmailAddress,
+    Impersonation,
+    ImpersonationTarget,
+    MfaRequired,
+    PasskeyAssertion,
+    PasskeySession,
+    PasswordResetForm,
+    SessionIssued,
+    TotpVerification,
+)
 from apps.auth.domain.service import (
     OAUTH_PROVIDERS,
     AuthTokens,
@@ -60,8 +73,9 @@ from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
 from apps.auth.infra.user_repository import find_user_id_by_email
 from apps.shared import clock
+from apps.shared.dto import Message
 from apps.shared.events.bus import events
-from apps.shared.http import parse_body, wants_json
+from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.client_ip import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
@@ -209,15 +223,15 @@ async def login_page(
     )
 
 
-@router.post("/login")
+@router.post("/login", response_model=SessionIssued | MfaRequired)
 @rate_limit("10/minute")
 async def login_endpoint(
-    request: Request, users_settings: UsersSettings, admin_session: AdminSession
+    request: Request,
+    body: Credentials,
+    users_settings: UsersSettings,
+    admin_session: AdminSession,
 ) -> Response:
-    body = await parse_body(request)
-    email = body.get("email", "")
-    password = body.get("password", "")
-    next = body.get("next", "")
+    email, password, next = body.email, body.password, body.next
     ip = _client_ip(request)
     if not email or not password:
         return _error_response(
@@ -324,21 +338,19 @@ async def _mfa_challenge_response(
     return resp
 
 
-@router.post("/mfa")
+@router.post("/mfa", response_model=SessionIssued)
 @rate_limit("10/minute")
 async def mfa_verify_endpoint(
     request: Request,
+    body: TotpVerification,
     admin_session: AdminSession,
     mfa_access_token: str | None = Cookie(default=None),
     mfa_method: str | None = Cookie(default=None),
 ) -> Response:
-    body = await parse_body(request)
-    code = str(body.get("code", "")).strip()
-    factor_id = str(body.get("factor_id", ""))
+    code, factor_id = body.code.strip(), body.factor_id
     if not mfa_access_token or not factor_id:
         return RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
-    challenge_id = str(body.get("challenge_id", ""))
-    next = str(body.get("next", ""))
+    challenge_id, next = body.challenge_id, body.next
     try:
         tokens = await verify_totp(mfa_access_token, factor_id, challenge_id, code)
     except TotpError:
@@ -375,7 +387,7 @@ async def mfa_verify_endpoint(
     return resp
 
 
-@router.post("/logout")
+@router.post("/logout", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse)
 async def logout_endpoint(
     admin_session: AdminSession, access_token: str | None = Cookie(default=None)
 ) -> Response:
@@ -407,7 +419,7 @@ def _ensure_passkeys_enabled(users_settings: SettingsView) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
-@router.post("/passkeys/options")
+@router.post("/passkeys/options", response_model=dict[str, Any])
 @rate_limit("10/minute")
 async def passkey_options_endpoint(request: Request, users_settings: UsersSettings) -> Response:
     _ensure_passkeys_enabled(users_settings)
@@ -417,16 +429,17 @@ async def passkey_options_endpoint(request: Request, users_settings: UsersSettin
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_400_BAD_REQUEST)
 
 
-@router.post("/passkeys/verify")
+@router.post("/passkeys/verify", response_model=PasskeySession)
 @rate_limit("10/minute")
 async def passkey_verify_endpoint(
-    request: Request, users_settings: UsersSettings, admin_session: AdminSession
+    request: Request,
+    body: PasskeyAssertion,
+    users_settings: UsersSettings,
+    admin_session: AdminSession,
 ) -> Response:
     _ensure_passkeys_enabled(users_settings)
-    body = await parse_body(request)
-    challenge_id = str(body.get("challenge_id", ""))
-    credential = body.get("credential")
-    if not challenge_id or not isinstance(credential, dict):
+    challenge_id, credential = body.challenge_id, body.credential
+    if not challenge_id or not credential:
         return JSONResponse(
             {"detail": "challenge_id and credential are required."},
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -444,7 +457,7 @@ async def passkey_verify_endpoint(
         {
             "access_token": tokens.access_token,
             "token_type": "bearer",
-            "redirect": _safe_next(str(body.get("next", "") or "")),
+            "redirect": _safe_next(body.next),
         }
     )
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -466,7 +479,9 @@ def _clear_oauth_cookies(resp: Response) -> None:
     resp.delete_cookie(_OAUTH_NEXT_COOKIE)
 
 
-@router.get("/oauth/{provider}")
+@router.get(
+    "/oauth/{provider}", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse
+)
 @rate_limit("10/minute")
 async def oauth_start(
     request: Request, provider: str, users_settings: UsersSettings, next: str = Query(default="")
@@ -495,7 +510,7 @@ def _oauth_failure(request: Request, message: str, users_settings: SettingsView)
     return resp
 
 
-@router.get("/callback")
+@router.get("/callback", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse)
 @rate_limit("10/minute")
 async def oauth_callback(
     request: Request,
@@ -553,13 +568,12 @@ async def register_page(
     )
 
 
-@router.post("/register")
+@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=Message)
 @rate_limit("5/minute")
-async def register_endpoint(request: Request, admin_session: AdminSession) -> Response:
-    body = await parse_body(request)
-    email = body.get("email", "")
-    password = body.get("password", "")
-    next = body.get("next", "")
+async def register_endpoint(
+    request: Request, body: Credentials, admin_session: AdminSession
+) -> Response:
+    email, password, next = body.email, body.password, body.next
     ip = _client_ip(request)
     if not email or not password:
         return _error_response(
@@ -602,16 +616,16 @@ async def register_endpoint(request: Request, admin_session: AdminSession) -> Re
     )
 
 
-@router.post("/impersonate")
+@router.post("/impersonate", response_model=Impersonation)
 async def impersonate_endpoint(
     request: Request,
+    body: ImpersonationTarget,
     admin: CurrentAdmin,
     admin_session: AdminSession,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
 ) -> Response:
-    body = await parse_body(request)
-    email = str(body.get("email", "")).strip().lower()
+    email = body.email.strip().lower()
     if not email or email == admin.email.lower() or not access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Pick another user's email."
@@ -648,7 +662,7 @@ async def impersonate_endpoint(
     return resp
 
 
-@router.post("/impersonate/stop")
+@router.post("/impersonate/stop", response_model=Impersonation)
 async def stop_impersonation_endpoint(
     request: Request,
     current_user: CurrentUser,
@@ -685,11 +699,10 @@ async def forgot_password_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "forgot_password.html", {})
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", responses=json_and_html(Message))
 @rate_limit("5/minute")
-async def forgot_password_endpoint(request: Request) -> Response:
-    body = await parse_body(request)
-    email = str(body.get("email", "")).strip()
+async def forgot_password_endpoint(request: Request, body: EmailAddress) -> Response:
+    email = body.email.strip()
     # Same response whether the account exists or not — no user enumeration.
     sent_message = "If an account exists for this address, a reset email is on its way."
     if email:
@@ -702,10 +715,13 @@ async def forgot_password_endpoint(request: Request) -> Response:
     return templates.TemplateResponse(request, "forgot_password.html", {"info": sent_message})
 
 
-@router.post("/resend-confirmation")
+@router.post("/resend-confirmation", responses=json_and_html(Message))
 @rate_limit("10/minute")
 async def resend_confirmation_endpoint(
-    request: Request, users_settings: UsersSettings, admin_session: AdminSession
+    request: Request,
+    body: EmailAddress,
+    users_settings: UsersSettings,
+    admin_session: AdminSession,
 ) -> Response:
     """Send the signup confirmation again — the way out for an unconfirmed account.
 
@@ -713,8 +729,7 @@ async def resend_confirmation_endpoint(
     """
     if not users_settings.resend_confirmation_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    body = await parse_body(request)
-    email = str(body.get("email", "")).strip().lower()
+    email = body.email.strip().lower()
     sent_message = "If an account exists for this address, a confirmation email is on its way."
     if email:
         try:
@@ -734,12 +749,12 @@ async def reset_password_page(request: Request, token_hash: str = Query(default=
     return templates.TemplateResponse(request, "reset_password.html", {"token_hash": token_hash})
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", response_model=Message)
 @rate_limit("10/minute")
-async def reset_password_endpoint(request: Request, admin_session: AdminSession) -> Response:
-    body = await parse_body(request)
-    token_hash = str(body.get("token_hash", ""))
-    password = str(body.get("password", ""))
+async def reset_password_endpoint(
+    request: Request, body: PasswordResetForm, admin_session: AdminSession
+) -> Response:
+    token_hash, password = body.token_hash, body.password
     ip = _client_ip(request)
     try:
         tokens = await confirm_signup(token_hash, type="recovery")
@@ -762,7 +777,9 @@ async def reset_password_endpoint(request: Request, admin_session: AdminSession)
     )
 
 
-@router.get("/confirm-email")
+@router.get(
+    "/confirm-email", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse
+)
 @rate_limit("10/minute")
 async def confirm_email_endpoint(
     request: Request, admin_session: AdminSession, token_hash: str = Query(default="")
@@ -789,7 +806,7 @@ async def confirm_email_endpoint(
     return resp
 
 
-@router.get("/confirm")
+@router.get("/confirm", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse)
 @rate_limit("10/minute")
 async def confirm_endpoint(
     request: Request,

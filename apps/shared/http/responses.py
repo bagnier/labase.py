@@ -29,9 +29,25 @@ from apps.shared.http.templates import templates
 # a request gets is `is_htmx`, not a media type. The schema has nothing finer to say.
 # It matters beyond the docs page: `client/` is generated from this schema, so a face the
 # schema omits is a face no external caller can reach.
-JSON_AND_HTML: dict[int | str, dict[str, Any]] = {
-    200: {"content": {"application/json": {}, "text/html": {}}}
-}
+
+# The shape FastAPI's ``responses=`` takes — its own annotation, which a `TypedDict` could not
+# satisfy (``dict`` is invariant in its values), so the helpers below say what they build in
+# their names rather than in the type.
+type Responses = dict[int | str, dict[str, Any]]
+
+
+def json_and_html(model: Any) -> Responses:
+    """Both faces, with the JSON one's content named. FastAPI files ``model`` under the route's
+    default media type, so the route must *not* pin ``response_class=HTMLResponse`` — that would
+    document the model as the shape of the HTML. Handlers returning their own ``Response`` need
+    no response class at runtime anyway."""
+    return {200: {"model": model, "content": {"text/html": {}}}}
+
+
+# A deletion answers two ways: ``204`` for a JSON caller — the route's own status — and the
+# re-rendered list or page for a browser. Declared as the 200 the browser gets; the 204 is the
+# decorator's ``status_code``.
+HTML_AFTER_DELETE: Responses = {200: {"content": {"text/html": {}}}}
 
 
 def or_404[T](entity: T | None) -> T:

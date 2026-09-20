@@ -64,6 +64,16 @@ class CardState(Base, UUIDPk, OrgScoped, Versioned, Created):
     next_review_on: Mapped[date | None] = mapped_column(Date, default=None)
 
 
+class SubscriptionCreate(BaseModel):
+    """The deck to learn, by name."""
+
+    deck: str = ""
+
+
+class ReviewCreate(BaseModel):
+    outcome: Outcome
+
+
 class ReviewCardRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -104,3 +114,21 @@ class CardResource:
     card_position: int
     deck_resource_url: str | None
     card_resource_url: str | None
+
+
+class SessionRead(BaseModel):
+    """Today's review session: the cards due, and how many."""
+
+    count: int
+    cards: list[ReviewCardRead]
+
+
+class CardStateRead(BaseModel):
+    """One card with the learner's progress on it — dates absent until it was ever studied."""
+
+    external_id: str
+    question: str
+    answer: str
+    level: int
+    last_reviewed_on: date | None
+    next_review_on: date | None

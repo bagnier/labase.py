@@ -14,6 +14,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from itertools import groupby
+from typing import Any
+
+from pydantic import BaseModel
 
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.vocabulary import AppName, PhosphorIcon
@@ -273,3 +276,10 @@ def heatmap_calendar(
         month_headers=_month_headers(week_starts),
         range_label=range_label,
     )
+
+
+class ActivityFeedRead(BaseModel):
+    """The day-grouped feed flattened for a JSON caller: each entry as the template renders it,
+    ``ts`` in ISO."""
+
+    entries: list[dict[str, Any]]

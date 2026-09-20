@@ -29,6 +29,10 @@ class OrgFileShareToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class FileRename(BaseModel):
+    filename: str = ""
+
+
 class OrgFileRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -38,3 +42,16 @@ class OrgFileRead(BaseModel):
     size_bytes: int
     uploader_email: str
     created_at: datetime
+
+
+class UploadedFile(BaseModel):
+    """What an upload answers a script: enough to reference the file from another surface."""
+
+    id: str
+    filename: str
+    content_type: str
+    url: str
+
+
+class ShareLink(BaseModel):
+    url: str

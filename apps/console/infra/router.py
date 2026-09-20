@@ -1,9 +1,8 @@
 import uuid
-from typing import TypedDict
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 
 from apps.auth.contract.admin import find_user_id_by_email
 from apps.auth.contract.current import CurrentAdmin
@@ -17,6 +16,20 @@ from apps.console.contract.events import (
 from apps.console.contract.overviews import SECTIONS, ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import admins, service, technical
 from apps.console.domain.admins import AdminNotFound, LastAdminViolation
+from apps.console.domain.models import (
+    AdminFlag,
+    AdminGrant,
+    AdminList,
+    AppPage,
+    ConsoleHome,
+    EventCatalogue,
+    EventsByApp,
+    OrgOverrideCreate,
+    OrgOverrides,
+    SettingsPage,
+    SettingsUpdated,
+    SettingValue,
+)
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.domain.studio import studio_link
 from apps.console.infra.repository import AppSettingRepository
@@ -25,7 +38,7 @@ from apps.shared import clock
 from apps.shared.charts import day_buckets_series
 from apps.shared.events.bus import events
 from apps.shared.events.wiring import wiring
-from apps.shared.http import JSON_AND_HTML, parse_body, wants_json
+from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.contribs import contribs
 from apps.shared.integration.fullpage import fullpage_context
@@ -174,13 +187,6 @@ def _event_graph() -> list[dict]:
     return sorted(rows, key=lambda row: row["kind"])
 
 
-class EventsByApp(TypedDict):
-    """Every declared event kind for one app — the full catalogue, wired or not."""
-
-    app: str
-    kinds: list[str]
-
-
 def _events_by_app() -> list[EventsByApp]:
     """Every declared event, grouped by owner app — the full catalogue, wired or not."""
     return [
@@ -211,7 +217,7 @@ async def _supabase_link(
     return {"label": link.label, "href": href}
 
 
-@router.get("", responses=JSON_AND_HTML)
+@router.get("", responses=json_and_html(ConsoleHome))
 async def get_console(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -258,7 +264,7 @@ def _admins_partial(
 
 
 # Registered before "/{app}" so "admins" is not captured as an app slug.
-@router.get("/admins", responses=JSON_AND_HTML)
+@router.get("/admins", responses=json_and_html(AdminList))
 async def get_admins(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -279,12 +285,11 @@ async def get_admins(
 
 # The admin flag itself lives in GoTrue, so the session here carries only the fact — but it carries
 # it on a transaction, so a failed journal write fails the request instead of being swallowed.
-@router.post("/admins", response_class=HTMLResponse)
+@router.post("/admins", responses=json_and_html(AdminList))
 async def add_admin(
-    request: Request, current_user: CurrentAdmin, session: AdminSession
+    request: Request, body: AdminGrant, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
-    body = await parse_body(request)
-    email = str(body.get("email") or "").strip()
+    email = body.email.strip()
     try:
         rows = await admins.grant_admin(email)
     except AdminNotFound as exc:
@@ -308,12 +313,15 @@ async def add_admin(
     return _admins_partial(request, rows)
 
 
-@router.put("/admins/{email}", response_class=HTMLResponse)
+@router.put("/admins/{email}", responses=json_and_html(AdminList))
 async def update_admin(
-    request: Request, email: str, current_user: CurrentAdmin, session: AdminSession
+    request: Request,
+    email: str,
+    body: AdminFlag,
+    current_user: CurrentAdmin,
+    session: AdminSession,
 ) -> Response:
-    body = await parse_body(request)
-    is_admin = service.coerce_bool(body.get("is_admin"))
+    is_admin = body.is_admin
     uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
         rows = await admins.set_admin(email, is_admin=is_admin)
@@ -333,7 +341,7 @@ async def update_admin(
     return _admins_partial(request, rows)
 
 
-@router.get("/settings", responses=JSON_AND_HTML)
+@router.get("/settings", responses=json_and_html(SettingsPage))
 async def get_settings_page(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -369,7 +377,7 @@ async def get_settings_page(
     )
 
 
-@router.get("/events", responses=JSON_AND_HTML)
+@router.get("/events", responses=json_and_html(EventCatalogue))
 async def get_events(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -392,7 +400,7 @@ async def get_events(
 
 # The history's default reach. Six hours shows an hourly recurring topic as a readable comb and
 # still fits a morning's incidents; anything wider is asked for explicitly.
-@router.get("/{app}", responses=JSON_AND_HTML)
+@router.get("/{app}", responses=json_and_html(AppPage))
 async def get_app(
     request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
@@ -455,18 +463,16 @@ async def _render_org_overrides(
     )
 
 
-@router.post("/{app}/org-settings", response_class=HTMLResponse)
+@router.post("/{app}/org-settings", responses=json_and_html(OrgOverrides))
 async def create_org_override(
     request: Request,
     app: str,
+    body: OrgOverrideCreate,
     current_user: CurrentAdmin,
     session: AdminSession,
 ) -> Response:
     group = _settings_group(app)
-    body = await parse_body(request)
-    handle = str(body.get("org_handle", "")).strip().lower()
-    key = str(body.get("key", ""))
-    value = str(body.get("value", ""))
+    handle, key, value = body.org_handle.strip().lower(), body.key, body.value
     repo = AppSettingRepository(session)
 
     if not any(d.key == key and d.org_overridable for d in group.defs):
@@ -502,7 +508,7 @@ async def create_org_override(
     return await _render_org_overrides(request, session, app, group)
 
 
-@router.delete("/{app}/org-settings/{key}/{org_id}", response_class=HTMLResponse)
+@router.delete("/{app}/org-settings/{key}/{org_id}", responses=json_and_html(OrgOverrides))
 async def delete_org_override(
     request: Request,
     app: str,
@@ -524,13 +530,17 @@ async def delete_org_override(
     return await _render_org_overrides(request, session, app, group)
 
 
-@router.put("/{app}/settings/{key}", response_class=HTMLResponse)
+@router.put("/{app}/settings/{key}", responses=json_and_html(SettingsUpdated))
 async def update_setting(
-    request: Request, app: str, key: str, current_user: CurrentAdmin, session: AdminSession
+    request: Request,
+    app: str,
+    key: str,
+    body: SettingValue,
+    current_user: CurrentAdmin,
+    session: AdminSession,
 ) -> Response:
     group = _settings_group(app)
-    body = await parse_body(request)
-    value = str(body.get("value", ""))
+    value = body.value
     try:
         stored = service.validate(group, key, value)
     except UnknownSetting:

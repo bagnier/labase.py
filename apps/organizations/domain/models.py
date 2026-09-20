@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Enum as SAEnum
@@ -73,6 +74,28 @@ class OrganizationCreate(BaseModel):
     name: str
 
 
+class OrganizationRename(BaseModel):
+    """Blank stays blank: the handler answers the form with its own message, not a 422."""
+
+    name: str = ""
+
+
+class OrgHandleUpdate(BaseModel):
+    handle: str = ""
+
+
+class OrgTimezoneUpdate(BaseModel):
+    timezone: str = ""
+
+
+class MemberRoleUpdate(BaseModel):
+    role: OrgRole
+
+
+class InvitationCreate(BaseModel):
+    email: str = ""
+
+
 class OrganizationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -101,3 +124,11 @@ class MemberRead(BaseModel):
     email: str
     role: OrgRole
     created_at: datetime
+
+
+class OverviewCard(BaseModel):
+    """One app's dashboard card, as ``overviews.json`` serves it to the page's own fetch."""
+
+    key: str
+    title: str
+    data: dict[str, Any]
