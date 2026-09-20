@@ -64,7 +64,7 @@ The run closes with its footer:
 
 ```
 Ended {date time} · {n} units audited, {n} failed, {n} never dispatched · {total} tokens ·
-{n} issues ({n} security, {n} correctness, {n} drift) and {n} proposals filed
+{n} issues ({n} security, {n} correctness, {n} drift), {n} proposals and {n} classes filed
 ```
 
 
@@ -117,7 +117,9 @@ Once a report is in, file its breaks in ROADMAP.md, then write the unit's log en
   picks it up knows the check is still owed.
 - **Duplicates:** check the whole of ROADMAP.md, every section included. A break already there,
   or already filed from another unit in this run, is not filed again. The same `file:line`, or
-  the same fault in other words, counts as a duplicate.
+  the same fault in other words, counts as a duplicate. A `**class**` item is the exception: it
+  is never a duplicate of anything. A break that matches one is still filed on its own, with its
+  own `file:line`, because the class is worked from its instances' addresses.
 - **Impact:** the agent's severity says how far the README sentence falls, not what the fault
   costs. Judge the cost yourself and give each issue one tag:
   - `security`: someone can read, change or forge what they should not, or a secret leaks;
@@ -146,8 +148,44 @@ the section it came from and what depends on it, then the links. Read the README
 a rule already stated there, even in other words, is not a proposal.
 
 
-## 4. Report
+## 4. Name the classes
 
-Once the last unit is logged, or once nothing more can be dispatched, write the run footer. Then
-end with a short message that gives the footer's figures, lists the items filed in ROADMAP.md,
-names the units that failed or were never dispatched, and points to the log for the rest.
+The audit reads one unit at a time, so a fault that recurs across units arrives as N separate
+reports and is filed as N separate items — right, since each has its own address, but the shape
+they share is stated nowhere. Once the last unit is logged, read back the `filed as issues` and
+`filed as proposals` lines of this run's entries in the log — the log, not the run's own context,
+which by then is many compactions old — and group them by the shape of the fault rather than by
+the section it came from.
+
+A shape carrying three items or more is a class, on two conditions:
+
+- **It names a mechanism, not a quality.** "A holder reads the source text where it should
+  interrogate the mounted artefact" is a class; "the holder tests are weak" is not, and is
+  dropped rather than filed vague.
+- **One fix reaches every instance.** Where each instance needs its own reading of its own code,
+  the items are neighbours, not a class.
+
+Do this once, at the end, on the whole run, never as the third instance arrives: a shape the run
+has not finished producing gets named from the few instances seen so far, and what comes out is
+the vague wording the first condition rejects. On a resumed run, read the entries the resume
+dropped as well — they were written at this same `HEAD` and their items are in ROADMAP.md.
+
+A class goes at the top of `## issues`, above the `security` items, in the shape
+`` - [ ] **class** · {the mechanism in one sentence} · {N} instances ``, then `→` and the one
+direction that covers them, then the links of two instances far enough apart to show the range.
+Nothing else moves: the N items stay where they are, each with its own `file:line`.
+
+
+## 5. Report
+
+Once the classes are filed, write them into the log above the footer:
+
+```
+### Classes
+
+- {the mechanism} · {N} instances · units {NN}, {NN}, …
+```
+
+Then write the run footer, and end with a short message that gives the footer's figures, names
+the classes, lists the items filed in ROADMAP.md, names the units that failed or were never
+dispatched, and points to the log for the rest.
