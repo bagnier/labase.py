@@ -205,7 +205,9 @@ async def _supabase_link(
         )
     else:
         path = link.path
-    href = studio_link(settings.supabase_api_url, path)
+    href = studio_link(settings.supabase_studio_url, settings.supabase_api_url, path)
+    if href is None:
+        return None
     return {"label": link.label, "href": href}
 
 

@@ -26,7 +26,9 @@
     {% endif %}
     <p class="text-sm space-x-4">
       <a class="link" href="/console/metrics">Settings →</a>
-      <a class="link" href="{{ studio_url }}" rel="noopener">Database stats → Supabase</a>
+      {% if studio_url %}
+        <a class="link" href="{{ studio_url }}" rel="noopener">Database stats → Supabase</a>
+      {% endif %}
       <a class="link" href="/metrics">Raw Prometheus exposition →</a>
     </p>
   </div>

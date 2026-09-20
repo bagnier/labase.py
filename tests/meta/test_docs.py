@@ -236,17 +236,21 @@ def test_every_quality_tool_in_the_table_is_still_configured():
 
 
 def test_the_test_environment_file_is_committed_and_local():
-    """`.env.test` is the one env file the README says is in the repo, because `make test` reads it
-    and points it at localhost — a `.env.test` that drifted to the docker host silently runs the
-    suite against the wrong stack."""
+    """`.env.test` is the one env file the README says is in the repo, because `make test` reads
+    it and points it at `127.0.0.1` — never the docker host, which silently runs the suite
+    against the wrong stack, and never `localhost`, which lets DNS answer `::1` for a stack
+    listening on IPv4 (the reason `env.py` documents)."""
     env_test = _ROOT / ".env.test"
     ignored = ".env.test" in (_ROOT / ".gitignore").read_text()
+    body = env_test.read_text()
 
-    assert (env_test.exists(), ignored, "host.docker.internal" in env_test.read_text()) == (
-        True,
-        False,
-        False,
-    )
+    assert (
+        env_test.exists(),
+        ignored,
+        "127.0.0.1" in body,
+        "localhost" in body,
+        "host.docker.internal" in body,
+    ) == (True, False, True, False, False)
 
 
 def test_every_readme_pointer_names_something_the_readme_says():

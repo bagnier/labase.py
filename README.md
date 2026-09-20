@@ -683,12 +683,12 @@ App: http://localhost:8000 · Swagger: http://localhost:8000/docs
 | File        | Used by                                 | Hosts                        |
 | ----------- | --------------------------------------- | ---------------------------- |
 | `.env`      | `docker compose` (app container)        | `host.docker.internal:543xx` |
-| `.env.test` | `make test` / `make test-e2e` (on host) | `localhost:544xx`            |
+| `.env.test` | `make test` / `make test-e2e` (on host) | `127.0.0.1:544xx`            |
 
 `make env` generates `.env` (mapping the Supabase CLI output to `SUPABASE_API_URL`,
 `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_DATABASE_USER_URL`,
 `SUPABASE_DATABASE_ADMIN_URL`, with the asyncpg driver and `host.docker.internal` host).
-`.env.test` is committed and uses `localhost`. It points at the checkout's test stack (543xx is
+`.env.test` is committed and uses `127.0.0.1`. It points at the checkout's test stack (543xx is
 the dev stack, 544xx the test one — see Parallel work below).
 
 Notes:

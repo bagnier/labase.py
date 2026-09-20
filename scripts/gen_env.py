@@ -81,6 +81,12 @@ def build_overrides(status: dict[str, str], password: str) -> dict[str, str]:
     return {
         "SUPABASE_API_URL": api_url.replace("127.0.0.1", DOCKER_HOST),
         "SUPABASE_STORAGE_URL": api_url,
+        # Browser-facing (the admin's browser follows it), so no DOCKER_HOST rewrite; the local
+        # Studio serves the default project under this base. A stack without a Studio (the CLI
+        # can exclude it) leaves the key empty, which hides the console's links.
+        "SUPABASE_STUDIO_URL": (
+            f"{status['STUDIO_URL']}/project/default" if status.get("STUDIO_URL") else ""
+        ),
         "SUPABASE_PUBLISHABLE_KEY": status["PUBLISHABLE_KEY"],
         "SUPABASE_SECRET_KEY": status["SECRET_KEY"],
         "SUPABASE_DATABASE_USER_URL": user_url,

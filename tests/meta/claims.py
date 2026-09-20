@@ -48,6 +48,7 @@ from tests.e2e.drivers.test_browser_isolation import test_distinct_emails_get_is
 from tests.meta.test_capture_sites import test_a_broad_except_never_logs_without_its_traceback
 from tests.meta.test_conventions import (
     test_every_mapped_primary_key_is_a_time_ordered_uuid7,
+    test_no_fragment_response_starts_inside_a_table,
     test_templates_tests_and_steps_live_with_their_context,
     test_the_session_dependencies_are_exactly_the_three_named,
     test_the_uuid4_exception_is_exactly_the_token_columns,
@@ -548,10 +549,10 @@ CLAIMS = [
         "without tokens)",
         test_a_cross_site_mutation_is_rejected_by_the_assembled_app,
     ),
-    waived(
+    held(
         "fragments-are-standalone-markup",
         "Fragments are standalone valid markup (they're swapped into the live DOM).",
-        "needs each _*.html rendered and parsed",
+        test_no_fragment_response_starts_inside_a_table,
     ),
     held(
         "never-call-datetime-now",
@@ -612,7 +613,7 @@ CLAIMS = [
     ),
     held(
         "env-test-is-committed",
-        "`.env.test` is committed and uses `localhost`.",
+        "`.env.test` is committed and uses `127.0.0.1`.",
         test_the_test_environment_file_is_committed_and_local,
     ),
     held(
@@ -631,4 +632,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 15
+UNHELD_TODAY = 14

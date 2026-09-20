@@ -26,6 +26,8 @@ class TechnicalSettings(BaseSettings):
     supabase_publishable_key: str
     supabase_secret_key: str
     supabase_storage_url: str = ""
+    # Browser-facing Studio base URL; empty means this deployment has no Studio (links hidden).
+    supabase_studio_url: str = ""
     supabase_storage_bucket: str = "org-files"
     supabase_database_user_url: str
     supabase_database_admin_url: str = ""

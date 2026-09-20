@@ -164,8 +164,8 @@
                the page it was rendered with — the tbody's own attributes survive the swap, so the
                number stays the first page's. #}
             <tbody id="timeline-entries"
-                   {{ live_refresh(paused or sort != 'ts' or dir != 'desc' or filters.before, "/console/timeline?" ~ load_more_qs, "#timeline-entries", swap="innerHTML", unless="&&document.querySelectorAll('#timeline-entries tr[data-entry-name]').length<=" ~ entries | length) }}>
-              {% include "timeline/_entries.html" %}
+                   {{ live_refresh(paused or sort != 'ts' or dir != 'desc' or filters.before, "/console/timeline?" ~ load_more_qs, "#timeline-entries", swap="innerHTML", select="tbody > tr", unless="&&document.querySelectorAll('#timeline-entries tr[data-entry-name]').length<=" ~ entries | length) }}>
+              {% include "timeline/_rows.html" %}
             </tbody>
           </table>
         </div>

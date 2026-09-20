@@ -7,6 +7,7 @@ README says someone has to make.
 """
 
 import ast
+import re
 import uuid
 from pathlib import Path
 
@@ -121,6 +122,59 @@ def test_templates_tests_and_steps_live_with_their_context():
     )
 
     assert misplaced == set()
+
+
+# What a browser's parser refuses to keep outside its context: handed a document that *starts*
+# with one of these, it foster-parents the text and drops the structure — 0 rows, 0 cells.
+_FOSTER_PARENTED = {"caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"}
+
+
+def _fragment_responses() -> set[str]:
+    """Every ``_*.html`` a python module returns as a response — the fragments that really are
+    "swapped into the live DOM", as opposed to partials only ever included by other templates."""
+    fragments = set()
+    for path in sorted(_APPS.rglob("*.py")):
+        if "/tests/" in path.as_posix():
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and node.value.endswith(".html")
+                and Path(node.value).name.startswith("_")
+            ):
+                fragments.add(node.value)
+    return fragments
+
+
+def _first_rendered_tag(template: Path) -> str:
+    """The first HTML tag the template renders — macro bodies stripped, since a macro defined at
+    the top is not output until something below calls it."""
+    body = template.read_text()
+    body = re.sub(r"\{%-?\s*macro\b.*?\bendmacro\s*-?%\}", "", body, flags=re.DOTALL)
+    body = re.sub(r"\{#.*?#\}", "", body, flags=re.DOTALL)
+    tag = re.search(r"<([a-zA-Z][\w-]*)", body)
+    return tag.group(1).lower() if tag else ""
+
+
+def test_no_fragment_response_starts_inside_a_table():
+    """ "Fragments are standalone valid markup (they're swapped into the live DOM)" — held on the
+    half a parser can refuse: a fragment whose first element is table furniture only survives
+    inside the right ancestor, and parsed alone it foster-parents into nothing. The rest of the
+    sentence (well-formedness at large) stays a review question."""
+    inside_a_table = {
+        f"{name} starts with <{tag}>"
+        for name in _fragment_responses()
+        for template in _APPS.glob(f"*/templates/{name}")
+        if (tag := _first_rendered_tag(template)) in _FOSTER_PARENTED
+    }
+
+    assert inside_a_table == set()
+
+
+def test_the_fragment_walk_actually_finds_the_responses():
+    # Guards the guard: a walk that matched nothing would make the assertion above vacuous.
+    assert len(_fragment_responses()) > 10
 
 
 def test_the_layout_walk_actually_finds_the_files():

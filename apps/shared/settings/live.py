@@ -84,7 +84,8 @@ def feature_switch(label: str = "Enabled (applies on restart)") -> SettingDef:
 class SupabaseLink:
     """A deep link into Supabase Studio for advanced, out-of-console management.
 
-    The console prefixes the derived Studio base URL onto either:
+    The console prefixes the configured Studio base URL (``SUPABASE_STUDIO_URL``; a deployment
+    without one shows no link) onto either:
     - ``path`` — a static Studio-relative fragment (e.g. ``auth/users``,
       ``storage/buckets/org-files``); or
     - ``table`` — a Postgres table name; the console resolves its OID at request time and

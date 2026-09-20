@@ -48,3 +48,15 @@ def test_the_user_url_carries_the_password():
     assert overrides["SUPABASE_DATABASE_USER_URL"] == (
         f"postgresql+asyncpg://app_user:{_KEPT}@host.docker.internal:54322/postgres"
     )
+
+
+def test_a_stack_with_a_studio_gets_the_browser_facing_base():
+    overrides = build_overrides({**_STATUS, "STUDIO_URL": "http://127.0.0.1:54323"}, _KEPT)
+
+    assert overrides["SUPABASE_STUDIO_URL"] == "http://127.0.0.1:54323/project/default"
+
+
+def test_a_stack_without_a_studio_leaves_the_key_empty():
+    overrides = build_overrides(_STATUS, _KEPT)
+
+    assert overrides["SUPABASE_STUDIO_URL"] == ""

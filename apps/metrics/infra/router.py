@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from apps.auth.contract.current import CurrentAdmin
+from apps.console.contract.studio import studio_base_url
 from apps.metrics.domain import service
 from apps.metrics.domain.accumulator import accumulator
 from apps.metrics.domain.models import LoadPoint
@@ -126,9 +127,7 @@ def _series_chart_json(series: list[LoadPoint]) -> str:
     )
 
 
-def _studio_url() -> str:
-    """Local stack → Studio; hosted Supabase → the project dashboard (same origin idea)."""
-    api_url = get_technical_settings().supabase_api_url
-    if "supabase.co" in api_url:
-        return "https://supabase.com/dashboard"
-    return api_url.replace(":54321", ":54323")
+def _studio_url() -> str | None:
+    """The console's own verdict on where Studio is — ``None`` hides the link."""
+    settings = get_technical_settings()
+    return studio_base_url(settings.supabase_studio_url, settings.supabase_api_url)

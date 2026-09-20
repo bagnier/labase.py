@@ -31,6 +31,8 @@
    reader's focus is inside it — landing a swap under someone mid-edit takes their edit away.
    ``unless`` appends a further condition for a screen whose target holds state a refetch would
    throw away (the timeline's older pages). One period, one guard, both screens. #}
-{% macro live_refresh(paused, href, target, swap="outerHTML", unless="") %}
-  {%- if not paused %} hx-get="{{ href }}" hx-target="{{ target }}" hx-swap="{{ swap }}" hx-trigger="every 30s[!document.activeElement||!document.activeElement.closest('{{ target }}'){{ unless }}]"{% endif -%}
+{# ``select`` extracts part of the response — for a fragment that ships inside a standalone
+   envelope (the timeline's rows arrive wrapped in their own table). #}
+{% macro live_refresh(paused, href, target, swap="outerHTML", unless="", select="") %}
+  {%- if not paused %} hx-get="{{ href }}" hx-target="{{ target }}" hx-swap="{{ swap }}"{{ (' hx-select="' ~ select ~ '"') | safe if select }} hx-trigger="every 30s[!document.activeElement||!document.activeElement.closest('{{ target }}'){{ unless }}]"{% endif -%}
 {% endmacro %}

@@ -1,0 +1,69 @@
+{# One row per merged entry. Every id a row names is a link that narrows the timeline to it —
+   correlating is the screen's whole purpose, and a resolved label a reader has to copy into the
+   filter box by hand is half a feature. A correlation link starts a fresh narrowing rather than
+   stacking onto the current filters, which is what the entity link already did. #}
+{% macro correlate(key, value, label) %}
+  {% if value %}
+    <a class="link link-hover"
+       href="/console/timeline?{{ key }}={{ value | urlencode }}"
+       title="Everything for this {{ key | replace('_id', '') }}">{{ label }}</a>
+  {% else %}
+    —
+  {% endif %}
+{% endmacro %}
+{% for e in entries %}
+  <tr data-entry-name="{{ e.name }}" data-entry-source="{{ e.source }}">
+    <td class="font-mono text-xs text-base-content/70 whitespace-nowrap"
+        data-entry-time>{{ e.ts.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+    <td><span class="badge badge-sm">{{ e.source }}</span></td>
+    <td>
+      <span class="badge badge-sm {{ 'badge-error' if e.level == 'error' else 'badge-warning' if e.level == 'warning' else 'badge-info' }}">
+        {{ e.level }}
+      </span>
+    </td>
+    <td class="font-mono text-xs text-base-content/60" title="{{ e.org_id }}">
+      {{ correlate('org_id', e.org_id, labels.org.get(e.org_id)) }}
+    </td>
+    {# An issue row names the exception; the stack, the triage and the sibling occurrences live on
+       the issue's own screen, so the name is the way there. #}
+    <td class="font-mono text-xs">
+      {% if e.issue_id %}
+        <a class="link link-hover"
+           href="/console/issues/{{ e.issue_id }}"
+           title="This issue: stack, triage and every occurrence">{{ e.name }}</a>
+      {% else %}
+        {{ e.name }}
+      {% endif %}
+    </td>
+    <td class="font-mono text-xs text-base-content/60"
+        title="{{ e.user_id }}">{{ correlate('user_id', e.user_id, labels.user.get(e.user_id)) }}</td>
+    {# The name the fact pinned when it happened, falling back to the id when the subject had none
+       (an account or membership action, whose subject is only an id). #}
+    <td class="text-xs text-base-content/60"
+        data-entry-entity
+        title="{{ e.entity_id }}">
+      {{ correlate('entity_id', e.entity_id, e.entity_name or (e.entity_id[:12] if e.entity_id)) }}
+    </td>
+    <td class="font-mono text-xs text-base-content/60"
+        title="{{ e.request_id }}">{{ correlate('request_id', e.request_id, labels.request.get(e.request_id)) }}</td>
+    {% set details = e.payload.items() | map("join", "=") | join(" ") %}
+    <td class="font-mono text-xs text-base-content/60 max-w-xs truncate"
+        data-entry-payload
+        title="{{ details }}">{{ details }}</td>
+  </tr>
+{% endfor %}
+{# The way below the first page. A row rather than a button under the table, so it can replace
+   itself with the next batch — which ends with its own successor, or with nothing when the
+   timeline runs out. Offered only on the default newest-first order (see `_next_cursor`). #}
+{% if next_before %}
+  <tr data-load-more>
+    <td colspan="9" class="text-center">
+      <button type="button"
+              class="btn btn-sm btn-ghost"
+              hx-get="/console/timeline?bucket={{ grain }}{{ '&' ~ load_more_qs if load_more_qs }}&before={{ next_before | urlencode }}"
+              hx-target="closest tr"
+              hx-select="tbody > tr"
+              hx-swap="outerHTML">Load older entries</button>
+    </td>
+  </tr>
+{% endif %}
