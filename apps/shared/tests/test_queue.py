@@ -77,6 +77,23 @@ async def _row(topic: str) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_a_task_rolls_back_with_the_transaction_that_enqueued_it():
+    """The outbox half of `enqueue()`: it writes through the caller's session, so a business
+    transaction that rolls back takes its task with it — nothing is left to run."""
+    topic = f"test.outbox_{uuid.uuid4().hex}"
+
+    async with db.admin_session_factory()() as session:
+        await enqueue(session, topic, {"n": 1})
+        await session.rollback()
+
+    async with db.admin_session_factory()() as session:
+        remaining = await session.scalar(
+            text("SELECT count(*) FROM task_queue WHERE topic = :topic"), {"topic": topic}
+        )
+    assert remaining == 0
+
+
+@pytest.mark.asyncio
 async def test_worker_runs_enqueued_task():
     topic = f"test.ok_{uuid.uuid4().hex}"
     seen: list[dict] = []

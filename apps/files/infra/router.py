@@ -27,7 +27,7 @@ from apps.organizations.contract.current import (
     Membership,
     OrgRole,
 )
-from apps.shared.clock import now
+from apps.shared import clock
 from apps.shared.events.bus import events
 from apps.shared.http import (
     JSON_AND_HTML,
@@ -353,7 +353,7 @@ async def public_share_download(
     share_token = await repo.get_share_token(token)
     if share_token is None:
         await reject("invalid", status.HTTP_404_NOT_FOUND, "Link not found")
-    if share_token.expires_at < now():
+    if share_token.expires_at < clock.now():
         await reject("expired", status.HTTP_410_GONE, "Link expired")
 
     org_file = await repo.get(share_token.file_id)

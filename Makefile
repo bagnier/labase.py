@@ -205,7 +205,7 @@ test: provision-test
 # CHROMIUM_EXECUTABLE_PATH is the one outside variable let through: a Chromium installed on the
 # machine instead of Playwright's download (Google's Chrome for Testing). Unset, it arrives empty.
 test-e2e: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" CHROMIUM_EXECUTABLE_PATH="$(CHROMIUM_EXECUTABLE_PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "test_scenarios or test_browser_isolation" --driver=browser
+	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" CHROMIUM_EXECUTABLE_PATH="$(CHROMIUM_EXECUTABLE_PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "scenarios or test_browser_isolation" --driver=browser
 
 # meta: the README's own lane — every claim the front page makes, each one held by a test or
 # waived in writing (tests/meta/claims.py). Worth running on a README edit rather than on a code

@@ -154,18 +154,85 @@ def _log_calls():
                 yield relative, node
 
 
+# Which imported binding lands in which bucket of `_clock_bindings`.
+_CLOCK_MODULE_BUCKET = {"datetime": "datetime_module", "time": "time_module"}
+_CLOCK_FROM_BUCKET = {
+    ("datetime", "datetime"): "datetime",
+    ("datetime", "date"): "date",
+    ("time", "time"): "bare_time",
+}
+
+
+def _clock_bindings(tree: ast.Module) -> tuple[dict[str, set[str]], list[int]]:
+    """What this module's imports bind the clock-shaped names to, bucketed — plus the lines that
+    import the clock's `now` by value, a stray in themselves."""
+    bound: dict[str, set[str]] = {
+        "datetime": {"datetime"},
+        "date": {"date"},
+        "datetime_module": set(),
+        "time_module": set(),
+        "bare_time": set(),
+    }
+    stray_imports = []
+    for node in ast.walk(tree):
+        aliases = node.names if isinstance(node, ast.Import | ast.ImportFrom) else []
+        for alias in aliases:
+            name = alias.asname or alias.name
+            if isinstance(node, ast.Import) and alias.name in _CLOCK_MODULE_BUCKET:
+                bound[_CLOCK_MODULE_BUCKET[alias.name]].add(name)
+            elif isinstance(node, ast.ImportFrom):
+                imported = (node.module or "", alias.name)
+                if imported in _CLOCK_FROM_BUCKET:
+                    bound[_CLOCK_FROM_BUCKET[imported]].add(name)
+                elif imported == ("apps.shared.clock", "now"):
+                    stray_imports.append(node.lineno)
+    return bound, stray_imports
+
+
+def _is_wall_clock_call(node: ast.Call, bound: dict[str, set[str]]) -> bool:
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id in bound["bare_time"]
+    if not isinstance(func, ast.Attribute):
+        return False
+    target = func.value
+    named = target.id if isinstance(target, ast.Name) else None
+    module_member = (
+        target.attr
+        if isinstance(target, ast.Attribute)
+        and isinstance(target.value, ast.Name)
+        and target.value.id in bound["datetime_module"]
+        else None
+    )
+    if func.attr in {"now", "utcnow"}:
+        return named in bound["datetime"] or module_member == "datetime"
+    if func.attr == "today":
+        return named in bound["date"] or module_member == "date"
+    return func.attr == "time" and named in bound["time_module"]
+
+
+def _wall_clock_reads(tree: ast.Module) -> list[int]:
+    """Line numbers of every wall-clock read in one module — `datetime.now`/`utcnow`,
+    `date.today` and `time.time` through any import alias, plus the clock's own `now` imported
+    by value, which a patch of `apps.shared.clock.now` never reaches. `time.monotonic` and
+    `perf_counter` measure durations, not the wall, and stay allowed."""
+    bound, reads = _clock_bindings(tree)
+    return reads + [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _is_wall_clock_call(node, bound)
+    ]
+
+
 def test_time_comes_from_the_one_clock():
-    """A second reading of the wall clock is how a test that pins time stops pinning anything."""
+    """A second reading of the wall clock is how a test that pins time stops pinning anything —
+    and `from apps.shared.clock import now` is the same leak one step removed: bound by value,
+    the reader keeps the function the harness's patch of the clock module no longer names."""
     strays = {
-        f"{relative}:{node.lineno}"
+        f"{relative}:{line}"
         for path, relative in _python_files(_APPS)
         if not any(allowed in f"/{relative}" for allowed in _MAY_READ_THE_WALL_CLOCK)
-        for node in ast.walk(ast.parse(path.read_text()))
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"now", "utcnow"}
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "datetime"
+        for line in _wall_clock_reads(ast.parse(path.read_text()))
     }
 
     assert strays == set()

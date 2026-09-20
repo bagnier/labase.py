@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import select
 
 from apps.profile.domain.models import Profile, ProfileCreate, ProfileUpdate
-from apps.shared.clock import now
+from apps.shared import clock
 from apps.shared.integration.slugs import handle_is_available, slugify, unique_handle
 from apps.shared.persistence.repository import BaseRepository
 
@@ -45,7 +45,7 @@ class ProfileRepository(BaseRepository[Profile]):
             base, self.session, exclude_from="profiles", exclude_id=profile.id
         )
         profile.handle = handle
-        profile.updated_at = now()
+        profile.updated_at = clock.now()
         self.session.add(profile)
         return profile
 
@@ -57,6 +57,6 @@ class ProfileRepository(BaseRepository[Profile]):
     async def update(self, profile: Profile, data: ProfileUpdate) -> Profile:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(profile, field, value)
-        profile.updated_at = now()
+        profile.updated_at = clock.now()
         self.session.add(profile)
         return profile

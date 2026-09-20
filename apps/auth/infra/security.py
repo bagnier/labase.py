@@ -1,4 +1,3 @@
-import time
 import uuid
 from functools import lru_cache
 
@@ -19,6 +18,7 @@ from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
+from apps.shared import clock
 from apps.shared.integration.contribs import contribs
 from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.database import get_admin_session
@@ -66,7 +66,7 @@ def _impersonation_remaining(deadline: str | None) -> int | None:
     if not deadline:
         return None
     try:
-        return int(deadline) - int(time.time())
+        return int(deadline) - int(clock.now().timestamp())
     except ValueError:
         return None
 

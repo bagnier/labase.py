@@ -286,7 +286,9 @@ async def _activity_context(
     }
 
 
-@org_router.get("/dashboard", responses=JSON_AND_HTML)
+# A composed document, not a resource: its data is its own routes (`overviews.json`, the
+# activity feed), each of which answers JSON — so this page declares the one face it has.
+@org_router.get("/dashboard", response_class=HTMLResponse)
 async def org_dashboard(
     request: Request,
     current_user: CurrentUser,
@@ -376,7 +378,9 @@ async def _settings_context(
     return ctx
 
 
-@org_router.get("/settings", responses=JSON_AND_HTML)
+# Same argument as the dashboard: a composed form page whose data is `/members` and the
+# contributed sections — the JSON callers read those.
+@org_router.get("/settings", response_class=HTMLResponse)
 async def org_settings(
     request: Request,
     current_user: CurrentUser,

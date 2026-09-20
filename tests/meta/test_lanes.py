@@ -51,23 +51,25 @@ def _scenario_bindings() -> dict[str, list[str]]:
 
 
 def _tagged_scenarios() -> set[str]:
-    """Every ``@web`` scenario, as ``file: title`` — the tag sits on the line above its
-    ``Scenario:``, which is what makes it readable without a Gherkin parser."""
+    """Every scenario carrying ``@web``, as ``file: title`` — parsed rather than pattern-matched:
+    tags stack over several lines, share a line with other tags, and one at the ``Feature:``
+    level covers every scenario below it."""
     tagged = set()
     for feature in sorted(_FEATURES.glob("*.feature")):
-        lines = feature.read_text().splitlines()
-        for index, line in enumerate(lines):
-            if line.strip() != "@web":
-                continue
-            title = next(
-                (
-                    rest.strip()
-                    for following in lines[index + 1 :]
-                    if (rest := re.sub(r"^\s*Scenario( Outline)?:", "", following)) != following
-                ),
-                "«no scenario under the tag»",
-            )
-            tagged.add(f"{feature.name}: {title}")
+        pending: set[str] = set()
+        feature_tags: set[str] = set()
+        for raw in feature.read_text().splitlines():
+            line = raw.strip()
+            if line.startswith("@"):
+                pending |= set(line.split())
+            elif line.startswith("Feature:"):
+                feature_tags, pending = pending, set()
+            elif (title := re.sub(r"^Scenario( Outline)?:", "", line)) != line:
+                if "@web" in pending | feature_tags:
+                    tagged.add(f"{feature.name}: {title.strip()}")
+                pending = set()
+            elif line and not line.startswith("#"):
+                pending = set()
     return tagged
 
 
@@ -89,6 +91,25 @@ def test_only_the_named_scenarios_run_on_one_driver():
     scenario that quietly becomes browser-only because it grew a DOM-shaped assertion is the way
     "the same scenarios run twice" stops being true one scenario at a time."""
     assert _tagged_scenarios() == _BROWSER_ONLY
+
+
+def test_the_browser_lane_collects_every_scenario_module():
+    """`make test-e2e` selects with `-k`; a scenario module whose name the expression never
+    matches runs in the API lane only, and "the same scenarios run twice" quietly loses a whole
+    file — which is invisible from the features, since the binding module exists and is green."""
+    makefile = (_ROOT / "Makefile").read_text()
+    selection = re.search(r'test-e2e:.*?\n\t.*? -k "([^"]+)"', makefile, flags=re.DOTALL)
+    assert selection is not None, "the browser lane no longer selects with -k — update this walk"
+
+    terms = [term.strip() for term in selection.group(1).split(" or ")]
+    deselected = {
+        module
+        for modules in _scenario_bindings().values()
+        for module in modules
+        if not any(term in Path(module).stem for term in terms)
+    }
+
+    assert deselected == set()
 
 
 def test_every_context_with_steps_drives_both_lanes():

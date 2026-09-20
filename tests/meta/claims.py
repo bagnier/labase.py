@@ -33,9 +33,18 @@ from apps.shared.tests.test_listener import (
     test_a_second_tick_does_not_refan_a_dispatched_fact,
     test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
 )
+from apps.shared.tests.test_queue import (
+    test_a_task_rolls_back_with_the_transaction_that_enqueued_it,
+    test_worker_runs_enqueued_task,
+)
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_browser_isolation import test_distinct_emails_get_isolated_contexts
 from tests.meta.test_capture_sites import test_a_broad_except_never_logs_without_its_traceback
+from tests.meta.test_conventions import (
+    test_every_mapped_primary_key_is_a_time_ordered_uuid7,
+    test_templates_tests_and_steps_live_with_their_context,
+    test_the_session_dependencies_are_exactly_the_three_named,
+)
 from tests.meta.test_diagrams import (
     test_the_dashboard_diagram_lists_every_contributor,
     test_the_signup_diagram_draws_every_welcome_seeder,
@@ -57,6 +66,7 @@ from tests.meta.test_lanes import (
     test_every_context_with_steps_drives_both_lanes,
     test_every_scenario_file_is_bound_exactly_once,
     test_only_the_named_scenarios_run_on_one_driver,
+    test_the_browser_lane_collects_every_scenario_module,
 )
 from tests.meta.test_log_thresholds import (
     test_an_error_line_carries_the_exception_that_justifies_it,
@@ -70,6 +80,9 @@ from tests.meta.test_log_vocabulary import (
 from tests.meta.test_loop_verdicts import (
     test_a_healthy_lifespan_loop_writes_nothing,
     test_a_lifespan_loop_that_falls_over_opens_an_issue,
+)
+from tests.meta.test_middleware import (
+    test_a_cross_site_mutation_is_rejected_by_the_assembled_app,
 )
 from tests.meta.test_ratchets import (
     test_dom_state_is_asserted_through_expect,
@@ -93,6 +106,7 @@ from tests.meta.test_surfaces import (
     test_every_context_declares_its_console_tile,
     test_every_context_declares_one_mount_entry_point,
     test_every_context_keeps_its_internals_private,
+    test_no_contract_exports_a_settings_handle,
     test_no_shared_module_names_a_bounded_context,
     test_the_capture_seam_is_not_a_business_fact,
     test_the_composition_root_mounts_every_context,
@@ -258,6 +272,7 @@ CLAIMS = [
         test_every_scenario_file_is_bound_exactly_once,
         test_only_the_named_scenarios_run_on_one_driver,
         test_every_context_with_steps_drives_both_lanes,
+        test_the_browser_lane_collects_every_scenario_module,
     ),
     waived(
         "nothing-critical-is-mocked",
@@ -286,10 +301,10 @@ CLAIMS = [
         "Time comes from a single clock",
         test_time_comes_from_the_one_clock,
     ),
-    waived(
+    held(
         "uuidv7-primary-keys",
         "every primary key is a time-ordered UUIDv7",
-        "the mixin is tested in isolation; no walk asserts every mapped table uses it",
+        test_every_mapped_primary_key_is_a_time_ordered_uuid7,
     ),
     waived(
         "one-component-system",
@@ -333,10 +348,10 @@ CLAIMS = [
         "the JSON and HTML faces are held (see two-faces); the third is not — nothing asks "
         "which routes actually have an HTMX fragment",
     ),
-    waived(
+    held(
         "tests-live-with-their-context",
         "Templates, tests, and BDD steps live with their context",
-        "a layout convention, checkable per app from the directory tree",
+        test_templates_tests_and_steps_live_with_their_context,
     ),
     # ── Integration ─────────────────────────────────────────────────────────────────────────────
     held(
@@ -356,10 +371,10 @@ CLAIMS = [
         "Because every surface is registered rather than hardcoded",
         test_no_shared_module_names_a_bounded_context,
     ),
-    waived(
+    held(
         "contract-never-exports-a-settings-handle",
         "A contract never exports a settings handle",
-        "an AST check over each contract package's public names",
+        test_no_contract_exports_a_settings_handle,
     ),
     waived(
         "no-magic-strings-in-collaboration",
@@ -483,17 +498,18 @@ CLAIMS = [
         test_no_shared_module_names_a_bounded_context,
     ),
     # ── Conventions ─────────────────────────────────────────────────────────────────────────────
-    waived(
+    held(
         "three-session-dependencies",
         "Three DB session dependencies: `RlsSession` (default — RLS enforced), "
         "`get_user_session` (raw), `AdminSession` (BYPASSRLS",
-        "a fourth would be a real decision and would announce itself nowhere",
+        test_the_session_dependencies_are_exactly_the_three_named,
     ),
-    waived(
+    held(
         "enqueue-is-outbox",
         "`enqueue()` writes through the caller's session, so a task exists iff the business "
         "transaction commits (outbox semantics)",
-        "the queue is well tested; this exact sentence — the rollback case — is not",
+        test_a_task_rolls_back_with_the_transaction_that_enqueued_it,
+        test_worker_runs_enqueued_task,
     ),
     held(
         "the-limiter-fails-open",
@@ -508,11 +524,11 @@ CLAIMS = [
         test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
         test_a_second_tick_does_not_refan_a_dispatched_fact,
     ),
-    waived(
+    held(
         "csrf-without-tokens",
         "Cross-site mutations are rejected by a `Sec-Fetch-Site` middleware (CSRF protection "
         "without tokens)",
-        "the middleware is unit-tested; nothing asserts it is still mounted on the real app",
+        test_a_cross_site_mutation_is_rejected_by_the_assembled_app,
     ),
     waived(
         "fragments-are-standalone-markup",
@@ -597,4 +613,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 28
+UNHELD_TODAY = 22

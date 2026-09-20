@@ -1,4 +1,3 @@
-import time
 import uuid
 
 import structlog
@@ -60,6 +59,7 @@ from apps.auth.domain.service import (
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.auth.infra.security import decode_jwt
 from apps.auth.infra.user_repository import find_user_id_by_email
+from apps.shared import clock
 from apps.shared.events.bus import events
 from apps.shared.http import parse_body, wants_json
 from apps.shared.http.client_ip import client_ip
@@ -635,7 +635,7 @@ async def impersonate_endpoint(
     # when these cookies expire the disguise and the stash die together. The deadline cookie
     # carries the absolute end of the window so a mid-window token refresh re-caps the target
     # session to the time it has left instead of re-minting a full-length login (see security.py).
-    deadline = int(time.time()) + IMPERSONATION_MAX_SECONDS
+    deadline = int(clock.now().timestamp()) + IMPERSONATION_MAX_SECONDS
     _set_ephemeral_cookie(resp, IMPERSONATOR_COOKIE, access_token, IMPERSONATION_MAX_SECONDS)
     _set_ephemeral_cookie(
         resp, IMPERSONATOR_REFRESH_COOKIE, refresh_token or "", IMPERSONATION_MAX_SECONDS

@@ -17,19 +17,42 @@ import re
 import tomllib
 from pathlib import Path
 
+from sqlalchemy import Table
+
 import apps.main  # noqa: F401  — mounting every app fills the catalog and the slug registry
 from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.shared.events import BusinessEvent
 from apps.shared.events.catalog import catalog
 from apps.shared.logs.capture import ExceptionCaptured
+from apps.shared.persistence.base import Base
 from apps.tasks.domain.strip import BANDS
 
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
 
-# Postgres' own schema, not the `public` context. The only word in `apps/shared` that collides
-# with a bounded context's name, and it predates the context by every migration in the repo.
-_POSTGRES_SCHEMA = ("apps/shared/settings/env.py", "public")
+# Strings through which `apps/shared` names a context *on purpose* — each one a real coupling the
+# guard below would otherwise report, kept visible here rather than suppressed in the walk. A new
+# entry is a decision: is this the multi-tenancy floor, or a trace an app's deletion would leave?
+_NAMED_ON_PURPOSE = {
+    # The journal writer pins the actor's handle and org name onto each fact, so a later deletion
+    # or RLS cannot hide who and where — the one shared SQL allowed to read those two tables.
+    "apps/shared/events/repository.py says 'organizations'",
+    "apps/shared/events/repository.py says 'profiles'",
+    # The 401 handler bounces a browser to the sign-in form; that URL is auth's.
+    "apps/shared/http/exceptions.py says '/auth'",
+    # The request logger skips the probes' own polling; the probe paths are health's.
+    "apps/shared/logs/request.py says '/health'",
+    # Multi-tenancy's floor: the `OrgScoped` mixin and the settings DDL name the org table's pk.
+    "apps/shared/persistence/base.py says 'organizations'",
+    "apps/shared/settings/store.py says 'organizations'",
+    # Postgres' own schema, not the `public` context — it predates the context by every migration.
+    "apps/shared/settings/env.py says 'public'",
+    # The shared shell links the account and operator surfaces of the foundation apps by URL.
+    "apps/shared/templates/base.html says '/auth'",
+    "apps/shared/templates/base.html says '/console'",
+    "apps/shared/templates/base.html says '/profile'",
+    "apps/shared/templates/errors/error.html says '/profile'",
+}
 
 
 def _contexts() -> set[str]:
@@ -78,8 +101,21 @@ def test_every_context_declares_one_mount_entry_point():
 
 def test_the_composition_root_mounts_every_context():
     """An app nobody mounts is an app that ships dead: no routes, no tile, no seeds — and no
-    failure either, which is why this is worth a test rather than a code review."""
+    failure either, which is why this is worth a test rather than a code review.
+
+    The listed aliases are resolved to the modules they import, so an alias borrowed from another
+    context still counts the module it really names; and the loop is asserted to be the *only*
+    ``mount`` call site, so a stray mount outside it cannot stand in for a missing listing."""
     root = ast.parse((_APPS / "main.py").read_text())
+    integration_of = {
+        alias.asname or alias.name: (node.module or "")
+        .removeprefix("apps.")
+        .removesuffix(".contract")
+        for node in ast.walk(root)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith(".contract")
+        for alias in node.names
+        if alias.name == "integration"
+    }
     mounted_tuple = next(
         node.value
         for node in root.body
@@ -91,47 +127,115 @@ def test_the_composition_root_mounts_every_context():
     # not its key function.
     listed = mounted_tuple.args[0] if isinstance(mounted_tuple, ast.Call) else mounted_tuple
 
-    mounted = {node.id for node in ast.walk(listed) if isinstance(node, ast.Name)}
+    mounted = {
+        integration_of[node.id]
+        for node in ast.walk(listed)
+        if isinstance(node, ast.Name) and node.id in integration_of
+    }
+    mount_calls = [
+        node.func.value.id
+        for node in ast.walk(root)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "mount"
+        and isinstance(node.func.value, ast.Name)
+    ]
 
-    assert mounted == _contexts() | {"shared"}
+    assert (mounted, mount_calls) == (_contexts() | {"shared"}, ["_app"])
 
 
 def test_the_shared_foundation_is_forbidden_from_every_context():
-    """`shared imports no bounded context` names its contexts one by one, so a new app is outside
-    the contract until someone extends the list — the one place the boundary is opt-in."""
-    contract = _contract_named("shared imports no bounded context")
+    """Two contracts carry the README's sentence, and both are asserted by content rather than by
+    name: an emptied forbidden list, a narrowed source or a quiet `ignore_imports` entry would
+    leave the contract's name standing while the boundary is gone. The context list is also what
+    keeps a new app inside the boundary — the one place it is opt-in."""
+    shared = _contract_named("shared imports no bounded context")
+    domain = _contract_named("domain never imports infra")
 
-    forbidden = {module.removeprefix("apps.") for module in contract["forbidden_modules"]}
+    forbidden = {module.removeprefix("apps.") for module in shared["forbidden_modules"]}
 
-    assert forbidden == _contexts()
+    assert (
+        forbidden,
+        shared["source_modules"],
+        shared.get("ignore_imports", []),
+        domain["source_modules"],
+        domain["forbidden_modules"],
+        domain.get("ignore_imports", []),
+    ) == (_contexts(), ["apps.shared"], [], ["apps.*.domain"], ["apps.*.infra"], [])
+
+
+def _internal_modules(context: str) -> set[str]:
+    """Everything importable in a context except its public contract — and its tests, which the
+    allowed-importers clause scopes on its own."""
+    return {
+        f"apps.{context}.{child.stem}"
+        for child in (_APPS / context).iterdir()
+        if not child.name.startswith("__")
+        and child.name not in {"contract", "tests", "templates"}
+        and (child.is_dir() or child.suffix == ".py")
+    }
 
 
 def test_every_context_keeps_its_internals_private():
-    """One `protected` contract per context. Same failure mode as above, one level down: a context
-    that never gets its contract can be imported through `domain/` by anyone, and the README's
-    "the only inter-app surfaces are each app's public contract" quietly stops holding."""
-    protected = {
-        contract["name"].removesuffix(" internals are private")
+    """One `protected` contract per context, and not an emptied one: what each protects is derived
+    from the context's own tree — every python child but `contract/` — and the only importers
+    allowed are the context itself and test code. A contract drifting from the tree (a new package
+    nobody protected, an `allowed_importers` widened to everyone) fails here, not in review."""
+    protections = {
+        contract["name"].removesuffix(" internals are private"): (
+            set(contract["protected_modules"]),
+            contract["allowed_importers"],
+        )
         for contract in _contracts()
         if contract["type"] == "protected"
     }
 
-    assert protected == _contexts()
+    expected = {
+        name: (_internal_modules(name), [f"apps.{name}.**", "apps.*.tests.**"])
+        for name in _contexts()
+    }
+
+    assert protections == expected
 
 
 def test_the_one_way_edge_out_of_auth_is_contracted():
-    """The README names this edge specifically as the example of import-downward-event-upward."""
+    """The README names this edge specifically as the example of import-downward-event-upward —
+    and an `ignore_imports` entry is how a real import gets waved through while the linter still
+    reports the contract KEPT, so its absence is part of what is asserted."""
     contract = _contract_named("auth is a foundation: it never imports the organizations context")
 
-    assert (contract["source_modules"], contract["forbidden_modules"]) == (
-        ["apps.auth"],
-        ["apps.organizations"],
-    )
+    assert (
+        contract["source_modules"],
+        contract["forbidden_modules"],
+        contract["type"],
+        contract.get("ignore_imports", []),
+    ) == (["apps.auth"], ["apps.organizations"], "forbidden", [])
+
+
+def _context_tables() -> set[str]:
+    """Every table owned by a bounded context — a shared SQL literal naming one is an import the
+    linter cannot see."""
+    tables = set()
+    for mapper in Base.registry.mappers:
+        if not mapper.class_.__module__.startswith("apps.shared"):
+            tables |= {table.name for table in mapper.tables if isinstance(table, Table)}
+    return tables
+
+
+def _naming_tokens(text: str, contexts: set[str], tables: set[str]) -> set[str]:
+    """How one string can name a context: its bare name, a path whose segment is one (`/auth/…`),
+    or a context-owned table spelled into SQL."""
+    names = "|".join(sorted(contexts))
+    tokens = {text} if text in contexts else set()
+    tokens |= {f"/{hit}" for hit in re.findall(rf"/({names})(?=[/?\"' ]|$)", text)}
+    tokens |= set(re.findall(rf"\b({'|'.join(sorted(tables))})\b", text))
+    return tokens
 
 
 def _shared_strings_naming_a_context() -> set[str]:
-    """Every non-docstring string literal under `apps/shared` that spells a context's name."""
-    contexts = _contexts()
+    """Every non-docstring string literal under `apps/shared` that names a context — by its bare
+    name, by a URL pointing into it, or by one of its tables."""
+    contexts, tables = _contexts(), _context_tables()
     found = set()
     for path in sorted((_APPS / "shared").rglob("*.py")):
         if "/tests/" in path.as_posix():
@@ -152,11 +256,28 @@ def _shared_strings_naming_a_context() -> set[str]:
             if (
                 isinstance(node, ast.Constant)
                 and isinstance(node.value, str)
-                and node.value in contexts
                 and id(node) not in docstrings
-                and (relative, node.value) != _POSTGRES_SCHEMA
             ):
-                found.add(f"{relative}:{node.lineno} says {node.value!r}")
+                found |= {
+                    f"{relative} says {token!r}"
+                    for token in _naming_tokens(node.value, contexts, tables)
+                }
+    return found
+
+
+def _shared_templates_naming_a_context() -> set[str]:
+    """The same walk over the shared layout: a template is an inter-app surface import-linter
+    cannot see, so a context named in one survives that context's deletion as a dead link."""
+    contexts = sorted(_contexts())
+    reference = re.compile(rf"/({'|'.join(contexts)})(?=[/?\"' ]|$)|[\"']({'|'.join(contexts)})/")
+    found = set()
+    for path in sorted((_APPS / "shared" / "templates").rglob("*.html")):
+        prose_stripped = re.sub(r"\{#.*?#\}", "", path.read_text(), flags=re.DOTALL)
+        relative = str(path.relative_to(_ROOT))
+        found |= {
+            f"{relative} says {f'/{hit[0]}' if hit[0] else f'{hit[1]}/'!r}"
+            for hit in reference.findall(prose_stripped)
+        }
     return found
 
 
@@ -164,11 +285,14 @@ def test_no_shared_module_names_a_bounded_context():
     """The whole "delete an app and nothing is left behind" promise rests here.
 
     import-linter already forbids shared *importing* a context; a string is how the rule gets
-    broken without one — a settings key, a nav slug, a template path, an `if app == "metrics"`.
-    Each one survives the app's deletion as a dangling reference to something that no longer
-    exists, which is exactly the trace the README says cannot remain.
+    broken without one — a settings key, a nav slug, a URL, a table spelled into SQL, a template
+    path. Each one survives the app's deletion as a dangling reference to something that no
+    longer exists, which is exactly the trace the README says cannot remain. What shared does
+    name is frozen above, each with the reason it may.
     """
-    assert _shared_strings_naming_a_context() == set()
+    named = _shared_strings_naming_a_context() | _shared_templates_naming_a_context()
+
+    assert named == _NAMED_ON_PURPOSE
 
 
 def test_every_context_declares_its_console_tile():
@@ -256,6 +380,39 @@ def test_the_capture_seam_is_not_a_business_fact():
         issubclass(ExceptionCaptured, BusinessEvent),
         ExceptionCaptured in catalog.kinds().values(),
     ) == (False, False)
+
+
+def test_no_contract_exports_a_settings_handle():
+    """Handlers take the app's settings *dependency* and get the request's effective values; a
+    contract that exported the live handle instead would hand every consumer server-wide values
+    with the org overrides silently dropped. So the handle never crosses a contract: calling
+    ``get_settings`` inside a function is non-request code doing its job, but a module-level
+    binding — or ``AppSettings`` in a contract's imports — is a handle exported."""
+    exported = set()
+    for path in sorted(_APPS.glob("*/contract/**/*.py")):
+        relative = str(path.relative_to(_ROOT))
+        tree = ast.parse(path.read_text())
+        for statement in tree.body:
+            if isinstance(statement, ast.Assign | ast.AnnAssign) and any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "get_settings"
+                for node in ast.walk(statement)
+            ):
+                exported.add(f"{relative}:{statement.lineno} binds a handle at import time")
+        exported |= {
+            f"{relative}:{node.lineno} imports AppSettings"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and any(alias.name == "AppSettings" for alias in node.names)
+        }
+
+    assert exported == set()
+
+
+def test_the_contract_walk_actually_finds_the_modules():
+    # Guards the guard: a glob that matched nothing would make the assertion above vacuous.
+    assert len(list(_APPS.glob("*/contract/**/*.py"))) > 10
 
 
 def test_the_reference_app_fills_every_surface():
