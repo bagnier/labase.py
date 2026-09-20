@@ -44,9 +44,11 @@ def _scenario_bindings() -> dict[str, list[str]]:
                 continue
             for arg in node.args:
                 if isinstance(arg, ast.Constant) and str(arg.value).endswith(".feature"):
-                    bound.setdefault(Path(str(arg.value)).name, []).append(
-                        str(module.relative_to(_ROOT))
-                    )
+                    modules = bound.setdefault(Path(str(arg.value)).name, [])
+                    # An explicit `scenario(...)` next to the module's `scenarios(...)` is one
+                    # binding, not two: pytest-bdd skips what is already bound.
+                    if str(module.relative_to(_ROOT)) not in modules:
+                        modules.append(str(module.relative_to(_ROOT)))
     return bound
 
 

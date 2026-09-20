@@ -11,16 +11,14 @@ both directions: the diagram is neither a subset (a seeder nobody drew) nor a su
 nothing implements) of what the app actually mounts.
 """
 
-import ast
 import re
-from pathlib import Path
 
 import apps.main  # noqa: F401  — mounting every app registers the seeders and the overviews
 from apps.organizations.contract.events import OrganizationCreated
+from apps.organizations.contract.overviews import OverviewQuery
 from apps.shared.events.wiring import wiring
+from apps.shared.integration.contribs import contribs
 from tests.meta.readme import diagram_containing
-
-_APPS = Path(__file__).resolve().parents[2] / "apps"
 
 
 def _drawn_seeders() -> set[str]:
@@ -46,17 +44,6 @@ def _drawn_overviews() -> set[str]:
     return {name.strip() for name in listed.group(1).split(",")}
 
 
-def _apps_naming(query: str) -> set[str]:
-    """Every context whose mount names ``query`` — read as a symbol, so ``ConsoleOverviewQuery``
-    does not answer for ``OverviewQuery``."""
-    found = set()
-    for integration in sorted(_APPS.glob("*/contract/integration.py")):
-        tree = ast.parse(integration.read_text())
-        if any(isinstance(node, ast.Name) and node.id == query for node in ast.walk(tree)):
-            found.add(integration.parts[-3])
-    return found
-
-
 def test_the_signup_diagram_draws_every_welcome_seeder():
     """The chain the README puts front and centre. Its seeders are durable async consumers of
     ``OrgCreated``, registered at mount — so the wiring knows them by app, and the picture can be
@@ -68,5 +55,12 @@ def test_the_signup_diagram_draws_every_welcome_seeder():
 
 def test_the_dashboard_diagram_lists_every_contributor():
     """Same shape, the pull side: an app that stops answering `OverviewQuery` loses its card, and
-    the dashboard renders one short without failing — the contribs registry logs and skips."""
-    assert _drawn_overviews() == _apps_naming("OverviewQuery")
+    the dashboard renders one short without failing — the contribs registry logs and skips. Read
+    off the *mounted* registry, not the source: a provider whose registration was deleted still
+    spells the query's name in its dead code, and a provider registered from another module never
+    spelled it in `integration.py` at all."""
+    contributing = {
+        provider.__module__.split(".")[1] for provider in contribs.providers(OverviewQuery)
+    }
+
+    assert _drawn_overviews() == contributing

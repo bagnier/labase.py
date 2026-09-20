@@ -635,8 +635,7 @@ async def avatar_upload(
         .upload(path, content, {"content-type": file.content_type or "", "x-upsert": "true"})
     )
     profile = await repo.get_or_create(current_user.id, current_user.email)
-    profile.avatar_path = path
-    await session.flush()
+    await repo.set_avatar_path(profile, path)
     await events.emit(AvatarUpdated(user_id=current_user.id), session)
     if wants_json(request):
         return JSONResponse({"message": "Avatar updated."})

@@ -20,6 +20,12 @@ counted by ``UNHELD_TODAY``. That number is the backlog this package exists to l
 from dataclasses import dataclass
 from types import FunctionType
 
+from apps.console.tests.e2e.test_admins_scenarios import (
+    test_the_first_registered_user_becomes_a_server_admin,
+)
+from apps.organizations.tests.e2e.test_scenarios import (
+    test_a_new_user_gets_a_personal_organisation_on_registration,
+)
 from apps.shared.tests.test_bus import test_emit_refuses_an_undeclared_event
 from apps.shared.tests.test_emit_durability import (
     test_a_fact_is_rolled_back_by_a_handler_that_raises,
@@ -44,6 +50,7 @@ from tests.meta.test_conventions import (
     test_every_mapped_primary_key_is_a_time_ordered_uuid7,
     test_templates_tests_and_steps_live_with_their_context,
     test_the_session_dependencies_are_exactly_the_three_named,
+    test_the_uuid4_exception_is_exactly_the_token_columns,
 )
 from tests.meta.test_diagrams import (
     test_the_dashboard_diagram_lists_every_contributor,
@@ -83,6 +90,8 @@ from tests.meta.test_loop_verdicts import (
 )
 from tests.meta.test_middleware import (
     test_a_cross_site_mutation_is_rejected_by_the_assembled_app,
+    test_a_request_whose_handler_raised_still_leaves_its_finished_line,
+    test_a_served_request_leaves_exactly_one_finished_line,
 )
 from tests.meta.test_ratchets import (
     test_dom_state_is_asserted_through_expect,
@@ -91,17 +100,21 @@ from tests.meta.test_ratchets import (
     test_every_request_the_driver_fires_itself_is_named,
     test_no_assertion_step_reaches_a_page_by_url,
     test_no_compensating_assert_narrows_an_annotation,
+    test_no_router_reaches_the_database_itself,
     test_no_state_wait_is_a_sleep,
     test_nothing_reruns_a_failing_test,
     test_the_defensive_reads_are_the_named_ones,
+    test_the_e2e_doubles_are_the_named_ones,
     test_time_comes_from_the_one_clock,
 )
 from tests.meta.test_routes import (
+    test_every_fixed_route_wins_its_first_match,
     test_no_org_handle_can_shadow_a_fixed_route,
     test_the_schema_describes_both_faces_of_every_page_but_the_named_ones,
 )
 from tests.meta.test_signin_coverage import test_every_delivered_session_is_recorded_as_a_sign_in
 from tests.meta.test_surfaces import (
+    test_a_disabled_app_drops_everything_but_its_console_tile,
     test_an_issue_fact_never_names_the_user_who_tripped_it,
     test_every_context_declares_its_console_tile,
     test_every_context_declares_one_mount_entry_point,
@@ -233,11 +246,11 @@ CLAIMS = [
         "settings there, and can be switched on or off",
         test_every_context_declares_its_console_tile,
     ),
-    waived(
+    held(
         "disabled-app-keeps-its-tile",
         "a disabled app drops its routes, nav and dashboard card but keeps its console tile (and "
         "still reserves its URL slugs)",
-        "needs an app mounted twice, on and off, with both route tables compared",
+        test_a_disabled_app_drops_everything_but_its_console_tile,
     ),
     held(
         "rls-is-the-single-source-of-truth",
@@ -256,7 +269,9 @@ CLAIMS = [
     waived(
         "python-never-reimplements-isolation",
         "Python never re-implements isolation for authenticated access.",
-        "would need a walk of repositories for an org_id filter added on top of an RlsSession",
+        "test_the_bypassrls_parameters_are_the_counted_ones counts the surface where Python may "
+        "be re-deciding what RLS should; holding the sentence needs the pages and avatar reads "
+        "moved onto RLS policies first (ROADMAP)",
     ),
     waived(
         "only-the-journal-is-transactional",
@@ -274,10 +289,10 @@ CLAIMS = [
         test_every_context_with_steps_drives_both_lanes,
         test_the_browser_lane_collects_every_scenario_module,
     ),
-    waived(
+    held(
         "nothing-critical-is-mocked",
         "Nothing business-critical is mocked",
-        "monkeypatch sites in the e2e lanes would have to be enumerated and named",
+        test_the_e2e_doubles_are_the_named_ones,
     ),
     held(
         "goto-is-a-smell",
@@ -286,15 +301,15 @@ CLAIMS = [
         test_every_deep_link_is_an_arrival_from_outside,
         test_every_request_the_driver_fires_itself_is_named,
     ),
-    waived(
+    held(
         "personal-org-at-signup",
         "Every account gets a personal organization at sign-up",
-        "a scenario covers the happy path; nothing ties it to this sentence",
+        test_a_new_user_gets_a_personal_organisation_on_registration,
     ),
-    waived(
+    held(
         "first-user-is-admin",
         "First signed-up user is admin",
-        "a scenario covers it; nothing ties it to this sentence",
+        test_the_first_registered_user_becomes_a_server_admin,
     ),
     held(
         "single-clock",
@@ -309,7 +324,8 @@ CLAIMS = [
     waived(
         "one-component-system",
         "styling from one component system (Tailwind + daisyUI)",
-        "needs a template scan for custom CSS classes outside the declared component layer",
+        "test_the_classes_outside_the_component_layer_are_the_named_ones freezes the 36 plain-CSS "
+        "classes that today beat the layer in the cascade; the claim holds when that set is empty",
     ),
     waived(
         "invariants-are-types",
@@ -336,11 +352,11 @@ CLAIMS = [
         test_every_quality_tool_in_the_table_is_still_configured,
     ),
     # ── Architecture ────────────────────────────────────────────────────────────────────────────
-    waived(
+    held(
         "routers-own-http",
         "Routers own HTTP and nothing else — parsing, serialization, status codes; no business "
         "logic, no direct DB access.",
-        "a router issuing its own select would pass every gate the repo has",
+        test_no_router_reaches_the_database_itself,
     ),
     waived(
         "three-audiences",
@@ -365,6 +381,7 @@ CLAIMS = [
         "catch-alls-sort-last",
         "catch-all routes (e.g. the org `/{slug}`) sort last so a fixed route is never shadowed",
         test_no_org_handle_can_shadow_a_fixed_route,
+        test_every_fixed_route_wins_its_first_match,
     ),
     held(
         "surfaces-are-registered",
@@ -471,11 +488,12 @@ CLAIMS = [
         "dotted `snake_case` names with kwargs, never f-strings or `print`",
         test_every_log_line_is_named_by_a_dotted_snake_case_literal,
     ),
-    waived(
+    held(
         "request-finished-once-per-request",
         "Every served request leaves one `request.finished` line — including one whose handler "
         "raised",
-        "needs a request driven end to end with the sink captured",
+        test_a_served_request_leaves_exactly_one_finished_line,
+        test_a_request_whose_handler_raised_still_leaves_its_finished_line,
     ),
     held(
         "timeline-writes-nothing",
@@ -540,10 +558,10 @@ CLAIMS = [
         "`clock.now()` is the single source of time. Never call `datetime.now()`.",
         test_time_comes_from_the_one_clock,
     ),
-    waived(
+    held(
         "tokens-stay-uuidv4",
         "Security tokens are the deliberate exception — they stay random **UUIDv4**",
-        "the exception has no list, so it cannot be checked in either direction",
+        test_the_uuid4_exception_is_exactly_the_token_columns,
     ),
     held(
         "every-actor-isolated-session",
@@ -599,7 +617,7 @@ CLAIMS = [
     ),
     held(
         "documented-commands-exist",
-        "make finalize     # js-build + fix + test (run before committing)",
+        "make finalize     # js-build + fix + lint + test (run before committing)",
         test_every_documented_command_exists,
     ),
     # ── Demo apps ───────────────────────────────────────────────────────────────────────────────
@@ -613,4 +631,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 22
+UNHELD_TODAY = 15

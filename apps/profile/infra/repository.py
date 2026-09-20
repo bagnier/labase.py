@@ -49,6 +49,13 @@ class ProfileRepository(BaseRepository[Profile]):
         self.session.add(profile)
         return profile
 
+    async def set_avatar_path(self, profile: Profile, path: str) -> None:
+        """Persist the freshly uploaded avatar's storage path, flushed so the emitting route's
+        fact rides the same transaction as a visible row."""
+        profile.avatar_path = path
+        profile.updated_at = clock.now()
+        await self.session.flush()
+
     async def is_handle_available(self, handle: str, profile_id: uuid.UUID) -> bool:
         return await handle_is_available(
             handle, self.session, exclude_from="profiles", exclude_id=profile_id

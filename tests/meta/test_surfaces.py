@@ -17,15 +17,21 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
 from sqlalchemy import Table
 
-import apps.main  # noqa: F401  — mounting every app fills the catalog and the slug registry
+import apps.main
+from apps.console.contract.overviews import ConsoleOverviewQuery
 from apps.issues.contract.events import IssueOpened, IssueRegressed
+from apps.organizations.contract.overviews import OverviewQuery
 from apps.shared.events import BusinessEvent
 from apps.shared.events.catalog import catalog
+from apps.shared.integration.host import Host
 from apps.shared.logs.capture import ExceptionCaptured
 from apps.shared.persistence.base import Base
+from apps.shared.settings import live
 from apps.tasks.domain.strip import BANDS
+from apps.todo.contract import integration as todo_integration
 
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
@@ -295,16 +301,21 @@ def test_no_shared_module_names_a_bounded_context():
     assert named == _NAMED_ON_PURPOSE
 
 
-def test_every_context_declares_its_console_tile():
-    """The tile is what makes an app visible to an admin — and what lets a *disabled* one be
-    switched back on, since it registers before the enabled gate."""
-    silent = {
-        name
-        for name in _contexts()
-        if "ConsoleOverviewQuery" not in (_APPS / name / "contract" / "integration.py").read_text()
+def _contexts_providing(query_type: type) -> set[str]:
+    """The contexts behind the mounted providers of one query type — the registry the request
+    path reads, not the source that once registered them."""
+    return {
+        provider.__module__.split(".")[1]
+        for provider in apps.main.host.contribs.providers(query_type)
     }
 
-    assert silent == set()
+
+def test_every_context_declares_its_console_tile():
+    """The tile is what makes an app visible to an admin — and what lets a *disabled* one be
+    switched back on, since it registers before the enabled gate. Read off the mounted registry:
+    a registration deleted from the manifest keeps the query's name in its dead provider, which
+    is exactly what a source grep kept counting."""
+    assert _contexts_providing(ConsoleOverviewQuery) == _contexts()
 
 
 def _writes_under(package: str) -> set[str]:
@@ -382,6 +393,42 @@ def test_the_capture_seam_is_not_a_business_fact():
     ) == (False, False)
 
 
+def _todo_surfaces(host: Host) -> dict[str, bool]:
+    return {
+        "routes": any("/todos" in path for path in host.app.openapi()["paths"]),
+        "nav": bool(host.nav_items),
+        "dashboard card": bool(host.contribs.providers(OverviewQuery)),
+        "console tile": bool(host.contribs.providers(ConsoleOverviewQuery)),
+    }
+
+
+def test_a_disabled_app_drops_everything_but_its_console_tile(monkeypatch: pytest.MonkeyPatch):
+    """The reference app mounted twice, on and off, and the two hosts compared surface by
+    surface — the README's whole sentence in one table. The settings store is doubled (our own
+    module) because the off state is a console decision this test has no console to make; both
+    mounts run on the same code path the composition root uses."""
+    monkeypatch.setattr("apps.shared.settings.store.seed_values", lambda app, defaults: None)
+    saved = live.get_settings("todo").snapshot()
+    monkeypatch.setattr("apps.shared.settings.live.seed_values", lambda app, defaults: None)
+
+    monkeypatch.setattr("apps.shared.settings.live.read_values", lambda app: dict(saved))
+    enabled_host = Host()
+    todo_integration.mount(enabled_host)
+
+    monkeypatch.setattr(
+        "apps.shared.settings.live.read_values", lambda app: {**saved, "enabled": "false"}
+    )
+    disabled_host = Host()
+    todo_integration.mount(disabled_host)
+
+    live.get_settings("todo").restore(saved)
+
+    assert (_todo_surfaces(enabled_host), _todo_surfaces(disabled_host)) == (
+        {"routes": True, "nav": True, "dashboard card": True, "console tile": True},
+        {"routes": False, "nav": False, "dashboard card": False, "console tile": True},
+    )
+
+
 def test_no_contract_exports_a_settings_handle():
     """Handlers take the app's settings *dependency* and get the request's effective values; a
     contract that exported the live handle instead would hand every consumer server-wide values
@@ -417,24 +464,28 @@ def test_the_contract_walk_actually_finds_the_modules():
 
 def test_the_reference_app_fills_every_surface():
     """`todo/` is what a new app is copied from, so a surface it stops demonstrating is a surface
-    the next app will not have. The README lists them by name; this is that list."""
-    manifest = (_APPS / "todo" / "contract" / "integration.py").read_text()
-    surfaces = {
-        "nav": "nav=",
-        "dashboard overview": "provides_when_enabled=",
-        "console overview": "ConsoleOverviewQuery",
-        "settings": "settings=",
-        "feature switch": "feature_switch()",
-        "seeding": "consumes_when_enabled=",
-        "routes": "routers=",
-        "events": "emits=",
+    the next app will not have. The README lists them by name; this asks the *mounted* app for
+    each one — a registration deleted from the manifest used to keep its spelling in the file,
+    and a text grep counted it forever."""
+    from apps.organizations.contract.events import OrganizationCreated
+    from apps.shared.events.wiring import wiring
+
+    filled = {
+        "routes": any("/todos" in path for path in apps.main.app.openapi()["paths"]),
+        "nav": any(item.match == "/todos" for item in apps.main.host.nav_items),
+        "dashboard overview": "todo" in _contexts_providing(OverviewQuery),
+        "console overview": "todo" in _contexts_providing(ConsoleOverviewQuery),
+        "settings": live.get_settings("todo").declaration.defs != [],
+        "feature switch": any(
+            definition.key == "enabled" for definition in live.get_settings("todo").declaration.defs
+        ),
+        "seeding": "todo" in {r.app for r in wiring.consumers_of(OrganizationCreated)},
+        "events": any(kind.startswith("todo.") for kind in catalog.kinds()),
+        "api driver": (_APPS / "todo" / "tests" / "e2e" / "driver_mixin_api.py").exists(),
+        "browser driver": (_APPS / "todo" / "tests" / "e2e" / "driver_mixin_browser.py").exists(),
     }
 
-    missing = {name for name, spelling in surfaces.items() if spelling not in manifest} | {
-        f"{driver} driver"
-        for driver in ("api", "browser")
-        if not (_APPS / "todo" / "tests" / "e2e" / f"driver_mixin_{driver}.py").exists()
-    }
+    missing = {name for name, present in filled.items() if not present}
 
     assert missing == set()
 

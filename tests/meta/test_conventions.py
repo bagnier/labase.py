@@ -79,6 +79,26 @@ def test_every_mapped_primary_key_is_a_time_ordered_uuid7():
     assert (composite, tokens, strays) == (_NATURAL_COMPOSITE_KEYS, _RANDOM_TOKEN_KEYS, set())
 
 
+# The security tokens, named: the columns that must stay uuid4 — unguessable, with no timestamp
+# to read off them. `test_every_mapped_primary_key_is_a_time_ordered_uuid7` already keeps uuid4
+# out of the primary keys; this is the other direction.
+_TOKEN_COLUMNS = {"org_file_share_tokens.token", "org_invitations.token"}
+
+
+def test_the_uuid4_exception_is_exactly_the_token_columns():
+    """ "Security tokens are the deliberate exception — they stay random UUIDv4", checked both
+    ways now that the exception has a list: every token column defaults to uuid4, and no other
+    column does."""
+    defaulting_to_uuid4 = {
+        f"{table.name}.{column.name}"
+        for table in Base.metadata.tables.values()
+        for column in table.columns
+        if _key_generator(column) is uuid.uuid4
+    }
+
+    assert defaulting_to_uuid4 == _TOKEN_COLUMNS
+
+
 def test_templates_tests_and_steps_live_with_their_context():
     """The layout half of self-containment: a template, a test or a step module parked outside
     its context is the piece a deletion leaves behind."""

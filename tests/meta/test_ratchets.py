@@ -115,6 +115,89 @@ _SUBSTRATE_DEEP_LINKS = {
     "tests/e2e/drivers/test_browser_isolation.py": 2,
 }
 
+# Every test double in the two e2e lanes, counted per file — "Nothing business-critical is
+# mocked" holds because this list is what it is. The clock pin is the sanctioned time control
+# (both drivers run the app in-process, so one setattr pins every `clock.now()`); the
+# browser-launch tests steer the env var that picks a Chromium — ambient control, not a double.
+_E2E_DOUBLES = {
+    "tests/e2e/drivers/test_browser_launch.py": 3,
+    "tests/plugin.py": 1,
+}
+
+# The API driver re-routes the three session dependencies onto the scenario's rolled-back
+# transaction — a real database reached differently, and the browser lane runs the untouched app.
+_SESSION_OVERRIDES = {
+    "tests/e2e/drivers/api_base.py": 3,
+}
+
+# The one router allowed to drive the database itself: the readiness probe's whole job is to
+# touch the dependency and report, so its `select 1` has nowhere lower to live.
+_ROUTERS_TOUCHING_THE_DB = {
+    "apps/health/router.py",
+}
+
+# Request functions on the BYPASSRLS session, counted per module. The README reserves
+# `AdminSession` for event handlers, console queries and anonymous public surfaces; this is what
+# that reservation costs today, so widening it is an edit someone makes on purpose.
+_BYPASSRLS_PARAMETERS = {
+    "apps/auth/infra/accounts_router.py": 4,
+    "apps/auth/infra/router.py": 12,
+    "apps/console/infra/router.py": 13,
+    "apps/files/infra/router.py": 1,
+    "apps/issues/infra/router.py": 3,
+    "apps/metrics/infra/router.py": 1,
+    "apps/organizations/infra/invitation_router.py": 2,
+    "apps/pages/infra/router.py": 3,
+    "apps/profile/infra/router.py": 2,
+    "apps/public/infra/router.py": 2,
+    "apps/tasks/infra/router.py": 2,
+    "apps/timeline/infra/router.py": 3,
+}
+
+# Class selectors defined outside `@layer components` in `static/css/input.css`. Everything here
+# is plain CSS that beats the layered components in the cascade — `list-panel` and `paper` are
+# even *redefinitions* of layered classes — which is the inversion the README's "one component
+# system" forbids. The list only shrinks: moving one into the layer is the fix, adding one here
+# is a decision.
+_OUTSIDE_THE_COMPONENT_LAYER = {
+    "activity-timeline",
+    "cm-toolbar",
+    "cm-toolbar-btn",
+    "cm-toolbar-sep",
+    "flip",
+    "heatmap",
+    "heatmap-cell",
+    "heatmap-col",
+    "heatmap-col-label",
+    "heatmap-day",
+    "heatmap-month",
+    "heatmap-swatch",
+    "lcard",
+    "list-panel",
+    "paper",
+    "ph",
+    "saved-flash",
+    "scene",
+    "strip-attempt",
+    "strip-axis",
+    "strip-block",
+    "strip-done",
+    "strip-grid",
+    "strip-gridlines",
+    "strip-group",
+    "strip-lane",
+    "strip-name",
+    "strip-parked",
+    "strip-pending",
+    "strip-retrying",
+    "strip-row",
+    "strip-swatch",
+    "strip-tail",
+    "task-bar",
+    "task-sub",
+    "task-total",
+}
+
 _STEP_TYPES = {"given", "when", "then"}
 _LEVELS = {"debug", "info", "warning", "error", "exception"}
 _DOTTED_SNAKE = re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*(\.[a-z0-9]+(_[a-z0-9]+)*)*$")
@@ -418,6 +501,107 @@ def test_every_log_line_is_named_by_a_dotted_snake_case_literal():
     }
 
     assert strays == set()
+
+
+def test_the_e2e_doubles_are_the_named_ones():
+    """ "Nothing business-critical is mocked" — held as the complete, counted list of what the
+    two e2e lanes double: the pinned clock and the driver's own env control, plus the API lane's
+    session overrides. GoTrue, Postgres, Storage and the mail catcher are all real; a new double
+    lands here as a question."""
+    doubles = _sites(
+        r"monkeypatch\.(setattr|setenv|delenv|setitem)|\bMagicMock\b|\bMock\(|mock\.patch",
+        _ROOT / "tests",
+        *sorted(_APPS.glob("*/tests/e2e")),
+    )
+
+    overrides = _sites(
+        r"dependency_overrides\[", _ROOT / "tests", *sorted(_APPS.glob("*/tests/e2e"))
+    )
+
+    assert (doubles, overrides) == (_E2E_DOUBLES, _SESSION_OVERRIDES)
+
+
+def _db_touches_in_routers() -> set[str]:
+    """Router modules that reach the database themselves — a DML/select/text import from
+    sqlalchemy (typing and exception imports stay free), or a session driven directly."""
+    dml = {"select", "insert", "update", "delete", "text", "func", "literal"}
+    driving = {"execute", "scalar", "scalars", "add", "add_all", "merge", "flush"}
+    touching = set()
+    for path in [*sorted(_APPS.glob("*/infra/*router*.py")), _APPS / "health" / "router.py"]:
+        relative = str(path.relative_to(_ROOT))
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and (node.module or "").split(".")[0] == "sqlalchemy"
+                and any(alias.name in dml for alias in node.names)
+            ):
+                touching.add(relative)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in driving
+                and isinstance(node.func.value, ast.Name)
+                and "session" in node.func.value.id
+            ):
+                touching.add(relative)
+    return touching
+
+
+def test_no_router_reaches_the_database_itself():
+    """The mechanical half of "Routers own HTTP and nothing else": no DML import, no session
+    driven from a router — that goes through a repository. The business-logic half stays a
+    review question; the readiness probe is the one named exception."""
+    assert _db_touches_in_routers() == _ROUTERS_TOUCHING_THE_DB
+
+
+def test_the_bypassrls_parameters_are_the_counted_ones():
+    """The distance between "AdminSession is reserved for…" and today, as a number per module.
+    This is the ratchet the `python-never-reimplements-isolation` waiver names: every request
+    function on the BYPASSRLS session is one place Python may be re-deciding what RLS should."""
+    parameters = {}
+    for path, relative in _python_files(_APPS):
+        if "/tests/" in relative:
+            continue
+        count = sum(
+            1
+            for node in ast.walk(ast.parse(path.read_text()))
+            if isinstance(node, ast.arg)
+            and node.annotation is not None
+            and "AdminSession" in ast.unparse(node.annotation)
+        )
+        if count:
+            parameters[relative] = count
+
+    assert parameters == _BYPASSRLS_PARAMETERS
+
+
+def _component_layer_span(css: str) -> tuple[int, int]:
+    opening = css.index("{", css.index("@layer components"))
+    depth = 0
+    for position in range(opening, len(css)):
+        if css[position] == "{":
+            depth += 1
+        elif css[position] == "}":
+            depth -= 1
+            if depth == 0:
+                return opening, position
+    return opening, len(css)
+
+
+def test_the_classes_outside_the_component_layer_are_the_named_ones():
+    """The ratchet the `one-component-system` waiver names: a class defined in plain CSS outside
+    `@layer components` beats every layered component in the cascade, whatever the specificity —
+    the inversion behind `paper border-2` computing 1px. The set may only shrink."""
+    css = (_ROOT / "static" / "css" / "input.css").read_text()
+    start, end = _component_layer_span(css)
+
+    outside = {
+        selector.group(1)
+        for selector in re.finditer(r"^\s*\.([a-zA-Z][\w-]*)", css, flags=re.MULTILINE)
+        if not start <= selector.start() <= end
+    }
+
+    assert outside == _OUTSIDE_THE_COMPONENT_LAYER
 
 
 def test_nothing_reruns_a_failing_test():

@@ -12,6 +12,10 @@ while serving both. That is exactly what makes the number worth freezing: the ge
 consumer can reach — which is the half of "two faces" that has a mechanical meaning.
 """
 
+import re
+
+from starlette.routing import Match
+
 import apps.main
 from apps.shared.integration import slugs
 
@@ -100,6 +104,50 @@ def test_no_org_handle_can_shadow_a_fixed_route():
     }
 
     assert unclaimed == set()
+
+
+def test_every_fixed_route_wins_its_first_match():
+    """Registration order is the whole mechanism behind "catch-alls sort last", so this walks it
+    the way Starlette will: for every fixed route, the first mounted route that matches must be
+    that route itself — not `/{slug}` or `/{org_handle}` arriving too early in the table. The
+    reserved-slug test above guards handles; this one guards the ordering."""
+    swallowed = set()
+    for path, operations in _paths().items():
+        if path.split("/")[1].startswith("{"):
+            continue
+        concrete = re.sub(r"\{[^}]+\}", "probe", path)
+        for method in operations:
+            scope = {
+                "type": "http",
+                "method": method.upper(),
+                "path": concrete,
+                "root_path": "",
+                "headers": [],
+            }
+            first_full = next(
+                (
+                    route
+                    for route in apps.main.app.router.routes
+                    if route.matches(scope)[0] is Match.FULL
+                ),
+                None,
+            )
+            if first_full is None or path not in _served_paths(first_full):
+                swallowed.add(f"{method.upper()} {path} → {_served_paths(first_full)}")
+
+    assert swallowed == set()
+
+
+def _served_paths(route) -> set[str]:
+    """The declared paths behind one top-level router entry. FastAPI defers `include_router`
+    into a lazy entry carrying the included router and its prefix — reading it is what lets the
+    walk say *which* app's routes the first match belongs to."""
+    if route is None:
+        return set()
+    context = getattr(route, "include_context", None)
+    if context is None:
+        return {getattr(route, "path", "")}
+    return {context.prefix + str(inner.path) for inner in context.included_router.routes}
 
 
 def test_the_schema_describes_both_faces_of_every_page_but_the_named_ones():

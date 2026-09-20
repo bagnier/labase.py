@@ -39,6 +39,11 @@ class Contribs:
     def provide(self, query_type: type[Q], provider: Callable[[Q], Awaitable[object]]) -> None:
         self._providers[query_type].append(provider)
 
+    def providers(self, query_type: type) -> tuple[Callable[[Any], Awaitable[object]], ...]:
+        """The providers registered for a query type — read-only, so declaration-level tests can
+        ask the mounted registry instead of grepping source."""
+        return tuple(self._providers.get(query_type, ()))
+
     async def collect(self, query: object) -> list[Any]:
         """Run every provider for this query type; log and skip failing providers.
 

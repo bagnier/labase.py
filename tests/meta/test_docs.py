@@ -10,59 +10,97 @@ proves the row. Asserting the labels *are* the map's keys is what makes a new ro
 adding a tool to the table without saying where it lives fails here.
 """
 
+import json
 import re
+import tomllib
 from pathlib import Path
 
 from tests.meta.readme import diagram_containing, normalised, text
 
 _ROOT = Path(__file__).resolve().parents[2]
 
-# Where each stack row's choice can be found. The Choice column is prose ("SQLAlchemy 2.x
-# (async)"), so the row is proved by the token a machine can look up rather than by the cell.
+# Each stack row: what its Choice cell must still say, and what proves it — a real dependency
+# entry (pyproject / package.json), a file the tool owns, or the pinned Python version. Proving
+# from structured entries is what stops a comment or the project description answering for a
+# dependency that was dropped.
 _STACK = {
-    "**Web framework**": "fastapi",
-    "**HTML rendering**": "jinja2",
-    "**Styling**": "daisyui",
-    "**ORM**": "sqlalchemy",
-    "**Auth + Storage**": "supabase",
-    "**Database**": "supabase",
-    "**Migrations**": "supabase",
-    "**ASGI server**": "hypercorn",
-    "**Dependency management**": "uv.lock",
-    "**Python**": "3.14",
+    "**Web framework**": ("FastAPI", "dependency", "fastapi"),
+    "**HTML rendering**": ("Jinja2", "dependency", "jinja2"),
+    "**Styling**": ("daisyUI", "dependency", "daisyui"),
+    "**ORM**": ("SQLAlchemy", "dependency", "sqlalchemy"),
+    "**Auth + Storage**": ("supabase-py", "dependency", "supabase"),
+    "**Database**": ("Supabase", "file", "supabase/config.toml"),
+    "**Migrations**": ("Supabase CLI", "file", "supabase/migrations"),
+    "**ASGI server**": ("Hypercorn", "dependency", "hypercorn"),
+    "**Dependency management**": ("uv", "file", "uv.lock"),
+    "**Python**": ("3.14", "requires-python", "3.14"),
 }
 
-# Same shape for the quality tools. Several are not Python packages — Biome and gplint ride npm,
-# droast is a GitHub Action — so what is checked is that the repo still configures them somewhere,
-# which is the claim the table actually makes.
+# Each quality tool: its configuration, and its invocation in a gate someone runs (the Makefile,
+# the CI workflow, an npm script, the pre-commit hooks). A version pin alone proves an install,
+# not a gate — which is how a tool could leave the build while its row stayed green.
 _TOOLS = {
-    "**ruff**": "ruff",
-    "**Biome**": "biome",
-    "**djlint**": "djlint",
-    "**sqlfluff**": "sqlfluff",
-    "**gplint**": "gplint",
-    "**yamllint**": "yamllint",
-    "**validate-pyproject**": "validate-pyproject",
-    "**zizmor**": "zizmor",
-    "**droast**": "droast",
-    "**ty**": "ty",
-    "**pyright**": "pyright",
-    "**import-linter**": "import-linter",
-    "**pip-audit**": "pip-audit",
-    "**pre-commit**": "pre-commit",
-    "**pytest + pytest-asyncio**": "pytest-asyncio",
-    "**pytest-bdd + Playwright**": "pytest-bdd",
-    "**coverage**": "coverage",
+    "**ruff**": (("pyproject", "[tool.ruff"), "ruff check"),
+    "**Biome**": (("file", "biome.json"), "biome"),
+    "**djlint**": (("pyproject", "[tool.djlint"), "djlint apps"),
+    "**sqlfluff**": (("file", "scripts/.sqlfluff"), "sqlfluff lint"),
+    "**gplint**": (("file", "scripts/.gplintrc"), "gplint"),
+    "**yamllint**": (("file", "scripts/.yamllint"), "yamllint"),
+    "**validate-pyproject**": (("dependency", "validate-pyproject"), "validate-pyproject"),
+    "**zizmor**": (("file", ".github/zizmor.yml"), "zizmor"),
+    "**droast**": (("workflow", "droast"), "droast"),
+    "**ty**": (("dependency", "ty"), "ty check"),
+    "**pyright**": (("pyproject", "[tool.pyright"), "pyright"),
+    "**import-linter**": (("pyproject", "[tool.importlinter"), "lint-imports"),
+    "**pip-audit**": (("dependency", "pip-audit"), "pip-audit"),
+    "**pre-commit**": (("file", "scripts/.pre-commit-config.yaml"), "pre-commit install"),
+    "**pytest + pytest-asyncio**": (("pyproject", "[tool.pytest.ini_options"), "pytest"),
+    "**pytest-bdd + Playwright**": (("dependency", "pytest-bdd"), "--driver=browser"),
+    "**coverage**": (("dependency", "coverage"), "coverage run"),
 }
 
-# Read as one blob: a tool proves itself by being configured anywhere the build looks.
-_CONFIGURED_IN = (
-    "pyproject.toml",
-    "package.json",
-    "Makefile",
-    "uv.lock",
-    ".pre-commit-config.yaml",
-)
+
+def _dependency_names() -> set[str]:
+    """The names actually depended on — pyproject's dependencies and groups, npm's two maps."""
+    config = tomllib.loads((_ROOT / "pyproject.toml").read_text())
+    specs = list(config["project"]["dependencies"])
+    for group in config.get("dependency-groups", {}).values():
+        specs += [spec for spec in group if isinstance(spec, str)]
+    package = json.loads((_ROOT / "package.json").read_text())
+    return (
+        {re.split(r"[\s\[<>=~!]", spec)[0].lower() for spec in specs}
+        | {name.lower() for name in package.get("dependencies", {})}
+        | {name.lower() for name in package.get("devDependencies", {})}
+    )
+
+
+def _proved(kind: str, needle: str) -> bool:
+    if kind == "dependency":
+        return needle in _dependency_names()
+    if kind == "file":
+        return (_ROOT / needle).exists()
+    if kind == "pyproject":
+        return needle in (_ROOT / "pyproject.toml").read_text()
+    if kind == "workflow":
+        return needle in (_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    if kind == "requires-python":
+        config = tomllib.loads((_ROOT / "pyproject.toml").read_text())
+        return needle in config["project"]["requires-python"]
+    raise ValueError(kind)
+
+
+def _gates() -> str:
+    """Everywhere an invocation counts as being part of the gate."""
+    package = json.loads((_ROOT / "package.json").read_text())
+    return "\n".join(
+        [
+            (_ROOT / "Makefile").read_text(),
+            (_ROOT / ".github" / "workflows" / "ci.yml").read_text(),
+            (_ROOT / "scripts" / ".pre-commit-config.yaml").read_text(),
+            "\n".join(package.get("scripts", {}).values()),
+        ]
+    )
+
 
 # Drawn in the structure tree and produced by the build rather than committed: `static/` is
 # gitignored (`make install` rebuilds it) and `client/` is regenerated by `make client-gen`.
@@ -75,12 +113,6 @@ def _table_rows(header: str) -> dict[str, str]:
     rows = block[: block.index("\n\n")].splitlines()[2:]
     cells = [[cell.strip() for cell in row.strip().strip("|").split("|")] for row in rows]
     return {row[0]: row[1] for row in cells}
-
-
-def _configuration() -> str:
-    return "\n".join(
-        (_ROOT / name).read_text() for name in _CONFIGURED_IN if (_ROOT / name).exists()
-    ).lower()
 
 
 def _tree_paths() -> list[str]:
@@ -116,42 +148,91 @@ def test_every_path_the_structure_tree_draws_exists():
     assert missing == set()
 
 
-def test_every_documented_command_exists():
-    """The README prints twelve `make` targets. A target renamed in the Makefile leaves the README
-    telling a newcomer to run something that answers "No rule to make target"."""
-    documented = set(re.findall(r"^make ([a-z][\w-]*)", text(), re.MULTILINE))
-    declared = set(re.findall(r"^([a-z][\w-]*):", (_ROOT / "Makefile").read_text(), re.MULTILINE))
+def _make_targets() -> dict[str, tuple[list[str], list[str]]]:
+    """The Makefile as a graph: ``{target: (prerequisites, recipe lines)}``."""
+    targets: dict[str, tuple[list[str], list[str]]] = {}
+    current = None
+    for line in (_ROOT / "Makefile").read_text().splitlines():
+        if header := re.match(r"^([a-z][\w-]*):(.*)$", line):
+            current = header.group(1)
+            prerequisites = [
+                word
+                for word in header.group(2).split()
+                if re.fullmatch(r"[a-z][\w-]*", word) is not None
+            ]
+            targets[current] = (prerequisites, [])
+        elif line.startswith("\t") and current is not None:
+            targets[current][1].append(line.strip())
+    return targets
 
-    assert documented - declared == set()
+
+def _reachable(target: str, targets: dict[str, tuple[list[str], list[str]]]) -> set[str]:
+    """Every target a `make <target>` will run — prerequisites, plus sub-makes in the recipe."""
+    reached: set[str] = set()
+    frontier = [target]
+    while frontier:
+        name = frontier.pop()
+        if name in reached or name not in targets:
+            continue
+        reached.add(name)
+        prerequisites, recipe = targets[name]
+        frontier += prerequisites
+        frontier += [
+            word for line in recipe if "$(MAKE)" in line for word in line.split() if word in targets
+        ]
+    return reached
+
+
+def test_every_documented_command_exists():
+    """The README prints its `make` targets, most with their composition (`# js-build + fix +
+    lint + test`). A target renamed answers "No rule to make target"; a composition the target
+    no longer reaches — a phase dropped, a recipe gutted to an echo — fails here instead of in a
+    newcomer's terminal. Only comments whose phases all name make targets are compositions."""
+    targets = _make_targets()
+    documented = re.findall(r"^make ([a-z][\w-]*)[^#\n]*(?:#\s*([^\n]*))?$", text(), re.MULTILINE)
+
+    missing = {name for name, _ in documented if name not in targets}
+    unreached = set()
+    for name, comment in documented:
+        phases = [phase.strip() for phase in comment.split(",")[0].split("(")[0].split("+")]
+        # A composition names make targets ("js-build + fix + lint + test"); a comment listing
+        # the tools a recipe runs ("ruff + biome + …") is prose, and stays one.
+        if name in targets and phases and all(phase in targets for phase in phases):
+            unreached |= {
+                f"{name} says it runs {phase}"
+                for phase in phases
+                if phase not in _reachable(name, targets)
+            }
+
+    assert (missing, unreached) == (set(), set())
 
 
 def test_the_stack_table_names_what_is_installed():
-    """Ten rows, each proved by a token the build files still contain."""
-    configuration = _configuration()
+    """Ten rows, each held at both ends: the Choice cell still says what the row promises, and a
+    structured build entry — not a stray word in a comment — still backs it."""
     rows = _table_rows("| Layer")
 
-    assert (
-        set(rows),
-        {label for label, token in _STACK.items() if token not in configuration},
-    ) == (
-        set(_STACK),
-        set(),
-    )
+    unsaid = {
+        label for label, (choice, _, _) in _STACK.items() if choice not in rows.get(label, "")
+    }
+    unproved = {label for label, (_, kind, needle) in _STACK.items() if not _proved(kind, needle)}
+
+    assert (set(rows), unsaid, unproved) == (set(_STACK), set(), set())
 
 
 def test_every_quality_tool_in_the_table_is_still_configured():
-    """Eighteen tools advertised as the gate. One removed and left in the table is a promise the
-    repo stopped keeping — and the table is what a reader trusts instead of running `make lint`."""
-    configuration = _configuration()
+    """Eighteen tools advertised as the gate — so each row is held by its configuration *and* by
+    an invocation in something someone runs (Makefile, CI, an npm script, the pre-commit hooks).
+    A version pin alone proves an install, which is how a tool once left the gate unnoticed."""
     rows = _table_rows("| Tool")
+    gates = _gates()
 
-    assert (
-        set(rows),
-        {label for label, token in _TOOLS.items() if token not in configuration},
-    ) == (
-        set(_TOOLS),
-        set(),
-    )
+    unconfigured = {
+        label for label, ((kind, needle), _) in _TOOLS.items() if not _proved(kind, needle)
+    }
+    ungated = {label for label, (_, invocation) in _TOOLS.items() if invocation not in gates}
+
+    assert (set(rows), unconfigured, ungated) == (set(_TOOLS), set(), set())
 
 
 def test_the_test_environment_file_is_committed_and_local():
