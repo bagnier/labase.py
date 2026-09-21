@@ -13,9 +13,7 @@ worktrees/
 
 # Tools
 .cache/
-.firehose/
 .DS_Store
-.playwright-mcp/
 dist/
 htmlcov/
 talisman_report/

@@ -42,7 +42,7 @@ class TechnicalSettings(BaseSettings):
     # ``log_lines``, and only a failing write falls back to per-day JSON files here — a database
     # outage is exactly when an operator still wants the log. Production points this at a real
     # log volume. The env var keeps its FIREHOSE_ name, which a deploy already sets.
-    firehose_dir: str = ".firehose"
+    firehose_dir: str = ".cache/firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
     # Behind a reverse proxy/LB, the socket peer is the proxy, so the real client sits in

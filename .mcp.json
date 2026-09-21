@@ -24,7 +24,9 @@
         "--console-level",
         "error",
         "--viewport-size",
-        "1440x900"
+        "1440x900",
+        "--output-dir",
+        ".cache/playwright-mcp"
       ]
     }
   }
