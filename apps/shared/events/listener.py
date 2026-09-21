@@ -11,8 +11,10 @@ producer no longer does — so it never knows its consumers nor waits for them:
   ``dispatched_at`` — one transaction, so there is no sequence-visibility gap (README: background
   work).
 - **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
-  each tick reads facts newer than this process's in-memory cursor whose kind has a ``spread``
-  subscriber and runs those handlers in-process (idempotent, so a replay is harmless).
+  each tick reads facts above this process's in-memory cursor whose kind has a ``spread``
+  subscriber and runs those handlers in-process (idempotent, so a replay is harmless). That cursor
+  trails a settle window, because a key is minted at INSERT and a late commit would otherwise land
+  under it unseen — the window is the only bound on how far under.
 - **Reconstruct from the record.** Both paths rebuild the typed event from the record's ``kind``
   via the catalog's ``class_for``; the async dedup key is the record id.
 """
@@ -40,6 +42,13 @@ log = structlog.get_logger(__name__)
 
 NOTIFY_CHANNEL = "business_event"
 
+# How long a fact stays replayable before the spread cursor is allowed past it. A key is minted at
+# INSERT, so a fact can surface below a cursor that already passed it (see ``scan_spread``); the
+# only thing bounding how far below is how long its transaction stayed open. This is that bound,
+# stated — well past any request or queue task, and paid for only by re-reading an indexed range
+# of facts nobody is producing most of the time.
+SPREAD_SETTLE_SECONDS = 60.0
+
 
 class UnroutableFact(Exception):
     """A persisted fact the listener cannot route: its ``kind`` maps to no registered event class,
@@ -66,12 +75,15 @@ class EventListener:
         batch_size: int = 50,
         session_factory: Callable[[], AsyncSession] | None = None,
         wiring: EventWiring | None = None,
+        spread_settle_seconds: float = SPREAD_SETTLE_SECONDS,
     ) -> None:
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory
         self._wiring = wiring if wiring is not None else process_wiring
-        self._spread_cursor: uuid.UUID | None = None  # per-instance high-water (uuid7, ordered)
+        self._spread_settle = spread_settle_seconds
+        self._spread_cursor: uuid.UUID | None = None  # per-instance high-water, settled facts only
+        self._spread_applied: set[uuid.UUID] = set()  # applied above it, still inside the window
         self._task: asyncio.Task | None = None
         self._listen_conn: Any | None = None
         self._wake = asyncio.Event()
@@ -107,13 +119,26 @@ class EventListener:
         return len(claimed)
 
     async def _read_spread(self, repo: EventRepository) -> list[BusinessEventRecord]:
-        """Facts newer than the spread cursor whose kind has a ``spread`` subscriber."""
+        """Facts above the spread cursor whose kind has a ``spread`` subscriber, minus the ones
+        this process already applied while they sat inside the settle window.
+
+        The cursor trails the window on purpose, so a fact that commits late still surfaces above
+        it (see ``scan_spread``). What that costs is the same fact offered on every tick until it
+        settles, and this set is what keeps the handler from being run again for it — the reason
+        a late commit is caught without a config reload firing sixty times over.
+        """
         kinds = self._wiring.spread_kinds()
         if not kinds:
             return []
         # Nil-uuid sentinel on first pass: uuid7 is version-tagged, so it always sorts above nil.
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
-        return await repo.scan_spread(cursor, kinds)
+        found, settled = await repo.scan_spread(cursor, kinds, self._spread_settle)
+        fresh = [record for record in found if record.id not in self._spread_applied]
+        self._spread_cursor = settled
+        # Only what the cursor has not passed: below it nothing is ever scanned again, so
+        # remembering it would grow this set for the life of the process.
+        self._spread_applied = {record.id for record in found if record.id > settled}
+        return fresh
 
     async def _apply_spread(self, record: BusinessEventRecord) -> None:
         """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
@@ -126,8 +151,9 @@ class EventListener:
         the fact was written, a hand-inserted payload). Not a loop, hence no transition rule: these
         run when an admin edits a setting, not once a second.
 
-        The cursor advances either way: it is a high-water mark, so leaving it on a record we can
-        never process would replay that same fact forever and freeze propagation for good."""
+        The record counts as applied either way, refused or unrebuildable: ``_read_spread`` books
+        it on the way out, so a fact this process can never make sense of is passed over once
+        rather than replayed until the window closes and then forgotten anyway."""
         event = self._reconstruct(record)
         if event is not None:
             for handler in self._wiring.spread_handlers_for(event):
@@ -135,7 +161,6 @@ class EventListener:
                     await handler(event)
                 except Exception as exc:
                     log.exception("listener.spread_handler_failed", exc_info=exc, kind=record.kind)
-        self._spread_cursor = record.id
 
     @staticmethod
     def _reconstruct(record: BusinessEventRecord) -> BusinessEvent | None:

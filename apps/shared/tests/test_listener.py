@@ -16,7 +16,7 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.wiring import EventWiring, wiring
 from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker, _handlers
-from apps.shared.tests.journal_seed import seed_fact
+from apps.shared.tests.journal_seed import seed_fact, seed_fact_on
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -282,6 +282,40 @@ async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
     assert len(seen) == 1
     assert isinstance(seen[0], _SpreadEvent)
     assert seen[0].value == "on"
+
+
+def _spread_record(value: str) -> BusinessEventRecord:
+    return BusinessEventRecord(app_name="test_listener", verb="spread", payload={"value": value})
+
+
+@pytest.mark.asyncio
+async def test_spread_reaches_a_fact_that_commits_after_a_later_one(iso):
+    """Two facts whose commit order reverses their minting order — the everyday shape of a slow
+    transaction next to a quick one.
+
+    ``early`` is minted first, so it holds the lower key (uuid7 is time-ordered), but it is still
+    in flight when ``late`` commits. A tick then sees ``late`` alone and the spread cursor moves
+    to its key; ``early`` surfaces on the commit that follows, *below* that cursor. Spread has
+    neither claim nor ledger to catch what a key comparison skips, so a reload lost this way is
+    lost for good: the instance runs the settings the console changed two changes ago.
+    """
+    own = EventWiring()
+    seen: list[str | None] = []
+
+    async def apply(event: _SpreadEvent) -> None:
+        seen.append(event.value)
+
+    EventBus(own).spread(_SpreadEvent, apply)
+    listener = EventListener(0, wiring=own)
+    async with db.admin_session_factory()() as in_flight:
+        await seed_fact_on(in_flight, _spread_record("early"))
+        await seed_fact(_spread_record("late"))
+        await listener.tick()
+        await in_flight.commit()
+
+    await listener.tick()
+
+    assert seen == ["late", "early"]
 
 
 @pytest.mark.asyncio

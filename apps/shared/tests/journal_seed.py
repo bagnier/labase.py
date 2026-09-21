@@ -14,25 +14,33 @@ The record *is* the argument: :class:`BusinessEventRecord` already names every c
 seeder never re-lists them.
 """
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository, _append_record
 from apps.shared.persistence.database import admin_session_factory
+
+
+async def seed_fact_on(session: AsyncSession, record: BusinessEventRecord) -> None:
+    """Append ``record`` on ``session``'s transaction, leaving the commit to the caller — for the
+    arrangement that needs a fact *in flight*: minted, holding its key, not yet visible elsewhere.
+
+    Fills what the real write path fills before writing: the readable names pinned as of now, and
+    the ``icon`` column default, which SQLAlchemy applies at flush and nothing here ever flushes.
+    The record is a throwaway carrier the caller built for this one write (the same thing
+    ``event_to_record`` returns), so it is completed in place."""
+    repo = EventRepository(session)
+    record.user_name, record.org_name = await repo.pinned_names(record.user_id, record.org_id)
+    record.icon = record.icon or "circle"
+    await _append_record(session, record)
 
 
 async def seed_fact(record: BusinessEventRecord) -> None:
     """Append ``record`` to the journal on its own admin session, and commit — the arrangement has
     to outlive the request under test, and be visible to a listener on another connection.
 
-    Fills what the real write path fills before writing: the readable names pinned as of now, and
-    the ``icon`` column default, which SQLAlchemy applies at flush and nothing here ever flushes.
-    The record is a throwaway carrier the caller built for this one write (the same thing
-    ``event_to_record`` returns), so it is completed in place.
-
     A failed write raises: seeding is arranging, and an arrangement that silently did nothing
     surfaces later as an assertion about a page, pointing anywhere but here."""
     async with admin_session_factory()() as session:
-        repo = EventRepository(session)
-        record.user_name, record.org_name = await repo.pinned_names(record.user_id, record.org_id)
-        record.icon = record.icon or "circle"
-        await _append_record(session, record)
+        await seed_fact_on(session, record)
         await session.commit()

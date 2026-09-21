@@ -15,6 +15,7 @@ import json
 import uuid
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime, timedelta
+from itertools import takewhile
 from typing import Any, ClassVar
 
 import structlog
@@ -252,15 +253,39 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
             {"ids": ids},
         )
 
-    async def scan_spread(self, cursor: uuid.UUID, kinds: list[str]) -> list[BusinessEventRecord]:
-        """No lock, no dispatch mark — a ``spread`` handler runs on *every* instance, each replaying
-        off its own cursor."""
-        found = await self.session.scalars(
-            select(BusinessEventRecord)
-            .where(BusinessEventRecord.id > cursor, BusinessEventRecord.kind.in_(kinds))
-            .order_by(BusinessEventRecord.id)
+    async def scan_spread(
+        self, cursor: uuid.UUID, kinds: list[str], settle_seconds: float
+    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
+        """The ``spread`` facts above ``cursor``, and the cursor its reader may safely take next.
+
+        No lock and no dispatch mark — a ``spread`` handler runs on *every* instance, each
+        replaying off its own cursor. What that cursor may not do is outrun the commits. A key is
+        minted at INSERT, not at commit, so a slow transaction commits *after* a quick one that
+        started later: the slow fact surfaces holding the lower key, below a cursor that has
+        already passed it, and ``id > cursor`` never offers it again. Neither claim nor ledger
+        stands behind ``spread`` to catch what the comparison skipped.
+
+        Time is what bounds it, and nothing else does: a fact still invisible belongs to a
+        transaction still open, so once ``settle_seconds`` have passed no unseen key can be older
+        than that. The cursor therefore stops at the last fact that old, and everything above it
+        comes back on every tick until it settles — the reader skips what it already applied,
+        which is why a replay costs nothing here.
+        """
+        settled_before = await self.session.scalar(
+            sql_text("SELECT now() - make_interval(secs => :settle)"),
+            {"settle": settle_seconds},
         )
-        return list(found)
+        found = list(
+            await self.session.scalars(
+                select(BusinessEventRecord)
+                .where(BusinessEventRecord.id > cursor, BusinessEventRecord.kind.in_(kinds))
+                .order_by(BusinessEventRecord.id)
+            )
+        )
+        # The contiguous settled prefix, never merely the settled rows: a cursor jumped past an
+        # unsettled key would skip whatever is still to surface beneath it.
+        settled = list(takewhile(lambda record: record.created_at < settled_before, found))
+        return found, settled[-1].id if settled else cursor
 
     async def already_consumed(self, topic: str, event_id: uuid.UUID | str) -> bool:
         """Insert-or-nothing against the ``consumed_events`` ledger — the idempotency substrate for
