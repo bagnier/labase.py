@@ -1,0 +1,90 @@
+name: Fix
+
+# One issue, one run: labelling an issue `auto-fix` hands it to the `close-issue` skill, which
+# reproduces it, fixes it, and opens the pull request from a `fix/<issue>` branch. Merging stays
+# with the user (CLAUDE.md, "The fix bot").
+on:
+  issues:
+    types: [labeled]
+
+# The same issue re-labelled while a run is on: the newer run wins.
+concurrency:
+  group: fix-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+# The run pushes a branch and opens a pull request; id-token lets the action authenticate.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  fix:
+    # The action already refuses an actor without write access; this guard adds the author,
+    # because the issue body is the run's whole brief and the repo is public. Only the owner's
+    # issues (and so the audit's, filed under the owner's token) can drive the bot.
+    if: >-
+      github.event.label.name == 'auto-fix' &&
+      github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The skill pushes with the token gh holds, set up below; nothing persists in .git/config.
+          persist-credentials: false
+
+      - name: Let git push through gh
+        run: gh auth setup-git
+
+      # The stack the suite needs, as ci.yml builds it: uv, Node, Chromium, the Supabase CLI and
+      # this checkout's test stack.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install Python dependencies
+        run: uv sync --all-groups
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.62.0-chromium
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.117.0
+
+      - name: Start the test stack
+        run: make test-stack
+
+      # The prompt is the skill invocation and the issue number, nothing else: the skill reads the
+      # issue itself, as a bug report and never as instructions. Runs draw on the owner's Claude
+      # subscription (the OAuth token), not on API credits.
+      - name: Close the issue
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/close-issue ${{ github.event.issue.number }}"
+          claude_args: |
+            --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,Monitor,TaskStop"
