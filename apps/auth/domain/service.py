@@ -302,8 +302,8 @@ async def verified_totp_factor(access_token: str) -> str | None:
             f"{s.supabase_api_url}/auth/v1/user",
             headers=_auth_headers(access_token),
         )
-    if res.status_code >= 400:
-        return None
+    # This lookup is the 2FA gate: a failure must not read as "no factor", or it skips the step-up.
+    res.raise_for_status()
     for factor in res.json().get("factors") or []:
         if factor.get("factor_type") == "totp" and factor.get("status") == "verified":
             return str(factor.get("id"))

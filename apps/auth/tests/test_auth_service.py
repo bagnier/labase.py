@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4, uuid7
 
+import httpx
 import pytest
 from supabase_auth.errors import AuthApiError
 
@@ -11,6 +12,7 @@ from apps.auth.domain.service import (
     logout,
     refresh_session,
     register,
+    verified_totp_factor,
 )
 from apps.auth.tests.given_helpers import delete_user, find_users
 from apps.shared.events import BusinessEvent
@@ -141,6 +143,20 @@ async def test_a_sign_out_that_never_reached_gotrue_is_a_bug():
         await logout("some-token")
 
     assert [type(captured.exc) for captured in capture._QUEUE] == [OSError]
+
+
+@pytest.mark.asyncio
+async def test_a_factor_lookup_gotrue_fails_is_not_a_missing_factor():
+    """The lookup is the 2FA gate: reading a GoTrue 500 as "no factor" skipped the step-up."""
+    failed = httpx.Response(500, request=httpx.Request("GET", "http://gotrue/auth/v1/user"))
+
+    with patch("apps.auth.domain.service.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.get.return_value = failed
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        with pytest.raises(httpx.HTTPStatusError):
+            await verified_totp_factor("some-token")
 
 
 @pytest.mark.asyncio

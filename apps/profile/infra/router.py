@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
+import structlog
 from fastapi import (
     APIRouter,
     Depends,
@@ -83,10 +84,13 @@ from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.integration.slugs import validate_handle
+from apps.shared.logs.dependency import log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.live import SettingsView, get_settings
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -253,7 +257,14 @@ async def _profile_context(
                 task.cancel()
         raise
 
-    twofa_active = bool(twofa_task is not None and await twofa_task)
+    twofa_active = False
+    if twofa_task is not None:
+        try:
+            twofa_active = bool(await twofa_task)
+        except Exception as exc:
+            # Unknown is not "off": the section would claim 2FA is disabled. Say nothing instead.
+            log_dependency_failure(log, "profile.twofa_lookup_failed", exc)
+            two_factor_enabled = False
     passkeys: list[dict] = []
     if passkeys_task is not None:
         try:
