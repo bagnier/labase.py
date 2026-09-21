@@ -49,7 +49,9 @@ minutes are free; private, one issue a night is roughly the free plan's monthly 
 
 ## Known edges
 
-- A pull request opened with the workflow's own `GITHUB_TOKEN` does not trigger the
-  `pull_request` CI. If the bot's pull requests show no checks, swap `github.token` in
-  `fix.yml` for a GitHub App or fine-grained PAT token.
+- The bot pushes and opens its pull request with `FIX_BOT_TOKEN`, the owner's fine-grained
+  token (this repository only; contents, pull requests and issues read and write), because a
+  pull request opened with the workflow's own `GITHUB_TOKEN` fires no `pull_request` CI.
+  The pull request is therefore the owner's, and `main`'s required review comes from
+  someone else, or from the owner's admin merge.
 - Nothing records the token cost of a run; the job log is the only trace.

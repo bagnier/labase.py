@@ -30,8 +30,10 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # The owner's fine-grained token, not the job's own: a pull request opened with GITHUB_TOKEN
+    # fires no workflow, so the bot's branch would get no CI. The push and the PR are the owner's.
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
