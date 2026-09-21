@@ -21,25 +21,43 @@ alter default privileges revoke execute on functions from public;
 -- `business_events.id`, the issue detail pages page on `issue_occurrences.id`). Security tokens
 -- keep `gen_random_uuid()` on purpose (unguessable, no embedded timestamp).
 --
--- Pure core SQL — no pgcrypto: a random uuid supplies the entropy, its first 48 bits overlaid with
--- the current epoch-millisecond, and the version (0111) / variant (10) nibbles set in place. Ordered
--- to the millisecond, which matches Python 3.14's stdlib `uuid.uuid7()` used on the ORM write path.
+-- No pgcrypto: `gen_random_uuid()` is core on PG 17, and it supplies every random bit needed here.
+-- Time-ordered *within* a millisecond as well as across one, because the 12 bits RFC 9562 calls
+-- `rand_a` carry the fraction of the millisecond rather than noise — the RFC's third method, and
+-- what PostgreSQL 18's native `uuidv7()` puts there. Left random, those bits decide the order of
+-- every pair of keys minted inside the same millisecond, which is a coin toss some five hundred
+-- times per millisecond on this hardware; `business_events.id` is read as a cursor, so that toss
+-- is a fact the listener steps over. Python 3.14's `uuid.uuid7()`, used on the ORM write path,
+-- reaches the same ordering by a different route (a 42-bit counter).
 create or replace function public.uuidv7()
-returns uuid language sql volatile as $$
-  select encode(
+returns uuid language plpgsql volatile as $$
+declare
+  -- Read once: the millisecond and the fraction below it have to describe the same instant, or a
+  -- key carries one millisecond's stamp beside the next one's fraction — an inversion per boundary.
+  us     bigint := (extract(epoch from clock_timestamp()) * 1000000)::bigint;
+  -- One random uuid for the whole key: the 62 bits of `rand_b`, plus the 6 the variant leaves free.
+  canvas bytea  := uuid_send(gen_random_uuid());
+  -- Microseconds within the millisecond, rescaled over the 4096 steps `rand_a` can hold.
+  sub    int    := (us % 1000) * 4096 / 1000;
+begin
+  return encode(
     set_byte(
       set_byte(
-        overlay(
-          uuid_send(gen_random_uuid())
-          placing substring(int8send((extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
-          from 1 for 6
+        set_byte(
+          -- bytes 0-5: the 48-bit millisecond, big-endian — the low 6 of an 8-byte bigint.
+          overlay(canvas placing substring(int8send(us / 1000) from 3) from 1 for 6),
+          -- byte 6: version 7 in the high nibble (0x70), `rand_a`'s top 4 bits under it.
+          6, 112 + (sub >> 8)
         ),
-        6, (b'0111' || get_byte(uuid_send(gen_random_uuid()), 6)::bit(4))::bit(8)::int
+        -- byte 7: `rand_a`'s low 8 bits.
+        7, sub & 255
       ),
-      8, (b'10' || get_byte(uuid_send(gen_random_uuid()), 8)::bit(6))::bit(8)::int
+      -- byte 8: variant 10 in the top 2 bits, the canvas's own randomness in the remaining 6.
+      8, 128 + (get_byte(canvas, 8) & 63)
     ),
     'hex'
-  )::uuid
+  )::uuid;
+end;
 $$;
 
 grant execute on function public.uuidv7() to authenticated, anon, service_role;
