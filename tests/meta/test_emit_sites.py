@@ -106,9 +106,43 @@ def _writer_callers() -> dict[str, set[str]]:
     return dict(callers)
 
 
+def _touches(stmt: ast.stmt, attr: str) -> bool:
+    """Whether ``stmt`` — not descending into a def nested in it — calls ``<expr>.<attr>(...)``."""
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == attr
+        for node in _own_nodes([stmt])
+    )
+
+
+def _commit_before_emit_sites() -> set[str]:
+    """Route functions where a ``.commit()`` statement precedes a ``.emit(`` statement — the fact
+    would then ride a second, later transaction of its own, so a raise between the two keeps the
+    mutation and loses the fact: exactly backwards from the README's own
+    ``the fact commits iff the mutation does``."""
+    sites: set[str] = set()
+    for path in sorted(_APPS.rglob("infra/router.py")):
+        relative = str(path.relative_to(_ROOT))
+        for name, body in _functions(ast.parse(path.read_text())):
+            seen_commit = False
+            for stmt in body:
+                if seen_commit and _touches(stmt, "emit"):
+                    sites.add(f"{relative}::{name}")
+                if _touches(stmt, "commit"):
+                    seen_commit = True
+    return sites
+
+
 def test_the_only_way_to_record_a_fact_is_on_a_transaction():
     """A second entry point would have to weaken durability to be worth adding at all."""
     assert _emit_variants() == {"emit"}
+
+
+def test_no_route_commits_before_emitting_its_fact():
+    """The other half of the same README claim: emitting after the mutation's own commit puts the
+    fact on a second transaction, so a raise in between keeps the row and loses the fact."""
+    assert _commit_before_emit_sites() == set()
 
 
 def test_every_link_of_the_journal_writer_has_its_one_caller():

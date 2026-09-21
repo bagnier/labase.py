@@ -200,16 +200,14 @@ async def create_organization(
         )
 
     org = await repo.create_with_owner(name, user_id)
-    # Commit before emitting: OrganizationCreated triggers the welcome seeders, each reading the
-    # org back on its own admin session — they must see a committed row (session has
-    # expire_on_commit=False, so `org` stays usable for the response below).
-    await repo.session.commit()
     await events.emit(
         OrganizationCreated(
             user_id=current_user.id, org_id=org.id, entity_id=org.id, entity_name=name
         ),
         repo.session,
     )
+    # session has expire_on_commit=False, so `org` stays usable for the response below.
+    await repo.session.commit()
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
     return mutation_response(
         request,
