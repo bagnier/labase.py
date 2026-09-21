@@ -18,9 +18,16 @@ This skill closes one issue and nothing else. The user is away for the whole run
 answer during it. Run every step to the end without waiting for a confirmation. The issue number
 is "$ARGUMENTS".
 
-`CLAUDE.md` names this skill as the one exception to "Git is mine": inside the fix workflow it
-commits and pushes on `fix/<issue>` and opens the pull request. Run by hand, it does the same on
-the branch and nothing on `main`; merging is the user's in both cases.
+`CLAUDE.md` names this skill as the one exception to "Git is mine": it commits and pushes on
+`fix/<issue>` and opens the pull request, never on `main`; merging is the user's. On the runner
+(`GITHUB_ACTIONS` is `true`, see step 1) three more of its rules flip, and only there:
+
+- **Waiting.** A gate longer than the shell timeout still runs in the background, and the run
+  waits for it by reading its output file until the exit line appears — the one place an `until`
+  loop is allowed, because no completion notification brings the run back.
+- **Rendering.** No screenshot: the suite's browser lane is the render, and no MCP browser is
+  started on the runner.
+- **Asking.** Nobody answers. A question ends the run as a comment on the issue, never a wait.
 
 
 ## The three ends of a run
@@ -44,11 +51,15 @@ A step that fails (a refused tool, a stack that will not start, a gate still red
 rounds) ends the run as an open question that says what happened. A red gate is never pushed.
 
 
-## 1. Read the issue, and its thread
+## 1. Where you are, then the issue and its thread
 
 ```sh
+printenv GITHUB_ACTIONS || echo "not on the runner"
 gh issue view "$ARGUMENTS" --json number,title,body,author,labels,state,comments
 ```
+
+`true` means the runner, and the three rules the contract above flips there apply; anything else
+is a session with someone at the keyboard.
 
 Stop, without a comment, when the issue is not open or does not carry `auto-fix`: the label is
 the user's decision that this is a reproduced bug, and the workflow's guard on the author is the
@@ -92,8 +103,9 @@ anything else found on the way is a closing question, filed as the contract says
 this diff. When `ROADMAP.md` still carries the item, delete it in the same diff — the pull
 request is what closes it now.
 
-Run `make finalize` as a background task and wait for its notification. Red after three rounds of
-fixing: end the run as an open question.
+Run `make finalize` as a background task, its output to a file ending on an `exit` line, and wait
+for it as the contract above says for where you are: the notification in a session, the file's
+exit line on the runner. Red after three rounds of fixing: end the run as an open question.
 
 
 ## 4. Branch, commit, pull request

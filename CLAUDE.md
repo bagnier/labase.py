@@ -45,14 +45,5 @@ Read `README.md` first.
 <!-- charm:no-autocommit -->
 ## Git is mine
 
-Without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command.
+In an interactive session, without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command. The one run with nobody at the keyboard, the `close-issue` skill on its `fix/<issue>` branch, has its own rules in the skill.
 <!-- /charm:no-autocommit -->
-
-## The fix bot
-
-The one named exception to "Git is mine": a run of the `close-issue` skill inside GitHub Actions
-(`.github/workflows/fix.yml`) commits and pushes on its own `fix/<issue>` branch and opens the
-pull request that closes the issue. Never on `main`, never a merge — merging is the user's.
-
-An issue carries the `auto-fix` label only when it is a reproduced bug: a scratch run, or a
-"to run" command that fails today. A hypothesis stays in `ROADMAP.md` until someone made it fall.
