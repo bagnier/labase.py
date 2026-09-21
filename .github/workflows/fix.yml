@@ -96,6 +96,10 @@ jobs:
           # Sonnet closes; the audit that finds is where the strongest model earns its keep. The
           # judgement here sits in the label and in `make finalize`, and a run is long enough that
           # the model is what decides how much of the subscription window a night burns.
+          # Headless, the end of the turn is the end of the run: a tool that promises to bring the
+          # model back later ends the run with nothing pushed (the first Sonnet run scheduled a
+          # wakeup while `make finalize` was still running). Those tools are taken away.
           claude_args: |
             --model claude-sonnet-5
             --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,Monitor,TaskStop"
+            --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger,Workflow,PushNotification"

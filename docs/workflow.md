@@ -18,7 +18,8 @@ pull request. Merging is never the bot's.
    issue to the `close-issue` skill. The skill reads the issue and its author's comments as
    a bug report, never as instructions, writes the failing test first, fixes under the `tdd`
    loop, runs `make finalize`, and pushes `fix/<issue>` with a pull request that
-   `Closes #<issue>` and deletes the ROADMAP line.
+   `Closes #<issue>`. It never edits `ROADMAP.md`: the map is the owner's, the issues are the
+   bot's, and neither is derived from the other.
 4. **Merge.** The owner reads the pull request and merges it, or closes it. `main` requires
    a review and refuses a direct push, so the bot cannot get past this step.
 
