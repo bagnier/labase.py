@@ -7,6 +7,9 @@ which is the admin escape hatch for lost authenticators.
 """
 
 from apps.auth.domain.service import (
+    AuthTokens as AuthTokens,
+)
+from apps.auth.domain.service import (
     TotpEnrollment as TotpEnrollment,
 )
 from apps.auth.domain.service import (
@@ -23,4 +26,7 @@ from apps.auth.domain.service import (
 )
 from apps.auth.domain.service import (
     verify_totp as verify_totp,
+)
+from apps.auth.infra.cookies import (
+    set_auth_cookies as set_auth_cookies,
 )

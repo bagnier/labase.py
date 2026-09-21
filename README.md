@@ -297,8 +297,9 @@ It is recorded at the moment the session is handed over, never before, so a sign
 then refuses never happened — and no token stands in for it: once an account enrolled an
 authenticator, `get_current_user` refuses its `aal1` tokens (the one a challenge relays, or a
 passkey's), save under an impersonation vouched for by a live admin token. `set_auth_cookies` is the single place a session is delivered, and a
-test over its call sites holds the rule: each one records a sign-in, except the two named
-*re-issues* (a token refresh, the restore of an admin's stashed session after an impersonation).
+test over its call sites holds the rule: each one records a sign-in, except the named
+*re-issues* (a token refresh, the restore of an admin's stashed session after an impersonation,
+the aal2 session a confirmed authenticator enrolment hands back).
 
 Technical error capture is *not* on the bus: an `ExceptionCaptured` (not a business fact) is fanned
 out to its trackers by the capture drain with log-and-skip isolation, directly between the

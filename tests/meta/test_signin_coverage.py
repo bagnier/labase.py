@@ -26,11 +26,14 @@ _COOKIE_WRITERS = {"set_cookie", "_set_ephemeral_cookie"}
 # Every ceremony allowed to deliver a session without recording a sign-in, with what it records
 # instead. The re-issues record nothing: a token refresh renews the session the caller already
 # holds, and stopping an impersonation restores the admin's own stashed one — which still says
-# so on the journal. Starting one delivers the *target's* session, and the disguise is the fact.
+# so on the journal. Confirming an authenticator raises the caller's session to aal2, recorded as
+# the enrolment. Starting an impersonation delivers the *target's* session: the disguise is the
+# fact.
 _DELIVERIES_THAT_ARE_NOT_SIGN_INS = {
     "apps/auth/infra/router.py::impersonate_endpoint": ["ImpersonationStarted"],
     "apps/auth/infra/router.py::stop_impersonation_endpoint": ["ImpersonationStopped"],
     "apps/auth/infra/security.py::get_current_user": [],
+    "apps/profile/infra/router.py::twofa_verify": ["TwoFactorEnabled"],
 }
 
 

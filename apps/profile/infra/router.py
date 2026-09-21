@@ -47,6 +47,7 @@ from apps.auth.contract.two_factor import (
     TotpEnrollment,
     TotpError,
     enroll_totp,
+    set_auth_cookies,
     totp_challenge,
     verified_totp_factor,
     verify_totp,
@@ -568,16 +569,21 @@ async def twofa_verify(
     factor_id, code = body.factor_id, body.code.strip()
     try:
         challenge_id = await totp_challenge(access_token, factor_id)
-        await verify_totp(access_token, factor_id, challenge_id, code)
+        tokens = await verify_totp(access_token, factor_id, challenge_id, code)
     except TotpError:
         error = "That code did not work. Try the next one from your app."
         return await _profile_error(
             request, session, current_user, repo, key="twofa_error", message=error
         )
     await events.emit(TwoFactorEnabled(user_id=current_user.id), session)
-    if wants_json(request):
-        return JSONResponse({"message": "Two-factor enabled."})
-    return _profile_redirect("twofa_enabled")
+    response: Response = (
+        JSONResponse({"message": "Two-factor enabled."})
+        if wants_json(request)
+        else _profile_redirect("twofa_enabled")
+    )
+    # Enrolled, the account's aal1 token is refused: keep the aal2 one the code just earned.
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+    return response
 
 
 @router.delete("/profile", response_model=Message)
