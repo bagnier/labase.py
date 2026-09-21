@@ -7,12 +7,11 @@ on:
   issues:
     types: [labeled]
 
-# The run pushes a branch and opens a pull request; id-token lets the action authenticate.
+# The run pushes a branch and opens a pull request.
 permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write
 
 jobs:
   fix:
@@ -39,11 +38,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The skill pushes with the token gh holds, set up below; nothing persists in .git/config.
+          # The action wires git to the owner's token itself, below; the job's own must not linger.
           persist-credentials: false
-
-      - name: Let git push through gh
-        run: gh auth setup-git
 
       # The stack the suite needs, as ci.yml builds it: uv, Node, Chromium, the Supabase CLI and
       # this checkout's test stack.
@@ -90,6 +86,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Without it the action swaps OIDC for an app token that dies after an hour, and hands
+          # that one to git and gh: a run past the hour commits and can no longer push. Given this,
+          # the push, the PR and the labels ride the owner's token for the whole run.
+          github_token: ${{ secrets.FIX_BOT_TOKEN }}
           prompt: "/close-issue ${{ github.event.issue.number }}"
           # The run is watched from the job log, so the agent's stream is written there, tool by
           # tool, and a report closes the job summary. Public repo: that log is public too.

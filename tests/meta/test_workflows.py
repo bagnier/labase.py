@@ -87,6 +87,19 @@ def test_each_headless_run_is_a_skill_with_the_runner_s_rules():
     assert prompts == {"fix.yml": "/close-issue", "review.yml": "/address-review"}
 
 
+def test_a_fix_run_past_the_hour_still_pushes_on_the_owner_s_token():
+    """Given no token, the action swaps OIDC for an app token that dies after an hour and hands it
+    to git and gh: the #11 run committed at 73 minutes, then every push and `gh` call got a 401.
+    Given the owner's token, it mints nothing, so the job has no OIDC permission to ask for."""
+    workflow = yaml.safe_load(_FIX.read_text())
+    step = next(s for s in _fix_job()["steps"] if str(s.get("uses", "")).startswith("anthropics/"))
+
+    assert (step["with"].get("github_token"), workflow["permissions"]) == (
+        "${{ secrets.FIX_BOT_TOKEN }}",
+        {"contents": "write", "pull-requests": "write", "issues": "write"},
+    )
+
+
 def test_a_run_that_dies_does_not_leave_the_issue_on_fixing():
     """`fixing` is set by the bot, so a run that ends before its own end — cancelled, timed out,
     or a turn that stopped — leaves the label with nobody behind it. A step that runs whatever
