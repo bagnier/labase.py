@@ -6,6 +6,7 @@ from tests.e2e.drivers.browser_base import BrowserBase
 class ApiKeysBrowserMixin(BrowserBase):
     _api_key_secret: str | None = None
     _api_key_org_handle: str = ""
+    _key_response: httpx.Response  # what the key got back from its last write
 
     def reset_session(self) -> None:
         self._api_key_secret = None
@@ -76,3 +77,23 @@ class ApiKeysBrowserMixin(BrowserBase):
         assert probe is not None
         slug = getattr(self, "active_org_handle", "")
         probe("GET", f"/{slug}/api-keys")
+
+    def assert_api_key_lists_only_its_org(self) -> None:
+        resp = self._sessionless_get("/organizations")
+        assert resp.status_code == 200, f"list: {resp.status_code} {resp.text}"
+        assert [org["handle"] for org in resp.json()] == [self._api_key_org_handle]
+
+    def create_org_with_api_key(self, name: str) -> None:
+        assert self._api_key_secret is not None, "no API key created"
+        self._key_response = httpx.post(
+            f"{self.base_url}/organizations",
+            json={"name": name},
+            headers={
+                "Authorization": f"Bearer {self._api_key_secret}",
+                "accept": "application/json",
+            },
+        )
+
+    def assert_api_key_refused(self) -> None:
+        status = self._key_response.status_code
+        assert status == 403, f"expected 403, got {status}: {self._key_response.text}"

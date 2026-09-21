@@ -19,6 +19,13 @@ Feature: User impersonation
     Then they are viewing the app as "alice@example.com"
     And the impersonation banner is visible
 
+  Scenario: An admin impersonates a user who has two-factor enabled
+    Given a user is signed in as "alice@example.com" within org "Acme"
+    And they enrol an authenticator app
+    And a server admin is signed in as "root@example.com"
+    When the admin impersonates "alice@example.com"
+    Then they are viewing the app as "alice@example.com"
+
   Scenario: A non-admin cannot impersonate
     Given the server already has an admin
     And a user is signed in as "bob@example.com"

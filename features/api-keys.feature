@@ -21,6 +21,15 @@ Feature: API keys
     And a user is signed in as "carol@example.com" as owner of "Globex"
     Then the key is rejected on the active organisation
 
+  Scenario: An API key lists only its own organisation
+    Given they have created an API key named "CI robot"
+    Then the key lists only the organisation it belongs to
+
+  Scenario: An API key cannot create an organisation
+    Given they have created an API key named "CI robot"
+    When the key tries to create an organisation named "Shadow"
+    Then the key is refused
+
   Scenario: Members cannot manage API keys
     Given "bob@example.com" is a member of the org
     And they are signed in as "bob@example.com" in the same org

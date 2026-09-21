@@ -348,6 +348,16 @@ def step_enter_code(driver, code):
     driver.enter_totp_code(code)
 
 
+@when("they skip the authenticator code and open their profile with the pending sign-in")
+def step_skip_code_with_pending_sign_in(driver):
+    driver.open_profile_with_pending_sign_in()
+
+
+@when("they skip the authenticator code and claim to be an admin impersonating themselves")
+def step_skip_code_posing_as_impersonator(driver):
+    driver.open_profile_with_pending_sign_in(as_impersonator=True)
+
+
 @then("the authenticator code is rejected")
 def step_assert_code_rejected(driver):
     driver.assert_totp_rejected()

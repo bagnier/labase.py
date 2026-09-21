@@ -10,6 +10,6 @@ results/errors to responses.
 from apps.auth.domain.service import RegisterResult, register
 
 
-async def register_user(email: str, password: str) -> RegisterResult:
+async def register_user(email: str, password: str, client_ip: str | None = None) -> RegisterResult:
     """Create the auth user. ``UserCreated`` is recorded by the signup trigger, not here."""
-    return await register(email, password)
+    return await register(email, password, client_ip)

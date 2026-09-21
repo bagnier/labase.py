@@ -5,12 +5,16 @@ import jwt
 import pytest
 import pytest_asyncio
 from fastapi import Depends, FastAPI
+from fastapi.dependencies.models import Dependant
+from fastapi.dependencies.utils import get_dependant
 from httpx import ASGITransport, AsyncClient
 from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, login
 from apps.auth.infra.security import get_current_user
+from apps.shared.persistence import database as db
+from apps.shared.persistence.database import get_admin_session
 
 _app = FastAPI()
 
@@ -20,10 +24,23 @@ async def me(user=Depends(get_current_user)):
     return {"id": str(user.id)}
 
 
+def _clear_engine_caches() -> None:
+    db._user_engine.cache_clear()
+    db._user_session_factory.cache_clear()
+    db._admin_engine.cache_clear()
+    db.admin_session_factory.cache_clear()
+
+
 @pytest_asyncio.fixture()
 async def client():
+    # Resolving a user may read the factor table, so the engines must live on this test's loop:
+    # the engines are ``lru_cache``d singletons bound to whichever loop built them.
+    _clear_engine_caches()
     async with AsyncClient(transport=ASGITransport(app=_app), base_url="http://test") as c:
         yield c
+    await db._user_engine().dispose()
+    await db._admin_engine().dispose()
+    _clear_engine_caches()
 
 
 @pytest.mark.asyncio
@@ -332,19 +349,32 @@ async def test_get_rls_session_sets_context_and_relies_on_commit_to_clear():
 
 
 @pytest.mark.asyncio
-async def test_get_rls_session_skips_context_for_anonymous_caller():
+async def test_get_rls_session_gives_an_anonymous_caller_a_context_with_no_identity():
+    """Left on the login role, an anonymous query hits ``permission denied``: the context is set
+    all the same — the app's role, and claims that name nobody."""
     from apps.auth.infra.session import get_rls_session
 
     fake_session = MagicMock()
     set_calls = []
 
-    async def mock_set(session, uid):
-        set_calls.append(uid)
+    async def mock_set(session, claims):
+        set_calls.append(claims)
 
     with patch("apps.auth.infra.session.set_rls_context", side_effect=mock_set):
         gen = get_rls_session(current_user=None, session=fake_session)
-        session = await gen.__anext__()
-        assert session is fake_session
-        assert not set_calls, "anonymous caller must not set an RLS context"
-        with pytest.raises(StopAsyncIteration):
-            await gen.__anext__()
+        await gen.__anext__()
+
+    assert set_calls == [{"role": "anon"}]
+
+
+def _calls(dependant: Dependant) -> set:
+    """Every callable a dependency tree resolves, at any depth."""
+    return {call for child in dependant.dependencies for call in {child.call} | _calls(child)}
+
+
+def test_knowing_who_asks_opens_no_bypassrls_session():
+    """README: the admin session is reserved for event handlers, console queries and anonymous
+    public surfaces — resolving the caller of every authenticated request is none of those."""
+    calls = _calls(get_dependant(path="/", call=get_current_user))
+
+    assert get_admin_session not in calls

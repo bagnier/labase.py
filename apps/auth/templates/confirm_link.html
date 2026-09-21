@@ -1,0 +1,18 @@
+{% extends "base_public.html" %}
+{% block title %}Confirm — labase{% endblock %}
+{% block content %}
+  <div class="card-panel" data-confirm-link>
+    <div class="card-body">
+      <div class="mb-2">
+        <h1 class="card-title text-xl">One more click</h1>
+        <p class="text-sm text-base-content/70 mt-1">Confirm to finish what this link started.</p>
+      </div>
+      <form method="post" action="{{ action }}" class="space-y-4">
+        <input type="hidden" name="token_hash" value="{{ token_hash }}">
+        <input type="hidden" name="type" value="{{ type }}">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <button type="submit" class="btn btn-primary w-full mt-1">Confirm</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

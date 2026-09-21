@@ -42,6 +42,7 @@ from apps.pages.domain.render import render_markdown
 from apps.pages.infra.repository import (
     PageNavRepository,
     PageRepository,
+    public_page,
     search_visible_pages,
     visible_pages,
 )
@@ -75,10 +76,6 @@ def _can_edit_role(visibility: PageVisibility, role: OrgRole | None) -> bool:
     return role == OrgRole.owner or (role is not None and visibility == PageVisibility.draft)
 
 
-def _can_view(visibility: PageVisibility, role: OrgRole | None) -> bool:
-    return visibility == PageVisibility.public or role is not None
-
-
 async def _editable_page(repo: PageRepository, slug: str, membership: Membership) -> Page:
     page = or_404(await repo.by_slug(slug))
     if not _can_edit_role(page.visibility, membership.role):
@@ -96,13 +93,31 @@ async def _resolve_org_role(
     rls: AsyncSession,
     org_handle: str,
     current_user: OptionalCurrentUser,
-) -> tuple[OrganizationRead, OrgRole | None, AsyncSession]:
-    """The org, the caller's role in it (``None`` if anonymous/non-member), and the session to
-    read pages with — RLS for members, admin (BYPASSRLS) for the public/anonymous view."""
+) -> tuple[OrganizationRead, OrgRole | None]:
+    """The org — its handle is in the URL, public by nature — and the caller's role in it
+    (``None`` if anonymous or outside it). Pages are then read on ``rls`` either way: the table
+    for a member, ``public_pages`` for anyone else, so the database decides what each sees."""
     org = or_404(await org_by_handle(admin, org_handle))
     role = await role_in_org(rls, org.id, current_user.id) if current_user else None
-    session = rls if role is not None else admin
-    return org, role, session
+    return org, role
+
+
+async def _visible_page(
+    rls: AsyncSession,
+    org_id: uuid.UUID,
+    role: OrgRole | None,
+    *,
+    slug: str | None = None,
+    page_id: uuid.UUID | None = None,
+) -> Page:
+    if role is None:
+        page = await public_page(rls, org_id, slug=slug, page_id=page_id)
+    elif slug is not None:
+        page = await PageRepository(rls, org_id).by_slug(slug)
+    else:
+        assert page_id is not None
+        page = await PageRepository(rls, org_id).by_id(page_id)
+    return or_404(page)
 
 
 # ── authed management routes (mounted under /{org_handle}, RLS) ────────────────
@@ -417,12 +432,12 @@ async def list_pages(
     rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> Response:
-    org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)
+    org, role = await _resolve_org_role(admin, rls, org_handle, current_user)
     query = request.query_params.get("q", "").strip()
     if query:
-        pages = await search_visible_pages(session, org.id, query, role=role)
+        pages = await search_visible_pages(rls, org.id, query, role=role)
     else:
-        pages = await visible_pages(session, org.id, role=role)
+        pages = await visible_pages(rls, org.id, role=role)
     if wants_json(request):
         return JSONResponse([PageRead.model_validate(p).model_dump(mode="json") for p in pages])
     if current_user is None:
@@ -474,10 +489,8 @@ async def view_page_by_id(
     """Timeline deep link: a page's stable uuid (its ``entity_id`` on the journal) resolves to its
     *current* slug URL. A temporary redirect on purpose — never 301: the slug can change, so the
     uuid→slug mapping must not be cached, else an old feed link would 404 after a re-slug."""
-    org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)
-    page = or_404(await PageRepository(session, org.id).by_id(page_id))
-    if not _can_view(page.visibility, role):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
+    org, role = await _resolve_org_role(admin, rls, org_handle, current_user)
+    page = await _visible_page(rls, org.id, role, page_id=page_id)
     return RedirectResponse(f"/{org_handle}/pages/{page.slug}", status_code=307)
 
 
@@ -490,10 +503,8 @@ async def view_page(
     rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> Response:
-    org, role, session = await _resolve_org_role(admin, rls, org_handle, current_user)
-    page = or_404(await PageRepository(session, org.id).by_slug(slug))
-    if not _can_view(page.visibility, role):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is not available")
+    org, role = await _resolve_org_role(admin, rls, org_handle, current_user)
+    page = await _visible_page(rls, org.id, role, slug=slug)
     can_edit = _can_edit_role(page.visibility, role)
     body = render_markdown(page.content)
     if wants_json(request):

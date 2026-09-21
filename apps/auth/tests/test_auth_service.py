@@ -17,6 +17,7 @@ from apps.auth.domain.service import (
 from apps.auth.tests.given_helpers import delete_user, find_users
 from apps.shared.events import BusinessEvent
 from apps.shared.logs import capture
+from apps.shared.persistence import supabase as supabase_module
 from apps.shared.persistence.supabase import get_admin_supabase
 
 
@@ -157,6 +158,19 @@ async def test_a_factor_lookup_gotrue_fails_is_not_a_missing_factor():
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         with pytest.raises(httpx.HTTPStatusError):
             await verified_totp_factor("some-token")
+
+
+@pytest.mark.asyncio
+async def test_a_sign_in_tells_gotrue_whose_address_it_carries(test_user):
+    """The server calls GoTrue for every visitor: without the visitor's address, GoTrue's per-IP
+    limit sees one caller per instance."""
+    email, password = test_user
+    with patch(
+        "apps.shared.persistence.supabase.acreate_client", wraps=supabase_module.acreate_client
+    ) as create:
+        await login(email, password, client_ip="203.0.113.7")
+
+    assert create.call_args.kwargs["options"].headers["Sb-Forwarded-For"] == "203.0.113.7"
 
 
 @pytest.mark.asyncio

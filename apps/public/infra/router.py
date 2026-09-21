@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.auth.contract.current import OptionalCurrentUser
+from apps.auth.contract.current import OptionalCurrentUser, RlsSession
 from apps.organizations.contract.queries import OrganizationRead, org_by_handle
 from apps.pages.contract.public import PublicPage, get_public_nav, get_public_page, get_public_pages
 from apps.public.contract.current import PublicSettings
@@ -18,7 +18,8 @@ async def _featured_org(
     admin: AsyncSession, public_settings: SettingsView
 ) -> OrganizationRead | None:
     """The configured featured org, or ``None`` when unset or unknown — the shared preamble
-    of the two public routes (each decides its own bail: home page vs 404)."""
+    of the two public routes (each decides its own bail: home page vs 404). Its pages are then
+    read on the RLS connection, through ``public_pages``: the database decides what is public."""
     handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         return None
@@ -29,16 +30,17 @@ async def _featured_org(
 async def index(
     request: Request,
     admin: AdminSession,
+    rls: RlsSession,
     current_user: OptionalCurrentUser,
     public_settings: PublicSettings,
 ) -> Response:
     org = await _featured_org(admin, public_settings)
     if org is None:
         return with_etag(request, templates.TemplateResponse(request, "home.html"))
-    nav_items = await get_public_nav(admin, org.id)
+    nav_items = await get_public_nav(rls, org.id)
     if nav_items:
         return RedirectResponse(url=f"/{nav_items[0].slug}", status_code=302)
-    pages = await get_public_pages(admin, org.id)
+    pages = await get_public_pages(rls, org.id)
     return with_etag(
         request,
         templates.TemplateResponse(
@@ -60,6 +62,7 @@ async def public_page(
     slug: str,
     request: Request,
     admin: AdminSession,
+    rls: RlsSession,
     current_user: OptionalCurrentUser,
     public_settings: PublicSettings,
 ) -> Response:
@@ -69,10 +72,10 @@ async def public_page(
     org = await org_by_handle(admin, handle)
     if org is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    page = await get_public_page(admin, org.id, slug)
+    page = await get_public_page(rls, org.id, slug)
     if page is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
-    nav_items = await get_public_nav(admin, org.id)
+    nav_items = await get_public_nav(rls, org.id)
     if wants_json(request):
         return JSONResponse(
             {

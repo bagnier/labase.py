@@ -19,20 +19,11 @@ def client():
     return TestClient(app, raise_server_exceptions=True)
 
 
-def _mock_admin_session(row=None):
+def _mock_session_with(row=None):
     mock_result = MagicMock()
     mock_result.mappings.return_value.first.return_value = row
     mock_session = AsyncMock()
     mock_session.execute = AsyncMock(return_value=mock_result)
-
-    async def _override():
-        yield mock_session
-
-    return _override
-
-
-def _mock_rls_session():
-    mock_session = AsyncMock()
 
     async def _override():
         yield mock_session
@@ -52,7 +43,7 @@ def _mock_user(user_id: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000
 
 def test_get_invitation_unknown_token_html_returns_invalid_state(client):
     token = uuid.uuid4()
-    app.dependency_overrides[get_admin_session] = _mock_admin_session(row=None)
+    app.dependency_overrides[get_admin_session] = _mock_session_with(row=None)
     try:
         resp = client.get(f"/invitations/{token}", headers={"accept": "text/html"})
         assert resp.status_code == 404
@@ -63,7 +54,7 @@ def test_get_invitation_unknown_token_html_returns_invalid_state(client):
 
 def test_get_invitation_unknown_token_json_returns_404(client):
     token = uuid.uuid4()
-    app.dependency_overrides[get_admin_session] = _mock_admin_session(row=None)
+    app.dependency_overrides[get_admin_session] = _mock_session_with(row=None)
     try:
         resp = client.get(f"/invitations/{token}", headers={"accept": "application/json"})
         assert resp.status_code == 404
@@ -83,7 +74,7 @@ def test_get_invitation_revoked_json_returns_404(client):
         "status": "revoked",
         "created_at": None,
     }
-    app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
+    app.dependency_overrides[get_admin_session] = _mock_session_with(row=fake_row)
     try:
         resp = client.get(f"/invitations/{token}", headers={"accept": "application/json"})
         assert resp.status_code == 404
@@ -104,7 +95,7 @@ def test_get_invitation_valid_json_returns_invitation(client):
         "status": "pending",
         "created_at": now(),
     }
-    app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
+    app.dependency_overrides[get_admin_session] = _mock_session_with(row=fake_row)
     try:
         resp = client.get(f"/invitations/{token}", headers={"accept": "application/json"})
         assert resp.status_code == 200
@@ -169,8 +160,8 @@ def test_accept_already_accepted_invitation_is_idempotent(client):
     mock_org = MagicMock()
     mock_org.handle = "test-org"
 
-    app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
-    app.dependency_overrides[get_user_session] = _mock_rls_session()
+    # The invitation is read on the invitee's own session, through get_invitation_by_token.
+    app.dependency_overrides[get_user_session] = _mock_session_with(row=fake_row)
     app.dependency_overrides[get_current_user] = _mock_user()
     try:
         with patch(
@@ -186,7 +177,6 @@ def test_accept_already_accepted_invitation_is_idempotent(client):
         assert "redirect" in data
         assert "/dashboard" in data["redirect"]
     finally:
-        app.dependency_overrides.pop(get_admin_session, None)
         app.dependency_overrides.pop(get_user_session, None)
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -202,8 +192,8 @@ def test_accept_non_pending_invitation_returns_404(client):
         "status": "revoked",
         "created_at": None,
     }
-    app.dependency_overrides[get_admin_session] = _mock_admin_session(row=fake_row)
-    app.dependency_overrides[get_user_session] = _mock_rls_session()
+    # The invitation is read on the invitee's own session, through get_invitation_by_token.
+    app.dependency_overrides[get_user_session] = _mock_session_with(row=fake_row)
     app.dependency_overrides[get_current_user] = _mock_user()
     try:
         resp = client.post(
@@ -212,6 +202,5 @@ def test_accept_non_pending_invitation_returns_404(client):
         )
         assert resp.status_code == 404
     finally:
-        app.dependency_overrides.pop(get_admin_session, None)
         app.dependency_overrides.pop(get_user_session, None)
         app.dependency_overrides.pop(get_current_user, None)

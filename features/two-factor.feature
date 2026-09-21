@@ -24,6 +24,22 @@ Feature: Two-factor authentication (TOTP)
     When they enter a valid authenticator code
     Then they are on their profile page
 
+  Scenario: The password alone does not open a session once enrolled
+    Given a visitor signs in with email "vault@labase.dev" and password "Test1234!"
+    And they enrol an authenticator app
+    When they sign out
+    And a visitor signs in with email "vault@labase.dev" and password "Test1234!"
+    And they skip the authenticator code and open their profile with the pending sign-in
+    Then access is denied
+
+  Scenario: The password alone does not open a session dressed as an impersonation
+    Given a visitor signs in with email "vault@labase.dev" and password "Test1234!"
+    And they enrol an authenticator app
+    When they sign out
+    And a visitor signs in with email "vault@labase.dev" and password "Test1234!"
+    And they skip the authenticator code and claim to be an admin impersonating themselves
+    Then access is denied
+
   Scenario: A wrong authenticator code is rejected
     Given a visitor signs in with email "vault@labase.dev" and password "Test1234!"
     And they enrol an authenticator app

@@ -100,3 +100,26 @@ create policy "page_nav_items: owner all"
 
 grant select, insert, update, delete on public.page_nav_items to authenticated;
 grant select, insert, update, delete on public.page_nav_items to service_role;
+
+
+-- ── What a visitor outside the org reads ────────────────────────────────────────────────────────
+--
+-- Its public pages, and the nav items that point at them. The rule is here, not in the route: a
+-- signed-in non-member and an anonymous visitor read through these on the app's own RLS
+-- connection, never a BYPASSRLS one. Executable by `app_rls` alone, so PostgREST's surface stays
+-- the column-limited `pages: anon read` above.
+
+create function public.public_pages(p_org_id uuid)
+returns setof public.pages language sql stable security definer set search_path = '' as $$
+  select * from public.pages where org_id = p_org_id and visibility = 'public'
+$$;
+
+create function public.public_nav_items(p_org_id uuid)
+returns setof public.page_nav_items language sql stable security definer set search_path = '' as $$
+  select n.* from public.page_nav_items n
+    join public.pages p on p.id = n.page_id
+   where n.org_id = p_org_id and p.visibility = 'public'
+$$;
+
+revoke all on function public.public_pages(uuid), public.public_nav_items(uuid) from public;
+grant execute on function public.public_pages(uuid), public.public_nav_items(uuid) to app_rls;

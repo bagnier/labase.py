@@ -52,7 +52,12 @@ _FUNCTION_GRANTS = {
     ("anon", "uuidv7"),
     ("authenticated", "accept_org_invitation"),
     ("authenticated", "create_org_with_owner"),
+    ("app_rls", "api_key_principal"),
+    ("app_rls", "get_invitation_by_token"),
     ("app_rls", "record_business_event"),
+    ("app_rls", "second_factor_enrolled"),
+    ("app_rls", "public_nav_items"),
+    ("app_rls", "public_pages"),
     ("authenticated", "user_is_org_owner"),
     ("authenticated", "user_org_ids"),
     ("authenticated", "uuidv7"),
@@ -142,6 +147,24 @@ async def test_api_roles_execute_only_the_functions_migrations_grant(
     granted = {tuple(row) for row in rows}
 
     assert granted == _FUNCTION_GRANTS
+
+
+@pytest.mark.asyncio
+async def test_the_secret_key_only_reads_the_journal(admin_conn: AsyncConnection):
+    """A fact has one writer, ``record_business_event``: a direct write from the secret key would
+    post a fact the listener delivers, or rewrite an append-only journal."""
+    rows = await admin_conn.execute(
+        text(
+            "select a.privilege_type from pg_class c"
+            " cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a"
+            " join pg_roles r on r.oid = a.grantee"
+            " where c.oid = 'public.business_events'::regclass and r.rolname = 'service_role'"
+        )
+    )
+
+    granted = set(rows.scalars())
+
+    assert granted == {"SELECT"}
 
 
 @pytest.mark.asyncio

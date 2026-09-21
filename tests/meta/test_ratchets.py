@@ -170,7 +170,7 @@ _BYPASSRLS_PARAMETERS = {
     "apps/metrics/infra/router.py": 1,
     "apps/organizations/infra/invitation_router.py": 2,
     "apps/pages/infra/router.py": 3,
-    "apps/profile/infra/router.py": 2,
+    "apps/profile/infra/router.py": 1,
     "apps/public/infra/router.py": 2,
     "apps/tasks/infra/router.py": 2,
     "apps/timeline/infra/router.py": 3,

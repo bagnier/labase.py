@@ -672,13 +672,14 @@ async def avatar_upload(
 async def avatar_image(
     user_id: uuid.UUID,
     current_user: CurrentUser,
-    admin_session: AdminSession,
+    session: RlsSession,
     profile_settings: ProfileSettings,
 ) -> Response:
-    """Streams the avatar to any signed-in user (they appear next to members)."""
+    """Streams the avatar to whoever may read the profile — its owner and their co-members, a
+    policy's decision: a profile RLS hides is a 404, not a 403 that would confirm the account."""
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    profile = await ProfileRepository(admin_session).get_by_user_id(user_id)
+    profile = await ProfileRepository(session).get_by_user_id(user_id)
     if profile is None or not profile.avatar_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     content = await admin_storage().from_(bucket()).download(profile.avatar_path)

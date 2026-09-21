@@ -64,3 +64,15 @@ def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
     assert "Today" in fragment  # newest-first entries land in a day-grouped section
     assert "Created" in fragment  # todo.created, humanised
     assert "Event created" not in fragment  # the type filter narrows to todo.* only
+
+
+def test_a_members_dashboard_does_not_count_the_invitations_only_owners_read(driver):
+    driver.sign_in_as_member_of_org("dashboard-member@example.com", "Acme")
+
+    body = (
+        driver.client()
+        .get(f"/{driver.active_org_handle}/dashboard", headers={"accept": "text/html"})
+        .text
+    )
+
+    assert "Pending invitations" not in body

@@ -26,9 +26,15 @@ create trigger profiles_updated_at
 
 alter table public.profiles enable row level security;
 
-create policy "profiles: own read"
+-- Your own profile, and those of the people you share an org with: they appear next to you.
+create policy "profiles: own or co-member read"
   on public.profiles for select
-  using (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    or user_id in (
+      select m.user_id from public.memberships as m where m.org_id in (select public.user_org_ids())
+    )
+  );
 
 create policy "profiles: own update"
   on public.profiles for update

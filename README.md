@@ -293,7 +293,9 @@ A session delivered by a password, an OAuth round-trip, a passkey or a
 mailed confirmation link is the same event — `auth.signed_in` — carrying *how* it was obtained
 (`method`) and whether a second factor was cleared (`two_factor`) in its payload, not in its `kind`.
 It is recorded at the moment the session is handed over, never before, so a sign-in a second factor
-then refuses never happened. `set_auth_cookies` is the single place a session is delivered, and a
+then refuses never happened — and no token stands in for it: once an account enrolled an
+authenticator, `get_current_user` refuses its `aal1` tokens (the one a challenge relays, or a
+passkey's), save under an impersonation vouched for by a live admin token. `set_auth_cookies` is the single place a session is delivered, and a
 test over its call sites holds the rule: each one records a sign-in, except the two named
 *re-issues* (a token refresh, the restore of an admin's stashed session after an impersonation).
 
@@ -502,7 +504,11 @@ non-owners). Three DB session dependencies: `RlsSession` (default — RLS enforc
 console queries, and anonymous public surfaces such as share-token downloads, where no
 JWT exists and checks are explicit). `RlsSession` runs on `app_rls`, a member of `authenticated`
 that alone may enqueue a task or record a fact: PostgREST serves a JWT on `authenticated`
-itself, so what is granted there is open to any account.
+itself, so what is granted there is open to any account. An anonymous caller gets `app_rls` with
+claims naming nobody. What must be read before or outside an identity — resolving an API key,
+whether an account enrolled a second factor, an invitation by its token, an org's public pages
+for a visitor outside it — goes through a `SECURITY DEFINER` function executable by `app_rls`
+alone, so the caller is resolved and the public pages served without a BYPASSRLS session.
 
 
 #### Sign-in surface
@@ -510,7 +516,10 @@ itself, so what is granted there is open to any account.
 Email/password with mailed confirmation (resend on blocked
 unconfirmed sign-ins, forgot/reset flow), OAuth social sign-in (Google, GitHub — GoTrue
 PKCE), TOTP two-factor, and passkeys (WebAuthn). Email change with mailed confirmation
-and self-serve account deletion are settings-gated (`profile.*_enabled`).
+and self-serve account deletion are settings-gated (`profile.*_enabled`). A mailed link opens a
+page whose button posts its token back: a GET never delivers a session. Sign-in and sign-up
+forward the visitor's address to GoTrue as `Sb-Forwarded-For`, so its per-IP limit sees visitors
+rather than the instance (docs/production.md).
 
 
 #### Background work

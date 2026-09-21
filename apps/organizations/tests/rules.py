@@ -1,8 +1,8 @@
 """Who may change an org, its members and its invitations.
 
-Members read; owners rename, promote, remove, add and invite. A member may still leave on their
-own. Keeping an org's last owner is an invariant, not an authorization rule: its trigger answers
-it (``test_last_owner_db_guard``).
+Members read the org and its members; owners rename, promote, remove, add, invite and read the
+invitations. A member may still leave on their own. Keeping an org's last owner is an invariant,
+not an authorization rule: its trigger answers it (``test_last_owner_db_guard``).
 """
 
 import httpx
@@ -43,6 +43,12 @@ INVITE = Action(
     sql="insert into org_invitations (org_id, email, invited_by)"
     " values (:org_id, 'invitee@example.com', :me) returning id",
     route=Route("POST", "/invitations", {"email": "invitee@example.com"}),
+)
+# A pending invitation carries the token that accepts it: reading one is an owner's act.
+READ_INVITATION = Action(
+    name="read-invitation",
+    sql="select id from org_invitations where id = :invitation_id",
+    route=Route("GET", "/invitations"),
 )
 REVOKE = Action(
     name="revoke",
@@ -93,6 +99,8 @@ ORGANIZATIONS = RuleBook(
         Rule("memberships", "owner", ADD, "outsider", allowed=True),
         Rule("org_invitations", "member", INVITE, "new-invitation", allowed=False),
         Rule("org_invitations", "owner", INVITE, "new-invitation", allowed=True),
+        Rule("org_invitations", "member", READ_INVITATION, "pending-invitation", allowed=False),
+        Rule("org_invitations", "owner", READ_INVITATION, "pending-invitation", allowed=True),
         Rule("org_invitations", "member", REVOKE, "pending-invitation", allowed=False),
         Rule("org_invitations", "owner", REVOKE, "pending-invitation", allowed=True),
     ],

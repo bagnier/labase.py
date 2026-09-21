@@ -6,6 +6,7 @@ from tests.e2e.drivers.api_base import ApiBase
 class ApiKeysApiMixin(ApiBase):
     _api_key_secret: str | None = None
     _api_key_org_handle: str = ""
+    _key_response: httpx.Response  # what the key got back from its last write
 
     def reset_session(self) -> None:
         self._api_key_secret = None
@@ -61,3 +62,24 @@ class ApiKeysApiMixin(ApiBase):
 
     def try_open_api_keys_page(self) -> None:
         self.response = self.client().get(self._keys_url())
+
+    def assert_api_key_lists_only_its_org(self) -> None:
+        resp = self._sessionless_get("/organizations")
+        assert resp.status_code == 200, f"list: {resp.status_code} {resp.text}"
+        assert [org["handle"] for org in resp.json()] == [self._api_key_org_handle]
+
+    def create_org_with_api_key(self, name: str) -> None:
+        assert self._api_key_secret is not None, "no API key created"
+        client = self._make_client()
+        try:
+            self._key_response = client.post(
+                "/organizations",
+                json={"name": name},
+                headers={"Authorization": f"Bearer {self._api_key_secret}"},
+            )
+        finally:
+            client.close()
+
+    def assert_api_key_refused(self) -> None:
+        status = self._key_response.status_code
+        assert status == 403, f"expected 403, got {status}: {self._key_response.text}"

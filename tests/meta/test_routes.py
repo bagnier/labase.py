@@ -70,14 +70,18 @@ _JSON_ONLY = {
 }
 
 # HTML only: pages with no JSON caller. The unauthenticated forms (sign in, register, the two
-# password flows), the editor forms, and the landing page — a form has no JSON meaning, and the
-# data behind each editor is its own route, which does have both faces. The dashboard and the
-# settings page are composed documents on the same argument: their data is its own routes
-# (`overviews.json`, the activity feed, `/members`), each of which answers JSON.
+# password flows, a mailed link's confirmation, the second-factor code), the editor forms, and the
+# landing page — a form has no JSON meaning, and the data behind each editor is its own route,
+# which does have both faces. The dashboard and the settings page are composed documents on the
+# same argument: their data is its own routes (`overviews.json`, the activity feed, `/members`),
+# each of which answers JSON.
 _HTML_ONLY = {
     "GET /",
+    "GET /auth/confirm",
+    "GET /auth/confirm-email",
     "GET /auth/forgot-password",
     "GET /auth/login",
+    "GET /auth/mfa",
     "GET /auth/register",
     "GET /auth/reset-password",
     "GET /{org_handle}/calendar/new",
@@ -234,8 +238,8 @@ _BODYLESS_MUTATIONS = {
 # stops promising a JSON document nobody serves.
 _NO_FACE = {
     "GET /auth/callback",
-    "GET /auth/confirm",
-    "GET /auth/confirm-email",
+    "POST /auth/confirm",
+    "POST /auth/confirm-email",
     "GET /auth/oauth/{provider}",
     "POST /auth/logout",
     "GET /console/timeline/export",

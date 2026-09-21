@@ -1,4 +1,7 @@
-from sqlalchemy import select
+import uuid
+from datetime import timedelta
+
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api_keys.domain.models import ApiKey
@@ -15,19 +18,21 @@ class ApiKeyRepository(OrgScopedRepository[ApiKey]):
     default_order = ApiKey.created_at.desc()
 
 
-async def resolve_active_key(session: AsyncSession, key_hash: str) -> ApiKey | None:
-    """The non-revoked key matching `key_hash` — admin session, pre-auth surface."""
-    key = await session.scalar(select(ApiKey).where(ApiKey.key_hash == key_hash))
-    if key is None or key.revoked_at is not None:
-        return None
-    return key
-
-
-async def touch_last_used(session: AsyncSession, key: ApiKey) -> None:
+async def resolve_key_principal(
+    session: AsyncSession, key_hash: str
+) -> tuple[uuid.UUID, uuid.UUID] | None:
+    """The live key matching ``key_hash`` as (creator, org), stamping its ``last_used_at`` when
+    stale — through ``api_key_principal``, on the request's own connection: no identity exists
+    yet, so the function is what answers, not a BYPASSRLS read."""
     now = clock.now()
-    stale = key.last_used_at is None or (
-        (now - key.last_used_at).total_seconds() > _LAST_USED_GRANULARITY_SECONDS
-    )
-    if stale:
-        key.last_used_at = now
-        await session.flush()
+    row = (
+        await session.execute(
+            text("select created_by, org_id from api_key_principal(:hash, :now, :stale_before)"),
+            {
+                "hash": key_hash,
+                "now": now,
+                "stale_before": now - timedelta(seconds=_LAST_USED_GRANULARITY_SECONDS),
+            },
+        )
+    ).first()
+    return (row.created_by, row.org_id) if row is not None else None

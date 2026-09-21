@@ -26,6 +26,8 @@ async def get_rls_session(
     durability is stated at its call site rather than inherited from whichever route happened to
     depend on this function.
     """
-    if current_user is not None:
-        await set_rls_context(session, current_user.claims)
+    # Anonymous too: left on the login role, which holds no privilege, a query would fail. The
+    # app's role with claims naming nobody is what a policy reads as "outside every org".
+    claims = current_user.claims if current_user is not None else {"role": "anon"}
+    await set_rls_context(session, claims)
     yield session

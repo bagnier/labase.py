@@ -180,6 +180,12 @@ async def create_organization(
     repo: OrgRepo,
     org_settings: OrganizationsSettings,
 ) -> Response:
+    # An API key acts inside the one org it was minted for; a new org is outside it by definition.
+    if current_user.api_key_org_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An API key cannot create an organisation",
+        )
     name = body.name.strip()
     user_id = current_user.id
 
@@ -220,9 +226,12 @@ async def list_organizations(
     repo: OrgRepo,
 ) -> list[OrganizationWithRoleRead]:
     pairs = await repo.list_with_role_for_user(current_user.id)
+    # An API key authenticates as its creator, but sees only the org it was minted for.
+    bound = current_user.api_key_org_id
     return [
         OrganizationWithRoleRead.model_validate({**org.__dict__, "role": role})
         for org, role in pairs
+        if bound is None or org.id == bound
     ]
 
 
@@ -313,7 +322,10 @@ async def org_dashboard(
     )
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
-    ctx["pending_invitations"] = len(await repo.list_invitations(org_id))
+    # Invitations are an owner's to read, so a member's dashboard has no count to show.
+    ctx["pending_invitations"] = (
+        len(await repo.list_invitations(org_id)) if membership.role == OrgRole.owner else None
+    )
     counts = await EventRepository(session).daily_counts(org_id=org_id)
     now = clock.now()
     ctx["activity_calendar"] = heatmap_calendar(counts, now=now, since=org.created_at)

@@ -148,3 +148,9 @@ It is off by default on purpose — trusting that header when nothing upstream s
 lets any caller spoof their IP. Turn it on **only** because Caddy sets it and nothing
 reaches the app except through Caddy. If you expose the app port directly (no proxy),
 leave it off.
+
+GoTrue has a per-IP limit of its own on sign-in, and every sign-in reaches it from the app
+server. The app forwards the visitor's address as `Sb-Forwarded-For`; GoTrue keys on it only
+once its IP forwarding is enabled (see GoTrue's own configuration reference). Enable it only if GoTrue is reachable through the app alone — a client that can
+call GoTrue directly can set that header too. Otherwise GoTrue sees one caller per instance, and
+the app's limiter is the only per-visitor floor.

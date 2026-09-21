@@ -32,6 +32,21 @@ def step_assert_key_rejected_on_active_org(driver):
     driver.assert_api_key_rejected_on_active_org()
 
 
+@then("the key lists only the organisation it belongs to")
+def step_assert_key_lists_its_org(driver):
+    driver.assert_api_key_lists_only_its_org()
+
+
+@when(parsers.parse('the key tries to create an organisation named "{name}"'))
+def step_key_creates_org(driver, name):
+    driver.create_org_with_api_key(name)
+
+
+@then("the key is refused")
+def step_assert_key_refused(driver):
+    driver.assert_api_key_refused()
+
+
 @when("they try to open the API keys page")
 def step_try_open_api_keys_page(driver):
     driver.try_open_api_keys_page()

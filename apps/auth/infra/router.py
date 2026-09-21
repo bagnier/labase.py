@@ -1,5 +1,6 @@
 import uuid
 from typing import Any
+from urllib.parse import urlencode
 
 import structlog
 from fastapi import (
@@ -40,6 +41,7 @@ from apps.auth.domain.models import (
     EmailAddress,
     Impersonation,
     ImpersonationTarget,
+    LinkConfirmation,
     MfaRequired,
     PasskeyAssertion,
     PasskeySession,
@@ -144,6 +146,7 @@ _INFO_MESSAGES: dict[str, str] = {
     "confirm_failed": "This confirmation link is invalid or has expired. "
     "Sign in to receive a new one.",
     "account_deleted": "Your account has been deleted.",
+    "email_changed": "Your email address was changed. Sign in with it.",
 }
 
 
@@ -243,7 +246,7 @@ async def login_endpoint(
             next=next,
         )
     try:
-        tokens = await login(email, password)
+        tokens = await login(email, password, client_ip=ip)
         if users_settings.two_factor_enabled:
             factor_id = await verified_totp_factor(tokens.access_token)
             if factor_id:
@@ -303,7 +306,7 @@ _MFA_REFRESH_COOKIE = "mfa_refresh_token"
 _MFA_METHOD_COOKIE = "mfa_method"
 _MFA_MAX_SECONDS = 300
 
-_RELAYABLE_METHODS: tuple[SignInMethod, ...] = ("password", "oauth")
+_RELAYABLE_METHODS: tuple[SignInMethod, ...] = ("password", "oauth", "passkey")
 
 
 def relayed_method(cookie: str | None) -> SignInMethod:
@@ -323,8 +326,12 @@ async def _mfa_challenge_response(
     cookies and ask for the authenticator code before issuing the session."""
     challenge_id = await totp_challenge(tokens.access_token, factor_id)
     if wants_json(request):
+        # ``redirect`` is for a page's script (the passkey ceremony): the form that answers it.
+        query = urlencode({"factor_id": factor_id, "challenge_id": challenge_id, "next": next})
         resp: Response = JSONResponse(
-            {"mfa_required": True, "factor_id": factor_id, "challenge_id": challenge_id}
+            MfaRequired(
+                factor_id=factor_id, challenge_id=challenge_id, redirect=f"/auth/mfa?{query}"
+            ).model_dump()
         )
     else:
         resp = templates.TemplateResponse(
@@ -336,6 +343,22 @@ async def _mfa_challenge_response(
     _set_ephemeral_cookie(resp, _MFA_REFRESH_COOKIE, tokens.refresh_token, _MFA_MAX_SECONDS)
     _set_ephemeral_cookie(resp, _MFA_METHOD_COOKIE, method, _MFA_MAX_SECONDS)
     return resp
+
+
+@router.get("/mfa", response_class=HTMLResponse, response_model=None)
+async def mfa_page(
+    request: Request,
+    factor_id: str,
+    challenge_id: str,
+    next: str = "",
+    mfa_access_token: str | None = Cookie(default=None),
+) -> Response:
+    """The code form, for a ceremony that ran in a page's script and could not render it."""
+    if not mfa_access_token:
+        return RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
+    return templates.TemplateResponse(
+        request, "mfa.html", {"factor_id": factor_id, "challenge_id": challenge_id, "next": next}
+    )
 
 
 @router.post("/mfa", response_model=SessionIssued)
@@ -429,7 +452,7 @@ async def passkey_options_endpoint(request: Request, users_settings: UsersSettin
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_400_BAD_REQUEST)
 
 
-@router.post("/passkeys/verify", response_model=PasskeySession)
+@router.post("/passkeys/verify", response_model=PasskeySession | MfaRequired)
 @rate_limit("10/minute")
 async def passkey_verify_endpoint(
     request: Request,
@@ -449,6 +472,13 @@ async def passkey_verify_endpoint(
     except PasskeyError as e:
         log.warning("auth.passkey_failed", challenge_id=challenge_id)
         return JSONResponse({"detail": str(e)}, status_code=status.HTTP_401_UNAUTHORIZED)
+    # A passkey is GoTrue's aal1, like a password: an enrolled authenticator still has its say.
+    if users_settings.two_factor_enabled:
+        factor_id = await verified_totp_factor(tokens.access_token)
+        if factor_id:
+            return await _mfa_challenge_response(
+                request, tokens, factor_id, _safe_next(body.next), "passkey"
+            )
     claims = decode_jwt(tokens.access_token)
     await events.emit(
         SignedIn(user_id=_sub_uuid(claims.get("sub")), method="passkey"), admin_session
@@ -585,7 +615,7 @@ async def register_endpoint(
             next=next,
         )
     try:
-        result = await register_user(email, password)
+        result = await register_user(email, password, client_ip=ip)
         if wants_json(request):
             return JSONResponse(
                 {"message": "Account created. Please verify your email."},
@@ -777,18 +807,40 @@ async def reset_password_endpoint(
     )
 
 
-@router.get(
+# A mailed link opens a page, never a session: a GET is what a cross-site page can make a browser
+# send, and a link that signed in would let an attacker's own link sign a victim into the
+# attacker's account. The reader's click posts the token back, same-origin (CSRF-checked).
+def _confirmation_page(request: Request, action: str, body: LinkConfirmation) -> Response:
+    return templates.TemplateResponse(
+        request,
+        "confirm_link.html",
+        {"action": action, "token_hash": body.token_hash, "type": body.type, "next": body.next},
+    )
+
+
+@router.get("/confirm-email", response_class=HTMLResponse)
+async def confirm_email_page(request: Request, token_hash: str = Query(default="")) -> Response:
+    return _confirmation_page(
+        request, "/auth/confirm-email", LinkConfirmation(token_hash=token_hash, type="email_change")
+    )
+
+
+@router.post(
     "/confirm-email", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse
 )
 @rate_limit("10/minute")
 async def confirm_email_endpoint(
-    request: Request, admin_session: AdminSession, token_hash: str = Query(default="")
+    request: Request,
+    body: LinkConfirmation,
+    admin_session: AdminSession,
+    users_settings: UsersSettings,
 ) -> Response:
     """Finalize an email change from the link mailed to the new address.
 
     Anonymous on purpose — the single-use token IS the credential (the reader of
     the new mailbox proves ownership), and the requesting session may be gone.
     """
+    token_hash = body.token_hash
     try:
         tokens = await confirm_signup(token_hash, type="email_change")
     except Exception as e:
@@ -799,6 +851,11 @@ async def confirm_email_endpoint(
     claims = decode_jwt(tokens.access_token)
     actor = _sub_uuid(claims.get("sub"))
     await events.emit(EmailChanged(user_id=actor), admin_session)
+    # An enrolled authenticator still has its say: the change holds, the sign-in asks for the code.
+    if users_settings.two_factor_enabled and await verified_totp_factor(tokens.access_token):
+        return RedirectResponse(
+            "/auth/login?info=email_changed", status_code=status.HTTP_303_SEE_OTHER
+        )
     # The link also signs the reader in: the single-use token is the credential.
     await events.emit(SignedIn(user_id=actor, method="email_link"), admin_session)
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -806,16 +863,25 @@ async def confirm_email_endpoint(
     return resp
 
 
-@router.get("/confirm", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse)
-@rate_limit("10/minute")
-async def confirm_endpoint(
+@router.get("/confirm", response_class=HTMLResponse)
+async def confirm_page(
     request: Request,
-    admin_session: AdminSession,
     token_hash: str = Query(...),
     type: str = Query(...),
     next: str = Query(default="/profile"),
 ) -> Response:
+    return _confirmation_page(
+        request, "/auth/confirm", LinkConfirmation(token_hash=token_hash, type=type, next=next)
+    )
+
+
+@router.post("/confirm", status_code=status.HTTP_303_SEE_OTHER, response_class=RedirectResponse)
+@rate_limit("10/minute")
+async def confirm_endpoint(
+    request: Request, body: LinkConfirmation, admin_session: AdminSession
+) -> Response:
     """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
+    token_hash, type, next = body.token_hash, body.type, body.next or "/profile"
     try:
         # UserCreated (and thus the personal org) was recorded by the signup trigger when the
         # account row was first created; confirming an email adds no new provisioning here.

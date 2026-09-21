@@ -63,6 +63,8 @@ class ProfileBrowserMixin(BrowserBase):
             f"{self.base_url}/auth/confirm-email?token_hash={token_hash}&type=email_change",
             wait_until="load",
         )
+        self.page.locator("[data-confirm-link]").get_by_role("button", name="Confirm").click()
+        self.page.wait_for_load_state("load")
         self.rekey_acting_identity(new_email)
 
     def assert_email_change_rejected(self) -> None:

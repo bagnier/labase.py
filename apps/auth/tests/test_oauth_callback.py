@@ -102,10 +102,32 @@ def test_confirm_failure_lands_on_login_with_a_visible_message(driver):
     err = AuthApiError("Email link is invalid or has expired", 403, "otp_expired")
     client = driver.client()
     with patch("apps.auth.infra.router.confirm_signup", side_effect=err):
-        response = client.get("/auth/confirm?token_hash=dead&type=signup", follow_redirects=False)
+        response = client.post(
+            "/auth/confirm", data={"token_hash": "dead", "type": "signup"}, follow_redirects=False
+        )
     assert response.status_code == 303
     location = response.headers["location"]
     info_key = location.split("info=")[1]
     assert info_key in _INFO_MESSAGES
     landing = client.get(location)
     assert _INFO_MESSAGES[info_key] in landing.text
+
+
+def test_opening_a_signup_link_spends_nothing_until_the_reader_confirms(driver):
+    """A GET is what a cross-site page can make a browser send: were it to sign in, an attacker's
+    own link would sign the victim into the attacker's account."""
+    with patch("apps.auth.infra.router.confirm_signup", return_value=_TOKENS) as confirm:
+        response = driver.client().get(
+            "/auth/confirm?token_hash=the-hash&type=signup", follow_redirects=False
+        )
+
+    assert (response.cookies.get("access_token"), confirm.called) == (None, False)
+
+
+def test_opening_an_email_change_link_spends_nothing_until_the_reader_confirms(driver):
+    with patch("apps.auth.infra.router.confirm_signup", return_value=_TOKENS) as confirm:
+        response = driver.client().get(
+            "/auth/confirm-email?token_hash=the-hash", follow_redirects=False
+        )
+
+    assert (response.cookies.get("access_token"), confirm.called) == (None, False)

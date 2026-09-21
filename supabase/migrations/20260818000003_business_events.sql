@@ -67,7 +67,10 @@ create policy "business_events: self or org member read"
   using (user_id = auth.uid() or org_id in (select public.user_org_ids()));
 
 grant select on public.business_events to authenticated;
-grant select, insert, update, delete on public.business_events to service_role;
+-- The secret key reads the journal and never writes it: Supabase's default privileges hand
+-- service_role everything, TRUNCATE included, so they are revoked before the one grant.
+revoke all on public.business_events from service_role;
+grant select on public.business_events to service_role;
 
 
 -- ── The one writer ──────────────────────────────────────────────────────────────────────────

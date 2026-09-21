@@ -6,13 +6,12 @@ from apps.pages.domain.models import (
     NavItemRead,
     Page,
     PageDocumentRead,
-    PageVisibility,
 )
 from apps.pages.domain.models import (
     PublicPage as PublicPage,
 )
 from apps.pages.domain.render import render_markdown
-from apps.pages.infra.repository import PageNavRepository, PageRepository, visible_pages
+from apps.pages.infra.repository import PageNavRepository, public_page, visible_pages
 
 
 async def get_public_nav(session: AsyncSession, org_id: uuid.UUID) -> list[NavItemRead]:
@@ -24,8 +23,8 @@ async def get_public_page(
 ) -> PageDocumentRead | None:
     """A public page as a document — its Markdown, its rendered HTML, and ``can_edit`` false:
     whoever reads a page here is anonymous, and never may."""
-    page = await PageRepository(session, org_id).by_slug(slug)
-    if page is None or page.visibility != PageVisibility.public:
+    page = await public_page(session, org_id, slug=slug)
+    if page is None:
         return None
     return PageDocumentRead.of(page, body_html=render_markdown(page.content), can_edit=False)
 

@@ -39,8 +39,8 @@ class AuthTokens:
     refresh_token: str
 
 
-async def login(email: str, password: str) -> AuthTokens:
-    supabase = await get_user_supabase()
+async def login(email: str, password: str, client_ip: str | None = None) -> AuthTokens:
+    supabase = await get_user_supabase(client_ip)
     auth = await supabase.auth.sign_in_with_password({"email": email, "password": password})
     if auth.session is None:
         raise ValueError("No session returned")
@@ -82,9 +82,9 @@ class RegisterResult:
     access_token: str | None  # None when email confirmation is required
 
 
-async def register(email: str, password: str) -> RegisterResult:
+async def register(email: str, password: str, client_ip: str | None = None) -> RegisterResult:
     """Signs up a new user. access_token is None when email confirmation is required."""
-    supabase = await get_user_supabase()
+    supabase = await get_user_supabase(client_ip)
     res = await supabase.auth.sign_up({"email": email, "password": password})
     if res.user is None:
         raise ValueError("Registration failed: no user returned")

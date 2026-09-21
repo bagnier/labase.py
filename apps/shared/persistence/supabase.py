@@ -9,12 +9,17 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.settings.env import get_technical_settings
-from supabase import AsyncClient, Client, acreate_client, create_client
+from supabase import AsyncClient, AsyncClientOptions, Client, acreate_client, create_client
 
 
-async def get_user_supabase() -> AsyncClient:
+async def get_user_supabase(client_ip: str | None = None) -> AsyncClient:
+    """A GoTrue client for one visitor's call. ``client_ip`` rides along as ``Sb-Forwarded-For``:
+    every call leaves from this server, so without it GoTrue's per-IP limit sees one caller."""
     s = get_technical_settings()
-    return await acreate_client(s.supabase_api_url, s.supabase_publishable_key)
+    headers = {"Sb-Forwarded-For": client_ip} if client_ip else {}
+    return await acreate_client(
+        s.supabase_api_url, s.supabase_publishable_key, options=AsyncClientOptions(headers=headers)
+    )
 
 
 @lru_cache

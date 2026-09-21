@@ -38,8 +38,8 @@ class ProfileApiMixin(ApiBase):
     def confirm_email_change(self, new_email: str) -> None:
         assert self._email_change_requested_at is not None, "no email change requested"
         token_hash = mailbox.token_hash_from_mail(new_email, since=self._email_change_requested_at)
-        resp = self.client().get(
-            f"/auth/confirm-email?token_hash={token_hash}", follow_redirects=False
+        resp = self.client().post(
+            "/auth/confirm-email", data={"token_hash": token_hash}, follow_redirects=False
         )
         assert resp.status_code == 303, f"confirm failed: {resp.status_code} {resp.text}"
         assert resp.headers.get("location") == "/profile", resp.headers.get("location")

@@ -105,3 +105,19 @@ alter role app_user noinherit nologin password null;
 grant app_rls to app_user;
 
 grant usage on schema public to authenticated;
+
+
+-- Whether an account enrolled a verified authenticator: what decides that its `aal1` token stops
+-- short of a sign-in. Read while the request's identity is still being established, so on the
+-- app's connection before any claims exist — `auth.mfa_factors` is GoTrue's, and no policy speaks
+-- for it. Executable by `app_rls` alone.
+create function public.second_factor_enrolled(p_user_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from auth.mfa_factors
+     where user_id = p_user_id and factor_type = 'totp' and status = 'verified'
+  )
+$$;
+
+revoke all on function public.second_factor_enrolled(uuid) from public;
+grant execute on function public.second_factor_enrolled(uuid) to app_rls;

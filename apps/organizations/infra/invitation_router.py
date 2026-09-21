@@ -120,11 +120,11 @@ async def accept_invitation(
     token: uuid.UUID,
     current_user: CurrentUser,
     rls_session: RlsSession,
-    admin_repo: AdminOrgRepo,
     rls_repo: RlsOrgRepo,
 ):
-    # Read on the admin repo: accepting is exactly what the caller has no membership for yet.
-    invitation = await admin_repo.get_invitation_by_token(token)
+    # Accepting is exactly what the caller has no membership for yet: the token reads it, through
+    # ``get_invitation_by_token``, on the caller's own session.
+    invitation = await rls_repo.get_invitation_by_token(token)
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 

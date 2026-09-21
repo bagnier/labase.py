@@ -220,6 +220,8 @@ class AuthBrowserMixin(BrowserBase):
             f"{self.base_url}/auth/confirm?token_hash={token_hash}&type=signup",
             wait_until="load",
         )
+        self.page.locator("[data-confirm-link]").get_by_role("button", name="Confirm").click()
+        self.page.wait_for_load_state("load")
 
     def assert_resend_offered(self) -> None:
         self.page.wait_for_selector("[data-resend-confirmation]", timeout=5000)
@@ -262,6 +264,29 @@ class AuthBrowserMixin(BrowserBase):
         self.page.get_by_label("Authenticator code").fill(code)
         self.page.get_by_role("button", name="Verify").click()
         self.page.wait_for_load_state("load")
+
+    def open_profile_with_pending_sign_in(self, *, as_impersonator: bool = False) -> None:
+        # The attacker's move: the challenge's relay cookie, presented as a bearer — and, dressed
+        # up, as the stashed admin session an impersonation carries.
+        self.page.wait_for_selector("[data-mfa-form]", timeout=5000)
+        pending = next(
+            (
+                c.get("value")
+                for c in self.page.context.cookies()
+                if c.get("name") == "mfa_access_token"
+            ),
+            None,
+        )
+        assert pending, "no pending sign-in to replay"
+        if as_impersonator:
+            self.page.context.add_cookies(
+                [{"name": "impersonator_access_token", "value": pending, "url": self.base_url}]
+            )
+        self.page.set_extra_http_headers({"Authorization": f"Bearer {pending}"})
+        try:
+            self.visit("/profile")
+        finally:
+            self.page.set_extra_http_headers({})
 
     def assert_totp_rejected(self) -> None:
         alert = self.page.locator("[data-mfa-form] .alert", has_text="did not work")
@@ -373,8 +398,12 @@ class AuthBrowserMixin(BrowserBase):
         )
         page.goto(f"{self.base_url}/auth/login", wait_until="load")
         page.locator("[data-passkey-signin]").click()
-        # passkeys.js follows the server's redirect once the assertion verified.
-        page.wait_for_url(f"{self.base_url}/profile*", timeout=10000)
+        # passkeys.js follows the server's redirect once the assertion verified: the session, or
+        # the authenticator-code step when the account enrolled one.
+        page.wait_for_url(
+            lambda url: url.startswith((f"{self.base_url}/profile", f"{self.base_url}/auth/mfa")),
+            timeout=10000,
+        )
 
     # ── user management (console accounts screen) ─────────────────────────────
     def _accounts_as_admin(self) -> None:

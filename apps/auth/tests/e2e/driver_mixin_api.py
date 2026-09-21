@@ -162,8 +162,10 @@ class AuthApiMixin(ApiBase):
     def confirm_address_via_link(self, email: str) -> None:
         assert self._confirmation_requested_at is not None, "no resend requested"
         token_hash = mailbox.token_hash_from_mail(email, since=self._confirmation_requested_at)
-        resp = self.client().get(
-            f"/auth/confirm?token_hash={token_hash}&type=signup", follow_redirects=False
+        resp = self.client().post(
+            "/auth/confirm",
+            data={"token_hash": token_hash, "type": "signup"},
+            follow_redirects=False,
         )
         assert resp.status_code == 303, f"confirm failed: {resp.status_code} {resp.text}"
 
@@ -231,6 +233,16 @@ class AuthApiMixin(ApiBase):
             },
             headers={"accept": "application/json"},
         )
+
+    def open_profile_with_pending_sign_in(self, *, as_impersonator: bool = False) -> None:
+        # The attacker's move: the challenge's relay cookie, presented as a bearer — and, dressed
+        # up, as the stashed admin session an impersonation carries.
+        pending = self.response.cookies.get("mfa_access_token")
+        assert pending, "no pending sign-in to replay"
+        headers = {"authorization": f"Bearer {pending}", "accept": "application/json"}
+        if as_impersonator:
+            headers["cookie"] = f"impersonator_access_token={pending}"
+        self.response = self.client().get("/profile", headers=headers, follow_redirects=False)
 
     def assert_totp_rejected(self) -> None:
         assert self.response.status_code == 401, f"expected 401, got {self.response.status_code}"

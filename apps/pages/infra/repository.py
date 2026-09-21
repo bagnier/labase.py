@@ -1,12 +1,34 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.organizations.contract.current import OrgRole
 from apps.pages.domain.models import NavCandidate, NavItemRead, Page, PageNavItem, PageVisibility
 from apps.shared import clock
 from apps.shared.persistence.repository import OrgScopedRepository, PositionedRepository
+
+
+def _public(sql: str, **params: object):
+    """Pages read through ``public_pages`` — the database's own rule for a visitor outside the
+    org, on the RLS connection. ``sql`` selects from it as ``p``."""
+    return select(Page).from_statement(text(sql).bindparams(**params))
+
+
+async def public_page(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    *,
+    slug: str | None = None,
+    page_id: uuid.UUID | None = None,
+) -> Page | None:
+    """One of an org's public pages, by slug or id — ``None`` for any other, which a visitor
+    outside the org cannot tell from a page that does not exist."""
+    if slug is not None:
+        sql, key = "select p.* from public_pages(:org_id) p where p.slug = :key", slug
+    else:
+        sql, key = "select p.* from public_pages(:org_id) p where p.id = :key", page_id
+    return await session.scalar(_public(sql, org_id=org_id, key=key))
 
 
 class PageRepository(OrgScopedRepository[Page]):
@@ -47,11 +69,18 @@ class PageRepository(OrgScopedRepository[Page]):
 async def visible_pages(
     session: AsyncSession, org_id: uuid.UUID, *, role: OrgRole | None
 ) -> list[Page]:
-    """Pages visible to the requester: members/owners see every page, anonymous
-    visitors only ``public`` ones."""
-    q = select(Page).where(Page.org_id == org_id).order_by(Page.created_at.desc())
+    """Pages visible to the requester: members/owners see every page, anyone outside the org
+    what ``public_pages`` gives them."""
     if role is None:
-        q = q.where(Page.visibility == PageVisibility.public)
+        return list(
+            await session.scalars(
+                _public(
+                    "select p.* from public_pages(:org_id) p order by p.created_at desc",
+                    org_id=org_id,
+                )
+            )
+        )
+    q = select(Page).where(Page.org_id == org_id).order_by(Page.created_at.desc())
     return list(await session.scalars(q))
 
 
@@ -63,14 +92,25 @@ async def search_visible_pages(
     Uses the generated ``search_vector`` (GIN-indexed) with ``websearch_to_tsquery`` so
     natural queries (quoted phrases, ``or``) work; falls back to recency for ties. Same
     visibility rules as :func:`visible_pages`."""
+    if role is None:
+        return list(
+            await session.scalars(
+                _public(
+                    "select p.* from public_pages(:org_id) p,"
+                    " websearch_to_tsquery('english', :query) q"
+                    " where p.search_vector @@ q"
+                    " order by ts_rank(p.search_vector, q) desc, p.created_at desc",
+                    org_id=org_id,
+                    query=query,
+                )
+            )
+        )
     tsq = func.websearch_to_tsquery("english", query)
     q = (
         select(Page)
         .where(Page.org_id == org_id, Page.search_vector.op("@@")(tsq))
         .order_by(func.ts_rank(Page.search_vector, tsq).desc(), Page.created_at.desc())
     )
-    if role is None:
-        q = q.where(Page.visibility == PageVisibility.public)
     return list(await session.scalars(q))
 
 
@@ -118,20 +158,28 @@ class PageNavRepository(PositionedRepository[PageNavItem]):
         return in_nav + not_in_nav
 
     async def nav_items(self, *, public_only: bool = False) -> list[NavItemRead]:
-        """Ordered nav items for page rendering. If public_only, exclude members-only pages."""
-        rows = await self.all()
-        page_ids = [r.page_id for r in rows]
-        if not page_ids:
-            return []
-        pages_map: dict[uuid.UUID, Page] = {
-            p.id: p for p in await self.session.scalars(select(Page).where(Page.id.in_(page_ids)))
-        }
+        """Ordered nav items for page rendering. ``public_only`` is the view from outside the org:
+        the items ``public_nav_items`` gives, pointing at pages ``public_pages`` gives."""
+        if public_only:
+            rows = list(
+                await self.session.scalars(
+                    select(PageNavItem).from_statement(
+                        text(
+                            "select n.* from public_nav_items(:org_id) n order by n.position"
+                        ).bindparams(org_id=self.org_id)
+                    )
+                )
+            )
+            pages = await visible_pages(self.session, self.org_id, role=None)
+        else:
+            rows = await self.all()
+            page_ids = [r.page_id for r in rows]
+            pages = list(await self.session.scalars(select(Page).where(Page.id.in_(page_ids))))
+        pages_map: dict[uuid.UUID, Page] = {p.id: p for p in pages}
         result = []
         for row in rows:
             page = pages_map.get(row.page_id)
             if page is None:
-                continue
-            if public_only and page.visibility != PageVisibility.public:
                 continue
             result.append(
                 NavItemRead(

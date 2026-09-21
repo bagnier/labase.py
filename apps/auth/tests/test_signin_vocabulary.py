@@ -42,6 +42,7 @@ def test_a_sign_in_records_that_a_second_factor_was_cleared():
     [
         ("password", "password"),
         ("oauth", "oauth"),
+        ("passkey", "passkey"),
         (None, "password"),  # a relay cookie the browser dropped
         ("nonsense", "password"),  # anything a caller can forge
     ],

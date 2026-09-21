@@ -11,7 +11,7 @@ touching auth.
 from apps.api_keys.contract.events import ApiKeyIssued, ApiKeyRevoked
 from apps.api_keys.domain.models import ApiKey, ApiKeyRead
 from apps.api_keys.domain.service import hash_token
-from apps.api_keys.infra.repository import ApiKeyRepository, resolve_active_key, touch_last_used
+from apps.api_keys.infra.repository import ApiKeyRepository, resolve_key_principal
 from apps.api_keys.infra.router import router
 from apps.auth.contract.admin import resolve_user_emails
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
@@ -67,17 +67,16 @@ def _declare_settings() -> SettingsDeclaration:
 async def _resolve(query: ApiKeyQuery) -> AuthenticatedUser | None:
     """Bearer token → org-pinned principal; None lets auth answer 401.
 
-    Runs pre-auth on the request's admin session (no JWT exists yet — the hash
-    lookup is the explicit check). RLS still applies downstream: the request
-    proceeds with the key creator's synthesized claims.
+    Runs pre-auth on the request's own connection, identity-less (no JWT exists yet — the hash
+    lookup is the explicit check). RLS still applies downstream: the request proceeds with the
+    key creator's synthesized claims.
     """
     if not query.token.startswith(API_KEY_PREFIX):
         return None
-    key = await resolve_active_key(query.session, hash_token(query.token))
-    if key is None:
+    principal = await resolve_key_principal(query.session, hash_token(query.token))
+    if principal is None:
         return None
-    await touch_last_used(query.session, key)
-    created_by, org_id = key.created_by, key.org_id
+    created_by, org_id = principal
     email = (await resolve_user_emails([created_by])).get(created_by, "")
     return AuthenticatedUser(
         id=created_by,

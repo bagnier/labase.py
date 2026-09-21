@@ -34,3 +34,29 @@ create policy "api_keys: owner all"
 
 grant select, insert, update, delete on public.api_keys to authenticated;
 grant select, insert, update, delete on public.api_keys to service_role;
+
+
+-- ── Resolving a bearer token ────────────────────────────────────────────────────────────────────
+--
+-- A key is resolved before any identity exists, so no policy can answer for it: this function
+-- does, for a live key's hash and nothing else, on the app's own connection rather than a
+-- BYPASSRLS one. It stamps `last_used_at` when older than `p_stale_before` (the app owns that
+-- granularity). Executable by `app_rls` alone — PostgREST never resolves an `lbk_` token.
+
+create function public.api_key_principal(
+  p_key_hash text, p_now timestamptz, p_stale_before timestamptz
+) returns table (created_by uuid, org_id uuid)
+  language plpgsql volatile security definer set search_path = '' as $$
+begin
+  update public.api_keys k
+     set last_used_at = p_now
+   where k.key_hash = p_key_hash and k.revoked_at is null
+     and (k.last_used_at is null or k.last_used_at < p_stale_before);
+  return query
+    select k.created_by, k.org_id from public.api_keys k
+     where k.key_hash = p_key_hash and k.revoked_at is null;
+end
+$$;
+
+revoke all on function public.api_key_principal(text, timestamptz, timestamptz) from public;
+grant execute on function public.api_key_principal(text, timestamptz, timestamptz) to app_rls;

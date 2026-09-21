@@ -26,3 +26,15 @@ Feature: Passkeys (WebAuthn)
     When they sign out
     And a visitor signs in with their passkey
     Then they are on their profile page
+
+  Scenario: A passkey sign-in still asks for the authenticator code once enrolled
+    Given a server admin is signed in as "root@example.com"
+    When the admin sets the "users" setting "passkeys_enabled" to "true"
+    Given a user is signed in as "quinn@example.com"
+    When they add a passkey
+    And they enrol an authenticator app
+    And they sign out
+    And a visitor signs in with their passkey
+    Then they are asked for their authenticator code
+    When they enter a valid authenticator code
+    Then they are on their profile page

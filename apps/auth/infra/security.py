@@ -1,4 +1,6 @@
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import lru_cache
 
 import jwt
@@ -12,6 +14,7 @@ from fastapi import (
     Response,
     status,
 )
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
@@ -21,8 +24,10 @@ from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared import clock
 from apps.shared.integration.contribs import contribs
 from apps.shared.logs.dependency import log_dependency_failure
-from apps.shared.persistence.database import get_admin_session
+from apps.shared.persistence.database import get_user_session
+from apps.shared.persistence.rls import clear_rls_context, set_rls_context
 from apps.shared.settings.env import get_technical_settings
+from apps.shared.settings.live import get_settings
 
 log = structlog.get_logger(__name__)
 
@@ -58,6 +63,55 @@ def decode_jwt(token: str) -> dict:
     )
 
 
+@asynccontextmanager
+async def _before_identity(session: AsyncSession) -> AsyncIterator[None]:
+    """Reads made while who is asking is not known yet: the app's role with claims naming nobody,
+    never a BYPASSRLS connection — what they need goes through functions made for it. Undone
+    after, so the session carries no borrowed identity into the request's own context."""
+    await set_rls_context(session, {"role": "anon"})
+    try:
+        yield
+    finally:
+        await clear_rls_context(session)
+
+
+def _short_of_aal2(payload: dict) -> bool:
+    """Whether the token could owe a second factor at all — free to answer, so the database is
+    asked only then."""
+    return payload.get("aal") != "aal2" and bool(get_settings("users").view().two_factor_enabled)
+
+
+async def _second_factor_owed(payload: dict, session: AsyncSession) -> bool:
+    """Whether this token stopped short of the second factor its account has enrolled.
+
+    GoTrue mints a working ``aal1`` token before the TOTP step-up — the one the challenge relays.
+    Accepting it here would make the password alone a session; with 2FA switched off server-wide,
+    sign-in skips the step-up, so ``aal1`` is the only level there is."""
+    if not _short_of_aal2(payload):
+        return False
+    enrolled = await session.scalar(
+        text("select second_factor_enrolled(:uid)").bindparams(uid=uuid.UUID(payload["sub"]))
+    )
+    return bool(enrolled)
+
+
+async def _impersonated_by_an_admin(stash: str | None, session: AsyncSession) -> bool:
+    """Whether the stashed impersonator token is a live admin session that owes no second factor.
+
+    Impersonation mints the target's session through a magic link — ``aal1`` by construction — so
+    a disguise over an enrolled account holds only on the admin's word, read from their own token:
+    the cookie alone is a value anyone can set."""
+    if not stash:
+        return False
+    try:
+        admin = decode_jwt(stash)
+    except jwt.PyJWTError:
+        return False
+    if admin.get("app_metadata", {}).get("role") != "admin":
+        return False
+    return not await _second_factor_owed(admin, session)
+
+
 def _impersonation_remaining(deadline: str | None) -> int | None:
     """Seconds left in the impersonation window, or ``None`` when not impersonating.
 
@@ -77,11 +131,13 @@ async def get_current_user(
     refresh_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
     impersonator_deadline: str | None = Cookie(default=None),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    impersonator_access_token: str | None = Cookie(default=None),
+    session: AsyncSession = Depends(get_user_session),
 ) -> AuthenticatedUser:
     bearer = _bearer_token(authorization)
     if bearer is not None and bearer.startswith(API_KEY_PREFIX):
-        principal = await _resolve_api_key(bearer, admin_session)
+        async with _before_identity(session):
+            principal = await _resolve_api_key(bearer, session)
         structlog.contextvars.bind_contextvars(user_id=principal.id)
         return principal
     # A bearer GoTrue JWT is the machine twin of the cookie session (no refresh flow).
@@ -120,6 +176,16 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
+    refused = False
+    if _short_of_aal2(payload):
+        async with _before_identity(session):
+            refused = await _second_factor_owed(payload, session) and not (
+                await _impersonated_by_an_admin(impersonator_access_token, session)
+            )
+    if refused:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Second factor required"
+        )
     is_admin = payload.get("app_metadata", {}).get("role") == "admin"
     # Correlate every log line of this request with who made it — the unified logs viewer
     # filters the log sink by user_id (request_id is already bound by RequestLogger).
@@ -166,7 +232,8 @@ async def try_get_current_user(
     refresh_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
     impersonator_deadline: str | None = Cookie(default=None),
-    admin_session: AsyncSession = Depends(get_admin_session),
+    impersonator_access_token: str | None = Cookie(default=None),
+    session: AsyncSession = Depends(get_user_session),
 ) -> AuthenticatedUser | None:
     if not access_token and _bearer_token(authorization) is None:
         return None
@@ -177,7 +244,8 @@ async def try_get_current_user(
             refresh_token,
             authorization,
             impersonator_deadline,
-            admin_session,
+            impersonator_access_token,
+            session,
         )
     except HTTPException:
         return None

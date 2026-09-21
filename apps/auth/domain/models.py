@@ -40,6 +40,14 @@ class EmailAddress(BaseModel):
     email: str = ""
 
 
+class LinkConfirmation(BaseModel):
+    """A mailed link's single-use token, sent back by the reader from the page it opened."""
+
+    token_hash: str = ""
+    type: str = "signup"
+    next: str = ""
+
+
 class PasswordResetForm(BaseModel):
     """The mailed recovery token and the password to set with it."""
 
@@ -69,6 +77,7 @@ class MfaRequired(BaseModel):
     mfa_required: bool = True
     factor_id: str
     challenge_id: str
+    redirect: str  # the page that answers it, for a caller that cannot render the form itself
 
 
 class Impersonation(BaseModel):

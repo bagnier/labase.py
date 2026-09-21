@@ -221,9 +221,10 @@ create trigger org_invitations_updated_at
 
 alter table public.org_invitations enable row level security;
 
-create policy "org_invitations: member read"
+-- A pending invitation carries the token that accepts it: only an owner reads one.
+create policy "org_invitations: owner read"
   on public.org_invitations for select
-  using (org_id in (select public.user_org_ids()));
+  using (public.user_is_org_owner(org_id));
 
 create policy "org_invitations: owner insert"
   on public.org_invitations for insert
@@ -278,8 +279,11 @@ begin
 end;
 $$;
 
--- The invitee accepts on their own session; the lookup runs on the admin one only.
+-- The invitee accepts on their own session. The lookup is the app's alone: the token is the
+-- credential, so whoever holds it reads its invitation — before being a member of anything.
 grant execute on function public.accept_org_invitation(uuid) to authenticated;
+revoke all on function public.get_invitation_by_token(uuid) from public;
+grant execute on function public.get_invitation_by_token(uuid) to app_rls;
 
 grant select, insert, update, delete on public.org_invitations to authenticated;
 grant select, insert, update, delete on public.org_invitations to service_role;
