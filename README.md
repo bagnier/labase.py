@@ -574,13 +574,14 @@ merges them — called explicitly, never injected silently.
 
 #### Identity
 
-Every table's primary key is a time-ordered **UUIDv7** — the `UUIDPk` mixin
-(`default=uuid.uuid7`, Python 3.14 stdlib) on the ORM write path, mirrored by a `public.uuidv7()`
-column default in SQL for raw / PostgREST inserts. Globally unique with no shared sequence (safe
-across instances) *and* monotonic, so the append-only stores use a pk as a cursor: the event listener
-claims/scans `business_events.id`, the issues detail pages `issue_occurrences.id`. Because every key is a
-uuid, a business event's `entity_id` correlates entities by their stable pk, never a renameable
-handle. Security tokens are the deliberate exception — they stay random **UUIDv4** (unguessable, no
+Every table's primary key is a time-ordered **UUIDv7**, minted by the ORM where Python
+writes and by the database where it does not — a trigger, a raw insert, the journal's own writer.
+Globally unique with no shared sequence, so instances never coordinate, and ordered by the instant
+they were minted, which is what lets an append-only trail page on its key rather than carry a
+cursor of its own. That ordering is exact within one minter; across the two it is only as good as
+the agreement between the app's clock and the database's. Because every key is a uuid, a business
+event's `entity_id` correlates entities by their stable pk, never a renameable handle. Security
+tokens are the deliberate exception — they stay random **UUIDv4** (unguessable, no
 embedded timestamp).
 
 
