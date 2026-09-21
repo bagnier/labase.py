@@ -31,7 +31,7 @@ async def _list_all(store: Any, prefix: str) -> list[dict[str, Any]]:
         offset += _PAGE_SIZE
 
 
-async def _walk(store: Any, prefix: str) -> list[str]:
+async def walk(store: Any, prefix: str) -> list[str]:
     """Return every object path under ``prefix`` (recursing into folders).
 
     Supabase Storage lists a single level; folder entries carry a null ``id``.
@@ -41,7 +41,7 @@ async def _walk(store: Any, prefix: str) -> list[str]:
         name = entry["name"]
         path = f"{prefix}/{name}" if prefix else name
         if entry.get("id") is None:  # a folder, not an object
-            paths.extend(await _walk(store, path))
+            paths.extend(await walk(store, path))
         else:
             paths.append(path)
     return paths
@@ -50,7 +50,7 @@ async def _walk(store: Any, prefix: str) -> list[str]:
 async def backup(dest: Path) -> int:
     bucket_name = bucket()
     store = admin_storage().from_(bucket_name)
-    paths = await _walk(store, "")
+    paths = await walk(store, "")
     root = dest / bucket_name
     for path in paths:
         data = await store.download(path)

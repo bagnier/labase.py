@@ -1,11 +1,11 @@
-"""`_walk` must page through every object of a folder, not just the API's default page."""
+"""`walk` must page through every object of a folder, not just the API's default page."""
 
 from collections.abc import Sequence
 from typing import Any
 
 import pytest
 
-from scripts.backup_storage import _walk
+from scripts.backup_storage import walk
 
 _PAGE_SIZE = 100
 
@@ -31,6 +31,6 @@ async def test_a_folder_of_more_than_one_page_is_walked_in_full():
     names = [f"file-{i}" for i in range(_PAGE_SIZE + 36)]
     store = _FakeStore({"": names})
 
-    paths = await _walk(store, "")
+    paths = await walk(store, "")
 
     assert sorted(paths) == sorted(names)
