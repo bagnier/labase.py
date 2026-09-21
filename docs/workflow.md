@@ -37,9 +37,10 @@ when it starts, then one of:
 | `not-reproduced` | the failing test passed at this `HEAD`        | the issue is closed with what was run                 |
 
 A run only starts on the `auto-fix` label. To answer a `question`, comment, then put
-`auto-fix` back: the next run reads the whole thread. A comment alone starts nothing. An
-issue left on `fixing` with no job running is a run that died; put `auto-fix` back.
-Pull requests carry `bot`.
+`auto-fix` back: the next run reads the whole thread. A comment alone starts nothing. A run
+that ends before its own end — cancelled, timed out, a turn that stopped — is marked
+`stalled` by the workflow itself, with the run's URL in a comment; read the log, then put
+`auto-fix` back. Pull requests carry `bot`.
 
 ## Cost
 

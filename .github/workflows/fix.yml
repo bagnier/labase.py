@@ -103,3 +103,17 @@ jobs:
             --model claude-sonnet-5
             --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,Monitor,TaskStop"
             --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger,Workflow,PushNotification"
+
+      # A run that ends before its own end — cancelled, timed out, a turn that stopped — leaves
+      # `fixing` with nobody behind it. Whatever happened, the label becomes a state the owner can
+      # see. Never `auto-fix` again: that would relaunch a lasting failure forever.
+      - name: Mark a run that died
+        if: always()
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx fixing; then
+            gh issue edit "$ISSUE" --remove-label fixing --add-label stalled
+            gh issue comment "$ISSUE" --body "The fix run ended without a result: $RUN_URL"
+          fi

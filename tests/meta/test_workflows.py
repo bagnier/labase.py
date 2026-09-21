@@ -37,3 +37,16 @@ def test_the_bot_cannot_hand_its_turn_to_a_harness_that_never_returns():
     }
 
     assert {"ScheduleWakeup", "CronCreate", "RemoteTrigger", "Workflow"} <= disallowed
+
+
+def test_a_run_that_dies_does_not_leave_the_issue_on_fixing():
+    """`fixing` is set by the bot, so a run that ends before its own end — cancelled, timed out,
+    or a turn that stopped — leaves the label with nobody behind it. A step that runs whatever
+    happened turns it into a terminal state the owner can see."""
+    steps = _fix_job()["steps"]
+    action = next(
+        i for i, s in enumerate(steps) if str(s.get("uses", "")).startswith("anthropics/")
+    )
+    after = [s for s in steps[action + 1 :] if s.get("if") == "always()"]
+
+    assert [("fixing" in s["run"], "stalled" in s["run"]) for s in after] == [(True, True)]
