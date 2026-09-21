@@ -50,6 +50,19 @@ that ends before its own end — cancelled, timed out, a turn that stopped — i
 `stalled` by the workflow itself, with the run's URL in a comment; read the log, then put
 `auto-fix` back. Pull requests carry `bot`.
 
+## Pace
+
+One fix in flight: never more, to spread the subscription window; never less while there is
+work. The owner decides what and in which order, by putting `queued` on issues, in batches.
+`.github/workflows/tick.yml`, on GitHub's cron every fifteen minutes, hands the oldest `queued`
+issue to the bot — `queued` off, `auto-fix` on, as the owner — when no fix run is in progress
+and no issue is on `fixing` or `auto-fix`. The cron line is the pace, and the only knob: with
+runs of ten to fifteen minutes, a queue drains at about one issue every fifteen minutes until
+it is empty; slow it down there when the subscription window says so. An issue on `question`
+or `stalled` is never picked: it waits for the owner. The fix job itself runs in one concurrency group, without
+cancellation, so two `auto-fix` labels put on by hand queue rather than run side by side; a run
+that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+
 ## Cost
 
 Runs bill the owner's Claude subscription through `CLAUDE_CODE_OAUTH_TOKEN`

@@ -22,12 +22,14 @@ jobs:
     if: >-
       github.event.label.name == 'auto-fix' &&
       github.event.issue.user.login == github.repository_owner
-    # The same issue re-labelled `auto-fix` while a run is on: the newer run wins. On the job, not
-    # the workflow: every label fires a run, the bot's own `fixing` too, and a workflow-level group
-    # is joined before the `if` above skips it — the skipped run would cancel the live one.
+    # One fix at a time, whatever labels were put on: one group for the whole bot, and no
+    # cancellation, so a second `auto-fix` waits for the first run to end (tick.yml paces them).
+    # On the job, not the workflow: every label fires a run, the bot's own `fixing` too, and a
+    # workflow-level group would be joined before the `if` above skips it. A run that must stop
+    # is cancelled by hand, `gh run cancel`, and lands on `stalled`.
     concurrency:
-      group: fix-${{ github.event.issue.number }}
-      cancel-in-progress: true
+      group: fix-bot
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 120
     # The owner's fine-grained token, not the job's own: a pull request opened with GITHUB_TOKEN

@@ -31,6 +31,25 @@ def test_a_skipped_fix_run_cannot_cancel_the_live_one():
     assert ("concurrency" in workflow, "concurrency" in workflow["jobs"]["fix"]) == (False, True)
 
 
+def test_one_fix_at_a_time_whatever_labels_were_put_on():
+    """The pace is one fix in flight: two `auto-fix` labels put on by hand queue, they do not run
+    side by side — one group for the whole bot, and no cancellation, so the second waits."""
+    assert _fix_job()["concurrency"] == {"group": "fix-bot", "cancel-in-progress": False}
+
+
+def test_the_tick_runs_on_a_cron_and_labels_with_the_owner_s_token():
+    """A label put on with the job's own GITHUB_TOKEN fires no workflow, so the tick would queue
+    forever; it labels as the owner, on GitHub's own clock, with no Claude run of its own."""
+    workflow = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())
+    (job,) = workflow["jobs"].values()
+
+    assert (
+        "schedule" in workflow[True],  # `on:` reads as the YAML boolean
+        job["env"]["GH_TOKEN"],
+        [s for s in job["steps"] if str(s.get("uses", "")).startswith("anthropics/")],
+    ) == (True, "${{ secrets.FIX_BOT_TOKEN }}", [])
+
+
 @pytest.mark.parametrize("workflow", _BOTS)
 def test_the_bot_cannot_hand_its_turn_to_a_harness_that_never_returns(workflow):
     """Headless, the end of the turn is the end of the run: a tool that promises to bring the
