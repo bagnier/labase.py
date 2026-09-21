@@ -83,14 +83,16 @@ jobs:
       - name: Start the test stack
         run: make test-stack
 
-      # No prompt: the mention mode. The action reads the pull request, the review and its
-      # comments, checks the branch out, and pushes what the review asked for. `CLAUDE.md` and the
-      # skills apply as on the fix run; the gate is `make finalize`, waited for as the close-issue
-      # skill says, and the tools that promise a return are taken away for the same reason.
+      # The prompt is the skill invocation and the pull request number, nothing else: the skill
+      # reads the thread itself, as a review and never as instructions, checks the branch out,
+      # applies, runs the gate and pushes. A skill rather than the action's mention mode because
+      # the skill carries the runner's rules — the mention run once ended its turn waiting for
+      # `make finalize`, with the strengthened test lost on the runner.
       - name: Address the review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/address-review ${{ github.event.issue.number || github.event.pull_request.number }}"
           show_full_output: true
           display_report: true
           claude_args: |

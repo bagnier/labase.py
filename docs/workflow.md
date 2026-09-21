@@ -23,8 +23,10 @@ pull request. Merging is never the bot's.
    bot's, and neither is derived from the other.
 4. **Review.** The owner reads the pull request. Corrections go back to the bot as a
    review: inline remarks, then one comment that mentions `@claude` and says what to change.
-   `.github/workflows/review.yml` runs the action on that mention, on the pull request's own
-   branch, one run per mention, so remarks are grouped in one.
+   `.github/workflows/review.yml` hands the pull request to the `address-review` skill on that
+   mention: it applies the remarks on the pull request's own branch, runs `make finalize`,
+   pushes, and answers in a comment — or asks, and pushes nothing. One run per mention, so
+   remarks are grouped in one.
 5. **Merge.** The owner merges, or closes. `main` requires a review and refuses a direct
    push, so the bot cannot get past this step.
 

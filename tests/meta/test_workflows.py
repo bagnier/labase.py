@@ -55,6 +55,19 @@ def test_a_review_run_answers_the_owner_s_mention_only():
     assert ("@claude" in job["if"], "repository_owner" in job["if"]) == (True, True)
 
 
+def test_each_headless_run_is_a_skill_with_the_runner_s_rules():
+    """The mention mode left the review run without a skill, and it ended its turn waiting for
+    `make finalize` like the fix run once did. Every headless run is a skill invocation: the
+    skill carries the runner's rules — waiting, rendering, asking — the workflow only names it."""
+    prompts = {}
+    for workflow in _BOTS:
+        (job,) = yaml.safe_load((_WORKFLOWS / workflow).read_text())["jobs"].values()
+        step = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("anthropics/"))
+        prompts[workflow] = step["with"]["prompt"].split(" ")[0]
+
+    assert prompts == {"fix.yml": "/close-issue", "review.yml": "/address-review"}
+
+
 def test_a_run_that_dies_does_not_leave_the_issue_on_fixing():
     """`fixing` is set by the bot, so a run that ends before its own end — cancelled, timed out,
     or a turn that stopped — leaves the label with nobody behind it. A step that runs whatever
