@@ -26,12 +26,15 @@ async def seed_fact_on(session: AsyncSession, record: BusinessEventRecord) -> No
     arrangement that needs a fact *in flight*: minted, holding its key, not yet visible elsewhere.
 
     Fills what the real write path fills before writing: the readable names pinned as of now, and
-    the ``icon`` column default, which SQLAlchemy applies at flush and nothing here ever flushes.
+    the ``icon`` and ``payload`` column defaults, which SQLAlchemy applies at flush and nothing here
+    ever flushes.
     The record is a throwaway carrier the caller built for this one write (the same thing
     ``event_to_record`` returns), so it is completed in place."""
     repo = EventRepository(session)
     record.user_name, record.org_name = await repo.pinned_names(record.user_id, record.org_id)
     record.icon = record.icon or "circle"
+    if record.payload is None:
+        record.payload = {}
     await _append_record(session, record)
 
 

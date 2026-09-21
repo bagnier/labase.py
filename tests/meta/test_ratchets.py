@@ -47,20 +47,16 @@ _MAY_READ_THE_WALL_CLOCK = ("apps/shared/clock.py", "/tests/")
 # name is a literal, which is what makes it greppable and what the Timeline's `app` axis reads.
 _NAMES_ITS_LINES_AT_RUNTIME = "apps/shared/logs/"
 
-# Reads defending against a `None` a writer really can produce: GoTrue's `app_metadata`, a JSONB
-# payload column, Starlette's optional headers. Each is an external shape, not slack in one of our
-# own annotations — which is the distinction the README's rule turns on. A twelfth is a decision.
+# Reads defending against a `None` a writer really can produce: GoTrue's raw sign-in answer, a
+# contribution's optional `growth`, Starlette's optional headers, and two optional parameters. Each
+# is an external shape or a declared option, not slack in one of our own annotations — which is the
+# distinction the README's rule turns on. A sixth is a decision.
 _DEFENSIVE_READS = {
     "apps/auth/domain/service.py": 1,
-    "apps/auth/infra/accounts_router.py": 1,
-    "apps/auth/infra/user_repository.py": 1,
     "apps/console/infra/router.py": 1,
-    "apps/issues/contract/queries.py": 1,
     "apps/shared/charts.py": 1,
-    "apps/shared/events/repository.py": 2,
     "apps/shared/http/exceptions.py": 1,
     "apps/shared/queue.py": 1,
-    "apps/timeline/infra/repository.py": 1,
 }
 
 # Every navigation the browser mixins still make by URL, and why each one is an *arrival* rather
@@ -220,6 +216,37 @@ _OUTSIDE_THE_COMPONENT_LAYER = {
     "task-total",
 }
 
+_SNAPSHOT_READS = {
+    "all",
+    "content",
+    "count",
+    "get_attribute",
+    "inner_html",
+    "inner_text",
+    "input_value",
+    "is_checked",
+    "is_enabled",
+    "text_content",
+}
+
+# Per browser mixin, the snapshot reads its assertions still make. None is a `count()`: those are
+# `expect(...).to_have_count(n)` now. What is left reads text or an attribute once — the backlog
+# of `expect-not-is-visible`, and it only shrinks.
+_SNAPSHOT_READS_IN_ASSERTIONS = {
+    "apps/auth/tests/e2e/driver_mixin_browser.py": 4,
+    "apps/calendar/tests/e2e/driver_mixin_browser.py": 4,
+    "apps/console/tests/e2e/driver_mixin_browser.py": 7,
+    "apps/files/tests/e2e/driver_mixin_browser.py": 1,
+    "apps/issues/tests/e2e/driver_mixin_browser.py": 3,
+    "apps/learning/tests/e2e/driver_mixin_browser.py": 9,
+    "apps/metrics/tests/e2e/driver_mixin_browser.py": 5,
+    "apps/organizations/tests/e2e/driver_mixin_browser.py": 2,
+    "apps/pages/tests/e2e/driver_mixin_browser.py": 11,
+    "apps/profile/tests/e2e/driver_mixin_browser.py": 1,
+    "apps/timeline/tests/e2e/driver_mixin_browser.py": 1,
+    "apps/todo/tests/e2e/driver_mixin_browser.py": 2,
+}
+
 _STEP_TYPES = {"given", "when", "then"}
 # What Playwright's request context can send: ``context.request.put(...)``, ``page.request.fetch``.
 _REQUEST_VERBS = {"fetch", "get", "post", "put", "patch", "delete", "head"}
@@ -373,9 +400,46 @@ def test_no_state_wait_is_a_sleep():
 
 
 def test_dom_state_is_asserted_through_expect():
-    """`assert locator.is_visible()` reads the DOM once, at whatever moment an HTMX swap happens
-    to be in. `expect(...)` retries to the settled state."""
-    assert _sites(r"assert [^#\n]*\.is_visible\(\)", _APPS, _ROOT / "tests") == {}
+    """`locator.is_visible()` reads the DOM once, at whatever moment an HTMX swap happens to be
+    in. `expect(...)` retries to the settled state. The read is what is banned, not the line
+    shape: an `if loc.is_visible(): return` or a bound `seen = loc.is_visible` is the same
+    snapshot with the `assert` moved elsewhere."""
+    reads = {
+        f"{relative}:{node.lineno}"
+        for path, relative in _python_files(_APPS, _ROOT / "tests")
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Attribute) and node.attr in {"is_visible", "is_hidden"}
+    }
+
+    assert reads == set()
+
+
+def _snapshot_reads_in_assertions(path: Path) -> int:
+    """Snapshot DOM reads inside a mixin's ``assert_*`` methods — each one is compared once, at
+    whatever state the page happens to be in, where ``expect(...)`` would retry to the settled
+    one."""
+    return sum(
+        1
+        for fn in ast.walk(ast.parse(path.read_text()))
+        if isinstance(fn, ast.FunctionDef) and fn.name.startswith("assert_")
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _SNAPSHOT_READS
+    )
+
+
+def test_the_snapshot_reads_in_assertions_are_the_named_ones():
+    """The half of `expect-not-is-visible` a banned spelling cannot reach: a `count() == 0` read
+    before a swap lands passes however wrong the page is about to be. `count` is gone; the reads
+    left compare text or attributes, and only shrink."""
+    reads = {
+        str(mixin.relative_to(_ROOT)): found
+        for mixin in sorted(_APPS.glob("*/tests/e2e/driver_mixin_browser.py"))
+        if (found := _snapshot_reads_in_assertions(mixin))
+    }
+
+    assert reads == _SNAPSHOT_READS_IN_ASSERTIONS
 
 
 def _called_attributes(fn: ast.AST) -> list[str]:

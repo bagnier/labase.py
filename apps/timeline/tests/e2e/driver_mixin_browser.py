@@ -1,6 +1,8 @@
 import json
 from datetime import datetime
 
+from playwright.sync_api import expect
+
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 from apps.shared.logs.chain import apply_log_level
@@ -190,9 +192,7 @@ class TimelineBrowserMixin(BrowserBase):
         )
 
     def assert_offers_older_entries(self) -> None:
-        assert self.page.locator("[data-load-more]").count() == 1, (
-            "expected the timeline to offer a next page"
-        )
+        expect(self.page.locator("[data-load-more]")).to_have_count(1)
 
     def assert_older_entries_do_not_repeat(self) -> None:
         added = self._subjects()[len(self._first_page) :]
@@ -257,9 +257,7 @@ class TimelineBrowserMixin(BrowserBase):
 
     def assert_entry_source(self, event: str, source: str) -> None:
         row = self.page.locator(f"tr[data-entry-name='{event}']").first
-        assert row.count() > 0, f"{event!r} not listed: {self._events()}"
-        actual = row.get_attribute("data-entry-source")
-        assert actual == source, f"{event!r} source: expected {source!r}, got {actual!r}"
+        expect(row).to_have_attribute("data-entry-source", source)
 
     def assert_entry_above(self, a: str, b: str) -> None:
         events = self._events()
@@ -276,8 +274,7 @@ class TimelineBrowserMixin(BrowserBase):
         the log drain — the same assertion saw 1, 2 or 4 depending on when the batch landed.
         """
         rows = f"tr[data-entry-source='{source}']:has(a[href*='org_id={timeline_org_id(org)}'])"
-        n = self.page.locator(rows).count()
-        assert n == expected, f"expected {expected} {source!r} entries for {org!r}, got {n}"
+        expect(self.page.locator(rows)).to_have_count(expected)
 
     def assert_all_listed(self, *events: str) -> None:
         listed = self._events()

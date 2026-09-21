@@ -3,6 +3,7 @@ import threading
 import uuid
 from datetime import date, timedelta
 
+from playwright.sync_api import expect
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -108,16 +109,16 @@ class LearningBrowserMixin(BrowserBase):
         return page
 
     def _focus_card(self, page, ext: str) -> None:
-        """The review session is a one-card-at-a-time stepper; step Next until the
-        target card's panel is the visible one before clicking inside it."""
-        target = page.locator(f".lcard[data-card-id='{ext}']")
-        nxt = page.locator("[data-stepper-next]")
-        for _ in range(50):
-            if target.is_visible():
-                return
-            if nxt.count() == 0 or not nxt.is_enabled():
-                return
-            nxt.click()
+        """The review session is a one-card-at-a-time stepper; step Next as many times as the
+        target card sits from the first, then insist it is the one shown — a card the session
+        never rendered fails here, not in the click that follows."""
+        cards = page.locator(".lcard")
+        expect(cards.first).to_be_attached()
+        order = [c.get_attribute("data-card-id") for c in cards.all()]
+        assert ext in order, f"card {ext!r} is not in today's session: {order}"
+        for _ in range(order.index(ext)):
+            page.locator("[data-stepper-next]").click()
+        expect(page.locator(f".lcard[data-card-id='{ext}']")).to_be_visible()
 
     def _card_state(self, key: str, ext: str) -> dict:
         org_id, uid = self._learn_org[key], self._learn_uid[key]
@@ -286,7 +287,7 @@ class LearningBrowserMixin(BrowserBase):
     def assert_no_resources(self, name: str) -> None:
         key = self._user(name)
         page = self._lpage(key)
-        assert page.locator("#learning-resources [data-empty]").count() == 1
+        expect(page.locator("#learning-resources [data-empty]")).to_have_count(1)
 
     def _current(self) -> str:
         assert self._learn_current is not None, "no acting user"

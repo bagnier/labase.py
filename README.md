@@ -125,9 +125,10 @@ submit forms.
 Every account gets a personal organization at sign-up;
 org data lives under `/{org_handle}/…`. Members read, owners write.
 
-### First signed-up user is admin
+### The first to sign up is admin
 
-They can then promote any other user as admin.
+Whoever signs up while the server has no admin becomes one — the first account, or the next one if
+that account was gone before its bootstrap ran. They can then promote any other user as admin.
 
 
 ### One source of truth for the rest

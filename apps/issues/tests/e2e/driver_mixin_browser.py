@@ -1,3 +1,5 @@
+from playwright.sync_api import expect
+
 from apps.issues.infra.repository import see_occurrence
 from tests.e2e.drivers.browser_base import BrowserBase
 
@@ -59,7 +61,7 @@ class IssuesBrowserMixin(BrowserBase):
         assert f"×{count}" in row.inner_text(), f"×{count} not in row: {row.inner_text()!r}"
 
     def assert_issue_detail_shows(self, count: int) -> None:
-        assert self.page.locator("[data-issue-occurrence]").count() == count
+        expect(self.page.locator("[data-issue-occurrence]")).to_have_count(count)
         first = self.page.locator("[data-issue-occurrence]").first
         first.locator("summary").click()
         assert "Traceback" in first.locator("pre").inner_text()

@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from playwright.sync_api import expect
+
 from apps.auth.tests.given_helpers import (
     create_unconfirmed_user,
     delete_user_if_exists,
@@ -227,9 +229,7 @@ class AuthBrowserMixin(BrowserBase):
         self.page.wait_for_selector("[data-resend-confirmation]", timeout=5000)
 
     def assert_resend_not_offered(self) -> None:
-        assert self.page.locator("[data-resend-confirmation]").count() == 0, (
-            "resend affordance should be hidden when the option is off"
-        )
+        expect(self.page.locator("[data-resend-confirmation]")).to_have_count(0)
 
     # ── two-factor (TOTP) ─────────────────────────────────────────────────────
     def enroll_totp(self) -> None:
@@ -296,9 +296,7 @@ class AuthBrowserMixin(BrowserBase):
         # Their own page, read from the server: the option was turned off after it rendered.
         self.set_acting_email(email)
         self.reach_profile(fresh=True)
-        assert self.page.locator("[data-twofa]").count() == 0, (
-            "two-factor section should be hidden when the option is off"
-        )
+        expect(self.page.locator("[data-twofa]")).to_have_count(0)
 
     # ── OAuth social sign-in ───────────────────────────────────────────────────
     # The sign-in page is a visitor's view — the acting context may be a
@@ -310,7 +308,7 @@ class AuthBrowserMixin(BrowserBase):
         self._oauth_button(provider).wait_for(timeout=5000)
 
     def assert_oauth_not_offered(self, provider: str) -> None:
-        assert self._oauth_button(provider).count() == 0, f"unexpected {provider} button"
+        expect(self._oauth_button(provider)).to_have_count(0)
 
     def start_oauth(self, provider: str) -> None:
         """Click the provider button; the app answers 303 to GoTrue's authorize URL.
@@ -360,9 +358,7 @@ class AuthBrowserMixin(BrowserBase):
         self.page_for(VISITOR).locator("[data-passkey-signin]").wait_for(timeout=5000)
 
     def assert_passkey_signin_not_offered(self) -> None:
-        assert self.page_for(VISITOR).locator("[data-passkey-signin]").count() == 0, (
-            "unexpected passkey button"
-        )
+        expect(self.page_for(VISITOR).locator("[data-passkey-signin]")).to_have_count(0)
 
     def add_passkey(self) -> None:
         page = self.page
@@ -426,7 +422,7 @@ class AuthBrowserMixin(BrowserBase):
         self._account_row(email).wait_for(timeout=5000)
 
     def assert_account_not_listed(self, email: str) -> None:
-        assert self._account_row(email).count() == 0, f"{email!r} still listed"
+        expect(self._account_row(email)).to_have_count(0)
 
     def filter_accounts(self, query: str) -> None:
         search = self.page.get_by_label("Filter accounts by email")
@@ -504,7 +500,7 @@ class AuthBrowserMixin(BrowserBase):
         self.page.wait_for_url(f"{self.base_url}/console", timeout=5000)
 
     def assert_back_as_admin(self, email: str) -> None:
-        assert self.page.locator("[data-impersonation-banner]").count() == 0
+        expect(self.page.locator("[data-impersonation-banner]")).to_have_count(0)
         assert "/console" in self.page.url, f"expected the console, got {self.page.url}"
 
     def try_impersonate(self, email: str) -> None:

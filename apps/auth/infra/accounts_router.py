@@ -62,7 +62,7 @@ def _list_accounts() -> list[dict[str, Any]]:
                     "created_at": u.created_at.strftime("%Y-%m-%d") if u.created_at else "",
                     "confirmed": u.email_confirmed_at is not None,
                     "disabled": _is_banned(u),
-                    "is_admin": (u.app_metadata or {}).get("role") == "admin",
+                    "is_admin": u.app_metadata.get("role") == "admin",
                 }
             )
         if len(users) < _PAGE_SIZE:

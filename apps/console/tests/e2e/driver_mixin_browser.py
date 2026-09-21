@@ -1,4 +1,4 @@
-from playwright.sync_api import Page, Response
+from playwright.sync_api import Page, Response, expect
 
 from apps.auth.tests.given_helpers import (
     clear_all_admin_roles,
@@ -236,7 +236,7 @@ class ConsoleBrowserMixin(BrowserBase):
     def assert_can_open_console(self, email: str) -> None:
         """Can open it: their own pages offer the way in, and following it lands on the console."""
         page = self.page_for(email)
-        assert page.locator("a[href='/console']").count(), f"no console offered to {email!r}"
+        expect(page.locator("a[href='/console']").first).to_be_visible()
         resp = self._open_console(page)
         assert resp is not None, "Expected 200, got no response"
         assert resp.status == 200, f"Expected 200, got {resp.status}"
@@ -245,7 +245,7 @@ class ConsoleBrowserMixin(BrowserBase):
         """Refused says two things, and hiding the button is only the first: the server itself
         must answer no to the request the button would have sent."""
         page = self.page_for(email)
-        assert page.locator("a[href='/console']").count() == 0, f"console offered to {email!r}"
+        expect(page.locator("a[href='/console']")).to_have_count(0)
         resp = page.request.fetch(f"{self.base_url}/console", method="GET")
         assert resp.status == 404, f"Expected 404, got {resp.status}"
 

@@ -206,10 +206,12 @@ class PagesBrowserMixin(BrowserBase):
         assert text in items, f"list item '{text}' not found in: {items}"
 
     def assert_rendered_shown(self) -> None:
-        assert self.page.locator("article").count() > 0, "rendered page article not found"
+        expect(self.page.locator("article")).to_be_visible()
 
     def assert_cannot_edit(self, slug: str) -> None:
-        assert self.page.locator("a.edit-link").count() == 0, "an edit link is shown"
+        article = self.page.locator("article")
+        expect(article).to_be_visible()
+        expect(article.get_by_role("link", name="Edit", exact=True)).to_have_count(0)
 
     def assert_visible_to_members(self, slug: str) -> None:
         self.assert_page_visibility(slug, "members")
@@ -320,14 +322,9 @@ class PagesBrowserMixin(BrowserBase):
         )
 
     def assert_page_nav_shows(self, title: str) -> None:
-        nav = self.page_for(_VISITOR).locator('nav[aria-label="Page navigation"]')
-        assert nav.count() > 0, "no page navigation found on page"
-        links = [el.inner_text().strip() for el in nav.locator("a").all()]
-        assert title in links, f"nav link to '{title}' not found: {links}"
+        nav = self.page_for(_VISITOR).get_by_role("navigation", name="Page navigation")
+        expect(nav.get_by_role("link", name=title, exact=True)).to_be_visible()
 
     def assert_page_nav_not_shows(self, title: str) -> None:
-        nav = self.page_for(_VISITOR).locator('nav[aria-label="Page navigation"]')
-        if nav.count() == 0:
-            return
-        links = [el.inner_text().strip() for el in nav.locator("a").all()]
-        assert title not in links, f"'{title}' should not appear in page nav: {links}"
+        nav = self.page_for(_VISITOR).get_by_role("navigation", name="Page navigation")
+        expect(nav.get_by_role("link", name=title, exact=True)).to_have_count(0)

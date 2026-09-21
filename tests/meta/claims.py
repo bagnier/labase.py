@@ -127,6 +127,7 @@ from tests.meta.test_ratchets import (
     test_the_defensive_reads_are_the_named_ones,
     test_the_e2e_doubles_are_the_named_ones,
     test_the_numbers_outside_the_settings_are_the_named_ones,
+    test_the_snapshot_reads_in_assertions_are_the_named_ones,
     test_time_comes_from_the_one_clock,
 )
 from tests.meta.test_routes import (
@@ -340,7 +341,7 @@ CLAIMS = [
     ),
     held(
         "first-user-is-admin",
-        "First signed-up user is admin",
+        "Whoever signs up while the server has no admin becomes one",
         test_the_first_registered_user_becomes_a_server_admin,
     ),
     held(
@@ -639,6 +640,7 @@ CLAIMS = [
         "Assert DOM state with `expect(...)` (auto-retries to the settled state), never `assert "
         "locator.is_visible()`",
         test_dom_state_is_asserted_through_expect,
+        test_the_snapshot_reads_in_assertions_are_the_named_ones,
     ),
     held(
         "no-networkidle-no-timeout",

@@ -68,7 +68,7 @@ async def search_issue_occurrences(
         IssueOccurrence(
             ts=occurrence.created_at,
             title=title,
-            context=occurrence.context or {},
+            context=occurrence.context,
             issue_id=issue_id,
         )
         for occurrence, title, issue_id in rows.all()

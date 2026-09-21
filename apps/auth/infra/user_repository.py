@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 from pydantic import ValidationError
@@ -21,8 +22,8 @@ class UserAdminStatus:
     is_admin: bool
 
 
-def _is_admin(app_metadata: dict | None) -> bool:
-    return (app_metadata or {}).get("role") == _ADMIN_ROLE
+def _is_admin(app_metadata: dict[str, Any]) -> bool:
+    return app_metadata.get("role") == _ADMIN_ROLE
 
 
 async def _iter_all_users():

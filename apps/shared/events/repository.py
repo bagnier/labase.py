@@ -82,7 +82,7 @@ async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> 
             "request_id": record.request_id,
             "request_name": record.request_name,
             "ip_address": record.ip_address,
-            "payload": json.dumps(record.payload or {}),
+            "payload": json.dumps(record.payload),
         },
     )
 
@@ -167,7 +167,7 @@ def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
     Both correlation keys ride as strings the queue can json-encode. ``created_at`` rebuilds onto
     the event; ``request_id`` is not an event field at all — the delivery wrapper reads it here to
     bind the reaction's log context, and ``from_payload`` then drops it."""
-    payload = dict(record.payload or {})
+    payload = dict(record.payload)
     for column in LIFTED_COLUMNS:
         value = getattr(record, column)
         payload[column] = str(value) if isinstance(value, uuid.UUID) else value

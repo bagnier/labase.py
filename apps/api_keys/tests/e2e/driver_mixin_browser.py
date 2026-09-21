@@ -1,4 +1,5 @@
 import httpx
+from playwright.sync_api import expect
 
 from tests.e2e.drivers.browser_base import BrowserBase
 
@@ -36,7 +37,7 @@ class ApiKeysBrowserMixin(BrowserBase):
         assert self._api_key_secret.startswith("lbk_"), self._api_key_secret
         # Reloading the page they are on is what "once" means: the secret is gone for good.
         self.page.reload(wait_until="load")
-        assert self.page.locator("[data-api-key-secret]").count() == 0
+        expect(self.page.locator("[data-api-key-secret]")).to_have_count(0)
 
     def _sessionless_get(self, path: str) -> httpx.Response:
         """Straight HTTP against the live server — no browser context, no cookies."""

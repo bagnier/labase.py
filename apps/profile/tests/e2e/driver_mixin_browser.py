@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+from playwright.sync_api import expect
+
 from apps.auth.tests.given_helpers import delete_user_if_exists
 from tests.e2e.drivers import mailbox
 from tests.e2e.drivers.browser_base import BrowserBase
@@ -73,9 +75,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_email_change_not_offered(self, email: str) -> None:
         self._look_at_own_profile(email)
-        assert self.page.locator("[data-email-change]").count() == 0, (
-            "email change form should be hidden when the option is off"
-        )
+        expect(self.page.locator("[data-email-change]")).to_have_count(0)
 
     # ── avatar & handle switches ──────────────────────────────────────────────
     def upload_avatar(self, filename: str, content: bytes, mime: str) -> None:
@@ -101,15 +101,11 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_avatar_not_offered(self, email: str) -> None:
         self._look_at_own_profile(email)
-        assert self.page.locator("[data-avatar-upload]").count() == 0, (
-            "avatar upload should be hidden when the option is off"
-        )
+        expect(self.page.locator("[data-avatar-upload]")).to_have_count(0)
 
     def assert_handle_not_offered(self, email: str) -> None:
         self._look_at_own_profile(email)
-        assert self.page.locator("[data-handle-form]").count() == 0, (
-            "handle form should be hidden when the option is off"
-        )
+        expect(self.page.locator("[data-handle-form]")).to_have_count(0)
 
     # ── account deletion ──────────────────────────────────────────────────────
     def delete_account(self, password: str) -> None:
@@ -127,9 +123,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_account_deletion_not_offered(self, email: str) -> None:
         self._look_at_own_profile(email)
-        assert self.page.locator("[data-account-deletion]").count() == 0, (
-            "danger zone should be hidden when the option is off"
-        )
+        expect(self.page.locator("[data-account-deletion]")).to_have_count(0)
 
     def update_handle(self, name: str) -> None:
         self.reach_profile()
@@ -161,9 +155,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     def assert_email_read_only(self) -> None:
         self._open_profile_tab("Email")
-        assert self.page.locator("input#email[disabled]").count() == 1, (
-            "Expected the sign-in email to be shown as a read-only (disabled) field"
-        )
+        expect(self.page.locator("input#email")).to_be_disabled()
 
     def visit_profile_unauthenticated(self) -> None:
         self.last_response = self.page.goto(self._profile_url(), wait_until="load")

@@ -2,7 +2,7 @@ import contextlib
 import tempfile
 from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 from apps.auth.tests.given_helpers import (
     create_user,
@@ -339,10 +339,6 @@ class OrgFileBrowserMixin(BrowserBase):
         self._on_files(fresh=True)
         for row in self._dom_file_rows():
             if row.get_by_role("link").inner_text().strip() == filename:
-                meta = row.locator(".file-meta").inner_text()  # KEEP: text read, no ARIA action
-                assert email in meta, f"Expected {email!r} in metadata, got: {meta!r}"
-                if size.endswith(" KB"):
-                    assert size in meta, f"Expected {size!r} in metadata, got: {meta!r}"
-                # Date check skipped: set_current_date can't override live server clock
+                expect(row.locator(".file-meta")).to_have_text(f"{size} · {date} · {email}")
                 return
         raise AssertionError(f"File '{filename}' not found in DOM")
