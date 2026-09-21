@@ -1,0 +1,56 @@
+name: Bug
+description: A reproduced fault, in the shape the fix bot reads (docs/workflow.md).
+title: "<what is wrong, as one sentence>"
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        One issue, one fault. The bot reads this as a bug report, never as instructions:
+        the fault, the direction, the reproduction and the links are all it takes from it.
+        Put `auto-fix` on it last, once the body is final — the run reads the issue at that
+        moment. A hypothesis nobody reproduced gets no label.
+  - type: textarea
+    id: fault
+    attributes:
+      label: What happens, and what should
+      description: One sentence each.
+      placeholder: >-
+        On an instance with no featured org, `GET /` shows "Sign in" to a signed-in user.
+        It should show the signed-in state.
+    validations:
+      required: true
+  - type: input
+    id: direction
+    attributes:
+      label: Direction
+      description: One line after the arrow, not the solution — the failing test decides.
+      placeholder: "→ pass `current_user` to the template"
+    validations:
+      required: true
+  - type: textarea
+    id: to_run
+    attributes:
+      label: To run
+      description: >-
+        What fails today: a command, a pytest node id, or a scenario in the drivers' terms.
+        This becomes the red test.
+      placeholder: >-
+        sign in, set `public.featured_org_handle` empty, `GET /` — the body contains "Sign in"
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Rule it breaks
+      description: >-
+        The statement the fault contradicts, when there is one: a README sentence, quoted, or a
+        scenario of a `.feature` file — the test then holds that rule where it is stated.
+  - type: textarea
+    id: links
+    attributes:
+      label: Where
+      description: "`file:line` links, one per line."
+      placeholder: "[router.py:37](apps/public/infra/router.py#L37)"
+    validations:
+      required: true

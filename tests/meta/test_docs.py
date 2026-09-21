@@ -290,3 +290,14 @@ def test_every_readme_pointer_names_something_the_readme_says():
     }
 
     assert dangling == set()
+
+
+def test_claude_md_imports_the_readme_rather_than_asking_for_it():
+    """`Read README.md first` is an instruction, and the fix bot's run skipped it; an
+    `@README.md` import is the README in the context of every session that reads CLAUDE.md,
+    the runner's included — nothing to obey."""
+    imports = [
+        line for line in (_ROOT / "CLAUDE.md").read_text().splitlines() if line.startswith("@")
+    ]
+
+    assert imports == ["@README.md"]

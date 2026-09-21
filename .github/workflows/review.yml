@@ -1,0 +1,99 @@
+name: Review
+
+# The review hands a pull request back to the bot: a comment or a review that mentions `@claude`
+# on a pull request is its brief, and the action pushes the corrections on the pull request's own
+# branch. One run per mention, so remarks are grouped in one. Merging stays with the user
+# (CLAUDE.md, "Git is mine"; docs/workflow.md).
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+
+# The run pushes to the pull request's branch and answers on it; id-token lets the action
+# authenticate.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    # The action already refuses an actor without write access; this guard adds the owner and the
+    # mention, because every comment of a public repository fires this workflow. An `issue_comment`
+    # counts only on a pull request.
+    if: >-
+      github.actor == github.repository_owner &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
+      (contains(github.event.comment.body, '@claude') || contains(github.event.review.body, '@claude'))
+    # A second mention on the same pull request while a run is on: the newer run wins.
+    concurrency:
+      group: review-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # The owner's fine-grained token for gh; the action pushes with its own app token.
+    env:
+      GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Let git push through gh
+        run: gh auth setup-git
+
+      # The stack the suite needs, as ci.yml builds it.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install Python dependencies
+        run: uv sync --all-groups
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.62.0-chromium
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.117.0
+
+      - name: Start the test stack
+        run: make test-stack
+
+      # No prompt: the mention mode. The action reads the pull request, the review and its
+      # comments, checks the branch out, and pushes what the review asked for. `CLAUDE.md` and the
+      # skills apply as on the fix run; the gate is `make finalize`, waited for as the close-issue
+      # skill says, and the tools that promise a return are taken away for the same reason.
+      - name: Address the review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          display_report: true
+          claude_args: |
+            --model claude-sonnet-5
+            --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,Monitor,TaskStop"
+            --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger,Workflow,PushNotification"

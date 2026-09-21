@@ -4,6 +4,8 @@
 Read `README.md` first.
 <!-- /charm:readme-first -->
 
+@README.md
+
 <!-- charm:general-guidance -->
 ## General guidance
 
@@ -31,7 +33,10 @@ Read `README.md` first.
 
 ## labase
 
-- TDD, red, green, refactor any development.
+- TDD, red, green, refactor any development: load `tdd` before the first change.
+- Load `write-tests` before the first line of any test, in every session and on the runner alike:
+  it decides what goes inside a test, and a test written without it is the one that reads as a
+  row of membership assertions.
 - import at top, refactor to make it possible.
 - Unless explicitly asked, the user commits, not the agent.
 - when the user want to fix a linter issue, please dont #noqa or ignore it — unless the user explicitly asks for a local suppression (e.g. `ty: ignore`, `# noqa`).

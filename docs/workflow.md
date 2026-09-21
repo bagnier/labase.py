@@ -9,8 +9,9 @@ pull request. Merging is never the bot's.
 
 1. **File.** A reproduced bug becomes a GitHub issue: a scratch run, or a "to run" command
    that fails today. A hypothesis stays in [ROADMAP.md](../ROADMAP.md) until someone made
-   it fall. The issue keeps the ROADMAP item's shape: the fault, `→` the direction, the
-   `file:line` links.
+   it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
+   reads: the fault, `→` the direction, what to run, the README sentence, the `file:line`
+   links. The label goes on last, once the body is final.
 2. **Label.** The owner puts `auto-fix` on it. The label is the decision that the body is a
    bug report worth a run; only the owner's issues can drive the bot (the workflow's guard),
    and only a write-access actor can label (the action's own check).
@@ -20,8 +21,12 @@ pull request. Merging is never the bot's.
    loop, runs `make finalize`, and pushes `fix/<issue>` with a pull request that
    `Closes #<issue>`. It never edits `ROADMAP.md`: the map is the owner's, the issues are the
    bot's, and neither is derived from the other.
-4. **Merge.** The owner reads the pull request and merges it, or closes it. `main` requires
-   a review and refuses a direct push, so the bot cannot get past this step.
+4. **Review.** The owner reads the pull request. Corrections go back to the bot as a
+   review: inline remarks, then one comment that mentions `@claude` and says what to change.
+   `.github/workflows/review.yml` runs the action on that mention, on the pull request's own
+   branch, one run per mention, so remarks are grouped in one.
+5. **Merge.** The owner merges, or closes. `main` requires a review and refuses a direct
+   push, so the bot cannot get past this step.
 
 Run by hand, `/close-issue <n>` does the same from a local checkout.
 
@@ -30,11 +35,12 @@ Run by hand, `/close-issue <n>` does the same from a local checkout.
 The issue's label is the run's state, set by the run itself: `auto-fix` becomes `fixing`
 when it starts, then one of:
 
-| label            | what happened                                 | where the rest is                                     |
-| ---------------- | --------------------------------------------- | ----------------------------------------------------- |
-| `fixed`          | the pull request is open                      | closing questions in its body; new work as new issues |
-| `question`       | something only the owner knows blocks the fix | one comment on the issue, no pull request             |
-| `not-reproduced` | the failing test passed at this `HEAD`        | the issue is closed with what was run                 |
+| label                       | what happened                                          | where the rest is                                     |
+| --------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| none, a pull request linked | the fix is open for review; its merge closes the issue | closing questions in its body; new work as new issues |
+| `question`                  | something only the owner knows blocks the fix          | one comment on the issue, no pull request             |
+| `not-reproduced`            | the failing test passed at this `HEAD`                 | the issue is closed with what was run                 |
+| `stalled`                   | the run ended before its own end                       | the run's URL in a comment; put `auto-fix` back       |
 
 A run only starts on the `auto-fix` label. To answer a `question`, comment, then put
 `auto-fix` back: the next run reads the whole thread. A comment alone starts nothing. A run
@@ -51,9 +57,9 @@ minutes are free; private, one issue a night is roughly the free plan's monthly 
 
 ## Known edges
 
-- The bot pushes and opens its pull request with `FIX_BOT_TOKEN`, the owner's fine-grained
-  token (this repository only; contents, pull requests and issues read and write), because a
-  pull request opened with the workflow's own `GITHUB_TOKEN` fires no `pull_request` CI.
-  The pull request is therefore the owner's, and `main`'s required review comes from
-  someone else, or from the owner's admin merge.
+- A pull request opened with the workflow's own `GITHUB_TOKEN` fires no `pull_request` CI.
+  The action pushes and opens the pull request with the token of the Claude GitHub App
+  installed on the repository (the author reads `app/claude`), which does fire it; `gh` in
+  the run holds `FIX_BOT_TOKEN`, the owner's fine-grained token (this repository only;
+  contents, pull requests and issues read and write), for the labels and comments.
 - Nothing records the token cost of a run; the job log is the only trace.

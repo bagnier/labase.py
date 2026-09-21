@@ -46,8 +46,9 @@ is "$ARGUMENTS".
   puts `auto-fix` back; the next run reads the whole thread.
 
 Which end a run took is the issue's label, set by the run itself: `auto-fix` is replaced by
-`fixing` at the start, and at the end by `fixed`, `question`, or `not-reproduced`. The pull
-request carries `bot`.
+`fixing` at the start, and at the end by `question` or `not-reproduced` — or by nothing, when
+a pull request is open: the linked pull request is the state, and its merge is what closes the
+issue. The pull request carries `bot`.
 
 A step that fails (a refused tool, a stack that will not start, a gate still red after three
 rounds) ends the run as an open question that says what happened. A red gate is never pushed.
@@ -122,7 +123,7 @@ Load the `commit-message` skill for the message, then commit and push:
 git push -u origin "fix/$ARGUMENTS"
 gh pr create --base main --head "fix/$ARGUMENTS" --label bot \
   --title "<the commit subject>" --body "<the body>"
-gh issue edit "$ARGUMENTS" --remove-label fixing --add-label fixed
+gh issue edit "$ARGUMENTS" --remove-label fixing
 ```
 
 The pull request body is the run's record, in this order: `Closes #<issue>`; the fault in one
