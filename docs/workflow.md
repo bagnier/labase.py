@@ -54,11 +54,12 @@ that ends before its own end — cancelled, timed out, a turn that stopped — i
 
 One fix in flight: never more, to spread the subscription window; never less while there is
 work. The owner decides what and in which order, by putting `queued` on issues, in batches.
-`.github/workflows/tick.yml`, on GitHub's cron every fifteen minutes, hands the oldest `queued`
-issue to the bot — `queued` off, `auto-fix` on, as the owner — when no fix run is in progress
-and no issue is on `fixing` or `auto-fix`. The cron line is the pace, and the only knob: with
-runs of ten to fifteen minutes, a queue drains at about one issue every fifteen minutes until
-it is empty; slow it down there when the subscription window says so. An issue on `question`
+`.github/workflows/tick.yml` hands the owner's oldest `queued` issue to the bot — `queued` off,
+`auto-fix` on, as the owner — when no fix run is in progress and no issue is on `fixing` or
+`auto-fix`. It ticks at the end of every Fix run, so a queue drains back to back until it is
+empty; the batch put on `queued` is the only knob the subscription window has. GitHub's cron,
+seven minutes off the quarter hours, is only the net that starts an idle queue: its schedule is
+best effort, and it fired once in six hours the day it was added. An issue on `question`
 or `stalled` is never picked: it waits for the owner. The fix job itself runs in one concurrency group, without
 cancellation, so two `auto-fix` labels put on by hand queue rather than run side by side; a run
 that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
