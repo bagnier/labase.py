@@ -89,5 +89,9 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/close-issue ${{ github.event.issue.number }}"
+          # The run is watched from the job log, so the agent's stream is written there, tool by
+          # tool, and a report closes the job summary. Public repo: that log is public too.
+          show_full_output: true
+          display_report: true
           claude_args: |
             --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,Monitor,TaskStop"
