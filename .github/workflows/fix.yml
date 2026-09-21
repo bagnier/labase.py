@@ -7,11 +7,6 @@ on:
   issues:
     types: [labeled]
 
-# The same issue re-labelled while a run is on: the newer run wins.
-concurrency:
-  group: fix-${{ github.event.issue.number }}
-  cancel-in-progress: true
-
 # The run pushes a branch and opens a pull request; id-token lets the action authenticate.
 permissions:
   contents: write
@@ -27,6 +22,12 @@ jobs:
     if: >-
       github.event.label.name == 'auto-fix' &&
       github.event.issue.user.login == github.repository_owner
+    # The same issue re-labelled `auto-fix` while a run is on: the newer run wins. On the job, not
+    # the workflow: every label fires a run, the bot's own `fixing` too, and a workflow-level group
+    # is joined before the `if` above skips it — the skipped run would cancel the live one.
+    concurrency:
+      group: fix-${{ github.event.issue.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
