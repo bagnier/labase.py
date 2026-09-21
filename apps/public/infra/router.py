@@ -36,7 +36,10 @@ async def index(
 ) -> Response:
     org = await _featured_org(admin, public_settings)
     if org is None:
-        return with_etag(request, templates.TemplateResponse(request, "home.html"))
+        return with_etag(
+            request,
+            templates.TemplateResponse(request, "home.html", {"current_user": current_user}),
+        )
     nav_items = await get_public_nav(rls, org.id)
     if nav_items:
         return RedirectResponse(url=f"/{nav_items[0].slug}", status_code=302)
