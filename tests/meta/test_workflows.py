@@ -105,16 +105,17 @@ def test_the_tick_s_cron_stays_off_the_quarter_hours():
 @pytest.mark.parametrize("workflow", _BOTS)
 def test_the_bot_cannot_hand_its_turn_to_a_harness_that_never_returns(workflow):
     """Headless, the end of the turn is the end of the run: a tool that promises to bring the
-    model back later (`ScheduleWakeup`, a cron) ends the run with nothing pushed — the first
-    Sonnet run did exactly that while `make finalize` was still running."""
-    disallowed = {
-        name
-        for line in _claude_args(workflow).splitlines()
-        if line.strip().startswith("--disallowedTools")
-        for name in line.split(maxsplit=1)[1].strip('"').split(",")
-    }
+    model back later (`ScheduleWakeup`, a cron, a `Monitor`) ends the run with nothing pushed —
+    the first Sonnet run did exactly that while `make finalize` was still running, and the #12
+    run did it again through a `Monitor` the allowed list handed it."""
+    flags = [line.split(maxsplit=1) for line in _claude_args(workflow).splitlines() if line.strip()]
+    allowed, disallowed = (
+        {name for flag, rest in flags if flag == wanted for name in rest.strip('"').split(",")}
+        for wanted in ("--allowedTools", "--disallowedTools")
+    )
+    never = {"ScheduleWakeup", "CronCreate", "RemoteTrigger", "Workflow", "Monitor"}
 
-    assert {"ScheduleWakeup", "CronCreate", "RemoteTrigger", "Workflow"} <= disallowed
+    assert (never <= disallowed, never & allowed) == (True, set())
 
 
 def test_a_review_run_answers_the_owner_s_mention_only():

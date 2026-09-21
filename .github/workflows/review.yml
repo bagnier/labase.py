@@ -97,5 +97,6 @@ jobs:
           display_report: true
           claude_args: |
             --model claude-sonnet-5
-            --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,Monitor,TaskStop"
-            --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger,Workflow,PushNotification"
+            --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,TaskStop"
+            --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger"
+            --disallowedTools "Workflow,PushNotification,Monitor"

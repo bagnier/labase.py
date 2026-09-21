@@ -18,10 +18,9 @@ whole run, and nobody will answer during it. The pull request number is "$ARGUME
 
 The contract of `close-issue` applies whole: the `Git is mine` exception on the pull request's
 own branch, never on `main`, never a merge; and on the runner (`GITHUB_ACTIONS` is `true`) its
-three flipped rules — **waiting** (a gate longer than the shell timeout runs in the background
-and is waited for by reading its output file until the exit line, the loop relaunched as often
-as its timeout expires; nothing brings the run back, and the turn ends on a push or a comment,
-never on a wait), **rendering** (no screenshot), **asking** (nobody answers: a question is a
+three flipped rules — **waiting** (a gate longer than the shell timeout runs detached and is
+waited on in the foreground with the commands that contract spells out, never a `Monitor`;
+nothing brings the run back, and the turn ends on a push or a comment, never on a wait), **rendering** (no screenshot), **asking** (nobody answers: a question is a
 comment). Read that skill's contract before going on.
 
 

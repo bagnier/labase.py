@@ -22,11 +22,25 @@ is "$ARGUMENTS".
 `fix/<issue>` and opens the pull request, never on `main`; merging is the user's. On the runner
 (`GITHUB_ACTIONS` is `true`, see step 1) three more of its rules flip, and only there:
 
-- **Waiting.** A gate longer than the shell timeout still runs in the background, and the run
-  waits for it by reading its output file until the exit line appears — the one place an `until`
-  loop is allowed, relaunched as many times as its own timeout expires. Nothing brings the run
-  back: no notification, no scheduled wakeup, no cron. The end of the turn is the end of the run,
-  so the turn ends on a pull request or a comment, never on a wait.
+- **Waiting.** Nothing brings the run back: no notification, no `Monitor`, no scheduled wakeup,
+  no cron — a tool that promises to call back ends the run, and `CLAUDE.md`'s "the completion
+  notification brings you back" is false here. A gate longer than the shell timeout runs
+  detached and is waited on in the foreground. Start it, keeping its PID:
+
+  ```sh
+  nohup bash -c 'make finalize > /tmp/finalize.log 2>&1; echo "exit:$?" >> /tmp/finalize.log' \
+    > /dev/null 2>&1 & echo $!
+  ```
+
+  then wait, the Bash call's timeout at its 600000 ms maximum, and make the same call again
+  until the log ends on its `exit:` line:
+
+  ```sh
+  timeout 590 tail --pid=<PID> -f /dev/null; tail -n 20 /tmp/finalize.log
+  ```
+
+  The end of the turn is the end of the run, so it ends on a pull request or a comment, never
+  on a wait.
 - **Rendering.** No screenshot: the suite's browser lane is the render, and no MCP browser is
   started on the runner.
 - **Asking.** Nobody answers. A question ends the run as a comment on the issue, never a wait.
