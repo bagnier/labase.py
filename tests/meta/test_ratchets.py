@@ -17,6 +17,7 @@ import ast
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import TypeGuard
 
 from tests.meta.readme import text as readme
 
@@ -720,3 +721,156 @@ def test_the_modules_outside_a_demo_that_import_it_are_the_named_ones():
     }
 
     assert (demos, reaching) == ({"calendar", "files", "learning", "todo"}, _REACHES_INTO_A_DEMO)
+
+
+# ── No magic number ─────────────────────────────────────────────────────────────────────────────
+#
+# Every numeric literal in ``apps/`` bound to a module constant or to a parameter's default —
+# the two shapes a tuning knob takes when it is not a setting. Three groups, because the sentence
+# forbids one thing and not the other two, and only the third is a backlog.
+
+# The literal *is* the setting's declared fallback: the console owns the live value and this is
+# what it falls back to. Exactly what the principle asks for, so it never leaves this list.
+_DEFAULTS_OF_A_DECLARED_SETTING = {
+    "apps/shared/persistence/sql_stats.py::DEFAULT_HEAVY_MS = 500",
+    "apps/shared/persistence/sql_stats.py::DEFAULT_HEAVY_QUERIES = 30",
+}
+
+# Numbers that are not knobs: a status code carries the response's meaning, an SVG dimension is
+# the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
+# lengths *are* the fingerprint (moving one silently re-groups every past issue), and 9 is the
+# rung count of the spaced-repetition ladder itself. Turning any of these into a setting would
+# offer an operator a lever that breaks the thing rather than tunes it.
+_NOT_A_TUNING_KNOB = {
+    "apps/issues/domain/service.py::_STACK_MAX = 8000",
+    "apps/issues/domain/service.py::_TITLE_MAX = 200",
+    "apps/issues/domain/service.py::_TOP_FRAMES = 5",
+    "apps/learning/domain/service.py::MAX_LEVEL = 9",
+    "apps/profile/infra/router.py::_profile_error(status_code=400)",
+    "apps/shared/charts.py::day_buckets_series(height=240)",
+    "apps/shared/charts.py::sparkline(height=48)",
+    "apps/shared/events/activity.py::heatmap_calendar(max_weeks=53)",
+    "apps/shared/events/activity.py::heatmap_calendar(min_weeks=5)",
+    "apps/shared/events/repository.py::search(offset=0)",
+    "apps/shared/http/responses.py::mutation_response(status_code=200)",
+    "apps/shared/persistence/sql_stats.py::_KEPT_STATEMENTS = 5",
+    "apps/shared/persistence/sql_stats.py::_MAX_STATEMENT = 300",
+    "apps/tasks/domain/strip.py::_MAX_BUCKETS = 400",
+    "apps/tasks/domain/strip.py::_MAX_TICKS = 8",
+    "apps/tasks/domain/strip.py::_MIN_SHARE = 6.0",
+    "apps/tasks/domain/strip.py::_MIN_WIDTH = 0.4",
+}
+
+# The backlog the sentence names: retention windows, poll and purge intervals, retry budgets,
+# batch sizes, page lengths, deadlines and caps — each one a value an operator has a reason to
+# change and today can only change by editing Python. This list only shrinks; a promotion to
+# `TechnicalSettings` or to an app's declared settings removes a line, and nothing adds one
+# without someone deciding to here.
+_KNOBS_AWAITING_PROMOTION = {
+    "apps/api_keys/infra/repository.py::_LAST_USED_GRANULARITY_SECONDS = 300",
+    "apps/auth/contract/impersonation.py::IMPERSONATION_MAX_SECONDS = 3600",
+    "apps/auth/infra/accounts_router.py::_PAGE_SIZE = 1000",
+    "apps/auth/infra/router.py::_MFA_MAX_SECONDS = 300",
+    "apps/auth/infra/router.py::_OAUTH_MAX_SECONDS = 300",
+    "apps/auth/infra/user_repository.py::_PAGE_SIZE = 1000",
+    "apps/calendar/contract/integration.py::_RECENT = 3",
+    "apps/console/infra/router.py::_GROWTH_DAYS = 14",
+    "apps/files/contract/integration.py::_RECENT = 3",
+    "apps/issues/contract/integration.py::CAPTURE_DRAIN_SECONDS = 1.0",
+    "apps/issues/contract/integration.py::PURGE_EVERY_SECONDS = 86400",
+    "apps/issues/contract/queries.py::search_issue_occurrences(limit=100)",
+    "apps/issues/infra/repository.py::list_issues(limit=100)",
+    "apps/issues/infra/repository.py::occurrences(limit=20)",
+    "apps/issues/infra/router.py::_SPARK_DAYS = 14",
+    "apps/metrics/contract/integration.py::MINUTE_RETENTION_DAYS = 7",
+    "apps/metrics/contract/integration.py::ROLLUP_EVERY_SECONDS = 86400",
+    "apps/metrics/domain/accumulator.py::UNMATCHED_LABEL_CAP = 25",
+    "apps/metrics/domain/service.py::percentile_ms(quantile=0.95)",
+    "apps/metrics/infra/router.py::WINDOW_HOURS = 24",
+    "apps/organizations/contract/queries.py::list_org_handles(limit=500)",
+    "apps/organizations/infra/router.py::_ACTIVITY_MAX = 250",
+    "apps/organizations/infra/router.py::_ACTIVITY_PAGE = 8",
+    "apps/pages/contract/integration.py::_RECENT = 3",
+    "apps/profile/contract/integration.py::_GROWTH_DAYS = 14",
+    "apps/profile/infra/router.py::_ACTIVITY_MAX = 250",
+    "apps/profile/infra/router.py::_ACTIVITY_PAGE = 25",
+    "apps/profile/infra/router.py::_ENROLLMENT_MAX_SECONDS = 300",
+    "apps/shared/events/listener.py::SPREAD_SETTLE_SECONDS = 60.0",
+    "apps/shared/events/listener.py::__init__(batch_size=50)",
+    "apps/shared/events/repository.py::daily_counts(days=366)",
+    "apps/shared/events/repository.py::search(limit=100)",
+    "apps/shared/http/limiter.py::PURGE_EVERY_SECONDS = 3600",
+    "apps/shared/logs/repository.py::search(limit=100)",
+    "apps/shared/queue.py::QUEUE_PURGE_EVERY_SECONDS = 86400",
+    "apps/shared/queue.py::QUEUE_RETENTION_DAYS = 7",
+    "apps/shared/queue.py::_RETRY_BACKOFF_SECONDS = 60",
+    "apps/shared/queue.py::_VISIBILITY_TIMEOUT_SECONDS = 300",
+    "apps/shared/queue.py::__init__(batch_size=10)",
+    "apps/shared/queue.py::enqueue(max_attempts=5)",
+    "apps/shared/queue.py::list_unfinished_tasks(limit=200)",
+    "apps/timeline/contract/integration.py::PURGE_EVERY_SECONDS = 86400",
+    "apps/timeline/infra/repository.py::activity(cap=20000)",
+    "apps/timeline/infra/repository.py::facets(cap=2000)",
+    "apps/timeline/infra/repository.py::search(limit=100)",
+    "apps/timeline/infra/router.py::_EXPORT_LIMIT = 5000",
+    "apps/timeline/infra/router.py::_PAGE_SIZE = 100",
+    "apps/todo/contract/integration.py::_RECENT = 3",
+}
+
+
+def _numeric_literals(tree: ast.AST, relative: str) -> set[str]:
+    """Numeric literals in the two places a knob hides: bound to a module-level name, or standing
+    as a parameter's default. A literal inside an expression is arithmetic, not configuration, and
+    is deliberately out of scope — the rule is about values someone would want to change."""
+    found = set()
+    for node in getattr(tree, "body", []):
+        target, value = None, None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        if isinstance(target, ast.Name) and _is_number(value):
+            found.add(f"{relative}::{target.id} = {value.value}")
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        args = node.args
+        positional = args.args[len(args.args) - len(args.defaults) :]
+        # Both pairings are equal-length by construction: a default per trailing positional,
+        # and one slot per keyword-only argument, holding ``None`` where it has no default.
+        pairs = [
+            *zip(args.defaults, positional, strict=True),
+            *zip(args.kw_defaults, args.kwonlyargs, strict=True),
+        ]
+        found |= {
+            f"{relative}::{node.name}({arg.arg}={default.value})"
+            for default, arg in pairs
+            if _is_number(default)
+        }
+    return found
+
+
+def _is_number(node: ast.AST | None) -> TypeGuard[ast.Constant]:
+    """A numeric literal — narrowing to ``ast.Constant``, so each caller reads ``.value`` off a
+    node the checker knows it has. A bool is an ``int`` in Python and a flag to a reader, so it
+    is not a magic number."""
+    if not isinstance(node, ast.Constant):
+        return False
+    return isinstance(node.value, int | float) and not isinstance(node.value, bool)
+
+
+def test_the_numbers_outside_the_settings_are_the_named_ones():
+    """ "No magic number" — held as the enumerated list of what is left, since the sentence is an
+    aim and the list is its distance. Every literal below is either a setting's own default, a
+    number that is not a knob at all, or a knob nobody has promoted yet; a new one belongs to one
+    of the three by an edit here, which is the decision the README says someone has to make."""
+    found = {
+        entry
+        for path, relative in _python_files(_APPS)
+        if "/tests/" not in relative
+        for entry in _numeric_literals(ast.parse(path.read_text()), relative)
+    }
+
+    assert found == (
+        _DEFAULTS_OF_A_DECLARED_SETTING | _NOT_A_TUNING_KNOB | _KNOBS_AWAITING_PROMOTION
+    )

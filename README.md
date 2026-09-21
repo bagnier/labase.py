@@ -144,6 +144,18 @@ a constrained type (Pydantic `Literal`, a value object) wherever it can be, so t
 checker rejects a violation before a test has to.
 
 
+### No magic number
+
+A number that tunes behaviour — a batch size, a poll
+interval, a retention window, a retry budget, a page length — is a setting, not a literal:
+**technical** where a deploy owns it (env, read at boot), **live** where an admin does (console,
+per-org overridable). A value inlined in a signature or frozen in a module constant is a knob
+only a new release can turn. Three kinds of number are not that — a setting's own declared
+default, a figure that *is* the thing (an HTTP status, an SVG dimension, a fingerprint's frame
+count) and the domain's own rules — and everything else left in code is enumerated, never waved
+away: the list is the distance to the sentence, and it only shrinks.
+
+
 ### `| None` means optional
 
 Not _unknown_ — if no writer can produce a `None`, the annotation is

@@ -126,6 +126,7 @@ from tests.meta.test_ratchets import (
     test_nothing_reruns_a_failing_test,
     test_the_defensive_reads_are_the_named_ones,
     test_the_e2e_doubles_are_the_named_ones,
+    test_the_numbers_outside_the_settings_are_the_named_ones,
     test_time_comes_from_the_one_clock,
 )
 from tests.meta.test_routes import (
@@ -363,6 +364,12 @@ CLAIMS = [
         "A constraint the domain must uphold is expressed as a constrained type",
         test_every_closed_set_column_is_a_python_enum,
         test_an_org_scoped_event_declares_its_org_as_required,
+    ),
+    held(
+        "no-magic-number",
+        "A number that tunes behaviour — a batch size, a poll interval, a retention window, a "
+        "retry budget, a page length — is a setting, not a literal",
+        test_the_numbers_outside_the_settings_are_the_named_ones,
     ),
     held(
         "none-means-optional",
