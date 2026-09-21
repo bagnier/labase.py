@@ -18,17 +18,15 @@ def _public(sql: str, **params: object):
 async def public_page(
     session: AsyncSession,
     org_id: uuid.UUID,
-    *,
-    slug: str | None = None,
-    page_id: uuid.UUID | None = None,
+    ref: str | uuid.UUID,
 ) -> Page | None:
     """One of an org's public pages, by slug or id — ``None`` for any other, which a visitor
     outside the org cannot tell from a page that does not exist."""
-    if slug is not None:
-        sql, key = "select p.* from public_pages(:org_id) p where p.slug = :key", slug
+    if isinstance(ref, str):
+        sql = "select p.* from public_pages(:org_id) p where p.slug = :key"
     else:
-        sql, key = "select p.* from public_pages(:org_id) p where p.id = :key", page_id
-    return await session.scalar(_public(sql, org_id=org_id, key=key))
+        sql = "select p.* from public_pages(:org_id) p where p.id = :key"
+    return await session.scalar(_public(sql, org_id=org_id, key=ref))
 
 
 class PageRepository(OrgScopedRepository[Page]):
@@ -154,7 +152,7 @@ class PageNavRepository(PositionedRepository[PageNavItem]):
             for p in pages
             if p.id not in nav_by_page
         ]
-        in_nav.sort(key=lambda c: c.position or 0)
+        in_nav.sort(key=lambda c: nav_by_page[c.page_id].position)
         return in_nav + not_in_nav
 
     async def nav_items(self, *, public_only: bool = False) -> list[NavItemRead]:

@@ -1,5 +1,4 @@
 import uuid
-from typing import cast
 
 from sqlalchemy import delete, func, select, text
 
@@ -34,7 +33,7 @@ class OrganizationRepository(BaseRepository[Organization]):
             text("SELECT create_org_with_owner(:id, :name, :handle, :owner, :at)"),
             {"id": org_id, "name": name, "handle": handle, "owner": user_id, "at": clock.now()},
         )
-        return cast(Organization, await self.session.get(Organization, org_id))
+        return await self.session.get_one(Organization, org_id)
 
     async def count_owned_by(self, user_id: uuid.UUID) -> int:
         result = await self.session.execute(

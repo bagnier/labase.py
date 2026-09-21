@@ -56,6 +56,12 @@ class AuthApiMixin(ApiBase):
         if resp.status_code == 200 and resp.json():
             self.active_org_handle = resp.json()[0]["handle"]
 
+    def registered_email(self) -> str:
+        """The user the scenario last registered — the one a bare "they" names."""
+        if self.last_registered_email is None:
+            raise AssertionError("no user registered in this scenario")
+        return self.last_registered_email
+
     def sign_in(self, email: str, password: str) -> None:
         resp = self.client().post("/auth/login", json={"email": email, "password": password})
         self.response = resp

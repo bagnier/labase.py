@@ -47,17 +47,66 @@ _MAY_READ_THE_WALL_CLOCK = ("apps/shared/clock.py", "/tests/")
 # name is a literal, which is what makes it greppable and what the Timeline's `app` axis reads.
 _NAMES_ITS_LINES_AT_RUNTIME = "apps/shared/logs/"
 
-# Reads defending against a `None` a writer really can produce: GoTrue's raw sign-in answer, a
-# contribution's optional `growth`, Starlette's optional headers, and two optional parameters. Each
-# is an external shape or a declared option, not slack in one of our own annotations — which is the
-# distinction the README's rule turns on. A sixth is a decision.
-_DEFENSIVE_READS = {
-    "apps/auth/domain/service.py": 1,
-    "apps/console/infra/router.py": 1,
-    "apps/shared/charts.py": 1,
-    "apps/shared/http/exceptions.py": 1,
-    "apps/shared/queue.py": 1,
-}
+# Reads tolerating a `None` — a fallback after `or`, a `typing.cast`, a suppression — named by the
+# function that makes them. Most answer a shape from outside: an aggregate's scalar (`None` over no
+# rows), a GoTrue or Starlette optional, SQLAlchemy's untyped `get`/`scalars`, pydantic-settings'
+# env-built constructor. Each is not slack in one of our own annotations, which is the distinction
+# the README's rule turns on; the list only shrinks, and a new entry is a decision.
+_DEFENSIVE_READS = [
+    "apps/auth/domain/service.py::confirm_signup cast",
+    'apps/auth/domain/service.py::exchange_oauth_code or ""',
+    "apps/auth/domain/service.py::exchange_oauth_code or {}",
+    "apps/auth/domain/service.py::list_passkeys or []",
+    "apps/auth/domain/service.py::verified_totp_factor or []",
+    'apps/auth/infra/accounts_router.py::_list_accounts or ""',
+    'apps/auth/infra/router.py::impersonate_endpoint or ""',
+    'apps/auth/infra/router.py::login_page or ""',
+    'apps/auth/infra/router.py::mfa_verify_endpoint or ""',
+    'apps/auth/infra/router.py::oauth_callback or ""',
+    'apps/auth/infra/user_repository.py::list_server_admins or ""',
+    'apps/auth/infra/user_repository.py::resolve_user_emails._get or ""',
+    "apps/console/contract/integration.py::mount cast",
+    'apps/console/domain/studio.py::studio_base_url or ""',
+    "apps/console/infra/router.py::_growth_chart or {}",
+    "apps/files/infra/repository.py::OrgFileRepository.total_size or 0",
+    'apps/files/infra/storage.py::signed_redirect_url or ""',
+    'apps/issues/domain/service.py::status_after_occurrence or ""',
+    "apps/issues/infra/repository.py::purge_old_occurrences or 0",
+    "apps/metrics/infra/repository.py::purge or 0",
+    "apps/metrics/infra/repository.py::total_requests or 0",
+    'apps/organizations/infra/router.py::_emit_last_owner_violation or ""',
+    'apps/pages/domain/render.py::render_markdown or ""',
+    "apps/pages/infra/repository.py::PageNavRepository.add or 0",
+    'apps/profile/infra/router.py::avatar_upload or ""',
+    'apps/profile/infra/router.py::avatar_upload or ""',
+    "apps/public/contract/integration.py::_console_overview ignore",
+    "apps/public/infra/router.py::_featured_org ignore",
+    "apps/public/infra/router.py::public_page ignore",
+    "apps/shared/charts.py::day_buckets_series or {}",
+    "apps/shared/http/exceptions.py::handle_http_error or {}",
+    "apps/shared/http/limiter.py::_increment or 0",
+    "apps/shared/http/templates.py::<module> cast",
+    "apps/shared/logs/repository.py::LogRepository.purge or 0",
+    "apps/shared/logs/repository.py::LogRepository.roll or 0",
+    'apps/shared/logs/repository.py::_columns or ""',
+    'apps/shared/logs/repository.py::_columns or ""',
+    "apps/shared/persistence/repository.py::BaseRepository.all cast",
+    "apps/shared/persistence/repository.py::BaseRepository.get cast",
+    "apps/shared/persistence/repository.py::OrgScopedRepository.all cast",
+    "apps/shared/persistence/repository.py::OrgScopedRepository.get cast",
+    "apps/shared/persistence/repository.py::PositionedRepository.move_above cast",
+    "apps/shared/persistence/repository.py::count_where or 0",
+    "apps/shared/queue.py::TaskWorker.tick cast",
+    "apps/shared/queue.py::enqueue or {}",
+    "apps/shared/queue.py::purge_finished_tasks or 0",
+    "apps/shared/settings/env.py::get_technical_settings ignore",
+    "apps/tasks/infra/router.py::_history_json cast",
+    "apps/tasks/infra/router.py::_history_json cast",
+    "apps/tasks/infra/router.py::_history_json cast",
+    "apps/timeline/contract/integration.py::mount cast",
+    'apps/timeline/infra/repository.py::_from_issue or ""',
+    'apps/timeline/infra/repository.py::_sort_value or ""',
+]
 
 # Every navigation the browser mixins still make by URL, and why each one is an *arrival* rather
 # than a deep link. The rule the list applies: a person reaches a page by following a link or
@@ -142,10 +191,11 @@ _E2E_DOUBLES = {
     "tests/plugin.py": 1,
 }
 
-# The API driver re-routes the three session dependencies onto the scenario's rolled-back
-# transaction — a real database reached differently, and the browser lane runs the untouched app.
+# The API driver re-routes the two raw session dependencies onto the scenario's rolled-back
+# transaction — a real database reached differently; `get_rls_session` runs untouched on top, as it
+# does in the browser lane.
 _SESSION_OVERRIDES = {
-    "tests/e2e/drivers/api_base.py": 3,
+    "tests/e2e/drivers/api_base.py": 2,
 }
 
 # The one router allowed to drive the database itself: the readiness probe's whole job is to
@@ -245,6 +295,122 @@ _SNAPSHOT_READS_IN_ASSERTIONS = {
     "apps/profile/tests/e2e/driver_mixin_browser.py": 1,
     "apps/timeline/tests/e2e/driver_mixin_browser.py": 1,
     "apps/todo/tests/e2e/driver_mixin_browser.py": 2,
+}
+
+# Driver state a `when` sets and a `then` reads, narrowed by an assert at the reader — the
+# lifecycle the README says belongs in a constructor or one narrowing accessor (as
+# `ApiBase.response` and `active_test_connection` do). Each is a scenario-shaped state no
+# constructor can own yet; the list only shrinks.
+_LIFECYCLES_THE_TESTS_NARROW = {
+    "apps/api_keys/tests/e2e/driver_mixin_api.py": [
+        "ApiKeysApiMixin._sessionless_get self._api_key_secret",
+        "ApiKeysApiMixin.assert_api_key_secret_revealed self._api_key_secret",
+        "ApiKeysApiMixin.create_org_with_api_key self._api_key_secret",
+    ],
+    "apps/api_keys/tests/e2e/driver_mixin_browser.py": [
+        "ApiKeysBrowserMixin._sessionless_get self._api_key_secret",
+        "ApiKeysBrowserMixin.assert_api_key_secret_revealed self._api_key_secret",
+        "ApiKeysBrowserMixin.create_org_with_api_key self._api_key_secret",
+    ],
+    "apps/auth/tests/e2e/driver_mixin_api.py": [
+        "AuthApiMixin._visitor_html self._visitor_page",
+        "AuthApiMixin.assert_confirmation_delivered self._confirmation_requested_at",
+        "AuthApiMixin.assert_registration_successful self.last_registered_email",
+        "AuthApiMixin.confirm_address_via_link self._confirmation_requested_at",
+        "AuthApiMixin.enter_totp_code self._mfa_challenge",
+        "AuthApiMixin.enter_totp_code self._totp_secret",
+        "AuthApiMixin.reset_password_via_email self._reset_email",
+        "AuthApiMixin.reset_password_via_email self._reset_requested_at",
+    ],
+    "apps/auth/tests/e2e/driver_mixin_browser.py": [
+        "AuthBrowserMixin.assert_confirmation_delivered self._confirmation_requested_at",
+        "AuthBrowserMixin.assert_impersonation_refused self.last_response",
+        "AuthBrowserMixin.assert_page_loaded self.last_response",
+        "AuthBrowserMixin.assert_registration_failed self.last_response",
+        "AuthBrowserMixin.assert_registration_successful self.last_registered_email",
+        "AuthBrowserMixin.confirm_address_via_link self._confirmation_requested_at",
+        "AuthBrowserMixin.enroll_totp self._totp_secret",
+        "AuthBrowserMixin.enter_totp_code self._totp_secret",
+        "AuthBrowserMixin.reset_password_via_email self._reset_email",
+        "AuthBrowserMixin.reset_password_via_email self._reset_requested_at",
+    ],
+    "apps/auth/tests/given_helpers.py": [
+        "create_unconfirmed_user resp.user",
+        "create_user resp.user",
+    ],
+    "apps/auth/tests/test_auth_service.py": [
+        "test_login_valid_credentials_returns_access_and_refresh_tokens tokens.access_token",
+        "test_login_valid_credentials_returns_access_and_refresh_tokens tokens.refresh_token",
+    ],
+    "apps/calendar/tests/e2e/driver_mixin_api.py": [
+        "CalendarApiMixin.assert_event_description self._cal_detail",
+        "CalendarApiMixin.assert_event_location self._cal_detail",
+        "CalendarApiMixin.assert_event_when self._cal_detail",
+    ],
+    "apps/calendar/tests/e2e/driver_mixin_browser.py": [
+        "CalendarBrowserMixin.assert_event_rejected self.last_response",
+    ],
+    "apps/console/tests/e2e/driver_mixin_api.py": [
+        "ConsoleApiMixin._as_admin self._admin_email",
+        "ConsoleApiMixin.assert_console_setting_shown self.settings_response",
+        "ConsoleApiMixin.assert_console_supabase_link self.settings_response",
+    ],
+    "apps/console/tests/e2e/driver_mixin_browser.py": [
+        "ConsoleBrowserMixin._as_admin self._admin_acting",
+    ],
+    "apps/files/tests/e2e/driver_mixin_api.py": [
+        "OrgFileApiMixin.access_share_link_as self.share_link_url",
+        "OrgFileApiMixin.access_share_link_unauthenticated self.share_link_url",
+    ],
+    "apps/files/tests/e2e/driver_mixin_browser.py": [
+        "OrgFileBrowserMixin.access_share_link_unauthenticated self.context",
+        "OrgFileBrowserMixin.assert_action_rejected self.last_response",
+        "OrgFileBrowserMixin.assert_download_succeeds self.last_response",
+        "OrgFileBrowserMixin.assert_upload_rejected self.last_response",
+    ],
+    "apps/issues/tests/test_capture.py": [
+        "test_log_exception_is_captured capture._QUEUE",
+    ],
+    "apps/learning/tests/e2e/driver_mixin_api.py": [
+        "LearningApiMixin._current self._learn_current",
+    ],
+    "apps/learning/tests/e2e/driver_mixin_browser.py": [
+        "LearningBrowserMixin._current self._learn_current",
+    ],
+    "apps/organizations/tests/e2e/driver_mixin_api.py": [
+        "OrgApiMixin.assert_other_org_absent self._org_list_response",
+    ],
+    "apps/organizations/tests/e2e/driver_mixin_browser.py": [
+        "OrgBrowserMixin.assert_action_fails_with self.last_response",
+        "OrgBrowserMixin.assert_org_dashboard_visible self.last_response",
+        "OrgBrowserMixin.assert_other_org_absent self._org_list_response",
+    ],
+    "apps/organizations/tests/test_emails.py": [
+        "test_invitation_email_renders_both_bodies email.html",
+    ],
+    "apps/pages/tests/e2e/driver_mixin_api.py": [
+        "PagesApiMixin.assert_only_listed self._pages_list",
+    ],
+    "apps/pages/tests/e2e/driver_mixin_browser.py": [
+        "PagesBrowserMixin.assert_visitor_allowed self.last_response",
+        "PagesBrowserMixin.assert_visitor_forbidden self.last_response",
+    ],
+    "apps/profile/tests/e2e/driver_mixin_api.py": [
+        "ProfileApiMixin.assert_email_change_delivered self._email_change_requested_at",
+        "ProfileApiMixin.confirm_email_change self._email_change_requested_at",
+    ],
+    "apps/profile/tests/e2e/driver_mixin_browser.py": [
+        "ProfileBrowserMixin.assert_email_change_delivered self._email_change_requested_at",
+        "ProfileBrowserMixin.assert_last_update_rejected self.last_response",
+        "ProfileBrowserMixin.confirm_email_change self._email_change_requested_at",
+    ],
+    "apps/shared/tests/test_events.py": [
+        "test_event_to_record_stringifies_uuid_payload_fields record.payload",
+    ],
+    "tests/e2e/drivers/browser_base.py": [
+        "BrowserBase.assert_forbidden self.last_response",
+        "BrowserBase.assert_not_found self.last_response",
+    ],
 }
 
 _STEP_TYPES = {"given", "when", "then"}
@@ -372,22 +538,143 @@ def test_time_comes_from_the_one_clock():
     assert strays == set()
 
 
+def _narrowed(test: ast.expr) -> ast.expr | None:
+    """What an assert narrows — ``x`` in ``assert x is not None`` or a bare ``assert x`` — when
+    ``x`` is a name or an attribute of one; ``None`` for an assert that checks anything else."""
+    if (
+        isinstance(test, ast.Compare)
+        and [type(op) for op in test.ops] == [ast.IsNot]
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value is None
+    ):
+        test = test.left
+    if isinstance(test, ast.Name) or (
+        isinstance(test, ast.Attribute) and isinstance(test.value, ast.Name)
+    ):
+        return test
+    return None
+
+
+def _compensating_asserts(*roots: Path, lifecycles_only: bool = False) -> list[str]:
+    """Every narrowing assert under ``roots``, named by the function it sits in. With
+    ``lifecycles_only``, only those narrowing state that outlives the call — an attribute, or a
+    module global — since in a test a local checked for ``None`` is the assertion itself."""
+    found = []
+    for path, relative in _python_files(*roots):
+        tree = ast.parse(path.read_text())
+        owner = _enclosing(tree)
+        module_globals = {
+            target.id
+            for node in tree.body
+            if isinstance(node, ast.Assign | ast.AnnAssign)
+            for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assert) or (narrowed := _narrowed(node.test)) is None:
+                continue
+            if (
+                lifecycles_only
+                and isinstance(narrowed, ast.Name)
+                and narrowed.id not in module_globals
+            ):
+                continue
+            found.append(
+                f"{relative}::{owner.get(node.lineno, '<module>')} {ast.unparse(narrowed)}"
+            )
+    return sorted(found)
+
+
 def test_no_compensating_assert_narrows_an_annotation():
-    """The first of the README's three tells that an annotation is wider than the truth. At zero
-    today, which is the only interesting place for it to be: one `assert x is not None` is how a
-    `| None` that no writer produces survives its first reader."""
-    assert _sites(r"^\s*assert .* is not None", _APPS) == {}
+    """The first of the README's three tells that an annotation is wider than the truth: one
+    `assert x is not None` — or a bare `assert x` — is how a `| None` that no writer produces
+    survives its first reader. At zero in `apps/`, which is the only interesting place for it."""
+    in_apps = [site for site in _compensating_asserts(_APPS) if "/tests/" not in site]
+
+    assert in_apps == []
+
+
+def test_the_lifecycles_the_tests_narrow_are_the_named_ones():
+    """The same tell in the harness, where it marks a lifecycle: a driver attribute a `when` sets
+    and a `then` reads, a module global bound per scenario. The README's cure — a constructor, or
+    one accessor that narrows — reshapes a scenario's state, so what is left is named here and
+    only shrinks."""
+    in_tests: dict[str, list[str]] = {}
+    for site in _compensating_asserts(_APPS, _ROOT / "tests", lifecycles_only=True):
+        path, narrowed = site.split("::", 1)
+        if "/tests/" in f"/{path}":
+            in_tests.setdefault(path, []).append(narrowed)
+
+    assert in_tests == _LIFECYCLES_THE_TESTS_NARROW
+
+
+_FALLBACKS = {"{}": "or {}", "[]": "or []", "0": "or 0", "''": 'or ""'}
+_SUPPRESSION = re.compile(r"#\s*(type|ty|pyright):\s*ignore")
+
+
+def _enclosing(tree: ast.Module) -> dict[int, str]:
+    """Each line of a module, mapped to the qualified name of the innermost def or class around
+    it — ``<module>`` outside all of them."""
+    owner: dict[int, str] = {}
+
+    def visit(node: ast.AST, prefix: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                name = f"{prefix}{child.name}"
+                for line in range(child.lineno, (child.end_lineno or child.lineno) + 1):
+                    owner[line] = name
+                visit(child, f"{name}.")
+            else:
+                visit(child, prefix)
+
+    visit(tree, "")
+    return owner
+
+
+def _defensive_reads(source: str) -> list[tuple[int, str]]:
+    """Every tell of a `None` tolerated at the read, by line: a fallback after `or`, a
+    `typing.cast` (whatever name it was imported under — SQLAlchemy's SQL `cast` is not one), and a
+    type checker's suppression comment."""
+    tree = ast.parse(source)
+    casts = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "typing"
+        for alias in node.names
+        if alias.name == "cast"
+    }
+    reads = [
+        (node.lineno, _FALLBACKS[ast.unparse(node.values[-1])])
+        for node in ast.walk(tree)
+        if isinstance(node, ast.BoolOp)
+        and isinstance(node.op, ast.Or)
+        and ast.unparse(node.values[-1]) in _FALLBACKS
+    ]
+    reads += [
+        (node.lineno, "cast")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in casts
+    ]
+    reads += [
+        (number, "ignore")
+        for number, line in enumerate(source.splitlines(), start=1)
+        if _SUPPRESSION.search(line)
+    ]
+    return reads
 
 
 def test_the_defensive_reads_are_the_named_ones():
     """The second tell, and the one that cannot go to zero: some of these `None`s come from
-    outside the process. Frozen per file so a new one lands here as a question — is this an
+    outside the process. Named by the function that reads, not counted per file — a count lets a
+    slack read take a legitimate one's place — so a new one lands here as a question: is this an
     external shape, or an annotation we could narrow?"""
-    reads = {
-        relative: count
-        for relative, count in _sites(r"or \{\}", _APPS).items()
+    reads = sorted(
+        f"{relative}::{_enclosing(ast.parse(source)).get(line, '<module>')} {spelling}"
+        for path, relative in _python_files(_APPS)
         if "/tests/" not in relative
-    }
+        for source in [path.read_text()]
+        for line, spelling in _defensive_reads(source)
+    )
 
     assert reads == _DEFENSIVE_READS
 
@@ -520,18 +807,36 @@ def _step_navigations(steps: Path) -> dict[str, tuple[set[str], int]]:
 
 
 def _mixin_navigations() -> dict[str, tuple[set[str], int]]:
-    """``{app.method: (step types that reach it, goto calls)}``, over every browser mixin and
-    every step module beside one."""
-    found = {}
+    """``{app.method: (step types that reach it, goto calls)}``, over the driver the mixins compose.
+
+    One call graph for every browser mixin, and every step module feeding it — an app's steps call
+    methods other apps' mixins define, since the composed driver is one class. Walking each app on
+    its own saw only the steps beside its mixin, so a `then` reaching another app's navigation
+    stayed invisible."""
+    navigations: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    calls: dict[str, set[str]] = defaultdict(set)
+    step_modules = [_ROOT / "tests" / "e2e" / "steps_common.py"]
     for mixin in sorted(_APPS.glob("*/tests/e2e/driver_mixin_browser.py")):
         app = mixin.relative_to(_APPS).parts[0]
-        gotos, calls = _mixin_methods(mixin)
-        reached = _propagated(_steps_reaching(mixin.parent / "steps.py"), calls)
-        found |= {f"{app}.{name}": (reached[name], count) for name, count in gotos.items() if count}
-        found |= {
-            f"{app}.{name}": reach
-            for name, reach in _step_navigations(mixin.parent / "steps.py").items()
-        }
+        gotos, callees = _mixin_methods(mixin)
+        for name, count in gotos.items():
+            calls[name] |= callees[name]
+            if count:
+                navigations[name].append((app, count))
+        step_modules.append(mixin.parent / "steps.py")
+    reached: dict[str, set[str]] = defaultdict(set)
+    for steps in step_modules:
+        for method, kinds in _steps_reaching(steps).items():
+            reached[method] |= kinds
+    reached = _propagated(reached, calls)
+    found = {
+        f"{app}.{name}": (reached[name], count)
+        for name, sites in navigations.items()
+        for app, count in sites
+    }
+    for steps in step_modules[1:]:
+        app = steps.relative_to(_APPS).parts[0]
+        found |= {f"{app}.{name}": reach for name, reach in _step_navigations(steps).items()}
     return found
 
 

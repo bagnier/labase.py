@@ -130,16 +130,43 @@ def test_every_event_names_both_of_its_halves():
     assert unnamed == set()
 
 
+# A field named like an identity — an id, a handle, a slug, an email, a key — outside the base's
+# three slots. Each is a subject the per-entity filter cannot see unless it is only a *value*: what
+# a change set, or the readable name riding beside an `entity_id` that already correlates.
+_IDENTITY_NAMED = re.compile(r"(^|_)(id|handle|slug|email|key|username|login)$")
+_IDENTITY_NAMED_FIELDS = {
+    # The value the fact is about: the address registered or asked for, the handle chosen.
+    "auth.email_change_requested.new_email",
+    "auth.user_created.email",
+    "profile.handle_changed.new_handle",
+    # A page's slug as of the fact, beside the `entity_id` that correlates it.
+    "pages.created.slug",
+    "pages.deleted.slug",
+    "pages.published_members.slug",
+    "pages.published_public.slug",
+    "pages.slug_changed.slug",
+    "pages.unpublished.slug",
+    "pages.updated.slug",
+    # The one subject named by a handle alone: a settings row has no surrogate pk, so these carry
+    # `key` with `entity_id` null — the exception the ROADMAP's Identity item names.
+    "settings.org_override_removed.key",
+    "settings.org_override_set.key",
+    "settings.server_changed.key",
+}
+
+
 def test_no_event_names_an_identity_outside_the_bases_slots():
-    """An `*_id` payload field is an identity the base already has a home for. Keeping a private one
-    doesn't just duplicate it — it hides the subject from the console's per-entity filter."""
-    offenders = {
+    """An identity in a payload field is one the base already has a home for. Keeping a private one
+    doesn't just duplicate it — it hides the subject from the console's per-entity filter. Read off
+    every identity-shaped name, not only `*_id`: a slug or a handle is the renameable kind the
+    README rules out. What is left is named above, each with the reason it may."""
+    named = {
         f"{kind}.{f.name}"
         for kind, cls in _shipped_events().items()
         for f in fields(cls)
-        if f.name.endswith("_id") and f.name not in _BASE_SLOTS
+        if _IDENTITY_NAMED.search(f.name) and f.name not in _BASE_SLOTS
     }
-    assert offenders == set()
+    assert named == _IDENTITY_NAMED_FIELDS
 
 
 def test_the_catalog_is_actually_populated():

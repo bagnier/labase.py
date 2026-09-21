@@ -80,9 +80,9 @@ class BrowserBase:
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
         if not self.base_url:
-            self._server = InProcessServer()
             port = int(os.environ.get("LABASE_E2E_PORT", _E2E_PORT))
-            self.base_url = self._server.start(port=port)
+            self._server = InProcessServer(port)
+            self.base_url = self._server.base_url
 
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(**launch_options())
@@ -90,7 +90,8 @@ class BrowserBase:
 
     @property
     def _browser(self) -> Browser:
-        assert self.__browser is not None, "_browser accessed before start()"
+        if self.__browser is None:
+            raise RuntimeError("_browser accessed before start()")
         return self.__browser
 
     @_browser.setter

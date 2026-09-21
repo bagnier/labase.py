@@ -8,7 +8,6 @@ from typing import Any, TypeVar
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.auth.infra.session import get_rls_session
 from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
 from apps.main import host
 from apps.shared.events.listener import EventListener
@@ -76,7 +75,7 @@ class ApiBase:
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
-        self._runner.start()
+        """Nothing left to start: the runner's loop runs from the driver's construction."""
 
     def stop(self) -> None:
         self._close_clients()
@@ -114,13 +113,11 @@ class ApiBase:
         db._test_connection = self.run(db.begin_test_transaction(_admin_engine()))
         app.dependency_overrides[get_user_session] = db.override_get_session
         app.dependency_overrides[get_admin_session] = db.override_get_session
-        app.dependency_overrides[get_rls_session] = db.override_get_rls_session
 
     def teardown_test(self) -> None:
         """Roll back the test transaction, then clean up data committed outside it."""
         app.dependency_overrides.pop(get_user_session, None)
         app.dependency_overrides.pop(get_admin_session, None)
-        app.dependency_overrides.pop(get_rls_session, None)
         conn = db._test_connection
         db._test_connection = None
         if conn is not None:
@@ -135,8 +132,7 @@ class ApiBase:
         """A session factory bound to the rolled-back test connection — for driving background loops
         (listener, worker, settings refresher) on the transaction a request just wrote to, since
         the real polling loops are off under tests and could not see it anyway."""
-        assert db._test_connection is not None, "No active test transaction"
-        return lambda: AsyncSession(bind=db._test_connection, expire_on_commit=False)
+        return db.session_on_test_connection
 
     def drain_task_queue(self) -> None:
         """Deliver async work now: fan persisted facts out to consumers (listener), then run them

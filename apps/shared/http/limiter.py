@@ -7,6 +7,7 @@ security): the unreachable store goes through the dependency verdict, which is
 what turns it into an issue rather than a line that rolls out of its window.
 """
 
+import asyncio
 import functools
 from collections.abc import Callable
 from typing import Any
@@ -78,10 +79,13 @@ async def _increment(key: str, window_seconds: int) -> int | None:
     epoch = int(clock.now().timestamp())
     window_start = epoch - (epoch % window_seconds)
     try:
-        async with admin_session_factory()() as session:
-            hits = await session.scalar(_INCREMENT, {"key": key, "window_start": window_start})
-            await session.commit()
-            return int(hits or 0)
+        # Failing open only keeps the endpoint up if it is fast: a black-holed store neither
+        # refuses nor answers, so the whole round trip — connect, pool, statement — is bounded.
+        async with asyncio.timeout(get_technical_settings().rate_limit_store_timeout_seconds):
+            async with admin_session_factory()() as session:
+                hits = await session.scalar(_INCREMENT, {"key": key, "window_start": window_start})
+                await session.commit()
+                return int(hits or 0)
     except Exception as exc:
         # Fail-open stays: the limiter must never be what takes an endpoint down. What changes is
         # the *level* — a store that never answered is a broken dependency, and the verdict makes

@@ -10,9 +10,6 @@ class AsyncRunner:
     def __init__(self) -> None:
         self._bg = BackgroundLoop()
 
-    def start(self) -> None:
-        self._bg.start()
-
     def stop(self) -> None:
         self._bg.stop()
 

@@ -106,17 +106,16 @@ async def _visible_page(
     rls: AsyncSession,
     org_id: uuid.UUID,
     role: OrgRole | None,
-    *,
-    slug: str | None = None,
-    page_id: uuid.UUID | None = None,
+    ref: str | uuid.UUID,
 ) -> Page:
+    """The page a slug or an id names, as ``role`` may see it — a visitor outside the org only
+    among the public pages."""
     if role is None:
-        page = await public_page(rls, org_id, slug=slug, page_id=page_id)
-    elif slug is not None:
-        page = await PageRepository(rls, org_id).by_slug(slug)
+        page = await public_page(rls, org_id, ref)
+    elif isinstance(ref, str):
+        page = await PageRepository(rls, org_id).by_slug(ref)
     else:
-        assert page_id is not None
-        page = await PageRepository(rls, org_id).by_id(page_id)
+        page = await PageRepository(rls, org_id).by_id(ref)
     return or_404(page)
 
 
@@ -490,7 +489,7 @@ async def view_page_by_id(
     *current* slug URL. A temporary redirect on purpose — never 301: the slug can change, so the
     uuid→slug mapping must not be cached, else an old feed link would 404 after a re-slug."""
     org, role = await _resolve_org_role(admin, rls, org_handle, current_user)
-    page = await _visible_page(rls, org.id, role, page_id=page_id)
+    page = await _visible_page(rls, org.id, role, page_id)
     return RedirectResponse(f"/{org_handle}/pages/{page.slug}", status_code=307)
 
 
@@ -504,7 +503,7 @@ async def view_page(
     current_user: OptionalCurrentUser,
 ) -> Response:
     org, role = await _resolve_org_role(admin, rls, org_handle, current_user)
-    page = await _visible_page(rls, org.id, role, slug=slug)
+    page = await _visible_page(rls, org.id, role, slug)
     can_edit = _can_edit_role(page.visibility, role)
     body = render_markdown(page.content)
     if wants_json(request):

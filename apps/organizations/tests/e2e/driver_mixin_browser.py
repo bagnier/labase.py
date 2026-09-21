@@ -96,11 +96,6 @@ class OrgBrowserMixin(BrowserBase):
     # ── basic org assertions ──────────────────────────────────────────────────
 
     def assert_org_count(self, count: int) -> None:
-        # After registration (no auto-login), the page lands on /auth/login.
-        # Sign in before reading the profile so the org list is visible.
-        email = getattr(self, "last_registered_email", None)
-        if "/auth/login" in self.page.url and email:
-            self.sign_in(email, _PASSWORD)
         orgs = self._read_org_cards_from_profile(self.page)
         assert len(orgs) == count, f"Expected {count} org(s), got {len(orgs)}: {orgs}"
 

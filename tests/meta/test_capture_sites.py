@@ -65,8 +65,57 @@ def _carries_a_traceback(keyword: ast.keyword) -> bool:
     return not (isinstance(keyword.value, ast.Constant) and not keyword.value.value)
 
 
+def _logging_helpers() -> dict[str, bool]:
+    """Each function under ``apps/`` that is handed an exception and logs it — directly or through
+    another such helper — with whether *every* line it can write carries the traceback. A broad
+    handler calling one says what the helper says, so it is judged by the helper's lines."""
+    bodies: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for path in _APPS.rglob("*.py"):
+        if "/tests/" in path.as_posix():
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and any(
+                arg.arg in {"exc", "error", "e"} for arg in node.args.args + node.args.kwonlyargs
+            ):
+                bodies[node.name] = node
+    carries: dict[str, bool] = {}
+    changed = True
+    while changed:
+        changed = False
+        for name, fn in bodies.items():
+            direct = [
+                any(map(_carries_a_traceback, call.keywords))
+                for call in _log_calls(fn)
+                if call.func.attr in _MUST_CARRY  # type: ignore[union-attr]
+            ]
+            through = [carries[callee] for callee in _helper_calls(fn, carries)]
+            if (direct or through) and carries.get(name) != all(direct + through):
+                carries[name] = all(direct + through)
+                changed = True
+    return carries
+
+
+def _helper_calls(node: ast.AST, helpers: dict[str, bool]) -> list[str]:
+    """The helpers ``node`` calls, by name — ``helper(...)`` or ``module.helper(...)``."""
+    return [
+        name
+        for child in ast.walk(node)
+        if isinstance(child, ast.Call)
+        and (
+            name := child.func.id
+            if isinstance(child.func, ast.Name)
+            else child.func.attr
+            if isinstance(child.func, ast.Attribute)
+            else ""
+        )
+        in helpers
+    ]
+
+
 def _broad_handler_logs() -> list[tuple[str, str, bool]]:
-    """Every ``(site, event name, carries the traceback)`` logged from a broad ``except``."""
+    """Every ``(site, event name, carries the traceback)`` logged from a broad ``except`` — by a
+    ``log.*`` call in the handler, or by a logging helper it hands the exception to."""
+    helpers = _logging_helpers()
     found = []
     for path in _APPS.rglob("*.py"):
         if "/tests/" in path.as_posix():
@@ -84,6 +133,9 @@ def _broad_handler_logs() -> list[tuple[str, str, bool]]:
                 )
                 site = f"{path.relative_to(_APPS.parent)}:{call.lineno}"
                 found.append((site, str(name), any(map(_carries_a_traceback, call.keywords))))
+            for helper in _helper_calls(node, helpers):
+                site = f"{path.relative_to(_APPS.parent)}:{node.lineno}"
+                found.append((site, f"via {helper}", helpers[helper]))
     return found
 
 

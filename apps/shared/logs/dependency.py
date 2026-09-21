@@ -64,6 +64,8 @@ def log_dependency_failure(log: Any, event: str, exc: BaseException, **context: 
     the same lesson the 500 handler learned.
     """
     if is_refusal(exc):
-        log.info(event, **context)
+        # At ``info`` the seam never fires, so the stack reaches the log sink and opens nothing —
+        # a refusal is an ordinary outcome, and still the only description of which one it was.
+        log.info(event, exc_info=exc, **context)
         return
     log.exception(event, exc_info=exc, **context)

@@ -36,6 +36,7 @@ from apps.shared.persistence.base import Base
 from apps.shared.settings import live
 from apps.tasks.domain.strip import BANDS
 from apps.todo.contract import integration as todo_integration
+from tests.meta.test_ratchets import _demos
 
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
@@ -62,6 +63,88 @@ _NAMED_ON_PURPOSE = {
     "apps/shared/templates/base.html says '/console'",
     "apps/shared/templates/base.html says '/profile'",
     "apps/shared/templates/errors/error.html says '/profile'",
+}
+
+
+# Strings through which something outside a demo names it — each a trace the demo's deletion
+# would leave: a dead route, a table no longer there, a suite that no longer loads. Frozen by the
+# string it spells; the list only shrinks, and `demo-apps-are-disposable` holds when it is empty.
+_NAMES_A_DEMO = {
+    # Organizations maps each app's entity to its detail route by name — the one production trace,
+    # a hard-wired table where a registered surface belongs.
+    "apps/organizations/contract/entity_links.py says '/calendar'",
+    "apps/organizations/contract/entity_links.py says 'calendar'",
+    "apps/organizations/contract/entity_links.py says 'files'",
+    "apps/organizations/contract/entity_links.py says 'todo'",
+    "apps/organizations/contract/entity_links.py says 'todos'",
+    # The harness lists the demos' tables: cleanup truncates them, the privilege books expect
+    # their grants, the worktree test provisions a bucket per demo, the plugin list loads their
+    # steps.
+    "tests/plugin.py says 'apps.calendar'",
+    "tests/plugin.py says 'apps.files'",
+    "tests/plugin.py says 'apps.learning'",
+    "tests/plugin.py says 'apps.todo'",
+    "tests/e2e/cleanup.py says 'card_states'",
+    "tests/e2e/cleanup.py says 'cards'",
+    "tests/e2e/cleanup.py says 'deck_subscriptions'",
+    "tests/e2e/cleanup.py says 'decks'",
+    "tests/e2e/cleanup.py says 'org_file_share_tokens'",
+    "tests/e2e/cleanup.py says 'org_files'",
+    "tests/e2e/cleanup.py says 'todos'",
+    "tests/test_db_privileges.py says 'calendar_events'",
+    "tests/test_db_privileges.py says 'card_states'",
+    "tests/test_db_privileges.py says 'cards'",
+    "tests/test_db_privileges.py says 'deck_subscriptions'",
+    "tests/test_db_privileges.py says 'decks'",
+    "tests/test_db_privileges.py says 'org_file_share_tokens'",
+    "tests/test_db_privileges.py says 'org_files'",
+    "tests/test_db_privileges.py says 'todos'",
+    "tests/test_worktree.py says 'calendar'",
+    # Scenarios of other apps, and the perf smoke, drive the todo demo to have something to act on.
+    "apps/api_keys/tests/e2e/driver_mixin_api.py says 'todos'",
+    "apps/api_keys/tests/e2e/driver_mixin_browser.py says 'todos'",
+    "apps/api_keys/tests/e2e/steps.py says 'todos'",
+    "apps/profile/tests/e2e/driver_mixin_api.py says 'todos'",
+    "apps/profile/tests/e2e/driver_mixin_browser.py says 'todos'",
+    "scripts/smoke.py says 'todos'",
+    # Unit tests borrowing a demo's name as a sample app or route — the cheapest to repoint.
+    "apps/issues/tests/test_capture.py says 'apps.todo'",
+    "apps/shared/tests/test_capture.py says 'apps.todo'",
+    "apps/shared/tests/test_log_chain.py says 'apps.todo'",
+    "apps/shared/tests/test_loop_health.py says 'apps.todo'",
+    "apps/shared/tests/test_request_logging.py says 'apps.todo'",
+    "apps/timeline/tests/test_app_axis.py says 'apps.todo'",
+    "apps/console/tests/test_console_styleguide.py says 'cards'",
+    "apps/console/tests/test_events_catalogue.py says '/todo'",
+    "apps/console/tests/test_live_settings.py says 'files'",
+    "apps/console/tests/test_live_settings.py says 'todo'",
+    "apps/issues/tests/test_capture.py says '/todo'",
+    "apps/metrics/tests/test_accumulator.py says '/todo'",
+    "apps/metrics/tests/test_service.py says '/todo'",
+    "apps/organizations/tests/test_dashboard_activity.py says 'calendar'",
+    "apps/organizations/tests/test_dashboard_activity.py says 'todo'",
+    "apps/organizations/tests/test_entity_links.py says '/calendar'",
+    "apps/organizations/tests/test_entity_links.py says 'calendar'",
+    "apps/organizations/tests/test_entity_links.py says 'files'",
+    "apps/organizations/tests/test_entity_links.py says 'learning'",
+    "apps/organizations/tests/test_entity_links.py says 'todo'",
+    "apps/organizations/tests/test_entity_links.py says 'todos'",
+    "apps/profile/tests/test_recent_activity.py says 'todo'",
+    "apps/shared/tests/test_activity.py says 'todo'",
+    "apps/shared/tests/test_events.py says 'todo'",
+    "apps/shared/tests/test_heavy_request.py says 'todos'",
+    "apps/shared/tests/test_listener.py says 'calendar'",
+    "apps/shared/tests/test_listener.py says 'files'",
+    "apps/shared/tests/test_listener.py says 'learning'",
+    "apps/shared/tests/test_listener.py says 'todo'",
+    "apps/shared/tests/test_request_logging.py says '/todo'",
+    "apps/shared/tests/test_request_logging.py says 'todos'",
+    "apps/timeline/tests/test_app_axis.py says 'todo'",
+    "apps/timeline/tests/test_entity_correlation.py says 'calendar'",
+    "apps/timeline/tests/test_entity_correlation.py says 'todo'",
+    "apps/timeline/tests/test_entity_naming.py says 'todo'",
+    "apps/timeline/tests/test_paging.py says 'todo'",
+    "apps/timeline/tests/test_pivots.py says 'todo'",
 }
 
 
@@ -234,22 +317,21 @@ def _context_tables() -> set[str]:
 
 def _naming_tokens(text: str, contexts: set[str], tables: set[str]) -> set[str]:
     """How one string can name a context: its bare name, a path whose segment is one (`/auth/…`),
-    or a context-owned table spelled into SQL."""
+    a dotted module path into it (`apps.auth…`, a plugin list or a patch target), or a
+    context-owned table spelled into SQL."""
     names = "|".join(sorted(contexts))
     tokens = {text} if text in contexts else set()
     tokens |= {f"/{hit}" for hit in re.findall(rf"/({names})(?=[/?\"' ]|$)", text)}
+    tokens |= {f"apps.{hit}" for hit in re.findall(rf"\bapps\.({names})\b", text)}
     tokens |= set(re.findall(rf"\b({'|'.join(sorted(tables))})\b", text))
     return tokens
 
 
-def _shared_strings_naming_a_context() -> set[str]:
-    """Every non-docstring string literal under `apps/shared` that names a context — by its bare
-    name, by a URL pointing into it, or by one of its tables."""
-    contexts, tables = _contexts(), _context_tables()
+def _strings_naming(contexts: set[str], tables: set[str], paths) -> set[str]:
+    """Every non-docstring string literal in ``paths`` that names one of ``contexts`` — by its bare
+    name, by a URL pointing into it, or by one of ``tables``."""
     found = set()
-    for path in sorted((_APPS / "shared").rglob("*.py")):
-        if "/tests/" in path.as_posix():
-            continue
+    for path in paths:
         tree = ast.parse(path.read_text())
         # A docstring is the first statement of its module, class or function — an expression
         # holding the constant. Matched by identity, so a prose mention of a context's name costs
@@ -273,6 +355,19 @@ def _shared_strings_naming_a_context() -> set[str]:
                     for token in _naming_tokens(node.value, contexts, tables)
                 }
     return found
+
+
+def _shared_strings_naming_a_context() -> set[str]:
+    """Every non-docstring string literal under `apps/shared` that names a context."""
+    return _strings_naming(
+        _contexts(),
+        _context_tables(),
+        (
+            path
+            for path in sorted((_APPS / "shared").rglob("*.py"))
+            if "/tests/" not in path.as_posix()
+        ),
+    )
 
 
 def _shared_templates_naming_a_context() -> set[str]:
@@ -303,6 +398,42 @@ def test_no_shared_module_names_a_bounded_context():
     named = _shared_strings_naming_a_context() | _shared_templates_naming_a_context()
 
     assert named == _NAMED_ON_PURPOSE
+
+
+def _outside_the_demos() -> list[Path]:
+    """Every Python module a demo's deletion leaves standing: the other apps with their tests, the
+    harness, the scripts. The composition root, whose job is to mount every app, and this package,
+    which reads the demos to hold the README's word on them, are left out."""
+    demos = _demos()
+    return [
+        path
+        for root in (_APPS, _ROOT / "tests", _ROOT / "scripts")
+        for path in sorted(root.rglob("*.py"))
+        if path != _APPS / "main.py"
+        and not path.is_relative_to(Path(__file__).parent)
+        and not (path.is_relative_to(_APPS) and path.relative_to(_APPS).parts[0] in demos)
+    ]
+
+
+def _demo_tables() -> set[str]:
+    demos = _demos()
+    return {
+        table.name
+        for mapper in Base.registry.mappers
+        if mapper.class_.__module__.split(".")[1:2] in ([demo] for demo in demos)
+        for table in mapper.tables
+        if isinstance(table, Table)
+    }
+
+
+def test_nothing_outside_a_demo_names_it():
+    """`apps/shared` naming a context is one trace; a demo named by another app, by the harness or
+    by a script is the same trace one directory over — and deleting the demo turns each into a dead
+    route, a missing table or a suite that no longer loads. What still names one is frozen here, by
+    the string it spells; the list only shrinks, and at zero a demo is deleted without a trace."""
+    named = _strings_naming(_demos(), _demo_tables(), _outside_the_demos())
+
+    assert named == _NAMES_A_DEMO
 
 
 def _contexts_providing(query_type: type) -> set[str]:

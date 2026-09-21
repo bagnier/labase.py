@@ -13,8 +13,8 @@ was about to raise anyway, a parked task the seam had just captured.
 
 The one deliberate ``error`` carrying no exception is ``request.finished`` on a 5xx, which states
 the *outcome* of an exchange rather than a defect. It is written through a bound alias
-(``log_at = log.error``), so it stays out of this walk by construction rather than by exemption —
-the one shape the walk cannot read, since the level is not on the call.
+(``log_at = log.error if … else log.info``), which the walk resolves to every level it can take —
+so it is named below as the one outcome line, rather than left out by the shape of its call.
 
 Same shape and same reason as its two siblings: these choices live at call sites, so nothing but
 an AST walk enumerates them.
@@ -28,20 +28,48 @@ from tests.meta.test_log_vocabulary import is_a_logger
 _APPS = Path(__file__).resolve().parents[2] / "apps"
 
 
+def _levels_of(value: ast.expr) -> set[str]:
+    """The levels an expression can bind: ``log.error``, or either branch of an ``if``/``else``
+    choosing between two — empty for anything that is not a logger's level."""
+    if isinstance(value, ast.IfExp):
+        return _levels_of(value.body) | _levels_of(value.orelse)
+    if isinstance(value, ast.Attribute) and is_a_logger(value.value):
+        return {value.attr}
+    return set()
+
+
+def _bound_levels(tree: ast.Module) -> dict[str, set[str]]:
+    """Each name bound to a logger's level somewhere in the module, with every level it can take
+    — ``log_at = log.error if … else log.info``, then ``log_at = log.warning``."""
+    bound: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and (levels := _levels_of(node.value)):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    bound.setdefault(target.id, set()).update(levels)
+    return bound
+
+
 def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:
-    """Every ``(site, name, call)`` spelling ``<logger>.<level>(…)`` under ``apps/``, tests aside
-    — whatever the logger is called at that site."""
+    """Every ``(site, name, call)`` writing a line at ``level`` under ``apps/``, tests aside —
+    ``<logger>.<level>(…)`` whatever the logger is called, and a call through a name bound to a
+    level, counted at each level it can take."""
     found = []
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
             continue
-        for node in ast.walk(ast.parse(path.read_text())):
-            if not (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
+        tree = ast.parse(path.read_text())
+        aliases = {name for name, levels in _bound_levels(tree).items() if level in levels}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            direct = (
+                isinstance(node.func, ast.Attribute)
                 and node.func.attr == level
                 and is_a_logger(node.func.value)
-            ):
+            )
+            through_alias = isinstance(node.func, ast.Name) and node.func.id in aliases
+            if not (direct or through_alias):
                 continue
             first = node.args[0] if node.args else None
             name = first.value if isinstance(first, ast.Constant) else "<caller-supplied>"
@@ -49,15 +77,21 @@ def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:
     return found
 
 
+# The exchange's own line: its level is computed from the outcome, so it is `error` on a 5xx with
+# no exception to carry, and `info` when the exchange did what was asked — neither a defect nor a
+# surprise, and the only line allowed to be either.
+_THE_OUTCOME_LINE = "request.finished (apps/shared/logs/request.py)"
+
+
 def test_an_error_line_carries_the_exception_that_justifies_it():
     """Without one it alarms nobody: the seam skips it, and the line rolls out of its window."""
     blind = {
-        f"{name} ({site})"
+        f"{name} ({site.split(':')[0]})"
         for site, name, call in _calls_at("error")
         if not any(keyword.arg == "exc_info" for keyword in call.keywords)
     }
 
-    assert blind == set()
+    assert blind == {_THE_OUTCOME_LINE}
 
 
 def test_the_walk_actually_finds_the_error_sites():
@@ -69,10 +103,6 @@ def test_the_walk_actually_finds_the_error_sites():
 # point of surprise, and a codebase holds only so many genuine surprises before the level stops
 # meaning anything. Adding one is a deliberate edit, argued here, rather than something that
 # happens while writing a handler.
-#
-# One more is written through a bound alias and so falls outside this walk: ``request.finished``
-# (``log_at``), whose *level* is computed from the outcome and is ``info`` only when the exchange
-# did what was asked.
 _THE_SURPRISES = {
     # A reaction whose actor closed their account between the fact and its delivery — the
     # personal org, the first-admin grant. Rare, and it explains a missing row later.
@@ -100,7 +130,7 @@ def test_the_info_lines_are_exactly_the_surprises():
     reader would have predicted."""
     written = {f"{name} ({site.split(':')[0]})" for site, name, _ in _calls_at("info")}
 
-    assert written == _THE_SURPRISES
+    assert written == _THE_SURPRISES | {_THE_OUTCOME_LINE}
 
 
 def test_nothing_is_written_below_the_two_levels():

@@ -7,6 +7,7 @@ Feature: Organisation management
 
   Scenario: A new user gets a personal organisation on registration
     Given a user is registered with email "alice@example.com"
+    When they sign in
     Then they have exactly one organisation
     And they are its owner
 

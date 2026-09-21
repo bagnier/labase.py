@@ -47,14 +47,8 @@ async def _make_event() -> asyncio.Event:
 
 
 class InProcessServer:
-    def __init__(self) -> None:
-        self._bg: BackgroundLoop | None = None
-        self._shutdown: asyncio.Event | None = None
-        self._server_future = None
-        self._port: int | None = None
-
-    def start(self, port: int | None = None) -> str:
-        """Launch the server (on `port`, or a free one) and return its base URL.
+    def __init__(self, port: int | None = None) -> None:
+        """Launch the server (on `port`, or a free one); it serves until ``stop()``.
 
         The URL says ``localhost`` (same socket) so the browser's origin domain
         matches the WebAuthn ``rp_id`` GoTrue pins; a pinned `port` listed in
@@ -62,7 +56,6 @@ class InProcessServer:
         in e2e (see the browser driver)."""
         self._port = port or _free_port()
         self._bg = BackgroundLoop()
-        self._bg.start()
         config = Config()
         config.bind = _loopback_binds(self._port)
         config.accesslog = config.errorlog = None
@@ -73,7 +66,7 @@ class InProcessServer:
             serve(cast(Framework, app), config, shutdown_trigger=self._shutdown.wait)
         )
         self._wait_for_server()
-        return f"http://localhost:{self._port}"
+        self.base_url = f"http://localhost:{self._port}"
 
     def run(self, coro):
         """Run a coroutine on the server's event loop and return its result.
@@ -81,7 +74,6 @@ class InProcessServer:
         The app's engines live on that loop; anything touching them (e.g. a
         TaskWorker tick) must run there too.
         """
-        assert self._bg is not None, "run() before start()"
         return self._bg.submit(coro).result(timeout=30)
 
     def _wait_for_server(self, timeout: float = 30.0) -> None:
@@ -95,13 +87,6 @@ class InProcessServer:
         raise RuntimeError(f"Server did not start within {timeout}s")
 
     def stop(self) -> None:
-        if not self._bg:
-            return
-        if self._shutdown:
-            self._bg.call_soon(self._shutdown.set)
-        if self._server_future:
-            self._server_future.result(timeout=10)
+        self._bg.call_soon(self._shutdown.set)
+        self._server_future.result(timeout=10)
         self._bg.stop()
-        self._bg = None
-        self._shutdown = None
-        self._server_future = None

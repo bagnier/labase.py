@@ -45,6 +45,9 @@ class TechnicalSettings(BaseSettings):
     firehose_dir: str = ".cache/firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
+    # How long a request waits on the counter store before failing open — connect, pool and query
+    # alike. Past it the request goes through unlimited, and the dependency verdict opens an issue.
+    rate_limit_store_timeout_seconds: float = 2.0
     # Behind a reverse proxy/LB, the socket peer is the proxy, so the real client sits in
     # X-Forwarded-For. Off by default: trusting that header when nothing upstream strips it
     # lets any caller spoof their IP (evading rate limits, poisoning logs). Turn on ONLY when a

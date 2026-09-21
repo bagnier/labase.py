@@ -15,6 +15,8 @@ The README is the product's front door and the only document read by people who 
 an assertion no run could contradict.
 """
 
+import re
+
 from tests.meta.claims import CLAIMS, UNHELD_TODAY
 from tests.meta.readme import README, normalised
 
@@ -68,6 +70,27 @@ def test_the_unheld_claims_are_the_backlog(request):
             reporter.write_line(f"  {name}")
 
     assert len(unheld) == UNHELD_TODAY
+
+
+def _principles_sentences() -> list[str]:
+    """The sentences of the README's Principles, headings aside — split where a sentence ends and
+    the next begins with a capital, a code span or emphasis."""
+    readme = README.read_text()
+    section = readme[readme.index("## Principles") : readme.index("## The boilerplate")]
+    prose = normalised(re.sub(r"^#+ .*$", "", section, flags=re.MULTILINE))
+    return [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z`*_])", prose) if s]
+
+
+def test_every_principles_sentence_is_a_claim():
+    """ "The principles below are mechanically verifiable" is only as true as the registry is
+    complete: a Principles sentence no claim quotes moves no counter, so `UNHELD_TODAY` could
+    reach zero while it stays unproven. Each one is quoted by a claim — held, or waived with its
+    reason, and then counted."""
+    quotes = [normalised(claim.quote) for claim in CLAIMS]
+
+    unbound = [s for s in _principles_sentences() if not any(q in s for q in quotes)]
+
+    assert unbound == []
 
 
 def test_the_registry_is_populated():

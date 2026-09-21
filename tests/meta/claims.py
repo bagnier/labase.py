@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from types import FunctionType
 
 from apps.console.tests.e2e.test_admins_scenarios import (
+    test_an_admin_adds_another_admin_by_email,
     test_the_first_registered_user_becomes_a_server_admin,
 )
 from apps.issues.tests.test_capture import (
@@ -40,6 +41,7 @@ from apps.shared.tests.test_form_as_json import (
     test_a_multipart_upload_is_left_alone,
 )
 from apps.shared.tests.test_limiter import (
+    test_a_store_that_never_answers_fails_open_within_its_timeout,
     test_a_store_the_limiter_cannot_reach_is_a_bug,
     test_rate_limit_fails_open_when_store_is_down,
 )
@@ -56,6 +58,9 @@ from apps.shared.tests.test_request_logging import (
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
 )
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
+from tests.e2e.drivers.test_api_rls import (
+    test_the_rls_session_runs_as_the_app_role_and_the_admin_one_does_not,
+)
 from tests.e2e.drivers.test_browser_isolation import test_distinct_emails_get_isolated_contexts
 from tests.e2e.drivers.test_conformance import (
     test_an_answer_straying_from_its_schema_is_named_by_its_operation,
@@ -79,7 +84,10 @@ from tests.meta.test_docs import (
     test_the_stack_table_names_what_is_installed,
     test_the_test_environment_file_is_committed_and_local,
 )
-from tests.meta.test_emit_sites import test_the_only_way_to_record_a_fact_is_on_a_transaction
+from tests.meta.test_emit_sites import (
+    test_every_link_of_the_journal_writer_has_its_one_caller,
+    test_the_only_way_to_record_a_fact_is_on_a_transaction,
+)
 from tests.meta.test_event_vocabulary import (
     test_an_org_scoped_event_declares_its_org_as_required,
     test_every_event_names_both_of_its_halves,
@@ -126,6 +134,7 @@ from tests.meta.test_ratchets import (
     test_nothing_reruns_a_failing_test,
     test_the_defensive_reads_are_the_named_ones,
     test_the_e2e_doubles_are_the_named_ones,
+    test_the_lifecycles_the_tests_narrow_are_the_named_ones,
     test_the_numbers_outside_the_settings_are_the_named_ones,
     test_the_snapshot_reads_in_assertions_are_the_named_ones,
     test_time_comes_from_the_one_clock,
@@ -147,6 +156,7 @@ from tests.meta.test_surfaces import (
     test_every_context_keeps_its_internals_private,
     test_no_contract_exports_a_settings_handle,
     test_no_shared_module_names_a_bounded_context,
+    test_nothing_outside_a_demo_names_it,
     test_the_capture_seam_is_not_a_business_fact,
     test_the_collaboration_registries_are_keyed_by_type_alone,
     test_the_composition_root_is_the_only_module_that_mounts,
@@ -209,8 +219,9 @@ CLAIMS = [
         "demo-apps-are-disposable",
         "The demo apps are meant to be deleted when real work starts.",
         "no lane deletes an app and re-runs; the surface claims below are its decomposition, and "
-        "test_the_modules_outside_a_demo_that_import_it_are_the_named_ones freezes the four "
-        "non-demo modules a deletion would break today — the claim holds when that list is empty",
+        "two ratchets measure the distance: test_the_modules_outside_a_demo_that_import_it_are_"
+        "the_named_ones freezes the imports, test_nothing_outside_a_demo_names_it the strings — "
+        "the claim holds when both lists are empty",
     ),
     # ── Principles ──────────────────────────────────────────────────────────────────────────────
     waived(
@@ -218,8 +229,9 @@ CLAIMS = [
         "each owns its domain logic, routes, templates, tests and migrations, and can be added, "
         "disabled, or deleted without touching the others",
         "test_the_modules_outside_a_demo_that_import_it_are_the_named_ones inventories what "
-        "outside a demo imports it; what names one by string (a feed filter, a cleanup list) "
-        "has no inventory yet, and both must be empty for the sentence to hold",
+        "outside a demo imports it, test_nothing_outside_a_demo_names_it what names one by "
+        "string; both must be empty for the sentence to hold, and neither covers the foundation "
+        "apps",
     ),
     held(
         "boundaries-are-hard",
@@ -248,12 +260,14 @@ CLAIMS = [
         "deleting-an-app-removes-every-trace",
         "deleting an app removes every trace of it",
         test_no_shared_module_names_a_bounded_context,
+        test_nothing_outside_a_demo_names_it,
     ),
     held(
         "fact-rides-a-transaction",
         "the emitter names that transaction explicitly, and there is no second way to record a "
         "fact",
         test_the_only_way_to_record_a_fact_is_on_a_transaction,
+        test_every_link_of_the_journal_writer_has_its_one_caller,
     ),
     held(
         "only-what-happened-is-a-fact",
@@ -289,6 +303,7 @@ CLAIMS = [
         "Row-level security, versioned as plain SQL migrations, is the single source of truth for "
         "who sees what.",
         test_every_public_table_enforces_row_level_security,
+        test_the_rls_session_runs_as_the_app_role_and_the_admin_one_does_not,
     ),
     held(
         "authorization-rules-at-both-doors",
@@ -378,6 +393,105 @@ CLAIMS = [
         "suppression added to tolerate either, is the sign the annotation is wider than the truth.",
         test_no_compensating_assert_narrows_an_annotation,
         test_the_defensive_reads_are_the_named_ones,
+        test_the_lifecycles_the_tests_narrow_are_the_named_ones,
+    ),
+    held(
+        "only-contract-and-bus-between-apps",
+        "The only inter-app surfaces are each app's public contract and the event bus.",
+        test_every_context_keeps_its_internals_private,
+    ),
+    waived(
+        "no-separate-frontend",
+        "One implementation buys a documented REST API _and_ a server-rendered, dynamic front "
+        "end, with no separate frontend project and no JS build step.",
+        "the two faces are held (two-faces); nothing asserts the absence of a JS bundle or a "
+        "second project — a package.json script building one would pass",
+    ),
+    waived(
+        "reactions-run-after-commit",
+        "a reaction that finds its subject already gone is a clean no-op, never a compensation.",
+        "delivery after commit is held by the listener tests; no test makes a subject disappear "
+        "before its reaction runs, and the files seeder still compensates (ROADMAP)",
+    ),
+    held(
+        "emitter-never-names-subscribers",
+        "The emitter never names its subscribers.",
+        test_the_collaboration_registries_are_keyed_by_type_alone,
+        test_the_shared_foundation_is_forbidden_from_every_context,
+    ),
+    waived(
+        "console-ships-the-operational-screens",
+        "Beyond per-app stats, the console ships the operational screens",
+        "each screen has its scenarios; nothing checks the sentence's list against the console's "
+        "own navigation, so a screen dropped from one is not missed by the other",
+    ),
+    held(
+        "policy-helpers-isolation-and-authorization",
+        "A policy calls two kinds of helper: *isolation* (which org a row belongs to), held by "
+        "SQL alone, and *authorization* (which role may act on it), which the route repeats — "
+        "exactly, never stricter — so a refusal reads as a clean 403.",
+        test_every_function_a_policy_calls_is_a_declared_guard,
+        test_the_database_gives_each_rule_its_verdict,
+        test_the_route_gives_each_rule_its_verdict,
+    ),
+    waived(
+        "sql-holds-the-invariants",
+        "SQL also holds the invariants, what must never become false whoever writes; decisions "
+        "and derived values stay in Python.",
+        "no inventory says which rules are invariants and which are decisions, so neither side "
+        "of the line can be checked — a trigger computing a derived value would pass",
+    ),
+    waived(
+        "three-records-correlated",
+        "the console's Timeline reads all three and correlates them per user, org, request and "
+        "entity.",
+        "each correlation key has scenarios; nothing checks that every record kind carries every "
+        "key it can, so a source that stops binding one only drops out of a filter",
+    ),
+    held(
+        "members-read-owners-write",
+        "Members read, owners write.",
+        test_the_database_gives_each_rule_its_verdict,
+        test_the_route_gives_each_rule_its_verdict,
+    ),
+    held(
+        "admins-promote-admins",
+        "They can then promote any other user as admin.",
+        test_an_admin_adds_another_admin_by_email,
+    ),
+    held(
+        "a-literal-is-a-release-knob",
+        "A value inlined in a signature or frozen in a module constant is a knob only a new "
+        "release can turn.",
+        test_the_numbers_outside_the_settings_are_the_named_ones,
+    ),
+    held(
+        "three-kinds-of-number-are-not-knobs",
+        "Three kinds of number are not that",
+        test_the_numbers_outside_the_settings_are_the_named_ones,
+    ),
+    held(
+        "none-is-not-unknown",
+        "Not _unknown_ — if no writer can produce a `None`, the annotation is slack",
+        test_the_defensive_reads_are_the_named_ones,
+    ),
+    held(
+        "none-is-not-not-yet",
+        "Not _not yet_ — a value bound after construction is a lifecycle",
+        test_no_compensating_assert_narrows_an_annotation,
+        test_the_lifecycles_the_tests_narrow_are_the_named_ones,
+    ),
+    waived(
+        "not-null-down-to-the-schema",
+        "a column is `not null` wherever null is unreachable.",
+        "nothing compares a nullable column with its writers; the `jsonb not null` payloads the "
+        "`| None` ratchet leaned on were found by hand",
+    ),
+    waived(
+        "markup-is-semantic-and-accessible",
+        "markup is semantic and accessible",
+        "a clause inside the single-clock sentence, so the sentence binding cannot see it; no "
+        "accessibility audit runs over the rendered pages",
     ),
     # ── Stack and quality tools ─────────────────────────────────────────────────────────────────
     held(
@@ -579,6 +693,7 @@ CLAIMS = [
         "limiting must never be what takes an endpoint down",
         test_rate_limit_fails_open_when_store_is_down,
         test_a_store_the_limiter_cannot_reach_is_a_bug,
+        test_a_store_that_never_answers_fails_open_within_its_timeout,
     ),
     held(
         "a-fact-is-fanned-out-once",
@@ -697,4 +812,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 9
+UNHELD_TODAY = 16

@@ -47,6 +47,12 @@ class AuthBrowserMixin(BrowserBase):
         assert self.last_response is not None
         assert self.last_response.status == 200, f"Expected 200, got {self.last_response.status}"
 
+    def registered_email(self) -> str:
+        """The user the scenario last registered — the one a bare "they" names."""
+        if self.last_registered_email is None:
+            raise AssertionError("no user registered in this scenario")
+        return self.last_registered_email
+
     def sign_in(self, email: str, password: str) -> None:
         self.page.goto(f"{self.base_url}/auth/login")
         if "/auth/login" not in self.page.url:

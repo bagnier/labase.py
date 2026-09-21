@@ -15,6 +15,11 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Where a session keeps the claims it speaks under — ``None`` for the login role. Production reads
+# it nowhere: each session has its connection. The API test lane, which runs every session of a
+# request on one connection, re-applies it before each statement so each keeps its own identity.
+RLS_CLAIMS = "rls_claims"
+
 
 async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> None:
     """Set the role + JWT claims so Postgres RLS policies see auth.uid().
@@ -38,6 +43,7 @@ async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> N
             "set_config('request.jwt.claims', :claims, true)"
         ).bindparams(claims=json.dumps(claims))
     )
+    session.info[RLS_CLAIMS] = json.dumps(claims)
 
 
 async def clear_rls_context(session: AsyncSession) -> None:
@@ -51,3 +57,4 @@ async def clear_rls_context(session: AsyncSession) -> None:
     conn = await session.connection()
     await conn.execute(text("RESET role"))
     await conn.execute(text("RESET request.jwt.claims"))
+    session.info.pop(RLS_CLAIMS, None)

@@ -167,6 +167,60 @@ async def test_the_secret_key_only_reads_the_journal(admin_conn: AsyncConnection
     assert granted == {"SELECT"}
 
 
+# The secret key's table privileges: data, not schema. Supabase's defaults hand `service_role`
+# TRUNCATE, TRIGGER, REFERENCES and MAINTAIN on every table too — a leaked key could then wipe a
+# table past its RLS-free DELETE, or plant a trigger that runs on every tenant's writes.
+_SERVICE_ROLE_TABLE_SQL = """
+select c.relname, a.privilege_type
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+  join pg_roles r on r.oid = a.grantee
+ where n.nspname = 'public'
+   and c.relkind in ('r', 'p', 'v', 'm', 'f')
+   and r.rolname = 'service_role'
+"""
+
+
+@pytest.mark.asyncio
+async def test_the_secret_key_holds_data_privileges_only(admin_conn: AsyncConnection):
+    relations = await admin_conn.execute(
+        text(
+            "select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace"
+            " where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')"
+        )
+    )
+    expected = {
+        (relation, privilege)
+        for relation in relations.scalars()
+        for privilege in (("SELECT",) if relation == "business_events" else _CRUD)
+    }
+
+    rows = await admin_conn.execute(text(_SERVICE_ROLE_TABLE_SQL))
+
+    assert {tuple(row) for row in rows} == expected
+
+
+@pytest.mark.asyncio
+async def test_a_table_created_later_gives_the_secret_key_data_privileges_only(
+    admin_conn: AsyncConnection,
+):
+    """The default privileges are what a new table inherits — a log partition rolled tomorrow, or
+    the next app's table — so they are held apart from today's tables."""
+    rows = await admin_conn.execute(
+        text(
+            "select a.privilege_type from pg_default_acl d"
+            " cross join lateral aclexplode(d.defaclacl) a"
+            " join pg_roles r on r.oid = a.grantee"
+            " where d.defaclrole = 'postgres'::regrole"
+            " and d.defaclnamespace = 'public'::regnamespace and d.defaclobjtype = 'r'"
+            " and r.rolname = 'service_role'"
+        )
+    )
+
+    assert set(rows.scalars()) == set(_CRUD)
+
+
 @pytest.mark.asyncio
 async def test_every_public_table_enforces_row_level_security(admin_conn: AsyncConnection):
     rows = await admin_conn.execute(

@@ -1,4 +1,6 @@
+import asyncio
 import uuid
+from typing import Self
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -95,6 +97,44 @@ async def test_rate_limit_fails_open_when_store_is_down(rate_limiting_enabled):
         ):
             for _ in range(3):
                 assert (await client.get("/ping")).status_code == 200
+
+
+class _BlackHoledSession:
+    """A session whose statement never comes back — the store behind a black-holed address, where
+    the connection is neither refused nor answered."""
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def scalar(self, *_: object, **__: object) -> None:
+        await asyncio.Event().wait()
+
+
+@pytest.mark.asyncio
+async def test_a_store_that_never_answers_fails_open_within_its_timeout(
+    rate_limiting_enabled, monkeypatch
+):
+    """Failing open only keeps the endpoint up if it happens *fast*: a store that hangs instead of
+    refusing would otherwise hold every rate-limited request for as long as the network lets it.
+    The bound is the limiter's own setting, pinned small here; the outer guard is what fails the
+    test when nothing bounds it."""
+    monkeypatch.setattr(
+        get_technical_settings(), "rate_limit_store_timeout_seconds", 0.05, raising=False
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=_app("1/minute")), base_url="http://test"
+    ) as client:
+        with patch(
+            "apps.shared.http.limiter.admin_session_factory",
+            return_value=lambda: _BlackHoledSession(),
+        ):
+            async with asyncio.timeout(5):
+                response = await client.get("/ping")
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

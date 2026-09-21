@@ -65,6 +65,11 @@ def step_access_home_unauthenticated(driver):
     driver.visit("/")
 
 
+@when("they sign in")
+def step_sign_in_registered(driver):
+    driver.sign_in(driver.registered_email(), driver.PASSWORD)
+
+
 @when("they sign out")
 def step_sign_out(driver):
     driver.logout_action()
