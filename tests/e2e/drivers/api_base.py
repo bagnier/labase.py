@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.auth.tests.given_helpers import delete_user_if_exists, find_users
+from apps.auth.tests.given_helpers import delete_user_if_exists
 from apps.main import host
 from apps.shared.events.listener import EventListener
 from apps.shared.persistence.database import (
@@ -21,7 +21,6 @@ from tests.e2e.drivers import api_transaction as db
 from tests.e2e.drivers.async_runner import AsyncRunner
 from tests.e2e.drivers.conformance import Conformance
 from tests.e2e.drivers.transport import ASGISyncTransport
-from tests.e2e.sql_setup import run_sql
 
 _conformance = Conformance(host.app.openapi())
 
@@ -158,13 +157,9 @@ class ApiBase:
             self._test_auth_emails.append(email)
 
     def _cleanup_auth_users(self) -> None:
-        # The signup trigger records ``UserCreated`` on the journal inside GoTrue's own committed
-        # transaction, so it escapes this driver's rollback. The journal deliberately has no FK to
-        # auth.users (it must outlive the user), so nothing cascades it — sweep this user's events
-        # by id. Everything else the trigger wrote (the profile) cascades when the GoTrue user goes.
+        # GoTrue's writes escape this driver's rollback; ``delete_user`` sweeps the user's journal
+        # events too, and the profile cascades when the GoTrue user goes.
         for email in self._test_auth_emails:
-            for user in find_users(email):
-                run_sql("DELETE FROM business_events WHERE user_id = :uid", {"uid": user.id})
             delete_user_if_exists(email)
         self._test_auth_emails.clear()
 

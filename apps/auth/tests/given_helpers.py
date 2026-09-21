@@ -3,6 +3,7 @@
 from supabase_auth.types import User
 
 from apps.shared.persistence.supabase import get_admin_supabase
+from tests.e2e.sql_setup import run_sql
 
 
 def find_users(email: str) -> list[User]:
@@ -38,7 +39,14 @@ def create_user(email: str, password: str) -> str:
 
 
 def delete_user(uid: str) -> None:
+    """Delete the GoTrue user and sweep their journal events.
+
+    The signup trigger records ``UserCreated`` inside GoTrue's own committed transaction, and the
+    journal has no FK to auth.users (it must outlive the user), so nothing cascades it. Left
+    undispatched, every later ``drain_task_queue`` re-delivers it on its rolled-back connection.
+    """
     get_admin_supabase().auth.admin.delete_user(uid)
+    run_sql("DELETE FROM business_events WHERE user_id = :uid", {"uid": uid})
 
 
 def set_admin_role(uid: str) -> None:
