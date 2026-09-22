@@ -216,6 +216,9 @@ allowed-confusables = ["×", "–"]
 # dev credentials the seed and the smoke sign in with, and `provision_schema.py`
 # allowlists its schema name (`re.fullmatch` + `sys.exit`) before any interpolation.
 "scripts/**" = ["S105", "S106", "S603", "S607", "S608", "T201"]
+# Runs the repo's own hook commands under `dash` by name: dash is the runner's `/bin/sh`, and
+# the command read from `.claude/settings.json` is the subject under test, not outside input.
+"tests/meta/test_agent_guard.py" = ["S603", "S607"]
 # A route handler's parameters *are* its HTTP contract — path params, `Form` fields and the
 # `Depends` injections. Most of the argument-count hits sit here, and bundling them into a
 # model would hide the contract FastAPI reads off the signature.
