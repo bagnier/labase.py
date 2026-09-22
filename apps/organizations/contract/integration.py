@@ -150,9 +150,9 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     if not await user_exists(session, user_id):
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    already_member = await count_where(session, Membership, Membership.user_id == user_id)
-    if already_member:
-        return  # returning user — OAuth sign-ins re-emit UserCreated on every visit
+    already_owns_one = await OrganizationRepository(session).count_owned_by(user_id)
+    if already_owns_one:
+        return  # retried delivery of a UserCreated already handled — idempotency, not a re-visit
     try:
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,
