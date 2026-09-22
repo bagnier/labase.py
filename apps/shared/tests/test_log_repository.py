@@ -10,7 +10,7 @@ rotation made it "a plain file delete", and nothing ever deleted.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 import pytest_asyncio
@@ -107,6 +107,27 @@ async def test_retention_drops_what_is_past_the_window(sessions):
 
     kept = await LogRepository(reader).search(text=marker, window=None)
     assert [line.ts for line in kept] == [fresh]
+
+
+@pytest.mark.asyncio
+async def test_retention_keeps_a_line_from_the_start_of_the_floor_day(sessions):
+    """The floor day is the oldest day ``roll`` keeps whole, not one past the window — so a line
+    dated at its very start, before ``now``'s own time-of-day, must survive purge the same as one
+    dated later that day. A purge floor cut to the exact hour instead of the day catches it
+    anyway, which is what turns the surviving partition's instant ``DROP`` into a row-by-row
+    ``DELETE`` that leaves dead tuples behind."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    floor_day = (_NOW - timedelta(days=30)).date()
+    on_floor_day = datetime.combine(floor_day, time.min, tzinfo=UTC)
+
+    await LogRepository(writer).append([_line(marker, ts=on_floor_day)], instance="gw0")
+    await writer.commit()
+    await LogRepository(writer).purge(retention_days=30)
+    await writer.commit()
+
+    kept = await LogRepository(reader).search(text=marker, window=None)
+    assert [line.ts for line in kept] == [on_floor_day]
 
 
 @pytest.mark.asyncio
