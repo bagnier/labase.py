@@ -75,9 +75,7 @@ async def test_collect_isolates_a_provider_that_hangs_past_its_timeout(monkeypat
     """A down app can't break the page (README: host.contribs — pull) — including one that
     hangs rather than raises. The bound is the registry's own setting, pinned small here; the
     outer guard is what fails the test when nothing bounds the hang."""
-    monkeypatch.setattr(
-        get_technical_settings(), "contribs_provider_timeout_seconds", 0.05, raising=False
-    )
+    monkeypatch.setattr(get_technical_settings(), "contribs_provider_timeout_seconds", 0.05)
     contribs = Contribs()
 
     async def hangs(q: _Query) -> str:
