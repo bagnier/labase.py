@@ -32,7 +32,7 @@ from apps.console.domain.models import (
 )
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.domain.studio import studio_link
-from apps.console.infra.repository import AppSettingRepository
+from apps.console.infra.repository import AppSettingRepository, lock_last_admin_guard
 from apps.organizations.contract.queries import list_org_handles
 from apps.shared import clock
 from apps.shared.charts import day_buckets_series
@@ -324,7 +324,8 @@ async def update_admin(
     is_admin = body.is_admin
     uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
-        rows = await admins.set_admin(email, is_admin=is_admin, session=session)
+        await lock_last_admin_guard(session)
+        rows = await admins.set_admin(email, is_admin=is_admin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:

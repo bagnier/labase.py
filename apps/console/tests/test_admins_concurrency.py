@@ -1,19 +1,20 @@
 """The last-admin guard's atomicity (issue #36).
 
-``set_admin`` used to read the admin count, then act on it, as two separate steps with no
-lock between them: two concurrent revocations could both read the same stale count, both pass
-the guard, and leave the server with no admin. The fix serializes the read-then-act critical
-section on a real lock scoped to the caller's session, so the second concurrent caller only ever
-sees the *result* of the first, never the same stale count.
+``set_admin`` reads the admin count, then acts on it, as two separate steps with nothing
+between them: two concurrent revocations can both read the same stale count, both pass the
+guard, and leave the server with no admin — exactly what the route now prevents by holding
+``lock_last_admin_guard`` (the same orchestration ``update_admin`` runs) around the call.
 """
 
 import asyncio
 import uuid
 
 import pytest
+from sqlalchemy import text
 
 from apps.auth.infra.user_repository import UserAdminStatus
 from apps.console.domain.admins import LastAdminViolation, set_admin
+from apps.console.infra.repository import lock_last_admin_guard
 from apps.shared.persistence import database as db
 
 
@@ -28,14 +29,15 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
     async def fake_list_server_admins() -> list[UserAdminStatus]:
         nonlocal list_calls
         list_calls += 1
+        # Snapshot now, as a real GoTrue call would: the query already ran and its answer is
+        # fixed before the (here, simulated) network hop back delivers it.
+        snapshot = dict(admin_flags)
         if list_calls == 1:
             first_list_entered.set()
             await let_first_list_return.wait()
         return [
-            UserAdminStatus(
-                user_id=root_id, email="root@example.com", is_admin=admin_flags[root_id]
-            ),
-            UserAdminStatus(user_id=bob_id, email="bob@example.com", is_admin=admin_flags[bob_id]),
+            UserAdminStatus(user_id=root_id, email="root@example.com", is_admin=snapshot[root_id]),
+            UserAdminStatus(user_id=bob_id, email="bob@example.com", is_admin=snapshot[bob_id]),
         ]
 
     async def fake_set_server_admin(user_id: uuid.UUID, *, is_admin: bool) -> None:
@@ -56,17 +58,30 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
     db.admin_session_factory.cache_clear()
     session_a = db.admin_session_factory()()
     session_b = db.admin_session_factory()()
+    observer = db.admin_session_factory()()
+
+    async def revoke(email: str, session) -> list[UserAdminStatus]:
+        # The exact orchestration `update_admin` runs: acquire the guard's lock, then the
+        # domain call — set_admin itself never touches the session.
+        await lock_last_admin_guard(session)
+        return await set_admin(email, is_admin=False)
+
     try:
-        task_a = asyncio.create_task(
-            set_admin("bob@example.com", is_admin=False, session=session_a)
-        )
+        task_a = asyncio.create_task(revoke("bob@example.com", session_a))
         await first_list_entered.wait()
 
-        task_b = asyncio.create_task(
-            set_admin("root@example.com", is_admin=False, session=session_b)
-        )
+        task_b = asyncio.create_task(revoke("root@example.com", session_b))
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(asyncio.shield(task_b), timeout=0.2)
+
+        # task_b is not merely slow — it is genuinely parked on a Postgres advisory lock,
+        # visible from a third, independent connection.
+        held_advisory_locks = (
+            await observer.execute(
+                text("select count(*) from pg_locks where locktype = 'advisory' and granted")
+            )
+        ).scalar_one()
+        assert held_advisory_locks == 1
 
         let_first_list_return.set()
         await task_a
@@ -76,6 +91,7 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
     finally:
         await session_a.close()
         await session_b.close()
+        await observer.close()
         await db._admin_engine().dispose()
         db._admin_engine.cache_clear()
         db.admin_session_factory.cache_clear()

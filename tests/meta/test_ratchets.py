@@ -1107,10 +1107,12 @@ _DEFAULTS_OF_A_DECLARED_SETTING = {
 
 # Numbers that are not knobs: a status code carries the response's meaning, an SVG dimension is
 # the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
-# lengths *are* the fingerprint (moving one silently re-groups every past issue), and 9 is the
-# rung count of the spaced-repetition ladder itself. Turning any of these into a setting would
-# offer an operator a lever that breaks the thing rather than tunes it.
+# lengths *are* the fingerprint (moving one silently re-groups every past issue), 9 is the rung
+# count of the spaced-repetition ladder itself, and an advisory lock's key is an identifier, not
+# a duration or a size — there is nothing an operator would tune it to. Turning any of these into
+# a setting would offer an operator a lever that breaks the thing rather than tunes it.
 _NOT_A_TUNING_KNOB = {
+    "apps/console/infra/repository.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
     "apps/issues/domain/service.py::_TITLE_MAX = 200",
     "apps/issues/domain/service.py::_TOP_FRAMES = 5",

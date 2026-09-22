@@ -5,19 +5,12 @@ The guard is the server-scope twin of the organisations' last-owner guard
 (``ensure_not_last_owner``).
 """
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from apps.auth.contract.admin import (
     UserAdminStatus,
     find_user_id_by_email,
     list_server_admins,
     set_server_admin,
 )
-
-# Named, not a bare integer, so two unrelated advisory locks in this codebase could never collide
-# on the same key by coincidence.
-_LAST_ADMIN_GUARD_LOCK = "console.last_admin_guard"
 
 
 class LastAdminViolation(Exception):
@@ -52,21 +45,17 @@ async def grant_admin(email: str) -> list[UserAdminStatus]:
     return await list_admins()
 
 
-async def set_admin(email: str, *, is_admin: bool, session: AsyncSession) -> list[UserAdminStatus]:
+async def set_admin(email: str, *, is_admin: bool) -> list[UserAdminStatus]:
     """Grant or revoke admin for ``email``, guarding the last-admin rule.
 
     Raises :class:`AdminNotFound` for an unknown email and :class:`LastAdminViolation` when the
-    revoke would leave the server with no admin. The count-then-revoke is serialized on a
-    Postgres advisory lock held for ``session``'s transaction: two concurrent revocations no
-    longer both read the same admin count before either acts on it, since the second one only
-    gets the lock once the first has committed, and re-reads a count that already reflects it.
+    revoke would leave the server with no admin. The caller (``infra.repository
+    .lock_last_admin_guard``) must hold the last-admin guard's lock for the duration of this
+    call — the read-then-act here is only atomic under that lock (issue #36).
     """
     uid = await find_user_id_by_email(email)
     if uid is None:
         raise AdminNotFound(email)
-    await session.execute(
-        text("select pg_advisory_xact_lock(hashtext(:key))"), {"key": _LAST_ADMIN_GUARD_LOCK}
-    )
     users = await list_server_admins()
     target_is_admin = any(u.user_id == uid and u.is_admin for u in users)
     admin_count = sum(1 for u in users if u.is_admin)
