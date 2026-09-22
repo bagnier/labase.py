@@ -538,8 +538,13 @@ behind the `Mailer` port (`apps/shared/email.py` — SMTP, caught by Mailpit in 
 Durable async event delivery rides the same queue: the event listener (`apps/shared/events/listener.py`,
 NOTIFY-woken, polling as a net) reads the `business_events` log and enqueues one task per
 `on` consumer, so a fact's reactions get the queue's retry, parking and at-least-once safety.
-It claims what it dispatches in the transaction that stamps it, so N instances never fan one
-fact out twice.
+Delivery is dispatched per declared consumer, off that consumer's own durable cursor — never off
+a flag on the fact itself, which would let whichever instance saw it first foreclose it for a
+consumer that instance's wiring does not carry (a rolling deploy; an app switched on and not yet
+restarted everywhere). A consumer newly registered starts at that cursor's nil floor, so it still
+catches every fact recorded before it existed; an idempotency ledger keyed on the pair makes a
+retry, before the cursor's settle window closes, a no-op rather than a second task — so N
+instances still never fan one fact out twice to the same consumer.
 
 
 #### HTTP security

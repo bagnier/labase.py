@@ -7,10 +7,12 @@ logic — writing and querying it — lives in the repository; humanizing a reco
 :mod:`apps.shared.events.activity`.
 
 This model maps only the columns that *are the fact* — the ones a reader projects and a consumer
-rebuilds. The delivery-plumbing column ``dispatched_at`` (the listener's claim cursor) is
-deliberately **not** mapped here: it is queue mechanics, not part of what happened, and the listener
-touches it through raw SQL in :mod:`apps.shared.events.repository` (alongside the ``consumed``
-ledger). Keeping it off the model is what lets this class stay "the fact, and only the fact"; the
+rebuilds. The delivery-plumbing column ``checked_at`` (the listener's routability-check claim,
+bounding whether a fact's ``kind`` can be routed at all — never whether a consumer got it, which is
+a separate, per-topic cursor) is deliberately **not** mapped here: it is queue mechanics, not part
+of what happened, and the listener touches it through raw SQL in
+:mod:`apps.shared.events.repository` (alongside the ``dispatched_consumers`` and ``consumed_events``
+ledgers). Keeping it off the model is what lets this class stay "the fact, and only the fact"; the
 choice lives here so the absence reads as intent, not oversight.
 """
 

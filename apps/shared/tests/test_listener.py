@@ -48,29 +48,31 @@ def _clear_engine_caches() -> None:
     db.admin_session_factory.cache_clear()
 
 
+async def _clear_test_listener_plumbing(s) -> None:
+    params = {"like": "evt:test_listener%"}
+    await s.execute(text("DELETE FROM task_queue WHERE topic LIKE :like"), params)
+    await s.execute(text("DELETE FROM consumed_events WHERE consumer LIKE :like"), params)
+    await s.execute(text("DELETE FROM dispatched_consumers WHERE topic LIKE :like"), params)
+    await s.execute(text("DELETE FROM event_dispatch_cursors WHERE topic LIKE :like"), params)
+
+
 @pytest_asyncio.fixture
 async def iso():
-    # Isolate the listener's global view: mark every pre-existing fact dispatched so tick() sees
+    # Isolate the listener's global view: mark every pre-existing fact checked so tick() sees
     # only what this test inserts. Restore the process-wide wiring and task handlers afterwards.
     _clear_engine_caches()
     saved_wiring = wiring.snapshot()
     saved_handlers = dict(_handlers)
     async with db.admin_session_factory()() as s:
         await s.execute(
-            text("UPDATE business_events SET dispatched_at = now() WHERE dispatched_at IS NULL")
+            text("UPDATE business_events SET checked_at = now() WHERE checked_at IS NULL")
         )
-        await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_listener%'"))
-        await s.execute(
-            text("DELETE FROM consumed_events WHERE consumer LIKE 'evt:test_listener%'")
-        )
+        await _clear_test_listener_plumbing(s)
         await s.commit()
     yield
     async with db.admin_session_factory()() as s:
         await s.execute(text("DELETE FROM business_events WHERE kind LIKE 'test_listener.%'"))
-        await s.execute(text("DELETE FROM task_queue WHERE topic LIKE 'evt:test_listener%'"))
-        await s.execute(
-            text("DELETE FROM consumed_events WHERE consumer LIKE 'evt:test_listener%'")
-        )
+        await _clear_test_listener_plumbing(s)
         await s.commit()
     _handlers.clear()
     _handlers.update(saved_handlers)
@@ -105,10 +107,10 @@ async def _topics() -> list[str]:
         return [r[0] for r in queued]
 
 
-async def _undispatched(kind: str) -> int:
+async def _unchecked(kind: str) -> int:
     async with db.admin_session_factory()() as s:
         return await s.scalar(
-            text("SELECT count(*) FROM business_events WHERE kind = :k AND dispatched_at IS NULL"),
+            text("SELECT count(*) FROM business_events WHERE kind = :k AND checked_at IS NULL"),
             {"k": kind},
         )
 
@@ -126,7 +128,7 @@ async def test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatch
         "evt:test_listener.happened:counter",
         "evt:test_listener.happened:search",
     ]
-    assert await _undispatched("test_listener.happened") == 0
+    assert await _unchecked("test_listener.happened") == 0
 
 
 @pytest.mark.asyncio
@@ -266,11 +268,11 @@ async def test_a_reaction_parked_for_good_logs_its_failure_under_the_facts_deliv
 
 
 @pytest.mark.asyncio
-async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispatched(iso):
+async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_checked(iso):
     """A kind with no registered class can be routed to no one — a fact we cannot even name. That is
     not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
-    it into a console Issue), so it stops being lost in silence. The cursor still advances: the
-    record is marked dispatched and nothing is enqueued."""
+    it into a console Issue), so it stops being lost in silence. The claim still advances: the
+    record is marked checked and nothing is enqueued."""
     async with db.admin_session_factory()() as s:
         await s.execute(
             text(
@@ -287,7 +289,7 @@ async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispa
     assert surfaced[0]["log_level"] == "error"  # exception level → captured as an Issue
     assert surfaced[0]["kind"] == "test_listener.legacy"
     assert await _topics() == []
-    assert await _undispatched("test_listener.legacy") == 0
+    assert await _unchecked("test_listener.legacy") == 0
 
 
 def test_forget_apps_register_durable_consumers_of_user_deleted():
@@ -435,3 +437,21 @@ async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
     assert await EventListener(0).tick() == 1
     assert await EventListener(0).tick() == 0  # nothing left undispatched
     assert await _topics() == ["evt:test_listener.happened:counter"]  # not duplicated
+
+
+@pytest.mark.asyncio
+async def test_a_wiring_without_the_consumer_does_not_foreclose_it_for_one_that_has_it(iso):
+    """The issue's own reproduction: two listeners on two wirings, only one of which registers
+    the consumer. The one without it must not mark the fact fully delivered — the listener
+    whose wiring does carry the consumer still owes it the task."""
+    without_consumer = EventWiring()
+    with_consumer = EventWiring()
+    EventBus(with_consumer).on(
+        _TailEvent, _noop, name="counter", app="test_listener", as_actor=False
+    )
+    await _seed(uuid.uuid7())
+
+    await EventListener(0, wiring=without_consumer).tick()
+    await EventListener(0, wiring=with_consumer).tick()
+
+    assert await _topics() == ["evt:test_listener.happened:counter"]

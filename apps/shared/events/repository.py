@@ -180,11 +180,11 @@ def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
 class EventRepository(BaseRepository[BusinessEventRecord]):
     """All ``business_events`` SQL, bound to one session.
 
-    The two delivery scans read whole :class:`BusinessEventRecord` objects: the journal already has
-    a typed shape, so the delivery path reads it rather than re-deriving a narrower one of its own.
-    What stays raw ``sql_text()`` is the plumbing proper — the ``dispatched_at`` cursor,
-    deliberately left off the fact model, and the ``consumed_events`` ledger, whose
-    ``ON CONFLICT`` reads best as SQL.
+    The delivery scans read whole :class:`BusinessEventRecord` objects: the journal already has a
+    typed shape, so the delivery path reads it rather than re-deriving a narrower one of its own.
+    What stays raw ``sql_text()`` is the plumbing proper — the ``checked_at`` marker, deliberately
+    left off the fact model, the per-topic ``event_dispatch_cursors``, and the ``consumed_events``
+    / ``dispatched_consumers`` ledgers, whose ``ON CONFLICT`` reads best as SQL.
     """
 
     model: ClassVar[type[BusinessEventRecord]] = BusinessEventRecord
@@ -233,25 +233,94 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
 
     # ── Delivery ─────────────────────────────────────────────────────────────────────────────
 
-    async def claim_undispatched(self, batch: int) -> list[BusinessEventRecord]:
-        """``SKIP LOCKED`` so N instances never double-claim; the caller marks them dispatched in
-        the same transaction. ``dispatched_at`` is queue mechanics, not part of what happened, so
-        the model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate
-        in an otherwise ORM query."""
+    async def claim_unchecked(self, batch: int) -> list[BusinessEventRecord]:
+        """``SKIP LOCKED`` so N instances never double-claim; the caller marks them checked in the
+        same transaction. ``checked_at`` is queue mechanics, not part of what happened, so the
+        model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate in
+        an otherwise ORM query. Bounds the *routability* check alone (an unrecognized ``kind``
+        surfaced as an issue): per-consumer delivery is a separate, per-topic cursor (see
+        :meth:`topic_backlog`), so this marker no longer gates whether a consumer gets its task."""
         claimed = await self.session.scalars(
             select(BusinessEventRecord)
-            .where(sql_text("dispatched_at IS NULL"))
+            .where(sql_text("checked_at IS NULL"))
             .order_by(BusinessEventRecord.id)
             .with_for_update(skip_locked=True)
             .limit(batch)
         )
         return list(claimed)
 
-    async def mark_dispatched(self, ids: list[uuid.UUID]) -> None:
+    async def mark_checked(self, ids: list[uuid.UUID]) -> None:
         await self.session.execute(
-            sql_text("UPDATE business_events SET dispatched_at = now() WHERE id = ANY(:ids)"),
+            sql_text("UPDATE business_events SET checked_at = now() WHERE id = ANY(:ids)"),
             {"ids": ids},
         )
+
+    _NIL_CURSOR: ClassVar[uuid.UUID] = uuid.UUID(int=0)
+
+    async def lock_dispatch_cursor(self, topic: str) -> uuid.UUID | None:
+        """The topic's own cursor, locked for this tick — ``None`` when another instance already
+        holds it (skipped this tick, retried next). A topic seen for the first time anywhere gets
+        a fresh row at the nil cursor, so it starts owed every fact recorded before it existed —
+        an app switched on, then restarted, still catches up on what it missed."""
+        await self.session.execute(
+            sql_text(
+                "INSERT INTO event_dispatch_cursors (topic, cursor) VALUES (:topic, :nil) "
+                "ON CONFLICT (topic) DO NOTHING"
+            ),
+            {"topic": topic, "nil": self._NIL_CURSOR},
+        )
+        return await self.session.scalar(
+            sql_text(
+                "SELECT cursor FROM event_dispatch_cursors "
+                "WHERE topic = :topic FOR UPDATE SKIP LOCKED"
+            ),
+            {"topic": topic},
+        )
+
+    async def advance_dispatch_cursor(self, topic: str, cursor: uuid.UUID) -> None:
+        await self.session.execute(
+            sql_text("UPDATE event_dispatch_cursors SET cursor = :cursor WHERE topic = :topic"),
+            {"cursor": cursor, "topic": topic},
+        )
+
+    async def topic_backlog(
+        self, kind: str, cursor: uuid.UUID, settle_seconds: float, batch: int
+    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
+        """A topic's own backlog above its cursor, and the cursor it may safely advance to.
+
+        Mirrors :meth:`scan_spread`'s id/commit-order reasoning exactly, for one kind and bounded
+        by ``batch``: every record above ``cursor`` is returned (and so dispatched on first sight,
+        by the caller — retries before it settles are deduplicated through
+        ``dispatched_consumers``, see :meth:`dispatch_consumer`), but the cursor itself only
+        advances to the contiguous *settled* prefix, so a fact that committed late, under a lower
+        id, is never skipped."""
+        settled_before = await self.session.scalar(
+            sql_text("SELECT now() - make_interval(secs => :settle)"),
+            {"settle": settle_seconds},
+        )
+        found = list(
+            await self.session.scalars(
+                select(BusinessEventRecord)
+                .where(BusinessEventRecord.id > cursor, BusinessEventRecord.kind == kind)
+                .order_by(BusinessEventRecord.id)
+                .limit(batch)
+            )
+        )
+        settled = list(takewhile(lambda record: record.created_at < settled_before, found))
+        return found, (settled[-1].id if settled else cursor)
+
+    async def dispatch_consumer(self, event_id: uuid.UUID, topic: str) -> bool:
+        """Insert-or-nothing against the ``dispatched_consumers`` ledger — ``True`` the first time
+        this (event, topic) pair is seen, which is when the caller must actually enqueue the task;
+        a re-check before the topic's cursor has caught up finds the row and no-ops."""
+        result = await self.session.execute(
+            sql_text(
+                "INSERT INTO dispatched_consumers (event_id, topic) VALUES (:event_id, :topic) "
+                "ON CONFLICT DO NOTHING RETURNING event_id"
+            ),
+            {"event_id": event_id, "topic": topic},
+        )
+        return result.first() is not None
 
     async def scan_spread(
         self, cursor: uuid.UUID, kinds: list[str], settle_seconds: float

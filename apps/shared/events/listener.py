@@ -2,21 +2,27 @@
 
 ``emit`` only writes a ``BusinessEvent`` to the ``business_events`` journal inside the request's
 transaction (the bus's ``emit`` → ``EventRepository.record``). This listener reads that
-journal, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
+journal, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the deliveries the
 producer no longer does — so it never knows its consumers nor waits for them:
 
-- **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched records
-  with ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one queued task per
-  registered ``bus.on`` consumer (read from the wiring via ``consumers_of``) and stamps
-  ``dispatched_at`` — one transaction, so there is no sequence-visibility gap (README: background
-  work).
+- **``on`` / async fan-out — exactly-once, per declared consumer.** Each durable consumer (a queue
+  topic) claims its own backlog off its own durable cursor (:meth:`EventRepository.topic_backlog`)
+  — never a flag on the record itself, which would let whichever instance checked a fact first
+  foreclose it for a consumer *that instance's* wiring simply does not carry (a rolling deploy; an
+  app switched on and not yet restarted everywhere — README: `dispatch per declared consumer`). A
+  fact is dispatched to a topic on first sight and the topic's cursor only advances past the
+  contiguous *settled* prefix, so a still-unsettled retry is possible — the ``dispatched_consumers``
+  ledger is what makes that retry a no-op rather than a second task (README: background work).
+- **Routability, separately.** Each tick also claims un-checked records with ``FOR UPDATE SKIP
+  LOCKED`` and stamps ``checked_at`` — bounding a single, unrelated concern: a fact whose ``kind``
+  maps to no registered class can be routed to no one, ever, and is surfaced as an issue once.
 - **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
   each tick reads facts above this process's in-memory cursor whose kind has a ``spread``
   subscriber and runs those handlers in-process (idempotent, so a replay is harmless). That cursor
   trails a settle window, because a key is minted at INSERT and a late commit would otherwise land
   under it unseen — the window is the only bound on how far under.
-- **Reconstruct from the record.** Both paths rebuild the typed event from the record's ``kind``
-  via the catalog's ``class_for``; the async dedup key is the record id.
+- **Reconstruct from the record.** Every path rebuilds the typed event from the record's ``kind``
+  via the catalog's ``class_for``.
 """
 
 import asyncio
@@ -42,18 +48,18 @@ log = structlog.get_logger(__name__)
 
 NOTIFY_CHANNEL = "business_event"
 
-# How long a fact stays replayable before the spread cursor is allowed past it. A key is minted at
-# INSERT, so a fact can surface below a cursor that already passed it (see ``scan_spread``); the
-# only thing bounding how far below is how long its transaction stayed open. This is that bound,
-# stated — well past any request or queue task, and paid for only by re-reading an indexed range
-# of facts nobody is producing most of the time.
-SPREAD_SETTLE_SECONDS = 60.0
+# How long a fact stays replayable before a cursor (spread's, or a durable consumer's own) is
+# allowed past it. A key is minted at INSERT, so a fact can surface below a cursor that already
+# passed it (see ``scan_spread``); the only thing bounding how far below is how long its
+# transaction stayed open. This is that bound, stated — well past any request or queue task, and
+# paid for only by re-reading an indexed range of facts nobody is producing most of the time.
+SETTLE_SECONDS = 60.0
 
 
 class UnroutableFact(Exception):
     """A persisted fact the listener cannot route: its ``kind`` maps to no registered event class,
     so no consumer could ever be handed it. Raised only to give the capture seam a live exception
-    to fingerprint on — caught immediately, logged, and the record is still marked dispatched."""
+    to fingerprint on — caught immediately, logged, and the record is still marked checked."""
 
 
 class EventListener:
@@ -75,13 +81,13 @@ class EventListener:
         batch_size: int = 50,
         session_factory: Callable[[], AsyncSession] | None = None,
         wiring: EventWiring | None = None,
-        spread_settle_seconds: float = SPREAD_SETTLE_SECONDS,
+        settle_seconds: float = SETTLE_SECONDS,
     ) -> None:
         self._interval = interval_seconds
         self._batch = batch_size
         self._session_factory = session_factory
         self._wiring = wiring if wiring is not None else process_wiring
-        self._spread_settle = spread_settle_seconds
+        self._settle = settle_seconds
         self._spread_cursor: uuid.UUID | None = None  # per-instance high-water, settled facts only
         self._spread_applied: set[uuid.UUID] = set()  # applied above it, still inside the window
         self._task: asyncio.Task | None = None
@@ -94,29 +100,67 @@ class EventListener:
         return factory()
 
     async def tick(self) -> int:
-        """One pass of both delivery paths. Returns the ``on``-path count, which is what drives
-        the drain loop's batching — the spread scan has no ``LIMIT``, so one tick applies all of it
-        and never needs another pass.
+        """One pass of every delivery path. Returns the routability-check count, which is what
+        drives the drain loop's batching for that pass — the backlog dispatch and the spread scan
+        each find their own way to the end of what is ready for them.
 
-        - **``on`` / async** — claim a batch of never-dispatched facts (``FOR UPDATE SKIP LOCKED``),
-          enqueue one task per durable consumer, stamp them dispatched. Exactly-once cluster-wide;
-          the tasks and the mark commit together.
+        - **routability** — claim a batch of never-checked facts (``FOR UPDATE SKIP LOCKED``),
+          surface an unrecognized ``kind`` as an issue, stamp them checked. Bounds one concern
+          only: whether a fact can be routed at all, never whether a consumer got it (that is
+          :meth:`_dispatch_backlog`, entirely independent of this marker — README: `dispatch per
+          declared consumer`).
+        - **``on`` / async** — see :meth:`_dispatch_backlog`.
         - **``spread``** — read facts newer than this process's cursor whose kind has a ``spread``
-          subscriber and run those handlers **in-process** (config reload). No claim, no dispatched
-          mark: every instance replays them.
+          subscriber and run those handlers **in-process** (config reload). No claim, no mark:
+          every instance replays them.
         """
         async with self._session() as session:
             repo = EventRepository(session)
-            claimed = await repo.claim_undispatched(self._batch)
-            for record in claimed:
-                await self._fan_out(session, record)
-            if claimed:
-                await repo.mark_dispatched([r.id for r in claimed])
+            checked = await repo.claim_unchecked(self._batch)
+            for record in checked:
+                self._check_routable(record)
+            if checked:
+                await repo.mark_checked([r.id for r in checked])
+            await self._dispatch_backlog(session, repo)
             spread_records = await self._read_spread(repo)
             await session.commit()
         for record in spread_records:
             await self._apply_spread(record)
-        return len(claimed)
+        return len(checked)
+
+    def _check_routable(self, record: BusinessEventRecord) -> None:
+        """Surface a fact whose ``kind`` maps to no registered class — it can be routed to no one,
+        ever, so this is the one thing worth checking once and remembering (via ``checked_at``)."""
+        if catalog.class_for(record.kind) is None:
+            self._capture_unroutable(record)
+
+    async def _dispatch_backlog(self, session: AsyncSession, repo: EventRepository) -> None:
+        """Deliver each durable consumer's own backlog off its own cursor — never off whether
+        *this* tick's routability claim touched a record, which is a different instance's wiring
+        away from knowing whether that consumer exists at all. A topic this instance's wiring
+        lacks (a disabled app, an older deploy) is simply not iterated here, so it neither claims
+        nor forecloses anything for a wiring that does carry it.
+
+        Each fact above a topic's cursor is dispatched on first sight, immediately — the ledger
+        (:meth:`~apps.shared.events.repository.EventRepository.dispatch_consumer`) is what makes a
+        retry, before the cursor has caught up to the settle window, a no-op rather than a second
+        task."""
+        for event_type, reactions in self._wiring.reactions().items():
+            kind = event_type.kind
+            for reaction in reactions:
+                cursor = await repo.lock_dispatch_cursor(reaction.topic)
+                if cursor is None:
+                    continue  # another instance holds this topic's cursor this tick
+                found, settled_cursor = await repo.topic_backlog(
+                    kind, cursor, self._settle, self._batch
+                )
+                for record in found:
+                    if await repo.dispatch_consumer(record.id, reaction.topic):
+                        payload = task_payload(record)
+                        actor = record.user_id if reaction.as_actor else None
+                        await enqueue(session, reaction.topic, payload, user_id=actor)
+                if settled_cursor != cursor:
+                    await repo.advance_dispatch_cursor(reaction.topic, settled_cursor)
 
     async def _read_spread(self, repo: EventRepository) -> list[BusinessEventRecord]:
         """Facts above the spread cursor whose kind has a ``spread`` subscriber, minus the ones
@@ -132,7 +176,7 @@ class EventListener:
             return []
         # Nil-uuid sentinel on first pass: uuid7 is version-tagged, so it always sorts above nil.
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
-        found, settled = await repo.scan_spread(cursor, kinds, self._spread_settle)
+        found, settled = await repo.scan_spread(cursor, kinds, self._settle)
         fresh = [record for record in found if record.id not in self._spread_applied]
         self._spread_cursor = settled
         # Only what the cursor has not passed: below it nothing is ever scanned again, so
@@ -180,26 +224,11 @@ class EventListener:
             log.exception("listener.reconstruct_failed", kind=record.kind, event_id=str(record.id))
             return None
 
-    async def _fan_out(self, session: AsyncSession, record: BusinessEventRecord) -> None:
-        event_type = catalog.class_for(record.kind)
-        if event_type is None:
-            # Not the benign "known kind, nobody listens" no-op below: a fact was persisted that
-            # this process cannot even name, and that is a defect worth an Issue of its own.
-            self._capture_unroutable(record)
-            return
-        subs = self._wiring.consumers_of(event_type)
-        if not subs:
-            return  # known kind, nobody listens — a clean no-op, no fact is lost
-        payload = task_payload(record)
-        actor = record.user_id
-        for sub in subs:
-            await enqueue(session, sub.topic, payload, user_id=actor if sub.as_actor else None)
-
     @staticmethod
     def _capture_unroutable(record: BusinessEventRecord) -> None:
         """Log an unroutable fact at ``exception`` level so the capture seam records a console
         Issue. Raised-and-caught to give the capture fingerprint a live traceback; the caller marks
-        the record dispatched regardless, so a fact we cannot route never wedges the cursor."""
+        the record checked regardless, so a fact we cannot route never wedges the claim."""
         try:
             raise UnroutableFact(f"no event class registered for kind {record.kind!r}")
         except UnroutableFact:
