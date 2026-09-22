@@ -1,7 +1,7 @@
 """Content negotiation — one handler answers JSON, HTMX fragment, or full page.
 
 The request's ``Accept`` and ``HX-Request`` headers pick the face; these predicates
-let a single handler branch without a separate frontend (README: every business
+let a single handler branch without a separate frontend (AGENTS: every business
 endpoint has two faces). The request side needs no predicate: a form is JSON at the door
 (:mod:`apps.shared.http.form`), so a handler declares its body once, as a Pydantic model.
 """

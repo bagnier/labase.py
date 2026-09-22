@@ -1,33 +1,38 @@
-"""The guard over the registry: a claim is quoted from the README, and someone holds it.
+"""The guard over the registry: a claim is quoted from its document, and someone holds it.
 
-``tests/meta/claims.py`` is a list of sentences the README makes about this codebase, each bound
-to the test that proves it — or to the reason none does yet. These four tests are what make that
-list cost something:
+``tests/meta/claims.py`` is a list of sentences AGENTS.md and the README make about this codebase,
+each bound to the test that proves it — or to the reason none does yet. These tests are what make
+that list cost something:
 
-- a claim whose quote no longer occurs in the README is a sentence someone reworded, and the
-  rewording is the decision this test forces into the open;
+- a claim whose quote no longer occurs in exactly one of the two is a sentence someone reworded or
+  wrote twice, and that is the decision this test forces into the open;
 - a claim bound to nothing at all is neither held nor waived, which is the one state the registry
   does not allow;
 - the number of unheld claims is written down, and only ever goes down.
 
-The README is the product's front door and the only document read by people who will never open
-`apps/`. Nothing else in the suite reads it, so until this file existed every sentence in it was
-an assertion no run could contradict.
+AGENTS.md is what every agent working on the base reads, and the README the front door for people
+who will never open `apps/`. Nothing else in the suite reads them, so until this file existed
+every sentence in them was an assertion no run could contradict.
 """
 
 import re
 
 from tests.meta.claims import CLAIMS, UNHELD_TODAY
-from tests.meta.readme import README, normalised
+from tests.meta.readme import AGENTS, DOCUMENTS, normalised, stated
 
 
-def test_every_claim_quotes_the_readme_verbatim():
-    """Whitespace-normalised, because the README wraps its lines and a claim may span two."""
-    readme = normalised(README.read_text())
+def test_every_claim_quotes_exactly_one_document_verbatim():
+    """Whitespace-normalised, because the documents wrap their lines and a claim may span two. In
+    exactly one of them: a sentence stated in both is a decision written twice, free to drift."""
+    documents = [normalised(stated(document)) for document in DOCUMENTS]
 
-    stale = sorted(claim.name for claim in CLAIMS if normalised(claim.quote) not in readme)
+    misplaced = sorted(
+        claim.name
+        for claim in CLAIMS
+        if sum(normalised(claim.quote) in document for document in documents) != 1
+    )
 
-    assert stale == []
+    assert misplaced == []
 
 
 def test_every_claim_is_either_held_or_waived():
@@ -64,7 +69,7 @@ def test_the_unheld_claims_are_the_backlog(request):
     """
     unheld = sorted(claim.name for claim in CLAIMS if not claim.held_by)
     reporter = request.config.pluginmanager.getplugin("terminalreporter")
-    reporter.write_line(f"\n{len(unheld)} README claims nothing holds yet (tests/meta/claims.py)")
+    reporter.write_line(f"\n{len(unheld)} claims nothing holds yet (tests/meta/claims.py)")
     if request.config.option.verbose > 0:
         for name in unheld:
             reporter.write_line(f"  {name}")
@@ -73,10 +78,12 @@ def test_the_unheld_claims_are_the_backlog(request):
 
 
 def _principles_sentences() -> list[str]:
-    """The sentences of the README's Principles, headings aside — split where a sentence ends and
+    """The sentences of AGENTS.md's Principles, headings aside — split where a sentence ends and
     the next begins with a capital, a code span or emphasis."""
-    readme = README.read_text()
-    section = readme[readme.index("## Principles") : readme.index("## The boilerplate")]
+    agents = AGENTS.read_text()
+    start = agents.index("## Principles\n")
+    end = agents.find("\n## ", start + 1)
+    section = agents[start : end if end != -1 else len(agents)]
     prose = normalised(re.sub(r"^#+ .*$", "", section, flags=re.MULTILINE))
     return [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z`*_])", prose) if s]
 

@@ -5,7 +5,7 @@ process. This one judges a failed tick *inside* it — the five lifespan workers
 listener, log drain, metrics flusher, capture drain), which by construction catch everything
 so that one bad tick never ends the loop.
 
-Which level a failing tick earns is settled once (README: a failure that repeats is one bug):
+Which level a failing tick earns is settled once (AGENTS: a failure that repeats is one bug):
 the level
 follows the *transition*, not the tick — the same shape as the log sink's own ``_Outage``. The
 arithmetic is what forced it: these loops tick once a second, so promoting every failed tick to

@@ -9,7 +9,7 @@ The storage is :mod:`apps.shared.logs.repository`, whose ``LogRepository`` owns 
 against ``log_lines`` — the house word for "the object that holds a table's queries", and the twin
 of ``EventRepository`` on the journal side.
 
-Where a line goes, and the fallback when Postgres refuses a batch, are stated once (README: the
+Where a line goes, and the fallback when Postgres refuses a batch, are stated once (AGENTS: the
 log sink). What only this module can say is *why a table*: per-day JSON Lines on local disk read
 fine with one instance, and with two they made the Timeline lie by omission — the journal and the
 issues live in Postgres and are therefore global, so an admin correlating a request saw the fact
@@ -25,7 +25,7 @@ sense of the word, and internal consistency wins — the shape is already famili
 **The day files.** The dying-process hook writes there too, not only the refused batch — it runs
 during interpreter shutdown, with no loop and no pool left to await on.
 
-**Non-blocking (README: the log sink).** The runtime path touches neither disk nor database: the
+**Non-blocking (AGENTS: the log sink).** The runtime path touches neither disk nor database: the
 processor only *enqueues* — a plain :meth:`deque.append`, atomic under the GIL, so it is safe
 before the event loop exists and from worker threads, exactly like the capture queue.
 """

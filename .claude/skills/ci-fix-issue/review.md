@@ -19,7 +19,7 @@ about it.
 Run all three, each on the perimeter. Open each break's heading with its grid: `[claims]`,
 `[features]` or `[refactor]`.
 
-- **Claims.** `README.md` states what the code promises, and `tests/meta/claims.py` names the tests
+- **Claims.** `AGENTS.md` states what the code promises, and `tests/meta/claims.py` names the tests
   that hold each sentence. For every sentence the changed code falls under — its section, and any
   claim whose holders sit in or test the changed files — establish that the head still holds it
   as written. Then attack the holders the diff adds or changes: a change that would make the

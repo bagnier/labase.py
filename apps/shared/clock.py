@@ -1,4 +1,4 @@
-"""The single source of time — never call ``datetime.now()`` directly (README: a single clock)."""
+"""The single source of time — never call ``datetime.now()`` directly (AGENTS: a single clock)."""
 
 from datetime import UTC, datetime
 

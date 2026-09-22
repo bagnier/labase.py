@@ -23,7 +23,7 @@ This skill closes one issue and nothing else.
 - **Closing questions.** The fix is coded and the pull request is open, and the fix raised
   questions. A question about the diff itself — a reading taken, a scope left out — goes in the
   pull request body, because its answer is the merge or a review remark. A question that is new
-  work — a second fault, a README sentence that would have to change — becomes its own issue,
+  work — a second fault, an AGENTS.md sentence that would have to change — becomes its own issue,
   in the shape the existing ones have, linked from the pull request body.
 - **Open question.** The issue cannot be closed without something only the user knows: which of
   two readings it means, whether a behaviour is the bug or the intent. Write the question as a
@@ -69,7 +69,7 @@ answers to questions a previous run asked.
 
 Load the `tdd` and `write-tests` skills and follow them: the first change is a test that fails
 today for the reason the issue gives. Where the issue names a "to run" command, that command is
-the reproduction, and the test is written from it. Where the issue names a README sentence, the
+the reproduction, and the test is written from it. Where the issue names an AGENTS.md sentence, the
 test is a holder of that claim, at the door the sentence names.
 
 A test that passes on the first run means the bug does not reproduce at this `HEAD`. Then:

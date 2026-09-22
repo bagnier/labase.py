@@ -15,7 +15,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from tests.meta.readme import diagram_containing, normalised, text
+from tests.meta.readme import AGENTS, diagram_containing, normalised, text
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -274,30 +274,60 @@ def test_the_test_environment_file_is_committed_and_local():
     ) == (True, False, True, False, False)
 
 
-def test_every_readme_pointer_names_something_the_readme_says():
-    """`(README: the log sink)` in a module docstring is a promise that the README carries the rule
+def test_every_rule_pointer_names_something_agents_md_says():
+    """`(AGENTS: the log sink)` in a module docstring is a promise that AGENTS.md carries the rule
     this file only applies. The pointer is prose, so a reworded heading leaves it pointing at
     nothing and the module quietly becomes the only statement again — which is the duplication the
-    pointers were introduced to end."""
-    readme = normalised(text()).lower()
+    pointers were introduced to end. The README carries no rule, so a pointer at it is dangling."""
+    agents = normalised(AGENTS.read_text()).lower()
 
     dangling = {
-        f"{path.relative_to(_ROOT)}: {claim}"
+        f"{path.relative_to(_ROOT)}: {document}: {claim}"
         for path in sorted(_ROOT.glob("apps/**/*.py"))
         if "/tests/" not in path.as_posix()
-        for claim in re.findall(r"\(README:\s*([^)]+)\)", " ".join(path.read_text().split()))
-        if claim.strip().rstrip(".").lower() not in readme
+        for document, claim in re.findall(
+            r"\((README|AGENTS):\s*([^)]+)\)", " ".join(path.read_text().split())
+        )
+        if document == "README" or claim.strip().rstrip(".").lower() not in agents
     }
 
     assert dangling == set()
 
 
-def test_claude_md_imports_the_readme_rather_than_asking_for_it():
-    """`Read README.md first` is an instruction, and the fix bot's run skipped it; an
-    `@README.md` import is the README in the context of every session that reads CLAUDE.md,
-    the runner's included — nothing to obey."""
+def test_claude_md_imports_agents_md_rather_than_asking_for_it():
+    """`Read AGENTS.md first` is an instruction, and the fix bot's run skipped one like it; an
+    `@AGENTS.md` import is the principles in the context of every session that reads CLAUDE.md,
+    the runner's included — nothing to obey. The README is for people, and stays out of it."""
     imports = [
         line for line in (_ROOT / "CLAUDE.md").read_text().splitlines() if line.startswith("@")
     ]
 
-    assert imports == ["@README.md"]
+    assert imports == ["@AGENTS.md"]
+
+
+def _github_anchor(title: str) -> str:
+    """The id GitHub gives a heading: lower-cased, punctuation dropped, spaces to hyphens."""
+    return re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")
+
+
+def _sections() -> list[tuple[int, str]]:
+    """(level, title) of every ``###`` and ``####`` of AGENTS.md outside a fenced block."""
+    found, fenced = [], False
+    for line in AGENTS.read_text().splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and (match := re.match(r"(#{3,4}) (.+)$", line)):
+            found.append((len(match[1]), match[2]))
+    return found
+
+
+def test_the_readme_lists_every_section_of_agents_md_linked_to_its_text():
+    """The README names the principles and conventions for whoever discovers the base; AGENTS.md
+    states them. A title with a link is the only thing the README says of one, so the two cannot
+    drift apart — in order, none missing, none renamed on one side only."""
+    listed = [line for line in text().splitlines() if "](AGENTS.md#" in line]
+
+    assert listed == [
+        f"{'  ' * (level - 3)}- [{title}](AGENTS.md#{_github_anchor(title)})"
+        for level, title in _sections()
+    ]

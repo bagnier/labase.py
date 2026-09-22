@@ -115,7 +115,7 @@ def main() -> int:
             print(f"  {line}", file=sys.stderr)
         print(
             "\nStyling must go through daisyUI semantic tokens "
-            "(base-*, primary, success…). See README 'Styling'.",
+            "(base-*, primary, success…). See AGENTS.md 'Styling'.",
             file=sys.stderr,
         )
         return 1

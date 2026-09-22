@@ -41,7 +41,7 @@ an issue — the label is what says it is reproduced, and the label is not yours
 - **To run**: what fails today — a command, a pytest node id, or a scenario in the drivers'
   terms. From the item's "to run" or "scratch run" when it has one; otherwise written from the
   fault, as the reproduction the bot will turn into its red test.
-- **Rule it breaks**: the statement the fault contradicts, when there is one — a README
+- **Rule it breaks**: the statement the fault contradicts, when there is one — an AGENTS.md
   sentence, quoted, or a scenario of a `.feature` file. Left out otherwise.
 - **Where**: the `file:line` links, one per line.
 

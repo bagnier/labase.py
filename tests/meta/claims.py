@@ -1,14 +1,14 @@
-"""What the README asserts about this codebase, and who proves it.
+"""What AGENTS.md and the README assert about this codebase, and who proves it.
 
-The README is a promise made to whoever clones the base, and it is the one document nothing in the
-suite reads. A sentence in it can therefore say anything: the code moves under it and no run ever
-disagrees. This registry closes that gap by making each claim a value — its exact wording, and
-either the test that holds it or the reason none does yet.
+AGENTS.md is the rule every agent works under, and the README a promise made to whoever clones the
+base; nothing else in the suite reads them. A sentence in them can therefore say anything: the
+code moves under it and no run ever disagrees. This registry closes that gap by making each claim a
+value — its exact wording, and either the test that holds it or the reason none does yet.
 
 Two rules give the list its teeth, both enforced by ``tests/meta/test_claims.py``:
 
 - **the quote is verbatim.** Reworded, the claim stops matching and the suite fails, which is the
-  point: the README's head sentences are the part that drifts in silence, since nobody re-reads a
+  point: the head sentences are the part that drifts in silence, since nobody re-reads a
   paragraph while diffing a router.
 - **the holder is a function, not a name.** ``held_by`` imports the test, so a rename moves the
   reference and a deletion breaks the import — the binding is checked before pytest even runs.
@@ -182,9 +182,10 @@ Holder = FunctionType
 
 @dataclass(frozen=True)
 class Claim:
-    """A sentence the README asserts, and what stands behind it: a test, or a written waiver.
+    """A sentence AGENTS.md or the README asserts, and what stands behind it: a test, or a written
+    waiver.
 
-    Exactly one of the two — ``test_claims`` refuses both and neither. ``quote`` is the README's
+    Exactly one of the two — ``test_claims`` refuses both and neither. ``quote`` is the document's
     own words (whitespace-normalised, so it may span wrapped lines); ``held_by`` holds the test
     functions themselves, so a rename or a deletion breaks the import rather than rotting.
     """

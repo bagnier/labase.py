@@ -264,7 +264,7 @@ allowed-confusables = ["×", "–"]
 max-positional-args = 7
 max-args = 10
 
-# Architecture contracts (README "Principles", mechanically verified by `make lint`):
+# Architecture contracts (AGENTS.md "Principles", mechanically verified by `make lint`):
 # - domain/ never imports infra/ (hexagonal direction);
 # - apps/shared/ sits below every context and imports none of them;
 # - a context's internals (domain/, infra/, private modules) are importable only from

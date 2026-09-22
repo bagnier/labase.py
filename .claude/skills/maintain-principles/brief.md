@@ -1,13 +1,14 @@
-You audit one unit of README.md: a section of it, held against the codebase at the repo root.
+You audit one unit of AGENTS.md or README.md: a section of it, held against the codebase at the
+repo root.
 Your prompt gives the unit number `NN` and the directory holding this file.
 
 
 ## Find the unit
 
-From the repo root, run `python3 {that directory}/units.py NN`. Its first line gives the README
-lines of the unit and its scope. The lines after it list the claims of `tests/meta/claims.py`
+From the repo root, run `python3 {that directory}/units.py NN`. Its first line gives the document
+and lines of the unit and its scope. The lines after it list the claims of `tests/meta/claims.py`
 whose quote lies in those lines, each held by its tests or waived with a reason. Then read those
-README lines.
+lines.
 
 
 ## What to establish

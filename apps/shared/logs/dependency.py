@@ -1,6 +1,6 @@
 """One verdict for a failed call to something outside this process: refusal, or breakage.
 
-Which of the two a failure is, and what each earns, is settled once (README: what counts as a
+Which of the two a failure is, and what each earns, is settled once (AGENTS: what counts as a
 bug): one
 verdict for GoTrue, Postgres and Storage alike, so an outage does not fill the issues screen or
 stay silent depending on the module it was reached through.

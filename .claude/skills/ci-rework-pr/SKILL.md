@@ -31,7 +31,7 @@ the runner (`GITHUB_ACTIONS` is `true`), the non-interactive rules apply.
   thread.
 
 A remark that is a critique with no ask — "weak tests" — is an ask: read the rule it points at
-(`write-tests`, the README, the feature file) and make the change the rule implies. What cannot
+(`write-tests`, AGENTS.md, the feature file) and make the change the rule implies. What cannot
 be inferred is the question.
 
 
@@ -62,7 +62,7 @@ gh pr checkout "$ARGUMENTS"
 
 Load the `tdd` skill before touching code, `write-tests` before touching a test. Only what the 
 review asks: a fault found on the way is a comment, never part of this push. A remark that would 
-change what `README.md` says is a question.
+change what `AGENTS.md` says is a question.
 
 
 ## Finalize

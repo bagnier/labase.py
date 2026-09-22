@@ -9,7 +9,7 @@ class Partial(BaseModel):
     A partial update reads only the fields the caller sent. Typing each as ``| None`` would make
     "absent" a value of the field — and read ``{"title": null}`` as "not sent". Pydantic already
     keeps the set of fields the message carried; :meth:`sent` is that set, and a field's type
-    stays what a sent value is (README: `| None` means optional).
+    stays what a sent value is (AGENTS: `| None` means optional).
     """
 
     def sent(self, field: str) -> bool:

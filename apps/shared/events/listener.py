@@ -8,7 +8,7 @@ producer no longer does — so it never knows its consumers nor waits for them:
 - **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched records
   with ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one queued task per
   registered ``bus.on`` consumer (read from the wiring via ``consumers_of``) and stamps
-  ``dispatched_at`` — one transaction, so there is no sequence-visibility gap (README: background
+  ``dispatched_at`` — one transaction, so there is no sequence-visibility gap (AGENTS: background
   work).
 - **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
   each tick reads facts above this process's in-memory cursor whose kind has a ``spread``

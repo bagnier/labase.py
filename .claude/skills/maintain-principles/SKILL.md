@@ -1,12 +1,12 @@
 ---
 name: maintain-principles
 description: >
-  Checks that the codebase still holds what the README states, and that the claims registry's
-  tests really prove it: each section goes to an adversarial-audit agent, and every break found
-  is filed in ROADMAP.md, as an issue or as a principle proposal.
+  Checks that the codebase still holds what AGENTS.md states and the README claims, and that the
+  claims registry's tests really prove it: each section goes to an adversarial-audit agent, and
+  every break found is filed in ROADMAP.md, as an issue or as a principle proposal.
 
-  Do NOT use for: bringing the README in line with the code (sync-readme), or fixing what the
-  audit finds — this skill only files.
+  Do NOT use for: bringing the README's inventories in line with the code (sync-readme), or
+  fixing what the audit finds — this skill only files.
 when_to_use: >
   "/maintain-principles", "maintenance des principes", "est-ce que le code tient ses principes",
   or a heading substring to check only matching sections: "/maintain-principles Time".
@@ -14,9 +14,9 @@ argument-hint: "[heading substring …]"
 disable-model-invocation: true
 ---
 
-This skill does corrective maintenance only. The README is taken as right, and the question is
-whether the code, and the tests that claim to hold it, still live up to it. Fix nothing and commit
-nothing.
+This skill does corrective maintenance only. AGENTS.md and the README are taken as right, and the
+question is whether the code, and the tests that claim to hold it, still live up to it. Fix nothing
+and commit nothing.
 
 The user is away for the whole run, and nobody will answer. Run every step to the end without
 asking anything or waiting for a confirmation:
@@ -76,9 +76,10 @@ From the repo root:
 python3 "${CLAUDE_SKILL_DIR}/units.py"
 ```
 
-Each unit prints on one line as `{NN} {start}-{end} {heading} · {n} claims`: each principle, each
-`####` section, and the section around any claim of `tests/meta/claims.py` that falls outside
-them, marked `[claims only]`. The numbering is stable for a given README.
+Each unit prints on one line as `{NN} {document} {start}-{end} {heading} · {n} claims`: each
+principle and each `####` section of AGENTS.md, and the section around any claim of
+`tests/meta/claims.py` that falls outside them, in either document, marked `[claims only]`. The
+numbering is stable for given documents.
 
 The skill's arguments are: "$ARGUMENTS". When that is empty, keep every unit. Otherwise keep
 only the units whose heading contains one of its words, case-insensitive.
@@ -120,7 +121,7 @@ Once a report is in, file its breaks in ROADMAP.md, then write the unit's log en
   the same fault in other words, counts as a duplicate. A `**class**` item is the exception: it
   is never a duplicate of anything. A break that matches one is still filed on its own, with its
   own `file:line`, because the class is worked from its instances' addresses.
-- **Impact:** the agent's severity says how far the README sentence falls, not what the fault
+- **Impact:** the agent's severity says how far the sentence falls, not what the fault
   costs. Judge the cost yourself and give each issue one tag:
   - `security`: someone can read, change or forge what they should not, or a secret leaks;
   - `correctness`: the product or its guarantees misbehave — lost data, a wrong answer, a test
@@ -131,11 +132,12 @@ Once a report is in, file its breaks in ROADMAP.md, then write the unit's log en
   sentences, then `→` and the direction, then the `[file.py:N](path#LN)` links. Lines are
   wrapped at 100 characters, and the language is English. The item opens with its impact, then
   the section it breaks, and the claim name when the break concerns one:
-  ``**security** · README `Time` (`never-call-datetime-now`): …``.
+  ``**security** · AGENTS `Time` (`never-call-datetime-now`): …`` — `README` for a section of the
+  README.
 - **A break in a holder test:** the direction names the test to tighten.
 
 Two kinds of break go to `## principle proposals` instead of `## issues`, because they are about
-what the README should say rather than about what the code does:
+what AGENTS.md should say rather than about what the code does:
 
 - **An unstated rule the code upholds everywhere:** a missing-premise break whose case says so.
   If the code breaks the rule somewhere, it is an issue instead.
@@ -143,8 +145,8 @@ what the README should say rather than about what the code does:
   working (a workflow, a skill, a build step, a design decision) rather than a defect. Decide this
   yourself from the case, even when the agent reports it as a plain break.
 
-Each proposal is an item of the same shape: the rule written as the README would state it, then
-the section it came from and what depends on it, then the links. Read the README before filing:
+Each proposal is an item of the same shape: the rule written as AGENTS.md would state it, then
+the section it came from and what depends on it, then the links. Read AGENTS.md before filing:
 a rule already stated there, even in other words, is not a proposal.
 
 
