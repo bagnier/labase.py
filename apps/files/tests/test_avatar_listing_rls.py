@@ -22,12 +22,16 @@ _INSERT_OBJECT = text(
     "insert into storage.objects (bucket_id, name) values (:bucket, :name) returning id"
 )
 _LIST_OBJECTS = text("select id from storage.objects where bucket_id = :bucket")
+_OBJECTS_BY_ID = text(
+    "select id from storage.objects where id in (:org_object_id, :avatar_object_id)"
+)
 
 
 @dataclass(frozen=True)
 class OrgFileAndAvatar:
     member: str
     org_object_id: uuid.UUID
+    avatar_object_id: uuid.UUID
 
 
 @asynccontextmanager
@@ -48,10 +52,12 @@ async def _an_org_object_and_an_avatar_object(
             org_object_id = await session.scalar(
                 _INSERT_OBJECT, {"bucket": bucket(), "name": f"{org.id}/notes.txt"}
             )
-            await session.execute(
+            avatar_object_id = await session.scalar(
                 _INSERT_OBJECT, {"bucket": bucket(), "name": f"avatars/{uuid.uuid4()}.png"}
             )
-            yield OrgFileAndAvatar(member=member, org_object_id=org_object_id)
+            yield OrgFileAndAvatar(
+                member=member, org_object_id=org_object_id, avatar_object_id=avatar_object_id
+            )
         finally:
             await outer.rollback()
     finally:
@@ -62,11 +68,14 @@ async def _an_org_object_and_an_avatar_object(
 async def test_a_member_lists_the_bucket_without_the_avatar_cast_raising(
     db_session: AsyncSession,
 ):
-    async with (
-        _an_org_object_and_an_avatar_object(db_session) as seeded,
-        acting_as(db_session, seeded.member),
-        db_session.begin_nested(),
-    ):
-        visible = set(await db_session.scalars(_LIST_OBJECTS, {"bucket": bucket()}))
+    async with _an_org_object_and_an_avatar_object(db_session) as seeded:
+        # Bootstrap role, RLS bypassed: proves the avatar row is really there to be evaluated,
+        # so the assertion below can only pass by the cast actually surviving it.
+        ids = {"org_object_id": seeded.org_object_id, "avatar_object_id": seeded.avatar_object_id}
+        seeded_ids = set(await db_session.scalars(_OBJECTS_BY_ID, ids))
+        assert seeded_ids == {seeded.org_object_id, seeded.avatar_object_id}
+
+        async with acting_as(db_session, seeded.member), db_session.begin_nested():
+            visible = set(await db_session.scalars(_LIST_OBJECTS, {"bucket": bucket()}))
 
     assert visible == {seeded.org_object_id}
