@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,11 @@ import sys
 from sqlalchemy.engine import make_url
 
 from apps.shared.settings.env import get_technical_settings
+
+# A per-`make`-invocation test schema (test_<pid>, see Makefile) outlives its own run on
+# purpose — so a failed run stays inspectable until the next one starts — but nothing else
+# ever drops one whose pid has since exited. provision() sweeps those on every call.
+_RUN_SCHEMA_RE = re.compile(r"^test_(\d+)$")
 
 
 def db_port(database_url: str) -> int:
@@ -168,10 +174,38 @@ insert into storage.buckets (id, name, public, file_size_limit)
 """
 
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just owned by someone else
+    return True
+
+
+def _sweep_stale_run_schemas(container: str, *, keep: str) -> None:
+    """Drop every other ``test_<pid>`` schema (+ bucket + trigger) whose pid has exited — a
+    run that crashed before reaching its own teardown, or an earlier lifetime of this
+    checkout. A schema whose pid is still alive may be another run using it right now."""
+    names = _query(
+        container,
+        "select schema_name from information_schema.schemata where schema_name ~ '^test_[0-9]+$'",
+    ).splitlines()
+    for name in names:
+        if name == keep:
+            continue
+        match = _RUN_SCHEMA_RE.fullmatch(name)
+        if match and not _pid_alive(int(match.group(1))):
+            deprovision(name, f"org-files-{name.replace('_', '-')}")
+
+
 def provision(schema: str, bucket: str, *, reset: bool) -> None:
     if not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
         sys.exit(f"Invalid schema name: {schema!r}")
     container = _db_container()
+    if _RUN_SCHEMA_RE.fullmatch(schema):
+        _sweep_stale_run_schemas(container, keep=schema)
 
     exists = _query(
         container, f"select 1 from information_schema.schemata where schema_name = '{schema}'"

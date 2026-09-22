@@ -773,8 +773,8 @@ Per worktree `<name>`:
 | --------- | ------------------- | ------------------------------- |
 | Stack     | the dev stack       | `labase-<name>-test`            |
 | API port  | 54321               | derived from name (54521-59421) |
-| DB schema | `wt_<name>`         | `test`                          |
-| Bucket    | `org-files-<name>`  | `org-files-test`                |
+| DB schema | `wt_<name>`         | `test_<pid>`                    |
+| Bucket    | `org-files-<name>`  | `org-files-test-<pid>`          |
 | App port  | derived from name   | in-process                      |
 | Dev user  | `<name>@labase.dev` | —                               |
 
@@ -782,8 +782,11 @@ The schema is a structural clone of `public` (`scripts/provision_schema.py` — 
 of `public`, rewritten to the target schema, plus the Storage bucket/policies and a
 per-schema signup trigger). On the dev stack, auth (GoTrue / `auth.users`) is shared by the
 worktrees — the dev user is namespaced by email. A `node_modules` symlink and `uv sync` mean
-a worktree needs no full reinstall. Tests run in a `test` schema cloned from their own stack's
-`public` (`make provision-test`, run automatically by `make test`).
+a worktree needs no full reinstall. Tests run in a `test_<pid>` schema, named after that
+`make` invocation's own pid so two runs started together in the same checkout never share one
+— cloned from their own stack's `public` (`make provision-test`, run automatically by
+`make test`). A schema outlives its own run so a failure stays inspectable; the next run to
+provision one sweeps any other whose pid has since exited.
 
 ### Commands
 
