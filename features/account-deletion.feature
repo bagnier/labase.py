@@ -41,6 +41,8 @@ Feature: Account deletion
 
   # The sole server admin's own deletion is the last-admin guard's other door: revoking through
   # the console is one path, deleting the account outright is the other, and both must refuse.
+  # Clears the Background's seeded admin first — this scenario needs "root@example.com" to be
+  # the *sole* admin, not one of two.
   Scenario: The sole server admin cannot delete their own account
     Given the server has no admin yet
     And a server admin is signed in as "root@example.com"
