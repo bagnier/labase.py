@@ -4,7 +4,11 @@ Feature: Account deletion
   So that I do not depend on support to close it
 
   Background:
-    Given a user is registered with email "leaving@labase.dev" and password "Test1234!"
+    # Otherwise "leaving@labase.dev" would be the first-ever registrant and bootstrap into the
+    # server's sole admin — tripping the last-admin guard below on a deletion these scenarios
+    # mean to be ordinary.
+    Given the server already has an admin
+    And a user is registered with email "leaving@labase.dev" and password "Test1234!"
 
   Scenario: Deleting the account signs the user out and closes access
     Given a visitor signs in with email "leaving@labase.dev" and password "Test1234!"
@@ -34,3 +38,12 @@ Feature: Account deletion
     And "bob@example.com" accepts the invitation
     When "alice@example.com" deletes their account
     Then "Acme" no longer appears in "bob@example.com"'s organisation list
+
+  # The sole server admin's own deletion is the last-admin guard's other door: revoking through
+  # the console is one path, deleting the account outright is the other, and both must refuse.
+  Scenario: The sole server admin cannot delete their own account
+    Given the server has no admin yet
+    And a server admin is signed in as "root@example.com"
+    When they delete their account confirming with password "Test1234!"
+    Then the account deletion is rejected
+    And "root@example.com" can open the console

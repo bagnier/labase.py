@@ -1,5 +1,6 @@
-"""Server-admin logic: the last-admin guard plus the small orchestrations the console runs on
-top of auth's admin contract (look up by email, grant, revoke).
+"""Server-admin logic: the small orchestrations the console runs on top of auth's admin
+contract (look up by email, grant, revoke) — the last-admin guard itself lives in
+``apps.auth.contract.admin``, shared with every other path that can remove an admin.
 
 The guard is the server-scope twin of the organisations' last-owner guard
 (``ensure_not_last_owner``).
@@ -9,14 +10,14 @@ import uuid
 from dataclasses import replace
 
 from apps.auth.contract.admin import (
+    LastAdminViolation as LastAdminViolation,
+)
+from apps.auth.contract.admin import (
     UserAdminStatus,
+    ensure_not_last_admin,
     list_server_admins,
     set_server_admin,
 )
-
-
-class LastAdminViolation(Exception):
-    """Revoking would leave the server with no admin."""
 
 
 class AdminNotFound(Exception):
@@ -25,11 +26,6 @@ class AdminNotFound(Exception):
     def __init__(self, email: str) -> None:
         super().__init__(f"No account exists for {email}")
         self.email = email
-
-
-def ensure_not_last_admin(*, is_revoke: bool, target_is_admin: bool, admin_count: int) -> None:
-    if is_revoke and target_is_admin and admin_count <= 1:
-        raise LastAdminViolation("The server must keep at least one admin")
 
 
 def _sorted_admins(users: list[UserAdminStatus]) -> list[UserAdminStatus]:
@@ -85,7 +81,7 @@ async def set_admin(email: str, *, is_admin: bool) -> tuple[list[UserAdminStatus
         raise AdminNotFound(email)
     admin_count = sum(1 for u in users if u.is_admin)
     ensure_not_last_admin(
-        is_revoke=not is_admin, target_is_admin=target.is_admin, admin_count=admin_count
+        removes_admin=not is_admin, target_is_admin=target.is_admin, admin_count=admin_count
     )
     changed = target.is_admin != is_admin
     if changed:

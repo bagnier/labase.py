@@ -1,3 +1,9 @@
+from apps.auth.domain.admin_guard import (
+    LastAdminViolation as LastAdminViolation,
+)
+from apps.auth.domain.admin_guard import (
+    ensure_not_last_admin as ensure_not_last_admin,
+)
 from apps.auth.infra.user_repository import (
     UserAdminStatus as UserAdminStatus,
 )

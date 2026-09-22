@@ -18,6 +18,11 @@ from fastapi import (
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.auth.contract.admin import (
+    LastAdminViolation,
+    count_server_admins,
+    ensure_not_last_admin,
+)
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
@@ -608,6 +613,14 @@ async def account_delete(
             await verify_password(current_user.email, current_password)
         except WrongPassword:
             error = "Current password is incorrect."
+
+    if error is None and current_user.is_admin:
+        try:
+            ensure_not_last_admin(
+                removes_admin=True, target_is_admin=True, admin_count=await count_server_admins()
+            )
+        except LastAdminViolation:
+            error = "You are the server's last admin — promote another admin first."
 
     if error is not None:
         return await _profile_error(
