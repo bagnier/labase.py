@@ -8,7 +8,7 @@ announced once rather than once per line.
 
 import asyncio
 import json
-import time
+import threading
 import uuid
 from collections import deque
 from contextlib import contextmanager
@@ -166,34 +166,26 @@ async def test_a_batch_the_store_refuses_lands_in_the_day_file():
 
 
 @pytest.mark.asyncio
-async def test_a_refused_batch_does_not_freeze_the_loop():
-    """The file fallback is the request loop's own doctrine (README: the log sink) — a batch the
-    store refuses must reach the day files without starving whatever else the loop is running.
+async def test_a_refused_batch_is_written_while_the_loop_keeps_serving(monkeypatch):
+    """The file fallback never blocks the request loop (README: the log sink).
 
-    Both ``tick()`` and a heartbeat are scheduled as tasks, oldest-first, so the loop's ready
-    queue runs the heartbeat's first checkpoint before ``tick()`` even starts. If ``tick()`` then
-    runs to completion without ever yielding, the heartbeat's *next* checkpoint only fires once
-    the whole write is done — turning the write's own duration into the gap between the two.
-    """
-    for i in range(10_000):
-        _enqueue(f"flood.{i}")
-    writer = LogDrain(interval_seconds=0)
-    gaps: list[float] = []
+    The day-file writer is doubled: a disk slow enough to show whether the loop waits on it cannot
+    be staged for real. The double holds the write until the loop, still serving, releases it —
+    written on the loop itself, nobody is left to release it, and it gives up at its bound."""
+    released = threading.Event()
+    releases_seen: list[bool] = []
+    monkeypatch.setattr(
+        sink, "_write_to_files", lambda lines: releases_seen.append(released.wait(timeout=1))
+    )
+    _enqueue("lost.line")
 
-    async def heartbeat() -> None:
-        last = time.perf_counter()
-        for _ in range(3):
-            await asyncio.sleep(0)
-            now = time.perf_counter()
-            gaps.append(now - last)
-            last = now
-
-    beat = asyncio.ensure_future(heartbeat())
     with _a_store_that_refuses():
-        tick = asyncio.ensure_future(writer.tick())
-        await asyncio.gather(beat, tick)
+        tick = asyncio.ensure_future(LogDrain(interval_seconds=0).tick())
+        await asyncio.sleep(0)
+        released.set()
+        await tick
 
-    assert max(gaps) < 0.05
+    assert releases_seen == [True]
 
 
 @pytest.mark.asyncio
