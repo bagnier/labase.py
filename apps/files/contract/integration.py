@@ -7,7 +7,6 @@ share router and the org-scoped router, claims the ``files`` slug, answers the d
 
 import uuid
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
@@ -24,7 +23,7 @@ from apps.files.infra.storage import storage_path
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import seed_org_welcome
+from apps.organizations.contract.queries import seed_org_welcome, user_exists
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.overview import pluralize
 from apps.shared.persistence.storage import admin_storage, bucket
@@ -127,6 +126,11 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+    # Re-checked here, past ``seed_org_welcome``'s own check, because that upload is this
+    # seeder's alone to avoid: a subject already gone is a clean no-op, never a reason to reach
+    # back into Storage for an object it never had cause to place.
+    if not await user_exists(session, owner_id):
+        return
     file_id = uuid.uuid7()
     path = storage_path(org_id, file_id, _WELCOME_FILENAME)
     # Server-side seeding runs without a caller JWT (e.g. an org created via an API key), so the
@@ -135,20 +139,11 @@ async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid
     await (
         admin_storage().from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
     )
-    try:
-        await OrgFileRepository(session, org_id).add(
-            file_id=file_id,
-            uploaded_by=owner_id,
-            filename=_WELCOME_FILENAME,
-            storage_path=path,
-            content_type="text/plain",
-            size_bytes=len(_WELCOME_BODY),
-        )
-    except IntegrityError:
-        # Storage has no transaction to join: the rollback above this returns the row and leaves
-        # the object, at a ``uuid7`` path no row will ever name again — and the retry no-ops once
-        # the owner is confirmed gone, so nothing comes back for it. Undone here because the
-        # upload is this seeder's, and ``seed_org_welcome`` has no idea one happened. Re-raised
-        # unchanged: which failures are the vanished owner's is that caller's question, not ours.
-        await admin_storage().from_(bucket()).remove([path])
-        raise
+    await OrgFileRepository(session, org_id).add(
+        file_id=file_id,
+        uploaded_by=owner_id,
+        filename=_WELCOME_FILENAME,
+        storage_path=path,
+        content_type="text/plain",
+        size_bytes=len(_WELCOME_BODY),
+    )
