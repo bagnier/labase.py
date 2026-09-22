@@ -1,111 +1,80 @@
 """Granting admin to an account that is already admin changes nothing — only an effective
-change is a fact. Driven by calling the handlers directly with mocks."""
+change is a fact. Driven through the API driver, over real HTTP, against the real journal."""
 
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-from fastapi import Request
-
-from apps.auth.contract.user import AuthenticatedUser
-from apps.console.domain.models import AdminFlag, AdminGrant
-from apps.console.infra.router import add_admin, update_admin
+from sqlalchemy import text
 
 
-def _request() -> Request:
-    scope = {
-        "type": "http",
-        "method": "POST",
-        "path": "/console/admins",
-        "headers": [],
-        "query_string": b"",
-    }
+def _admin_grant_facts(driver, email: str) -> list[str]:
+    async def read() -> list[str]:
+        async with driver.test_session_factory()() as session:
+            rows = await session.execute(
+                text(
+                    "SELECT entity_name FROM business_events "
+                    "WHERE kind = 'settings.admin_granted' AND entity_name = :email"
+                ),
+                {"email": email},
+            )
+            return [row.entity_name for row in rows]
 
-    async def receive() -> dict:
-        return {"type": "http.request", "body": b"", "more_body": False}
-
-    return Request(scope, receive)
-
-
-@pytest.mark.asyncio
-async def test_granting_an_already_admin_account_emits_no_fact():
-    current_user = AuthenticatedUser(id=uuid.uuid4(), email="root@test.local")
-    session = MagicMock()
-
-    with (
-        patch(
-            "apps.console.infra.router.find_user_id_by_email", AsyncMock(return_value=uuid.uuid4())
-        ),
-        patch(
-            "apps.console.infra.router.admins.grant_admin",
-            AsyncMock(return_value=([], False)),
-        ),
-        patch("apps.console.infra.router.events.emit", AsyncMock()) as emit,
-    ):
-        await add_admin(_request(), AdminGrant(email="bob@test.local"), current_user, session)
-
-    emit.assert_not_awaited()
+    return driver.run(read())
 
 
-@pytest.mark.asyncio
-async def test_granting_a_new_admin_emits_the_fact():
-    current_user = AuthenticatedUser(id=uuid.uuid4(), email="root@test.local")
-    session = MagicMock()
+def _admin_revoke_facts(driver, email: str) -> list[str]:
+    async def read() -> list[str]:
+        async with driver.test_session_factory()() as session:
+            rows = await session.execute(
+                text(
+                    "SELECT entity_name FROM business_events "
+                    "WHERE kind = 'settings.admin_revoked' AND entity_name = :email"
+                ),
+                {"email": email},
+            )
+            return [row.entity_name for row in rows]
 
-    with (
-        patch(
-            "apps.console.infra.router.find_user_id_by_email", AsyncMock(return_value=uuid.uuid4())
-        ),
-        patch(
-            "apps.console.infra.router.admins.grant_admin",
-            AsyncMock(return_value=([], True)),
-        ),
-        patch("apps.console.infra.router.events.emit", AsyncMock()) as emit,
-    ):
-        await add_admin(_request(), AdminGrant(email="bob@test.local"), current_user, session)
-
-    emit.assert_awaited_once()
+    return driver.run(read())
 
 
-@pytest.mark.asyncio
-async def test_setting_admin_to_its_current_value_emits_no_fact():
-    current_user = AuthenticatedUser(id=uuid.uuid4(), email="root@test.local")
-    session = MagicMock()
+def test_granting_an_already_admin_account_records_no_second_fact(driver):
+    driver.sign_in_as_admin("admin-grant-noop@example.com")
+    driver.register_regular_user("bob-grant-noop@example.com")
 
-    with (
-        patch(
-            "apps.console.infra.router.find_user_id_by_email", AsyncMock(return_value=uuid.uuid4())
-        ),
-        patch(
-            "apps.console.infra.router.admins.set_admin",
-            AsyncMock(return_value=([], False)),
-        ),
-        patch("apps.console.infra.router.events.emit", AsyncMock()) as emit,
-    ):
-        await update_admin(
-            _request(), "bob@test.local", AdminFlag(is_admin=True), current_user, session
-        )
+    driver.add_server_admin_by_email("bob-grant-noop@example.com")
+    driver.add_server_admin_by_email("bob-grant-noop@example.com")
 
-    emit.assert_not_awaited()
+    assert driver.response.status_code == 200
+    assert _admin_grant_facts(driver, "bob-grant-noop@example.com") == [
+        "bob-grant-noop@example.com"
+    ]
 
 
-@pytest.mark.asyncio
-async def test_changing_admin_status_emits_the_fact():
-    current_user = AuthenticatedUser(id=uuid.uuid4(), email="root@test.local")
-    session = MagicMock()
+def test_granting_a_new_admin_records_the_fact(driver):
+    driver.sign_in_as_admin("admin-grant-new@example.com")
+    driver.register_regular_user("bob-grant-new@example.com")
 
-    with (
-        patch(
-            "apps.console.infra.router.find_user_id_by_email", AsyncMock(return_value=uuid.uuid4())
-        ),
-        patch(
-            "apps.console.infra.router.admins.set_admin",
-            AsyncMock(return_value=([], True)),
-        ),
-        patch("apps.console.infra.router.events.emit", AsyncMock()) as emit,
-    ):
-        await update_admin(
-            _request(), "bob@test.local", AdminFlag(is_admin=True), current_user, session
-        )
+    driver.add_server_admin_by_email("bob-grant-new@example.com")
 
-    emit.assert_awaited_once()
+    assert driver.response.status_code == 200
+    assert _admin_grant_facts(driver, "bob-grant-new@example.com") == ["bob-grant-new@example.com"]
+
+
+def test_setting_admin_to_its_current_value_records_no_fact(driver):
+    driver.sign_in_as_admin("admin-set-noop@example.com")
+    driver.register_regular_user("bob-set-noop@example.com")
+
+    driver.designate_server_admin("bob-set-noop@example.com")
+    driver.designate_server_admin("bob-set-noop@example.com")
+
+    assert _admin_grant_facts(driver, "bob-set-noop@example.com") == ["bob-set-noop@example.com"]
+
+
+def test_changing_admin_status_records_the_fact(driver):
+    driver.sign_in_as_admin("admin-set-change@example.com")
+    driver.register_regular_user("bob-set-change@example.com")
+    driver.designate_server_admin("bob-set-change@example.com")
+
+    driver.revoke_server_admin("bob-set-change@example.com")
+
+    assert driver.response.status_code == 200
+    assert _admin_revoke_facts(driver, "bob-set-change@example.com") == [
+        "bob-set-change@example.com"
+    ]

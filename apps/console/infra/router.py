@@ -4,7 +4,6 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
-from apps.auth.contract.admin import find_user_id_by_email
 from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract import appearance
 from apps.console.contract.events import (
@@ -291,7 +290,7 @@ async def add_admin(
 ) -> Response:
     email = body.email.strip()
     try:
-        rows, granted = await admins.grant_admin(email)
+        rows, granted, uid = await admins.grant_admin(email)
     except AdminNotFound as exc:
         if wants_json(request):
             return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
@@ -304,12 +303,7 @@ async def add_admin(
         )
     if granted:
         await events.emit(
-            AdminGranted(
-                user_id=current_user.id,
-                entity_id=await find_user_id_by_email(email),
-                entity_name=email,
-            ),
-            session,
+            AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email), session
         )
     if wants_json(request):
         return _admins_json(rows)
@@ -325,9 +319,8 @@ async def update_admin(
     session: AdminSession,
 ) -> Response:
     is_admin = body.is_admin
-    uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
-        rows, changed = await admins.set_admin(email, is_admin=is_admin)
+        rows, changed, uid = await admins.set_admin(email, is_admin=is_admin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
