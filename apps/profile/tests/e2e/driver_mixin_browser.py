@@ -118,7 +118,9 @@ class ProfileBrowserMixin(BrowserBase):
         self.drain_task_queue()  # run UserDeleted's reactions (reap the orgs, forget the profile)
 
     def assert_account_deletion_rejected(self) -> None:
-        alert = self.page.locator("[data-account-deletion] .alert-error", has_text="incorrect")
+        # Generic on purpose: the rejection reads different messages (wrong password, the
+        # last-admin guard), and this step only claims that one showed up.
+        alert = self.page.locator("[data-account-deletion] .alert-error")
         alert.wait_for(timeout=5000)
 
     def assert_account_deletion_not_offered(self, email: str) -> None:
