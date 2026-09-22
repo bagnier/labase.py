@@ -28,7 +28,7 @@ from apps.organizations.contract.events import (
     OrganizationRenamed,
     OrgHandleChanged,
 )
-from apps.organizations.contract.overviews import OverviewQuery
+from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.settings_sections import OrgSettingsSectionQuery
 from apps.organizations.domain.exceptions import (
     InvitationRefused,
@@ -317,9 +317,7 @@ async def org_dashboard(
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle)
-    ctx["overviews"] = sorted(
-        await contribs.collect(OverviewQuery(session, org_id)), key=lambda o: o.key
-    )
+    overviews = sorted(await contribs.collect(OverviewQuery(session, org_id)), key=lambda o: o.key)
     # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
     # Invitations are an owner's to read, so a member's dashboard has no count to show.
@@ -331,7 +329,24 @@ async def org_dashboard(
     ctx["activity_calendar"] = heatmap_calendar(counts, now=now, since=org.created_at)
     ctx["activity_stats"] = activity_stats(counts, now=now)
     ctx.update(await _activity_context(session, org_id, org_handle))
+    ctx["request"] = request
+    ctx["overview_cards"] = _render_overview_cards(overviews, ctx)
     return templates.TemplateResponse(request, "organizations/dashboard.html", ctx)
+
+
+def _render_overview_cards(overviews: list[Overview], ctx: dict) -> list[str]:
+    """Each app's own partial (``o.template``), rendered one at a time so a card that raises —
+    a missing template, a bad macro call — is dropped instead of 500ing the whole dashboard
+    (the *contribs* provider itself is already isolated by ``collect``; this isolates its
+    render). Marked ``| safe`` by the caller, not here: the html is already autoescaped by
+    the render below."""
+    cards = []
+    for o in overviews:
+        try:
+            cards.append(templates.get_template(o.template).render({**ctx, "o": o}))
+        except Exception:
+            log.exception("dashboard.card_failed", template=o.template, key=o.key)
+    return cards
 
 
 @org_router.get("/dashboard/activity", responses=json_and_html(ActivityFeedRead))
