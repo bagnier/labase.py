@@ -19,6 +19,7 @@ import pytest_asyncio
 
 from apps.shared import clock
 from apps.shared.logs import sink
+from apps.shared.logs.chain import apply_log_level
 from apps.shared.logs.repository import LogRepository
 from apps.shared.logs.sink import (
     LogDrain,
@@ -229,3 +230,24 @@ async def test_a_store_that_comes_back_says_what_the_outage_cost(log_chain, stor
         for line in log_chain()
         if line.name == "log_sink.write_recovered"
     ] == [("log_sink.write_recovered", 3)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["INFO", "WARNING", "ERROR"])
+async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog, store, level):
+    """``timeline.log_level`` quiets the sink's ordinary lines, never its own outage and
+    recovery (README: the outage said once on each transition, whatever the level)."""
+    apply_log_level(level)
+    writer = LogDrain(interval_seconds=0)
+    with _a_store_that_refuses():
+        _enqueue("lost.line")
+        await writer.tick()
+    _enqueue("kept.line")
+    await writer.tick()
+
+    transitions = sorted(
+        r.msg.get("event")
+        for r in caplog.records
+        if r.msg.get("event", "").startswith("log_sink.write_")
+    )
+    assert transitions == ["log_sink.write_failed", "log_sink.write_recovered"]
