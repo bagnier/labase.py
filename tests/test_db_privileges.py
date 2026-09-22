@@ -58,6 +58,7 @@ _FUNCTION_GRANTS = {
     ("app_rls", "second_factor_enrolled"),
     ("app_rls", "public_nav_items"),
     ("app_rls", "public_pages"),
+    ("authenticated", "storage_path_org_id"),
     ("authenticated", "user_is_org_owner"),
     ("authenticated", "user_org_ids"),
     ("authenticated", "uuidv7"),
@@ -65,7 +66,7 @@ _FUNCTION_GRANTS = {
 
 # The helpers a policy may call, each in one list. Isolation says which org a row belongs to; only
 # SQL holds it. Authorization says which role may act on it; the route repeats it for a clean 403.
-_ISOLATION_HELPERS = {"user_org_ids"}
+_ISOLATION_HELPERS = {"storage_path_org_id", "user_org_ids"}
 _AUTHORIZATION_HELPERS = {"user_is_org_owner"}
 
 # Every relation, partitions included: PostgREST does not serve a partition, but a SQL session on
