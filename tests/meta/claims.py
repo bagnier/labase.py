@@ -410,8 +410,10 @@ CLAIMS = [
     waived(
         "reactions-run-after-commit",
         "a reaction that finds its subject already gone is a clean no-op, never a compensation.",
-        "delivery after commit is held by the listener tests; no test makes a subject disappear "
-        "before its reaction runs, and the files seeder still compensates (ROADMAP)",
+        "delivery after commit is held by the listener tests; the org-seeding no-op is held test "
+        "by test (test_seed_org_welcome_no_ops_when_the_resolved_owner_is_gone, the files "
+        "seeder's own test_a_seeder_whose_owner_is_already_gone_is_a_clean_no_op), but nothing "
+        "asserts the rule once for every reaction the bus delivers",
     ),
     held(
         "emitter-never-names-subscribers",
