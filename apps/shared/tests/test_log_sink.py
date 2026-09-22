@@ -6,7 +6,9 @@ store is the thing that is down, the batch still lands in its day file, and the 
 announced once rather than once per line.
 """
 
+import asyncio
 import json
+import time
 import uuid
 from collections import deque
 from contextlib import contextmanager
@@ -161,6 +163,37 @@ async def test_a_batch_the_store_refuses_lands_in_the_day_file():
         for raw in path.read_text(encoding="utf-8").splitlines()
     ]
     assert [one["event"] for one in written] == ["lost.line"]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_batch_does_not_freeze_the_loop():
+    """The file fallback is the request loop's own doctrine (README: the log sink) — a batch the
+    store refuses must reach the day files without starving whatever else the loop is running.
+
+    Both ``tick()`` and a heartbeat are scheduled as tasks, oldest-first, so the loop's ready
+    queue runs the heartbeat's first checkpoint before ``tick()`` even starts. If ``tick()`` then
+    runs to completion without ever yielding, the heartbeat's *next* checkpoint only fires once
+    the whole write is done — turning the write's own duration into the gap between the two.
+    """
+    for i in range(10_000):
+        _enqueue(f"flood.{i}")
+    writer = LogDrain(interval_seconds=0)
+    gaps: list[float] = []
+
+    async def heartbeat() -> None:
+        last = time.perf_counter()
+        for _ in range(3):
+            await asyncio.sleep(0)
+            now = time.perf_counter()
+            gaps.append(now - last)
+            last = now
+
+    beat = asyncio.ensure_future(heartbeat())
+    with _a_store_that_refuses():
+        tick = asyncio.ensure_future(writer.tick())
+        await asyncio.gather(beat, tick)
+
+    assert max(gaps) < 0.05
 
 
 @pytest.mark.asyncio
