@@ -152,7 +152,7 @@ async def get_current_user(
     if bearer is not None and bearer.startswith(API_KEY_PREFIX):
         async with _before_identity(session):
             principal = await _resolve_api_key(bearer, session)
-        structlog.contextvars.bind_contextvars(user_id=principal.id)
+        structlog.contextvars.bind_contextvars(user_id=str(principal.id))
         return principal
     # A bearer GoTrue JWT is the machine twin of the cookie session (no refresh flow).
     access_token = access_token or bearer
