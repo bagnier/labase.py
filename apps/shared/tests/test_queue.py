@@ -276,6 +276,43 @@ async def test_a_task_parked_for_good_is_captured_as_a_bug(log_chain):
 
 
 @pytest.mark.asyncio
+async def test_a_parked_task_carries_its_delivery_context_in_the_issue_it_opens(log_chain):
+    """A durable reaction's payload carries the originating ``request_id``, the fact's own
+    ``event_id``, ``user_id`` and ``org_id`` — the keys the Timeline correlates a fact and its
+    reaction's lines on. Once retries are exhausted the failure is logged one frame above the
+    handler that raised, after the wrapper's own binding around the handler call has already
+    exited — so the issue it opens must still carry them, read straight off the payload."""
+    topic = f"test.parked_ctx_{uuid.uuid4().hex}"
+    request_id, event_id, user_id, org_id = (uuid.uuid7() for _ in range(4))
+
+    async def handler(session, payload):
+        raise RuntimeError("boom")
+
+    register_task_handler(topic, handler)
+    await _enqueue_committed(
+        topic,
+        {
+            "request_id": str(request_id),
+            "event_id": str(event_id),
+            "user_id": str(user_id),
+            "org_id": str(org_id),
+        },
+        max_attempts=1,
+    )
+    capture._QUEUE.clear()
+
+    await TaskWorker(interval_seconds=1).tick()
+
+    context = capture._QUEUE[0].context
+    assert (
+        context["request_id"],
+        context["event_id"],
+        context["user_id"],
+        context["org_id"],
+    ) == (str(request_id), str(event_id), str(user_id), str(org_id))
+
+
+@pytest.mark.asyncio
 async def test_a_parked_task_names_itself_in_the_issue_it_opens(log_chain):
     """The pivot off the issue and back to the row that is still owed.
 
