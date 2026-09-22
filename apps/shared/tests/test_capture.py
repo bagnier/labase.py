@@ -9,6 +9,7 @@ These hold what that round trip cannot state, all three about the *count* an iss
 - and the ones still queued when the process is asked to stop are folded in, not dropped.
 """
 
+import asyncio
 import logging
 from collections import deque
 
@@ -86,6 +87,41 @@ def test_a_second_failure_of_the_same_kind_is_still_its_own_capture(log_chain):
 # Shutdown is not a special case: SIGTERM is how every deploy ends a process, so whatever sits in
 # the queue at that moment is the *normal* amount to lose, not an edge one. The log drain
 # already emptied on its way out; this one dropped the exceptions it was holding.
+
+
+# ``asyncio.CancelledError`` derives from ``BaseException``, not ``Exception`` — a tracker that
+# raises it (its own bug, not the drain task being cancelled) must be log-and-skipped exactly
+# like any other failing tracker, never left to abort the tick mid-queue.
+
+
+@pytest.mark.asyncio
+async def test_a_tracker_raising_cancelled_error_does_not_kill_the_drain(log_chain, monkeypatch):
+    """A misbehaving tracker raising ``CancelledError`` must not worsen the exceptions queued
+    after it: the doctrine (README: 'a failing tracker never worsens the exception it tracks')
+    does not carve out ``BaseException`` subclasses."""
+    tracked: list[capture.ExceptionCaptured] = []
+
+    async def flaky(_captured: capture.ExceptionCaptured) -> None:
+        raise asyncio.CancelledError
+
+    async def fine(captured: capture.ExceptionCaptured) -> None:
+        tracked.append(captured)
+
+    monkeypatch.setattr(capture, "_trackers", [flaky, fine])
+    monkeypatch.setattr(
+        capture,
+        "_QUEUE",
+        deque(
+            [
+                capture.ExceptionCaptured(exc=ValueError("first")),
+                capture.ExceptionCaptured(exc=ValueError("second")),
+            ]
+        ),
+    )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert [str(c.exc) for c in tracked] == ["first", "second"]
 
 
 @pytest.mark.asyncio

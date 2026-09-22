@@ -199,6 +199,14 @@ class CaptureDrain:
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
+                    except asyncio.CancelledError:
+                        # A tracker raising CancelledError on its own is a bug, not this task
+                        # being cancelled — ``Task.cancelling()`` is 0 unless ``cancel()`` was
+                        # actually called on it, in which case the drain must still unwind.
+                        task = asyncio.current_task()
+                        if task is not None and task.cancelling():
+                            raise
+                        log.exception("capture.tracker_failed", tracker=repr(tracker))
                     except Exception:
                         # Log-and-skip: a failing tracker must never worsen the exception it tracks,
                         # nor abort the others. Logged under the guard, so it does not re-capture.
