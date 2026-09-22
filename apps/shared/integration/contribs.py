@@ -39,9 +39,10 @@ class Contribs:
     def provide(self, query_type: type[Q], provider: Callable[[Q], Awaitable[object]]) -> None:
         self._providers[query_type].append(provider)
 
-    def providers(self, query_type: type) -> tuple[Callable[[Any], Awaitable[object]], ...]:
+    def providers(self, query_type: type) -> tuple[Callable[[Any], Awaitable[Any]], ...]:
         """The providers registered for a query type — read-only, so declaration-level tests can
-        ask the mounted registry instead of grepping source."""
+        ask the mounted registry instead of grepping source, or (as auth's own resolution of
+        ``ApiKeyQuery`` does) call each in turn without ``collect``'s log-and-skip policy."""
         return tuple(self._providers.get(query_type, ()))
 
     async def collect(self, query: object) -> list[Any]:
