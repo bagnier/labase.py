@@ -9,7 +9,6 @@ create or replace function public.storage_path_org_id(path text)
 returns uuid
 language sql
 immutable
-set search_path = ''
 as $$
   select case
     when (storage.foldername(path))[1] ~

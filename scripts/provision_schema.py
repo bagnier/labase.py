@@ -166,10 +166,25 @@ create trigger on_auth_user_created__{schema}
   after insert on auth.users
   for each row execute procedure {schema}.handle_new_user();
 
--- Storage bucket + RLS policies scoped to this schema's memberships.
+-- Storage bucket + RLS policies scoped to this schema's memberships. The helper is (re)created
+-- here too, not only cloned from public, so refreshing a schema provisioned before it existed
+-- does not leave the policies below pointing at a function this schema doesn't have.
 insert into storage.buckets (id, name, public, file_size_limit)
   values ('{bucket}', '{bucket}', false, 52428800)
   on conflict (id) do nothing;
+
+create or replace function {schema}.storage_path_org_id(path text)
+returns uuid
+language sql
+immutable
+as $$
+  select case
+    when (storage.foldername(path))[1] ~
+      '^[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{12}}$'
+    then (storage.foldername(path))[1]::uuid
+  end
+$$;
+grant execute on function {schema}.storage_path_org_id(text) to authenticated;
 {policies}
 """
 
