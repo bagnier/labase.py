@@ -32,8 +32,21 @@ echo
 
 for i in $(seq 1 "$N"); do
     log="$OUT/run$i.log"
-    make provision-test > "$OUT/provision$i.log" 2>&1
+    provision_out="$(make provision-test 2>&1)"
+    printf '%s\n' "$provision_out" > "$OUT/provision$i.log"
+    # provision-test names this run's schema/bucket after its own `make` pid (Makefile,
+    # TEST_RUN_SCHEMA/BUCKET) — read back what it actually provisioned rather than assume
+    # .env.test's committed default, which two runs sharing this checkout must not share.
+    if [[ "$provision_out" =~ Provisioned\ schema\ \'([^\']+)\'\ \+\ bucket\ \'([^\']+)\'\. ]]; then
+        schema="${BASH_REMATCH[1]}"
+        bucket="${BASH_REMATCH[2]}"
+    else
+        echo "run $i: could not read the provisioned schema/bucket. Tail:"
+        tail -5 "$OUT/provision$i.log"
+        exit 1
+    fi
     env --ignore-environment ENV_FILE=.env.test PATH="$PATH" \
+        SUPABASE_DATABASE_SCHEMA="$schema" SUPABASE_STORAGE_BUCKET="$bucket" \
         CHROMIUM_EXECUTABLE_PATH="${CHROMIUM_EXECUTABLE_PATH:-}" \
         uv run pytest "${TARGET[@]}" \
         -k "test_scenarios or test_browser_isolation" --driver=browser \
