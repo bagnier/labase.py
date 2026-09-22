@@ -12,7 +12,7 @@ from apps.learning.domain.models import (
     DeckSubscription,
     Schedule,
 )
-from apps.shared.persistence.repository import count_where
+from apps.shared.persistence.repository import OrgScopedRepository, count_where
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,11 @@ class CatalogRow:
     deck: Deck
     card: Card
     state: CardState | None
+
+
+class DeckRepository(OrgScopedRepository[Deck]):
+    model = Deck
+    default_order = Deck.created_at.desc()
 
 
 class LearningRepository:

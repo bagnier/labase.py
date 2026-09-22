@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.learning.contract.events import CardReviewed
 from apps.learning.domain.models import Card, Deck
+from apps.learning.infra.repository import DeckRepository
 from apps.learning.infra.router import router
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
@@ -22,6 +23,8 @@ from apps.shared.persistence.repository import count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
+
+_RECENT = 3
 
 _WELCOME_DECK = "Welcome"
 _WELCOME_CARDS = [
@@ -77,10 +80,10 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    decks = await count_where(query.session, Deck, Deck.org_id == query.org_id)
+    decks = await DeckRepository(query.session, query.org_id).all()
     cards = await count_where(query.session, Card, Card.org_id == query.org_id)
     if decks:
-        lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
+        lines = [*overview_from_count(len(decks), "deck", "No decks yet"), f"{cards} cards"]
     else:
         lines = ["No decks yet"]
     return Overview(
@@ -89,7 +92,7 @@ async def _overview(query: OverviewQuery) -> Overview:
         icon="book-open",
         href="learning/sessions",
         template="learning/_overview.html",
-        data={"lines": lines, "recent": []},
+        data={"lines": lines, "recent": [d.name for d in decks[:_RECENT]]},
     )
 
 
