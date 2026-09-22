@@ -291,7 +291,7 @@ async def add_admin(
 ) -> Response:
     email = body.email.strip()
     try:
-        rows = await admins.grant_admin(email)
+        rows, granted = await admins.grant_admin(email)
     except AdminNotFound as exc:
         if wants_json(request):
             return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
@@ -302,12 +302,15 @@ async def add_admin(
             error=exc.email,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    await events.emit(
-        AdminGranted(
-            user_id=current_user.id, entity_id=await find_user_id_by_email(email), entity_name=email
-        ),
-        session,
-    )
+    if granted:
+        await events.emit(
+            AdminGranted(
+                user_id=current_user.id,
+                entity_id=await find_user_id_by_email(email),
+                entity_name=email,
+            ),
+            session,
+        )
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -324,18 +327,19 @@ async def update_admin(
     is_admin = body.is_admin
     uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
-        rows = await admins.set_admin(email, is_admin=is_admin)
+        rows, changed = await admins.set_admin(email, is_admin=is_admin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
         log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=email)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    granted: AdminGranted | AdminRevoked = (
-        AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email)
-        if is_admin
-        else AdminRevoked(user_id=current_user.id, entity_id=uid, entity_name=email)
-    )
-    await events.emit(granted, session)
+    if changed:
+        granted: AdminGranted | AdminRevoked = (
+            AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email)
+            if is_admin
+            else AdminRevoked(user_id=current_user.id, entity_id=uid, entity_name=email)
+        )
+        await events.emit(granted, session)
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)

@@ -590,8 +590,8 @@ async def leave_organization(
             f'<div role="alert" class="alert-error">{msg}</div>',
             status_code=status.HTTP_403_FORBIDDEN,
         )
-    await repo.remove_member(org_id, user_id)
-    await events.emit(MemberLeft(user_id=current_user.id, org_id=org_id), repo.session)
+    if await repo.remove_member(org_id, user_id):
+        await events.emit(MemberLeft(user_id=current_user.id, org_id=org_id), repo.session)
     return delete_response(request, htmx_redirect_url="/profile")
 
 

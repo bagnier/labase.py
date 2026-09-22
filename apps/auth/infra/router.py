@@ -761,7 +761,7 @@ async def resend_confirmation_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     email = body.email.strip().lower()
     sent_message = "If an account exists for this address, a confirmation email is on its way."
-    if email:
+    if email and await find_user_id_by_email(email) is not None:
         try:
             await resend_confirmation(email)
             await events.emit(ConfirmationResent(entity_name=email), admin_session)
