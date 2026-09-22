@@ -83,8 +83,8 @@
     </section>
     {# The apps' own cards — reference state, so they sit below the pulse. #}
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {% for o in overviews %}
-        {% include o.template %}
+      {% for card in overview_cards %}
+        {{ card | safe }}
       {% endfor %}
     </div>
   </div>
