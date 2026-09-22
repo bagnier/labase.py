@@ -48,6 +48,27 @@ async def test_a_served_request_leaves_exactly_one_finished_line():
 
 
 @pytest.mark.asyncio
+async def test_a_refused_preflight_still_leaves_its_finished_line():
+    """ "Every served request leaves one `request.finished` line" — held against a CORS preflight
+    too: with no origin configured (the default) it is CORSMiddleware itself that answers, so it
+    must sit *inside* RequestLogger rather than wrap it."""
+    transport = httpx.ASGITransport(app=apps.main.app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        with capture_logs() as logs:
+            await client.options(
+                "/auth/login",
+                headers={
+                    "Origin": "https://evil.example",
+                    "Access-Control-Request-Method": "POST",
+                },
+            )
+
+    finished = [line["status"] for line in logs if line["event"] == "request.finished"]
+    assert finished == [400]
+
+
+@pytest.mark.asyncio
 async def test_a_request_whose_handler_raised_still_leaves_its_finished_line():
     """The other half of the sentence — "including one whose handler raised": the exchange ends
     as a 500 and its one line carries `error`. Driven on a fresh host wearing the foundation's
