@@ -192,9 +192,13 @@ def test_a_secret_that_slips_past_the_class_check_does_not_open_an_issue(monkeyp
 
     payload = repository._fact_payload(_P1Event(org_id=uuid.uuid7(), entity_name="acme"))
 
-    lines = [(line.level, line.name) for line in log_chain() if line.logger == repository.__name__]
+    lines = [
+        (line.level, line.name, "MaskedSecret" in line.payload.get("exception", ""))
+        for line in log_chain()
+        if line.logger == repository.__name__
+    ]
     assert (payload["entity_name"], lines, list(capture._QUEUE)) == (
         "***",
-        [("warning", "business_event.secret_field_masked")],
+        [("warning", "business_event.secret_field_masked", True)],
         [],
     )

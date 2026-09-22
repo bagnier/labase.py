@@ -104,8 +104,8 @@ def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
         value = getattr(event, f.name)
         if _is_secret_field_name(f.name):
             # Defence in depth: ``__init_subclass__`` already refuses a secret-named event field, so
-            # reaching here means one slipped past (a raw or legacy writer). Mask it *and* shout — a
-            # silent mask is how the leak stayed invisible; an issue is what gets it fixed.
+            # reaching here means one slipped past (a raw or legacy writer). Mask it *and* shout —
+            # a silent mask is how the leak stayed invisible, and the log sink is what gets it seen.
             if value is not None:
                 _report_masked_secret(f.name, event.kind)
             payload[f.name] = "***" if value is not None else None
