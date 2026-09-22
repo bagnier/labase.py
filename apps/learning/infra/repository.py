@@ -26,6 +26,11 @@ class DeckRepository(OrgScopedRepository[Deck]):
     model = Deck
     default_order = Deck.created_at.desc()
 
+    async def by_name(self, name: str) -> Deck | None:
+        return await self.session.scalar(
+            select(Deck).where(Deck.org_id == self.org_id, Deck.name == name)
+        )
+
 
 class LearningRepository:
     """Org-scoped catalog with per-user progress (subscriptions/states/reviews).
@@ -39,11 +44,10 @@ class LearningRepository:
         self.session = session
         self.org_id = org_id
         self.user_id = user_id
+        self._decks = DeckRepository(session, org_id)
 
     async def get_deck_by_name(self, name: str) -> Deck | None:
-        return await self.session.scalar(
-            select(Deck).where(Deck.org_id == self.org_id, Deck.name == name)
-        )
+        return await self._decks.by_name(name)
 
     async def get_card_by_external(self, external_id: str) -> Card | None:
         return await self.session.scalar(
