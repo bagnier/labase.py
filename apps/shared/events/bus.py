@@ -36,23 +36,13 @@ from apps.shared.events.repository import EventRepository
 from apps.shared.events.types import BusinessEvent
 from apps.shared.events.wiring import EventWiring
 from apps.shared.events.wiring import wiring as process_wiring
-from apps.shared.queue import register_task_handler
+from apps.shared.queue import delivery_context, register_task_handler
 
 # Durable consumer signature: the reconstructed, typed event on the worker's session. Generic over
 # that event, and deliberately so — subscribing one fact with a handler written for another is
 # otherwise found only when the reaction runs off the journal, on an ``AttributeError`` in
 # production. Here ``ty`` and ``pyright`` reject it at the mount that registers it.
 type AsyncEventHandler[E: BusinessEvent] = Callable[[AsyncSession, E], Awaitable[None]]
-
-
-def _delivery_context(payload: dict[str, Any]) -> dict[str, str]:
-    """The correlation keys to bind on a reaction's log context, read off the task payload — the
-    originating ``request_id`` and the fact's own ``event_id`` (its causation). Only present keys
-    are bound: a fact emitted outside a request (an auth signal, a background job) has no
-    ``request_id``, and binding a ``None`` would only add a null column to every reaction's logs."""
-    return {
-        key: str(payload[key]) for key in ("request_id", "event_id") if payload.get(key) is not None
-    }
 
 
 class EventBus:
@@ -138,8 +128,10 @@ class EventBus:
             ):
                 return
             # The reaction runs on a background task with no request context of its own, minutes to
-            # days after the fact — bound here, its logs still join the emitting request's timeline.
-            with structlog.contextvars.bound_contextvars(**_delivery_context(payload)):
+            # days after the fact — bound here, its logs still join the emitting request's
+            # timeline. ``TaskWorker._process`` binds the same keys once more, around the whole
+            # task including a failure logged after this narrower scope has already exited.
+            with structlog.contextvars.bound_contextvars(**delivery_context(payload)):
                 await handler(session, event_type.from_payload(payload))
 
         return wrapper
