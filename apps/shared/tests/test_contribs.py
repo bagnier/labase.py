@@ -1,5 +1,6 @@
 """Contribs — the pull/collect contribution registry, split out of the event bus."""
 
+import asyncio
 from dataclasses import dataclass
 
 import pytest
@@ -7,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.integration.contribs import Contribs
+from apps.shared.settings.env import get_technical_settings
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,32 @@ async def test_collect_isolates_a_failing_provider_and_keeps_the_rest():
 
     # log-and-skip: the failure never propagates, the healthy provider still contributes.
     assert await contribs.collect(_Query("boom")) == ["ok"]
+
+
+@pytest.mark.asyncio
+async def test_collect_isolates_a_provider_that_hangs_past_its_timeout(monkeypatch):
+    """A down app can't break the page (README: host.contribs — pull) — including one that
+    hangs rather than raises. The bound is the registry's own setting, pinned small here; the
+    outer guard is what fails the test when nothing bounds the hang."""
+    monkeypatch.setattr(
+        get_technical_settings(), "contribs_provider_timeout_seconds", 0.05, raising=False
+    )
+    contribs = Contribs()
+
+    async def hangs(q: _Query) -> str:
+        await asyncio.Event().wait()
+        return "never"
+
+    async def ok(q: _Query) -> str:
+        return "ok"
+
+    contribs.provide(_Query, hangs)
+    contribs.provide(_Query, ok)
+
+    async with asyncio.timeout(5):
+        results = await contribs.collect(_Query("x"))
+
+    assert results == ["ok"]
 
 
 @pytest.mark.asyncio
