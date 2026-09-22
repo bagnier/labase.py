@@ -215,6 +215,57 @@ async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
 
 
 @pytest.mark.asyncio
+async def test_a_reaction_parked_for_good_logs_its_failure_under_the_facts_delivery_context(iso):
+    """The issue's own reproduction: an ``on`` consumer that always raises, retried to exhaustion.
+    ``queue.task_failed`` must carry the same request_id/user_id/org_id as the fact that triggered
+    it — the keys the Timeline correlates a bug back to the request, actor and org it concerns —
+    read off the reaction's own payload past the point where the wrapper's narrower binding
+    (only around the handler call) has already exited."""
+
+    async def handler(session, event) -> None:
+        raise RuntimeError("boom")
+
+    events.on(_TailEvent, handler, name="always_fails", app="test_listener", as_actor=False)
+    request_id, org_id, actor = uuid.uuid7(), uuid.uuid7(), uuid.uuid7()
+    await seed_fact(
+        BusinessEventRecord(
+            app_name="test_listener",
+            verb="happened",
+            user_id=actor,
+            org_id=org_id,
+            request_id=request_id,
+            payload={"label": "x"},
+        )
+    )
+
+    factory = db.admin_session_factory()
+    await EventListener(0, session_factory=factory).tick()
+    async with db.admin_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE task_queue SET max_attempts = 1 "
+                "WHERE topic = 'evt:test_listener.happened:always_fails'"
+            )
+        )
+        await s.commit()
+
+    # `capture_logs()` disables every configured processor for its duration — `merge_contextvars`
+    # included — so it is handed back explicitly, or the bound keys never reach the captured entry.
+    with capture_logs(processors=(structlog.contextvars.merge_contextvars,)) as logs:
+        worker = TaskWorker(0, session_factory=factory)
+        while await worker.tick():
+            pass
+
+    failed = [entry for entry in logs if entry["event"] == "queue.task_failed"]
+    assert len(failed) == 1
+    assert (failed[0]["request_id"], failed[0]["user_id"], failed[0]["org_id"]) == (
+        str(request_id),
+        str(actor),
+        str(org_id),
+    )
+
+
+@pytest.mark.asyncio
 async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispatched(iso):
     """A kind with no registered class can be routed to no one — a fact we cannot even name. That is
     not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
