@@ -36,10 +36,10 @@ class MaskedSecret(Exception):
     """A field that looks like secret material reached the journal's write path.
 
     ``BusinessEvent.__init_subclass__`` refuses one at class creation, so getting here means a
-    writer bypassed that check. Raised only to give the capture seam a live exception to
-    fingerprint on — caught immediately, like the listener's ``UnroutableFact``: a bare
-    ``log.error`` carries no exception, which is precisely the level the seam ignores, so the
-    leak was masked and then forgotten.
+    writer bypassed that check. Raised and caught immediately, purely to carry a live traceback
+    onto the warning that reports it — never ``log.exception``, which the capture seam folds
+    into an issue: the fact already commits once, and folding the same occurrence into an issue
+    would show it a second time, as a bug (see ``emit`` logs nothing of its own).
     """
 
 
@@ -88,13 +88,12 @@ async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> 
 
 
 def _report_masked_secret(field_name: str, kind: str) -> None:
-    """Shout where an admin will still hear it tomorrow: the issues screen, not a log window."""
+    """Shout on the log sink, not the issues screen: a warning carries the traceback without the
+    capture seam folding it into a bug the fact already recorded once."""
     try:
         raise MaskedSecret(f"{kind} carries a field named {field_name!r}")
     except MaskedSecret as exc:
-        log.exception(
-            "business_event.secret_field_masked", exc_info=exc, field=field_name, kind=kind
-        )
+        log.warning("business_event.secret_field_masked", exc_info=exc, field=field_name, kind=kind)
 
 
 def _fact_payload(event: BusinessEvent) -> dict[str, Any]:

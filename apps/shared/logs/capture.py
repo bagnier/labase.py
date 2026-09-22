@@ -9,10 +9,12 @@ that leaves to decide *here* is the question at the call site — never "should 
 The consequence is a trap worth naming: a site that means "this is a bug" and writes ``log.error``
 gets a log line that rolls out of its window and nothing else. Such a site raises an
 exception of its own to be seen — ``UnroutableFact`` in the event listener, ``UnlimitedEndpoint``
-in the rate limiter, ``MaskedSecret`` on the journal's write path — caught immediately, purely so
-the seam has something to fingerprint on. And a failure that *repeats* (a background loop, a
-readiness probe) goes through :mod:`apps.shared.logs.loop` instead, which files the
-transition and not every tick.
+in the rate limiter — caught immediately, purely so the seam has something to fingerprint on. The
+journal's write path is the deliberate exception to that: ``MaskedSecret`` is raised and caught the
+same way, but reported through ``log.warning``, because the fact it describes already committed
+once — folding it into an issue too would show it a second time (AGENTS: `emit` logs nothing of
+its own). And a failure that *repeats* (a background loop, a readiness probe) goes through
+:mod:`apps.shared.logs.loop` instead, which files the transition and not every tick.
 
 A structlog processor (:func:`capture_processor`, wired into the chain *before*
 ``format_exc_info`` so the live exception is still present) tees every ``log.exception`` call
