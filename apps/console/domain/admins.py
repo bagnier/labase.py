@@ -36,21 +36,28 @@ async def list_admins() -> list[UserAdminStatus]:
     return sorted((u for u in users if u.is_admin), key=lambda u: u.email)
 
 
-async def grant_admin(email: str) -> list[UserAdminStatus]:
-    """Promote the account at ``email``; raises :class:`AdminNotFound` if none exists."""
+async def grant_admin(email: str) -> tuple[list[UserAdminStatus], bool]:
+    """Promote the account at ``email``; raises :class:`AdminNotFound` if none exists.
+
+    Returns whether the account was newly granted — ``False`` for one already admin, which
+    the caller must not journal as a fresh fact."""
     uid = await find_user_id_by_email(email) if email else None
     if uid is None:
         raise AdminNotFound(email)
-    await set_server_admin(uid, is_admin=True)
-    return await list_admins()
+    users = await list_server_admins()
+    already_admin = any(u.user_id == uid and u.is_admin for u in users)
+    if not already_admin:
+        await set_server_admin(uid, is_admin=True)
+    return await list_admins(), not already_admin
 
 
-async def set_admin(email: str, *, is_admin: bool) -> list[UserAdminStatus]:
+async def set_admin(email: str, *, is_admin: bool) -> tuple[list[UserAdminStatus], bool]:
     """Grant or revoke admin for ``email``, guarding the last-admin rule.
 
     Raises :class:`AdminNotFound` for an unknown email and :class:`LastAdminViolation` when the
-    revoke would leave the server with no admin.
-    """
+    revoke would leave the server with no admin. Returns whether the status actually changed —
+    ``False`` when ``email`` already held the requested status, which the caller must not
+    journal as a fresh fact."""
     uid = await find_user_id_by_email(email)
     if uid is None:
         raise AdminNotFound(email)
@@ -60,5 +67,7 @@ async def set_admin(email: str, *, is_admin: bool) -> list[UserAdminStatus]:
     ensure_not_last_admin(
         is_revoke=not is_admin, target_is_admin=target_is_admin, admin_count=admin_count
     )
-    await set_server_admin(uid, is_admin=is_admin)
-    return await list_admins()
+    changed = target_is_admin != is_admin
+    if changed:
+        await set_server_admin(uid, is_admin=is_admin)
+    return await list_admins(), changed
