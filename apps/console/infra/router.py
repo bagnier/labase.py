@@ -324,7 +324,7 @@ async def update_admin(
     is_admin = body.is_admin
     uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
-        rows = await admins.set_admin(email, is_admin=is_admin)
+        rows = await admins.set_admin(email, is_admin=is_admin, session=session)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
