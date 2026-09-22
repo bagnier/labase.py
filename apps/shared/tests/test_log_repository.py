@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import event
 from sqlalchemy import text as sql_text
 
 from apps.shared import clock
@@ -90,6 +91,29 @@ async def test_a_line_names_the_instance_that_wrote_it(sessions):
 
     found = await LogRepository(reader).search(text=marker)
     assert [line.instance for line in found] == ["gw7"]
+
+
+@pytest.mark.asyncio
+async def test_append_writes_the_whole_batch_as_one_statement(sessions):
+    """README, "The log sink": "the write is one multi-row insert per drain" — not one
+    single-row statement replayed once per line."""
+    writer, _ = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    lines = [_line(marker), _line(marker), _line(marker)]
+    executemany_flags: list[bool] = []
+
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        if "log_lines" in statement:
+            executemany_flags.append(executemany)
+
+    engine = writer.bind.sync_engine
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        await LogRepository(writer).append(lines, instance="gw0")
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert executemany_flags == [False]
 
 
 @pytest.mark.asyncio

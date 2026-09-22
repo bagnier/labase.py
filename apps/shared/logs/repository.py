@@ -100,11 +100,17 @@ class LogRepository(BaseRepository[LogLine]):
 
         Nothing here has to silence itself any more: with no per-statement line, this INSERT
         writes nothing that the next drain would insert and log again.
+
+        ``.values([...])`` rather than a parameter list on ``execute``: the id column has no
+        server default to ``RETURNING``, so nothing pushes SQLAlchemy's own insertmanyvalues
+        batching to kick in, and a parameter list is sent as a plain DBAPI executemany — one
+        single-row statement replayed once per line, not the multi-row ``VALUES`` this builds.
         """
         if not lines:
             return
         await self.session.execute(sql_text("SET LOCAL synchronous_commit = off"))
-        await self.session.execute(insert(LogLine), [_columns(line, instance) for line in lines])
+        rows = [_columns(line, instance) for line in lines]
+        await self.session.execute(insert(LogLine).values(rows))
 
     async def roll(self, *, today: date, retention_days: int) -> int:
         """Create the day partitions just ahead of ``today`` and drop those past retention;
