@@ -29,6 +29,7 @@ from apps.auth.tests.given_helpers import create_user, delete_user
 from apps.organizations.contract.integration import _create_org
 from apps.organizations.contract.queries import seed_org_welcome, user_exists
 from apps.organizations.domain.models import Membership, Organization, OrgRole
+from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.persistence import database as db
 
 
@@ -149,6 +150,46 @@ async def test_create_org_survives_the_actor_vanishing_between_the_guard_and_the
         )
 
     assert orphaned is None
+
+
+@pytest.mark.asyncio
+async def test_create_org_still_creates_a_personal_org_for_an_invitee_who_joined_first():
+    """Regression: an invitee who accepts an invitation before the worker delivers their
+    ``UserCreated`` already holds a plain membership by the time this consumer runs. The guard
+    must look for an *owned* org, not any membership at all, or that invitee never gets the
+    personal org every account is promised at sign-up."""
+    owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
+    invitee_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
+    try:
+        async with db.admin_session_factory()() as session:
+            org = await OrganizationRepository(session).create_with_owner(
+                name="Someone else's org",
+                user_id=uuid.UUID(owner_id),
+            )
+            session.add(
+                Membership(org_id=org.id, user_id=uuid.UUID(invitee_id), role=OrgRole.member)
+            )
+            await session.commit()
+
+            event = UserCreated(
+                user_id=uuid.UUID(invitee_id),
+                entity_id=uuid.UUID(invitee_id),
+                email="invitee@signup-seeding.local",
+            )
+            await _create_org(session, event)
+            await session.commit()
+
+            memberships = await OrganizationRepository(session).list_with_role_for_user(
+                uuid.UUID(invitee_id)
+            )
+        roles_by_org_name = {org.name: role for org, role in memberships}
+        assert roles_by_org_name == {
+            "Someone else's org": OrgRole.member,
+            "invitee@signup-seeding.local": OrgRole.owner,
+        }
+    finally:
+        delete_user(owner_id)
+        delete_user(invitee_id)
 
 
 @pytest.mark.asyncio

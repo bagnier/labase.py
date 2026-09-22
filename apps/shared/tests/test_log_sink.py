@@ -6,7 +6,9 @@ store is the thing that is down, the batch still lands in its day file, and the 
 announced once rather than once per line.
 """
 
+import asyncio
 import json
+import threading
 import uuid
 from collections import deque
 from contextlib import contextmanager
@@ -161,6 +163,29 @@ async def test_a_batch_the_store_refuses_lands_in_the_day_file():
         for raw in path.read_text(encoding="utf-8").splitlines()
     ]
     assert [one["event"] for one in written] == ["lost.line"]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_batch_is_written_while_the_loop_keeps_serving(monkeypatch):
+    """The file fallback never blocks the request loop (README: the log sink).
+
+    The day-file writer is doubled: a disk slow enough to show whether the loop waits on it cannot
+    be staged for real. The double holds the write until the loop, still serving, releases it —
+    written on the loop itself, nobody is left to release it, and it gives up at its bound."""
+    released = threading.Event()
+    releases_seen: list[bool] = []
+    monkeypatch.setattr(
+        sink, "_write_to_files", lambda lines: releases_seen.append(released.wait(timeout=1))
+    )
+    _enqueue("lost.line")
+
+    with _a_store_that_refuses():
+        tick = asyncio.ensure_future(LogDrain(interval_seconds=0).tick())
+        await asyncio.sleep(0)
+        released.set()
+        await tick
+
+    assert releases_seen == [True]
 
 
 @pytest.mark.asyncio

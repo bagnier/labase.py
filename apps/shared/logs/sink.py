@@ -9,7 +9,7 @@ The storage is :mod:`apps.shared.logs.repository`, whose ``LogRepository`` owns 
 against ``log_lines`` — the house word for "the object that holds a table's queries", and the twin
 of ``EventRepository`` on the journal side.
 
-Where a line goes, and the fallback when Postgres refuses a batch, are stated once (README: the
+Where a line goes, and the fallback when Postgres refuses a batch, are stated once (AGENTS: the
 log sink). What only this module can say is *why a table*: per-day JSON Lines on local disk read
 fine with one instance, and with two they made the Timeline lie by omission — the journal and the
 issues live in Postgres and are therefore global, so an admin correlating a request saw the fact
@@ -25,7 +25,7 @@ sense of the word, and internal consistency wins — the shape is already famili
 **The day files.** The dying-process hook writes there too, not only the refused batch — it runs
 during interpreter shutdown, with no loop and no pool left to await on.
 
-**Non-blocking (README: the log sink).** The runtime path touches neither disk nor database: the
+**Non-blocking (AGENTS: the log sink).** The runtime path touches neither disk nor database: the
 processor only *enqueues* — a plain :meth:`deque.append`, atomic under the GIL, so it is safe
 before the event loop exists and from worker threads, exactly like the capture queue.
 """
@@ -117,10 +117,6 @@ def fallback_dir() -> Path:
     return path
 
 
-def _file_for(ts: datetime) -> Path:
-    return fallback_dir() / f"firehose-{ts.date().isoformat()}.jsonl"
-
-
 def _write_batch(path: Path, lines: list[dict[str, Any]]) -> bool:
     """Append several lines to one day's file in a single ``open``. Returns whether they landed.
 
@@ -142,13 +138,16 @@ def append_to_file(line: dict[str, Any]) -> None:
 
 def _write_to_files(lines: list[dict[str, Any]]) -> None:
     """Send a batch to the day files, grouped so a burst spanning midnight costs two ``open``s
-    rather than one per line.
+    rather than one per line, and the directory is resolved once for the whole batch rather than
+    once per line.
 
     The fallback of a fallback: if the disk refuses too there is nowhere left to put the line, and
     saying so would mean writing one. It stays silent by design — stdout already carried it."""
+    base = fallback_dir()
     batches: dict[Path, list[dict[str, Any]]] = defaultdict(list)
     for line in lines:
-        batches[_file_for(_parse_ts(line.get("timestamp")))].append(line)
+        ts = _parse_ts(line.get("timestamp"))
+        batches[base / f"firehose-{ts.date().isoformat()}.jsonl"].append(line)
     for path, batch in batches.items():
         _write_batch(path, batch)
 
@@ -277,7 +276,9 @@ class LogDrain:
                 # would be one more line feeding the queue that cannot be drained.
                 _outage.refusing = True
                 _outage.lines += len(lines)
-                _write_to_files(lines)
+                # Off the loop: building the JSONL rows and writing them is exactly the blocking
+                # work this fallback must never inflict on whoever else the loop is serving.
+                await asyncio.to_thread(_write_to_files, lines)
             else:
                 _outage.refusing = False
             report_write_outage()

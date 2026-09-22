@@ -190,7 +190,7 @@ def new_request_id() -> str:
 
 
 class RequestLogger:
-    """Per-request correlation and telemetry (README: observability is built in).
+    """Per-request correlation and telemetry (AGENTS: facts, traces, bugs: three records).
 
     Binds a ``request_id`` in a contextvar so every log line of the request correlates, times the
     request, and feeds the load metrics. It logs **once per served request**, under one name —

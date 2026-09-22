@@ -2,8 +2,8 @@
 
 Replaces slowapi's in-memory store: with N app instances, each counted alone;
 here the hit count is one atomic upsert in a shared table (first
-Postgres-as-Redis brick). Fail-open, and loudly so (README: HTTP
-security): the unreachable store goes through the dependency verdict, which is
+Postgres-as-Redis brick). Fail-open, and loudly so (AGENTS: CSRF needs no token, and the rate
+limiter fails open): the unreachable store goes through the dependency verdict, which is
 what turns it into an issue rather than a line that rolls out of its window.
 """
 

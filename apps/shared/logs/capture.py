@@ -1,6 +1,7 @@
 """The capture seam: every ``log.exception`` becomes a tracked issue.
 
-Which calls earn a line at all, and at which level, is settled once (README: what earns a line):
+Which calls earn a line at all, and at which level, is settled once (AGENTS: A line says what
+no other record says):
 two levels and this seam, no debug tier, and a bare ``log.error`` deliberately not the seam. What
 that leaves to decide *here* is the question at the call site — never "should this be logged?" but
 "what would a reader learn that neither the exchange nor the journal already tells them?".

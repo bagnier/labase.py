@@ -1,6 +1,6 @@
 """A form is JSON at the door.
 
-One handler answers a browser's form and an API caller's JSON (README: every business endpoint
+One handler answers a browser's form and an API caller's JSON (AGENTS: every business endpoint
 has two faces). FastAPI documents and validates a JSON body from the handler's signature; a body
 that may also arrive ``application/x-www-form-urlencoded`` it can neither describe nor parse into
 the same model. So the form is re-encoded as JSON before routing, and every mutation declares one

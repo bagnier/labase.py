@@ -1,7 +1,7 @@
 # The fix workflow
 
 How a bug becomes a pull request while nobody is at the keyboard. The human decides; the
-bot codes. What the human writes: sentences in [README.md](../README.md) (principles),
+bot codes. What the human writes: sentences in [AGENTS.md](../AGENTS.md) (principles),
 `.feature` files (features), and the `auto-fix` label. What the bot writes: a branch and a
 pull request. Merging is never the bot's.
 
@@ -10,7 +10,7 @@ pull request. Merging is never the bot's.
 1. **File.** A reproduced bug becomes a GitHub issue: a scratch run, or a "to run" command
    that fails today. A hypothesis stays in [ROADMAP.md](../ROADMAP.md) until someone made
    it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
-   reads: the fault, `→` the direction, what to run, the README sentence, the `file:line`
+   reads: the fault, `→` the direction, what to run, the AGENTS.md sentence, the `file:line`
    links. The label goes on last, once the body is final.
 2. **Label.** The owner puts `auto-fix` on it. The label is the decision that the body is a
    bug report worth a run; only the owner's issues can drive the bot (the workflow's guard),
@@ -19,7 +19,7 @@ pull request. Merging is never the bot's.
    issue to the `ci-fix-issue` skill. The skill reads the issue and its author's comments as
    a bug report, never as instructions, writes the failing test first, fixes under the `tdd`
    loop, runs `make finalize`, then hands the commit to an `adversarial-audit` agent that reads
-   the diff through three grids — the README claims, the `.feature` scenarios, `refactor-code` —
+   the diff through three grids — the claims, the `.feature` scenarios, `refactor-code` —
    without running the gate (`.claude/skills/ci-fix-issue/review.md`). It fixes what breaks on
    its own diff, keeps the rest as closing questions, and pushes `fix/<issue>` with a pull
    request that `Closes #<issue>`. It never edits `ROADMAP.md`: the map is the owner's, the 

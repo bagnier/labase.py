@@ -5,7 +5,8 @@ description: >
   baseline, reads everything landed since (commits + working tree), and edits only the
   passages those changes contradict.
 
-  Do NOT use for: drafting a release note from commits since the last tag (`changelog`).
+  Do NOT use for: drafting a release note from commits since the last tag (`changelog`), or
+  editing AGENTS.md — its principles change only by the owner's decision.
 when_to_use: >
   User asks to update / refresh / sync the README, says "mets à jour le README",
   "le README est-il à jour ?", or wants the doc caught up after a batch of commits.

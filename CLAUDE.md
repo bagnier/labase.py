@@ -70,8 +70,6 @@ On the runner, three more rules flip, and only there:
 - /analyse for codebase digging, /fetch for the web, context7 for library docs.
 - when you think it's done, run `make finalize` as background task before you claim it.
 - render any UI change and look at a screenshot (Playwright or /run).
-- Docs by audience: README = functional/CLI and development, docs/ = one topic per file
-  (deployment: docs/production.md).
 - Describe the CURRENT state, never the history; prune, dense and short.
 
 <!-- charm:no-autocommit -->
@@ -84,8 +82,8 @@ In an interactive session, without an explicit go-ahead in that same message, on
 <!-- charm:readme-first -->
 ## Before you start
 
-Read `README.md` first.
+Read `AGENTS.md` first: the principles every change is held to.
 
-@README.md
+@AGENTS.md
 
 <!-- /charm:readme-first -->

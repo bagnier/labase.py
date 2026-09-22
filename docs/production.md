@@ -6,7 +6,7 @@ readiness in [ROADMAP.md](../ROADMAP.md).
 
 Already built into the app, so not repeated here: 4-layer observability, `health/`
 liveness/readiness probes, cross-instance rate limiting, RLS, security headers
-(HSTS/CSP/X-Frame/nosniff), `Sec-Fetch-Site` CSRF. See [README.md](../README.md).
+(HSTS/CSP/X-Frame/nosniff), `Sec-Fetch-Site` CSRF. See [AGENTS.md](../AGENTS.md).
 
 ## Topology
 

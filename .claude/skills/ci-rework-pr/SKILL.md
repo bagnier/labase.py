@@ -31,7 +31,7 @@ the runner (`GITHUB_ACTIONS` is `true`), the non-interactive rules apply.
   thread.
 
 A remark that is a critique with no ask — "weak tests" — is an ask: read the rule it points at
-(`write-tests`, the README, the feature file) and make the change the rule implies. What cannot
+(`write-tests`, AGENTS.md, the feature file) and make the change the rule implies. What cannot
 be inferred is the question.
 
 
@@ -62,7 +62,7 @@ gh pr checkout "$ARGUMENTS"
 
 Load the `tdd` skill before touching code, `write-tests` before touching a test. Only what the 
 review asks: a fault found on the way is a comment, never part of this push. A remark that would 
-change what `README.md` says is a question.
+change what `AGENTS.md` says is a question.
 
 
 ## Finalize
@@ -99,10 +99,12 @@ break marked `unverified` is run from its `to_run` command before anything is do
 
 ```sh
 git push origin HEAD
-gh pr comment "$ARGUMENTS" --body "<what changed, in the review's order; what was read into a
-remark; what was left out and why; what make finalize gave; what the adversarial review found
-and what was fixed from it>"
+gh pr comment "$ARGUMENTS" --body-file /tmp/answer.md
 ```
+
+The comment says what changed, in the review's order; what was read into a remark; what was left
+out and why; what `make finalize` gave; what the adversarial review found and what was fixed from
+it.
 
 No history, no narration. Never `--force`, never a rebase: the branch's history is the review's.
 

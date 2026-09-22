@@ -39,12 +39,26 @@ def _bearer_token(authorization: str | None) -> str | None:
 
 
 async def _resolve_api_key(token: str, session: AsyncSession) -> AuthenticatedUser:
-    """Route an `lbk_...` bearer token to whoever contributes an answer to ApiKeyQuery."""
-    results = await contribs.collect(ApiKeyQuery(token, session))
-    principals = [p for p in results if p is not None]
-    if not principals:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-    return principals[0]
+    """Route an `lbk_...` bearer token to whoever contributes an answer to ApiKeyQuery.
+
+    Unlike ``contribs.collect``'s general log-and-skip policy (right for a dashboard card, whose
+    absence hurts nobody), a raising provider here must not be read as "no key matched": that
+    would answer a valid key with a wrong-password 401 instead of the 503 a broken dependency
+    earns.
+    """
+    query = ApiKeyQuery(token, session)
+    for provider in contribs.providers(ApiKeyQuery):
+        try:
+            principal = await provider(query)
+        except Exception as exc:
+            log.exception("auth.api_key_provider_failed", provider=repr(provider))
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="API key verification unavailable",
+            ) from exc
+        if principal is not None:
+            return principal
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
 
 @lru_cache
@@ -138,7 +152,7 @@ async def get_current_user(
     if bearer is not None and bearer.startswith(API_KEY_PREFIX):
         async with _before_identity(session):
             principal = await _resolve_api_key(bearer, session)
-        structlog.contextvars.bind_contextvars(user_id=principal.id)
+        structlog.contextvars.bind_contextvars(user_id=str(principal.id))
         return principal
     # A bearer GoTrue JWT is the machine twin of the cookie session (no refresh flow).
     access_token = access_token or bearer

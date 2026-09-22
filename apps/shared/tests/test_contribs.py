@@ -1,15 +1,24 @@
 """Contribs — the pull/collect contribution registry, split out of the event bus."""
 
+import asyncio
 from dataclasses import dataclass
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.integration.contribs import Contribs
+from apps.shared.settings.env import get_technical_settings
 
 
 @dataclass(frozen=True)
 class _Query:
     marker: str
+
+
+@dataclass(frozen=True)
+class _SessionQuery:
+    session: AsyncSession
 
 
 @pytest.mark.asyncio
@@ -62,5 +71,53 @@ async def test_collect_isolates_a_failing_provider_and_keeps_the_rest():
 
 
 @pytest.mark.asyncio
+async def test_collect_isolates_a_provider_that_hangs_past_its_timeout(monkeypatch):
+    """A down app can't break the page (README: host.contribs — pull) — including one that
+    hangs rather than raises. The bound is the registry's own setting, pinned small here; the
+    outer guard is what fails the test when nothing bounds the hang."""
+    monkeypatch.setattr(get_technical_settings(), "contribs_provider_timeout_seconds", 0.05)
+    contribs = Contribs()
+
+    async def hangs(q: _Query) -> str:
+        await asyncio.Event().wait()
+        return "never"
+
+    async def ok(q: _Query) -> str:
+        return "ok"
+
+    contribs.provide(_Query, hangs)
+    contribs.provide(_Query, ok)
+
+    async with asyncio.timeout(5):
+        results = await contribs.collect(_Query("x"))
+
+    assert results == ["ok"]
+
+
+@pytest.mark.asyncio
 async def test_collect_of_an_unknown_query_type_is_empty():
     assert await Contribs().collect(_Query("x")) == []
+
+
+@pytest.mark.asyncio
+async def test_collect_isolates_a_failing_sql_provider_so_the_session_stays_usable(
+    db_session: AsyncSession,
+):
+    """A provider's SQL error aborts the caller's transaction: every later provider and the
+    caller's own queries must still work — a down app can't break the page (README)."""
+    contribs = Contribs()
+
+    async def boom(q: _SessionQuery) -> None:
+        await q.session.execute(text("select 1/0"))
+
+    async def ok(q: _SessionQuery) -> int:
+        result = await q.session.execute(text("select 2"))
+        return result.scalar()
+
+    contribs.provide(_SessionQuery, boom)
+    contribs.provide(_SessionQuery, ok)
+
+    result = await contribs.collect(_SessionQuery(db_session))
+    assert result == [2]
+    after = await db_session.execute(text("select 3"))
+    assert after.scalar() == 3

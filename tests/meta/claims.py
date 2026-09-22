@@ -1,14 +1,14 @@
-"""What the README asserts about this codebase, and who proves it.
+"""What AGENTS.md and the README assert about this codebase, and who proves it.
 
-The README is a promise made to whoever clones the base, and it is the one document nothing in the
-suite reads. A sentence in it can therefore say anything: the code moves under it and no run ever
-disagrees. This registry closes that gap by making each claim a value — its exact wording, and
-either the test that holds it or the reason none does yet.
+AGENTS.md is the rule every agent works under, and the README a promise made to whoever clones the
+base; nothing else in the suite reads them. A sentence in them can therefore say anything: the
+code moves under it and no run ever disagrees. This registry closes that gap by making each claim a
+value — its exact wording, and either the test that holds it or the reason none does yet.
 
 Two rules give the list its teeth, both enforced by ``tests/meta/test_claims.py``:
 
 - **the quote is verbatim.** Reworded, the claim stops matching and the suite fails, which is the
-  point: the README's head sentences are the part that drifts in silence, since nobody re-reads a
+  point: the head sentences are the part that drifts in silence, since nobody re-reads a
   paragraph while diffing a router.
 - **the holder is a function, not a name.** ``held_by`` imports the test, so a rename moves the
   reference and a deletion breaks the import — the binding is checked before pytest even runs.
@@ -20,18 +20,34 @@ counted by ``UNHELD_TODAY``. That number is the backlog this package exists to l
 from dataclasses import dataclass
 from types import FunctionType
 
+from apps.auth.tests.test_auth_dependencies import (
+    test_get_rls_session_gives_an_anonymous_caller_a_context_with_no_identity,
+)
+from apps.auth.tests.test_signin_vocabulary import (
+    test_a_sign_in_records_that_a_second_factor_was_cleared,
+)
 from apps.console.tests.e2e.test_admins_scenarios import (
     test_an_admin_adds_another_admin_by_email,
     test_the_first_registered_user_becomes_a_server_admin,
 )
+from apps.health.tests.test_health import test_a_readiness_probe_that_starts_failing_says_why
 from apps.issues.tests.test_capture import (
     test_the_fact_that_opens_an_issue_points_back_at_the_request,
+)
+from apps.issues.tests.test_service import (
+    test_fingerprint_distinguishes_exception_types,
+    test_fingerprint_ignores_the_variable_message,
+)
+from apps.metrics.tests.test_accumulator import test_render_prometheus_exposes_cumulative_histogram
+from apps.metrics.tests.test_flush_and_rollup import (
+    test_rollup_downsamples_old_minute_rows_then_purge_applies_retention,
 )
 from apps.organizations.tests.e2e.test_scenarios import (
     test_a_new_user_gets_a_personal_organisation_on_registration,
 )
 from apps.shared.tests.test_bus import test_emit_refuses_an_undeclared_event
 from apps.shared.tests.test_capture import test_the_drain_reports_the_captures_the_queue_had_to_shed
+from apps.shared.tests.test_email import test_enqueue_email_outboxes_through_the_callers_session
 from apps.shared.tests.test_emit_durability import (
     test_a_fact_is_rolled_back_by_a_handler_that_raises,
     test_a_fact_survives_a_handler_that_returns_an_error_response,
@@ -48,15 +64,27 @@ from apps.shared.tests.test_limiter import (
 from apps.shared.tests.test_listener import (
     test_a_second_tick_does_not_refan_a_dispatched_fact,
     test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
+    test_tick_runs_spread_handlers_per_instance_off_the_trail,
 )
-from apps.shared.tests.test_log_sink import test_the_drain_reports_the_lines_the_queue_had_to_shed
+from apps.shared.tests.test_log_chain import test_only_a_library_line_is_held_to_the_warning_floor
+from apps.shared.tests.test_log_repository import test_retention_drops_a_whole_day_as_one_partition
+from apps.shared.tests.test_log_sink import (
+    test_a_batch_the_store_refuses_lands_in_the_day_file,
+    test_a_store_that_refuses_is_announced_once,
+    test_processor_enqueues_without_writing,
+    test_the_drain_reports_the_lines_the_queue_had_to_shed,
+)
 from apps.shared.tests.test_queue import (
+    test_a_task_parked_for_good_is_captured_as_a_bug,
     test_a_task_rolls_back_with_the_transaction_that_enqueued_it,
+    test_recurring_task_reenqueues_next_run,
     test_worker_runs_enqueued_task,
 )
 from apps.shared.tests.test_request_logging import (
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
 )
+from apps.shared.tests.test_uuid7 import test_uuid7_is_time_ordered_and_versioned
+from apps.timeline.tests.test_pivots import test_a_row_correlates_by_the_request_it_names
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_api_rls import (
     test_the_rls_session_runs_as_the_app_role_and_the_admin_one_does_not,
@@ -154,6 +182,7 @@ from tests.meta.test_surfaces import (
     test_every_context_declares_its_console_tile,
     test_every_context_declares_one_mount_entry_point,
     test_every_context_keeps_its_internals_private,
+    test_every_icon_a_surface_declares_has_a_glyph_to_render,
     test_no_contract_exports_a_settings_handle,
     test_no_shared_module_names_a_bounded_context,
     test_nothing_outside_a_demo_names_it,
@@ -182,9 +211,10 @@ Holder = FunctionType
 
 @dataclass(frozen=True)
 class Claim:
-    """A sentence the README asserts, and what stands behind it: a test, or a written waiver.
+    """A sentence AGENTS.md or the README asserts, and what stands behind it: a test, or a written
+    waiver.
 
-    Exactly one of the two — ``test_claims`` refuses both and neither. ``quote`` is the README's
+    Exactly one of the two — ``test_claims`` refuses both and neither. ``quote`` is the document's
     own words (whitespace-normalised, so it may span wrapped lines); ``held_by`` holds the test
     functions themselves, so a rename or a deletion breaks the import rather than rotting.
     """
@@ -410,8 +440,10 @@ CLAIMS = [
     waived(
         "reactions-run-after-commit",
         "a reaction that finds its subject already gone is a clean no-op, never a compensation.",
-        "delivery after commit is held by the listener tests; no test makes a subject disappear "
-        "before its reaction runs, and the files seeder still compensates (ROADMAP)",
+        "delivery after commit is held by the listener tests; the org-seeding no-op is held test "
+        "by test (test_seed_org_welcome_no_ops_when_the_resolved_owner_is_gone, the files "
+        "seeder's own test_a_seeder_whose_owner_is_already_gone_is_a_clean_no_op), but nothing "
+        "asserts the rule once for every reaction the bus delivers",
     ),
     held(
         "emitter-never-names-subscribers",
@@ -492,6 +524,403 @@ CLAIMS = [
         "markup is semantic and accessible",
         "a clause inside the single-clock sentence, so the sentence binding cannot see it; no "
         "accessibility audit runs over the rendered pages",
+    ),
+    # ── AGENTS Architecture ───────────────────────────────────────────────────────────────
+    held(
+        "each-context-splits-domain-from-infra",
+        "Organized by **bounded context**, each split into `domain/`",
+        test_the_shared_foundation_is_forbidden_from_every_context,
+    ),
+    waived(
+        "architecture-shared-homes",
+        "Shared layout sits in `apps/shared/templates/`, Gherkin `.feature` files in "
+        "`features/`, and shared E2E drivers in `tests/e2e/drivers/`.",
+        "test_templates_tests_and_steps_live_with_their_context holds the per-context half; "
+        "nothing checks the shared homes",
+    ),
+    # ── AGENTS Integration ────────────────────────────────────────────────────────────────
+    waived(
+        "settings-dependency-per-request",
+        "Handlers declare the app's `TodoSettings` dependency",
+        "test_no_contract_exports_a_settings_handle holds the negative; nothing checks that a "
+        "handler reads its settings through the dependency rather than get_settings",
+    ),
+    waived(
+        "non-request-settings-read",
+        'Non-request code uses `get_settings("todo")`, plus `.for_org(session, org_id)` when '
+        "an org is in hand.",
+        "no inventory of the non-request call sites; a request handler calling get_settings "
+        "would pass",
+    ),
+    waived(
+        "push-and-pull-are-two-objects",
+        "Push (a fact happened) and pull (who contributes to this?) are different animals, so "
+        "they are different objects",
+        "both registries are held keyed by type (no-magic-strings-in-collaboration); nothing "
+        "asserts neither grows the other's verbs",
+    ),
+    held(
+        "emit-persists-on-the-callers-session",
+        "`emit(event, session)` **persists** the `BusinessEvent` to the journal on the session "
+        "the caller names",
+        test_a_fact_is_rolled_back_by_a_handler_that_raises,
+        test_a_fact_survives_a_handler_that_returns_an_error_response,
+    ),
+    held(
+        "emit-session-is-required",
+        "The session is a required argument: durability is stated at the call site",
+        test_the_only_way_to_record_a_fact_is_on_a_transaction,
+    ),
+    held(
+        "emit-refuses-an-undeclared-event",
+        "It refuses an event no app declared",
+        test_emit_refuses_an_undeclared_event,
+    ),
+    held(
+        "reactions-delivered-off-the-journal",
+        "are delivered by the event listener off the persisted journal after commit",
+        test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
+        test_tick_runs_spread_handlers_per_instance_off_the_trail,
+    ),
+    waived(
+        "reactions-treat-facts-as-history",
+        "Reactions treat the fact as immutable history",
+        "the rule of reactions-run-after-commit, with its gap: no test makes a subject "
+        "disappear before its reaction runs",
+    ),
+    waived(
+        "the-bus-decouples-twice",
+        "The bus decouples twice",
+        "explanatory: its space half is held by emitter-never-names-subscribers and its time "
+        "half by the listener tests; nothing binds this sentence itself",
+    ),
+    waived(
+        "self-subscription-needs-the-time-half",
+        "an app reacting to itself is legitimate exactly when it needs the second",
+        "nothing inventories the self-subscriptions, so one that could run inline would pass",
+    ),
+    waived(
+        "self-subscription-otherwise-a-call",
+        "Otherwise it is a function call written the long way round.",
+        "the same missing inventory of self-subscriptions",
+    ),
+    held(
+        "a-sign-in-is-one-event",
+        "is the same event — `auth.signed_in` —",
+        test_a_sign_in_records_that_a_second_factor_was_cleared,
+    ),
+    held(
+        "a-sign-in-is-recorded-at-handover",
+        "It is recorded at the moment the session is handed over, never before",
+        test_every_delivered_session_is_recorded_as_a_sign_in,
+    ),
+    waived(
+        "contribs-declared-at-mount",
+        "A registry of contribution providers (an extension point), declared at mount and read "
+        "synchronously on the request path",
+        "nothing checks that providers are registered at mount only",
+    ),
+    waived(
+        "signup-off-the-critical-path",
+        "never on the signup's critical path",
+        "the seeders are held (signup-chain); nothing asserts the signup answers before its "
+        "reactions run",
+    ),
+    waived(
+        "import-downward",
+        "**Direct contract import** when the call points *down* to a foundation every feature "
+        "may depend on",
+        "only auth's one-way edge is contracted (auth-never-imports-organizations); "
+        "organizations and console have no contract of their own",
+    ),
+    waived(
+        "event-upward",
+        "you *want* the coupling explicit",
+        "the same missing contracts: a foundation importing a feature would pass everywhere "
+        "but auth",
+    ),
+    waived(
+        "the-registry-inverts-the-dependency",
+        "The registry inverts the dependency so the foundation stays ignorant of its consumers.",
+        "held for shared (surfaces-are-registered); auth resolving keys through ApiKeyQuery is "
+        "not checked",
+    ),
+    waived(
+        "one-process-wide-bus",
+        "`host.events` is that same bus, wired at mount",
+        "nothing asserts host.events is the bus singleton",
+    ),
+    # ── AGENTS Observability ──────────────────────────────────────────────────────────────
+    held(
+        "journal-reads-are-rls-scoped",
+        "Reads are RLS-scoped",
+        test_every_public_table_enforces_row_level_security,
+    ),
+    held(
+        "only-the-journal-on-the-critical-path",
+        "This is the one record the base lets sit on a request's critical path.",
+        test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+    ),
+    waived(
+        "a-fact-has-no-severity",
+        "A fact has no severity: it happened.",
+        "nothing checks that neither the journal nor an event class carries a level",
+    ),
+    waived(
+        "one-log-table-for-the-deployment",
+        "one Postgres table the whole deployment shares",
+        "no test runs two instances and reads one's lines from the other",
+    ),
+    held(
+        "the-request-path-only-enqueues",
+        "The request path only enqueues (a bounded deque)",
+        test_processor_enqueues_without_writing,
+    ),
+    waived(
+        "the-log-table-is-unlogged",
+        "the table is `UNLOGGED`",
+        "nothing reads log_lines' persistence, partitioning or commit mode; the migration "
+        "alone says it",
+    ),
+    held(
+        "retention-drops-a-partition",
+        "a day past the window leaves as a `DROP`",
+        test_retention_drops_a_whole_day_as_one_partition,
+    ),
+    held(
+        "the-log-falls-back-to-day-files",
+        "the batch falls back to per-day files",
+        test_a_batch_the_store_refuses_lands_in_the_day_file,
+        test_a_store_that_refuses_is_announced_once,
+    ),
+    waived(
+        "the-log-level-is-live",
+        "an admin can raise it to `WARNING` or `ERROR` to quiet an instance",
+        "nothing raises the level and checks a lower line is dropped",
+    ),
+    held(
+        "a-line-says-what-no-record-says",
+        "A line says what no other record says already",
+        test_no_log_line_spells_a_business_event_kind,
+        test_a_served_request_leaves_exactly_one_finished_line,
+    ),
+    held(
+        "two-levels-carry-the-rest",
+        "Two levels carry the rest.",
+        test_nothing_is_written_below_the_two_levels,
+    ),
+    waived(
+        "warning-is-what-was-absorbed",
+        "`warning` is **what the code could not carry through and absorbed**",
+        "info lines are inventoried (info-is-a-surprise); warning lines are not",
+    ),
+    held(
+        "libraries-join-at-warning",
+        "The libraries' stdlib `logging` joins the same chain at `WARNING` and above",
+        test_only_a_library_line_is_held_to_the_warning_floor,
+    ),
+    waived(
+        "middlewares-are-plain-asgi",
+        "The request middlewares are plain ASGI, not `BaseHTTPMiddleware`",
+        "nothing checks the middleware stack's classes; one BaseHTTPMiddleware would only show "
+        "as a correlation missing from the finished line",
+    ),
+    held(
+        "issues-fold-by-fingerprint",
+        "folded, by stack fingerprint, into an `Issue`",
+        test_fingerprint_ignores_the_variable_message,
+        test_fingerprint_distinguishes_exception_types,
+    ),
+    waived(
+        "one-occurrence-per-failure",
+        "one per failure, whatever else logs the same exception on its way out",
+        "no bound test logs one exception twice and counts its occurrences",
+    ),
+    waived(
+        "a-failing-tracker-worsens-nothing",
+        "a failing tracker never worsens what it tracks",
+        "no bound test makes a tracker raise and checks the others still receive the capture",
+    ),
+    waived(
+        "answered-no-versus-broken",
+        "the dependency *answered no*",
+        "the gap of one-dependency-verdict: the verdict is unit-tested, nothing binds its "
+        "callers to it",
+    ),
+    held(
+        "the-park-opens-the-issue",
+        "the park is what opens the issue",
+        test_a_task_parked_for_good_is_captured_as_a_bug,
+    ),
+    held(
+        "lifespan-workers-catch-everything",
+        "The five lifespan workers catch everything",
+        test_a_lifespan_loop_that_falls_over_opens_an_issue,
+    ),
+    held(
+        "readiness-on-the-same-verdict",
+        "The readiness probe is on the same verdict",
+        test_a_readiness_probe_that_starts_failing_says_why,
+    ),
+    waived(
+        "the-timeline-pins-names",
+        "those pinned names are shown on the row and are what free text searches",
+        "no scenario renames a subject and finds its old name on the timeline",
+    ),
+    held(
+        "lines-inherit-the-correlation",
+        "Lines and occurrences inherit the ids from contextvars",
+        test_a_row_correlates_by_the_request_it_names,
+    ),
+    waived(
+        "the-entity-filter-is-journal-only",
+        "the per-entity filter narrows to the journal alone",
+        "nothing filters by entity and checks the other sources drop out",
+    ),
+    waived(
+        "the-timeline-says-its-sort-is-partial",
+        "the screen says so rather than pass a sample off as an ordering",
+        "no scenario sorts by another column and reads the notice",
+    ),
+    held(
+        "metrics-owns-the-counter-outright",
+        "`apps/metrics` owns the counter outright.",
+        test_no_shared_module_names_a_bounded_context,
+    ),
+    waived(
+        "metrics-off-finds-nobody",
+        "Switch the app off and the offer finds nobody",
+        "nothing switches metrics off and checks the middleware still serves",
+    ),
+    held(
+        "metrics-rolls-up-and-exports",
+        "a daily rollup that downsamples minute → hour and applies retention",
+        test_rollup_downsamples_old_minute_rows_then_purge_applies_retention,
+        test_render_prometheus_exposes_cumulative_histogram,
+    ),
+    # ── AGENTS Conventions ────────────────────────────────────────────────────────────────
+    waived(
+        "dependencies-live-in-current-py",
+        "Each context's FastAPI dependencies live in its own `contract/current.py`",
+        "7 of 17 contexts have the file (ROADMAP); nothing checks where a dependency is declared",
+    ),
+    held(
+        "the-rls-session-runs-on-app-rls",
+        "`RlsSession` runs on `app_rls`",
+        test_the_rls_session_runs_as_the_app_role_and_the_admin_one_does_not,
+    ),
+    held(
+        "an-anonymous-caller-names-nobody",
+        "An anonymous caller gets `app_rls` with claims naming nobody.",
+        test_get_rls_session_gives_an_anonymous_caller_a_context_with_no_identity,
+    ),
+    waived(
+        "pre-identity-reads-through-a-definer",
+        "goes through a `SECURITY DEFINER` function executable by `app_rls` alone",
+        "test_every_security_definer_function_pins_its_search_path checks their shape, not "
+        "that each pre-identity read goes through one, nor who may run it",
+    ),
+    waived(
+        "the-sign-in-methods",
+        "Email/password with mailed confirmation",
+        "each method has its scenarios; nothing checks this list against them",
+    ),
+    waived(
+        "profile-actions-are-settings-gated",
+        "are settings-gated (`profile.*_enabled`)",
+        "nothing checks each flag gates its route",
+    ),
+    waived(
+        "a-get-never-delivers-a-session",
+        "a GET never delivers a session",
+        "nothing walks the GET routes and checks none sets the auth cookies",
+    ),
+    waived(
+        "sign-in-forwards-the-visitor",
+        "forward the visitor's address to GoTrue as `Sb-Forwarded-For`",
+        "nothing checks the header on the sign-in and sign-up calls",
+    ),
+    held(
+        "recurring-jobs-reenqueue",
+        "Recurring jobs (purges, rollups) re-enqueue themselves on completion.",
+        test_recurring_task_reenqueues_next_run,
+    ),
+    held(
+        "email-rides-the-queue",
+        "Transactional email goes the same way",
+        test_enqueue_email_outboxes_through_the_callers_session,
+    ),
+    held(
+        "event-delivery-rides-the-queue",
+        "Durable async event delivery rides the same queue",
+        test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
+    ),
+    waived(
+        "negotiation-goes-through-the-helpers",
+        "centralize the JSON / fragment / page branching",
+        "nothing checks a router branches only through these helpers",
+    ),
+    waived(
+        "a-page-is-assembled-from-slices",
+        "A full page's context is assembled from _slices_",
+        "nothing checks a full page's context is built by the collector",
+    ),
+    waived(
+        "slice-collisions-rejected-at-startup",
+        "collisions rejected at startup",
+        "no bound test registers two slices under one key",
+    ),
+    held(
+        "uuid7-minted-on-both-sides",
+        "minted by the ORM where Python writes and by the database where it does not",
+        test_every_mapped_primary_key_is_a_time_ordered_uuid7,
+    ),
+    held(
+        "uuid7-lets-a-trail-page-on-its-key",
+        "which is what lets an append-only trail page on its key",
+        test_uuid7_is_time_ordered_and_versioned,
+    ),
+    waived(
+        "ordering-across-two-minters",
+        "across the two it is only as good as the agreement between the app's clock and the "
+        "database's",
+        "a stated limit, not a guarantee: nothing measures the skew between the two minters",
+    ),
+    waived(
+        "daisyui-is-the-component-system",
+        "daisyUI 5 is the component system",
+        "the gap of one-component-system: the classes beating the layer are frozen, and the "
+        "claim holds when that set is empty",
+    ),
+    waived(
+        "component-classes-live-in-the-layer",
+        "Project-specific component classes live in `@layer components`",
+        "the same frozen set as one-component-system",
+    ),
+    waived(
+        "reuse-components",
+        "Reuse components instead of re-spelling utility chains",
+        "nothing detects a re-spelled chain (ROADMAP: card-panel re-spelled six times)",
+    ),
+    held(
+        "icons-are-phosphor",
+        "Icons are Phosphor.",
+        test_every_icon_a_surface_declares_has_a_glyph_to_render,
+    ),
+    waived(
+        "markup-uses-landmarks-and-labels",
+        "Markup uses real landmarks, labelled controls",
+        "no accessibility audit runs over the rendered pages (markup-is-semantic-and-accessible)",
+    ),
+    waived(
+        "drivers-share-a-substrate",
+        "Both E2E drivers share a substrate",
+        "nothing checks each feature mixin extends the shared drivers",
+    ),
+    waived(
+        "each-scenario-leaves-nothing-behind",
+        "The API driver wraps each scenario in a rolled-back transaction",
+        "no test checks a scenario leaves no committed row behind, on either driver",
     ),
     # ── Stack and quality tools ─────────────────────────────────────────────────────────────────
     held(
@@ -812,4 +1241,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 16
+UNHELD_TODAY = 59

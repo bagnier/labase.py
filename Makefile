@@ -7,6 +7,17 @@
 WORKTREE := $(subst .,-,$(notdir $(CURDIR)))
 COMPOSE := docker compose --env-file .env --project-name labase-$(WORKTREE) --file docker/docker-compose.yml
 
+# One test schema/bucket per `make` invocation, named after that invocation's own pid (the
+# `$(shell echo $$PPID)` subshell's parent is this running make process): two `test`/`test-e2e`/
+# `meta`/`perf-smoke` runs started together in the same checkout never share, or stomp, each
+# other's rows (issue #30). A schema outlives its own run on purpose, so a failure stays
+# inspectable — provision_schema.py sweeps any other one whose pid has since exited on its
+# next call, so nothing accumulates.
+TEST_RUN_ID := $(shell echo $$PPID)
+TEST_RUN_SCHEMA := test_$(TEST_RUN_ID)
+TEST_RUN_BUCKET := org-files-test-$(TEST_RUN_ID)
+TEST_ENV := env --ignore-environment ENV_FILE=.env.test SUPABASE_DATABASE_SCHEMA=$(TEST_RUN_SCHEMA) SUPABASE_STORAGE_BUCKET=$(TEST_RUN_BUCKET) PATH="$(PATH)"
+
 # --- Setup ---
 install: db-start
 	uv sync --all-groups
@@ -98,9 +109,9 @@ test-stack:
 test-stack-rm:
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/test_stack.py stop
 
-# Clone the test stack's public schema into this checkout's test schema (+ its bucket).
+# Clone the test stack's public schema into this run's own schema (+ its bucket).
 provision-test: test-stack
-	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/provision_schema.py --reset
+	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/provision_schema.py --schema $(TEST_RUN_SCHEMA) --bucket $(TEST_RUN_BUCKET) --reset
 
 # --- Quality ---
 # lint: read-only, fails on non-conforming code (used by `make ci`).
@@ -198,20 +209,20 @@ PYTEST = $(if $(COV),uv run coverage run --parallel-mode -m pytest,uv run pytest
 # was a proxy for is measured directly and cannot go stale: `test_local_stack_is_responsive`
 # times each dependency on every run and fails the suite loudly when the stack is degraded.
 test: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST)
+	$(TEST_ENV) $(PYTEST)
 
 # The browser lane counts too: its Hypercorn server runs in-process, so it is the only lane
 # that renders HTML — the api driver asks for JSON on every request.
 # CHROMIUM_EXECUTABLE_PATH is the one outside variable let through: a Chromium installed on the
 # machine instead of Playwright's download (Google's Chrome for Testing). Unset, it arrives empty.
 test-e2e: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" CHROMIUM_EXECUTABLE_PATH="$(CHROMIUM_EXECUTABLE_PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "scenarios or test_browser_isolation" --driver=browser
+	$(TEST_ENV) CHROMIUM_EXECUTABLE_PATH="$(CHROMIUM_EXECUTABLE_PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "scenarios or test_browser_isolation" --driver=browser
 
 # meta: the README's own lane — every claim the front page makes, each one held by a test or
 # waived in writing (tests/meta/claims.py). Worth running on a README edit rather than on a code
 # edit: reword a sentence a test holds and this is what says so, by name.
 meta: provision-test
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" $(PYTEST) tests/meta
+	$(TEST_ENV) $(PYTEST) tests/meta
 
 # flakehunt: run the browser scenarios N times and aggregate failures per test — an
 # intermittent test fails a few runs out of N, where a single run only says "red" or "green".
@@ -223,7 +234,7 @@ flakehunt:
 # Perf smoke: boots the app on the test schema, drives it with Locust through
 # the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
 perf-smoke: provision-test client-gen
-	env --ignore-environment ENV_FILE=.env.test PATH="$(PATH)" uv run python scripts/perf_smoke.py
+	$(TEST_ENV) uv run python scripts/perf_smoke.py
 
 coverage-erase:
 	uv run coverage erase

@@ -78,15 +78,19 @@ def mount(host: Host) -> None:
     app.exception_handler(HTTPException)(handle_http_error)
     app.exception_handler(StarletteHTTPException)(handle_http_error)
 
-    # Added innermost-first: each ``add_middleware`` wraps what is already there, so CORS ends up
-    # outermost and the form re-encoder closest to the router. All five are plain ASGI — a
-    # ``BaseHTTPMiddleware`` anywhere under ``RequestLogger`` would run the rest in a child task
-    # and strip the request's correlation off the finished line (see ``RequestLogger``).
+    # Added innermost-first: each ``add_middleware`` wraps what is already there, so
+    # ``RequestLogger`` ends up outermost and the form re-encoder closest to the router.
+    # ``RequestLogger`` has to wrap ``CORSMiddleware`` rather than sit inside it: a preflight
+    # CORS itself refuses (no origin configured, a disallowed one) never reaches what is beneath
+    # it, and "every served request leaves one `request.finished` line" has no exception for that.
+    # All five are plain ASGI — a ``BaseHTTPMiddleware`` anywhere under ``RequestLogger`` would run
+    # the rest in a child task and strip the request's correlation off the finished line (see
+    # ``RequestLogger``).
     app.add_middleware(FormAsJson)
     app.add_middleware(SecurityHeaders)
     app.add_middleware(CsrfProtect)
-    app.add_middleware(RequestLogger)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
+    app.add_middleware(RequestLogger)
 
     # The three process-wide hooks go in with setup_logging; the loop's only exists once
     # there is a loop to install it on.

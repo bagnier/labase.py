@@ -4,7 +4,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
-from apps.auth.contract.admin import find_user_id_by_email
+from apps.auth.contract.admin import lock_last_admin_guard
 from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract import appearance
 from apps.console.contract.events import (
@@ -32,7 +32,7 @@ from apps.console.domain.models import (
 )
 from apps.console.domain.service import InvalidSettingValue, UnknownSetting
 from apps.console.domain.studio import studio_link
-from apps.console.infra.repository import AppSettingRepository, lock_last_admin_guard
+from apps.console.infra.repository import AppSettingRepository
 from apps.organizations.contract.queries import list_org_handles
 from apps.shared import clock
 from apps.shared.charts import day_buckets_series
@@ -291,7 +291,8 @@ async def add_admin(
 ) -> Response:
     email = body.email.strip()
     try:
-        rows = await admins.grant_admin(email)
+        await lock_last_admin_guard(session)
+        rows, granted, uid = await admins.grant_admin(email)
     except AdminNotFound as exc:
         if wants_json(request):
             return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
@@ -302,12 +303,10 @@ async def add_admin(
             error=exc.email,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    await events.emit(
-        AdminGranted(
-            user_id=current_user.id, entity_id=await find_user_id_by_email(email), entity_name=email
-        ),
-        session,
-    )
+    if granted:
+        await events.emit(
+            AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email), session
+        )
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -322,21 +321,21 @@ async def update_admin(
     session: AdminSession,
 ) -> Response:
     is_admin = body.is_admin
-    uid = await find_user_id_by_email(email)  # the targeted user, for entity_id correlation
     try:
         await lock_last_admin_guard(session)
-        rows = await admins.set_admin(email, is_admin=is_admin)
+        rows, changed, uid = await admins.set_admin(email, is_admin=is_admin)
     except AdminNotFound:
         raise _NOT_FOUND from None
     except LastAdminViolation as exc:
         log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=email)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    granted: AdminGranted | AdminRevoked = (
-        AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email)
-        if is_admin
-        else AdminRevoked(user_id=current_user.id, entity_id=uid, entity_name=email)
-    )
-    await events.emit(granted, session)
+    if changed:
+        granted: AdminGranted | AdminRevoked = (
+            AdminGranted(user_id=current_user.id, entity_id=uid, entity_name=email)
+            if is_admin
+            else AdminRevoked(user_id=current_user.id, entity_id=uid, entity_name=email)
+        )
+        await events.emit(granted, session)
     if wants_json(request):
         return _admins_json(rows)
     return _admins_partial(request, rows)
@@ -494,7 +493,6 @@ async def create_org_override(
         return await _render_org_overrides(request, session, app, group, error=str(exc))
 
     await repo.set_org_override(app, key, org_id, stored)
-    await session.commit()
     await events.emit(
         OrgOverrideSet(
             user_id=current_user.id,
@@ -506,6 +504,7 @@ async def create_org_override(
         ),
         session,
     )
+    await session.commit()
     return await _render_org_overrides(request, session, app, group)
 
 
@@ -521,13 +520,13 @@ async def delete_org_override(
     group = _settings_group(app)
     repo = AppSettingRepository(session)
     await repo.delete_org_override(app, key, org_id)
-    await session.commit()
     await events.emit(
         OrgOverrideRemoved(
             user_id=current_user.id, org_id=org_id, app=app, key=key, entity_name=f"{app}.{key}"
         ),
         session,
     )
+    await session.commit()
     return await _render_org_overrides(request, session, app, group)
 
 

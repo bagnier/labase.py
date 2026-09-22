@@ -7,6 +7,7 @@ new Storage policy or a second bucket would land in ``public`` but not in a clon
 provisions a throwaway schema and asserts the clone is faithful, so drift fails CI loudly.
 """
 
+import os
 from collections.abc import Iterator
 
 import pytest
@@ -16,12 +17,28 @@ from scripts import provision_schema as ps
 GUARD_SCHEMA = "wt_guard"
 GUARD_BUCKET = "org-files-guard"
 
+# A per-run schema (test_<pid>) outlives its own `make` invocation on purpose, so a failed
+# run stays inspectable — but nothing ever drops one whose pid has since exited, and it is
+# recreated with this test's own pid, guaranteed alive for the test's duration.
+LIVE_SCHEMA = f"test_{os.getpid()}"
+LIVE_BUCKET = f"org-files-test-{os.getpid()}"
+# No Linux pid reaches this value (max_pid_max tops out at 2^22), so it can never be alive.
+DEAD_PID = 4_194_304 + 1
+DEAD_SCHEMA = f"test_{DEAD_PID}"
+DEAD_BUCKET = f"org-files-test-{DEAD_PID}"
+
 
 @pytest.fixture
 def guard_schema() -> Iterator[str]:
     ps.provision(GUARD_SCHEMA, GUARD_BUCKET, reset=True)
     yield GUARD_SCHEMA
     ps.deprovision(GUARD_SCHEMA, GUARD_BUCKET)
+
+
+@pytest.fixture
+def live_run_schema() -> Iterator[str]:
+    yield LIVE_SCHEMA
+    ps.deprovision(LIVE_SCHEMA, LIVE_BUCKET)
 
 
 def test_db_port_is_the_host_port_of_the_database_url():
@@ -32,6 +49,11 @@ def test_db_port_is_the_host_port_of_the_database_url():
 
 def _count(container: str, sql: str) -> str:
     return ps._query(container, sql)
+
+
+def _schema_count(container: str, schema: str) -> str:
+    sql = f"select count(*) from information_schema.schemata where schema_name = '{schema}'"
+    return _count(container, sql)
 
 
 def test_clone_matches_public(guard_schema: str) -> None:
@@ -76,3 +98,23 @@ def test_clone_matches_public(guard_schema: str) -> None:
         c, f"select count(*) from pg_policies where policyname like '{GUARD_BUCKET}: %'"
     )
     assert clone_policies == public_policies != "0"
+
+
+def test_provision_drops_a_run_schema_whose_pid_has_exited(live_run_schema: str) -> None:
+    ps.provision(DEAD_SCHEMA, DEAD_BUCKET, reset=True)
+
+    ps.provision(live_run_schema, LIVE_BUCKET, reset=True)
+
+    c = ps._db_container()
+    assert _schema_count(c, DEAD_SCHEMA) == "0"
+
+
+def test_provision_keeps_a_run_schema_whose_pid_is_alive(live_run_schema: str) -> None:
+    ps.provision(live_run_schema, LIVE_BUCKET, reset=True)
+    other_schema, other_bucket = "test_4194306", "org-files-test-4194306"
+
+    ps.provision(other_schema, other_bucket, reset=True)  # its own sweep must skip LIVE_SCHEMA
+    ps.deprovision(other_schema, other_bucket)
+
+    c = ps._db_container()
+    assert _schema_count(c, live_run_schema) == "1"

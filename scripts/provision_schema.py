@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,11 @@ import sys
 from sqlalchemy.engine import make_url
 
 from apps.shared.settings.env import get_technical_settings
+
+# A per-`make`-invocation test schema (test_<pid>, see Makefile) outlives its own run on
+# purpose — so a failed run stays inspectable until the next one starts — but nothing else
+# ever drops one whose pid has since exited. provision() sweeps those on every call.
+_RUN_SCHEMA_RE = re.compile(r"^test_(\d+)$")
 
 
 def db_port(database_url: str) -> int:
@@ -150,7 +156,7 @@ def _storage_and_trigger_sql(schema: str, bucket: str) -> str:
         f'drop policy if exists "{bucket}: org members {act}" on storage.objects;\n'
         f'create policy "{bucket}: org members {act}" on storage.objects for {act}\n'
         f"  {clause} (bucket_id = '{bucket}'\n"
-        f"    and (storage.foldername(name))[1]::uuid in (select {schema}.user_org_ids()));"
+        f"    and {schema}.storage_path_org_id(name) in (select {schema}.user_org_ids()));"
         for act, clause in actions
     )
     return f"""
@@ -160,18 +166,61 @@ create trigger on_auth_user_created__{schema}
   after insert on auth.users
   for each row execute procedure {schema}.handle_new_user();
 
--- Storage bucket + RLS policies scoped to this schema's memberships.
+-- Storage bucket + RLS policies scoped to this schema's memberships. The helper is (re)created
+-- here too, not only cloned from public, so refreshing a schema provisioned before it existed
+-- does not leave the policies below pointing at a function this schema doesn't have.
 insert into storage.buckets (id, name, public, file_size_limit)
   values ('{bucket}', '{bucket}', false, 52428800)
   on conflict (id) do nothing;
+
+create or replace function {schema}.storage_path_org_id(path text)
+returns uuid
+language sql
+immutable
+as $$
+  select case
+    when (storage.foldername(path))[1] ~
+      '^[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{4}}-[0-9a-fA-F]{{12}}$'
+    then (storage.foldername(path))[1]::uuid
+  end
+$$;
+grant execute on function {schema}.storage_path_org_id(text) to authenticated;
 {policies}
 """
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just owned by someone else
+    return True
+
+
+def _sweep_stale_run_schemas(container: str, *, keep: str) -> None:
+    """Drop every other ``test_<pid>`` schema (+ bucket + trigger) whose pid has exited — a
+    run that crashed before reaching its own teardown, or an earlier lifetime of this
+    checkout. A schema whose pid is still alive may be another run using it right now."""
+    names = _query(
+        container,
+        "select schema_name from information_schema.schemata where schema_name ~ '^test_[0-9]+$'",
+    ).splitlines()
+    for name in names:
+        if name == keep:
+            continue
+        match = _RUN_SCHEMA_RE.fullmatch(name)
+        if match and not _pid_alive(int(match.group(1))):
+            deprovision(name, f"org-files-{name.replace('_', '-')}")
 
 
 def provision(schema: str, bucket: str, *, reset: bool) -> None:
     if not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
         sys.exit(f"Invalid schema name: {schema!r}")
     container = _db_container()
+    if _RUN_SCHEMA_RE.fullmatch(schema):
+        _sweep_stale_run_schemas(container, keep=schema)
 
     exists = _query(
         container, f"select 1 from information_schema.schemata where schema_name = '{schema}'"

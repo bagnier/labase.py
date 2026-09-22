@@ -5,6 +5,7 @@ reconstructed-typed-event wrapper folds in, and how a test isolates or restores 
 Delivery itself (journal → task_queue) is the listener's job; see test_listener.py.
 """
 
+import re
 import uuid
 from dataclasses import dataclass
 from typing import cast
@@ -112,6 +113,39 @@ def test_on_rejects_a_duplicate_consumer_name_for_the_same_event():
     events.on(_Ticked, _noop, name="counter", app="test_bus")
     with pytest.raises(ValueError, match="counter"):
         events.on(_Ticked, _noop, name="counter", app="test_bus")
+
+
+def test_on_rejects_an_event_type_with_no_kind():
+    """An abstract base with no app_name/verb never enters the catalog, so the listener could not
+    rebuild it from a stored record — and its topic would be ``evt::<name>``, indistinguishable
+    from any other kindless type's, silently colliding in the queue's handler registry."""
+
+    class _Kindless(BusinessEvent):
+        pass
+
+    own = EventWiring()
+    with pytest.raises(ValueError, match="_Kindless"):
+        own.add_consumer(_Kindless, "counter", as_actor=False, app="test_bus")
+
+
+def test_on_rejects_a_duplicate_topic_across_different_event_types():
+    """The topic, not the event class, is what keys the queue's handler registry — so uniqueness
+    has to be checked across every registered consumer, not scoped to one event type's own list
+    (which is what let two distinct kindless types share ``evt::counter`` and silently overwrite
+    each other)."""
+
+    class _First:
+        kind = "test_bus.duplicated"
+
+    class _Second:
+        kind = "test_bus.duplicated"
+
+    own = EventWiring()
+    own.add_consumer(cast(type[BusinessEvent], _First), "counter", as_actor=False, app="test_bus")
+    with pytest.raises(ValueError, match=re.escape("evt:test_bus.duplicated:counter")):
+        own.add_consumer(
+            cast(type[BusinessEvent], _Second), "counter", as_actor=False, app="test_bus"
+        )
 
 
 def test_consumers_of_walks_the_mro_so_a_base_subscription_catches_subclasses():

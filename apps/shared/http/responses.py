@@ -1,6 +1,6 @@
 """Response helpers that absorb the JSON / HTMX-fragment / full-page branching.
 
-One handler serves all three audiences (README: every business endpoint has two faces);
+One handler serves all three audiences (AGENTS: every business endpoint has two faces);
 these centralize the negotiation so routers stay free of it.
 """
 

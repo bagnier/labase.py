@@ -108,12 +108,14 @@ jobs:
           # Headless, the end of the turn is the end of the run: a tool that promises to bring the
           # model back later ends the run with nothing pushed (the first Sonnet run scheduled a
           # wakeup while `make finalize` was still running, the #12 run waited on a `Monitor`).
-          # Those tools are taken away.
+          # Those tools are taken away. So is `gh api`: the skill writes through `gh issue` and
+          # `gh pr`, and the #35 run's `-f body=@file` posted the path instead of the comment.
           claude_args: |
             --model claude-sonnet-5
             --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,TaskStop"
             --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger"
             --disallowedTools "Workflow,PushNotification,Monitor"
+            --disallowedTools "Bash(gh api:*)"
 
       # A run that ends before its own end — cancelled, timed out, a turn that stopped — leaves
       # `fixing` with nobody behind it. Whatever happened, the label becomes a state the owner can

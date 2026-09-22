@@ -18,6 +18,12 @@ from fastapi import (
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.auth.contract.admin import (
+    LastAdminViolation,
+    ensure_not_last_admin,
+    list_server_admins,
+    lock_last_admin_guard,
+)
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
 from apps.auth.contract.email_change import EmailChangeError, change_email
@@ -608,6 +614,25 @@ async def account_delete(
             await verify_password(current_user.email, current_password)
         except WrongPassword:
             error = "Current password is incorrect."
+
+    if error is None:
+        # Serializes against a concurrent console revoke (or another self-deletion) racing the
+        # same invariant through a different gate (issue #36) — held on admin_session, released
+        # at its commit below.
+        await lock_last_admin_guard(admin_session)
+        # The JWT's ``is_admin`` claim can be stale (a promotion lands in it only on the next
+        # sign-in), so the target's actual status is read fresh, the same way the console's own
+        # revoke path does.
+        admins = await list_server_admins()
+        target_is_admin = any(u.user_id == current_user.id and u.is_admin for u in admins)
+        try:
+            ensure_not_last_admin(
+                removes_admin=True,
+                target_is_admin=target_is_admin,
+                admin_count=sum(1 for u in admins if u.is_admin),
+            )
+        except LastAdminViolation:
+            error = "You are the server's last admin — promote another admin first."
 
     if error is not None:
         return await _profile_error(

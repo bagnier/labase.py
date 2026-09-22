@@ -219,6 +219,9 @@ allowed-confusables = ["×", "–"]
 # Runs the repo's own hook commands under `dash` by name: dash is the runner's `/bin/sh`, and
 # the command read from `.claude/settings.json` is the subject under test, not outside input.
 "tests/meta/test_agent_guard.py" = ["S603", "S607"]
+# Dry-runs the repo's own Makefile by name (`make -n <target>`) — the target is one of four
+# names hardcoded in the test itself, not outside input.
+"tests/test_makefile.py" = ["S603", "S607"]
 # A route handler's parameters *are* its HTTP contract — path params, `Form` fields and the
 # `Depends` injections. Most of the argument-count hits sit here, and bundling them into a
 # model would hide the contract FastAPI reads off the signature.
@@ -261,7 +264,7 @@ allowed-confusables = ["×", "–"]
 max-positional-args = 7
 max-args = 10
 
-# Architecture contracts (README "Principles", mechanically verified by `make lint`):
+# Architecture contracts (AGENTS.md "Principles", mechanically verified by `make lint`):
 # - domain/ never imports infra/ (hexagonal direction);
 # - apps/shared/ sits below every context and imports none of them;
 # - a context's internals (domain/, infra/, private modules) are importable only from

@@ -44,6 +44,24 @@ _handlers: dict[str, TaskHandler] = {}
 _RETRY_BACKOFF_SECONDS = 60
 _VISIBILITY_TIMEOUT_SECONDS = 300  # a crashed worker's claim expires after this
 
+# The correlation keys a task's own payload carries where it originated off a business fact (see
+# ``events.repository.task_payload``): the request that caused it, the fact's own id (causation),
+# and who/where it concerns. Read generically off any task's payload — not just a durable
+# reaction's — so a plain ``enqueue()`` call that happens to carry the same keys gets the same
+# correlation for free.
+_CORRELATION_KEYS = ("request_id", "event_id", "user_id", "org_id")
+
+
+def delivery_context(payload: dict[str, Any]) -> dict[str, str]:
+    """The correlation keys to bind on a task's log context, read off its payload — only the
+    present ones, so a task with no such key adds nothing. Bound around the whole of
+    :meth:`TaskWorker._process`, including the failure log: a handler's own logs join the
+    emitting request's timeline through the narrower binding the event bus wraps around the call
+    itself, but ``queue.task_failed`` is logged one frame above that, after retries are exhausted —
+    a scope only this wider binding covers."""
+    return {key: str(payload[key]) for key in _CORRELATION_KEYS if payload.get(key) is not None}
+
+
 # The queue's own retention: done rows are receipts, and nothing else ever deletes them.
 QUEUE_PURGE_TOPIC = "task_queue.purge"
 QUEUE_PURGE_EVERY_SECONDS = 86400
@@ -399,41 +417,45 @@ class TaskWorker:
         return len(rows)
 
     async def _process(self, task: ClaimedTask) -> None:
-        handler = _handlers.get(task["topic"])
-        if handler is None:
-            self._report_unhandled_topic(task)
-            await self._fail(task, "no handler registered")
-            return
         payload = _payload_dict(task)
-        try:
-            await self._run_handler(handler, payload, task["user_id"])
-        except Exception as exc:
-            if task["attempts"] >= task["max_attempts"]:
-                # Retries exhausted: nobody will run this task again, so the failure is final —
-                # ``log.exception`` is the capture seam, and an issue is where it stays visible.
-                # ``str`` is not cosmetic: the capture processor keeps only scalars, so a raw
-                # ``UUID`` here reaches the log line and never the occurrence — leaving an issue
-                # that names the topic but not the row still owed.
-                log.exception(
-                    "queue.task_failed", exc_info=exc, topic=task["topic"], task_id=str(task["id"])
-                )
-                await self._fail(task, repr(exc))
+        with structlog.contextvars.bound_contextvars(**delivery_context(payload)):
+            handler = _handlers.get(task["topic"])
+            if handler is None:
+                self._report_unhandled_topic(task)
+                await self._fail(task, "no handler registered")
+                return
+            try:
+                await self._run_handler(handler, payload, task["user_id"])
+            except Exception as exc:
+                if task["attempts"] >= task["max_attempts"]:
+                    # Retries exhausted: nobody will run this task again, so the failure is final —
+                    # ``log.exception`` is the capture seam, and an issue is where it stays visible.
+                    # ``str`` is not cosmetic: the capture processor keeps only scalars, so a raw
+                    # ``UUID`` here reaches the log line and never the occurrence — leaving an
+                    # issue that names the topic but not the row still owed.
+                    log.exception(
+                        "queue.task_failed",
+                        exc_info=exc,
+                        topic=task["topic"],
+                        task_id=str(task["id"]),
+                    )
+                    await self._fail(task, repr(exc))
+                else:
+                    # The queue's own retry is a lifecycle, not a defect: capturing here would open
+                    # an issue per transient blip, and close none when the next attempt succeeds.
+                    log.warning(
+                        "queue.task_retrying",
+                        topic=task["topic"],
+                        task_id=str(task["id"]),
+                        attempt=task["attempts"],
+                        exc_info=exc,
+                    )
+                    await self._retry(task, repr(exc))
             else:
-                # The queue's own retry is a lifecycle, not a defect: capturing here would open
-                # an issue per transient blip, and close none when the next attempt succeeds.
-                log.warning(
-                    "queue.task_retrying",
-                    topic=task["topic"],
-                    task_id=str(task["id"]),
-                    attempt=task["attempts"],
-                    exc_info=exc,
-                )
-                await self._retry(task, repr(exc))
-        else:
-            # No receipt: a task that ran is already recorded, by ``done_at`` on its own row and by
-            # whatever fact the handler emitted. A line per task is a line per second on a busy
-            # queue, saying what two other stores say better.
-            await self._complete(task)
+                # No receipt: a task that ran is already recorded, by ``done_at`` on its own row
+                # and by whatever fact the handler emitted. A line per task is a line per second on
+                # a busy queue, saying what two other stores say better.
+                await self._complete(task)
 
     async def _run_handler(
         self, handler: TaskHandler, payload: dict[str, Any], user_id: uuid.UUID | None

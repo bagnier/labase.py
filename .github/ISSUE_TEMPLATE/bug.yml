@@ -44,7 +44,7 @@ body:
     attributes:
       label: Rule it breaks
       description: >-
-        The statement the fault contradicts, when there is one: a README sentence, quoted, or a
+        The statement the fault contradicts, when there is one: an AGENTS.md sentence, quoted, or a
         scenario of a `.feature` file — the test then holds that rule where it is stated.
   - type: textarea
     id: links

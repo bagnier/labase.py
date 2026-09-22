@@ -1112,7 +1112,7 @@ _DEFAULTS_OF_A_DECLARED_SETTING = {
 # a duration or a size — there is nothing an operator would tune it to. Turning any of these into
 # a setting would offer an operator a lever that breaks the thing rather than tunes it.
 _NOT_A_TUNING_KNOB = {
-    "apps/console/infra/repository.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
+    "apps/auth/infra/admin_guard.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
     "apps/issues/domain/service.py::_TITLE_MAX = 200",
     "apps/issues/domain/service.py::_TOP_FRAMES = 5",

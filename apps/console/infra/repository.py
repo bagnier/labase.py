@@ -73,22 +73,3 @@ class AppSettingRepository:
         row = await self.session.get(OrgAppSetting, (app, key, org_id))
         if row is not None:
             await self.session.delete(row)
-
-
-# This app's own fixed identifier for the last-admin guard's advisory lock — arbitrary, but must
-# stay distinct from any other advisory lock key added anywhere in this codebase (there are none
-# yet). Not derived from a name: hashing a string into the 32-bit space `pg_advisory_xact_lock`
-# takes would trade one collision risk for another.
-_LAST_ADMIN_GUARD_LOCK_KEY = 3_600_360_036
-
-
-async def lock_last_admin_guard(session: AsyncSession) -> None:
-    """Serializes the last-admin count-then-revoke against a concurrent caller (issue #36).
-
-    Held for ``session``'s transaction: a second concurrent caller blocks here until the first
-    commits, then re-reads a count that already reflects it — so two revocations can no longer
-    both read the same stale count and both pass the guard.
-    """
-    await session.execute(
-        text("select pg_advisory_xact_lock(:key)"), {"key": _LAST_ADMIN_GUARD_LOCK_KEY}
-    )
