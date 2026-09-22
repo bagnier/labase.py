@@ -10,9 +10,11 @@ from fastapi.dependencies.utils import get_dependant
 from httpx import ASGITransport, AsyncClient
 from supabase_auth.errors import AuthApiError
 
+from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, login
 from apps.auth.infra.security import get_current_user
+from apps.shared.integration.contribs import Contribs
 from apps.shared.persistence import database as db
 from apps.shared.persistence.database import get_admin_session
 
@@ -67,6 +69,34 @@ async def test_wrong_signature_returns_401(client):
     )
     response = await client.get("/me")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_api_key_bearer_returns_401_when_no_provider_matches(client):
+    with patch("apps.auth.infra.security.contribs", Contribs()):
+        response = await client.get(
+            "/me", headers={"Authorization": f"Bearer {API_KEY_PREFIX}whatever"}
+        )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_api_key_bearer_returns_503_when_the_provider_fails(client):
+    """A failing contributor is a degraded service, not a refusal: `contribs.collect` logs and
+    skips it the same way it would a dashboard card, which would otherwise read as "no key
+    matched" and answer 401 to what may well be a valid key."""
+    fresh = Contribs()
+
+    async def boom(query: ApiKeyQuery) -> None:
+        raise RuntimeError("provider broke")
+
+    fresh.provide(ApiKeyQuery, boom)
+
+    with patch("apps.auth.infra.security.contribs", fresh):
+        response = await client.get(
+            "/me", headers={"Authorization": f"Bearer {API_KEY_PREFIX}whatever"}
+        )
+    assert response.status_code == 503
 
 
 @pytest.mark.asyncio
