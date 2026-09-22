@@ -9,8 +9,6 @@ from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.integration.slugs import is_reserved
 
-log = structlog.get_logger(__name__)
-
 
 async def get_current_org(
     request: Request,
@@ -103,29 +101,23 @@ async def get_membership_by_org_id(
     return membership
 
 
-async def _gate_owner(request: Request, membership: Membership) -> Membership:
+def _gate_owner(membership: Membership) -> Membership:
+    # request.finished already reports this 403 with the same user, org and path — bound as
+    # contextvars and carried through note_rejection — so a line here would only restate it.
     if membership.role != OrgRole.owner:
-        log.warning(
-            "organizations.ownership_violation",
-            user_id=str(membership.user_id),
-            org_id=str(membership.org_id),
-            path=request.url.path,
-        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership
 
 
 async def require_owner(
-    request: Request,
     membership: Membership = Depends(get_membership_by_org_id),
 ) -> Membership:
     """Owner gate for routes with an ``{org_id}`` path parameter (JSON API)."""
-    return await _gate_owner(request, membership)
+    return _gate_owner(membership)
 
 
 async def require_current_owner(
-    request: Request,
     membership: Membership = Depends(get_current_membership),
 ) -> Membership:
     """Owner gate for ``/{org_handle}/...`` routes (resolves the org from the slug)."""
-    return await _gate_owner(request, membership)
+    return _gate_owner(membership)
