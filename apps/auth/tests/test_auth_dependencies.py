@@ -299,9 +299,10 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_expired_token_stale_refresh_logs_info_not_exception(client):
-    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the end of a session,
-    not a bug. It logs at info; log.exception (the capture seam) must not fire."""
+async def test_expired_token_stale_refresh_logs_nothing(client):
+    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the everyday end of
+    a session for every returning user whose token turned over, not a surprise. It earns no
+    line at all, at any level."""
     stale = AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, None)
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "stale.refresh.token")
@@ -314,7 +315,8 @@ async def test_expired_token_stale_refresh_logs_info_not_exception(client):
         response = await client.get("/me")
 
     assert response.status_code == 401
-    log.info.assert_called_once()
+    log.info.assert_not_called()
+    log.warning.assert_not_called()
     log.exception.assert_not_called()
 
 
