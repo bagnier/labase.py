@@ -51,11 +51,21 @@ class Contribs:
         it into an issue (``query_type`` names the query so it survives into the issue's
         context). The drain delivers under a reentrancy guard, so a tracker that is itself a
         failing provider here cannot recurse.
+
+        Providers share the caller's session (every query type carries one), so a provider's own
+        SQL error aborts that shared transaction — a savepoint around each call confines the
+        abort to it, leaving later providers and the caller's own queries unaffected: a down app
+        can't break the page.
         """
+        session = getattr(query, "session", None)
         results: list[Any] = []
         for provider in self._providers[type(query)]:
             try:
-                results.append(await provider(query))
+                if session is None:
+                    results.append(await provider(query))
+                else:
+                    async with session.begin_nested():
+                        results.append(await provider(query))
             except Exception:
                 log.exception(
                     "query.provider_failed",
