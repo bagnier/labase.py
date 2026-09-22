@@ -1,6 +1,6 @@
 name: Fix
 
-# One issue, one run: labelling an issue `auto-fix` hands it to the `close-issue` skill, which
+# One issue, one run: labelling an issue `auto-fix` hands it to the `ci-fix-issue` skill, which
 # reproduces it, fixes it, and opens the pull request from a `fix/<issue>` branch. Merging stays
 # with the user.
 on:
@@ -84,13 +84,20 @@ jobs:
       # subscription (the OAuth token), not on API credits.
       - name: Close the issue
         uses: anthropics/claude-code-action@v1
+        # Past its 120 s default, Claude Code moves a Bash command to the background and promises
+        # a notification no headless run receives (the #14 run waited on one). No background
+        # tasks, and ten minutes for a foreground call: the wait the runner's rules spell out fits
+        # in one.
+        env:
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          BASH_DEFAULT_TIMEOUT_MS: "600000"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Without it the action swaps OIDC for an app token that dies after an hour, and hands
           # that one to git and gh: a run past the hour commits and can no longer push. Given this,
           # the push, the PR and the labels ride the owner's token for the whole run.
           github_token: ${{ secrets.FIX_BOT_TOKEN }}
-          prompt: "/close-issue ${{ github.event.issue.number }}"
+          prompt: "/ci-fix-issue ${{ github.event.issue.number }}"
           # The run is watched from the job log, so the agent's stream is written there, tool by
           # tool, and a report closes the job summary. Public repo: that log is public too.
           show_full_output: true

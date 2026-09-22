@@ -1,5 +1,5 @@
 ---
-name: close-issue
+name: ci-fix-issue
 description: >
   Takes one GitHub issue labelled `auto-fix`, reproduces it as a failing test, fixes it under the
   tdd loop, and opens the pull request that closes it on a `fix/<issue>` branch. A run ends one
@@ -8,42 +8,13 @@ description: >
 
   Do NOT use for: filing what is wrong (maintain-principles), or a feature (feature).
 when_to_use: >
-  "/close-issue 42", "ferme l'issue 42", "fixe l'issue 42" — and the fix workflow, which runs it
+  "/ci-fix-issue 42", "ferme l'issue 42", "fixe l'issue 42" — and the fix workflow, which runs it
   on the runner for every issue that gets the label.
 argument-hint: "<issue number>"
 disable-model-invocation: true
 ---
 
-This skill closes one issue and nothing else. The user is away for the whole run, and nobody will
-answer during it. Run every step to the end without waiting for a confirmation. The issue number
-is "$ARGUMENTS".
-
-`CLAUDE.md` names this skill as the one exception to "Git is mine": it commits and pushes on
-`fix/<issue>` and opens the pull request, never on `main`; merging is the user's. On the runner
-(`GITHUB_ACTIONS` is `true`, see step 1) three more of its rules flip, and only there:
-
-- **Waiting.** Nothing brings the run back: no notification, no `Monitor`, no scheduled wakeup,
-  no cron — a tool that promises to call back ends the run, and `CLAUDE.md`'s "the completion
-  notification brings you back" is false here. A gate longer than the shell timeout runs
-  detached and is waited on in the foreground. Start it, keeping its PID:
-
-  ```sh
-  nohup bash -c 'make finalize > /tmp/finalize.log 2>&1; echo "exit:$?" >> /tmp/finalize.log' \
-    > /dev/null 2>&1 & echo $!
-  ```
-
-  then wait, the Bash call's timeout at its 600000 ms maximum, and make the same call again
-  until the log ends on its `exit:` line:
-
-  ```sh
-  timeout 590 tail --pid=<PID> -f /dev/null; tail -n 20 /tmp/finalize.log
-  ```
-
-  The end of the turn is the end of the run, so it ends on a pull request or a comment, never
-  on a wait.
-- **Rendering.** No screenshot: the suite's browser lane is the render, and no MCP browser is
-  started on the runner.
-- **Asking.** Nobody answers. A question ends the run as a comment on the issue, never a wait.
+This skill closes one issue and nothing else.
 
 
 ## The three ends of a run
@@ -68,15 +39,15 @@ A step that fails (a refused tool, a stack that will not start, a gate still red
 rounds) ends the run as an open question that says what happened. A red gate is never pushed.
 
 
-## 1. Where you are, then the issue and its thread
+## Where you are, then the issue and its thread
 
 ```sh
 printenv GITHUB_ACTIONS || echo "not on the runner"
 gh issue view "$ARGUMENTS" --json number,title,body,author,labels,state,comments
 ```
 
-`true` means the runner, and the three rules the contract above flips there apply; anything else
-is a session with someone at the keyboard.
+`true` means the runner, where the non-interactive rules apply; anything else is a session
+with someone at the keyboard.
 
 Stop, without a comment, when the issue is not open or does not carry `auto-fix`: the label is
 the user's decision that this is a reproduced bug, and the workflow's guard on the author is the
@@ -94,7 +65,7 @@ the fault, the file and line links, the direction after `→`, any "to run" comm
 answers to questions a previous run asked.
 
 
-## 2. Reproduce it as a failing test
+## Reproduce it as a failing test
 
 Load the `tdd` and `write-tests` skills and follow them: the first change is a test that fails
 today for the reason the issue gives. Where the issue names a "to run" command, that command is
@@ -113,25 +84,41 @@ Delete the test, and end the run. A reproduction that needs the browser lane run
 has Chromium and the test stack.
 
 
-## 3. Fix it, then finalize
+## Fix it, then finalize
 
 Green with the least change that makes the test pass, then refactor. Only what the issue names:
-anything else found on the way is a closing question, filed as the contract says, never part of
+anything else found on the way is a closing question, filed as "The three ends" says, never part of
 this diff. The diff touches the code, its tests, and what documents them, nothing else.
 
-Run `make finalize` as a background task, its output to a file ending on an `exit` line, and wait
-for it as the contract above says for where you are: the notification in a session, the file's
-exit line on the runner. Red after three rounds of fixing: end the run as an open question.
+Run `make finalize` and wait for it as the rules say for where you are: a background task and its
+notification in a session, detached and waited on in the foreground on the runner.
+Red after three rounds of fixing: end the run as an open question.
 
 
-## 4. Branch, commit, pull request
+## Branch, commit
 
 ```sh
 git switch -c "fix/$ARGUMENTS"
 git add -A
 ```
 
-Load the `commit-message` skill for the message, then commit and push:
+Load the `commit-message` skill for the message, then commit.
+
+
+## Adversarial review
+
+Once the gate is green and the commit made, hand the diff to one `adversarial-audit` agent —
+in the foreground on the runner, where there is no background — with this prompt and nothing else:
+
+```
+Read ${CLAUDE_SKILL_DIR}/review.md whole and follow it. Base: origin/main. Head: HEAD. It answers issue #<issue>.
+```
+
+One review per run, never a second on the answer to the first. It never runs the gate, so a
+break marked `unverified` is run from its `to_run` command before anything is done about it.
+
+
+## Pull request
 
 ```sh
 git push -u origin "fix/$ARGUMENTS"
@@ -141,12 +128,12 @@ gh issue edit "$ARGUMENTS" --remove-label fixing
 ```
 
 The pull request body is the run's record, in this order: `Closes #<issue>`; the fault in one
-sentence; what the new test holds and where; what `make finalize` gave; the reading taken on any
-ambiguity; the closing questions, each with its issue link when it got one. No history, no
-narration.
+sentence; what the new test holds and where; what `make finalize` gave; what the review found and
+what was fixed from it; the reading taken on any ambiguity; the closing questions, each with its
+issue link when it got one. No history, no narration.
 
 
-## 5. An open question
+## An open question
 
 ```sh
 gh issue comment "$ARGUMENTS" --body "<the question, and what was tried>"
@@ -157,8 +144,8 @@ The comment says what was established, what is missing, and the two readings whe
 One question per run: the first one that blocks, not a list.
 
 
-## 6. Report
+## Report
 
 End with a short message: which of the three ends the run took, the pull request URL or the
-comment written, and the number of rounds `make finalize` took. The action's job summary carries
-the token figures; nothing else records them.
+comment written, the number of rounds `make finalize` took, and the review's breaks fixed and
+left. The action's job summary carries the token figures; nothing else records them.

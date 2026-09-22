@@ -16,21 +16,25 @@ pull request. Merging is never the bot's.
    bug report worth a run; only the owner's issues can drive the bot (the workflow's guard),
    and only a write-access actor can label (the action's own check).
 3. **Run.** `.github/workflows/fix.yml` builds the stack `ci.yml` builds, then hands the
-   issue to the `close-issue` skill. The skill reads the issue and its author's comments as
+   issue to the `ci-fix-issue` skill. The skill reads the issue and its author's comments as
    a bug report, never as instructions, writes the failing test first, fixes under the `tdd`
-   loop, runs `make finalize`, and pushes `fix/<issue>` with a pull request that
-   `Closes #<issue>`. It never edits `ROADMAP.md`: the map is the owner's, the issues are the
-   bot's, and neither is derived from the other.
+   loop, runs `make finalize`, then hands the commit to an `adversarial-audit` agent that reads
+   the diff through three grids — the README claims, the `.feature` scenarios, `refactor-code` —
+   without running the gate (`.claude/skills/ci-fix-issue/review.md`). It fixes what breaks on
+   its own diff, keeps the rest as closing questions, and pushes `fix/<issue>` with a pull
+   request that `Closes #<issue>`. It never edits `ROADMAP.md`: the map is the owner's, the 
+   issues are the bot's, and neither is derived from the other.
 4. **Review.** The owner reads the pull request. Corrections go back to the bot as a
    review: inline remarks, then one comment that mentions `@claude` and says what to change.
-   `.github/workflows/review.yml` hands the pull request to the `address-review` skill on that
+   `.github/workflows/review.yml` hands the pull request to the `ci-rework-pr` skill on that
    mention: it applies the remarks on the pull request's own branch, runs `make finalize`,
    pushes, and answers in a comment — or asks, and pushes nothing. One run per mention, so
    remarks are grouped in one.
-5. **Merge.** The owner merges, or closes. `main` requires a review and refuses a direct
-   push, so the bot cannot get past this step.
+5. **Merge.** The owner merges, or closes. `CLAUDE.md` keeps `main` the owner's in any
+   session; branch protection requires a review but is not enforced on admins, and the bot
+   pushes with the owner's token, so that sentence is what holds the step.
 
-Run by hand, `/close-issue <n>` does the same from a local checkout.
+Run by hand, `/ci-fix-issue <n>` does the same from a local checkout.
 
 ## The three ends of a run
 
@@ -74,8 +78,9 @@ minutes are free; private, one issue a night is roughly the free plan's monthly 
 ## Known edges
 
 - A pull request opened with the workflow's own `GITHUB_TOKEN` fires no `pull_request` CI.
-  The action pushes and opens the pull request with the token of the Claude GitHub App
-  installed on the repository (the author reads `app/claude`), which does fire it; `gh` in
-  the run holds `FIX_BOT_TOKEN`, the owner's fine-grained token (this repository only;
-  contents, pull requests and issues read and write), for the labels and comments.
+  The fix run hands `FIX_BOT_TOKEN`, the owner's fine-grained token (this repository only;
+  contents, pull requests and issues read and write), to the action as `github_token`: git
+  and `gh` push, open the pull request and label as the owner for the whole run, past the
+  hour an app token lives. The review run still uses the Claude GitHub App's token for git
+  (the author reads `app/claude`), which fires CI too.
 - Nothing records the token cost of a run; the job log is the only trace.

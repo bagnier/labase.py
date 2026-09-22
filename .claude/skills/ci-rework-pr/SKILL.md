@@ -1,13 +1,13 @@
 ---
-name: address-review
+name: ci-rework-pr
 description: >
   Takes one pull request the owner handed back with a review and a `@claude` mention, applies
   what the review asks on the pull request's own branch, runs the gate, pushes, and answers in a
   comment. A run ends pushed, or on a question, never on a wait.
 
-  Do NOT use for: an issue (close-issue), or a review the owner did not send back.
+  Do NOT use for: an issue (ci-fix-issue), or a review the owner did not send back.
 when_to_use: >
-  "/address-review 8", "adresse la review de la PR 8", "reprends la PR 8" — and the review
+  "/ci-rework-pr 8", "adresse la review de la PR 8", "reprends la PR 8" — and the review
   workflow, which runs it on the runner for every `@claude` mention on a pull request.
 argument-hint: "<pull request number>"
 disable-model-invocation: true
@@ -16,12 +16,8 @@ disable-model-invocation: true
 This skill answers one review on one pull request and nothing else. The user is away for the
 whole run, and nobody will answer during it. The pull request number is "$ARGUMENTS".
 
-The contract of `close-issue` applies whole: the `Git is mine` exception on the pull request's
-own branch, never on `main`, never a merge; and on the runner (`GITHUB_ACTIONS` is `true`) its
-three flipped rules — **waiting** (a gate longer than the shell timeout runs detached and is
-waited on in the foreground with the commands that contract spells out, never a `Monitor`;
-nothing brings the run back, and the turn ends on a push or a comment, never on a wait), **rendering** (no screenshot), **asking** (nobody answers: a question is a
-comment). Read that skill's contract before going on.
+It commits and pushes on the pull request's own branch only, never on `main`, never a merge. On
+the runner (`GITHUB_ACTIONS` is `true`), the non-interactive rules apply.
 
 
 ## The two ends of a run
@@ -39,7 +35,7 @@ A remark that is a critique with no ask — "weak tests" — is an ask: read the
 be inferred is the question.
 
 
-## 1. Where you are, then the pull request and its thread
+## Where you are, then the pull request and its thread
 
 ```sh
 printenv GITHUB_ACTIONS || echo "not on the runner"
@@ -62,39 +58,56 @@ gh pr checkout "$ARGUMENTS"
 ```
 
 
-## 2. Apply
+## Apply
 
-Load the `tdd` skill before touching code, `write-tests` before touching a test, as
-`CLAUDE.md` says. Only what the review asks: a fault found on the way is a comment, never part
-of this push. A remark that would change what `README.md` says is a question.
-
-
-## 3. Finalize
-
-Run `make finalize` as a background task, its output to a file ending on an `exit` line, and
-wait for it as the contract says: the file's exit line on the runner, the notification in a
-session. Red after three rounds: end the run as a question.
+Load the `tdd` skill before touching code, `write-tests` before touching a test. Only what the 
+review asks: a fault found on the way is a comment, never part of this push. A remark that would 
+change what `README.md` says is a question.
 
 
-## 4. Commit, push, answer
+## Finalize
+
+Run `make finalize` and wait for it as the rules say for where you are: a background task and its
+notification in a session, detached and waited on in the foreground on the runner.
+Red after three rounds: end the run as a question.
+
+
+## Commit
 
 ```sh
 git add -A
 ```
 
-Load the `commit-message` skill for the message, then commit and push to the pull request's own
-branch:
+Load the `commit-message` skill for the message, then commit.
+
+
+## Adversarial review
+
+Before the push, hand the new commit to one `adversarial-audit` agent — in the foreground on 
+the runner — with the brief `ci-fix-issue` uses, and nothing else:
+
+```
+Read .claude/skills/ci-fix-issue/review.md whole and follow it. Base: HEAD~1. Head: HEAD. It 
+answers the review of pull request #<number>.
+```
+
+One review per run, never a second on the answer to the first. It never runs the gate, so a
+break marked `unverified` is run from its `to_run` command before anything is done about it.
+
+
+## Push, answer
 
 ```sh
 git push origin HEAD
 gh pr comment "$ARGUMENTS" --body "<what changed, in the review's order; what was read into a
-remark; what was left out and why; what make finalize gave>"
+remark; what was left out and why; what make finalize gave; what the adversarial review found
+and what was fixed from it>"
 ```
 
 No history, no narration. Never `--force`, never a rebase: the branch's history is the review's.
 
 
-## 5. Report
+## Report
 
 End with a short message: which end the run took, the commit pushed or the comment written,
-and the number of rounds `make finalize` took.
+the number of rounds `make finalize` took, and the review's breaks fixed and left.

@@ -1,11 +1,3 @@
-<!-- charm:readme-first -->
-## Before you start
-
-Read `README.md` first.
-<!-- /charm:readme-first -->
-
-@README.md
-
 <!-- charm:general-guidance -->
 ## General guidance
 
@@ -20,15 +12,50 @@ Read `README.md` first.
   the substance. This outranks the no-openers rule above: returning a joke is courtesy to
   the person, not flattery of the idea.
 - Command slower than 1s: never `| tail`, always `> /tmp/<file>`.
-- Command slower than 10s: never `timeout `, always run in background.
-- Never wait on background task — no `until`/`sleep`, the completion notification brings you 
-  back.
 - Skip files over 100KB unless explicitly required.
 - A file an instruction names is read whole: `Read`, not `cat | head`. Truncating to save
   context decides what matters before knowing what is there.
 - Any change to code starts from a failing test — the `tdd` loop, whether or not the request
-  says so.
+  says so. A test holds a rule; a declared value (a cron, a token, an env var) is justified by
+  its comment, never restated in a test.
 - User instructions may override this general guidance.
+
+
+## Interactive session
+
+- Command slower than 10s: never `timeout `, always run in background.
+- Never wait on background task — no `until`/`sleep`, the completion notification brings you 
+  back.
+
+
+## Non Interactive session
+
+When you run on Github (`GITHUB_ACTIONS` is `true`), the user is away for the whole run, 
+and nobody will answer during it. Run every step to the end without waiting for a confirmation. 
+
+On the runner, three more rules flip, and only there:
+
+- **Waiting.** Nothing brings the run back: no notification, no `Monitor`, no scheduled wakeup,
+  no cron — a tool that promises to call back ends the run, and the interactive "the completion
+  notification brings you back" is false here. A gate longer than the shell timeout runs
+  detached and is waited on in the foreground. Start it, keeping its PID:
+  ```sh
+  nohup bash -c 'make finalize > /tmp/finalize.log 2>&1; echo "exit:$?" >> /tmp/finalize.log' \
+    > /dev/null 2>&1 & echo $!
+  ```
+  then wait, the Bash call's timeout at its 600000 ms maximum, and make the same call again
+  until the log ends on its `exit:` line:
+  ```sh
+  timeout 590 tail --pid=<PID> -f /dev/null; tail -n 20 /tmp/finalize.log
+  ```
+  The end of the turn is the end of the run, so it ends on a pull request or a comment, never
+  on a wait.
+
+- **Rendering.** No screenshot: the suite's browser lane is the render, and no MCP browser is
+  started on the runner.
+
+- **Asking.** Nobody answers. A question ends the run as a comment on the issue, never a wait.
+  
 <!-- /charm:general-guidance -->
 
 ## labase
@@ -48,7 +75,17 @@ Read `README.md` first.
 - Describe the CURRENT state, never the history; prune, dense and short.
 
 <!-- charm:no-autocommit -->
-## Git is mine
+## `main` git branch is mine
 
-In an interactive session, without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command. The one run with nobody at the keyboard, the `close-issue` skill on its `fix/<issue>` branch, has its own rules in the skill.
+In an interactive session, without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command. In any session, `main` is mine: no commit, push or merge on it.
+
 <!-- /charm:no-autocommit -->
+
+<!-- charm:readme-first -->
+## Before you start
+
+Read `README.md` first.
+
+@README.md
+
+<!-- /charm:readme-first -->

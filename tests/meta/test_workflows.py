@@ -1,11 +1,17 @@
-"""GitHub Actions workflows — the rules their triggers make easy to break."""
+"""GitHub Actions workflows — the rules their triggers make easy to break.
+
+A value that only configures (a cron, a token, an env var) is justified by its comment in the
+YAML, not restated here; a test holds a rule a later edit could break without noticing.
+"""
 
 from pathlib import Path
 
 import pytest
 import yaml
 
-_WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+_ROOT = Path(__file__).resolve().parents[2]
+_WORKFLOWS = _ROOT / ".github" / "workflows"
+_SKILLS = _ROOT / ".claude" / "skills"
 _FIX = _WORKFLOWS / "fix.yml"
 
 # The two workflows that run Claude headless: one issue to a pull request, one review to a push.
@@ -16,10 +22,15 @@ def _fix_job() -> dict:
     return yaml.safe_load(_FIX.read_text())["jobs"]["fix"]
 
 
-def _claude_args(workflow: str) -> str:
+def _only_job(workflow: str) -> dict:
     (job,) = yaml.safe_load((_WORKFLOWS / workflow).read_text())["jobs"].values()
-    step = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("anthropics/"))
-    return step["with"]["claude_args"]
+    return job
+
+
+def _action_step(workflow: str) -> dict:
+    return next(
+        s for s in _only_job(workflow)["steps"] if str(s.get("uses", "")).startswith("anthropics/")
+    )
 
 
 def test_a_skipped_fix_run_cannot_cancel_the_live_one():
@@ -31,75 +42,16 @@ def test_a_skipped_fix_run_cannot_cancel_the_live_one():
     assert ("concurrency" in workflow, "concurrency" in workflow["jobs"]["fix"]) == (False, True)
 
 
-def test_one_fix_at_a_time_whatever_labels_were_put_on():
-    """The pace is one fix in flight: two `auto-fix` labels put on by hand queue, they do not run
-    side by side — one group for the whole bot, and no cancellation, so the second waits."""
-    assert _fix_job()["concurrency"] == {"group": "fix-bot", "cancel-in-progress": False}
-
-
-def test_the_tick_runs_on_a_cron_and_labels_with_the_owner_s_token():
-    """A label put on with the job's own GITHUB_TOKEN fires no workflow, so the tick would queue
-    forever; it labels as the owner, on GitHub's own clock, with no Claude run of its own."""
-    workflow = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())
-    (job,) = workflow["jobs"].values()
-
-    assert (
-        "schedule" in workflow[True],  # `on:` reads as the YAML boolean
-        job["env"]["GH_TOKEN"],
-        [s for s in job["steps"] if str(s.get("uses", "")).startswith("anthropics/")],
-    ) == (True, "${{ secrets.FIX_BOT_TOKEN }}", [])
-
-
-def test_the_end_of_a_fix_run_ticks_without_waiting_for_the_cron():
-    """GitHub's schedule is best effort: the `*/15` cron fired once in six hours on 2026-09-21,
-    and the queue sat still behind it. Every Fix run that ends — the live one and the skipped
-    ones its labels fire — asks the tick; the tick itself decides whether the way is clear."""
-    workflow = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())
-
-    assert workflow[True].get("workflow_run") == {"workflows": ["Fix"], "types": ["completed"]}
-
-
 def test_a_fork_s_workflow_named_fix_cannot_tick():
     """`workflow_run` matches the upstream workflow by name, so a fork's pull request can add its
     own "Fix" and fire the tick with the base repository's secrets. A Fix run fired by an issue
     has this repository as its head; a fork's does not."""
-    (job,) = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())["jobs"].values()
+    job = _only_job("tick.yml")
 
     assert job.get("if") == (
         "github.event_name != 'workflow_run' || "
         "github.event.workflow_run.head_repository.full_name == github.repository"
     )
-
-
-def test_two_ticks_never_read_the_way_clear_at_once():
-    """A run's closing label fires a skipped Fix run that ends with the live one: two ticks both
-    reading the way clear would hand out two issues, and the second `auto-fix` waits in the Fix
-    group, where a third cancels it before its `stalled` step can run."""
-    (job,) = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())["jobs"].values()
-
-    assert job.get("concurrency") == {"group": "tick", "cancel-in-progress": False}
-
-
-def test_the_tick_hands_out_only_the_issues_the_fix_bot_will_take():
-    """The Fix job skips an issue the owner did not write; handed `auto-fix`, it would keep the
-    label with no run behind it, and the tick waits on `auto-fix` forever."""
-    (job,) = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())["jobs"].values()
-    script = job["steps"][0]["run"]
-    command = script.split("next=$(")[1].split(")\n")[0]
-
-    assert " ".join(command.replace("\\", " ").split()) == (
-        'gh issue list --state open --label queued --author "$GITHUB_REPOSITORY_OWNER" '
-        '--search "-label:question -label:stalled sort:created-asc" '
-        "--limit 1 --json number --jq '.[0].number // empty'"
-    )
-
-
-def test_the_tick_s_cron_stays_off_the_quarter_hours():
-    """GitHub drops scheduled runs under load, and the start of every hour is where the load
-    sits — :00, :15, :30, :45 are everyone's `*/15`. The net fires seven minutes past them."""
-    workflow = yaml.safe_load((_WORKFLOWS / "tick.yml").read_text())
-
-    assert workflow[True]["schedule"] == [{"cron": "7,22,37,52 * * * *"}]
 
 
 @pytest.mark.parametrize("workflow", _BOTS)
@@ -108,7 +60,8 @@ def test_the_bot_cannot_hand_its_turn_to_a_harness_that_never_returns(workflow):
     model back later (`ScheduleWakeup`, a cron, a `Monitor`) ends the run with nothing pushed —
     the first Sonnet run did exactly that while `make finalize` was still running, and the #12
     run did it again through a `Monitor` the allowed list handed it."""
-    flags = [line.split(maxsplit=1) for line in _claude_args(workflow).splitlines() if line.strip()]
+    args = _action_step(workflow)["with"]["claude_args"]
+    flags = [line.split(maxsplit=1) for line in args.splitlines() if line.strip()]
     allowed, disallowed = (
         {name for flag, rest in flags if flag == wanted for name in rest.strip('"').split(",")}
         for wanted in ("--allowedTools", "--disallowedTools")
@@ -122,35 +75,19 @@ def test_a_review_run_answers_the_owner_s_mention_only():
     """The review workflow fires on every comment of a public repository; the job runs only for
     a body that mentions `@claude`, written by the owner — the action's own write-access check
     is the other half of that guard."""
-    (job,) = yaml.safe_load((_WORKFLOWS / "review.yml").read_text())["jobs"].values()
+    job = _only_job("review.yml")
 
     assert ("@claude" in job["if"], "repository_owner" in job["if"]) == (True, True)
 
 
-def test_each_headless_run_is_a_skill_with_the_runner_s_rules():
-    """The mention mode left the review run without a skill, and it ended its turn waiting for
-    `make finalize` like the fix run once did. Every headless run is a skill invocation: the
-    skill carries the runner's rules — waiting, rendering, asking — the workflow only names it."""
-    prompts = {}
-    for workflow in _BOTS:
-        (job,) = yaml.safe_load((_WORKFLOWS / workflow).read_text())["jobs"].values()
-        step = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("anthropics/"))
-        prompts[workflow] = step["with"]["prompt"].split(" ")[0]
+def test_each_headless_run_invokes_a_skill_that_exists():
+    """Every headless run is a skill invocation — the skill and `CLAUDE.md` carry the runner's
+    rules, the workflow only names it. A name no skill answers to leaves the run with a bare
+    prompt and none of those rules, and nothing else fails."""
+    invoked = {_action_step(w)["with"]["prompt"].split(" ")[0].removeprefix("/") for w in _BOTS}
+    existing = {path.parent.name for path in _SKILLS.glob("*/SKILL.md")}
 
-    assert prompts == {"fix.yml": "/close-issue", "review.yml": "/address-review"}
-
-
-def test_a_fix_run_past_the_hour_still_pushes_on_the_owner_s_token():
-    """Given no token, the action swaps OIDC for an app token that dies after an hour and hands it
-    to git and gh: the #11 run committed at 73 minutes, then every push and `gh` call got a 401.
-    Given the owner's token, it mints nothing, so the job has no OIDC permission to ask for."""
-    workflow = yaml.safe_load(_FIX.read_text())
-    step = next(s for s in _fix_job()["steps"] if str(s.get("uses", "")).startswith("anthropics/"))
-
-    assert (step["with"].get("github_token"), workflow["permissions"]) == (
-        "${{ secrets.FIX_BOT_TOKEN }}",
-        {"contents": "write", "pull-requests": "write", "issues": "write"},
-    )
+    assert invoked - existing == set()
 
 
 def test_a_run_that_dies_does_not_leave_the_issue_on_fixing():

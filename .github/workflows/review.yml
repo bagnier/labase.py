@@ -90,9 +90,14 @@ jobs:
       # `make finalize`, with the strengthened test lost on the runner.
       - name: Address the review
         uses: anthropics/claude-code-action@v1
+        # As in fix.yml: no background task, whose notification never reaches a headless run, and
+        # ten minutes for a foreground call.
+        env:
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          BASH_DEFAULT_TIMEOUT_MS: "600000"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: "/address-review ${{ github.event.issue.number || github.event.pull_request.number }}"
+          prompt: "/ci-rework-pr ${{ github.event.issue.number || github.event.pull_request.number }}"
           show_full_output: true
           display_report: true
           claude_args: |

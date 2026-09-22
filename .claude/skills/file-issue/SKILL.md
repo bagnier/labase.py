@@ -5,7 +5,7 @@ description: >
   a ROADMAP.md line, an audit break, a failing test, a sentence from the user. Fills the form's
   sections, runs `gh issue create`, never puts `auto-fix` on.
 
-  Do NOT use for: fixing anything (close-issue), or finding what is wrong (maintain-principles).
+  Do NOT use for: fixing anything (ci-fix-issue), or finding what is wrong (maintain-principles).
 when_to_use: >
   "/file-issue", "file une issue", "crée une issue pour", "fais-en une issue", "file les bugs du
   ROADMAP" — or whenever a fault is established and someone says it should become an issue.
@@ -13,7 +13,7 @@ argument-hint: "<what names the fault: a ROADMAP line, a path, a sentence>"
 disable-model-invocation: true
 ---
 
-An issue is the fix bot's whole brief, so it carries the four things `close-issue` takes from it
+An issue is the fix bot's whole brief, so it carries the four things `ci-fix-issue` takes from it
 and nothing else: the fault, the direction, the reproduction, the links. Its shape is the `Bug`
 form's, `.github/ISSUE_TEMPLATE/bug.yml`: read the form first, and write the body with its
 sections, under its labels, in its order — the form is the one place the shape is stated.
