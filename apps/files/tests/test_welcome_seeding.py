@@ -40,6 +40,11 @@ async def test_a_seeder_whose_owner_is_already_gone_is_a_clean_no_op():
     ghost_org, ghost_owner = uuid.uuid7(), uuid.uuid7()  # neither exists
 
     async with db.admin_session_factory()() as session:
-        await _seed_welcome(session, ghost_org, ghost_owner)
+        try:
+            await _seed_welcome(session, ghost_org, ghost_owner)
+        finally:
+            stranded = await _objects_under(ghost_org)
+            if stranded:  # a red run leaves the very blob this test is about
+                await admin_storage().from_(bucket()).remove([f"{ghost_org}/{n}" for n in stranded])
 
-    assert await _objects_under(ghost_org) == []
+    assert stranded == []
