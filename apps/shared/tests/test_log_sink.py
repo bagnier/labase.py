@@ -236,7 +236,8 @@ async def test_a_store_that_comes_back_says_what_the_outage_cost(log_chain, stor
 @pytest.mark.parametrize("level", ["INFO", "WARNING", "ERROR"])
 async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog, store, level):
     """``timeline.log_level`` quiets the sink's ordinary lines, never its own outage and
-    recovery (README: the outage said once on each transition, whatever the level)."""
+    recovery (AGENTS: the log sink — the outage said once on each transition, whatever the
+    level)."""
     apply_log_level(level)
     writer = LogDrain(interval_seconds=0)
     with _a_store_that_refuses():
@@ -250,4 +251,12 @@ async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog
         for r in caplog.records
         if r.msg.get("event", "").startswith("log_sink.write_")
     )
-    assert transitions == ["log_sink.write_failed", "log_sink.write_recovered"]
+    # The recovery announcement is enqueued *after* the successful write it reports, so — unlike
+    # the outage announcement, drained by that same write — it is still what the queue holds: the
+    # direct proof that it reached the sink's own pipeline (``log_processor``), not just a caplog
+    # record that never made it past the console.
+    queued = [line.name for line in log_chain()]
+    assert (transitions, queued) == (
+        ["log_sink.write_failed", "log_sink.write_recovered"],
+        ["log_sink.write_recovered"],
+    )

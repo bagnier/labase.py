@@ -55,9 +55,12 @@ log = structlog.get_logger(__name__)
 # with ``wrap_logger``, outside ``structlog.configure()``'s global state, immune to
 # ``apply_log_level`` re-pointing the console's filtering wrapper class. The underlying stdlib
 # logger is pinned to its own floor for the same reason: unpinned, it would inherit the root
-# logger's level, which ``apply_log_level`` raises too.
+# logger's level, which ``apply_log_level`` raises too. The processors are ``chain.py``'s own
+# shared ones, copied rather than imported: ``chain.py`` imports this module, so the reverse
+# import would cycle. Named ``_log`` (not ``_logger``) so it cannot shadow ``log_processor``'s
+# own ``_logger`` parameter below.
 logging.getLogger(__name__).setLevel(logging.INFO)
-_logger = structlog.wrap_logger(
+_log = structlog.wrap_logger(
     logging.getLogger(__name__),
     wrapper_class=structlog.stdlib.BoundLogger,
     processors=[
@@ -186,10 +189,10 @@ def report_write_outage() -> None:
         # ``warning``, not ``error``: the batch is not lost, it went to the day files. What the
         # code could not carry through and absorbed is precisely the warning half of the doctrine
         # — and ``error`` with no exception behind it is the one level the capture seam skips.
-        _logger.warning("log_sink.write_failed")
+        _log.warning("log_sink.write_failed")
     elif not _outage.refusing and _outage.announced:
         _outage.announced = False
-        _logger.info("log_sink.write_recovered", lines=_outage.lines)
+        _log.info("log_sink.write_recovered", lines=_outage.lines)
         _outage.lines = 0
 
 
