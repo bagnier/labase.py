@@ -1,9 +1,11 @@
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
 import pytest_asyncio
+import structlog
 from fastapi import Depends, FastAPI
 from fastapi.dependencies.models import Dependant
 from fastapi.dependencies.utils import get_dependant
@@ -14,7 +16,9 @@ from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
 from apps.auth.domain.service import AuthTokens, login
 from apps.auth.infra.security import get_current_user
+from apps.auth.infra.security import log as security_log
 from apps.shared.integration.contribs import Contribs
+from apps.shared.logs import capture
 from apps.shared.persistence import database as db
 from apps.shared.persistence.database import get_admin_session
 
@@ -107,6 +111,41 @@ async def test_valid_token_returns_user(client, test_user):
     response = await client.get("/me")
     assert response.status_code == 200
     assert response.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_api_key_auth_lets_a_captured_issue_keep_its_user():
+    """capture.py's _SCALARS filter (str | int | float | bool | None) keeps only scalars in a
+    captured issue's context — an API-key request's user_id must be one, the same way the
+    JWT path's already is (it binds payload["sub"], a string)."""
+    user_id = uuid.UUID("00000000-0000-0000-0000-000000000042")
+    principal = AuthenticatedUser(id=user_id, email="key@test.local")
+
+    @asynccontextmanager
+    async def _no_identity_yet(session):
+        yield
+
+    capture._QUEUE.clear()
+    structlog.contextvars.clear_contextvars()
+    with (
+        patch("apps.auth.infra.security._resolve_api_key", return_value=principal),
+        patch("apps.auth.infra.security._before_identity", _no_identity_yet),
+    ):
+        await get_current_user(
+            response=MagicMock(),
+            authorization=f"Bearer {API_KEY_PREFIX}abc123",
+            session=MagicMock(),
+        )
+        try:
+            raise RuntimeError("boom")
+        except RuntimeError as exc:
+            security_log.exception("auth.probe_captured", exc_info=exc)
+
+    assert capture._QUEUE[-1].context == {
+        "event": "auth.probe_captured",
+        "logger": "apps.auth.infra.security",
+        "user_id": str(user_id),
+    }
 
 
 @pytest.mark.asyncio
