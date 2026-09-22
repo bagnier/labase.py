@@ -6,13 +6,14 @@ journal, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the deli
 producer no longer does — so it never knows its consumers nor waits for them:
 
 - **``on`` / async fan-out — exactly-once, per declared consumer.** Each durable consumer (a queue
-  topic) claims its own backlog off its own durable cursor (:meth:`EventRepository.topic_backlog`)
-  — never a flag on the record itself, which would let whichever instance checked a fact first
-  foreclose it for a consumer *that instance's* wiring simply does not carry (a rolling deploy; an
-  app switched on and not yet restarted everywhere — README: `dispatch per declared consumer`). A
-  fact is dispatched to a topic on first sight and the topic's cursor only advances past the
-  contiguous *settled* prefix, so a still-unsettled retry is possible — the ``dispatched_consumers``
-  ledger is what makes that retry a no-op rather than a second task (README: background work).
+  topic) claims its own backlog off its own durable cursor (:meth:`EventRepository.
+  facts_above_cursor`) — never a flag on the record itself, which would let whichever instance
+  checked a fact first foreclose it for a consumer *that instance's* wiring simply does not carry
+  (a rolling deploy; an app switched on and not yet restarted everywhere — README: `dispatch per
+  declared consumer`). A fact is dispatched to a topic on first sight and the topic's cursor only
+  advances past the contiguous *settled* prefix, so a still-unsettled retry is possible — the
+  ``dispatched_consumers`` ledger is what makes that retry a no-op rather than a second task
+  (README: background work).
 - **Routability, separately.** Each tick also claims un-checked records with ``FOR UPDATE SKIP
   LOCKED`` and stamps ``checked_at`` — bounding a single, unrelated concern: a fact whose ``kind``
   maps to no registered class can be routed to no one, ever, and is surfaced as an issue once.
@@ -50,10 +51,18 @@ NOTIFY_CHANNEL = "business_event"
 
 # How long a fact stays replayable before a cursor (spread's, or a durable consumer's own) is
 # allowed past it. A key is minted at INSERT, so a fact can surface below a cursor that already
-# passed it (see ``scan_spread``); the only thing bounding how far below is how long its
+# passed it (see ``facts_above_cursor``); the only thing bounding how far below is how long its
 # transaction stayed open. This is that bound, stated — well past any request or queue task, and
 # paid for only by re-reading an indexed range of facts nobody is producing most of the time.
 SETTLE_SECONDS = 60.0
+
+
+def _kinds_of(event_type: type[BusinessEvent]) -> list[str]:
+    """Every catalog-registered kind whose class is ``event_type`` or one of its subclasses — the
+    inverse of :meth:`~apps.shared.events.wiring.EventWiring.consumers_of`'s MRO walk, needed here
+    because a fact's *own* concrete kind is what the journal is queried by, not the (possibly
+    abstract) type a reaction was registered against."""
+    return [kind for kind, cls in catalog.kinds().items() if issubclass(cls, event_type)]
 
 
 class UnroutableFact(Exception):
@@ -141,19 +150,22 @@ class EventListener:
         lacks (a disabled app, an older deploy) is simply not iterated here, so it neither claims
         nor forecloses anything for a wiring that does carry it.
 
-        Each fact above a topic's cursor is dispatched on first sight, immediately — the ledger
-        (:meth:`~apps.shared.events.repository.EventRepository.dispatch_consumer`) is what makes a
-        retry, before the cursor has caught up to the settle window, a no-op rather than a second
-        task."""
-        for event_type, reactions in self._wiring.reactions().items():
-            kind = event_type.kind
+        Each fact above a topic's cursor is dispatched on first sight, immediately, unbounded —
+        the same shape :meth:`_read_spread` reads (:meth:`~EventRepository.facts_above_cursor`),
+        so a burst larger than one batch is never left waiting behind its own cursor. The ledger
+        (:meth:`~EventRepository.dispatch_consumer`) is what makes a retry, before the cursor has
+        caught up to the settle window, a no-op rather than a second task."""
+        reactions_by_type = self._wiring.reactions()
+        if not reactions_by_type:
+            return
+        settled_before = await repo.settled_before(self._settle)
+        for event_type, reactions in reactions_by_type.items():
+            kinds = _kinds_of(event_type)
             for reaction in reactions:
                 cursor = await repo.lock_dispatch_cursor(reaction.topic)
                 if cursor is None:
                     continue  # another instance holds this topic's cursor this tick
-                found, settled_cursor = await repo.topic_backlog(
-                    kind, cursor, self._settle, self._batch
-                )
+                found, settled_cursor = await repo.facts_above_cursor(cursor, kinds, settled_before)
                 for record in found:
                     if await repo.dispatch_consumer(record.id, reaction.topic):
                         payload = task_payload(record)
@@ -167,16 +179,17 @@ class EventListener:
         this process already applied while they sat inside the settle window.
 
         The cursor trails the window on purpose, so a fact that commits late still surfaces above
-        it (see ``scan_spread``). What that costs is the same fact offered on every tick until it
-        settles, and this set is what keeps the handler from being run again for it — the reason
-        a late commit is caught without a config reload firing sixty times over.
+        it (see ``facts_above_cursor``). What that costs is the same fact offered on every tick
+        until it settles, and this set is what keeps the handler from being run again for it — the
+        reason a late commit is caught without a config reload firing sixty times over.
         """
         kinds = self._wiring.spread_kinds()
         if not kinds:
             return []
         # Nil-uuid sentinel on first pass: uuid7 is version-tagged, so it always sorts above nil.
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
-        found, settled = await repo.scan_spread(cursor, kinds, self._settle)
+        settled_before = await repo.settled_before(self._settle)
+        found, settled = await repo.facts_above_cursor(cursor, kinds, settled_before)
         fresh = [record for record in found if record.id not in self._spread_applied]
         self._spread_cursor = settled
         # Only what the cursor has not passed: below it nothing is ever scanned again, so

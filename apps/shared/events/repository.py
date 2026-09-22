@@ -239,7 +239,8 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
         model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate in
         an otherwise ORM query. Bounds the *routability* check alone (an unrecognized ``kind``
         surfaced as an issue): per-consumer delivery is a separate, per-topic cursor (see
-        :meth:`topic_backlog`), so this marker no longer gates whether a consumer gets its task."""
+        :meth:`facts_above_cursor`), so this marker no longer gates whether a consumer gets its
+        task."""
         claimed = await self.session.scalars(
             select(BusinessEventRecord)
             .where(sql_text("checked_at IS NULL"))
@@ -283,32 +284,6 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
             {"cursor": cursor, "topic": topic},
         )
 
-    async def topic_backlog(
-        self, kind: str, cursor: uuid.UUID, settle_seconds: float, batch: int
-    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
-        """A topic's own backlog above its cursor, and the cursor it may safely advance to.
-
-        Mirrors :meth:`scan_spread`'s id/commit-order reasoning exactly, for one kind and bounded
-        by ``batch``: every record above ``cursor`` is returned (and so dispatched on first sight,
-        by the caller — retries before it settles are deduplicated through
-        ``dispatched_consumers``, see :meth:`dispatch_consumer`), but the cursor itself only
-        advances to the contiguous *settled* prefix, so a fact that committed late, under a lower
-        id, is never skipped."""
-        settled_before = await self.session.scalar(
-            sql_text("SELECT now() - make_interval(secs => :settle)"),
-            {"settle": settle_seconds},
-        )
-        found = list(
-            await self.session.scalars(
-                select(BusinessEventRecord)
-                .where(BusinessEventRecord.id > cursor, BusinessEventRecord.kind == kind)
-                .order_by(BusinessEventRecord.id)
-                .limit(batch)
-            )
-        )
-        settled = list(takewhile(lambda record: record.created_at < settled_before, found))
-        return found, (settled[-1].id if settled else cursor)
-
     async def dispatch_consumer(self, event_id: uuid.UUID, topic: str) -> bool:
         """Insert-or-nothing against the ``dispatched_consumers`` ledger — ``True`` the first time
         this (event, topic) pair is seen, which is when the caller must actually enqueue the task;
@@ -322,28 +297,38 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
         )
         return result.first() is not None
 
-    async def scan_spread(
-        self, cursor: uuid.UUID, kinds: list[str], settle_seconds: float
-    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
-        """The ``spread`` facts above ``cursor``, and the cursor its reader may safely take next.
-
-        No lock and no dispatch mark — a ``spread`` handler runs on *every* instance, each
-        replaying off its own cursor. What that cursor may not do is outrun the commits. A key is
-        minted at INSERT, not at commit, so a slow transaction commits *after* a quick one that
-        started later: the slow fact surfaces holding the lower key, below a cursor that has
-        already passed it, and ``id > cursor`` never offers it again. Neither claim nor ledger
-        stands behind ``spread`` to catch what the comparison skipped.
-
-        Time is what bounds it, and nothing else does: a fact still invisible belongs to a
-        transaction still open, so once ``settle_seconds`` have passed no unseen key can be older
-        than that. The cursor therefore stops at the last fact that old, and everything above it
-        comes back on every tick until it settles — the reader skips what it already applied,
-        which is why a replay costs nothing here.
-        """
-        settled_before = await self.session.scalar(
+    async def settled_before(self, settle_seconds: float) -> datetime:
+        """The cutoff a cursor may safely advance to, read once and shared across every cursor a
+        tick moves (:meth:`facts_above_cursor` is called once per durable consumer, and reading
+        this itself per call would cost one more round trip per topic for a value none of them own
+        — it names how long a transaction may stay open, not who is asking)."""
+        return await self.session.scalar(
             sql_text("SELECT now() - make_interval(secs => :settle)"),
             {"settle": settle_seconds},
         )
+
+    async def facts_above_cursor(
+        self, cursor: uuid.UUID, kinds: list[str], settled_before: datetime
+    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
+        """The facts above ``cursor`` whose kind is one of ``kinds``, and the cursor its reader may
+        safely take next — shared by ``spread`` (a cursor per process, in memory) and the durable
+        per-consumer backlog (a cursor per topic, in ``event_dispatch_cursors``): both replay off a
+        cursor of their own, so both share the one hazard a cursor has and a claim does not.
+
+        What a cursor may not do is outrun the commits. A key is minted at INSERT, not at commit,
+        so a slow transaction commits *after* a quick one that started later: the slow fact
+        surfaces holding the lower key, below a cursor that has already passed it, and
+        ``id > cursor`` never offers it again. Neither claim nor ledger stands behind a cursor to
+        catch what the comparison skipped on its own.
+
+        Time is what bounds it, and nothing else does: a fact still invisible belongs to a
+        transaction still open, so once ``settled_before`` (:meth:`settled_before`) is passed no
+        unseen key can be older than that. The cursor therefore stops at the last fact that old,
+        and everything above it comes back on every tick until it settles — unbounded on purpose,
+        so a burst larger than one batch is never left waiting behind its own cursor; the caller is
+        what dedupes a replay (``spread``'s in-memory applied set, or the durable consumer's
+        ``dispatched_consumers`` ledger), which is why offering it again costs nothing here.
+        """
         found = list(
             await self.session.scalars(
                 select(BusinessEventRecord)

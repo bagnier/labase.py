@@ -6,8 +6,8 @@ touches — the signup trigger's rows, written inside GoTrue's own transaction w
 no session to join, and *every* row of ``business_events``, whose single writer
 ``record_business_event`` passes no id and so falls to the column default.
 
-That last one is what makes ordering load-bearing rather than decorative: the event listener
-reads ``business_events.id`` as a cursor (``scan_spread``'s ``id > cursor``), so a key sorting
+That last one is what makes ordering load-bearing rather than decorative: the event listener reads
+``business_events.id`` as a cursor (``facts_above_cursor``'s ``id > cursor``), so a key sorting
 below the one minted before it is a fact the cursor steps straight over.
 
 Read against the live stack, because the property belongs to the SQL function rather than to

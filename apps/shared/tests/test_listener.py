@@ -26,6 +26,13 @@ class _TailEvent(BusinessEvent):
     label: str | None = None
 
 
+class _TailEventSub(_TailEvent):
+    """A concrete subclass of a concrete (kinded) event — its own kind, distinct from its base's,
+    the shape a subscriber on the base must still reach (mirrors ``consumers_of``'s MRO walk)."""
+
+    verb = "happened_sub"
+
+
 @dataclass(frozen=True, kw_only=True)
 class _SpreadEvent(BusinessEvent):
     app_name = "test_listener"
@@ -453,5 +460,34 @@ async def test_a_wiring_without_the_consumer_does_not_foreclose_it_for_one_that_
 
     await EventListener(0, wiring=without_consumer).tick()
     await EventListener(0, wiring=with_consumer).tick()
+
+    assert await _topics() == ["evt:test_listener.happened:counter"]
+
+
+@pytest.mark.asyncio
+async def test_a_burst_larger_than_the_batch_size_is_dispatched_in_one_tick(iso):
+    """The backlog scan is unbounded, the same shape as its spread sibling — a small batch only
+    bounds the routability claim, never how much of a consumer's backlog one tick clears. A read
+    anchored at the cursor and capped at ``batch`` would otherwise starve anything past the first
+    batch until the whole window settles, however many ticks passed."""
+    events.on(_TailEvent, _noop, name="counter", app="test_listener", as_actor=False)
+    for _ in range(5):
+        await _seed(uuid.uuid7())
+
+    await EventListener(0, batch_size=2).tick()
+
+    assert await _topics() == ["evt:test_listener.happened:counter"] * 5
+
+
+@pytest.mark.asyncio
+async def test_a_consumer_registered_on_a_base_type_still_receives_a_subclass_fact(iso):
+    """Mirrors ``consumers_of``'s own MRO walk (see ``test_bus.py``): a subscriber on a concrete
+    base must still be reached by a concrete subclass's own, distinct kind."""
+    events.on(_TailEvent, _noop, name="counter", app="test_listener", as_actor=False)
+    await seed_fact(
+        BusinessEventRecord(app_name="test_listener", verb="happened_sub", user_id=uuid.uuid7())
+    )
+
+    await EventListener(0).tick()
 
     assert await _topics() == ["evt:test_listener.happened:counter"]
