@@ -1,64 +1,49 @@
-"""GoTrue answers the resend-confirmation request the same way for a known and an unknown
-address (no enumeration) — but only a known address is where anything happened. Only what
-happened is a fact. Driven by calling the handler directly with mocks."""
+"""A resend answers the same way for a known and an unknown address (no enumeration), but only an
+address with an account is where anything happened — only what happened is a fact."""
 
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-from fastapi import Request
-
-from apps.auth.domain.models import EmailAddress
-from apps.auth.infra.router import resend_confirmation_endpoint
+from sqlalchemy import text
 
 
-def _request() -> Request:
-    scope = {
-        "type": "http",
-        "method": "POST",
-        "path": "/auth/resend-confirmation",
-        "headers": [],
-        "query_string": b"",
-    }
+def _confirmation_resent_facts(driver) -> list[str]:
+    async def read() -> list[str]:
+        async with driver.test_session_factory()() as session:
+            rows = await session.execute(
+                text(
+                    "SELECT entity_name FROM business_events "
+                    "WHERE kind = 'auth.confirmation_resent'"
+                )
+            )
+            return [row.entity_name for row in rows]
 
-    async def receive() -> dict:
-        return {"type": "http.request", "body": b"", "more_body": False}
-
-    return Request(scope, receive)
-
-
-@pytest.mark.asyncio
-async def test_resend_confirmation_for_unknown_address_emits_no_fact():
-    users_settings = MagicMock(resend_confirmation_enabled=True)
-    admin_session = MagicMock()
-
-    with (
-        patch("apps.auth.infra.router.find_user_id_by_email", AsyncMock(return_value=None)),
-        patch("apps.auth.infra.router.resend_confirmation", AsyncMock()) as resend,
-        patch("apps.auth.infra.router.events.emit", AsyncMock()) as emit,
-    ):
-        await resend_confirmation_endpoint(
-            _request(), EmailAddress(email="ghost@example.com"), users_settings, admin_session
-        )
-
-    resend.assert_not_awaited()  # nothing to ask GoTrue for an address with no account
-    emit.assert_not_awaited()
+    return driver.run(read())
 
 
-@pytest.mark.asyncio
-async def test_resend_confirmation_for_a_known_address_emits_the_fact():
-    users_settings = MagicMock(resend_confirmation_enabled=True)
-    admin_session = MagicMock()
-    uid = uuid.uuid4()
+def test_a_resend_to_an_address_with_no_account_records_no_fact(driver):
+    driver.resend_confirmation_to("ghost@example.com")
 
-    with (
-        patch("apps.auth.infra.router.find_user_id_by_email", AsyncMock(return_value=uid)),
-        patch("apps.auth.infra.router.resend_confirmation", AsyncMock()) as resend,
-        patch("apps.auth.infra.router.events.emit", AsyncMock()) as emit,
-    ):
-        await resend_confirmation_endpoint(
-            _request(), EmailAddress(email="bob@example.com"), users_settings, admin_session
-        )
+    assert _confirmation_resent_facts(driver) == []
 
-    resend.assert_awaited_once()
-    emit.assert_awaited_once()
+
+def test_a_resend_to_an_unconfirmed_account_records_its_fact(driver):
+    driver.register_unconfirmed("pending-fact@example.com", "Test1234!")
+
+    driver.resend_confirmation_to("pending-fact@example.com")
+
+    assert _confirmation_resent_facts(driver) == ["pending-fact@example.com"]
+
+
+def test_an_address_with_no_account_still_costs_the_gotrue_call(driver):
+    """GoTrue's resend is doubled because the interaction is the behaviour: skipping the call for
+    an unknown address answers measurably faster, and that timing enumerates the accounts the
+    neutral message hides."""
+    asked: list[str] = []
+
+    async def resend(email: str) -> None:
+        asked.append(email)
+
+    with patch("apps.auth.infra.router.resend_confirmation", resend):
+        driver.resend_confirmation_to("ghost@example.com")
+
+    assert asked == ["ghost@example.com"]
