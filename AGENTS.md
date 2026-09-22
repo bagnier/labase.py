@@ -1,4 +1,4 @@
-## Principles
+## General
 
 
 ### Demo apps are disposable, the others loosely coupled
@@ -131,9 +131,10 @@ defensive `or {}` at every read, or a suppression added to tolerate either, is t
 annotation is wider than the truth.
 
 
-## The boilerplate
 
-### Architecture
+## Architecture
+
+### Each context splits its domain from its infrastructure
 
 Organized by **bounded context**, each split into `domain/` (business logic,
 framework-free) and `infra/` (router, repository, framework I/O):
@@ -142,17 +143,24 @@ framework-free) and `infra/` (router, repository, framework I/O):
 HTTP request → infra/router.py → domain/service.py → infra/repository.py → DB / external service
 ```
 
+### Routers own HTTP and nothing else
+
 Routers own HTTP and nothing else — parsing, serialization, status codes; no business
 logic, no direct DB access. Every business route answers three audiences from one
 handler: **JSON** (`wants_json`), **HTMX fragment** (partial templates named `_*.html`),
 or **full page** — the shared helpers in `apps/shared/http/` absorb the branching.
+
+### Everything a context needs lives in it
 
 Templates, tests, and BDD steps live with their context: `<context>/templates/`,
 `<context>/tests/e2e/` (incl. API + browser driver mixins), `<context>/tests/e2e/steps.py`.
 Shared layout sits in `apps/shared/templates/`, Gherkin `.feature` files in `features/`,
 and shared E2E drivers in `tests/e2e/drivers/`.
 
-### Integration — between apps, and with the admin console
+
+## Integration — between apps, and with the admin console
+
+### An app declares every surface it contributes
 
 Each bounded context exposes a single `mount(host)` entry point in its
 `contract/integration.py` — the FastAPI app is carried by `host.app`. The composition
@@ -176,7 +184,7 @@ nav entry, dashboard card, console stat and seeds automatically** — this is wh
 the demo apps disposable.
 
 
-#### A contract never exports a settings handle
+### A contract never exports a settings handle
 
 Handlers declare the app's `TodoSettings`
 dependency (`contract/current.py`) and get the request's effective values — org overrides
@@ -184,7 +192,7 @@ applied under `/{org_handle}`, server values elsewhere. Non-request code uses
 `get_settings("todo")`, plus `.for_org(session, org_id)` when an org is in hand.
 
 
-#### Two collaboration objects, two shapes
+### Two collaboration objects, two shapes
 
 Push (a fact happened) and pull (who contributes
 to this?) are different animals, so they are different objects — `host.events` (the
@@ -192,7 +200,7 @@ to this?) are different animals, so they are different objects — `host.events`
 type they carry, so there are no magic strings and no shared imports.
 
 
-#### `host.events` — push
+### `emit` records a fact and does only that
 
 `emit(event, session)` **persists** the `BusinessEvent` to the journal on
 the session the caller names — atomic with the action, so the fact commits iff the mutation commits
@@ -206,7 +214,7 @@ Reactions treat the fact as immutable history: one that finds its subject alread
 no-op, never a compensation.
 
 
-#### An app may subscribe to its own business event
+### An app may subscribe to its own business event
 
 The bus decouples twice: in **space** — the emitter never names its reactions — and in **time** — 
 the reaction runs after the producer's commit, in its own transaction. Only the first is about 
@@ -215,7 +223,7 @@ alerts on its own `issues.opened` because a failing alert must never roll back t
 recorded the failure. Otherwise it is a function call written the long way round.
 
 
-#### Signing in is one fact
+### Signing in is one fact
 
 A session delivered by a password, an OAuth round-trip, a passkey or a
 mailed confirmation link is the same event — `auth.signed_in` — carrying *how* it was obtained
@@ -234,7 +242,7 @@ out to its trackers by the capture drain with log-and-skip isolation, directly b
 exception it tracks.
 
 
-#### `host.contribs` — pull
+### A contribution is pulled, and a failing contributor is skipped
 
 A registry of contribution providers (an extension point),
 declared at mount and read synchronously on the request path — *not* events:
@@ -246,9 +254,9 @@ declared at mount and read synchronously on the request path — *not* events:
 | **Used for**   | dashboard/console cards, org nav, settings sections | `OverviewQuery`, `ConsoleOverviewQuery`, `OrgNavQuery`, `ApiKeyQuery` |
 
 
-#### Sign-up event chain
+### Sign-up is a chain of durable reactions
 
-the signup trigger records `UserCreated` on GoTrue's own transaction
+The signup trigger records `UserCreated` on GoTrue's own transaction
 (atomic with the account); a **durable async consumer** then creates the user's personal org and
 persists `OrgCreated`, whose welcome seeders are themselves durable async consumers — every reaction
 delivered by the event listener off the journal (retried and parked on failure, never on the signup's
@@ -264,7 +272,7 @@ signup → trigger records UserCreated → organizations: creates personal org �
 ```
 
 
-#### Dashboard query
+### The dashboard collects one card per app
 
 
 ```
@@ -274,7 +282,7 @@ GET /{org}/ → contribs.collect(OverviewQuery)
 ```
 
 
-#### Import downward, event upward
+### Import downward, event upward
 
 When one context reaches another, the dependency direction
 picks the mechanism:
@@ -295,10 +303,11 @@ a smell — reach for an event (an import-linter contract enforces the one-way e
 never imports organizations). Runtime publishers/collectors reach the process-wide `bus`
 singleton (`apps.shared.events.bus`) directly; `host.events` is that same bus, wired at mount.
 
-### Observability
+
+## Observability
 
 
-#### The journal — what changed the domain
+### The journal records what changed the domain
 
 A sensitive domain action is a typed, frozen
 `BusinessEvent`, its `kind` (`todo.ticked`, `organizations.renamed`) derived from an app prefix and
@@ -310,7 +319,7 @@ request's critical path. A fact has no severity: it happened. `emit` logs nothin
 an action shows up once, not twice.
 
 
-#### The log sink — a trace of the machinery
+### The log sink traces the machinery off the request's path
 
 `structlog.get_logger(__name__)`, dotted
 `snake_case` names with kwargs, never f-strings or `print`. Every line carries its logger, and that
@@ -330,7 +339,7 @@ nothing writes below it, and an admin can raise it to `WARNING` or `ERROR` to qu
 live, from the console.
 
 
-#### What earns a line
+### A line says what no other record says
 
 A line says what no other record says already: the exchange is stated once
 by `request.finished`, a domain action once by its fact, and a line restating either says the same
@@ -346,7 +355,7 @@ writes nothing at all, which is what makes its silence readable — and AST test
 way they already hold the naming one.
 
 
-#### Nothing escapes it
+### Nothing escapes the log chain
 
 The libraries' stdlib `logging` joins the same chain at `WARNING` and above
 — a library is there for its degradations, not its chatter — and so do `warnings.warn` and the four
@@ -360,7 +369,7 @@ middlewares are plain ASGI, not `BaseHTTPMiddleware`, which is what lets that li
 and org the request bound below it.
 
 
-#### Issues — a bug, with a lifecycle
+### A bug is an issue with a lifecycle
 
 Every `log.exception` is teed to a bounded queue and folded,
 by stack fingerprint, into an `Issue` that opens, resolves, and regresses on a later version. Each
@@ -372,7 +381,7 @@ naming the request that tripped them, never its user: the journal is readable by
 and an internal issue has no business in someone's activity feed.
 
 
-#### What counts as a bug
+### A broken dependency is a bug, a refusal is not
 
 A call outside the process fails two ways that look alike: the dependency
 *answered no* — a 4xx, a wrong password, an expired link — which is an ordinary outcome at `info`;
@@ -384,7 +393,7 @@ is the one reached through the queue instead: a send that keeps failing retries,
 the park is what opens the issue.
 
 
-#### A failure that repeats is one bug
+### A failure that repeats is one bug
 
 The five lifespan workers catch everything, so one bad tick
 never ends a loop — which is exactly how a task worker that stopped claiming, or a listener that
@@ -396,7 +405,7 @@ deliberately not the seam — `request.finished` writes one on every 5xx to stat
 site that means *this is a bug* raises an exception of its own to be seen.
 
 
-#### The Timeline reads all three
+### The Timeline reads the journal, the log sink and the issues
 
 `apps/timeline` writes nothing: its console screen merges the
 journal (`business`), the log sink (`logs`) and issue occurrences (`issue`) into one view,
@@ -411,7 +420,7 @@ the whole window; any other column orders the loaded page only — each source i
 newest rows — and the screen says so rather than pass a sample off as an ordering.
 
 
-#### Load metrics
+### Load metrics belong to their app alone
 
 `apps/metrics` owns the counter outright. The request middleware only *offers*
 what it measured — `on_request_measured`, the same shape as the capture seam feeding `apps/issues`
@@ -420,10 +429,11 @@ nobody; delete it and nothing counts anywhere, which is the promise every app is
 What it does with the exchanges is its own: a Prometheus `/metrics` endpoint, per-minute rows, the
 console **Load** screen, and a daily rollup that downsamples minute → hour and applies retention.
 
-### Conventions
+
+## Conventions
 
 
-#### Auth & sessions
+### Three sessions, and RLS by default
 
 Each context's FastAPI dependencies live in its own
 `contract/current.py` — `CurrentUser` / `OptionalCurrentUser` (auth), `CurrentOrg`,
@@ -440,7 +450,7 @@ for a visitor outside it — goes through a `SECURITY DEFINER` function executab
 alone, so the caller is resolved and the public pages served without a BYPASSRLS session.
 
 
-#### Sign-in surface
+### A GET never delivers a session
 
 Email/password with mailed confirmation (resend on blocked
 unconfirmed sign-ins, forgot/reset flow), OAuth social sign-in (Google, GitHub — GoTrue
@@ -451,7 +461,7 @@ forward the visitor's address to GoTrue as `Sb-Forwarded-For`, so its per-IP lim
 rather than the instance (docs/production.md).
 
 
-#### Background work
+### Deferred work rides a durable Postgres queue
 
 Deferred work rides the durable Postgres task queue
 (`apps/shared/queue.py`): `enqueue()` writes through the caller's session, so a task
@@ -469,7 +479,7 @@ It claims what it dispatches in the transaction that stamps it, so N instances n
 fact out twice.
 
 
-#### HTTP security
+### CSRF needs no token, and the rate limiter fails open
 
 Cross-site mutations are rejected by a `Sec-Fetch-Site` middleware
 (CSRF protection without tokens); rate limiting counts against a shared Postgres store
@@ -479,14 +489,14 @@ an endpoint down — and it says so through the dependency verdict, since failin
 how a limiter stays off for good.
 
 
-#### Content negotiation
+### One set of helpers branches JSON, fragment and page
 
 `wants_json(request)` / `wants_full_page(request)` and the
 `render_list(...)` helper in `apps/shared/http/` centralize the JSON / fragment / page
 branching. Fragments are standalone valid markup (they're swapped into the live DOM).
 
 
-#### A form is JSON at the door
+### A form is JSON at the door
 
 The request side negotiates nothing: the innermost middleware (`apps/shared/http/form.py`)
 re-encodes a urlencoded form as JSON before routing, so every mutation declares one Pydantic body
@@ -497,7 +507,7 @@ against the schema its route declares (`tests/e2e/drivers/conformance.py`): the 
 is held by the scenarios that drive the routes, not by a promise.
 
 
-#### Page composition
+### A page's context is assembled from slices its apps own
 
 A full page's context is assembled from _slices_, each owned by
 the app that knows it. Apps register a provider at mount time with declared, prefixed
@@ -505,12 +515,12 @@ keys (collisions rejected at startup); the ownerless collector in `apps/shared/i
 merges them — called explicitly, never injected silently.
 
 
-#### Time
+### `clock.now()` is the only clock
 
 `clock.now()` is the single source of time. Never call `datetime.now()`.
 
 
-#### Identity
+### Every key is a UUIDv7, every token a UUIDv4
 
 Every table's primary key is a time-ordered **UUIDv7**, minted by the ORM where Python
 writes and by the database where it does not — a trigger, a raw insert, the journal's own writer.
@@ -523,7 +533,7 @@ tokens are the deliberate exception — they stay random **UUIDv4** (unguessable
 embedded timestamp).
 
 
-#### Styling
+### daisyUI components, never re-spelled utility chains
 
 daisyUI 5 is the component system (`btn`, `card`, `input`, `alert`,
 `badge`, `stat`, `menu`…). Project-specific component classes live in
@@ -533,7 +543,7 @@ Phosphor. Markup uses real landmarks, labelled controls, `aria-hidden` on decora
 icons, visible focus rings.
 
 
-#### Testing
+### Each scenario runs isolated, on both drivers
 
 Both E2E drivers share a substrate in `tests/e2e/drivers/` that each
 context's feature mixins extend. Every actor in a scenario gets an isolated session —
@@ -544,7 +554,7 @@ truncates app tables between scenarios. The browser driver navigates like a huma
 entry point, then links and forms — no deep URLs.
 
 
-#### Anti-flake e2e
+### Assert the settled DOM, never wait on time
 
 Assert DOM state with `expect(...)` (auto-retries to the settled
 state), never `assert locator.is_visible()` (a snapshot — flakes the moment an HTMX swap

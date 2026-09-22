@@ -77,25 +77,31 @@ def test_the_unheld_claims_are_the_backlog(request):
     assert len(unheld) == UNHELD_TODAY
 
 
-def _principles_sentences() -> list[str]:
-    """The sentences of AGENTS.md's Principles, headings aside — split where a sentence ends and
-    the next begins with a capital, a code span or emphasis."""
-    agents = AGENTS.read_text()
-    start = agents.index("## Principles\n")
-    end = agents.find("\n## ", start + 1)
-    section = agents[start : end if end != -1 else len(agents)]
-    prose = normalised(re.sub(r"^#+ .*$", "", section, flags=re.MULTILINE))
-    return [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z`*_])", prose) if s]
+def _agents_sentences() -> list[str]:
+    """The sentences of AGENTS.md, diagrams and tables aside — each section split on its own, where
+    a sentence ends and the next begins with a capital, a code span or emphasis (an abbreviation's
+    dot ends nothing)."""
+    prose = re.sub(r"```.*?```", "", AGENTS.read_text(), flags=re.DOTALL)
+    sections = re.split(r"^#+ .*$", prose, flags=re.MULTILINE)
+    return [
+        sentence
+        for section in sections
+        for sentence in re.split(
+            r"(?<!incl\.)(?<!e\.g\.)(?<=[.!?])\s+(?=[A-Z`*_])",
+            normalised(re.sub(r"^\|.*$", "", section, flags=re.MULTILINE)),
+        )
+        if sentence
+    ]
 
 
-def test_every_principles_sentence_is_a_claim():
-    """ "The principles below are mechanically verifiable" is only as true as the registry is
-    complete: a Principles sentence no claim quotes moves no counter, so `UNHELD_TODAY` could
-    reach zero while it stays unproven. Each one is quoted by a claim — held, or waived with its
-    reason, and then counted."""
+def test_every_sentence_of_agents_md_is_a_claim():
+    """Every section of AGENTS.md is a principle, and a principle is only as true as the registry
+    is complete: a sentence no claim quotes moves no counter, so `UNHELD_TODAY` could reach zero
+    while it stays unproven. Each one is quoted by a claim — held, or waived with its reason, and
+    then counted."""
     quotes = [normalised(claim.quote) for claim in CLAIMS]
 
-    unbound = [s for s in _principles_sentences() if not any(q in s for q in quotes)]
+    unbound = [s for s in _agents_sentences() if not any(q in s or s in q for q in quotes)]
 
     assert unbound == []
 

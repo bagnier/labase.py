@@ -77,9 +77,9 @@ python3 "${CLAUDE_SKILL_DIR}/units.py"
 ```
 
 Each unit prints on one line as `{NN} {document} {start}-{end} {heading} · {n} claims`: each
-principle and each `####` section of AGENTS.md, and the section around any claim of
-`tests/meta/claims.py` that falls outside them, in either document, marked `[claims only]`. The
-numbering is stable for given documents.
+`###` principle of AGENTS.md, and the section around any claim of `tests/meta/claims.py` that
+falls outside them, in the README, marked `[claims only]`. The numbering is stable for given
+documents.
 
 The skill's arguments are: "$ARGUMENTS". When that is empty, keep every unit. Otherwise keep
 only the units whose heading contains one of its words, case-insensitive.

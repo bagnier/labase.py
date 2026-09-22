@@ -311,23 +311,36 @@ def _github_anchor(title: str) -> str:
 
 
 def _sections() -> list[tuple[int, str]]:
-    """(level, title) of every ``###`` and ``####`` of AGENTS.md outside a fenced block."""
+    """(level, title) of every ``##`` subject and ``###`` principle of AGENTS.md outside a fenced
+    block."""
     found, fenced = [], False
     for line in AGENTS.read_text().splitlines():
         if line.startswith("```"):
             fenced = not fenced
-        elif not fenced and (match := re.match(r"(#{3,4}) (.+)$", line)):
+        elif not fenced and (match := re.match(r"(#{2,3}) (.+)$", line)):
             found.append((len(match[1]), match[2]))
     return found
 
 
 def test_the_readme_lists_every_section_of_agents_md_linked_to_its_text():
-    """The README names the principles and conventions for whoever discovers the base; AGENTS.md
-    states them. A title with a link is the only thing the README says of one, so the two cannot
-    drift apart — in order, none missing, none renamed on one side only."""
+    """The README names the principles, subject by subject, for whoever discovers the base;
+    AGENTS.md states them. A title with a link is the only thing the README says of one, so the
+    two cannot drift apart — in order, none missing, none renamed on one side only."""
     listed = [line for line in text().splitlines() if "](AGENTS.md#" in line]
 
     assert listed == [
-        f"{'  ' * (level - 3)}- [{title}](AGENTS.md#{_github_anchor(title)})"
+        f"{'  ' * (level - 2)}- [{title}](AGENTS.md#{_github_anchor(title)})"
         for level, title in _sections()
     ]
+
+
+def test_a_subject_of_agents_md_holds_nothing_but_its_principles():
+    """What AGENTS.md says lives in a `###` principle; a `##` subject only groups them, so nothing
+    sits between a subject's heading and its first principle."""
+    subjects = re.findall(
+        r"^## (.+?)\n(.*?)(?=^##)", AGENTS.read_text() + "\n##", flags=re.MULTILINE | re.DOTALL
+    )
+
+    loose = [title for title, body in subjects if body.strip()]
+
+    assert loose == []

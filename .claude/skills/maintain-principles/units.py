@@ -1,9 +1,9 @@
 """The units maintain-principles audits, and the claims of ``tests/meta/claims.py`` they carry.
 
-A unit is each ``###`` under ``## Principles`` and each ``####`` of AGENTS.md, plus the section
-around any claim that falls outside them, in AGENTS.md or README.md — marked ``[claims only]``,
-since only its claims are under audit. The registry is read as syntax, never imported: importing
-it loads every holder test, and with them the apps, which reach for the database.
+A unit is each ``###`` principle of AGENTS.md, plus the section around any claim that falls
+outside them, in README.md — marked ``[claims only]``, since only its claims are under audit. The
+registry is read as syntax, never imported: importing it loads every holder test, and with them the
+apps, which reach for the database.
 
 Run from the repo root. ``python3 <this file>`` prints the numbered units, one line each;
 ``python3 <this file> NN`` prints unit ``NN``'s document, lines, scope and claims, for its audit
@@ -39,12 +39,7 @@ HEADINGS = {document: headings(document) for document in DOCUMENTS}
 
 
 def is_unit(document: str, index: int) -> bool:
-    if document != "AGENTS.md":
-        return False
-    found = HEADINGS[document]
-    _, level, _ = found[index]
-    parent = next((title for _, lvl, title in reversed(found[:index]) if lvl == 2), "")
-    return level == 4 or (level == 3 and parent == "Principles")
+    return document == "AGENTS.md" and HEADINGS[document][index][1] == 3
 
 
 def section_of(document: str, line: int) -> int:

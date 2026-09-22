@@ -40,19 +40,19 @@ Behaviour the code gets wrong — a lost fact, a silent outage, a harness that l
 - [ ] Nothing in `config.toml` reaches a hosted project — no `supabase config push` anywhere. A
   hosted project mails GoTrue's default templates, whose links carry no `token_hash` for the
   reset route, and keeps its own email quota. → push the config from the deploy path.
-- [ ] AGENTS `Sign-in surface` ("mailed confirmation … resend on blocked unconfirmed sign-ins"):
+- [ ] AGENTS `A GET never delivers a session` ("mailed confirmation … resend on blocked unconfirmed sign-ins"):
   the shipped `config.toml` has `enable_confirmations = false`, so registering signs the account in
   at once, GoTrue never answers `email_not_confirmed` and the resend path is unreachable — while
   the JSON branch still answers "Please verify your email" (checked end to end). → turn
   confirmations on, or say the resend path waits on a deployment that does.
   [config.toml:22](supabase/config.toml#L22), [router.py:621](apps/auth/infra/router.py#L621)
-- [ ] AGENTS `Sign-in surface` ("settings-gated (`profile.*_enabled`)"): email change and account
+- [ ] AGENTS `A GET never delivers a session` ("settings-gated (`profile.*_enabled`)"): email change and account
   deletion also re-authenticate with a password, so an OAuth-only account cannot use either with
   both settings on — `400 "Current password is incorrect."` (checked on a passwordless account),
   and the form shows the field to everyone. → accept a recent-session proof for a passwordless
   account. [router.py:404](apps/profile/infra/router.py#L404),
   [router.py:608](apps/profile/infra/router.py#L608)
-- [ ] AGENTS `Testing` ("wraps each scenario in a rolled-back transaction"): the rollback isolates
+- [ ] AGENTS `Each scenario runs isolated, on both drivers` ("wraps each scenario in a rolled-back transaction"): the rollback isolates
   only what goes through the overridden sessions — GoTrue, the files driver's external orgs and
   Storage objects, `run_sql` given-helpers and the background admin sessions all commit around it,
   each paid for by a hand-written delete or truncate. → state the boundary, or route those writes
@@ -87,25 +87,25 @@ Code that made a defensible choice AGENTS.md or the README does not describe. Cl
   `list_issues`, `org_dashboard`, `list_members` and `nav_manager`; an HTMX request gets the full
   page. → a fragment per list/view, or a named exception list the test holds.
   [router.py:171](apps/calendar/infra/router.py#L171), [router.py:61](apps/issues/infra/router.py#L61)
-- [ ] AGENTS `Dashboard query` ("GET /{org}/ → contribs.collect(OverviewQuery)"): there is no
+- [ ] AGENTS `The dashboard collects one card per app` ("GET /{org}/ → contribs.collect(OverviewQuery)"): there is no
   route at an org's root — `/acme/` redirects to `/acme`, which falls to the public `/{slug}`
   catch-all and 404s; the collection lives at `/{org}/dashboard`. → serve the org root, or say
   `/{org}/dashboard` here and in the Integration table.
   [router.py:309](apps/organizations/infra/router.py#L309)
-- [ ] AGENTS `The Timeline reads all three` (`timeline-writes-nothing`): the app writes twice —
+- [ ] AGENTS `The Timeline reads the journal, the log sink and the issues` (`timeline-writes-nothing`): the app writes twice —
   `_purge` drops a partition and DELETEs from `log_lines`, the source it reads, and `_plant_purge`
   inserts into `task_queue` — while the holder test sees only `emit(`, `session.add` and imported
   DML *spelled inside the package*, so a write delegated to a shared repository is invisible.
   → tighten `test_the_timeline_writes_nothing` to the write helpers a package calls.
   [integration.py:103](apps/timeline/contract/integration.py#L103),
   [test_surfaces.py:489](tests/meta/test_surfaces.py#L489)
-- [ ] AGENTS `Auth & sessions` ("Each context's FastAPI dependencies live in its own
+- [ ] AGENTS `Three sessions, and RLS by default` ("Each context's FastAPI dependencies live in its own
   `contract/current.py`"): 7 of 17 contexts have that file — calendar's `CalendarRepo`, api_keys'
   `KeyRepo`, pages' `PageRepo`/`PageNavRepo` and timeline's query params sit in their routers, and
   auth's `UsersSettings`, consumed by profile, sits in `contract/settings.py`. → move them, or name
   the exceptions. [router.py:34](apps/calendar/infra/router.py#L34),
   [settings.py:22](apps/auth/contract/settings.py#L22)
-- [ ] AGENTS `Identity` (`entity-id-correlates`): the settings facts name their subject with a
+- [ ] AGENTS `Every key is a UUIDv7, every token a UUIDv4` (`entity-id-correlates`): the settings facts name their subject with a
   renameable handle — `app_settings` has no surrogate pk, so `OrgOverrideSet` and `SettingsChanged`
   carry the app (`target_app` on `SettingsChanged`), the key and an `entity_name`, with `entity_id` null and `entity_url()` returning
   `None`. → a pk on the settings rows, or state the handle-keyed exception.
@@ -155,7 +155,7 @@ A holder that stays green under the mutation it exists to catch. Closed by a tig
   fallback — `x.strftime(...) if u.created_at else ""` — is invisible to it. → add `IfExp` whose
   test is the value it guards. [test_ratchets.py](tests/meta/test_ratchets.py),
   [accounts_router.py:61](apps/auth/infra/accounts_router.py#L61)
-- [ ] AGENTS `Anti-flake e2e` (`expect-not-is-visible`): the browser mixins' assertions still read
+- [ ] AGENTS `Assert the settled DOM, never wait on time` (`expect-not-is-visible`): the browser mixins' assertions still read
   text and attributes once (`inner_text()`, `get_attribute()`, `.all()`) — 50 sites, frozen per file
   by `test_the_snapshot_reads_in_assertions_are_the_named_ones`; `count()` is gone. → `expect(...)`
   for each, lowering `_SNAPSHOT_READS_IN_ASSERTIONS`. [test_ratchets.py](tests/meta/test_ratchets.py)
@@ -273,43 +273,43 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   auth keeps all 23 contracts green (scratch run) — `apps/shared/integration/fullpage.py` already
   names a context that way. → drop the exclusion, or forbid the edge in both forms.
   [pyproject.toml:268](pyproject.toml#L268), [fullpage.py:41](apps/shared/integration/fullpage.py#L41)
-- [ ] AGENTS `Load metrics` (`metrics-owns-the-counter`): shared does name the context —
+- [ ] AGENTS `Load metrics belong to their app alone` (`metrics-owns-the-counter`): shared does name the context —
   `metrics_flush_seconds` in `TechnicalSettings`, read only by `apps/metrics`, and shipped as the
   deploy contract `METRICS_FLUSH_SECONDS`; delete the app and the setting survives. It is the only
   poll knob naming a context. → the app declares its own interval.
   [env.py:61](apps/shared/settings/env.py#L61), [.env.example:68](.env.example#L68)
-- [ ] AGENTS `Content negotiation` ("centralize the … branching"): four routers re-spell the
+- [ ] AGENTS `One set of helpers branches JSON, fragment and page` ("centralize the … branching"): four routers re-spell the
   header test by hand — timeline and metrics inline, issues and learning into a local `is_htmx`
   that shadows the helper's name — against the module's own "single source of truth for the header".
   → call `is_htmx`. [router.py:326](apps/timeline/infra/router.py#L326),
   [router.py:109](apps/issues/infra/router.py#L109), [router.py:95](apps/learning/infra/router.py#L95),
   [router.py:44](apps/metrics/infra/router.py#L44)
-- [ ] AGENTS `Page composition` ("declared, prefixed keys"): only the prefix is declared — the keys
+- [ ] AGENTS `A page's context is assembled from slices its apps own` ("declared, prefixed keys"): only the prefix is declared — the keys
   are whatever the coroutine returns, and the module's own "Current providers" table is already
   stale (`profile_avatar_path` is live and read by `base.html`, and unlisted). → declare the key
   set at registration. [fullpage.py:18](apps/shared/integration/fullpage.py#L18),
   [fullpage.py:38](apps/profile/contract/fullpage.py#L38)
-- [ ] AGENTS `Styling` ("Icons are Phosphor"): the build copies the woff2 only, so an icon renders
+- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Icons are Phosphor"): the build copies the woff2 only, so an icon renders
   just when `input.css` carries its codepoint by hand — three used names are unmapped and render
   nothing: `ph-mask-happy` (the impersonation banner), `ph-clock-counter-clockwise`,
   `ph-arrow-bend-down-right` (checked in Chromium: `content: none`). → generate the mapping, or a
   test over the names used. [base.html:24](apps/shared/templates/base.html#L24),
   [index.html:118](apps/timeline/templates/timeline/index.html#L118)
-- [ ] AGENTS `Styling` ("Icons are Phosphor"): the timeline draws its sort state with `▲`/`▼` and
+- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Icons are Phosphor"): the timeline draws its sort state with `▲`/`▼` and
   its filter-clear with `✕`, where `ph-caret-down` and `ph-x` are mapped and `ph-x` already serves
   that meaning in todo. → the Phosphor icons.
   [index.html:151](apps/timeline/templates/timeline/index.html#L151),
   [_combobox.html:45](apps/timeline/templates/timeline/_combobox.html#L45)
-- [ ] AGENTS `Styling` ("real landmarks"): `invitations/accept.html` is its own document and its
+- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("real landmarks"): `invitations/accept.html` is its own document and its
   body is `div`/`h1`/`p` — no `main`, no header, no skip link, where the six other root templates
   carry one. → a landmark, or extend the public shell.
   [accept.html:1](apps/organizations/templates/invitations/accept.html#L1)
-- [ ] AGENTS `Styling` ("labelled controls, visible focus rings"): the timeline filter's clear
+- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("labelled controls, visible focus rings"): the timeline filter's clear
   affordance is a `role="button"` span nested inside the pill button, and its options are plain
   divs — no `tabindex`, no key handler, absent from the tab order (measured), so a keyboard user
   can open the popover and neither choose nor clear. → real buttons and a listbox.
   [_combobox.html:42](apps/timeline/templates/timeline/_combobox.html#L42)
-- [ ] AGENTS `Styling` ("Reuse components instead of re-spelling utility chains"): `card-panel`
+- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Reuse components instead of re-spelling utility chains"): `card-panel`
   exists and is used by 29 templates, yet its chain is re-spelled six times in the console, less
   its `shadow-sm`; `tab-content border-base-300 bg-base-100 p-4 sm:p-6` repeats 13 times across
   four files. → the
@@ -425,24 +425,22 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   touches it. [bus.py:151](apps/shared/events/bus.py#L151),
   [contribs.py:65](apps/shared/integration/contribs.py#L65)
 - [ ] "`request.finished` is a `warning` on a refusal we made as well as on a dead link of ours —
-  every 4xx but 404." From AGENTS `Nothing escapes it` ("`warning` on a dead link of ours, `info`
+  every 4xx but 404." From AGENTS `Nothing escapes the log chain` ("`warning` on a dead link of ours, `info`
   otherwise"): `_refused_deliberately` promotes the level, and the middleware's own docstring says
   both halves. [request.py:293](apps/shared/logs/request.py#L293)
 - [ ] "A resolved issue regresses on any version that is not the one it was resolved in — git SHAs
-  have no ordering, so 'different' is the honest test." From AGENTS `Issues — a bug, with a
-  lifecycle` ("regresses on a later version"): an occurrence from an older release during a rolling
+  have no ordering, so 'different' is the honest test." From AGENTS `A bug is an issue with a lifecycle` ("regresses on a later version"): an occurrence from an older release during a rolling
   deploy or a rollback reopens the issue and alerts.
   [service.py:60](apps/issues/domain/service.py#L60)
 - [ ] "An authentication refusal is a `warning`, not the `info` an ordinary refusal earns: it is a
-  signal about a caller, and a run of them is what brute force looks like." From AGENTS `What
-  counts as a bug` ("an ordinary outcome at `info`"), which `What earns a line` contradicts by
+  signal about a caller, and a run of them is what brute force looks like." From AGENTS `A broken dependency is a bug, a refusal is not` ("an ordinary outcome at `info`"), which `What earns a line` contradicts by
   calling a refused attempt a `warning`: login, mfa, passkey, oauth and register failures all warn,
   and the threshold test's `info` allowlist holds none of them.
   [router.py:270](apps/auth/infra/router.py#L270),
   [test_log_thresholds.py:102](tests/meta/test_log_thresholds.py#L102)
 - [ ] "A client raising something of its own is breakage only when the call's outcome is unknown:
   a response the SDK cannot parse *after* the server applied it is an `info`, not an issue." From
-  AGENTS `What counts as a bug` ("a client raising something of its own — which is an issue"):
+  AGENTS `A broken dependency is a bug, a refusal is not` ("a client raising something of its own — which is an issue"):
   `set_server_admin` treats a pydantic `ValidationError` that way, and says why.
   [user_repository.py:70](apps/auth/infra/user_repository.py#L70)
 - [ ] "Two of the five lifespan loops stay off the verdict on purpose — the log drain and the
@@ -454,23 +452,23 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   [capture.py:211](apps/shared/logs/capture.py#L211)
 - [ ] "OAuth and passkeys ship switched off — their settings default to `false`, so a fresh install
   offers email/password and TOTP, and the console is where the rest is turned on." From AGENTS
-  `Sign-in surface` (which lists the four methods flat and calls only the profile pair
+  `A GET never delivers a session` (which lists the four methods flat and calls only the profile pair
   settings-gated): at the declared defaults the provider and passkey routes answer 404 and the
   login page shows neither. [integration.py:96](apps/auth/contract/integration.py#L96)
 - [ ] "Process-wide page context — the theme, the theme list, the log levels — is installed as a
   Jinja global at mount, not as a slice: a per-request route argument is a poor carrier for a
-  setting no route chooses." From AGENTS `Page composition` ("merges them — called explicitly,
+  setting no route chooses." From AGENTS `A page's context is assembled from slices its apps own` ("merges them — called explicitly,
   never injected silently"): `base.html` renders `app_theme()` on every page, from a global no
   route mentions. [integration.py:74](apps/console/contract/integration.py#L74),
   [templates.py:40](apps/shared/http/templates.py#L40)
 - [ ] "A bearer credential is not a uuid: the API key is `secrets.token_hex(20)` behind its prefix
   and the PKCE verifier `secrets.token_urlsafe(64)` — a uuid4 carries 122 random bits, the wrong
   shape for a secret. The uuid4 exception covers the two table-stored tokens, invitations and file
-  shares." From AGENTS `Identity` ("Security tokens are the deliberate exception — they stay random
+  shares." From AGENTS `Every key is a UUIDv7, every token a UUIDv4` ("Security tokens are the deliberate exception — they stay random
   **UUIDv4**"). [service.py:22](apps/api_keys/domain/service.py#L22),
   [service.py:122](apps/auth/domain/service.py#L122)
 - [ ] "No suite reruns, and none can: the rerun plugin is deliberately absent, because a rerun
-  hides exactly what `make flakehunt` measures." From AGENTS `Anti-flake e2e` ("Reruns are opt-in
+  hides exactly what `make flakehunt` measures." From AGENTS `Assert the settled DOM, never wait on time` ("Reruns are opt-in
   and justified per named suite"): there is no opt-in mechanism and no named suite, and the
   Makefile, `flakehunt.sh` and the ratchet's docstring all say why.
   [Makefile:218](Makefile#L218), [test_ratchets.py:1035](tests/meta/test_ratchets.py#L1035)
