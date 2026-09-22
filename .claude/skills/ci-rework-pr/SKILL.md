@@ -99,10 +99,12 @@ break marked `unverified` is run from its `to_run` command before anything is do
 
 ```sh
 git push origin HEAD
-gh pr comment "$ARGUMENTS" --body "<what changed, in the review's order; what was read into a
-remark; what was left out and why; what make finalize gave; what the adversarial review found
-and what was fixed from it>"
+gh pr comment "$ARGUMENTS" --body-file /tmp/answer.md
 ```
+
+The comment says what changed, in the review's order; what was read into a remark; what was left
+out and why; what `make finalize` gave; what the adversarial review found and what was fixed from
+it.
 
 No history, no narration. Never `--force`, never a rebase: the branch's history is the review's.
 

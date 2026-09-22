@@ -33,6 +33,16 @@ def _action_step(workflow: str) -> dict:
     )
 
 
+def _tool_lists(workflow: str) -> tuple[set[str], set[str]]:
+    args = _action_step(workflow)["with"]["claude_args"]
+    flags = [line.split(maxsplit=1) for line in args.splitlines() if line.strip()]
+    allowed, disallowed = (
+        {name for flag, rest in flags if flag == wanted for name in rest.strip('"').split(",")}
+        for wanted in ("--allowedTools", "--disallowedTools")
+    )
+    return allowed, disallowed
+
+
 def test_a_skipped_fix_run_cannot_cancel_the_live_one():
     """Every label fires the workflow, and the bot's own `fixing` label is one. A workflow-level
     group is joined before the job's `if` skips the run, so that run cancels the live fix; a
@@ -60,15 +70,19 @@ def test_the_bot_cannot_hand_its_turn_to_a_harness_that_never_returns(workflow):
     model back later (`ScheduleWakeup`, a cron, a `Monitor`) ends the run with nothing pushed —
     the first Sonnet run did exactly that while `make finalize` was still running, and the #12
     run did it again through a `Monitor` the allowed list handed it."""
-    args = _action_step(workflow)["with"]["claude_args"]
-    flags = [line.split(maxsplit=1) for line in args.splitlines() if line.strip()]
-    allowed, disallowed = (
-        {name for flag, rest in flags if flag == wanted for name in rest.strip('"').split(",")}
-        for wanted in ("--allowedTools", "--disallowedTools")
-    )
+    allowed, disallowed = _tool_lists(workflow)
     never = {"ScheduleWakeup", "CronCreate", "RemoteTrigger", "Workflow", "Monitor"}
 
     assert (never <= disallowed, never & allowed) == (True, set())
+
+
+def test_the_fix_bot_cannot_reach_the_raw_github_api():
+    """`ci-fix-issue` writes to GitHub through `gh issue` and `gh pr` alone. `gh api` is where a
+    body goes wrong silently — the #35 run patched its comment with `-f body=@file`, which posts
+    the string `@file` — so the bot is not handed it."""
+    _, disallowed = _tool_lists("fix.yml")
+
+    assert sorted(name for name in disallowed if name.startswith("Bash(")) == ["Bash(gh api:*)"]
 
 
 def test_a_review_run_answers_the_owner_s_mention_only():
