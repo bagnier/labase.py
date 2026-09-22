@@ -107,12 +107,26 @@ class EventWiring:
         """Register a durable consumer ``name`` (in ``app``) for ``event_type``; return its topic.
 
         ``name`` must be unique among the event's consumers (the topic ``evt:<kind>:<name>`` keys an
-        independent queued task per consumer). Raises ``ValueError`` on a duplicate."""
+        independent queued task per consumer). Raises ``ValueError`` on a duplicate — checked across
+        *every* registered topic, not just this event type's own consumers: the topic, not the
+        class, is what the queue's handler registry keys on, so two different types that happen to
+        build the same topic would otherwise silently overwrite each other there.
+
+        An event with no ``app_name``/``verb`` has no kind at all, so its topic ``evt::<name>``
+        cannot be told apart from any other kindless type's — refused here for the same reason
+        :meth:`declare` refuses it (typically an abstract base handed over instead of a concrete
+        subclass)."""
+        if not event_type.kind:
+            raise ValueError(
+                f"{event_type.__name__} names no kind, so it has no topic to register a consumer "
+                "under — an unnamed fact cannot be persisted or rebuilt"
+            )
         topic = f"evt:{event_type.kind}:{name}"
-        registered = self._reactions.setdefault(event_type, [])
-        if any(r.topic == topic for r in registered):
-            raise ValueError(f"duplicate consumer {name!r} for {event_type.__name__}")
-        registered.append(Reaction(name=name, topic=topic, as_actor=as_actor, app=app))
+        if any(r.topic == topic for rs in self._reactions.values() for r in rs):
+            raise ValueError(f"duplicate topic {topic!r}: another consumer already claims it")
+        self._reactions.setdefault(event_type, []).append(
+            Reaction(name=name, topic=topic, as_actor=as_actor, app=app)
+        )
         return topic
 
     def consumers_of(self, event_type: type) -> list[Reaction]:
