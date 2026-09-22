@@ -95,11 +95,12 @@ async def test_a_line_names_the_instance_that_wrote_it(sessions):
 
 @pytest.mark.asyncio
 async def test_append_writes_the_whole_batch_as_one_statement(sessions):
-    """README, "The log sink": "the write is one multi-row insert per drain" — not one
-    single-row statement replayed once per line."""
-    writer, _ = sessions
+    """AGENTS.md, "The log sink traces the machinery off the request's path": "the write is
+    one multi-row insert per drain" — not one single-row statement replayed once per line, and
+    every line of the batch still has to land, not just the statement count be right."""
+    writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
-    lines = [_line(marker), _line(marker), _line(marker)]
+    lines = [_line(marker, seq=0), _line(marker, seq=1), _line(marker, seq=2)]
     executemany_flags: list[bool] = []
 
     def _record(conn, cursor, statement, parameters, context, executemany):
@@ -112,8 +113,26 @@ async def test_append_writes_the_whole_batch_as_one_statement(sessions):
         await LogRepository(writer).append(lines, instance="gw0")
     finally:
         event.remove(engine, "before_cursor_execute", _record)
+    await writer.commit()
 
-    assert executemany_flags == [False]
+    found = await LogRepository(reader).search(text=marker)
+    assert (executemany_flags, sorted(f.payload["seq"] for f in found)) == ([False], [0, 1, 2])
+
+
+@pytest.mark.asyncio
+async def test_append_lands_a_batch_wider_than_one_statements_bind_limit(sessions):
+    """A drain tick can hand back everything the bounded queue held (``_QUEUE``'s maxlen is
+    10000) — asyncpg refuses a single statement bound to more than 32767 parameters, so a
+    batch this wide must still all land, not raise, however it is chunked."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    lines = [_line(marker) for _ in range(3300)]
+
+    await LogRepository(writer).append(lines, instance="gw0")
+    await writer.commit()
+
+    found = await LogRepository(reader).search(text=marker, limit=len(lines))
+    assert len(found) == len(lines)
 
 
 @pytest.mark.asyncio
