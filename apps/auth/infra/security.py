@@ -23,7 +23,7 @@ from apps.auth.domain.service import AuthTokens, refresh_session
 from apps.auth.infra.cookies import set_auth_cookies
 from apps.shared import clock
 from apps.shared.integration.contribs import contribs
-from apps.shared.logs.dependency import is_refusal
+from apps.shared.logs.dependency import log_dependency_failure, refused_status
 from apps.shared.persistence.database import get_user_session
 from apps.shared.persistence.rls import clear_rls_context, set_rls_context
 from apps.shared.settings.env import get_technical_settings
@@ -214,17 +214,19 @@ async def get_current_user(
 
 
 def _report_refresh_failure(exc: Exception) -> None:
-    """Log the lapse at the level its nature warrants — the base's verdict, not a second copy.
+    """Log the lapse at the level its nature warrants, sparing the one refusal that is routine.
 
-    A stale, rotated or absent refresh token is GoTrue answering a routine 'no' (a 4xx): the
-    everyday end of a session for every returning user whose token turned over, not a surprise —
-    so it earns no line at all, not even ``log_dependency_failure``'s usual ``info`` for a
-    refusal. Everything else — GoTrue unreachable, a 5xx, a network error, our own
-    ``ValueError`` — is a broken dependency, which the capture seam tracks as an issue.
+    A stale, rotated or absent refresh token is GoTrue answering with a 4xx that is not a rate
+    limit: the everyday end of a session for every returning user whose token turned over, not a
+    surprise — so it earns no line at all. A 429 is still the base's ordinary "dependency
+    answered no" at ``info``, since it can sign out every returning user on the instance at
+    once and is worth seeing. Everything else — GoTrue unreachable, a 5xx, a network error, our
+    own ``ValueError`` — is a broken dependency, which the capture seam tracks as an issue.
     """
-    if is_refusal(exc):
+    status = refused_status(exc)
+    if status is not None and status != 429 and 400 <= status < 500:
         return
-    log.exception("auth.token_refresh_failed", exc_info=exc, detail=str(exc))
+    log_dependency_failure(log, "auth.token_refresh_failed", exc, detail=str(exc))
 
 
 async def get_current_admin(

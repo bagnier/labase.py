@@ -315,8 +315,27 @@ async def test_expired_token_stale_refresh_logs_nothing(client):
         response = await client.get("/me")
 
     assert response.status_code == 401
-    log.info.assert_not_called()
-    log.warning.assert_not_called()
+    assert log.mock_calls == []
+
+
+@pytest.mark.asyncio
+async def test_expired_token_refresh_rate_limited_logs_info(client):
+    """GoTrue rate-limiting the refresh endpoint (429) is not "your token turned over" — it can
+    sign out every returning user on the instance at once, a surprise still worth an info line,
+    unlike the routine stale-token case above."""
+    limited = AuthApiError("Request rate limit reached", 429, "over_request_rate_limit")
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", "some.refresh.token")
+
+    with (
+        patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
+        patch("apps.auth.infra.security.refresh_session", side_effect=limited),
+        patch("apps.auth.infra.security.log") as log,
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+    log.info.assert_called_once()
     log.exception.assert_not_called()
 
 
