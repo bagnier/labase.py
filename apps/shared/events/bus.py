@@ -129,8 +129,10 @@ class EventBus:
                 return
             # The reaction runs on a background task with no request context of its own, minutes to
             # days after the fact — bound here, its logs still join the emitting request's
-            # timeline. ``TaskWorker._process`` binds the same keys once more, around the whole
-            # task including a failure logged after this narrower scope has already exited.
+            # timeline. Through ``TaskWorker._process`` this duplicates a wider binding it already
+            # makes around the whole task (including a failure logged after this one has exited),
+            # but the wrapper is reachable directly too — as this module's own tests call it — so
+            # its own contract does not lean on whichever caller happens to invoke it.
             with structlog.contextvars.bound_contextvars(**delivery_context(payload)):
                 await handler(session, event_type.from_payload(payload))
 

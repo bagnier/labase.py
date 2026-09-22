@@ -417,13 +417,13 @@ class TaskWorker:
         return len(rows)
 
     async def _process(self, task: ClaimedTask) -> None:
-        handler = _handlers.get(task["topic"])
-        if handler is None:
-            self._report_unhandled_topic(task)
-            await self._fail(task, "no handler registered")
-            return
         payload = _payload_dict(task)
         with structlog.contextvars.bound_contextvars(**delivery_context(payload)):
+            handler = _handlers.get(task["topic"])
+            if handler is None:
+                self._report_unhandled_topic(task)
+                await self._fail(task, "no handler registered")
+                return
             try:
                 await self._run_handler(handler, payload, task["user_id"])
             except Exception as exc:
