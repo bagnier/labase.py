@@ -16,8 +16,8 @@ This base exists for four reasons, in order:
    platform — database, auth, storage, migrations, and a growing feature catalog. On
    top of it, rather than bolting on Kafka, Elastic, Redis, or Mongo, the ambition is
    to rebuild those capabilities _on Postgres itself_. The first bricks have landed:
-   a durable task queue, error tracking, log storage, load metrics and rate limiting
-   — plain Postgres tables, no new infrastructure. Fulltext search, caching and
+   a durable task queue, error tracking, log storage, load metrics, rate limiting and
+   fulltext search over pages — plain Postgres, no new infrastructure. Caching and
    document storage are next.
 
 3. **Agent-driven development.** The base is optimized to be developed by AI agents
