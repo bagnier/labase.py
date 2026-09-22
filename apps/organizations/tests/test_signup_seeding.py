@@ -179,8 +179,14 @@ async def test_create_org_still_creates_a_personal_org_for_an_invitee_who_joined
             await _create_org(session, event)
             await session.commit()
 
-            owned = await OrganizationRepository(session).count_owned_by(uuid.UUID(invitee_id))
-        assert owned == 1
+            memberships = await OrganizationRepository(session).list_with_role_for_user(
+                uuid.UUID(invitee_id)
+            )
+        roles_by_org_name = {org.name: role for org, role in memberships}
+        assert roles_by_org_name == {
+            "Someone else's org": OrgRole.member,
+            "invitee@signup-seeding.local": OrgRole.owner,
+        }
     finally:
         delete_user(owner_id)
         delete_user(invitee_id)

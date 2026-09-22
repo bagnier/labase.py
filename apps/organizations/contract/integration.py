@@ -137,7 +137,7 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     """Durable consumer of ``UserCreated``: create the user's personal org, then emit
     ``OrganizationCreated`` (the fact the welcome seeders react to). Runs off the journal on the
     worker's session — the worker commits the org and the emitted fact together, so the seeders
-    (delivered after that commit) always read the org back. Idempotent (the ``already_member``
+    (delivered after that commit) always read the org back. Idempotent (the ``already_owns_one``
     guard), so a task retry never double-creates."""
     if not get_settings("organizations").auto_create_personal_org:
         return
