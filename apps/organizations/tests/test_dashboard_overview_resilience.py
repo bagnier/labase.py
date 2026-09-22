@@ -1,7 +1,9 @@
 """One overview card raising must not take the whole dashboard down with it."""
 
+from unittest.mock import patch
+
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.shared.integration.host import host
+from apps.shared.integration.contribs import Contribs
 
 
 async def _overview_with_a_missing_template(query: OverviewQuery) -> Overview:
@@ -15,14 +17,15 @@ async def _overview_with_a_missing_template(query: OverviewQuery) -> Overview:
 
 
 def test_a_cards_missing_template_does_not_500_the_dashboard(driver):
+    """A registry of its own, holding the broken card alone: no mounted app can be made to
+    return a template that does not exist, so the failure is staged by the provider."""
     driver.sign_in_as_member_of_org("dashboard-broken-card@example.com", "Acme")
-    host.contribs.provide(OverviewQuery, _overview_with_a_missing_template)
-    try:
+    broken = Contribs()
+    broken.provide(OverviewQuery, _overview_with_a_missing_template)
+
+    with patch("apps.organizations.infra.router.contribs", broken):
         response = driver.client().get(
             f"/{driver.active_org_handle}/dashboard", headers={"accept": "text/html"}
         )
-    finally:
-        host.contribs._providers[OverviewQuery].remove(_overview_with_a_missing_template)
 
-    assert response.status_code == 200
-    assert "Broken card" not in response.text
+    assert (response.status_code, "Broken card" in response.text) == (200, False)
