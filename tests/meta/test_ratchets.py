@@ -182,11 +182,12 @@ _SUBSTRATE_DEEP_LINKS = {
     "tests/e2e/drivers/test_browser_isolation.py": 2,
 }
 
-# Every test double in the two e2e lanes, counted per file — "Nothing business-critical is
-# mocked" holds because this list is what it is. The clock pin is the sanctioned time control
-# (both drivers run the app in-process, so one setattr pins every `clock.now()`); the
-# browser-launch tests steer the env var that picks a Chromium, and the host-override ones pin
-# the process environment `pending_host_overrides` reads — ambient control, not a double.
+# Every test double `_sites` finds under `tests/` (the two e2e lanes, plus any other unit test
+# that reaches for one) — "Nothing business-critical is mocked" holds because this list is what
+# it is. The clock pin is the sanctioned time control (both drivers run the app in-process, so
+# one setattr pins every `clock.now()`); the browser-launch tests steer the env var that picks a
+# Chromium; `test_envfile.py` pins the process environment `apply_host_overrides` reads — ambient
+# control, not a double, in every case.
 _E2E_DOUBLES = {
     "tests/e2e/drivers/test_browser_launch.py": 3,
     "tests/plugin.py": 1,
@@ -934,10 +935,10 @@ def test_every_log_line_is_named_by_a_dotted_snake_case_literal():
 
 
 def test_the_e2e_doubles_are_the_named_ones():
-    """ "Nothing business-critical is mocked" — held as the complete, counted list of what the
-    two e2e lanes double: the pinned clock and the driver's own env control, plus the API lane's
-    session overrides. GoTrue, Postgres, Storage and the mail catcher are all real; a new double
-    lands here as a question."""
+    """ "Nothing business-critical is mocked" — held as the complete, counted list of what
+    `tests/` doubles: the two e2e lanes' pinned clock, driver env control and session overrides,
+    plus any other unit test's own ambient-env control. GoTrue, Postgres, Storage and the mail
+    catcher are all real; a new double lands here as a question."""
     doubles = _sites(
         r"monkeypatch\.(setattr|setenv|delenv|setitem)|\bMagicMock\b|\bMock\(|mock\.patch",
         _ROOT / "tests",

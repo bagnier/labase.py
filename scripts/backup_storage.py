@@ -15,12 +15,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from scripts.envfile import pending_host_overrides
-
-# Runs on the host, where the app container's `host.docker.internal` does not resolve.
-os.environ.update(pending_host_overrides(Path(os.getenv("ENV_FILE", ".env"))))
-
 from apps.shared.persistence.storage import admin_storage, bucket
+from scripts.envfile import apply_host_overrides
 
 _PAGE_SIZE = 1000
 
@@ -67,6 +63,8 @@ async def backup(dest: Path) -> int:
 
 
 def main() -> int:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.getenv("ENV_FILE", ".env")))
     parser = argparse.ArgumentParser(description="Mirror the Supabase Storage bucket to disk.")
     parser.add_argument("--dest", default="backups/storage", help="destination directory")
     args = parser.parse_args()
