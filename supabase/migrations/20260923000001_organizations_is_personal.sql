@@ -7,6 +7,32 @@
 alter table public.organizations
   add column is_personal boolean not null default false;
 
+-- Every account before this migration already got its personal org at sign-up — `_create_org`
+-- (#14) always seeded it first, so it is the earliest org each user owns. Backfilling on that
+-- rule is what lets the guard trust `is_personal` for an account that signed up before today:
+-- without it, every pre-migration account would read as owning no personal org, and the next
+-- redelivered `UserCreated` for one of them would seed a second one.
+with first_owned as (
+  select distinct on (m.user_id) m.org_id
+    from public.memberships as m
+    inner join public.organizations as o on m.org_id = o.id
+   where m.role = 'owner'
+   order by m.user_id, o.created_at
+)
+update public.organizations as o
+   set is_personal = true
+  from first_owned as f
+ where o.id = f.org_id;
+
+-- Table-wide UPDATE (granted to `authenticated` in the foundation migration) let every owner-
+-- writable column share one grant because they all were owner-writable. `is_personal` breaks
+-- that: it must be stamped once, by `create_org_with_owner` alone, never by a client holding the
+-- JWT — so it is carved out with a column-level grant instead of joining the table-wide one.
+-- `version` is included because SQLAlchemy's optimistic-lock write always sets it, on every
+-- update, whichever column changed.
+revoke update on public.organizations from authenticated;
+grant update (name, handle, timezone, version) on public.organizations to authenticated;
+
 -- `create or replace` cannot add a parameter in place — Postgres would keep the old 5-arg
 -- overload and pick between it and this one by the defaults, ambiguously. Drop it first.
 drop function if exists public.create_org_with_owner(uuid, text, text, uuid, timestamptz);

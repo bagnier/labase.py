@@ -126,9 +126,10 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         title="Organisations",
         icon="buildings",
         section="identity",
-        # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day
-        # would just shadow the Sign-ups series on the console growth chart even counting
-        # team orgs (``is_personal``) alone.
+        # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day would
+        # just shadow the Sign-ups series on the console growth chart. ``is_personal`` now
+        # distinguishes a team org from one, but a team-orgs-per-day series is its own signal,
+        # not a fix to this one — out of scope here.
         data={"lines": lines},
     )
 
