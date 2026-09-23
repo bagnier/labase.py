@@ -100,6 +100,27 @@ def test_the_uuid4_exception_is_exactly_the_token_columns():
     assert defaulting_to_uuid4 == _TOKEN_COLUMNS
 
 
+def test_no_repository_assigns_updated_at_from_the_python_clock():
+    """ "``updated_at`` is also maintained by a DB trigger" (``Timestamped``) makes the trigger
+    the column's one writer — every table relies on it alone; an assignment from
+    ``clock.now()`` on top is dead, since the trigger overwrites it on the way in regardless
+    of what was sent. "``clock.now()`` is the single source of time" then names the trigger,
+    not the assignment, as that one source."""
+    offenders = {
+        f"{relative}:{node.lineno}"
+        for path, relative in _python_files(_APPS)
+        if "/tests/" not in relative
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Attribute) and target.attr == "updated_at"
+            for target in node.targets
+        )
+    }
+
+    assert offenders == set()
+
+
 def test_templates_tests_and_steps_live_with_their_context():
     """The layout half of self-containment: a template, a test or a step module parked outside
     its context is the piece a deletion leaves behind."""
