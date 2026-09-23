@@ -14,7 +14,7 @@ from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
-from apps.auth.domain.service import AuthTokens, login
+from apps.auth.domain.service import AuthTokens, PasswordUpdateError, login
 from apps.auth.infra.security import get_current_user
 from apps.auth.infra.security import log as security_log
 from apps.shared.integration.contribs import Contribs
@@ -382,6 +382,26 @@ def test_login_wrong_password_returns_401_with_generic_message(driver):
         response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 401
     assert "invalid email or password" in response.text.lower()
+
+
+def test_password_reset_gotrue_outage_is_logged_not_silent(driver):
+    """A GoTrue 503 on ``PUT /auth/v1/user`` (password update) must reach the dependency
+    verdict as a bug, not be swallowed by the "recovery token already consumed" branch, which
+    used to catch every ``PasswordUpdateError`` and log nothing (issue #52)."""
+    outage = PasswordUpdateError("Service Unavailable", 503)
+    tokens = AuthTokens(
+        access_token="recovery.access.token", refresh_token="recovery.refresh.token"
+    )
+    with (
+        patch("apps.auth.infra.router.confirm_signup", return_value=tokens),
+        patch("apps.auth.infra.router.update_password", side_effect=outage),
+        patch("apps.auth.infra.router.log") as log,
+    ):
+        response = driver.client().post(
+            "/auth/reset-password", data={"token_hash": "abc", "password": "NewPass1!"}
+        )
+    assert response.status_code == 400
+    log.exception.assert_called_once()
 
 
 def test_register_unexpected_exception_returns_400(driver):
