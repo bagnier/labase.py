@@ -200,7 +200,17 @@ class Host:
     def register_fullpage_provider(
         self, name: str, fn: Callable[[FullpageQuery], Awaitable[dict]]
     ) -> None:
-        """Register a fullpage-context slice, contributed by an app from its :func:`mount`."""
+        """Register a fullpage-context slice, contributed by an app from its :func:`mount`.
+
+        ``name`` prefixes every key the provider returns (see
+        :mod:`apps.shared.integration.fullpage`), so two providers sharing it would silently
+        overwrite each other's keys on every render — rejected here, at mount, rather than found
+        as a ``page.overwrite`` log line in production."""
+        if any(existing.name == name for existing in self.fullpage_providers):
+            raise ValueError(
+                f"fullpage provider {name!r} is already registered — "
+                "two providers under the same name would collide on every render"
+            )
         self.fullpage_providers.append(FullpageProvider(name, fn))
 
     def on_startup(self, handler: Callable[[], Awaitable[None]]) -> None:
