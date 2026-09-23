@@ -34,3 +34,14 @@ async def auth_user_exists(admin_session: AsyncSession, email: str) -> bool:
         {"email": email},
     )
     return result.first() is not None
+
+
+async def auth_user_awaiting_confirmation(admin_session: AsyncSession, email: str) -> bool:
+    result = await admin_session.execute(
+        text(
+            "SELECT 1 FROM auth.users "
+            "WHERE lower(email) = lower(:email) AND email_confirmed_at IS NULL LIMIT 1"
+        ),
+        {"email": email},
+    )
+    return result.first() is not None

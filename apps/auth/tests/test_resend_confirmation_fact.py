@@ -34,6 +34,14 @@ def test_a_resend_to_an_unconfirmed_account_records_its_fact(driver):
     assert _confirmation_resent_facts(driver) == ["pending-fact@example.com"]
 
 
+def test_a_resend_to_an_already_confirmed_account_records_no_fact(driver):
+    driver.register_disposable("already-confirmed@example.com", "Test1234!")
+
+    driver.resend_confirmation_to("already-confirmed@example.com")
+
+    assert _confirmation_resent_facts(driver) == []
+
+
 def test_an_address_with_no_account_still_costs_the_gotrue_call(driver):
     """GoTrue's resend is doubled because the interaction is the behaviour: skipping the call for
     an unknown address answers measurably faster, and that timing enumerates the accounts the
