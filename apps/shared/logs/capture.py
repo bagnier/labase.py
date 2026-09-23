@@ -210,6 +210,10 @@ class CaptureDrain:
                     # Postgres down is a tracker raising, not a capture that stops mattering: kept
                     # for the next tick's retry rather than lost with the outage it would explain.
                     # Snapshotted past this round (see above), so it is not retried this same tick.
+                    # Bound like any other append: a concurrent request can fill the freed slot
+                    # while the tracker awaits, and the eviction that follows counts the same way.
+                    if len(_QUEUE) == _QUEUE.maxlen:
+                        _overflow.dropped += 1
                     _QUEUE.append(captured)
             finally:
                 _capturing.reset(token)

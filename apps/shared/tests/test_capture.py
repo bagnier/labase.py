@@ -108,6 +108,29 @@ async def test_a_capture_stays_queued_until_a_tracker_takes_it(monkeypatch):
     assert (len(capture._QUEUE), attempts) == (0, 2)
 
 
+@pytest.mark.asyncio
+async def test_a_requeued_capture_reports_the_overflow_it_causes(monkeypatch):
+    """A tracker's own await is exactly where a concurrent request can log its own failure and
+    fill the one free slot: the re-append after a failed tracker meets a full queue like any
+    other append, and the eviction that follows has to be counted the same way capture_processor
+    counts one, or the overflow figure under-reports what the queue actually shed."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=1))
+    capture._overflow.dropped = 0
+    arrival = capture.ExceptionCaptured(exc=RuntimeError("arrived mid-drain"), context={})
+
+    async def flaky(_captured: capture.ExceptionCaptured) -> None:
+        capture._QUEUE.append(arrival)  # a concurrent request's own capture, mid-drain
+        raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [flaky])
+    outage = capture.ExceptionCaptured(exc=RuntimeError("outage"), context={})
+    capture._QUEUE.append(outage)
+
+    await capture.CaptureDrain(0).tick()
+
+    assert capture._overflow.dropped == 1
+
+
 # Shutdown is not a special case: SIGTERM is how every deploy ends a process, so whatever sits in
 # the queue at that moment is the *normal* amount to lose, not an edge one. The log drain
 # already emptied on its way out; this one dropped the exceptions it was holding.
