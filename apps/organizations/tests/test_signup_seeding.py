@@ -27,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from apps.auth.contract.events import UserCreated
 from apps.auth.tests.given_helpers import create_user, delete_user
 from apps.organizations.contract.integration import _create_org
-from apps.organizations.contract.queries import seed_org_welcome, user_exists
+from apps.organizations.contract.queries import org_exists, seed_org_welcome, user_exists
 from apps.organizations.domain.models import Membership, Organization, OrgRole
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.persistence import database as db
@@ -90,6 +90,26 @@ async def test_seed_org_welcome_no_ops_when_the_resolved_owner_is_gone(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_org_exists_is_true_for_a_live_org():
+    owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
+    try:
+        async with db.admin_session_factory()() as session:
+            org = await OrganizationRepository(session).create_with_owner(
+                name="Org exists test", user_id=uuid.UUID(owner_id)
+            )
+            await session.commit()
+            assert await org_exists(session, org.id) is True
+    finally:
+        delete_user(owner_id)
+
+
+@pytest.mark.asyncio
+async def test_org_exists_is_false_for_an_unknown_org():
+    async with db.admin_session_factory()() as session:
+        assert await org_exists(session, uuid.uuid7()) is False
+
+
+@pytest.mark.asyncio
 async def test_seed_org_welcome_no_ops_when_the_owner_vanishes_during_the_seeder(monkeypatch):
     """The half the pre-check cannot cover: there when it ran, gone by the time of the write."""
     monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
@@ -107,24 +127,52 @@ async def test_seed_org_welcome_no_ops_when_the_owner_vanishes_during_the_seeder
 
 
 @pytest.mark.asyncio
-async def test_seed_org_welcome_reraises_a_failure_the_owner_is_still_there_to_contradict(
+async def test_seed_org_welcome_no_ops_when_the_org_vanishes_during_the_seeder(monkeypatch):
+    """The narrower race #75 found: the owner check passes (the owner row is untouched by an
+    org deletion), but the *org* is gone by the time the seeder writes — the insert fails on
+    the org's own foreign key, not the owner's, and must degrade to the same clean no-op."""
+    owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
+    try:
+        monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
+        monkeypatch.setattr(
+            "apps.organizations.contract.queries.get_org_owner_id",
+            AsyncMock(return_value=uuid.UUID(owner_id)),
+        )
+        ghost_org = uuid.uuid7()  # never created, so the insert genuinely violates the org FK
+
+        async with db.admin_session_factory()() as session:
+            await seed_org_welcome(session, ghost_org, _insert_a_doomed_membership)  # no raise
+    finally:
+        delete_user(owner_id)
+
+
+@pytest.mark.asyncio
+async def test_seed_org_welcome_reraises_a_failure_neither_the_owner_nor_the_org_contradicts(
     monkeypatch,
 ):
-    """The same ``IntegrityError``, an owner who never left: not the race, so not this code's to
-    absorb. It goes back to the worker, which retries it and eventually parks it into an issue."""
-    monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
-    monkeypatch.setattr(
-        "apps.organizations.contract.queries.get_org_owner_id",
-        AsyncMock(return_value=uuid.uuid7()),
-    )
-    monkeypatch.setattr(
-        "apps.organizations.contract.queries.user_exists",
-        AsyncMock(return_value=True),  # still there both times it is asked
-    )
+    """The same ``IntegrityError``, an owner and an org that both never left: not either race,
+    so not this code's to absorb. It goes back to the worker, which retries it and eventually
+    parks it into an issue."""
+    owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
+    try:
+        async with db.admin_session_factory()() as session:
+            org = await OrganizationRepository(session).create_with_owner(
+                name="Reraise test", user_id=uuid.UUID(owner_id)
+            )
+            await session.commit()
 
-    async with db.admin_session_factory()() as session:
-        with pytest.raises(IntegrityError):
-            await seed_org_welcome(session, uuid.uuid7(), _insert_a_doomed_membership)
+            monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
+            monkeypatch.setattr(
+                "apps.organizations.contract.queries.get_org_owner_id",
+                AsyncMock(return_value=uuid.UUID(owner_id)),
+            )
+            # A real org, a real owner, already an owner member of it: the seeder's insert
+            # collides on the membership primary key — a genuine bug, unrelated to either
+            # actor's presence.
+            with pytest.raises(IntegrityError):
+                await seed_org_welcome(session, org.id, _insert_a_doomed_membership)
+    finally:
+        delete_user(owner_id)
 
 
 @pytest.mark.asyncio
