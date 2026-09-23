@@ -26,15 +26,18 @@ untracked. The seam is deliberately off the event bus: an ``ExceptionCaptured`` 
 observability, not a persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
-exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
-enqueue is a plain ``deque.append`` (atomic under the GIL). All async/DB work lives in the drain.
+exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so the
+queue is guarded by a plain :class:`threading.Lock` rather than relying on a single GIL-atomic
+call — shedding by fingerprint takes more than one step, and two threads racing that step is
+exactly the storm scenario this module exists to survive. All async/DB work lives in the drain.
 """
 
 import asyncio
 import contextlib
 import sys
+import threading
 import traceback
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Awaitable, Callable, MutableMapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -65,8 +68,9 @@ class CaptureQueueOverflowed(Exception):
 # Bounded so that with the issues app disabled — no drain running — the queue self-caps instead of
 # growing without limit. Full, it sheds by fingerprint (see ``_shed``) rather than the deque's own
 # blind oldest-first eviction, so a storm of identical failures never costs a distinct one queued
-# behind it.
+# behind it. Every read-check-mutate sequence against it holds ``_lock``.
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
+_lock = threading.Lock()
 
 
 @dataclass
@@ -131,17 +135,20 @@ def _shed_key(exc: BaseException) -> str:
     return key
 
 
-def _shed(incoming: BaseException) -> None:
-    """Make room for ``incoming`` in a full queue: evict a capture sharing its fingerprint if one
-    is queued, so a storm of identical failures costs its own duplicates rather than a distinct
-    capture sitting behind it. Falls back to the true oldest once every queued capture already
-    differs from ``incoming`` and from each other."""
-    key = _shed_key(incoming)
+def _shed() -> None:
+    """Make room in a full queue: evict a capture from whichever fingerprint currently repeats
+    the most, so a storm's own duplicates pay for the room before any distinct capture does —
+    whether or not the arriving exception shares that fingerprint. Falls back to the true oldest
+    once every queued capture is already distinct from every other. Called with ``_lock`` held
+    and the queue already at ``maxlen``, so there is always at least one entry to evict."""
+    key, repeats = Counter(_shed_key(captured.exc) for captured in _QUEUE).most_common(1)[0]
+    if repeats == 1:
+        _QUEUE.popleft()
+        return
     for captured in _QUEUE:
         if _shed_key(captured.exc) == key:
             _QUEUE.remove(captured)
             return
-    _QUEUE.popleft()
 
 
 def _exc_from(value: Any) -> BaseException | None:
@@ -186,11 +193,14 @@ def capture_processor(
     context = {
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
-    if len(_QUEUE) == _QUEUE.maxlen:
-        _overflow.dropped += 1
-        _shed(exc)  # a manual shed first, so the append below never falls back to the deque's
-        # own blind maxlen eviction (always the oldest, storm or not)
-    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+    # Warm the fingerprint cache now, spread over every capture as it arrives, so a storm's first
+    # overflow never pays to walk a thousand tracebacks it should have already had cached.
+    _shed_key(exc)
+    with _lock:
+        if len(_QUEUE) == _QUEUE.maxlen:
+            _overflow.dropped += 1
+            _shed()
+        _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
     return event_dict
 
 
@@ -232,33 +242,46 @@ class CaptureDrain:
         await self.tick()  # the exceptions before a restart are the ones that explain it
 
     async def tick(self) -> None:
-        dropped, _overflow.dropped = _overflow.dropped, 0
+        with _lock:
+            dropped, _overflow.dropped = _overflow.dropped, 0
         # Snapshot the current length so appends arriving mid-drain wait for the next tick.
         for _ in range(len(_QUEUE)):
-            try:
+            with _lock:
+                if not _QUEUE:
+                    break
                 captured = _QUEUE.popleft()
-            except IndexError:
-                break
+            await self._deliver(captured)
+        if dropped:
+            await self._report_overflow(dropped)
+
+    async def _deliver(self, captured: ExceptionCaptured) -> None:
+        token = _capturing.set(True)
+        try:
+            for tracker in _trackers:
+                try:
+                    await tracker(captured)
+                except Exception:
+                    # Log-and-skip: a failing tracker must never worsen the exception it tracks,
+                    # nor abort the others. Logged under the guard, so it does not re-capture.
+                    log.exception("capture.tracker_failed", tracker=repr(tracker))
+        finally:
+            _capturing.reset(token)
+
+    async def _report_overflow(self, dropped: int) -> None:
+        """Deliver the shortfall straight to the trackers, in this same tick, rather than
+        enqueuing it for the next one: ``stop()`` runs exactly one tick before the process ends,
+        and a storm's drop sitting one tick behind would die with it, unfolded."""
+        try:
+            raise CaptureQueueOverflowed(
+                f"the capture queue shed {dropped} capture(s) it had no room for"
+            )
+        except CaptureQueueOverflowed as exc:
             token = _capturing.set(True)
             try:
-                for tracker in _trackers:
-                    try:
-                        await tracker(captured)
-                    except Exception:
-                        # Log-and-skip: a failing tracker must never worsen the exception it tracks,
-                        # nor abort the others. Logged under the guard, so it does not re-capture.
-                        log.exception("capture.tracker_failed", tracker=repr(tracker))
+                log.exception("capture.overflowed", exc_info=exc, dropped=dropped)
             finally:
                 _capturing.reset(token)
-        # After the drain above, so the queue it enqueues into is normally empty — the shortfall
-        # rides the very same seam as any other bug, one tick behind, rather than a warning line.
-        if dropped:
-            try:
-                raise CaptureQueueOverflowed(
-                    f"the capture queue shed {dropped} capture(s) it had no room for"
-                )
-            except CaptureQueueOverflowed as exc:
-                log.exception("capture.overflowed", exc_info=exc, dropped=dropped)
+            await self._deliver(ExceptionCaptured(exc=exc, context={"dropped": dropped}))
 
     async def _run(self) -> None:
         while True:
