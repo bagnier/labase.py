@@ -1153,6 +1153,7 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/issues/infra/repository.py::list_issues(limit=100)",
     "apps/issues/infra/repository.py::occurrences(limit=20)",
     "apps/issues/infra/router.py::_SPARK_DAYS = 14",
+    "apps/learning/contract/integration.py::_RECENT = 3",
     "apps/metrics/contract/integration.py::MINUTE_RETENTION_DAYS = 7",
     "apps/metrics/contract/integration.py::ROLLUP_EVERY_SECONDS = 86400",
     "apps/metrics/domain/accumulator.py::UNMATCHED_LABEL_CAP = 25",
