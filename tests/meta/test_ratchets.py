@@ -1108,8 +1108,9 @@ _DEFAULTS_OF_A_DECLARED_SETTING = {
 # Numbers that are not knobs: a status code carries the response's meaning, an SVG dimension is
 # the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
 # lengths *are* the fingerprint (moving one silently re-groups every past issue), and 9 is the
-# rung count of the spaced-repetition ladder itself. Turning any of these into a setting would
-# offer an operator a lever that breaks the thing rather than tunes it.
+# rung count of the spaced-repetition ladder itself, and the perf smoke's fail-ratio and p95
+# thresholds *are* the CI check, not a deploy's opinion of it. Turning any of these into a
+# setting would offer an operator a lever that breaks the thing rather than tunes it.
 _NOT_A_TUNING_KNOB = {
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
     "apps/issues/domain/service.py::_TITLE_MAX = 200",
@@ -1128,13 +1129,16 @@ _NOT_A_TUNING_KNOB = {
     "apps/tasks/domain/strip.py::_MAX_TICKS = 8",
     "apps/tasks/domain/strip.py::_MIN_SHARE = 6.0",
     "apps/tasks/domain/strip.py::_MIN_WIDTH = 0.4",
+    "scripts/smoke.py::FAIL_RATIO_MAX = 0.01",
+    "scripts/smoke.py::P95_MS_MAX = 800.0",
 }
 
 # The backlog the sentence names: retention windows, poll and purge intervals, retry budgets,
 # batch sizes, page lengths, deadlines and caps — each one a value an operator has a reason to
-# change and today can only change by editing Python. This list only shrinks; a promotion to
-# `TechnicalSettings` or to an app's declared settings removes a line, and nothing adds one
-# without someone deciding to here.
+# change and today can only change by editing Python. A promotion to `TechnicalSettings` or to
+# an app's declared settings removes a line; widening the scan's perimeter to a root it never
+# read before enumerates knobs that were already there, unseen — the list grows once, on that
+# edit, and shrinks on every one after. Nothing adds a line without someone deciding to here.
 _KNOBS_AWAITING_PROMOTION = {
     "apps/api_keys/infra/repository.py::_LAST_USED_GRANULARITY_SECONDS = 300",
     "apps/auth/contract/impersonation.py::IMPERSONATION_MAX_SECONDS = 3600",
@@ -1187,8 +1191,6 @@ _KNOBS_AWAITING_PROMOTION = {
     "scripts/doctor.py::TIMEOUT_SECONDS = 5.0",
     "scripts/doctor.py::WARN_SECONDS = 0.5",
     "scripts/perf_smoke.py::_wait_ready(timeout=30.0)",
-    "scripts/smoke.py::FAIL_RATIO_MAX = 0.01",
-    "scripts/smoke.py::P95_MS_MAX = 800.0",
     "scripts/smoke.py::_wait_for_personal_org(timeout=10.0)",
 }
 
