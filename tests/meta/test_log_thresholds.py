@@ -109,6 +109,9 @@ _THE_SURPRISES = {
     "bootstrap_first_admin.actor_gone (apps/console/contract/integration.py)",
     "create_personal_org.actor_gone (apps/organizations/contract/integration.py)",
     "seed_org_welcome.actor_gone (apps/organizations/contract/queries.py)",
+    # The narrower half of that same race: the owner never left, but the org itself was deleted
+    # between the pre-check and the seeder's write.
+    "seed_org_welcome.org_gone (apps/organizations/contract/queries.py)",
     # An admin-role write the server took whose echoed record the SDK could not parse (an
     # anonymized identity): the action landed, and this explains the missing confirmation.
     "set_server_admin.record_unreadable (apps/auth/infra/user_repository.py)",
