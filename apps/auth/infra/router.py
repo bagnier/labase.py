@@ -272,9 +272,10 @@ async def login_endpoint(
             log.warning("auth.login_failed", email=email, ip=ip)
         else:
             # GoTrue answering 500 is not a routine "no" but the dependency breaking, which
-            # takes the same capture path as any other broken dependency.
+            # takes the same capture path as any other broken dependency — log.exception
+            # directly, since is_refusal(e) already settled the verdict above.
             # (AGENTS: a broken dependency is a bug, a refusal is not)
-            _log_gotrue_failure("auth.login_failed", e, email=email, ip=ip)
+            log.exception("auth.login_failed", exc_info=e, email=email, ip=ip)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -645,7 +646,7 @@ async def register_endpoint(
         if is_refusal(e):
             log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
         else:
-            _log_gotrue_failure("auth.register_failed", e, ip=ip, email=email, code=str(e.code))
+            log.exception("auth.register_failed", exc_info=e, ip=ip, email=email, code=str(e.code))
 
     except Exception as exc:
         # Our own code as much as GoTrue's, like login above — always an issue, never a refusal.
