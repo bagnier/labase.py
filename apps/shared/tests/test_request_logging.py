@@ -155,6 +155,23 @@ def test_an_asset_the_browser_fetched_itself_leaves_no_line(log_chain):
     assert _levels_for(log_chain, "/favicon.ico", 404, "https://example.com/home") == []
 
 
+# A liveness/readiness probe is silent while healthy — it is not traffic an admin needs to see on
+# every tick — but a 503 answer is the database going down at the exact moment the Timeline is read
+# for it, and that is not ours to swallow.
+
+
+def test_a_healthy_readiness_probe_leaves_no_line(log_chain):
+    assert _levels_for(log_chain, "/health/ready", 200) == []
+
+
+def test_a_failing_readiness_probe_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/health/ready", 503) == ["error"]
+
+
+def test_a_failing_liveness_probe_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/health/live", 503) == ["error"]
+
+
 # The load metrics count the same universe the timeline shows: our own traffic and our own
 # failures, never the bot-scan / favicon noise that would otherwise flood ``GET unmatched``.
 
