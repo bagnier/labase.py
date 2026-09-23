@@ -169,6 +169,36 @@ def capture_processor(
     return event_dict
 
 
+def _report_tracker_failure(
+    tracker: ExceptionTracker, tracker_exc: BaseException, context: dict[str, Any]
+) -> None:
+    """The level follows the *transition*: the first failure is queued (past the ``_capturing``
+    guard, which would otherwise swallow it) so a broken tracker becomes its own issue; a tracker
+    already known broken only warns, or every tick would re-enqueue its own failure and the queue
+    would never settle."""
+    failures = _tracker_failures.get(tracker, 0) + 1
+    _tracker_failures[tracker] = failures
+    if failures == 1:
+        log.exception("capture.tracker_failed", tracker=repr(tracker))
+        _enqueue(tracker_exc, {**context, "tracker": repr(tracker)})
+    else:
+        log.warning(
+            "capture.tracker_failed",
+            exc_info=tracker_exc,
+            tracker=repr(tracker),
+            failures=failures,
+        )
+
+
+def _report_tracker_recovery(tracker: ExceptionTracker) -> None:
+    if tracker in _tracker_failures:
+        log.info(
+            "capture.tracker_recovered",
+            tracker=repr(tracker),
+            failures=_tracker_failures.pop(tracker),
+        )
+
+
 async def drain_once() -> None:
     """Fold whatever is queued into its issues, now, on the caller's task.
 
@@ -230,11 +260,7 @@ class CaptureDrain:
                         # included. The one carve-out is a *real* cancellation of this task
                         # (``Task.cancelling()`` counts ``cancel()`` calls still pending): that one
                         # must still unwind the drain, or ``stop()`` hangs forever on a tracker
-                        # that outlives it. Otherwise the level follows the *transition*: the
-                        # first failure is queued (past the guard, which would otherwise swallow
-                        # it) so a broken tracker becomes its own issue; a tracker already known
-                        # broken only warns, or every tick would re-enqueue its own failure and
-                        # the queue would never settle.
+                        # that outlives it.
                         task = asyncio.current_task()
                         if (
                             isinstance(tracker_exc, asyncio.CancelledError)
@@ -242,25 +268,9 @@ class CaptureDrain:
                             and task.cancelling()
                         ):
                             raise
-                        failures = _tracker_failures.get(tracker, 0) + 1
-                        _tracker_failures[tracker] = failures
-                        if failures == 1:
-                            log.exception("capture.tracker_failed", tracker=repr(tracker))
-                            _enqueue(tracker_exc, {**captured.context, "tracker": repr(tracker)})
-                        else:
-                            log.warning(
-                                "capture.tracker_failed",
-                                exc_info=tracker_exc,
-                                tracker=repr(tracker),
-                                failures=failures,
-                            )
+                        _report_tracker_failure(tracker, tracker_exc, captured.context)
                     else:
-                        if tracker in _tracker_failures:
-                            log.info(
-                                "capture.tracker_recovered",
-                                tracker=repr(tracker),
-                                failures=_tracker_failures.pop(tracker),
-                            )
+                        _report_tracker_recovery(tracker)
             finally:
                 _capturing.reset(token)
 
