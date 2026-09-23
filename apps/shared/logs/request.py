@@ -249,10 +249,12 @@ class RequestLogger:
 
         try:
             await self.app(scope, receive, send_with_request_id)
-        except Exception:
+        except BaseException:
             # The line first, then the exception on its way: it is the 500 handler further up
             # that captures it as an issue, and this middleware's job is only to say the exchange
             # ended — which is exactly what used to go missing on the requests that mattered most.
+            # ``BaseException``, not ``Exception``: a client disconnect or a shutdown drain raises
+            # ``CancelledError`` through this same frame, and that is not ours to swallow either.
             self._finish(request, status, start)
             raise
         self._finish(request, status, start)
