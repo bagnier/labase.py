@@ -5,10 +5,13 @@ dependency is a bug, a refusal is not): one
 verdict for GoTrue, Postgres and Storage alike, so an outage does not fill the issues screen or
 stay silent depending on the module it was reached through.
 
-An HTTP status is what tells the two apart, and each client library keeps it in a place of its
-own — hence :func:`refused_status` rather than a table of exception classes to maintain. Shared
-cannot import a bounded context's client anyway, and would not want to: the rule is about the
-*shape* of the answer, not about who answered.
+An HTTP status is what tells the two apart for GoTrue and Storage, and each client library keeps
+it in a place of its own — hence :func:`refused_status` rather than a table of exception classes
+to maintain. Postgres has no HTTP status, but the same shape: a SQLSTATE (on the driver exception,
+or on ``.orig`` where SQLAlchemy wrapped it) means the server *answered* — an unmigrated table, a
+missing grant — which is ordinary, unlike a connection failure that never reached the server at
+all and carries no SQLSTATE. Shared cannot import a bounded context's client anyway, and would not
+want to: the rule is about the *shape* of the answer, not about who answered.
 
 Call :func:`log_dependency_failure` from the ``except`` block, passing the module's own logger —
 the timeline reads a line's app off the logger that wrote it, so a failure funnelled through here
@@ -50,10 +53,27 @@ def refused_status(exc: BaseException) -> int | None:
     return None
 
 
+def refused_sqlstate(exc: BaseException) -> str | None:
+    """The SQLSTATE Postgres answered with, or ``None`` if it never reached the server at all.
+
+    Checked on the exception itself (asyncpg's own error classes) and on ``.orig`` (where
+    SQLAlchemy wraps the driver exception, e.g. ``DBAPIError``) — a connection failure carries
+    neither, since the server never got the chance to answer.
+    """
+    for holder in (exc, getattr(exc, "orig", None)):
+        sqlstate = getattr(holder, "sqlstate", None)
+        if isinstance(sqlstate, str):
+            return sqlstate
+    return None
+
+
 def is_refusal(exc: BaseException) -> bool:
-    """Whether the dependency answered *no* — a 4xx, which is an outcome and not a defect."""
+    """Whether the dependency answered *no* — a 4xx, or a Postgres SQLSTATE — an outcome, not a
+    defect."""
     status = refused_status(exc)
-    return status is not None and 400 <= status < 500
+    if status is not None:
+        return 400 <= status < 500
+    return refused_sqlstate(exc) is not None
 
 
 def log_dependency_failure(log: Any, event: str, exc: BaseException, **context: object) -> None:

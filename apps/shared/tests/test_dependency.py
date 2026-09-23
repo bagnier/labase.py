@@ -47,6 +47,31 @@ class _AnsweredInText(Exception):
         self.status = status
 
 
+class _PostgresAnswered(Exception):
+    """asyncpg's own error classes hang the SQLSTATE off the exception itself."""
+
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__(f"the server answered {sqlstate}")
+        self.sqlstate = sqlstate
+
+
+class _PostgresAnsweredThroughSqlalchemy(Exception):
+    """SQLAlchemy's ``DBAPIError``, which hangs the driver's own exception off ``.orig``."""
+
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__(f"the server answered {sqlstate}")
+        self.orig = _PostgresAnswered(sqlstate)
+
+
+class _PostgresUnreachable(Exception):
+    """SQLAlchemy's ``DBAPIError`` wrapping a connection failure — the server never got the
+    chance to answer, so its driver exception (a bare ``OSError``) carries no ``sqlstate``."""
+
+    def __init__(self) -> None:
+        super().__init__("connection refused")
+        self.orig = ConnectionRefusedError("connection refused")
+
+
 @pytest.fixture(autouse=True)
 def _empty_capture_queue():
     capture._QUEUE.clear()
@@ -70,12 +95,26 @@ def test_a_dependency_that_answers_4xx_is_refusing(exc):
 @pytest.mark.parametrize(
     "exc",
     [
+        _PostgresAnswered("42P01"),  # undefined_table — an unmigrated database, not a bug
+        _PostgresAnswered("42501"),  # insufficient_privilege — permission denied
+        _PostgresAnsweredThroughSqlalchemy("42P01"),
+        _PostgresAnsweredThroughSqlalchemy("42501"),
+    ],
+)
+def test_a_postgres_answer_is_refusing(exc):
+    assert is_refusal(exc) is True
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
         _Answered(500),  # the dependency broke while answering
         _AnsweredOnItsResponse(503),
         _AnsweredInText("503"),
         _AnsweredInText("not a status at all"),  # unparseable is not an answer
         ConnectionError("no route to host"),  # it never answered at all
         ValueError("our own mistake, on the way to calling it"),
+        _PostgresUnreachable(),  # connection refused — postgres never got to answer
     ],
 )
 def test_anything_else_is_the_dependency_breaking(exc):
