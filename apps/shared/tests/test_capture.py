@@ -1,7 +1,7 @@
 """The seam's own edges — what it sheds, what it refuses to count twice, what it still owes.
 
 ``apps/issues/tests/test_capture.py`` covers the round trip all the way to the issues tables.
-These hold what that round trip cannot state, all four about the *count* an issue carries:
+These hold what that round trip cannot state, all about the *count* an issue carries:
 
 - the queue is bounded so a storm can never eat memory, which means it drops — but it sheds by
   fingerprint, so a storm's own duplicates pay for the room, never a distinct capture behind them;
@@ -11,6 +11,7 @@ These hold what that round trip cannot state, all four about the *count* an issu
 - and the ones still queued when the process is asked to stop are folded in, not dropped.
 """
 
+import asyncio
 import logging
 from collections import deque
 
@@ -144,6 +145,47 @@ def test_a_second_failure_of_the_same_kind_is_still_its_own_capture(log_chain):
 # already emptied on its way out; this one dropped the exceptions it was holding.
 
 
+# ``asyncio.CancelledError`` derives from ``BaseException``, not ``Exception`` — a tracker that
+# raises it (its own bug, not the drain task being cancelled) must be log-and-skipped exactly
+# like any other failing tracker, never left to abort the tick mid-queue.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", [asyncio.CancelledError, SystemExit], ids=["CancelledError", "SystemExit"]
+)
+async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(
+    failure, log_chain, monkeypatch
+):
+    """A misbehaving tracker must not worsen the exceptions queued after it, whatever it raises:
+    the doctrine (README: 'a failing tracker never worsens the exception it tracks') is not a
+    list of exception types to keep pace with — ``CancelledError`` is one case among the whole
+    ``BaseException`` tree, not a carve-out from it."""
+    tracked: list[capture.ExceptionCaptured] = []
+
+    async def flaky(_captured: capture.ExceptionCaptured) -> None:
+        raise failure("tracker bug")
+
+    async def fine(captured: capture.ExceptionCaptured) -> None:
+        tracked.append(captured)
+
+    monkeypatch.setattr(capture, "_trackers", [flaky, fine])
+    monkeypatch.setattr(
+        capture,
+        "_QUEUE",
+        deque(
+            [
+                capture.ExceptionCaptured(exc=ValueError("first")),
+                capture.ExceptionCaptured(exc=ValueError("second")),
+            ]
+        ),
+    )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert [str(c.exc) for c in tracked] == ["first", "second"]
+
+
 @pytest.mark.asyncio
 async def test_stopping_the_drain_folds_in_what_it_was_still_holding(log_chain, monkeypatch):
     """The last exceptions before a deploy are the ones most likely to explain it."""
@@ -164,3 +206,41 @@ async def test_stopping_the_drain_folds_in_what_it_was_still_holding(log_chain, 
     await drain.stop()
 
     assert [str(one.exc) for one in folded] == ["caught by the shutdown"]
+
+
+@pytest.mark.asyncio
+async def test_stopping_the_drain_still_cancels_it_mid_tracker(monkeypatch):
+    """The guard that lets a tracker's own ``CancelledError`` through checks ``Task.cancelling()``
+    precisely so that ``stop()``'s real ``cancel()`` — landing while the drain happens to be
+    suspended inside a tracker's own await — still wins: otherwise every deploy would hang on
+    whichever tracker was mid-flight."""
+    started = asyncio.Event()
+
+    async def stuck(_captured: capture.ExceptionCaptured) -> None:
+        started.set()
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(capture, "_trackers", [stuck])
+    capture._QUEUE.clear()
+    capture._QUEUE.append(capture.ExceptionCaptured(exc=ValueError("boom")))
+    drain = capture.CaptureDrain(interval_seconds=0.01)
+    await drain.start()
+    task = drain._task
+    assert task is not None
+
+    await asyncio.wait_for(started.wait(), timeout=1)
+    # Not `asyncio.wait_for(drain.stop(), ...)`: its own timeout would cancel `stop()` itself,
+    # and `stop()`'s `contextlib.suppress(CancelledError)` around `await self._task` would
+    # swallow that unrelated cancellation too, letting `stop()` return normally regardless of
+    # whether the background task ever actually ended — a hang that reads as a pass.
+    stop_task = asyncio.ensure_future(drain.stop())
+    try:
+        done, _pending = await asyncio.wait({stop_task}, timeout=1)
+        assert stop_task in done, "stop() must not hang on a tracker stuck mid-await"
+    finally:
+        if not stop_task.done():
+            stop_task.cancel()
+        if not task.done():
+            task.cancel()
+
+    assert task.cancelled()

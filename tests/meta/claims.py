@@ -46,7 +46,10 @@ from apps.organizations.tests.e2e.test_scenarios import (
     test_a_new_user_gets_a_personal_organisation_on_registration,
 )
 from apps.shared.tests.test_bus import test_emit_refuses_an_undeclared_event
-from apps.shared.tests.test_capture import test_the_drain_reports_the_captures_the_queue_had_to_shed
+from apps.shared.tests.test_capture import (
+    test_a_tracker_raising_any_base_exception_does_not_kill_the_drain,
+    test_the_drain_reports_the_captures_the_queue_had_to_shed,
+)
 from apps.shared.tests.test_email import test_enqueue_email_outboxes_through_the_callers_session
 from apps.shared.tests.test_emit_durability import (
     test_a_fact_is_rolled_back_by_a_handler_that_raises,
@@ -736,10 +739,10 @@ CLAIMS = [
         "one per failure, whatever else logs the same exception on its way out",
         "no bound test logs one exception twice and counts its occurrences",
     ),
-    waived(
+    held(
         "a-failing-tracker-worsens-nothing",
         "a failing tracker never worsens what it tracks",
-        "no bound test makes a tracker raise and checks the others still receive the capture",
+        test_a_tracker_raising_any_base_exception_does_not_kill_the_drain,
     ),
     waived(
         "answered-no-versus-broken",
@@ -1241,4 +1244,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 59
+UNHELD_TODAY = 58
