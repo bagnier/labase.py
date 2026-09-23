@@ -1,6 +1,6 @@
 import uuid
 from contextlib import asynccontextmanager
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import jwt
 import pytest
@@ -14,7 +14,7 @@ from supabase_auth.errors import AuthApiError
 
 from apps.auth.contract.api_keys import API_KEY_PREFIX, ApiKeyQuery
 from apps.auth.contract.user import AuthenticatedUser
-from apps.auth.domain.service import AuthTokens, login
+from apps.auth.domain.service import AuthTokens, PasswordUpdateError, login
 from apps.auth.infra.security import get_current_user
 from apps.auth.infra.security import log as security_log
 from apps.shared.integration.contribs import Contribs
@@ -299,9 +299,10 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_expired_token_stale_refresh_logs_info_not_exception(client):
-    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the end of a session,
-    not a bug. It logs at info; log.exception (the capture seam) must not fire."""
+async def test_expired_token_stale_refresh_logs_nothing(client):
+    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the everyday end of
+    a session for every returning user whose token turned over, not a surprise. It earns no
+    line at all, at any level."""
     stale = AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, None)
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "stale.refresh.token")
@@ -309,6 +310,26 @@ async def test_expired_token_stale_refresh_logs_info_not_exception(client):
     with (
         patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
         patch("apps.auth.infra.security.refresh_session", side_effect=stale),
+        patch("apps.auth.infra.security.log") as log,
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+    assert log.mock_calls == []
+
+
+@pytest.mark.asyncio
+async def test_expired_token_refresh_rate_limited_logs_info(client):
+    """GoTrue rate-limiting the refresh endpoint (429) is not "your token turned over" — it can
+    sign out every returning user on the instance at once, a surprise still worth an info line,
+    unlike the routine stale-token case above."""
+    limited = AuthApiError("Request rate limit reached", 429, "over_request_rate_limit")
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", "some.refresh.token")
+
+    with (
+        patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
+        patch("apps.auth.infra.security.refresh_session", side_effect=limited),
         patch("apps.auth.infra.security.log") as log,
     ):
         response = await client.get("/me")
@@ -382,6 +403,46 @@ def test_login_wrong_password_returns_401_with_generic_message(driver):
         response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 401
     assert "invalid email or password" in response.text.lower()
+
+
+def test_password_reset_gotrue_outage_is_logged_not_silent(driver):
+    """A GoTrue 503 on ``PUT /auth/v1/user`` (password update) must reach the dependency
+    verdict as a bug, not be swallowed by the "recovery token already consumed" branch, which
+    used to catch every ``PasswordUpdateError`` and log nothing (issue #52)."""
+    outage = PasswordUpdateError("Service Unavailable", 503)
+    tokens = AuthTokens(
+        access_token="recovery.access.token", refresh_token="recovery.refresh.token"
+    )
+    with (
+        patch("apps.auth.infra.router.confirm_signup", return_value=tokens),
+        patch("apps.auth.infra.router.update_password", side_effect=outage),
+        patch("apps.auth.infra.router.log") as log,
+    ):
+        response = driver.client().post(
+            "/auth/reset-password", data={"token_hash": "abc", "password": "NewPass1!"}
+        )
+    assert response.status_code == 400
+    log.exception.assert_called_once_with("auth.password_reset_failed", exc_info=outage, ip=ANY)
+
+
+def test_password_reset_consumed_token_returns_400_without_opening_an_issue(driver):
+    """A 4xx from GoTrue on the same call (the recovery token already spent) is a refusal, not
+    a bug: it keeps its own user-facing message and must stay out of the capture seam."""
+    refused = PasswordUpdateError("Token has expired or is invalid", 401)
+    tokens = AuthTokens(
+        access_token="recovery.access.token", refresh_token="recovery.refresh.token"
+    )
+    with (
+        patch("apps.auth.infra.router.confirm_signup", return_value=tokens),
+        patch("apps.auth.infra.router.update_password", side_effect=refused),
+        patch("apps.auth.infra.router.log") as log,
+    ):
+        response = driver.client().post(
+            "/auth/reset-password", data={"token_hash": "abc", "password": "NewPass1!"}
+        )
+    assert response.status_code == 400
+    assert "please request a new reset link" in response.text.lower()
+    log.exception.assert_not_called()
 
 
 def test_register_unexpected_exception_returns_400(driver):

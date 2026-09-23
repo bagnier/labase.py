@@ -30,7 +30,7 @@ from apps.shared.persistence.sql_stats import (
 
 log = structlog.get_logger(__name__)
 
-_SKIP_PATHS = {"/health/live", "/health/ready"}
+_HEALTH_PROBE_PATHS = {"/health/live", "/health/ready"}
 _INFRA_PROBE_PREFIXES = ("/.well-known/",)
 _ASSET_SUFFIXES = (
     ".ico",
@@ -80,6 +80,14 @@ def _is_infra_probe(path: str) -> bool:
     return path.startswith(_INFRA_PROBE_PREFIXES)
 
 
+def _is_health_probe(path: str) -> bool:
+    """Our own liveness/readiness endpoint. Silent while it answers healthy — an admin has no
+    use for a line on every tick — but never on its own account: a status the app never means
+    to give it (a 5xx, the database unreachable) is exactly the incident the Timeline exists
+    for, so it is not dropped unconditionally the way an asset or an infra probe is."""
+    return path in _HEALTH_PROBE_PATHS
+
+
 def _is_internal_referer(request: Request) -> bool:
     """Whether the request followed a link from one of our own pages — a same-host ``Referer``.
     That's what makes a 404 a *dead link from ourselves* rather than a bot scan or a stray URL."""
@@ -106,14 +114,22 @@ def _is_traced(request: Request, status: int) -> bool:
     does not, since a row per image would bury the traffic it sits between. A 5xx is our fault
     whoever asked, so it is traced regardless."""
     path = request.url.path
+    if _is_health_probe(path):
+        return status >= 400
     return status >= 500 or not (_is_asset(path) or _is_infra_probe(path))
 
 
 def _feeds_load_metrics(request: Request, status: int) -> bool:
-    """Which requests count toward ``/console/load``. Same universe as the timeline: our own
-    traffic and our own failures, never the noise. 2xx/3xx and every 5xx always count; a 4xx
-    (all of ``unmatched`` — a 404 before routing — plus matched 4xx) counts only when it's a
-    dead link from ourselves, so bot scans, the favicon probe and stray URLs stay out."""
+    """Which requests count toward ``/console/load``. A liveness/readiness probe never counts,
+    5xx included: it is our own infra hitting us on a timer, not load an admin needs sized, and
+    it is the one path that parts ways with the timeline here (a failing probe is traced, never
+    metered). Everything else shares the timeline's universe — our own traffic and our own
+    failures, never the noise: 2xx/3xx and every 5xx always count; a 4xx (all of ``unmatched`` —
+    a 404 before routing — plus matched 4xx) counts only when it's a dead link from ourselves,
+    so bot scans, the favicon probe and stray URLs stay out."""
+    path = request.url.path
+    if _is_health_probe(path):
+        return False
     return status < 400 or status >= 500 or _is_internal_dead_link(request, status)
 
 
@@ -211,14 +227,16 @@ class RequestLogger:
 
     What the browser fetches on its own leaves nothing behind — static assets, the favicon and
     ``/.well-known`` probes — unless it 5xx'd, which is our fault whatever asked for it.
-    Liveness/readiness probes are skipped before any of this.
+    A liveness/readiness probe is silent the same way while healthy, but not on a 5xx: the
+    status is only known once the app has answered, so it is decided at the same place as
+    every other exchange rather than skipped up front.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in _SKIP_PATHS:
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
@@ -234,7 +252,11 @@ class RequestLogger:
             ip=request.client.host if request.client else None,
             request_name=f"{request.method} {request.url.path}",
         )
-        start_request_stats()
+        # A health probe never gets the SQL drill-down: its own `SELECT 1` would otherwise trip
+        # `db.heavy_request` on a merely slow database, one line with nothing to correlate it to
+        # on the ticks that stay silent (AGENTS: a line says what no other record says already).
+        if not _is_health_probe(request.url.path):
+            start_request_stats()
         _rejection.set(None)
 
         status = 500  # what Starlette answers if the app raises before saying otherwise
@@ -249,10 +271,12 @@ class RequestLogger:
 
         try:
             await self.app(scope, receive, send_with_request_id)
-        except Exception:
+        except BaseException:
             # The line first, then the exception on its way: it is the 500 handler further up
             # that captures it as an issue, and this middleware's job is only to say the exchange
             # ended — which is exactly what used to go missing on the requests that mattered most.
+            # ``BaseException``, not ``Exception``: a client disconnect or a shutdown drain raises
+            # ``CancelledError`` through this same frame, and that is not ours to swallow either.
             self._finish(request, status, start)
             raise
         self._finish(request, status, start)

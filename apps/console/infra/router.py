@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
+from apps.auth.contract.admin import lock_last_admin_guard
 from apps.auth.contract.current import CurrentAdmin
 from apps.console.contract import appearance
 from apps.console.contract.events import (
@@ -290,6 +291,7 @@ async def add_admin(
 ) -> Response:
     email = body.email.strip()
     try:
+        await lock_last_admin_guard(session)
         rows, granted, uid = await admins.grant_admin(email)
     except AdminNotFound as exc:
         if wants_json(request):
@@ -320,6 +322,7 @@ async def update_admin(
 ) -> Response:
     is_admin = body.is_admin
     try:
+        await lock_last_admin_guard(session)
         rows, changed, uid = await admins.set_admin(email, is_admin=is_admin)
     except AdminNotFound:
         raise _NOT_FOUND from None

@@ -74,6 +74,9 @@ async def set_admin(email: str, *, is_admin: bool) -> tuple[list[UserAdminStatus
     revoke would leave the server with no admin. Returns whether the status actually changed
     (``False`` when ``email`` already held the requested status, which the caller must not
     journal as a fresh fact) and the account's id — one directory scan, as in :func:`grant_admin`.
+    The caller must hold the last-admin guard's lock (``apps.auth.contract.admin
+    .lock_last_admin_guard``) for the duration of this call — the read-then-act here is only
+    atomic under that lock (issue #36).
     """
     users = await list_server_admins()
     target = _by_email(users, email)

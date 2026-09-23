@@ -1,4 +1,5 @@
 import pytest
+from structlog.testing import capture_logs
 
 from apps.shared.settings.env import TechnicalSettings
 from apps.shared.settings.preflight import PreflightError, check_production, enforce_at_boot
@@ -121,3 +122,19 @@ def test_boot_refuses_a_production_config_with_a_blocking_error():
 
 def test_boot_ignores_a_blocking_error_outside_production():
     assert enforce_at_boot(_settings(environment="development", cookies_secure=False)) is None
+
+
+def test_boot_logs_a_non_blocking_finding_without_the_warning_tier():
+    with capture_logs() as logs:
+        enforce_at_boot(_settings(log_debug=True))
+
+    assert [(entry["log_level"], entry["event"], entry["detail"]) for entry in logs] == [
+        (
+            "info",
+            "preflight.finding",
+            (
+                "LOG_DEBUG is true — logs render as human-readable console text instead of the "
+                "JSON an aggregator can parse."
+            ),
+        )
+    ]

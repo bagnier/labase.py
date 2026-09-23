@@ -2,14 +2,17 @@
 
 A full HTML page's template context is composed of *slices*, each owned by the app
 that knows it. An app registers a *fullpage provider* at its ``mount()`` via
-:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`, passing a ``name`` and a
-function that returns raw keys — the collector namespaces them as ``f"{name}_{key}"``
-(name ``profile`` returning ``handle`` lands in the context as ``profile_handle``).
-Keys stay flat — no nested sub-dicts — so templates read ``{{ profile_handle }}``.
+:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`, passing a ``name``, the
+raw keys its function returns, and the function itself — the collector namespaces each key as
+``f"{name}_{key}"`` (name ``profile`` declaring ``handle`` lands in the context as
+``profile_handle``). Keys stay flat — no nested sub-dicts — so templates read
+``{{ profile_handle }}``. A namespaced key colliding with another provider's, or with the
+context's own seeded keys, is rejected at registration — see
+:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`.
 
-If a provider's namespaced key collides with one already in the context, the merge
-logs and overwrites. A provider that raises is isolated and logged; the rest of the
-page still renders.
+A provider that raises is isolated and logged; the rest of the page still renders. A chunk
+returning a key it never declared still logs and overwrites here — the mount-time check only
+catches what was declared.
 
 No global render hook injects data silently — a Jinja "context processor" or ASGI
 middleware would, and that is proscribed by the *Page composition* principle. Routes
@@ -35,7 +38,7 @@ from typing import TYPE_CHECKING
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.integration.host import host
+from apps.shared.integration.host import RESERVED_FULLPAGE_KEYS, host
 
 if TYPE_CHECKING:
     from apps.auth.contract.user import AuthenticatedUser
@@ -60,6 +63,9 @@ async def fullpage_context(
     docstring for the namespacing, collision and provider-isolation rules.
     """
     ctx: dict = {"user": user, "nav_items": sorted(host.nav_items, key=lambda i: i.order)}
+    # Kept identical to RESERVED_FULLPAGE_KEYS so a provider mount-time check protects
+    # against exactly the keys seeded here.
+    assert set(ctx) == RESERVED_FULLPAGE_KEYS
     query = FullpageQuery(session, user)
     for provider in host.fullpage_providers:
         try:
