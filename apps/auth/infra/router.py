@@ -794,21 +794,16 @@ async def reset_password_endpoint(
     try:
         tokens = await confirm_signup(token_hash, type="recovery")
         await update_password(tokens.access_token, password)
-    except PasswordUpdateError as e:
-        if not is_refusal(e):
-            # GoTrue broke rather than refused (e.g. a 503): the verdict, not the exception's
-            # Python type, decides — an outage must not read as "please request a new link".
+    except Exception as e:
+        if isinstance(e, PasswordUpdateError) and is_refusal(e):
+            # The recovery token is single-use and already consumed: a new link is needed.
+            error = f"{e}. Please request a new reset link."
+        else:
+            # GoTrue broke rather than refused (e.g. a 503), or the flow raised something of
+            # its own: the verdict, not the exception's Python type, decides whether this
+            # reaches the log sink as a bug instead of vanishing.
             _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
             error = "This reset link is invalid or has expired. Please request a new one."
-            return _error_response(
-                request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST
-            )
-        # The recovery token is single-use and already consumed: a new link is needed.
-        error = f"{e}. Please request a new reset link."
-        return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
-        error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the journal attributed to the account holder.
