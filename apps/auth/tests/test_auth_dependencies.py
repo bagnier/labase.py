@@ -299,9 +299,10 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_expired_token_stale_refresh_logs_info_not_exception(client):
-    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the end of a session,
-    not a bug. It logs at info; log.exception (the capture seam) must not fire."""
+async def test_expired_token_stale_refresh_logs_nothing(client):
+    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the everyday end of
+    a session for every returning user whose token turned over, not a surprise. It earns no
+    line at all, at any level."""
     stale = AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, None)
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "stale.refresh.token")
@@ -309,6 +310,26 @@ async def test_expired_token_stale_refresh_logs_info_not_exception(client):
     with (
         patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
         patch("apps.auth.infra.security.refresh_session", side_effect=stale),
+        patch("apps.auth.infra.security.log") as log,
+    ):
+        response = await client.get("/me")
+
+    assert response.status_code == 401
+    assert log.mock_calls == []
+
+
+@pytest.mark.asyncio
+async def test_expired_token_refresh_rate_limited_logs_info(client):
+    """GoTrue rate-limiting the refresh endpoint (429) is not "your token turned over" — it can
+    sign out every returning user on the instance at once, a surprise still worth an info line,
+    unlike the routine stale-token case above."""
+    limited = AuthApiError("Request rate limit reached", 429, "over_request_rate_limit")
+    client.cookies.set("access_token", "expired.token.value")
+    client.cookies.set("refresh_token", "some.refresh.token")
+
+    with (
+        patch("apps.auth.infra.security.decode_jwt", side_effect=jwt.ExpiredSignatureError),
+        patch("apps.auth.infra.security.refresh_session", side_effect=limited),
         patch("apps.auth.infra.security.log") as log,
     ):
         response = await client.get("/me")
