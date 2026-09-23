@@ -181,6 +181,12 @@
 .ph.ph-caret-down:before {
   content: "\e136";
 }
+.ph.ph-caret-up:before {
+  content: "\e13c";
+}
+.ph.ph-caret-up-down:before {
+  content: "\e140";
+}
 .ph.ph-clipboard-text:before {
   content: "\e198";
 }
@@ -358,6 +364,15 @@
 .ph.ph-download-simple:before {
   content: "\e20c";
 }
+.ph.ph-mask-happy:before {
+  content: "\e9f4";
+}
+.ph.ph-clock-counter-clockwise:before {
+  content: "\e1a0";
+}
+.ph.ph-arrow-bend-down-right:before {
+  content: "\e01a";
+}
 
 @layer components {
   /* Bordered, divided container for a vertical list of rows (the one recurring non-DaisyUI shape). */
@@ -368,6 +383,14 @@
   /* Bordered card shell (the recurring non-DaisyUI card look) */
   .card-panel {
     @apply card bg-base-100 border border-base-300 shadow-sm;
+  }
+
+  /* `tabs-lift` panel's border/background/padding — DaisyUI's own `.tab-content` carries the
+     show/hide toggle tied to the sibling `.tab`'s `:checked` state, so this stays a companion
+     class next to `tab-content` in markup rather than folding it in, which `@apply` cannot
+     reach (a sibling-selector rule is not part of `.tab-content`'s own declaration block). */
+  .tab-panel {
+    @apply border-base-300 bg-base-100 p-4 sm:p-6;
   }
 
   /* Type scale — the shared heading/meta ramp. Templates use these instead of

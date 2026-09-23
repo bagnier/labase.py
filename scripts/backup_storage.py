@@ -11,24 +11,26 @@ folders. Idempotent: re-runs overwrite, so the destination stays a full mirror.
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
 from apps.shared.persistence.storage import admin_storage, bucket
-
-_PAGE_SIZE = 1000
+from apps.shared.settings.env import get_technical_settings
+from scripts.envfile import apply_host_overrides
 
 
 async def _list_all(store: Any, prefix: str) -> list[dict[str, Any]]:
     """Every entry of a single folder, paging past the API's own default page size."""
+    page_size = get_technical_settings().backup_storage_page_size
     entries: list[dict[str, Any]] = []
     offset = 0
     while True:
-        page = await store.list(prefix, {"limit": _PAGE_SIZE, "offset": offset})
+        page = await store.list(prefix, {"limit": page_size, "offset": offset})
         entries.extend(page)
-        if len(page) < _PAGE_SIZE:
+        if len(page) < page_size:
             return entries
-        offset += _PAGE_SIZE
+        offset += page_size
 
 
 async def walk(store: Any, prefix: str) -> list[str]:
@@ -61,6 +63,8 @@ async def backup(dest: Path) -> int:
 
 
 def main() -> int:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.getenv("ENV_FILE", ".env")))
     parser = argparse.ArgumentParser(description="Mirror the Supabase Storage bucket to disk.")
     parser.add_argument("--dest", default="backups/storage", help="destination directory")
     args = parser.parse_args()

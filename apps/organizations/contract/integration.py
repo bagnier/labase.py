@@ -67,7 +67,7 @@ def mount(host: Host) -> None:
     host.events.on(UserCreated, _create_org, name="create_personal_org", app="organizations")
     host.events.on(UserDeleted, _forget_user, name="organizations_forget", app="organizations")
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
-    host.register_fullpage_provider("org", provide_org_nav)
+    host.register_fullpage_provider("org", ["nav"], provide_org_nav)
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
     )
@@ -126,9 +126,10 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         title="Organisations",
         icon="buildings",
         section="identity",
-        # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day
-        # would just shadow the Sign-ups series on the console growth chart. Team creation
-        # isn't structurally distinguishable from a personal org, so we don't fake a signal.
+        # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day would
+        # just shadow the Sign-ups series on the console growth chart. ``is_personal`` now
+        # distinguishes a team org from one, but a team-orgs-per-day series is its own signal,
+        # not a fix to this one — out of scope here.
         data={"lines": lines},
     )
 
@@ -150,13 +151,16 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     if not await user_exists(session, user_id):
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    already_owns_one = await OrganizationRepository(session).count_owned_by(user_id)
+    # A *personal* org specifically — not any owned org, which a self-created team org (through
+    # `POST /organizations`, before this delivery) would also satisfy and wrongly skip (#71).
+    already_owns_one = await OrganizationRepository(session).count_personal_owned_by(user_id)
     if already_owns_one:
         return  # retried delivery of a UserCreated already handled — idempotency, not a re-visit
     try:
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,
             user_id=user_id,
+            is_personal=True,
         )
     except IntegrityError:
         # The race remains: gone between the check above and the membership insert. But the clause

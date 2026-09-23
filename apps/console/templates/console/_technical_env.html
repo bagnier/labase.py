@@ -1,24 +1,24 @@
 <div class="space-y-6">
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    <div class="card bg-base-100 border border-base-300">
+    <div class="card-panel">
       <div class="card-body p-4 gap-1">
         <span class="text-xs text-base-content/60">Python</span>
         <p class="font-mono text-sm">{{ process.python_version }}</p>
       </div>
     </div>
-    <div class="card bg-base-100 border border-base-300">
+    <div class="card-panel">
       <div class="card-body p-4 gap-1">
         <span class="text-xs text-base-content/60">PID</span>
         <p class="font-mono text-sm">{{ process.pid }}</p>
       </div>
     </div>
-    <div class="card bg-base-100 border border-base-300">
+    <div class="card-panel">
       <div class="card-body p-4 gap-1">
         <span class="text-xs text-base-content/60">Uptime</span>
         <p class="font-mono text-sm">{{ process.uptime_seconds // 3600 }}h {{ (process.uptime_seconds % 3600) // 60 }}m</p>
       </div>
     </div>
-    <div class="card bg-base-100 border border-base-300">
+    <div class="card-panel">
       <div class="card-body p-4 gap-1">
         <span class="text-xs text-base-content/60">Memory / CPU</span>
         <p class="font-mono text-sm">{{ process.rss_mb }} MB · {{ process.cpu_percent }}%</p>
