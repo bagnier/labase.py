@@ -2,14 +2,14 @@
 
 
 def test_the_load_screen_answers_the_full_page_when_hx_request_is_false(driver):
-    """``HX-Request: false`` is what a browser's own fetch sends on a plain navigation —
-    truthiness on the raw header would read it as an HTMX request and answer the fragment."""
+    """The issue's own reproduction: any non-empty string is truthy in Python, so a check
+    reading the raw header's presence — instead of comparing it to ``"true"`` — answers the
+    ``metrics/_detail.html`` drill-down fragment even though the header says ``"false"``."""
+    driver.seed_traffic("GET /console", requests=1, errors=0, around_ms=20)
     driver.sign_in_as_admin("metrics-admin-hx-false@example.com")
 
-    body = (
-        driver.client()
-        .get("/console/load", headers={"accept": "text/html", "HX-Request": "false"})
-        .text
+    response = driver.client().get(
+        "/console/load", headers={"accept": "text/html", "HX-Request": "false"}
     )
 
-    assert "<html" in body
+    assert (response.status_code, 'id="load-detail"' in response.text) == (200, True)
