@@ -34,6 +34,7 @@ class LoopHealth:
         self._failed_event = f"{name}_failed"
         self._recovered_event = f"{name}_recovered"
         self._failures = 0
+        self._fault: type[BaseException] | None = None
 
     @property
     def failures(self) -> int:
@@ -42,9 +43,14 @@ class LoopHealth:
         return self._failures
 
     def tick_failed(self, exc: BaseException, **context: object) -> None:
-        """Record a tick that raised, at the level its place in the outage warrants."""
+        """Record a tick that raised, at the level its place in the outage warrants.
+
+        The transition is per *fault*, not per outage: a ``TypeError`` arriving while a
+        ``RuntimeError`` is already warning is a second, distinct bug, and earns its own
+        opening line rather than being folded into the first one's warnings."""
         self._failures += 1
-        if self._failures == 1:
+        if type(exc) is not self._fault:
+            self._fault = type(exc)
             self._log.exception(self._failed_event, exc_info=exc, **context)
             return
         self._log.warning(self._failed_event, exc_info=exc, failures=self._failures, **context)
@@ -55,3 +61,4 @@ class LoopHealth:
         if self._failures:
             self._log.info(self._recovered_event, failures=self._failures)
             self._failures = 0
+            self._fault = None

@@ -74,6 +74,20 @@ def test_a_loop_still_down_keeps_saying_so(log_chain):
     ]
 
 
+def test_a_second_distinct_failure_during_the_outage_opens_its_own_issue(log_chain):
+    """A `TypeError` arriving mid-outage is not the same bug as the `RuntimeError` that opened
+    it — folding it into the same warning is how it never reaches the issues screen at all."""
+    health = _health()
+
+    health.tick_failed(RuntimeError("still down"))
+    health.tick_failed(TypeError("a different fault altogether"))
+
+    assert _captured() == [
+        ("probe.tick_failed", "still down"),
+        ("probe.tick_failed", "a different fault altogether"),
+    ]
+
+
 def test_a_loop_coming_back_says_what_the_outage_cost(log_chain):
     """The toll is only final once a tick succeeds, so the recovery line is the one that carries
     it — the same reason the log sink reports its own write outage on the way out."""
