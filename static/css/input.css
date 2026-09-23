@@ -181,6 +181,12 @@
 .ph.ph-caret-down:before {
   content: "\e136";
 }
+.ph.ph-caret-up:before {
+  content: "\e13c";
+}
+.ph.ph-caret-up-down:before {
+  content: "\e140";
+}
 .ph.ph-clipboard-text:before {
   content: "\e198";
 }

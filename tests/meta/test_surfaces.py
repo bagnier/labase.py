@@ -657,6 +657,35 @@ def test_the_icon_walk_actually_finds_the_declarations():
     assert len(_icons_declared()) > 10
 
 
+# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕`` — instead of
+# reaching for the icon font. It renders the same to a sighted mouse user, but it is not
+# `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped first,
+# so prose that names the glyph — describing the affordance it used to be, as this file's own
+# templates once did — is not mistaken for markup. This is the curated set issue #131 reported,
+# not every character a template could misuse as an icon.
+_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕"}
+
+
+def _template_markup_without_comments() -> dict[str, str]:
+    return {
+        str(path.relative_to(_ROOT)): re.sub(r"\{#.*?#\}", "", path.read_text(), flags=re.DOTALL)
+        for path in _TEMPLATES
+    }
+
+
+def test_no_template_spells_an_icon_as_a_literal_glyph():
+    bodies = _template_markup_without_comments()
+
+    spelled = {
+        f"{glyph!r} in {site}"
+        for site, body in bodies.items()
+        for glyph in _ICON_LOOKALIKE_GLYPHS
+        if glyph in body
+    }
+
+    assert spelled == set()
+
+
 # ``data-hash-tabs`` is an opt-in: the markup asks for the behaviour, and the page has to load the
 # script that provides it. Forget the script and nothing breaks loudly — the tabs still switch,
 # they just stop surviving a reload and stop being linkable, which is exactly the kind of silence
