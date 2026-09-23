@@ -18,7 +18,7 @@ import sys
 import zlib
 from pathlib import Path
 
-from scripts.envfile import merge_env
+from scripts.envfile import host_reachable_overrides, merge_env
 from scripts.test_stack import project_id
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -110,7 +110,7 @@ def create(name: str) -> None:
     _run(
         ["uv", "run", "python", str(ROOT / "scripts" / "seed.py"), "--email", dev_email],
         cwd=ROOT,
-        env={**_py_env(path / ".env"), **_host_overrides(path / ".env")},
+        env={**_py_env(path / ".env"), **host_reachable_overrides(path / ".env")},
     )
 
     print(
@@ -159,23 +159,6 @@ def remove(name: str) -> None:
 def _py_env(env_file: Path) -> dict[str, str]:
     """Env for running main-repo tooling against a worktree's env file (absolute ENV_FILE)."""
     return {**os.environ, "ENV_FILE": str(env_file), "PYTHONPATH": str(ROOT)}
-
-
-def _host_overrides(env_file: Path) -> dict[str, str]:
-    """Host-reachable variants of the URL/DB settings (host.docker.internal → 127.0.0.1)
-    for tooling that connects from the host rather than the Docker network."""
-    keys = {
-        "SUPABASE_API_URL",
-        "SUPABASE_STORAGE_URL",
-        "SUPABASE_DATABASE_USER_URL",
-        "SUPABASE_DATABASE_ADMIN_URL",
-    }
-    out: dict[str, str] = {}
-    for line in env_file.read_text().splitlines():
-        m = re.match(r"\s*([A-Z_]+)\s*=\s*(.*)", line)
-        if m and m.group(1) in keys:
-            out[m.group(1)] = m.group(2).replace("host.docker.internal", "127.0.0.1")
-    return out
 
 
 def main() -> None:

@@ -5,13 +5,18 @@
 Exits non-zero if any blocking error is found, so it can gate a deploy pipeline.
 """
 
+import os
 import sys
+from pathlib import Path
 
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.preflight import check_production
+from scripts.envfile import apply_host_overrides
 
 
 def main() -> int:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.getenv("ENV_FILE", ".env")))
     settings = get_technical_settings()
     errors, warnings = check_production(settings)
 
