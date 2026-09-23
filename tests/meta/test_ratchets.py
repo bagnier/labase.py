@@ -1124,6 +1124,7 @@ _NOT_A_TUNING_KNOB = {
     "apps/shared/events/activity.py::heatmap_calendar(min_weeks=5)",
     "apps/shared/events/repository.py::search(offset=0)",
     "apps/shared/http/responses.py::mutation_response(status_code=200)",
+    "apps/shared/logs/repository.py::_MAX_STATEMENT_PARAMS = 32767",
     "apps/shared/persistence/sql_stats.py::_KEPT_STATEMENTS = 5",
     "apps/shared/persistence/sql_stats.py::_MAX_STATEMENT = 300",
     "apps/tasks/domain/strip.py::_MAX_BUCKETS = 400",

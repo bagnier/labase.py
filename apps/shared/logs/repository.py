@@ -35,6 +35,11 @@ INSTANCE = uuid.uuid4().hex[:8]
 # Event-dict keys promoted to first-class columns; everything else lands in ``payload``.
 _RESERVED = {"timestamp", "level", "logger", "event", "org_id", "user_id", "request_id"}
 
+# asyncpg's own hard cap on one statement's bound parameters (a 16-bit count in the Postgres
+# wire protocol's Bind message) — the figure that *is* the thing, not a tunable. The queue this
+# batch comes from holds up to 10000 lines, well past what one multi-row ``VALUES`` can bind.
+_MAX_STATEMENT_PARAMS = 32767
+
 
 def _parse_ts(value: Any) -> datetime:
     if isinstance(value, datetime):
@@ -100,11 +105,23 @@ class LogRepository(BaseRepository[LogLine]):
 
         Nothing here has to silence itself any more: with no per-statement line, this INSERT
         writes nothing that the next drain would insert and log again.
+
+        ``.values([...])`` rather than a parameter list on ``execute``: the id column has no
+        server default to ``RETURNING``, so nothing pushes SQLAlchemy's own insertmanyvalues
+        batching to kick in, and a parameter list is sent as a plain DBAPI executemany — one
+        single-row statement replayed once per line, not the multi-row ``VALUES`` this builds.
+
+        Chunked at :data:`_MAX_STATEMENT_PARAMS`: a queue-wide batch can hold far more rows than
+        one statement may bind, and asyncpg refuses the whole insert rather than truncate it.
         """
         if not lines:
             return
         await self.session.execute(sql_text("SET LOCAL synchronous_commit = off"))
-        await self.session.execute(insert(LogLine), [_columns(line, instance) for line in lines])
+        rows = [_columns(line, instance) for line in lines]
+        per_row = len(LogLine.__table__.columns)
+        chunk_size = _MAX_STATEMENT_PARAMS // per_row
+        for start in range(0, len(rows), chunk_size):
+            await self.session.execute(insert(LogLine).values(rows[start : start + chunk_size]))
 
     async def roll(self, *, today: date, retention_days: int) -> int:
         """Create the day partitions just ahead of ``today`` and drop those past retention;

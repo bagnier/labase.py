@@ -67,7 +67,10 @@ from apps.shared.tests.test_listener import (
     test_tick_runs_spread_handlers_per_instance_off_the_trail,
 )
 from apps.shared.tests.test_log_chain import test_only_a_library_line_is_held_to_the_warning_floor
-from apps.shared.tests.test_log_repository import test_retention_drops_a_whole_day_as_one_partition
+from apps.shared.tests.test_log_repository import (
+    test_append_writes_the_whole_batch_as_one_statement,
+    test_retention_drops_a_whole_day_as_one_partition,
+)
 from apps.shared.tests.test_log_sink import (
     test_a_batch_the_store_refuses_lands_in_the_day_file,
     test_a_store_that_refuses_is_announced_once,
@@ -681,6 +684,11 @@ CLAIMS = [
         "the table is `UNLOGGED`",
         "nothing reads log_lines' persistence, partitioning or commit mode; the migration "
         "alone says it",
+    ),
+    held(
+        "the-log-write-is-one-multi-row-insert",
+        "the write is one multi-row insert per drain",
+        test_append_writes_the_whole_batch_as_one_statement,
     ),
     held(
         "retention-drops-a-partition",
