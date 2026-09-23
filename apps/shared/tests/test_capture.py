@@ -132,3 +132,88 @@ async def test_a_failing_tracker_is_still_captured(log_chain, monkeypatch):
     await capture.CaptureDrain(0).tick()
 
     assert [str(captured.exc) for captured in capture._QUEUE] == ["tracker itself is down"]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_trackers_capture_keeps_the_original_correlation_keys(
+    log_chain, monkeypatch
+):
+    """``captured.context`` carries the request/user/org ids the timeline joins on — dropping them
+    for the tracker's own failure would open an issue no filter can pivot back to its request."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    capture._tracker_failures.clear()
+
+    async def failing_tracker(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("tracker itself is down")
+
+    monkeypatch.setattr(capture, "_trackers", [failing_tracker])
+    with structlog.contextvars.bound_contextvars(request_id="req-1"):
+        structlog.get_logger(_PROBE_LOGGER).exception(
+            "todo.blew_up", exc_info=RuntimeError("the original failure")
+        )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert capture._QUEUE[-1].context == {
+        "event": "todo.blew_up",
+        "logger": _PROBE_LOGGER,
+        "request_id": "req-1",
+        "tracker": repr(failing_tracker),
+    }
+
+
+# A tracker stuck failing every tick must not promote every tick to its own capture (AGENTS: a
+# failure that repeats is one bug) — that would file the same breakage anew every second and,
+# fed its own failure back as new input, never let the queue settle.
+
+
+@pytest.mark.asyncio
+async def test_a_permanently_broken_tracker_does_not_keep_the_queue_growing(log_chain, monkeypatch):
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    capture._tracker_failures.clear()
+
+    async def failing_tracker(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("tracker itself is down")
+
+    monkeypatch.setattr(capture, "_trackers", [failing_tracker])
+    structlog.get_logger(_PROBE_LOGGER).exception(
+        "todo.blew_up", exc_info=RuntimeError("the original failure")
+    )
+
+    for _ in range(5):
+        await capture.CaptureDrain(0).tick()
+
+    assert len(capture._QUEUE) == 0
+    reported = [
+        line.level
+        for line in reversed(log_chain())  # oldest first, matching the order the ticks ran in
+        if line.logger == capture.__name__ and line.name == "capture.tracker_failed"
+    ]
+    assert reported == ["error", "warning"]
+
+
+@pytest.mark.asyncio
+async def test_stopping_the_drain_also_folds_in_a_failing_trackers_own_failure(
+    log_chain, monkeypatch
+):
+    """``stop`` is the last tick a loop about to exit gets — a tracker breaking on it must not
+    leave its own failure sitting in a queue nobody will ever drain again."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    capture._tracker_failures.clear()
+    folded: list[str] = []
+
+    async def failing_tracker(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("tracker itself is down")
+
+    async def fold(captured: capture.ExceptionCaptured) -> None:
+        folded.append(str(captured.exc))
+
+    monkeypatch.setattr(capture, "_trackers", [failing_tracker, fold])
+    drain = capture.CaptureDrain(interval_seconds=0)
+    structlog.get_logger(_PROBE_LOGGER).exception(
+        "todo.blew_up", exc_info=RuntimeError("caught by the shutdown")
+    )
+
+    await drain.stop()
+
+    assert folded == ["caught by the shutdown", "tracker itself is down"]
