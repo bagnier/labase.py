@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import os
 import uuid
+from pathlib import Path
 
 os.environ.setdefault("ENV_FILE", ".env")
 
@@ -25,6 +26,7 @@ from apps.auth.tests.given_helpers import (
 from apps.organizations.infra.repository import OrganizationRepository
 from apps.shared.settings.env import get_technical_settings
 from apps.todo.domain.models import Todo
+from scripts.envfile import apply_host_overrides
 
 _DEFAULT_EMAIL = "dev@labase.dev"
 _DEFAULT_PASSWORD = "Devpass123!"
@@ -33,6 +35,8 @@ _TODOS = ["Read the docs", "Write a test", "Ship it"]
 
 
 async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.environ["ENV_FILE"]))
     settings = get_technical_settings()
 
     if reset:
