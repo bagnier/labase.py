@@ -129,11 +129,19 @@ class FullpageProvider:
     ``fn`` produces a ``dict`` from a
     :class:`~apps.shared.integration.fullpage.FullpageQuery`; each key it returns is
     namespaced as ``f"{name}_{key}"`` (e.g. name ``profile`` returning
-    ``handle`` lands in the context as ``profile_handle``).
+    ``handle`` lands in the context as ``profile_handle``). ``keys`` is the declared set of
+    raw keys ``fn`` returns — fixed at mount, so :meth:`Host.register_fullpage_provider` can
+    check the namespaced keys for a collision before ``fn`` ever runs.
     """
 
     name: str
+    keys: frozenset[str]
     fn: Callable[[FullpageQuery], Awaitable[dict]]
+
+
+# The keys :func:`~apps.shared.integration.fullpage.fullpage_context` seeds itself, before any
+# provider runs — claimed here too, so a provider cannot be declared to collide with them.
+RESERVED_FULLPAGE_KEYS: frozenset[str] = frozenset({"user", "nav_items"})
 
 
 @dataclass
@@ -198,20 +206,33 @@ class Host:
         self.nav_items.append(item)
 
     def register_fullpage_provider(
-        self, name: str, fn: Callable[[FullpageQuery], Awaitable[dict]]
+        self, name: str, keys: Sequence[str], fn: Callable[[FullpageQuery], Awaitable[dict]]
     ) -> None:
         """Register a fullpage-context slice, contributed by an app from its :func:`mount`.
 
-        ``name`` prefixes every key the provider returns (see
-        :mod:`apps.shared.integration.fullpage`), so two providers sharing it would silently
-        overwrite each other's keys on every render — rejected here, at mount, rather than found
-        as a ``page.overwrite`` log line in production."""
+        ``keys`` is the raw keys ``fn`` returns; each is namespaced as ``f"{name}_{key}"`` (see
+        :mod:`apps.shared.integration.fullpage`). Two providers whose namespaced keys collide —
+        same name, or two names landing on the same string — would silently overwrite each
+        other on every render, so the collision is rejected here, at mount, rather than found as
+        a ``page.overwrite`` log line in production."""
         if any(existing.name == name for existing in self.fullpage_providers):
             raise ValueError(
                 f"fullpage provider {name!r} is already registered — "
                 "two providers under the same name would collide on every render"
             )
-        self.fullpage_providers.append(FullpageProvider(name, fn))
+        namespaced = {f"{name}_{key}" for key in keys}
+        claimed = RESERVED_FULLPAGE_KEYS | {
+            f"{existing.name}_{key}"
+            for existing in self.fullpage_providers
+            for key in existing.keys
+        }
+        collision = sorted(namespaced & claimed)
+        if collision:
+            raise ValueError(
+                f"fullpage provider {name!r} would collide on {collision} — "
+                "already claimed by another provider or by the host-seeded context"
+            )
+        self.fullpage_providers.append(FullpageProvider(name, frozenset(keys), fn))
 
     def on_startup(self, handler: Callable[[], Awaitable[None]]) -> None:
         """Register an async startup hook from an app's :func:`mount`.
