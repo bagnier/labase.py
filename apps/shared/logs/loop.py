@@ -15,9 +15,26 @@ meant to raise the alarm on.
 A failure that is *not* a loop — a queued task exhausting its retries, a spread handler refusing a
 config reload — is a defect of its own and logs at ``exception`` directly. This is only for what
 repeats.
+
+The transition is tracked per *fault*, not per outage: a second, distinct exception arriving
+mid-outage is a bug of its own and earns its own opening line — folding it into the first
+fault's warnings is how it never reaches the issues screen at all. ``_fingerprint`` keys a
+fault the same way :func:`apps.issues.domain.service.fingerprint` keys an issue — type plus
+raise site — deliberately not by importing it: ``apps.shared`` names no bounded context.
 """
 
 from typing import Any
+
+
+def _fingerprint(exc: BaseException) -> str:
+    """The type plus where it was raised — two different bugs sharing a built-in type (a
+    ``RuntimeError`` from the claim query, one from the commit after it) are not one fault."""
+    frame = exc.__traceback__
+    while frame is not None and frame.tb_next is not None:
+        frame = frame.tb_next
+    if frame is None:
+        return type(exc).__qualname__
+    return f"{type(exc).__qualname__}@{frame.tb_frame.f_code.co_filename}:{frame.tb_lineno}"
 
 
 class LoopHealth:
@@ -34,7 +51,7 @@ class LoopHealth:
         self._failed_event = f"{name}_failed"
         self._recovered_event = f"{name}_recovered"
         self._failures = 0
-        self._fault: type[BaseException] | None = None
+        self._opened_faults: set[str] = set()
 
     @property
     def failures(self) -> int:
@@ -45,15 +62,21 @@ class LoopHealth:
     def tick_failed(self, exc: BaseException, **context: object) -> None:
         """Record a tick that raised, at the level its place in the outage warrants.
 
-        The transition is per *fault*, not per outage: a ``TypeError`` arriving while a
-        ``RuntimeError`` is already warning is a second, distinct bug, and earns its own
-        opening line rather than being folded into the first one's warnings."""
+        A fault already opened this outage keeps warning, however many ticks it has run for —
+        two faults taking turns tick to tick must not reopen each other every time, which is the
+        same flood this module exists to avoid, just spread over two exception types."""
         self._failures += 1
-        if type(exc) is not self._fault:
-            self._fault = type(exc)
-            self._log.exception(self._failed_event, exc_info=exc, **context)
+        fault = _fingerprint(exc)
+        if fault in self._opened_faults:
+            self._log.warning(self._failed_event, exc_info=exc, failures=self._failures, **context)
             return
-        self._log.warning(self._failed_event, exc_info=exc, failures=self._failures, **context)
+        self._opened_faults.add(fault)
+        if self._failures == 1:
+            self._log.exception(self._failed_event, exc_info=exc, **context)
+        else:
+            self._log.exception(
+                self._failed_event, exc_info=exc, failures=self._failures, **context
+            )
 
     def tick_succeeded(self) -> None:
         """Record a tick that returned. Says nothing unless it ends an outage — a healthy loop
@@ -61,4 +84,4 @@ class LoopHealth:
         if self._failures:
             self._log.info(self._recovered_event, failures=self._failures)
             self._failures = 0
-            self._fault = None
+            self._opened_faults.clear()

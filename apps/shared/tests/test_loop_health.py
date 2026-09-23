@@ -8,8 +8,12 @@ same issue eighty-six thousand times a day.
 
 Hence a verdict rather than a level: the *transition* into failure is the bug (one issue, one
 occurrence), the ticks that follow are the same outage still running (a warning carrying how
-long), and coming back says what it cost.
+long), and coming back says what it cost. The transition is tracked per *fault*, not per
+outage: a second, distinct exception arriving mid-outage is its own bug and opens its own
+issue, however many ticks a fault already seen this outage go on warning.
 """
+
+from collections.abc import Callable
 
 import structlog
 
@@ -49,7 +53,7 @@ def test_a_loop_falling_over_opens_an_issue(log_chain):
 
 
 def test_a_loop_still_down_does_not_open_the_issue_again(log_chain):
-    """One outage is one issue. Ticking at a second, the alternative is eighty-six thousand
+    """One fault is one issue. Ticking at a second, the alternative is eighty-six thousand
     occurrences a day for a single failure, which buries every other issue on the screen."""
     health = _health()
 
@@ -86,6 +90,61 @@ def test_a_second_distinct_failure_during_the_outage_opens_its_own_issue(log_cha
         ("probe.tick_failed", "still down"),
         ("probe.tick_failed", "a different fault altogether"),
     ]
+
+
+def test_two_faults_taking_turns_each_open_only_once(log_chain):
+    """The transition tracks *which* faults already opened this outage, not merely the last
+    one seen — otherwise two faults alternating tick to tick would reopen the issue every time,
+    which is the same flood this module exists to avoid, just spread over two exception types."""
+    health = _health()
+
+    health.tick_failed(RuntimeError("still down"))
+    health.tick_failed(TypeError("a different fault altogether"))
+    health.tick_failed(RuntimeError("still down"))
+    health.tick_failed(TypeError("a different fault altogether"))
+
+    assert len(_captured()) == 2
+
+
+def _raise_from_site_a() -> None:
+    raise RuntimeError("still down")
+
+
+def _raise_from_site_b() -> None:
+    raise RuntimeError("still down")
+
+
+def _raised_by(raiser: Callable[[], None]) -> RuntimeError:
+    try:
+        raiser()
+    except RuntimeError as exc:
+        return exc
+    raise AssertionError("the probe raiser did not raise")
+
+
+def test_the_same_exception_type_from_a_different_call_site_is_a_distinct_fault(log_chain):
+    """A `RuntimeError` from the claim query and a `RuntimeError` from the commit that follows
+    it are two different bugs sharing a type — the fingerprint is the raise site, not the type
+    alone, or the second one folds into the first's warnings same as issue #55's original bug."""
+    health = _health()
+
+    health.tick_failed(_raised_by(_raise_from_site_a))
+    health.tick_failed(_raised_by(_raise_from_site_b))
+
+    assert len(_captured()) == 2
+
+
+def test_a_fault_reopening_mid_outage_still_says_how_long_it_has_run(log_chain):
+    """The opening line for the very first failure carries no count (there is nothing to say
+    yet), but one that opens after the outage has already run for a while is not that case —
+    losing the count there reads as a fresh outage instead of one 3 ticks deep."""
+    health = _health()
+
+    health.tick_failed(RuntimeError("still down"))
+    health.tick_failed(RuntimeError("still down"))
+    health.tick_failed(TypeError("a different fault altogether"))
+
+    assert _lines(log_chain)[-1] == ("error", "probe.tick_failed", {"failures": 3})
 
 
 def test_a_loop_coming_back_says_what_the_outage_cost(log_chain):
