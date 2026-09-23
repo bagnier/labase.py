@@ -197,13 +197,20 @@ class CaptureDrain:
                 break
             token = _capturing.set(True)
             try:
+                taken = False
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
+                        taken = True
                     except Exception:
                         # Log-and-skip: a failing tracker must never worsen the exception it tracks,
                         # nor abort the others. Logged under the guard, so it does not re-capture.
                         log.exception("capture.tracker_failed", tracker=repr(tracker))
+                if _trackers and not taken:
+                    # Postgres down is a tracker raising, not a capture that stops mattering: kept
+                    # for the next tick's retry rather than lost with the outage it would explain.
+                    # Snapshotted past this round (see above), so it is not retried this same tick.
+                    _QUEUE.append(captured)
             finally:
                 _capturing.reset(token)
 

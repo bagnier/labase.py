@@ -83,6 +83,31 @@ def test_a_second_failure_of_the_same_kind_is_still_its_own_capture(log_chain):
     assert [captured.exc for captured in capture._QUEUE] == [first, second]
 
 
+@pytest.mark.asyncio
+async def test_a_capture_stays_queued_until_a_tracker_takes_it(monkeypatch):
+    """Postgres going down mid-drain is a tracker raising, not a capture that stops mattering:
+    the fingerprinting that would have turned it into an issue never ran, so the outage that
+    explains itself has to survive to the tick where a tracker finally takes it — never lost
+    with the very failure it would have opened an issue for."""
+    attempts = 0
+
+    async def flaky(_captured: capture.ExceptionCaptured) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [flaky])
+    capture._QUEUE.clear()
+    structlog.get_logger(_PROBE_LOGGER).exception("todo.blew_up", exc_info=RuntimeError("outage"))
+
+    await capture.CaptureDrain(0).tick()
+    assert len(capture._QUEUE) == 1, "no tracker took it yet, so it must stay queued"
+
+    await capture.CaptureDrain(0).tick()
+    assert (len(capture._QUEUE), attempts) == (0, 2)
+
+
 # Shutdown is not a special case: SIGTERM is how every deploy ends a process, so whatever sits in
 # the queue at that moment is the *normal* amount to lose, not an edge one. The log drain
 # already emptied on its way out; this one dropped the exceptions it was holding.
