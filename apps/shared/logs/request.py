@@ -292,19 +292,27 @@ class RequestLogger:
     @staticmethod
     def _observe(request: Request, status: int, duration_ms: float) -> None:
         """Feed the load metrics under the matched route template — a low-cardinality label the
-        router only fills in while serving, hence read here rather than up front."""
+        router only fills in while serving, hence read here rather than up front.
+
+        Log-and-skip around each observer (AGENTS: so a failing tracker never worsens the
+        exception it tracks) — an observer that raises must never replace the exchange's own
+        exception, nor cost the finished line that was still to come.
+        """
         if not _feeds_load_metrics(request, status):
             return
         route = _route_template(request)
         if route is not None:
-            for observe in _observers:
-                observe(request.method, route, status, duration_ms)
+            label, unmatched = route, False
         else:
             # No route matched, so there is no template: the real path travels instead, flagged,
             # and the counter decides how many such labels it keeps before collapsing them — a
             # genuine dead link of ours stays identifiable without the label set exploding.
-            for observe in _observers:
-                observe(request.method, request.url.path, status, duration_ms, unmatched=True)
+            label, unmatched = request.url.path, True
+        for observe in _observers:
+            try:
+                observe(request.method, label, status, duration_ms, unmatched=unmatched)
+            except Exception:
+                log.exception("request.observer_failed", observer=repr(observe))
 
     @staticmethod
     def _log_finished(request: Request, status: int, duration_ms: float) -> None:
