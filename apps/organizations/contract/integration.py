@@ -127,8 +127,8 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         icon="buildings",
         section="identity",
         # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day
-        # would just shadow the Sign-ups series on the console growth chart. Team creation
-        # isn't structurally distinguishable from a personal org, so we don't fake a signal.
+        # would just shadow the Sign-ups series on the console growth chart even counting
+        # team orgs (``is_personal``) alone.
         data={"lines": lines},
     )
 
@@ -150,13 +150,16 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
     if not await user_exists(session, user_id):
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    already_owns_one = await OrganizationRepository(session).count_owned_by(user_id)
+    # A *personal* org specifically — not any owned org, which a self-created team org (through
+    # `POST /organizations`, before this delivery) would also satisfy and wrongly skip (#71).
+    already_owns_one = await OrganizationRepository(session).count_personal_owned_by(user_id)
     if already_owns_one:
         return  # retried delivery of a UserCreated already handled — idempotency, not a re-visit
     try:
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,
             user_id=user_id,
+            is_personal=True,
         )
     except IntegrityError:
         # The race remains: gone between the check above and the membership insert. But the clause

@@ -193,6 +193,41 @@ async def test_create_org_still_creates_a_personal_org_for_an_invitee_who_joined
 
 
 @pytest.mark.asyncio
+async def test_create_org_still_creates_a_personal_org_for_a_user_who_owns_a_team_org_first():
+    """Regression (#71): a user who creates a team org through ``POST /organizations`` before
+    the worker delivers their ``UserCreated`` already owns a non-personal org by the time this
+    consumer runs. The guard must look for an owned *personal* org, not any owned org, or that
+    user never gets the personal org every account is promised at sign-up."""
+    user_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
+    try:
+        async with db.admin_session_factory()() as session:
+            await OrganizationRepository(session).create_with_owner(
+                name="A team org",
+                user_id=uuid.UUID(user_id),
+            )
+            await session.commit()
+
+            event = UserCreated(
+                user_id=uuid.UUID(user_id),
+                entity_id=uuid.UUID(user_id),
+                email="team-owner@signup-seeding.local",
+            )
+            await _create_org(session, event)
+            await session.commit()
+
+            memberships = await OrganizationRepository(session).list_with_role_for_user(
+                uuid.UUID(user_id)
+            )
+        roles_by_org_name = {org.name: role for org, role in memberships}
+        assert roles_by_org_name == {
+            "A team org": OrgRole.owner,
+            "team-owner@signup-seeding.local": OrgRole.owner,
+        }
+    finally:
+        delete_user(user_id)
+
+
+@pytest.mark.asyncio
 async def test_create_org_reraises_a_failure_the_actor_is_still_there_to_contradict(monkeypatch):
     """``except IntegrityError`` names a type, not a cause: a handle collision and the last-owner
     trigger arrive spelled the same way as the vanished seat. Absorbing those as ``actor_gone``
