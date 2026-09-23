@@ -20,10 +20,12 @@ _ORG_NAME = "Acme Widgets"
 def _seed_fact_from_a_gone_actor_and_org():
     """A fact whose ``user_id``/``org_id`` resolve nowhere (no signed-up account, no org row) —
     standing in for the account closed, and the org renamed or deleted, since the write path
-    itself resolves names live at the moment the fact is recorded."""
+    itself resolves names live at the moment the fact is recorded. ``app_name`` names no real
+    context on purpose — a seeded fact needs no owner, and a made-up one keeps this test off the
+    demo-naming ratchet in tests/meta/test_surfaces.py."""
     return seed_fact(
         BusinessEventRecord(
-            app_name="todo",
+            app_name="sample",
             verb="created",
             user_id=uuid.uuid7(),
             user_name=_ACTOR_EMAIL,
@@ -38,5 +40,14 @@ def test_a_row_shows_the_actor_and_org_names_the_fact_pinned(driver):
     driver.run(_seed_fact_from_a_gone_actor_and_org())
 
     body = driver.client().get("/console/timeline", headers={"accept": "text/html"}).text
+
+    assert (_ACTOR_EMAIL in body, _ORG_NAME in body) == (True, True)
+
+
+def test_the_csv_export_carries_the_pinned_names_too(driver):
+    driver.sign_in_as_admin(_ADMIN)
+    driver.run(_seed_fact_from_a_gone_actor_and_org())
+
+    body = driver.client().get("/console/timeline/export?format=csv").text
 
     assert (_ACTOR_EMAIL in body, _ORG_NAME in body) == (True, True)
