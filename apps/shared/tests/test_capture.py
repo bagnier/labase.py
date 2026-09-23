@@ -108,3 +108,27 @@ async def test_stopping_the_drain_folds_in_what_it_was_still_holding(log_chain, 
     await drain.stop()
 
     assert [str(one.exc) for one in folded] == ["caught by the shutdown"]
+
+
+# The reentrancy guard exists so a tracker's own *ordinary* logging never feeds the queue back to
+# itself — not to make a broken tracker invisible. ``capture.tracker_failed`` is logged under that
+# same guard, so without a path around it, the one bug the seam most needs to surface is the one
+# it cannot see.
+
+
+@pytest.mark.asyncio
+async def test_a_failing_tracker_is_still_captured(log_chain, monkeypatch):
+    """A broken tracker must reach the queue itself, or it can never become an issue."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+
+    async def failing_tracker(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("tracker itself is down")
+
+    monkeypatch.setattr(capture, "_trackers", [failing_tracker])
+    structlog.get_logger(_PROBE_LOGGER).exception(
+        "todo.blew_up", exc_info=RuntimeError("the original failure")
+    )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert [str(captured.exc) for captured in capture._QUEUE] == ["tracker itself is down"]

@@ -22,8 +22,9 @@ register directly here via :func:`on_captured` (``apps/issues`` subscribes its o
 the drain fans each exception out to them with log-and-skip isolation, so a failing tracker never
 worsens the exception it tracks. That isolation IS the doctrine: best-effort, never blocking, and a
 tracker that must never itself fail — so deleting the issues context simply leaves the exception
-untracked. The seam is deliberately off the event bus: an ``ExceptionCaptured`` is technical
-observability, not a persisted business fact.
+untracked. A tracker that fails anyway is itself queued for the next tick, so a broken tracker
+becomes trackable rather than a silent gap. The seam is deliberately off the event bus: an
+``ExceptionCaptured`` is technical observability, not a persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
@@ -68,8 +69,9 @@ class _Overflow:
 
 _overflow = _Overflow()
 
-# Set while the drain is delivering, so the capture path's own logs — a tracker's, and
-# ``capture.tracker_failed`` when one raises — never re-enter the capture processor.
+# Set while the drain is delivering, so a tracker's own ordinary logging never re-enters the
+# capture processor mid-drain. ``capture.tracker_failed`` is logged under the same guard, but
+# the exception behind it is queued directly (see ``tick``), never left uncaptured.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
 # An exception tracker, registered directly at mount by whoever tracks them (``apps/issues``) rather
@@ -116,6 +118,20 @@ def _exc_from(value: Any) -> BaseException | None:
     return None
 
 
+def _enqueue(exc: BaseException, context: dict[str, Any]) -> None:
+    """Mark ``exc`` captured and append it, bounded — the part ``capture_processor`` and a
+    failing tracker's own capture (below) both need, the latter reached straight past the
+    ``_capturing`` guard that would otherwise swallow it."""
+    if getattr(exc, _CAPTURED, False):
+        return
+    # A C-level or ``__slots__`` exception takes no marks; capture it anyway, at the risk of twice.
+    with contextlib.suppress(AttributeError, TypeError):
+        setattr(exc, _CAPTURED, True)
+    if len(_QUEUE) == _QUEUE.maxlen:
+        _overflow.dropped += 1
+    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+
+
 def capture_processor(
     _logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
@@ -132,19 +148,14 @@ def capture_processor(
     if method_name != "error" or _capturing.get():
         return event_dict
     exc = _exc_from(event_dict.get("exc_info"))
-    if exc is None or getattr(exc, _CAPTURED, False):
+    if exc is None:
         return event_dict
-    # A C-level or ``__slots__`` exception takes no marks; capture it anyway, at the risk of twice.
-    with contextlib.suppress(AttributeError, TypeError):
-        setattr(exc, _CAPTURED, True)
     # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
     # timeline joins on — and whether a request was in flight is read off request_id itself.
     context = {
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
-    if len(_QUEUE) == _QUEUE.maxlen:
-        _overflow.dropped += 1
-    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+    _enqueue(exc, context)
     return event_dict
 
 
@@ -200,10 +211,14 @@ class CaptureDrain:
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
-                    except Exception:
-                        # Log-and-skip: a failing tracker must never worsen the exception it tracks,
-                        # nor abort the others. Logged under the guard, so it does not re-capture.
+                    except Exception as tracker_exc:
+                        # Log-and-skip: a failing tracker must never worsen the exception it
+                        # tracks, nor abort the others. The line is written under the guard, so
+                        # it does not re-capture through the normal path — but a broken tracker
+                        # is a bug like any other, so its own exception is queued directly,
+                        # landing on the next tick rather than this one still under way.
                         log.exception("capture.tracker_failed", tracker=repr(tracker))
+                        _enqueue(tracker_exc, {"tracker": repr(tracker)})
             finally:
                 _capturing.reset(token)
 
