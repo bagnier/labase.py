@@ -90,6 +90,7 @@ from apps.shared.tests.test_queue import (
 )
 from apps.shared.tests.test_request_logging import (
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+    test_a_raising_observer_never_replaces_the_handlers_own_exception,
 )
 from apps.shared.tests.test_uuid7 import test_uuid7_is_time_ordered_and_versioned
 from apps.timeline.tests.test_pivots import test_a_row_correlates_by_the_request_it_names
@@ -366,6 +367,7 @@ CLAIMS = [
         test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
         test_the_drain_reports_the_lines_the_queue_had_to_shed,
         test_the_drain_reports_the_captures_the_queue_had_to_shed,
+        test_a_raising_observer_never_replaces_the_handlers_own_exception,
     ),
     held(
         "scenarios-run-twice",
