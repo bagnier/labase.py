@@ -78,10 +78,6 @@ Code that made a defensible choice AGENTS.md or the README does not describe. Cl
   like `OrgNavQuery`.
   [dashboard.html:57](apps/organizations/templates/organizations/dashboard.html#L57),
   [profile.html:97](apps/profile/templates/profile.html#L97)
-- [ ] AGENTS `One clock, one key, one style` ("every primary key"): `LogLine` maps `id` alone as
-  its key through `UUIDPk`, where the table's key is `(id, ts)`. → map the composite key.
-  [models.py:22](apps/shared/logs/models.py#L22),
-  [20260818000015_log_lines.sql:53](supabase/migrations/20260818000015_log_lines.sql#L53)
 - [ ] AGENTS `Architecture` (`three-audiences`): several business GETs have no fragment face — the
   calendar router never branches on HTMX (its only `_*.html` is the dashboard tile), nor do
   `list_issues`, `org_dashboard`, `list_members` and `nav_manager`; an HTMX request gets the full
@@ -214,28 +210,12 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   and may only shrink; its regex also counts a comment line, which is how `list-panel` is listed.
   → into the component layer, on Tailwind values.
   [input.css:497](static/css/input.css#L497), [test_ratchets.py:1019](tests/meta/test_ratchets.py#L1019)
-- [ ] AGENTS `One clock, one key, one style` ("markup is semantic and accessible"): the file
-  input (`opacity-0`, its visible label a `pointer-events-none` span), the share URL and the todo
-  rename input have no accessible name; the todo edit and delete buttons stay `opacity-0` on
-  keyboard focus. → labels, and `focus-visible:opacity-100`.
-  [files.html:26](apps/files/templates/files/files.html#L26),
-  [_share_result.html:2](apps/files/templates/files/_share_result.html#L2),
-  [_list_fragment.html:23](apps/todo/templates/todo/_list_fragment.html#L23)
 - [ ] AGENTS `Invariants are types, not checks`: an enum-typed column binds on assignment and in
   signatures only — `Membership(..., role="boss")` passes `ty`, since `DeclarativeBase.__init__`
   takes `**kwargs: Any`, and rows are built that way (`OrgInvitation(...)`). Same for every
   StrEnum column. → typed constructors, or a ty-visible `__init__` on the base.
   [models.py:33](apps/organizations/domain/models.py#L33),
   [repository.py:142](apps/organizations/infra/repository.py#L142)
-- [ ] AGENTS `Invariants are types, not checks`: `get_invitation_by_token` returns a bare `dict`,
-  and the invitation router compares `status` to string literals — `== "revokd"` passes `ty` and a
-  revoked invitation reads as valid. → return a typed read model, compare `InvitationStatus`.
-  [repository.py:183](apps/organizations/infra/repository.py#L183),
-  [invitation_router.py:64](apps/organizations/infra/invitation_router.py#L64)
-- [ ] AGENTS `Invariants are types, not checks`: the Timeline grain is a runtime tuple checked
-  once, then `grain: str` below — `bucket_key(now, "yeer")` silently buckets by day, `_axis_keys`
-  raises `KeyError`. → a `Literal`. [router.py:43](apps/timeline/infra/router.py#L43),
-  [repository.py:50](apps/timeline/infra/repository.py#L50)
 - [ ] AGENTS `Invariants are types, not checks`: an org's time zone and a handle are `str`,
   validated in the routers only — `set_timezone(org, "Mars/Olympus_Mons")` passes `ty`, then every
   calendar page raises `ZoneInfoNotFoundError`. → a `ZoneInfo` / handle value object at the
@@ -257,11 +237,6 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   [router.py:88](apps/todo/infra/router.py#L88),
   [router.py:178](apps/organizations/infra/router.py#L178),
   [router.py:61](apps/calendar/infra/router.py#L61)
-- [ ] AGENTS `A contract never exports a settings handle`: the rule only bites if request code
-  never calls `get_settings(name)` itself, and profile's router reads `get_settings("users")` —
-  auth's handle, by string, around `apps/auth/contract/settings.py`. Nothing states or checks it.
-  → the `UsersSettings` dependency, and a ratchet on `get_settings` in handlers.
-  [router.py:230](apps/profile/infra/router.py#L230)
 - [ ] AGENTS `A contract never exports a settings handle` ("org overrides applied under
   `/{org_handle}`"): the full-page slice reads `get_settings("profile").view().avatar_enabled`
   server-wide, while the console accepts a per-org override of it — an org that switches avatars
@@ -278,44 +253,16 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   deploy contract `METRICS_FLUSH_SECONDS`; delete the app and the setting survives. It is the only
   poll knob naming a context. → the app declares its own interval.
   [env.py:61](apps/shared/settings/env.py#L61), [.env.example:68](.env.example#L68)
-- [ ] AGENTS `One set of helpers branches JSON, fragment and page` ("centralize the … branching"): four routers re-spell the
-  header test by hand — timeline and metrics inline, issues and learning into a local `is_htmx`
-  that shadows the helper's name — against the module's own "single source of truth for the header".
-  → call `is_htmx`. [router.py:326](apps/timeline/infra/router.py#L326),
-  [router.py:109](apps/issues/infra/router.py#L109), [router.py:95](apps/learning/infra/router.py#L95),
-  [router.py:44](apps/metrics/infra/router.py#L44)
 - [ ] AGENTS `A page's context is assembled from slices its apps own` ("declared, prefixed keys"): only the prefix is declared — the keys
   are whatever the coroutine returns, and the module's own "Current providers" table is already
   stale (`profile_avatar_path` is live and read by `base.html`, and unlisted). → declare the key
   set at registration. [fullpage.py:18](apps/shared/integration/fullpage.py#L18),
   [fullpage.py:38](apps/profile/contract/fullpage.py#L38)
-- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Icons are Phosphor"): the build copies the woff2 only, so an icon renders
-  just when `input.css` carries its codepoint by hand — three used names are unmapped and render
-  nothing: `ph-mask-happy` (the impersonation banner), `ph-clock-counter-clockwise`,
-  `ph-arrow-bend-down-right` (checked in Chromium: `content: none`). → generate the mapping, or a
-  test over the names used. [base.html:24](apps/shared/templates/base.html#L24),
-  [index.html:118](apps/timeline/templates/timeline/index.html#L118)
-- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Icons are Phosphor"): the timeline draws its sort state with `▲`/`▼` and
-  its filter-clear with `✕`, where `ph-caret-down` and `ph-x` are mapped and `ph-x` already serves
-  that meaning in todo. → the Phosphor icons.
-  [index.html:151](apps/timeline/templates/timeline/index.html#L151),
-  [_combobox.html:45](apps/timeline/templates/timeline/_combobox.html#L45)
-- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("real landmarks"): `invitations/accept.html` is its own document and its
-  body is `div`/`h1`/`p` — no `main`, no header, no skip link, where the six other root templates
-  carry one. → a landmark, or extend the public shell.
-  [accept.html:1](apps/organizations/templates/invitations/accept.html#L1)
 - [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("labelled controls, visible focus rings"): the timeline filter's clear
   affordance is a `role="button"` span nested inside the pill button, and its options are plain
   divs — no `tabindex`, no key handler, absent from the tab order (measured), so a keyboard user
   can open the popover and neither choose nor clear. → real buttons and a listbox.
   [_combobox.html:42](apps/timeline/templates/timeline/_combobox.html#L42)
-- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Reuse components instead of re-spelling utility chains"): `card-panel`
-  exists and is used by 29 templates, yet its chain is re-spelled six times in the console, less
-  its `shadow-sm`; `tab-content border-base-300 bg-base-100 p-4 sm:p-6` repeats 13 times across
-  four files. → the
-  component class, and one for the tab shell.
-  [_technical_env.html:3](apps/console/templates/console/_technical_env.html#L3),
-  [input.css:369](static/css/input.css#L369)
 - [ ] "Foundation apps — auth, organizations, console — are what the others are built on: they
   have no on/off switch and are not deleted; only feature apps can be." From AGENTS
   `Demo apps are disposable, the others loosely coupled` ("can be added, disabled, or deleted without touching the others"): every
@@ -586,11 +533,6 @@ rebuilt — observability, `health/` probes, cross-instance rate limiting, RLS, 
 headers, `Sec-Fetch-Site` CSRF, backup docs. The gap is not the runtime, it is the path to
 production and its operation. Full runbook in [production.md](docs/production.md).
 
-- [ ] The preflight's `len(SUPABASE_SECRET_KEY) < 40` threshold is a heuristic that refuses boot
-  with no way out. Measured: a real `sb_secret_…` key is 41 characters — a one-character margin.
-  Legacy `service_role` keys are very long JWTs and sail through. A false positive locks production
-  out. → validate a prefix rather than a length, or downgrade to a warning.
-  [preflight.py](apps/shared/settings/preflight.py)
 - [ ] Deployment CI/CD — a pipeline gated on `make ci`, an image tagged by version (`apps/issues`
   already tracks regression by version), migration, rollback.
 - [ ] Alerting — the issue half is done: `issues.alerting_enabled` + `alert_email` send mail on an

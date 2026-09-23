@@ -10,10 +10,11 @@ rotation made it "a plain file delete", and nothing ever deleted.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import event
 from sqlalchemy import text as sql_text
 
 from apps.shared import clock
@@ -93,6 +94,48 @@ async def test_a_line_names_the_instance_that_wrote_it(sessions):
 
 
 @pytest.mark.asyncio
+async def test_append_writes_the_whole_batch_as_one_statement(sessions):
+    """AGENTS.md, "The log sink traces the machinery off the request's path": "the write is
+    one multi-row insert per drain" — not one single-row statement replayed once per line, and
+    every line of the batch still has to land, not just the statement count be right."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    lines = [_line(marker, seq=0), _line(marker, seq=1), _line(marker, seq=2)]
+    executemany_flags: list[bool] = []
+
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        if "log_lines" in statement:
+            executemany_flags.append(executemany)
+
+    engine = writer.bind.sync_engine
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        await LogRepository(writer).append(lines, instance="gw0")
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+    await writer.commit()
+
+    found = await LogRepository(reader).search(text=marker)
+    assert (executemany_flags, sorted(f.payload["seq"] for f in found)) == ([False], [0, 1, 2])
+
+
+@pytest.mark.asyncio
+async def test_append_lands_a_batch_wider_than_one_statements_bind_limit(sessions):
+    """A drain tick can hand back everything the bounded queue held (``_QUEUE``'s maxlen is
+    10000) — asyncpg refuses a single statement bound to more than 32767 parameters, so a
+    batch this wide must still all land, not raise, however it is chunked."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    lines = [_line(marker) for _ in range(3300)]
+
+    await LogRepository(writer).append(lines, instance="gw0")
+    await writer.commit()
+
+    found = await LogRepository(reader).search(text=marker, limit=len(lines))
+    assert len(found) == len(lines)
+
+
+@pytest.mark.asyncio
 async def test_retention_drops_what_is_past_the_window(sessions):
     """The delete the module promised and never performed."""
     writer, reader = sessions
@@ -107,6 +150,34 @@ async def test_retention_drops_what_is_past_the_window(sessions):
 
     kept = await LogRepository(reader).search(text=marker, window=None)
     assert [line.ts for line in kept] == [fresh]
+
+
+@pytest.mark.asyncio
+async def test_retention_keeps_a_line_from_the_start_of_the_floor_day(sessions):
+    """The floor day is the oldest day ``roll`` keeps whole — so a line dated at its very start,
+    before ``now``'s own time-of-day, must survive purge *inside that same surviving partition*,
+    not just in the default one. A purge floor cut to the exact hour instead of the day catches it
+    anyway, which is what turns the partition's instant ``DROP`` into a row-by-row ``DELETE`` that
+    leaves dead tuples behind (issue #43)."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    floor_day = (_NOW - timedelta(days=30)).date()
+    on_floor_day = datetime.combine(floor_day, time.min, tzinfo=UTC)
+
+    # A real partition for the floor day, the way years of nightly rolls would have made one —
+    # not the default partition every prior version of this test landed in, which is blind to
+    # whether the row-level floor actually agrees with the day the roll keeps whole.
+    await LogRepository(writer).roll(today=floor_day, retention_days=9999)
+    await writer.commit()
+    await LogRepository(writer).append([_line(marker, ts=on_floor_day)], instance="gw0")
+    await writer.commit()
+    await LogRepository(writer).purge(retention_days=30)
+    await writer.commit()
+
+    kept = [line.ts for line in await LogRepository(reader).search(text=marker, window=None)]
+    partitions = await _day_partitions(reader)
+    survived = (kept, floor_day.strftime("log_lines_%Y%m%d") in partitions)
+    assert survived == ([on_floor_day], True)
 
 
 @pytest.mark.asyncio

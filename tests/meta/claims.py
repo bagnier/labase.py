@@ -56,6 +56,11 @@ from apps.shared.tests.test_form_as_json import (
     test_a_form_reaches_the_handler_as_its_declared_body,
     test_a_multipart_upload_is_left_alone,
 )
+from apps.shared.tests.test_host_fullpage import (
+    test_register_fullpage_provider_rejects_a_duplicate_name,
+    test_register_fullpage_provider_rejects_a_key_colliding_with_the_seeded_context,
+    test_register_fullpage_provider_rejects_a_key_collision_across_two_names,
+)
 from apps.shared.tests.test_limiter import (
     test_a_store_that_never_answers_fails_open_within_its_timeout,
     test_a_store_the_limiter_cannot_reach_is_a_bug,
@@ -67,7 +72,10 @@ from apps.shared.tests.test_listener import (
     test_tick_runs_spread_handlers_per_instance_off_the_trail,
 )
 from apps.shared.tests.test_log_chain import test_only_a_library_line_is_held_to_the_warning_floor
-from apps.shared.tests.test_log_repository import test_retention_drops_a_whole_day_as_one_partition
+from apps.shared.tests.test_log_repository import (
+    test_append_writes_the_whole_batch_as_one_statement,
+    test_retention_drops_a_whole_day_as_one_partition,
+)
 from apps.shared.tests.test_log_sink import (
     test_a_batch_the_store_refuses_lands_in_the_day_file,
     test_a_store_that_refuses_is_announced_once,
@@ -185,6 +193,7 @@ from tests.meta.test_surfaces import (
     test_every_icon_a_surface_declares_has_a_glyph_to_render,
     test_no_contract_exports_a_settings_handle,
     test_no_shared_module_names_a_bounded_context,
+    test_no_template_spells_an_icon_as_a_literal_glyph,
     test_nothing_outside_a_demo_names_it,
     test_the_capture_seam_is_not_a_business_fact,
     test_the_collaboration_registries_are_keyed_by_type_alone,
@@ -683,6 +692,11 @@ CLAIMS = [
         "alone says it",
     ),
     held(
+        "the-log-write-is-one-multi-row-insert",
+        "the write is one multi-row insert per drain",
+        test_append_writes_the_whole_batch_as_one_statement,
+    ),
+    held(
         "retention-drops-a-partition",
         "a day past the window leaves as a `DROP`",
         test_retention_drops_a_whole_day_as_one_partition,
@@ -865,10 +879,12 @@ CLAIMS = [
         "A full page's context is assembled from _slices_",
         "nothing checks a full page's context is built by the collector",
     ),
-    waived(
+    held(
         "slice-collisions-rejected-at-startup",
         "collisions rejected at startup",
-        "no bound test registers two slices under one key",
+        test_register_fullpage_provider_rejects_a_duplicate_name,
+        test_register_fullpage_provider_rejects_a_key_collision_across_two_names,
+        test_register_fullpage_provider_rejects_a_key_colliding_with_the_seeded_context,
     ),
     held(
         "uuid7-minted-on-both-sides",
@@ -906,6 +922,7 @@ CLAIMS = [
         "icons-are-phosphor",
         "Icons are Phosphor.",
         test_every_icon_a_surface_declares_has_a_glyph_to_render,
+        test_no_template_spells_an_icon_as_a_literal_glyph,
     ),
     waived(
         "markup-uses-landmarks-and-labels",
@@ -1241,4 +1258,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 59
+UNHELD_TODAY = 58

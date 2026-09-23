@@ -9,8 +9,9 @@ It never touches another context's tables: business events are read through the 
 All three now answer on the same session, which is what makes the ``logs`` source global rather
 than whatever the instance serving the page happened to have on its own disk. Sorting and the cut
 to the page size still happen in memory over the merged list: each source is asked for *its own*
-newest rows, which is exact for the default time order and a sample for any other column — the
-screen says so rather than imply otherwise.
+newest rows, which is exact for the default newest-first time order and a sample for any other
+sort — including time reversed, since the rows behind it are still each source's newest, not its
+oldest — the screen says so rather than imply otherwise.
 """
 
 import uuid
@@ -100,6 +101,12 @@ class TimelineFilter:
         replaces the window on its own, in the store's own read.
         """
         return any((self.org_id, self.user_id, self.entity_id, self.request_id, self.text))
+
+    def orders_whole_window(self) -> bool:
+        """Whether this sort reaches every row in the window rather than a sample of each
+        source's own newest — true only for the default, newest-first time order; ``ts``
+        reversed still starts from each source's newest rows, just read backwards."""
+        return self.sort == "ts" and self.descending
 
 
 def _app_of(logger: str) -> str:
@@ -325,7 +332,9 @@ def _from_event(record: BusinessEventRecord) -> TimelineEntry:
         name=record.kind,
         app=record.app_name,  # its own column — never re-split out of the composed kind
         org_id=str(record.org_id) if record.org_id else None,
+        org_name=record.org_name,
         user_id=str(record.user_id) if record.user_id else None,
+        user_name=record.user_name,
         entity_id=str(record.entity_id) if record.entity_id else None,
         entity_name=record.entity_name,
         request_id=str(record.request_id) if record.request_id else None,

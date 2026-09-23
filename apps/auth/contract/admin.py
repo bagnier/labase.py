@@ -4,6 +4,9 @@ from apps.auth.domain.admin_guard import (
 from apps.auth.domain.admin_guard import (
     ensure_not_last_admin as ensure_not_last_admin,
 )
+from apps.auth.infra.admin_guard import (
+    lock_last_admin_guard as lock_last_admin_guard,
+)
 from apps.auth.infra.user_repository import (
     UserAdminStatus as UserAdminStatus,
 )

@@ -81,9 +81,9 @@ from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.client_ip import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
-from apps.shared.logs.dependency import log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
-from apps.shared.persistence.supabase import auth_user_exists
+from apps.shared.persistence.supabase import auth_user_awaiting_confirmation
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.live import SettingsView
 
@@ -764,11 +764,12 @@ async def resend_confirmation_endpoint(
     sent_message = "If an account exists for this address, a confirmation email is on its way."
     if email:
         # GoTrue is asked either way, so an unknown address costs the same round-trip as a known
-        # one — the timing keeps the neutral answer's secret. Only an account is a fact.
-        has_account = await auth_user_exists(admin_session, email)
+        # one — the timing keeps the neutral answer's secret. Only a mail actually sent is a fact:
+        # an already-confirmed account gets none from GoTrue, so it records none either.
+        awaiting_confirmation = await auth_user_awaiting_confirmation(admin_session, email)
         try:
             await resend_confirmation(email)
-            if has_account:
+            if awaiting_confirmation:
                 await events.emit(ConfirmationResent(entity_name=email), admin_session)
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
@@ -794,13 +795,16 @@ async def reset_password_endpoint(
     try:
         tokens = await confirm_signup(token_hash, type="recovery")
         await update_password(tokens.access_token, password)
-    except PasswordUpdateError as e:
-        # The recovery token is single-use and already consumed: a new link is needed.
-        error = f"{e}. Please request a new reset link."
-        return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
-        error = "This reset link is invalid or has expired. Please request a new one."
+        if isinstance(e, PasswordUpdateError) and is_refusal(e):
+            # The recovery token is single-use and already consumed: a new link is needed.
+            error = f"{e}. Please request a new reset link."
+        else:
+            # GoTrue broke rather than refused (e.g. a 503), or the flow raised something of
+            # its own: the verdict, not the exception's Python type, decides whether this
+            # reaches the log sink as a bug instead of vanishing.
+            _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
+            error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the journal attributed to the account holder.
