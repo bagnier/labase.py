@@ -392,6 +392,35 @@ def test_register_unexpected_exception_returns_400(driver):
     assert "unexpected error" in response.text.lower()
 
 
+def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
+    # GoTrue answering 500 on /token is the dependency breaking, not refusing — it must take
+    # the same log.exception capture path as any other broken dependency, not the brute-force
+    # warning reserved for an actual wrong-password refusal.
+    creds = {"email": "x@test.local", "password": "pw"}
+    err = AuthApiError("Internal Server Error", 500, None)
+    with (
+        patch("apps.auth.infra.router.login", side_effect=err),
+        patch("apps.auth.infra.router.log") as log,
+    ):
+        response = driver.client().post("/auth/login", data=creds)
+    assert response.status_code == 401
+    log.warning.assert_not_called()
+    log.exception.assert_called_once()
+
+
+def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
+    creds = {"email": "x@test.local", "password": "pw"}
+    err = AuthApiError("Internal Server Error", 500, None)
+    with (
+        patch("apps.auth.infra.router.register_user", side_effect=err),
+        patch("apps.auth.infra.router.log") as log,
+    ):
+        response = driver.client().post("/auth/register", data=creds)
+    assert response.status_code == 400
+    log.warning.assert_not_called()
+    log.exception.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_get_rls_session_sets_context_and_relies_on_commit_to_clear():
     from apps.auth.infra.session import get_rls_session
