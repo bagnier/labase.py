@@ -113,6 +113,7 @@ _NAMES_A_DEMO = {
     "apps/shared/tests/test_log_chain.py says 'apps.todo'",
     "apps/shared/tests/test_loop_health.py says 'apps.todo'",
     "apps/shared/tests/test_request_logging.py says 'apps.todo'",
+    "apps/timeline/tests/test_actor_naming.py says 'todo'",
     "apps/timeline/tests/test_app_axis.py says 'apps.todo'",
     "apps/console/tests/test_console_styleguide.py says 'cards'",
     "apps/console/tests/test_events_catalogue.py says '/todo'",
