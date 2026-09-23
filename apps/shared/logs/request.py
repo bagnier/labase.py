@@ -80,6 +80,14 @@ def _is_infra_probe(path: str) -> bool:
     return path.startswith(_INFRA_PROBE_PREFIXES)
 
 
+def _is_health_probe(path: str) -> bool:
+    """Our own liveness/readiness endpoint. Silent while it answers healthy — an admin has no
+    use for a line on every tick — but never on its own account: a status the app never means
+    to give it (a 5xx, the database unreachable) is exactly the incident the Timeline exists
+    for, so it is not dropped unconditionally the way an asset or an infra probe is."""
+    return path in _SKIP_PATHS
+
+
 def _is_internal_referer(request: Request) -> bool:
     """Whether the request followed a link from one of our own pages — a same-host ``Referer``.
     That's what makes a 404 a *dead link from ourselves* rather than a bot scan or a stray URL."""
@@ -106,6 +114,8 @@ def _is_traced(request: Request, status: int) -> bool:
     does not, since a row per image would bury the traffic it sits between. A 5xx is our fault
     whoever asked, so it is traced regardless."""
     path = request.url.path
+    if _is_health_probe(path):
+        return status >= 400
     return status >= 500 or not (_is_asset(path) or _is_infra_probe(path))
 
 
@@ -113,7 +123,11 @@ def _feeds_load_metrics(request: Request, status: int) -> bool:
     """Which requests count toward ``/console/load``. Same universe as the timeline: our own
     traffic and our own failures, never the noise. 2xx/3xx and every 5xx always count; a 4xx
     (all of ``unmatched`` — a 404 before routing — plus matched 4xx) counts only when it's a
-    dead link from ourselves, so bot scans, the favicon probe and stray URLs stay out."""
+    dead link from ourselves, so bot scans, the favicon probe and stray URLs stay out. A
+    liveness/readiness probe never counts: it is our own infra hitting us, not load."""
+    path = request.url.path
+    if _is_health_probe(path):
+        return False
     return status < 400 or status >= 500 or _is_internal_dead_link(request, status)
 
 
@@ -211,14 +225,16 @@ class RequestLogger:
 
     What the browser fetches on its own leaves nothing behind — static assets, the favicon and
     ``/.well-known`` probes — unless it 5xx'd, which is our fault whatever asked for it.
-    Liveness/readiness probes are skipped before any of this.
+    A liveness/readiness probe is silent the same way while healthy, but not on a 5xx: the
+    status is only known once the app has answered, so it is decided at the same place as
+    every other exchange rather than skipped up front.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in _SKIP_PATHS:
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
