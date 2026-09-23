@@ -32,7 +32,8 @@ pull request. Merging is never the bot's.
    remarks are grouped in one.
 5. **Merge.** The owner merges, or closes. `CLAUDE.md` keeps `main` the owner's in any
    session; branch protection requires a review but is not enforced on admins, and the bot
-   pushes with the owner's token, so that sentence is what holds the step.
+   pushes with the owner's token, so that sentence is what holds the step. One pull request
+   lands on its own check; several land together, *Landing a batch* below.
 
 Run by hand, `/ci-fix-issue <n>` does the same from a local checkout.
 
@@ -53,6 +54,27 @@ A run only starts on the `auto-fix` label. To answer a `question`, comment, then
 that ends before its own end — cancelled, timed out, a turn that stopped — is marked
 `stalled` by the workflow itself, with the run's URL in a comment; read the log, then put
 `auto-fix` back. Pull requests carry `bot`.
+
+## Landing a batch
+
+The one step that needs someone at the keyboard. A green check proves one pull request against
+`main`, never against the others open beside it: two branches that each pass can fail together —
+a contract changed on one, consumed on the other — and no per-pull-request run can see it. So
+more than a couple open at once land as one object, not one at a time.
+
+The `land-prs` skill does it from a local checkout. It computes which pull requests compose
+(`git merge-tree`, in memory, no worktree, no ref), merges those onto an `integration/<date>`
+branch, runs the gate on the result, and opens the one pull request that carries them. It merges
+and never squashes: each pull request's head becomes an ancestor of `main`, which is what closes
+every one of them by itself.
+
+That gate writes the triage. Each failure names a pair — the one that changes a contract stays,
+the one that consumes it is ejected and reworked on its own branch, given its brief after the
+landing and never before, since three branches told to rebase at once produce three divergent
+rebases.
+
+Depth is what conflicts, not parallelism: two branches off the same `main` rarely collide, twenty
+do. Landing often is what keeps the bot's next branch cut from a `main` that moved.
 
 ## Pace
 

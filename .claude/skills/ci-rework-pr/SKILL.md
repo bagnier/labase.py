@@ -16,6 +16,9 @@ disable-model-invocation: true
 This skill answers one review on one pull request and nothing else. The user is away for the
 whole run, and nobody will answer during it. The pull request number is "$ARGUMENTS".
 
+What it writes into the repository is in English — the answering comment, the commit message —
+whatever language the review it answers is written in.
+
 It commits and pushes on the pull request's own branch only, never on `main`, never a merge. On
 the runner (`GITHUB_ACTIONS` is `true`), the non-interactive rules apply.
 
