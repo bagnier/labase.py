@@ -157,14 +157,12 @@ async def delete_user(
     # released at its commit below.
     await lock_last_admin_guard(admin_session)
     admins = await list_server_admins()
-    target_is_admin = any(
-        u.user_id == uuid.UUID(user_id) and u.is_admin and not u.is_banned for u in admins
-    )
+    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.can_act for u in admins)
     try:
         ensure_not_last_admin(
             removes_admin=True,
             target_is_admin=target_is_admin,
-            admin_count=sum(1 for u in admins if u.is_admin and not u.is_banned),
+            admin_count=sum(1 for u in admins if u.can_act),
         )
     except LastAdminViolation as exc:
         log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=user_id)

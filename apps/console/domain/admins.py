@@ -82,11 +82,9 @@ async def set_admin(email: str, *, is_admin: bool) -> tuple[list[UserAdminStatus
     target = _by_email(users, email)
     if target is None:
         raise AdminNotFound(email)
-    admin_count = sum(1 for u in users if u.is_admin and not u.is_banned)
+    admin_count = sum(1 for u in users if u.can_act)
     ensure_not_last_admin(
-        removes_admin=not is_admin,
-        target_is_admin=target.is_admin and not target.is_banned,
-        admin_count=admin_count,
+        removes_admin=not is_admin, target_is_admin=target.can_act, admin_count=admin_count
     )
     changed = target.is_admin != is_admin
     if changed:

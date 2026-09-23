@@ -22,6 +22,12 @@ class UserAdminStatus:
     is_admin: bool
     is_banned: bool = False
 
+    @property
+    def can_act(self) -> bool:
+        """A banned admin still holds ``app_metadata.role`` but cannot sign in — every last-admin
+        guard call site counts *this*, not the raw role flag, so the rule lives in one place."""
+        return self.is_admin and not self.is_banned
+
 
 def _is_admin(app_metadata: dict[str, Any]) -> bool:
     return app_metadata.get("role") == _ADMIN_ROLE
