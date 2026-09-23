@@ -1,4 +1,5 @@
-"""Defaults a fresh checkout runs with, read from the declaration so no env file can mask them."""
+"""Defaults a fresh checkout runs with, read from the declaration so no env file can mask them,
+and the values the declaration refuses outright."""
 
 import pytest
 from pydantic import ValidationError
