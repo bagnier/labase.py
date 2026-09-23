@@ -1184,6 +1184,12 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/timeline/infra/router.py::_EXPORT_LIMIT = 5000",
     "apps/timeline/infra/router.py::_PAGE_SIZE = 100",
     "apps/todo/contract/integration.py::_RECENT = 3",
+    "scripts/doctor.py::TIMEOUT_SECONDS = 5.0",
+    "scripts/doctor.py::WARN_SECONDS = 0.5",
+    "scripts/perf_smoke.py::_wait_ready(timeout=30.0)",
+    "scripts/smoke.py::FAIL_RATIO_MAX = 0.01",
+    "scripts/smoke.py::P95_MS_MAX = 800.0",
+    "scripts/smoke.py::_wait_for_personal_org(timeout=10.0)",
 }
 
 
@@ -1235,7 +1241,7 @@ def test_the_numbers_outside_the_settings_are_the_named_ones():
     of the three by an edit here, which is the decision the README says someone has to make."""
     found = {
         entry
-        for path, relative in _python_files(_APPS)
+        for path, relative in _python_files(_APPS, _ROOT / "scripts")
         if "/tests/" not in relative
         for entry in _numeric_literals(ast.parse(path.read_text()), relative)
     }

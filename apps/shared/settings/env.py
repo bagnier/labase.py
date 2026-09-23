@@ -80,6 +80,9 @@ class TechnicalSettings(BaseSettings):
     smtp_starttls: bool = False
     # The catcher's HTTP API, beside its SMTP port: read by the e2e mailbox and `make doctor`.
     mailpit_url: str = "http://127.0.0.1:54324"
+    # Page length `scripts/backup_storage.py` requests per Storage `list` call while paging a
+    # folder to its end.
+    backup_storage_page_size: int = 1000
 
     @model_validator(mode="after")
     def _default_storage_url(self) -> TechnicalSettings:
