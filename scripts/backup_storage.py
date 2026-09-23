@@ -11,8 +11,14 @@ folders. Idempotent: re-runs overwrite, so the destination stays a full mirror.
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
+
+from scripts.envfile import pending_host_overrides
+
+# Runs on the host, where the app container's `host.docker.internal` does not resolve.
+os.environ.update(pending_host_overrides(Path(os.getenv("ENV_FILE", ".env"))))
 
 from apps.shared.persistence.storage import admin_storage, bucket
 

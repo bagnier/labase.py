@@ -11,8 +11,14 @@ import argparse
 import asyncio
 import os
 import uuid
+from pathlib import Path
 
 os.environ.setdefault("ENV_FILE", ".env")
+
+from scripts.envfile import pending_host_overrides
+
+# Runs on the host, where the app container's `host.docker.internal` does not resolve.
+os.environ.update(pending_host_overrides(Path(os.environ["ENV_FILE"])))
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 

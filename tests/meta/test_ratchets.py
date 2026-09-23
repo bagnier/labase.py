@@ -185,10 +185,12 @@ _SUBSTRATE_DEEP_LINKS = {
 # Every test double in the two e2e lanes, counted per file — "Nothing business-critical is
 # mocked" holds because this list is what it is. The clock pin is the sanctioned time control
 # (both drivers run the app in-process, so one setattr pins every `clock.now()`); the
-# browser-launch tests steer the env var that picks a Chromium — ambient control, not a double.
+# browser-launch tests steer the env var that picks a Chromium, and the host-override ones pin
+# the process environment `pending_host_overrides` reads — ambient control, not a double.
 _E2E_DOUBLES = {
     "tests/e2e/drivers/test_browser_launch.py": 3,
     "tests/plugin.py": 1,
+    "tests/test_envfile.py": 2,
 }
 
 # The API driver re-routes the two raw session dependencies onto the scenario's rolled-back
