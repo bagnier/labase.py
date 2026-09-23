@@ -67,7 +67,7 @@ def mount(host: Host) -> None:
     host.events.on(UserCreated, _create_org, name="create_personal_org", app="organizations")
     host.events.on(UserDeleted, _forget_user, name="organizations_forget", app="organizations")
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
-    host.register_fullpage_provider("org", provide_org_nav)
+    host.register_fullpage_provider("org", ["nav"], provide_org_nav)
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
     )

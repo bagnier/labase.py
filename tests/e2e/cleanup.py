@@ -46,29 +46,29 @@ def _run_blocking(coro_factory):
     return result[0]
 
 
+# Excluded from the blanket TRUNCATE: the targeted DELETE below empties it while sparing a
+# recurring singleton, which a full wipe would leave with no worker to re-enqueue it.
+_KEEP_TABLES = ["task_queue"]
+
+_TABLES_QUERY = """
+select c.relname
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = :schema
+   and c.relkind in ('r', 'p')  -- ordinary and partitioned tables — never a partition child
+   and not c.relispartition
+"""
+
+
 def truncate_app_tables() -> None:
-    """Truncates all application tables — used in browser test teardown."""
+    """Truncates every table of the schema — used in browser test teardown.
+
+    Enumerated from the catalog rather than a hand-kept list: a fixed list survives exactly until
+    the next migration adds a table nothing else references, at which point ``CASCADE`` can never
+    reach it (issue #65).
+    """
 
     s = get_technical_settings().supabase_database_schema
-    tables = [
-        "app_settings",
-        "business_events",
-        "issue_occurrences",
-        "issues",
-        "request_metrics",
-        "org_file_share_tokens",
-        "org_files",
-        "todos",
-        "card_states",
-        "deck_subscriptions",
-        "cards",
-        "decks",
-        "org_invitations",
-        "memberships",
-        "organizations",
-        "profiles",
-    ]
-    truncate = "TRUNCATE TABLE " + ", ".join(f"{s}.{t}" for t in tables) + " CASCADE"
 
     async def _truncate() -> None:
         engine = _service_engine()
@@ -78,6 +78,11 @@ def truncate_app_tables() -> None:
             for attempt in range(3):
                 try:
                     async with engine.begin() as conn:
+                        rows = await conn.execute(text(_TABLES_QUERY), {"schema": s})
+                        tables = [r.relname for r in rows if r.relname not in _KEEP_TABLES]
+                        truncate = (
+                            "TRUNCATE TABLE " + ", ".join(f"{s}.{t}" for t in tables) + " CASCADE"
+                        )
                         await conn.execute(text(truncate))
                         # One-shot tasks (e.g. queued emails) must not leak across
                         # scenarios; recurring singletons stay — they are only

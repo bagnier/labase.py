@@ -1107,10 +1107,12 @@ _DEFAULTS_OF_A_DECLARED_SETTING = {
 
 # Numbers that are not knobs: a status code carries the response's meaning, an SVG dimension is
 # the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
-# lengths *are* the fingerprint (moving one silently re-groups every past issue), and 9 is the
-# rung count of the spaced-repetition ladder itself. Turning any of these into a setting would
-# offer an operator a lever that breaks the thing rather than tunes it.
+# lengths *are* the fingerprint (moving one silently re-groups every past issue), 9 is the rung
+# count of the spaced-repetition ladder itself, and an advisory lock's key is an identifier, not
+# a duration or a size — there is nothing an operator would tune it to. Turning any of these into
+# a setting would offer an operator a lever that breaks the thing rather than tunes it.
 _NOT_A_TUNING_KNOB = {
+    "apps/auth/infra/admin_guard.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
     "apps/issues/domain/service.py::_TITLE_MAX = 200",
     "apps/issues/domain/service.py::_TOP_FRAMES = 5",
@@ -1122,6 +1124,7 @@ _NOT_A_TUNING_KNOB = {
     "apps/shared/events/activity.py::heatmap_calendar(min_weeks=5)",
     "apps/shared/events/repository.py::search(offset=0)",
     "apps/shared/http/responses.py::mutation_response(status_code=200)",
+    "apps/shared/logs/repository.py::_MAX_STATEMENT_PARAMS = 32767",
     "apps/shared/persistence/sql_stats.py::_KEPT_STATEMENTS = 5",
     "apps/shared/persistence/sql_stats.py::_MAX_STATEMENT = 300",
     "apps/tasks/domain/strip.py::_MAX_BUCKETS = 400",
@@ -1151,6 +1154,7 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/issues/infra/repository.py::list_issues(limit=100)",
     "apps/issues/infra/repository.py::occurrences(limit=20)",
     "apps/issues/infra/router.py::_SPARK_DAYS = 14",
+    "apps/learning/contract/integration.py::_RECENT = 3",
     "apps/metrics/contract/integration.py::MINUTE_RETENTION_DAYS = 7",
     "apps/metrics/contract/integration.py::ROLLUP_EVERY_SECONDS = 86400",
     "apps/metrics/domain/accumulator.py::UNMATCHED_LABEL_CAP = 25",

@@ -257,7 +257,7 @@ def _next_cursor(entries: list[TimelineEntry], flt: TimelineFilter) -> str | Non
     A full page is the signal: the reader cannot tell "exactly a hundred left" from "a hundred and
     more", and asking it to would cost a second query on every view to spare one empty click.
     """
-    if len(entries) < _PAGE_SIZE or flt.sort != "ts" or not flt.descending:
+    if len(entries) < _PAGE_SIZE or not flt.orders_whole_window():
         return None
     return entries[-1].ts.isoformat()
 
@@ -344,6 +344,7 @@ async def timeline_screen(
             "filters": filters,
             "sort": flt.sort,
             "dir": "desc" if flt.descending else "asc",
+            "exact_order": flt.orders_whole_window(),
             # The three sources do not share a memory, and only one of them says so. Stated on
             # screen rather than left to be discovered by a correlation that came back short —
             # the same move as ``data-sort-scope`` one section down.
@@ -356,7 +357,18 @@ async def timeline_screen(
 
 
 _EXPORT_LIMIT = 5000
-_CSV_COLUMNS = ("ts", "source", "level", "name", "org_id", "user_id", "entity_id", "request_id")
+_CSV_COLUMNS = (
+    "ts",
+    "source",
+    "level",
+    "name",
+    "org_id",
+    "org_name",
+    "user_id",
+    "user_name",
+    "entity_id",
+    "request_id",
+)
 
 
 def _ndjson(rows: list[dict[str, Any]]) -> str:

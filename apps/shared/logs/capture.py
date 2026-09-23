@@ -9,10 +9,12 @@ that leaves to decide *here* is the question at the call site — never "should 
 The consequence is a trap worth naming: a site that means "this is a bug" and writes ``log.error``
 gets a log line that rolls out of its window and nothing else. Such a site raises an
 exception of its own to be seen — ``UnroutableFact`` in the event listener, ``UnlimitedEndpoint``
-in the rate limiter, ``MaskedSecret`` on the journal's write path — caught immediately, purely so
-the seam has something to fingerprint on. And a failure that *repeats* (a background loop, a
-readiness probe) goes through :mod:`apps.shared.logs.loop` instead, which files the
-transition and not every tick.
+in the rate limiter — caught immediately, purely so the seam has something to fingerprint on. The
+journal's write path is the deliberate exception to that: ``MaskedSecret`` is raised and caught the
+same way, but reported through ``log.warning``, because the fact it describes already committed
+once — folding it into an issue too would show it a second time (AGENTS: `emit` logs nothing of
+its own). And a failure that *repeats* (a background loop, a readiness probe) goes through
+:mod:`apps.shared.logs.loop` instead, which files the transition and not every tick.
 
 A structlog processor (:func:`capture_processor`, wired into the chain *before*
 ``format_exc_info`` so the live exception is still present) tees every ``log.exception`` call
@@ -222,13 +224,24 @@ class CaptureDrain:
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
-                    except Exception as tracker_exc:
+                    except BaseException as tracker_exc:
                         # Log-and-skip: a failing tracker must never worsen the exception it
-                        # tracks, nor abort the others. The level follows the *transition*: the
+                        # tracks, nor abort the others — whatever it raises, ``CancelledError``
+                        # included. The one carve-out is a *real* cancellation of this task
+                        # (``Task.cancelling()`` counts ``cancel()`` calls still pending): that one
+                        # must still unwind the drain, or ``stop()`` hangs forever on a tracker
+                        # that outlives it. Otherwise the level follows the *transition*: the
                         # first failure is queued (past the guard, which would otherwise swallow
                         # it) so a broken tracker becomes its own issue; a tracker already known
                         # broken only warns, or every tick would re-enqueue its own failure and
                         # the queue would never settle.
+                        task = asyncio.current_task()
+                        if (
+                            isinstance(tracker_exc, asyncio.CancelledError)
+                            and task is not None
+                            and task.cancelling()
+                        ):
+                            raise
                         failures = _tracker_failures.get(tracker, 0) + 1
                         _tracker_failures[tracker] = failures
                         if failures == 1:
