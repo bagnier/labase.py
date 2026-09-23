@@ -179,6 +179,7 @@ from tests.meta.test_routes import (
     test_every_fixed_route_wins_its_first_match,
     test_every_json_face_declares_its_schema,
     test_every_mutation_declares_the_body_it_reads,
+    test_every_operation_has_its_own_id,
     test_no_org_handle_can_shadow_a_fixed_route,
     test_the_schema_describes_both_faces_of_every_page_but_the_named_ones,
 )
@@ -1228,6 +1229,7 @@ CLAIMS = [
         "the OpenAPI schema is a full description of the app",
         test_every_mutation_declares_the_body_it_reads,
         test_every_json_face_declares_its_schema,
+        test_every_operation_has_its_own_id,
     ),
     waived(
         "client-is-generated",
