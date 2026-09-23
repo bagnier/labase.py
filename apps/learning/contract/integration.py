@@ -80,11 +80,13 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    decks = await DeckRepository(query.session, query.org_id).all()
+    decks = await count_where(query.session, Deck, Deck.org_id == query.org_id)
     cards = await count_where(query.session, Card, Card.org_id == query.org_id)
     if decks:
-        lines = [*overview_from_count(len(decks), "deck", "No decks yet"), f"{cards} cards"]
+        recent = await DeckRepository(query.session, query.org_id).recent(_RECENT)
+        lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:
+        recent = []
         lines = ["No decks yet"]
     return Overview(
         key="learning",
@@ -92,7 +94,7 @@ async def _overview(query: OverviewQuery) -> Overview:
         icon="book-open",
         href="learning/sessions",
         template="learning/_overview.html",
-        data={"lines": lines, "recent": [d.name for d in decks[:_RECENT]]},
+        data={"lines": lines, "recent": [d.name for d in recent]},
     )
 
 
