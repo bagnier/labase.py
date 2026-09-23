@@ -70,6 +70,15 @@ class _Overflow:
 
 _overflow = _Overflow()
 
+
+def _enqueue(captured: ExceptionCaptured) -> None:
+    """Append to the bounded queue, counting the eviction a full queue sheds to make room —
+    shared by the processor's own capture and the drain's retry, an ordinary append either way."""
+    if len(_QUEUE) == _QUEUE.maxlen:
+        _overflow.dropped += 1
+    _QUEUE.append(captured)
+
+
 # Set while the drain is delivering, so the capture path's own logs — a tracker's, and
 # ``capture.tracker_failed`` when one raises — never re-enter the capture processor.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
@@ -144,9 +153,7 @@ def capture_processor(
     context = {
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
-    if len(_QUEUE) == _QUEUE.maxlen:
-        _overflow.dropped += 1
-    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+    _enqueue(ExceptionCaptured(exc=exc, context=context))
     return event_dict
 
 
@@ -199,9 +206,11 @@ class CaptureDrain:
                 break
             token = _capturing.set(True)
             try:
+                taken = False
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
+                        taken = True
                     except BaseException as exc:
                         # Log-and-skip: a failing tracker must never worsen the exception it
                         # tracks, nor abort the others — whatever it raises, ``CancelledError``
@@ -217,6 +226,13 @@ class CaptureDrain:
                         ):
                             raise
                         log.exception("capture.tracker_failed", tracker=repr(tracker))
+                if _trackers and not taken:
+                    # Postgres down is a tracker raising, not a capture that stops mattering: kept
+                    # for the next tick's retry rather than lost with the outage it would explain.
+                    # Snapshotted past this round (see above), so it is not retried this same tick.
+                    # Bound like any other append: a concurrent request can fill the freed slot
+                    # while the tracker awaits, and the eviction that follows counts the same way.
+                    _enqueue(captured)
             finally:
                 _capturing.reset(token)
 
