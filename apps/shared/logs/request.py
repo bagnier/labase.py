@@ -30,7 +30,7 @@ from apps.shared.persistence.sql_stats import (
 
 log = structlog.get_logger(__name__)
 
-_SKIP_PATHS = {"/health/live", "/health/ready"}
+_HEALTH_PROBE_PATHS = {"/health/live", "/health/ready"}
 _INFRA_PROBE_PREFIXES = ("/.well-known/",)
 _ASSET_SUFFIXES = (
     ".ico",
@@ -85,7 +85,7 @@ def _is_health_probe(path: str) -> bool:
     use for a line on every tick — but never on its own account: a status the app never means
     to give it (a 5xx, the database unreachable) is exactly the incident the Timeline exists
     for, so it is not dropped unconditionally the way an asset or an infra probe is."""
-    return path in _SKIP_PATHS
+    return path in _HEALTH_PROBE_PATHS
 
 
 def _is_internal_referer(request: Request) -> bool:
@@ -120,11 +120,13 @@ def _is_traced(request: Request, status: int) -> bool:
 
 
 def _feeds_load_metrics(request: Request, status: int) -> bool:
-    """Which requests count toward ``/console/load``. Same universe as the timeline: our own
-    traffic and our own failures, never the noise. 2xx/3xx and every 5xx always count; a 4xx
-    (all of ``unmatched`` — a 404 before routing — plus matched 4xx) counts only when it's a
-    dead link from ourselves, so bot scans, the favicon probe and stray URLs stay out. A
-    liveness/readiness probe never counts: it is our own infra hitting us, not load."""
+    """Which requests count toward ``/console/load``. A liveness/readiness probe never counts,
+    5xx included: it is our own infra hitting us on a timer, not load an admin needs sized, and
+    it is the one path that parts ways with the timeline here (a failing probe is traced, never
+    metered). Everything else shares the timeline's universe — our own traffic and our own
+    failures, never the noise: 2xx/3xx and every 5xx always count; a 4xx (all of ``unmatched`` —
+    a 404 before routing — plus matched 4xx) counts only when it's a dead link from ourselves,
+    so bot scans, the favicon probe and stray URLs stay out."""
     path = request.url.path
     if _is_health_probe(path):
         return False
@@ -250,7 +252,11 @@ class RequestLogger:
             ip=request.client.host if request.client else None,
             request_name=f"{request.method} {request.url.path}",
         )
-        start_request_stats()
+        # A health probe never gets the SQL drill-down: its own `SELECT 1` would otherwise trip
+        # `db.heavy_request` on a merely slow database, one line with nothing to correlate it to
+        # on the ticks that stay silent (AGENTS: a line says what no other record says already).
+        if not _is_health_probe(request.url.path):
+            start_request_stats()
         _rejection.set(None)
 
         status = 500  # what Starlette answers if the app raises before saying otherwise

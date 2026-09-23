@@ -54,6 +54,23 @@ def _named(lines) -> list[tuple[str, str]]:
     return [(line.name, line.level) for line in lines]
 
 
+def test_a_health_probe_never_opens_a_sql_tally(log_chain):
+    """The middleware skips `start_request_stats` for `/health/live` and `/health/ready`: their
+    own `SELECT 1` must never trip `db.heavy_request` on a merely slow database, one line with
+    nothing else to correlate it to on the ticks that otherwise stay silent."""
+    app = FastAPI()
+
+    @app.get("/health/ready")
+    def handler() -> Response:
+        assert sql_stats.read_request_stats() is None
+        return Response(status_code=200)
+
+    app.add_middleware(request.RequestLogger)
+    TestClient(app, base_url="https://example.com").get("/health/ready")
+
+    assert log_chain() == []
+
+
 def test_a_request_under_both_thresholds_says_nothing_about_its_sql(log_chain):
     """The healthy case, which is nearly every request: the exchange line already carries the
     count and the time, and there is no surprise to elaborate on."""
