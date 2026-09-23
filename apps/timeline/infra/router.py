@@ -357,7 +357,18 @@ async def timeline_screen(
 
 
 _EXPORT_LIMIT = 5000
-_CSV_COLUMNS = ("ts", "source", "level", "name", "org_id", "user_id", "entity_id", "request_id")
+_CSV_COLUMNS = (
+    "ts",
+    "source",
+    "level",
+    "name",
+    "org_id",
+    "org_name",
+    "user_id",
+    "user_name",
+    "entity_id",
+    "request_id",
+)
 
 
 def _ndjson(rows: list[dict[str, Any]]) -> str:

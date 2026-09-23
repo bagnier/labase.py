@@ -332,7 +332,9 @@ def _from_event(record: BusinessEventRecord) -> TimelineEntry:
         name=record.kind,
         app=record.app_name,  # its own column — never re-split out of the composed kind
         org_id=str(record.org_id) if record.org_id else None,
+        org_name=record.org_name,
         user_id=str(record.user_id) if record.user_id else None,
+        user_name=record.user_name,
         entity_id=str(record.entity_id) if record.entity_id else None,
         entity_name=record.entity_name,
         request_id=str(record.request_id) if record.request_id else None,

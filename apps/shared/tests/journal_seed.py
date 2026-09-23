@@ -27,11 +27,17 @@ async def seed_fact_on(session: AsyncSession, record: BusinessEventRecord) -> No
 
     Fills what the real write path fills before writing: the readable names pinned as of now, and
     the ``icon`` and ``payload`` column defaults, which SQLAlchemy applies at flush and nothing here
-    ever flushes.
+    ever flushes. A name the caller already set on the record is left alone — the write path never
+    overwrites a pin either, and a test arranging a fact whose actor or org resolves to nothing
+    (a closed account, a deleted org) needs to set it itself; the other name, if not also given, is
+    still resolved live, same as the write path would.
     The record is a throwaway carrier the caller built for this one write (the same thing
     ``event_to_record`` returns), so it is completed in place."""
     repo = EventRepository(session)
-    record.user_name, record.org_name = await repo.pinned_names(record.user_id, record.org_id)
+    if record.user_name is None or record.org_name is None:
+        user_name, org_name = await repo.pinned_names(record.user_id, record.org_id)
+        record.user_name = record.user_name if record.user_name is not None else user_name
+        record.org_name = record.org_name if record.org_name is not None else org_name
     record.icon = record.icon or "circle"
     if record.payload is None:
         record.payload = {}
