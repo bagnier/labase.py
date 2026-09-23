@@ -23,7 +23,7 @@ def _org_nav_provider_broken():
     it promises is exercised for real rather than staged by patching an organizations
     internal."""
     broken = [
-        FullpageProvider("org", _broken_org_nav) if p.name == "org" else p
+        FullpageProvider(p.name, p.keys, _broken_org_nav) if p.name == "org" else p
         for p in host.fullpage_providers
     ]
     with patch.object(host, "fullpage_providers", broken):
