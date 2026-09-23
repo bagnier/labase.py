@@ -102,8 +102,9 @@ async def get_membership_by_org_id(
 
 
 def _gate_owner(membership: Membership) -> Membership:
-    # request.finished already reports this 403 with the same user, org and path — bound as
-    # contextvars and carried through note_rejection — so a line here would only restate it.
+    # request.finished already reports this 403 with the same user and path, and its detail via
+    # note_rejection — a line here would only restate it. (require_current_owner's callers also
+    # get org_id for free, bound by get_current_org; require_owner's do not — see #95.)
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership
