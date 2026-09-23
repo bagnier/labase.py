@@ -125,13 +125,18 @@
         {% endif %}
       </p>
       {% if entries %}
-        {# Only the default ts sort orders the whole window: the reader takes each source's own
-           newest rows, so any other column orders that sample and not the timeline. Say it rather
-           than let the header imply otherwise. #}
-        {% if sort != "ts" %}
+        {# Only the default newest-first ts sort orders the whole window: the reader takes each
+           source's own newest rows, so any other column — or ts reversed — orders that sample
+           and not the timeline. Say it rather than let the header imply otherwise. #}
+        {% if not exact_order %}
           <p class="px-3 pt-3 text-xs text-base-content/60" data-sort-scope>
             <i class="ph ph-info" aria-hidden="true"></i>
-            Sorted within the loaded page — only time orders the whole window.
+            {% if sort == "ts" %}
+              Sorted oldest-first within the loaded page — each source's own newest rows,
+              reversed, not the window's true oldest.
+            {% else %}
+              Sorted within the loaded page — only time orders the whole window.
+            {% endif %}
             <a class="link"
                href="/console/timeline?bucket={{ grain }}{{ '&' ~ export_qs if export_qs }}">Back to
               newest first</a>, or narrow with a filter to sort a smaller set exactly.
@@ -164,7 +169,7 @@
                the page it was rendered with — the tbody's own attributes survive the swap, so the
                number stays the first page's. #}
             <tbody id="timeline-entries"
-                   {{ live_refresh(paused or sort != 'ts' or dir != 'desc' or filters.before, "/console/timeline?" ~ load_more_qs, "#timeline-entries", swap="innerHTML", select="tbody > tr", unless="&&document.querySelectorAll('#timeline-entries tr[data-entry-name]').length<=" ~ entries | length) }}>
+                   {{ live_refresh(paused or not exact_order or filters.before, "/console/timeline?" ~ load_more_qs, "#timeline-entries", swap="innerHTML", select="tbody > tr", unless="&&document.querySelectorAll('#timeline-entries tr[data-entry-name]').length<=" ~ entries | length) }}>
               {% include "timeline/_rows.html" %}
             </tbody>
           </table>
