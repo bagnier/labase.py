@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from apps.auth.tests.given_helpers import (
     create_unconfirmed_user,
+    create_user,
     delete_user_if_exists,
     find_users,
 )
@@ -141,6 +142,14 @@ class AuthApiMixin(ApiBase):
     def register_unconfirmed(self, email: str, password: str) -> None:
         delete_user_if_exists(email)
         create_unconfirmed_user(email, password)
+        self._track_auth_email(email)
+
+    def register_confirmed(self, email: str, password: str) -> None:
+        """An account whose mailbox is already verified — via the admin API's own
+        ``email_confirm: True``, so the state holds whatever the stack's own signup
+        confirmation setting is."""
+        delete_user_if_exists(email)
+        create_user(email, password)
         self._track_auth_email(email)
 
     def assert_login_rejected_with(self, message: str) -> None:
