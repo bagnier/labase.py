@@ -56,6 +56,11 @@ from apps.shared.tests.test_form_as_json import (
     test_a_form_reaches_the_handler_as_its_declared_body,
     test_a_multipart_upload_is_left_alone,
 )
+from apps.shared.tests.test_host_fullpage import (
+    test_register_fullpage_provider_rejects_a_duplicate_name,
+    test_register_fullpage_provider_rejects_a_key_colliding_with_the_seeded_context,
+    test_register_fullpage_provider_rejects_a_key_collision_across_two_names,
+)
 from apps.shared.tests.test_limiter import (
     test_a_store_that_never_answers_fails_open_within_its_timeout,
     test_a_store_the_limiter_cannot_reach_is_a_bug,
@@ -873,10 +878,12 @@ CLAIMS = [
         "A full page's context is assembled from _slices_",
         "nothing checks a full page's context is built by the collector",
     ),
-    waived(
+    held(
         "slice-collisions-rejected-at-startup",
         "collisions rejected at startup",
-        "no bound test registers two slices under one key",
+        test_register_fullpage_provider_rejects_a_duplicate_name,
+        test_register_fullpage_provider_rejects_a_key_collision_across_two_names,
+        test_register_fullpage_provider_rejects_a_key_colliding_with_the_seeded_context,
     ),
     held(
         "uuid7-minted-on-both-sides",
@@ -1249,4 +1256,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 59
+UNHELD_TODAY = 58
