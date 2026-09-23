@@ -102,6 +102,12 @@ class TimelineFilter:
         """
         return any((self.org_id, self.user_id, self.entity_id, self.request_id, self.text))
 
+    def orders_whole_window(self) -> bool:
+        """Whether this sort reaches every row in the window rather than a sample of each
+        source's own newest — true only for the default, newest-first time order; ``ts``
+        reversed still starts from each source's newest rows, just read backwards."""
+        return self.sort == "ts" and self.descending
+
 
 def _app_of(logger: str) -> str:
     """The app a line belongs to, read off the logger that wrote it: the package under ``apps.``
