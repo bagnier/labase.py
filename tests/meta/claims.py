@@ -919,7 +919,8 @@ CLAIMS = [
     waived(
         "reuse-components",
         "Reuse components instead of re-spelling utility chains",
-        "nothing detects a re-spelled chain (ROADMAP: card-panel re-spelled six times)",
+        "a ratchet holds the two named chains (card-panel, the tab shell) at zero; nothing "
+        "yet detects an arbitrary re-spelled chain",
     ),
     held(
         "icons-are-phosphor",

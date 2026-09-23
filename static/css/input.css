@@ -376,6 +376,14 @@
     @apply card bg-base-100 border border-base-300 shadow-sm;
   }
 
+  /* `tabs-lift` panel's border/background/padding — DaisyUI's own `.tab-content` carries the
+     show/hide toggle tied to the sibling `.tab`'s `:checked` state, so this stays a companion
+     class next to `tab-content` in markup rather than folding it in, which `@apply` cannot
+     reach (a sibling-selector rule is not part of `.tab-content`'s own declaration block). */
+  .tab-panel {
+    @apply border-base-300 bg-base-100 p-4 sm:p-6;
+  }
+
   /* Type scale — the shared heading/meta ramp. Templates use these instead of
      hand-spelling text sizes, so titles stay consistent across every app. */
   .page-title {
