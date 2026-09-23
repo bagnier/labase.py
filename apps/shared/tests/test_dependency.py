@@ -115,6 +115,11 @@ def test_a_postgres_answer_is_refusing(exc):
         ConnectionError("no route to host"),  # it never answered at all
         ValueError("our own mistake, on the way to calling it"),
         _PostgresUnreachable(),  # connection refused — postgres never got to answer
+        _PostgresAnswered("08006"),  # connection_failure — lost mid-operation, still broken
+        _PostgresAnswered("53300"),  # too_many_connections — the server is out of room
+        _PostgresAnswered("57P03"),  # cannot_connect_now — admin shutdown in progress
+        _PostgresAnswered("58030"),  # io_error — the server's own disk failed
+        _PostgresAnswered("XX000"),  # internal_error — a bug in Postgres itself
     ],
 )
 def test_anything_else_is_the_dependency_breaking(exc):
