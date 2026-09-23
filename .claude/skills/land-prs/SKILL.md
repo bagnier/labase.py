@@ -171,7 +171,8 @@ was ejected, one line each with the reason; what the gate gave. No history, no n
 
 After the pull request is open, never before: three branches told to rebase at once produce three
 divergent rebases against a `main` about to move. One comment per ejected pull request, mentioning
-`@claude`, saying what state it must now sit on and what to change — `ci-rework-pr` takes it from
+`@claude`, saying what state it must now sit on and what to change — each comment queues its pull
+request on `to-rework`, the tick hands them over one at a time, and `ci-rework-pr` takes it from
 there and merges `main` into its own branch itself.
 
 

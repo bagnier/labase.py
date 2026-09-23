@@ -24,12 +24,13 @@ pull request. Merging is never the bot's.
    its own diff, keeps the rest as closing questions, and pushes `fix/<issue>` with a pull
    request that `Closes #<issue>`. It never edits `ROADMAP.md`: the map is the owner's, the 
    issues are the bot's, and neither is derived from the other.
-4. **Review.** The owner reads the pull request. Corrections go back to the bot as a
+4. **Rework.** The owner reads the pull request. Corrections go back to the bot as a
    review: inline remarks, then one comment that mentions `@claude` and says what to change.
-   `.github/workflows/review.yml` hands the pull request to the `ci-rework-pr` skill on that
-   mention: it applies the remarks on the pull request's own branch, runs `make finalize`,
-   pushes, and answers in a comment — or asks, and pushes nothing. One run per mention, so
-   remarks are grouped in one.
+   The mention only queues the pull request — `to-rework` — and the tick hands it over when the
+   rework lane is free (*Pace* below). `.github/workflows/rework.yml` then runs the
+   `ci-rework-pr` skill: it applies the remarks on the pull request's own branch, runs
+   `make finalize`, pushes, and answers in a comment — or asks, and pushes nothing. One run per
+   hand-off, so remarks are grouped in one.
 5. **Merge.** The owner merges, or closes. `CLAUDE.md` keeps `main` the owner's in any
    session; branch protection requires a review but is not enforced on admins, and the bot
    pushes with the owner's token, so that sentence is what holds the step. One pull request
@@ -55,6 +56,12 @@ that ends before its own end — cancelled, timed out, a turn that stopped — i
 `stalled` by the workflow itself, with the run's URL in a comment; read the log, then put
 `auto-fix` back. Pull requests carry `bot`.
 
+A pull request's labels say the same thing for the rework bot: `to-rework` is a mention
+waiting, `reworking` is the run holding it, and a run gives the label back at either of its
+two ends — pushed, or a question — so the pull request goes back to waiting for the owner.
+A rework run that dies lands on `stalled` too, with the run's URL in a comment, and the queue
+behind it moves on; a new `@claude` comment is what puts it back on `to-rework`.
+
 ## Landing a batch
 
 The one step that needs someone at the keyboard. A green check proves one pull request against
@@ -78,17 +85,28 @@ do. Landing often is what keeps the bot's next branch cut from a `main` that mov
 
 ## Pace
 
-One fix in flight: never more, to spread the subscription window; never less while there is
-work. The owner decides what and in which order, by putting `queued` on issues, in batches.
-`.github/workflows/tick.yml` hands the owner's oldest `queued` issue to the bot — `queued` off,
-`auto-fix` on, as the owner — when no fix run is in progress and no issue is on `fixing` or
-`auto-fix`. It ticks at the end of every Fix run, so a queue drains back to back until it is
-empty; the batch put on `queued` is the only knob the subscription window has. GitHub's cron,
-seven minutes off the quarter hours, is only the net that starts an idle queue: its schedule is
-best effort, and it fired once in six hours the day it was added. An issue on `question`
-or `stalled` is never picked: it waits for the owner. The fix job itself runs in one concurrency group, without
-cancellation, so two `auto-fix` labels put on by hand queue rather than run side by side; a run
-that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+Two lanes, one run in each: never more, to spread the subscription window; never less while
+there is work. A fix and a rework run side by side; two fixes, or two reworks, never do.
+`.github/workflows/tick.yml` holds both, and hands nothing over while its own lane is busy.
+
+The owner decides what gets fixed and in which order, by putting `to-fix` on issues, in batches.
+The tick hands the owner's oldest `to-fix` issue to the bot — `to-fix` off, `auto-fix` on, as the
+owner — when no fix run is in progress and no issue is on `fixing` or `auto-fix`. The batch put
+on `to-fix` is the only knob the subscription window has. An issue on `question` or `stalled` is
+never picked: it waits for the owner.
+
+For reworks the queue is the mention itself: the `@claude` comment fires a five-minute job that
+only puts `to-rework` on the pull request, and the tick hands the oldest one over — `to-rework`
+off, `reworking` on — when no rework run is in progress and no pull request is on `reworking`.
+That label is what fires the run, so ten mentions at once take one runner, not ten. This is the
+step that used to take a runner per mention.
+
+The tick runs at the end of every Fix and Rework run, so a queue drains back to back until it is
+empty, and the queueing job wakes it too, so a mention on an idle lane starts at once. GitHub's
+cron, seven minutes off the quarter hours, is only the net: its schedule is best effort, and it
+fired once in six hours the day it was added. Each bot job also runs in one concurrency group of
+its own, without cancellation, so a label put on by hand queues rather than runs side by side; a
+run that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
 
 ## Cost
 
@@ -103,6 +121,6 @@ minutes are free; private, one issue a night is roughly the free plan's monthly 
   The fix run hands `FIX_BOT_TOKEN`, the owner's fine-grained token (this repository only;
   contents, pull requests and issues read and write), to the action as `github_token`: git
   and `gh` push, open the pull request and label as the owner for the whole run, past the
-  hour an app token lives. The review run still uses the Claude GitHub App's token for git
+  hour an app token lives. The rework run still uses the Claude GitHub App's token for git
   (the author reads `app/claude`), which fires CI too.
 - Nothing records the token cost of a run; the job log is the only trace.
