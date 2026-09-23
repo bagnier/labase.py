@@ -668,7 +668,9 @@ def test_the_icon_walk_actually_finds_the_declarations():
 # A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕`` — instead of
 # reaching for the icon font. It renders the same to a sighted mouse user, but it is not
 # `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped first,
-# so prose describing the glyph (as this file's own templates do) is not mistaken for markup.
+# so prose that names the glyph — describing the affordance it used to be, as this file's own
+# templates once did — is not mistaken for markup. This is the curated set issue #131 reported,
+# not every character a template could misuse as an icon.
 _ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕"}
 
 
