@@ -91,7 +91,10 @@ for n in 81 82; do git merge --no-ff -m "merge #$n" "refs/prsim/$n"; done
 Run this block whole, never the `cp` alone. A `.env.test` copied verbatim points at the main
 checkout's ports and the stack dies on `Bind for 0.0.0.0:54422 failed: port is already allocated` —
 but only once `lint` has passed and `make test-stack` finally runs, so a first red gate hides the
-trap and the second one springs it. `scripts/worktree.py` holds the port block each checkout gets:
+trap and the second one springs it. `scripts/worktree.py` holds the port block each checkout gets.
+The guard names the five keys `test_stack_settings` rewrites and nothing else: `SUPABASE_STUDIO_URL`
+keeps its 544xx on purpose — `scripts/test_stack.py` excludes Studio, so it binds nothing — and a
+worktree's own block can start at 545xx, so neither is evidence of anything.
 
 ```sh
 git worktree add --detach worktrees/batch HEAD
@@ -104,7 +107,7 @@ from scripts.worktree import test_block_base, test_stack_settings
 merge_env(Path('.env.test'), Path('worktrees/batch/.env.test'),
           test_stack_settings(test_block_base('batch')))
 "
-grep -q ':54[45]' worktrees/batch/.env.test && echo "PORTS NOT REWRITTEN — rerun the block"
+grep -qE '^(SUPABASE_API_URL|SUPABASE_DATABASE_(USER|ADMIN)_URL|MAILPIT_URL|SMTP_PORT)=.*544[0-9][0-9]' worktrees/batch/.env.test && echo "PORTS NOT REWRITTEN — rerun the block"
 ```
 
 Then `uv sync --all-groups && make finalize` in it, waited for as the rules say for where you are.
@@ -168,7 +171,8 @@ was ejected, one line each with the reason; what the gate gave. No history, no n
 
 After the pull request is open, never before: three branches told to rebase at once produce three
 divergent rebases against a `main` about to move. One comment per ejected pull request, mentioning
-`@claude`, saying what state it must now sit on and what to change — `ci-rework-pr` takes it from
+`@claude`, saying what state it must now sit on and what to change — each comment queues its pull
+request on `to-rework`, the tick hands them over one at a time, and `ci-rework-pr` takes it from
 there and merges `main` into its own branch itself.
 
 

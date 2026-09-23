@@ -11,11 +11,13 @@ folders. Idempotent: re-runs overwrite, so the destination stays a full mirror.
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings.env import get_technical_settings
+from scripts.envfile import apply_host_overrides
 
 
 async def _list_all(store: Any, prefix: str) -> list[dict[str, Any]]:
@@ -61,6 +63,8 @@ async def backup(dest: Path) -> int:
 
 
 def main() -> int:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.getenv("ENV_FILE", ".env")))
     parser = argparse.ArgumentParser(description="Mirror the Supabase Storage bucket to disk.")
     parser.add_argument("--dest", default="backups/storage", help="destination directory")
     args = parser.parse_args()

@@ -83,7 +83,7 @@ from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
 from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
-from apps.shared.persistence.supabase import auth_user_exists
+from apps.shared.persistence.supabase import auth_user_awaiting_confirmation
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.live import SettingsView
 
@@ -764,11 +764,12 @@ async def resend_confirmation_endpoint(
     sent_message = "If an account exists for this address, a confirmation email is on its way."
     if email:
         # GoTrue is asked either way, so an unknown address costs the same round-trip as a known
-        # one — the timing keeps the neutral answer's secret. Only an account is a fact.
-        has_account = await auth_user_exists(admin_session, email)
+        # one — the timing keeps the neutral answer's secret. Only a mail actually sent is a fact:
+        # an already-confirmed account gets none from GoTrue, so it records none either.
+        awaiting_confirmation = await auth_user_awaiting_confirmation(admin_session, email)
         try:
             await resend_confirmation(email)
-            if has_account:
+            if awaiting_confirmation:
                 await events.emit(ConfirmationResent(entity_name=email), admin_session)
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
