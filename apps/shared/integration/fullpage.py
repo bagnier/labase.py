@@ -9,7 +9,9 @@ Keys stay flat — no nested sub-dicts — so templates read ``{{ profile_handle
 
 If a provider's namespaced key collides with one already in the context, the merge
 logs and overwrites. A provider that raises is isolated and logged; the rest of the
-page still renders.
+page still renders. A route's own page extra (``**extra``) is unprefixed, so it is
+refused when its name collides with a provider's namespaced key — a slice belongs to
+the app that provides it, never to whichever route happened to render last.
 
 No global render hook injects data silently — a Jinja "context processor" or ASGI
 middleware would, and that is proscribed by the *Page composition* principle. Routes
@@ -57,10 +59,13 @@ async def fullpage_context(
     """Full template context for a page: nav + provider slices + user + page extras.
 
     Called explicitly by routes, on full pages only (never HTMX fragments) — see the module
-    docstring for the namespacing, collision and provider-isolation rules.
+    docstring for the namespacing, collision and provider-isolation rules. A page extra named
+    like a provider's own namespaced key is refused rather than silently overriding that
+    provider's slice — a slice belongs to the app that provides it.
     """
     ctx: dict = {"user": user, "nav_items": sorted(host.nav_items, key=lambda i: i.order)}
     query = FullpageQuery(session, user)
+    providers_by_key: dict[str, str] = {}
     for provider in host.fullpage_providers:
         try:
             chunk = await provider.fn(query)
@@ -72,4 +77,8 @@ async def fullpage_context(
             if full_key in ctx:
                 log.warning("page.overwrite", key=full_key, provider=provider.name)
             ctx[full_key] = value
+            providers_by_key[full_key] = provider.name
+    for key in extra:
+        if key in providers_by_key:
+            raise ValueError(f"page extra {key!r} collides with the {providers_by_key[key]} slice")
     return {**ctx, **extra}

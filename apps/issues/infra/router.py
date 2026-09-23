@@ -108,18 +108,19 @@ async def issue_detail(
         )
     is_htmx = request.headers.get("HX-Request") == "true"
     template = "issues/_occurrences.html" if is_htmx else "issues/detail.html"
-    ctx: dict[str, Any] = {
-        "user": current_user,
+    slices: dict[str, Any] = {
         "issue": issue_read,
         "occurrences": occurrence_reads,
         "next_before_id": next_before_id,
     }
-    if not is_htmx:
+    if is_htmx:
+        ctx = {"user": current_user, **slices}
+    else:
         counts = await repo.daily_counts(issue_id, days=_SPARK_DAYS)
         window = last_days(_SPARK_DAYS, end=clock.now().date())
-        ctx["spark"] = sparkline([counts.get(d.isoformat(), 0) for d in window], color="error")
-        ctx["spark_days"] = _SPARK_DAYS
-        ctx |= await fullpage_context(session, current_user)
+        slices["spark"] = sparkline([counts.get(d.isoformat(), 0) for d in window], color="error")
+        slices["spark_days"] = _SPARK_DAYS
+        ctx = await fullpage_context(session, current_user, **slices)
     return templates.TemplateResponse(request, template, ctx)
 
 
