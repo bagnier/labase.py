@@ -33,7 +33,7 @@
              aria-label="Activity"
              data-tab="activity"
              {% if active_tab == "activity" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           <div class="stats stats-horizontal border border-base-300 w-full">
             <div class="stat">
@@ -124,7 +124,7 @@
              aria-label="Profile"
              data-tab="profile"
              {% if active_tab == "profile" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           <div class="card-panel">
             <div class="card-body">
@@ -211,7 +211,7 @@
              class="tab"
              aria-label="Organisations"
              data-tab="organisations" />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="card-panel">
           <div class="card-body space-y-4">
             <h2 class="card-title text-sm font-semibold">My organisations</h2>
@@ -253,7 +253,7 @@
              aria-label="Email"
              data-tab="email"
              {% if active_tab == "email" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           {# Current sign-in email, always shown read-only: the address itself is never edited in
              place — a change goes through the confirm-by-link flow below (when enabled). #}
@@ -292,7 +292,7 @@
              aria-label="Authentication"
              data-tab="authentication"
              {% if active_tab == "authentication" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           <section class="card-panel">
             <div class="card-body">
@@ -389,7 +389,7 @@
              aria-label="Account"
              data-tab="account"
              {% if active_tab == "account" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           <section class="card-panel">
             <div class="card-body">

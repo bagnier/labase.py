@@ -22,7 +22,7 @@
              aria-label="Backlog"
              data-tab="backlog"
              {% if panel != "history" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           <div class="stats stats-horizontal border border-base-300 bg-base-100">
             {% for state in states %}
@@ -79,7 +79,7 @@
              aria-label="History"
              data-tab="history"
              {% if panel == "history" %}checked{% endif %} />
-      <div role="tabpanel" class="tab-panel">{% include "tasks/_history.html" %}</div>
+      <div role="tabpanel" class="tab-content tab-panel">{% include "tasks/_history.html" %}</div>
     </div>
   </div>
 {% endblock %}
