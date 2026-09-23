@@ -364,6 +364,15 @@
 .ph.ph-download-simple:before {
   content: "\e20c";
 }
+.ph.ph-mask-happy:before {
+  content: "\e9f4";
+}
+.ph.ph-clock-counter-clockwise:before {
+  content: "\e1a0";
+}
+.ph.ph-arrow-bend-down-right:before {
+  content: "\e01a";
+}
 
 @layer components {
   /* Bordered, divided container for a vertical list of rows (the one recurring non-DaisyUI shape). */
