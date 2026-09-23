@@ -23,7 +23,7 @@ from apps.files.infra.storage import storage_path
 from apps.organizations.contract import ORG_PREFIX
 from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
-from apps.organizations.contract.queries import seed_org_welcome, user_exists
+from apps.organizations.contract.queries import org_exists, seed_org_welcome, user_exists
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
 from apps.shared.overview import pluralize
 from apps.shared.persistence.storage import admin_storage, bucket
@@ -128,8 +128,12 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
     # Re-checked here, past ``seed_org_welcome``'s own check, because that upload is this
     # seeder's alone to avoid: a subject already gone is a clean no-op, never a reason to reach
-    # back into Storage for an object it never had cause to place.
+    # back into Storage for an object it never had cause to place. The org gets the same
+    # question — the upload lands before the row that would fail on its FK, so a check this
+    # close to the write is what keeps the org-vanishes race (#75) from stranding the object.
     if not await user_exists(session, owner_id):
+        return
+    if not await org_exists(session, org_id):
         return
     file_id = uuid.uuid7()
     path = storage_path(org_id, file_id, _WELCOME_FILENAME)

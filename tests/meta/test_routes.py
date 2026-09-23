@@ -13,6 +13,7 @@ consumer can reach — which is the half of "two faces" that has a mechanical me
 """
 
 import re
+from collections import Counter
 
 from starlette.routing import Match
 
@@ -276,6 +277,23 @@ def test_every_declared_method_is_one_the_load_metrics_know():
     declared = {method.upper() for operations in _paths().values() for method in operations}
 
     assert declared <= KNOWN_METHODS
+
+
+def test_every_operation_has_its_own_id():
+    """The generated client (`client/`) names one module per `operationId`: two operations
+    sharing an id collapse into one module, and the survivor answers for both — a form posting
+    to the collapsed method calls the wrong one. FastAPI's default id is one per *route*, not
+    per operation — suffixed with one arbitrary member of the route's own method set — so a
+    single `api_route(methods=[...])` decorator carrying more than one method gives every
+    operation on it the same id."""
+    ids = [
+        operation["operationId"]
+        for operations in _paths().values()
+        for operation in operations.values()
+    ]
+    duplicates = {operation_id for operation_id, count in Counter(ids).items() if count > 1}
+
+    assert duplicates == set()
 
 
 def test_every_json_face_declares_its_schema():

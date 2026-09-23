@@ -24,6 +24,9 @@ class Organization(Base, UUIDPk, Versioned, Timestamped):
     handle: Mapped[str] = mapped_column(default="")
     # IANA timezone the org's dates are entered and shown in (calendar, etc.).
     timezone: Mapped[str] = mapped_column(default="UTC")
+    # The one every account gets at sign-up, as opposed to one a member created through
+    # `POST /organizations` — set once at creation, structural rather than inferred.
+    is_personal: Mapped[bool] = mapped_column(default=False)
 
 
 class Membership(Base, Versioned, Timestamped):

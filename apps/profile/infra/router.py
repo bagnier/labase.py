@@ -253,7 +253,7 @@ async def _profile_context(
             current_user.id, current_user.email, handle_enabled=profile_settings.handle_enabled
         )
         context = await fullpage_context(session, current_user)
-        orgs = context["org_nav"]
+        orgs = context.get("org_nav", [])
         handles = {o.id: o.handle for o in orgs}
         counts = await EventRepository(session).daily_counts(user_id=current_user.id)
         activity = await _activity_context(session, current_user.id, handles)
@@ -364,7 +364,7 @@ async def profile_activity(
     Load-older all re-render it. API callers get the same feed as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     context = await fullpage_context(session, current_user)
-    handles = {o.id: o.handle for o in context["org_nav"]}
+    handles = {o.id: o.handle for o in context.get("org_nav", [])}
     ctx = await _activity_context(
         session, current_user.id, handles, q=q, app=app, from_dt=from_dt, to_dt=to_dt, limit=limit
     )
