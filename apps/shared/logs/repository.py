@@ -153,6 +153,11 @@ class LogRepository(BaseRepository[LogLine]):
            line dated outside every range, or a day the roll fell behind on. Cheap, because the
            bulk left with the dropped partitions.
 
+        The floor is the same *day* ``roll`` keeps whole — midnight of ``today - retention_days``
+        — never the exact instant ``retention_days`` ago: that finer floor falls inside the floor
+        day itself, so it row-deletes part of the very partition the roll just decided to keep,
+        leaving it the dead tuples partitioning exists to avoid.
+
         Counted through a CTE rather than off ``rowcount``, the shape ``purge_old_occurrences``
         and the rate limiter's purge already use: one statement either way, and the count comes
         back as a plain scalar instead of a cursor attribute the type checker cannot see.
@@ -162,13 +167,14 @@ class LogRepository(BaseRepository[LogLine]):
         """
         now = clock.now()
         await self.roll(today=now.date(), retention_days=retention_days)
+        floor_day = now.date() - timedelta(days=retention_days)
         deleted = await self.session.scalar(
             sql_text(
                 "WITH purged AS ("
                 "  DELETE FROM log_lines WHERE ts < :floor RETURNING 1"
                 ") SELECT count(*) FROM purged"
             ),
-            {"floor": now - timedelta(days=retention_days)},
+            {"floor": floor_day},
         )
         return int(deleted or 0)
 

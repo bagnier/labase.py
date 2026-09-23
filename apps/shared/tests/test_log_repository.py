@@ -10,7 +10,7 @@ rotation made it "a plain file delete", and nothing ever deleted.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 import pytest_asyncio
@@ -150,6 +150,34 @@ async def test_retention_drops_what_is_past_the_window(sessions):
 
     kept = await LogRepository(reader).search(text=marker, window=None)
     assert [line.ts for line in kept] == [fresh]
+
+
+@pytest.mark.asyncio
+async def test_retention_keeps_a_line_from_the_start_of_the_floor_day(sessions):
+    """The floor day is the oldest day ``roll`` keeps whole — so a line dated at its very start,
+    before ``now``'s own time-of-day, must survive purge *inside that same surviving partition*,
+    not just in the default one. A purge floor cut to the exact hour instead of the day catches it
+    anyway, which is what turns the partition's instant ``DROP`` into a row-by-row ``DELETE`` that
+    leaves dead tuples behind (issue #43)."""
+    writer, reader = sessions
+    marker = f"store.{uuid.uuid4().hex}"
+    floor_day = (_NOW - timedelta(days=30)).date()
+    on_floor_day = datetime.combine(floor_day, time.min, tzinfo=UTC)
+
+    # A real partition for the floor day, the way years of nightly rolls would have made one —
+    # not the default partition every prior version of this test landed in, which is blind to
+    # whether the row-level floor actually agrees with the day the roll keeps whole.
+    await LogRepository(writer).roll(today=floor_day, retention_days=9999)
+    await writer.commit()
+    await LogRepository(writer).append([_line(marker, ts=on_floor_day)], instance="gw0")
+    await writer.commit()
+    await LogRepository(writer).purge(retention_days=30)
+    await writer.commit()
+
+    kept = [line.ts for line in await LogRepository(reader).search(text=marker, window=None)]
+    partitions = await _day_partitions(reader)
+    survived = (kept, floor_day.strftime("log_lines_%Y%m%d") in partitions)
+    assert survived == ([on_floor_day], True)
 
 
 @pytest.mark.asyncio
