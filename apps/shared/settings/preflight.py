@@ -83,7 +83,8 @@ def enforce_at_boot(settings: TechnicalSettings | None = None) -> None:
         # The details ride the exception rather than lines of their own. The process is about to
         # die on it, so its message is what an operator reads — and a ``log.error`` carrying no
         # exception is exactly the spelling the capture seam skips, which made the one report
-        # that mattered the one nothing could act on. A boot that succeeds says nothing at all.
+        # that mattered the one nothing could act on. A sound boot — no errors, no findings —
+        # is the only one that says nothing at all.
         raise PreflightError(
             f"production preflight failed with {len(errors)} blocking error(s); "
             f"refusing to boot: {'; '.join(errors)}"
