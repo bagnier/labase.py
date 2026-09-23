@@ -96,7 +96,7 @@ async def _render_session(
     template = "learning/_session_fragment.html" if is_htmx else "learning/session.html"
     org_handle = request.path_params.get("org_handle", "")
     available = await repo.available_decks()
-    slices = {
+    extras = {
         "cards": cards,
         "available_decks": available,
         "sharing_enabled": settings.sharing_enabled,
@@ -104,9 +104,9 @@ async def _render_session(
         "org": org,
     }
     ctx = (
-        {"user": current_user, **slices}
+        {"user": current_user, **extras}
         if is_htmx
-        else await fullpage_context(session, current_user, **slices)
+        else await fullpage_context(session, current_user, **extras)
     )
     return templates.TemplateResponse(request, template, ctx)
 

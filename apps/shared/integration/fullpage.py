@@ -60,12 +60,13 @@ async def fullpage_context(
 
     Called explicitly by routes, on full pages only (never HTMX fragments) — see the module
     docstring for the namespacing, collision and provider-isolation rules. A page extra named
-    like a provider's own namespaced key is refused rather than silently overriding that
-    provider's slice — a slice belongs to the app that provides it.
+    like a slice already computed for this render — the host's own ``user``/``nav_items``, or
+    a provider's namespaced key — is refused rather than silently overriding it: a slice
+    belongs to the app that provides it, never to whichever route happened to render last.
     """
     ctx: dict = {"user": user, "nav_items": sorted(host.nav_items, key=lambda i: i.order)}
     query = FullpageQuery(session, user)
-    providers_by_key: dict[str, str] = {}
+    owners_by_key: dict[str, str] = {"user": "(host)", "nav_items": "(host)"}
     for provider in host.fullpage_providers:
         try:
             chunk = await provider.fn(query)
@@ -77,8 +78,8 @@ async def fullpage_context(
             if full_key in ctx:
                 log.warning("page.overwrite", key=full_key, provider=provider.name)
             ctx[full_key] = value
-            providers_by_key[full_key] = provider.name
+            owners_by_key[full_key] = provider.name
     for key in extra:
-        if key in providers_by_key:
-            raise ValueError(f"page extra {key!r} collides with the {providers_by_key[key]} slice")
+        if key in owners_by_key:
+            raise ValueError(f"page extra {key!r} collides with the {owners_by_key[key]} slice")
     return {**ctx, **extra}
