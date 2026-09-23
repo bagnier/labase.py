@@ -667,11 +667,10 @@ def test_the_icon_walk_actually_finds_the_declarations():
 
 def _icons_spelled_in_templates() -> dict[str, str]:
     """Every ``ph-<name>`` a template spells directly in its own markup, mapped to where. A
-    dynamic slot (``ph-{{ icon }}``) contributes no name here — its values are Python string
-    literals, already covered by `_icons_declared`."""
+    dynamic slot (``ph-{{ icon }}``) contributes no name here — there is no bareword to read."""
     found = {}
     for path in sorted(_APPS.glob("*/templates/**/*.html")):
-        for icon in re.findall(r'class="ph ph-([a-z0-9-]+)', path.read_text()):
+        for icon in re.findall(r"\bph ph-([a-z0-9-]+)", path.read_text()):
             found[icon] = str(path.relative_to(_ROOT))
     return found
 
@@ -686,6 +685,11 @@ def test_every_icon_a_template_spells_has_a_glyph_to_render():
     mute = {f"{icon} ({site})" for icon, site in spelled.items() if icon not in with_rule}
 
     assert mute == set()
+
+
+def test_the_template_icon_walk_finds_a_name_that_is_not_the_first_class():
+    # `class="drag-handle ph ph-dots-six-vertical …"` — the icon class sits second, not first.
+    assert "dots-six-vertical" in _icons_spelled_in_templates()
 
 
 def test_the_template_icon_walk_actually_finds_the_names():
