@@ -193,6 +193,7 @@ from tests.meta.test_surfaces import (
     test_every_icon_a_surface_declares_has_a_glyph_to_render,
     test_no_contract_exports_a_settings_handle,
     test_no_shared_module_names_a_bounded_context,
+    test_no_template_spells_an_icon_as_a_literal_glyph,
     test_nothing_outside_a_demo_names_it,
     test_the_capture_seam_is_not_a_business_fact,
     test_the_collaboration_registries_are_keyed_by_type_alone,
@@ -921,6 +922,7 @@ CLAIMS = [
         "icons-are-phosphor",
         "Icons are Phosphor.",
         test_every_icon_a_surface_declares_has_a_glyph_to_render,
+        test_no_template_spells_an_icon_as_a_literal_glyph,
     ),
     waived(
         "markup-uses-landmarks-and-labels",
