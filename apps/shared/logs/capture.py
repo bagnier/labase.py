@@ -33,6 +33,7 @@ enqueue is a plain ``deque.append`` (atomic under the GIL). All async/DB work li
 import asyncio
 import contextlib
 import sys
+import traceback
 from collections import deque
 from collections.abc import Awaitable, Callable, MutableMapping
 from contextvars import ContextVar
@@ -52,8 +53,19 @@ class ExceptionCaptured:
     context: dict[str, Any] = field(default_factory=dict)
 
 
-# Bounded so that with the issues app disabled — no drain running — the queue self-caps by dropping
-# the oldest instead of growing without limit.
+class CaptureQueueOverflowed(Exception):
+    """A dropped capture is an issue nobody would otherwise see: ``log.warning`` reaches the log
+    sink and nothing else, and rolls out of its window with no trace — no other record says this
+    one (AGENTS: A line says what no other record says). Raised only to give the drop itself
+    something to fold into an issue, exactly like the listener's ``UnroutableFact`` or the rate
+    limiter's ``UnlimitedEndpoint`` — caught immediately, purely so the seam has a live exception
+    to fingerprint on."""
+
+
+# Bounded so that with the issues app disabled — no drain running — the queue self-caps instead of
+# growing without limit. Full, it sheds by fingerprint (see ``_shed``) rather than the deque's own
+# blind oldest-first eviction, so a storm of identical failures never costs a distinct one queued
+# behind it.
 _QUEUE: deque[ExceptionCaptured] = deque(maxlen=1000)
 
 
@@ -98,6 +110,38 @@ _CAPTURED = "_labase_captured"
 _SCALARS = (str, int, float, bool, type(None))
 # Render-noise keys that carry no correlation value into a stored issue.
 _DROP_KEYS = frozenset({"exc_info", "exception", "timestamp", "level"})
+
+# Stamped on an exception the first time its shedding key is computed — a storm's whole point is
+# volume, so a key recomputed by walking the traceback on every later overflow would cost the
+# request it is meant to protect. Not ``apps/issues``'s own fingerprint (richer, persisted,
+# off-limits from here: shared never imports an app's domain) — only a cheap "same failure again"
+# good enough to prefer shedding a duplicate over the one capture standing behind it.
+_SHED_KEY = "_labase_shed_key"
+
+
+def _shed_key(exc: BaseException) -> str:
+    key = getattr(exc, _SHED_KEY, None)
+    if key is not None:
+        return key
+    frames = traceback.extract_tb(exc.__traceback__)
+    site = f"{frames[-1].filename}:{frames[-1].name}" if frames else ""
+    key = f"{type(exc).__qualname__}|{site}"
+    with contextlib.suppress(AttributeError, TypeError):
+        setattr(exc, _SHED_KEY, key)
+    return key
+
+
+def _shed(incoming: BaseException) -> None:
+    """Make room for ``incoming`` in a full queue: evict a capture sharing its fingerprint if one
+    is queued, so a storm of identical failures costs its own duplicates rather than a distinct
+    capture sitting behind it. Falls back to the true oldest once every queued capture already
+    differs from ``incoming`` and from each other."""
+    key = _shed_key(incoming)
+    for captured in _QUEUE:
+        if _shed_key(captured.exc) == key:
+            _QUEUE.remove(captured)
+            return
+    _QUEUE.popleft()
 
 
 def _exc_from(value: Any) -> BaseException | None:
@@ -144,6 +188,8 @@ def capture_processor(
     }
     if len(_QUEUE) == _QUEUE.maxlen:
         _overflow.dropped += 1
+        _shed(exc)  # a manual shed first, so the append below never falls back to the deque's
+        # own blind maxlen eviction (always the oldest, storm or not)
     _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
     return event_dict
 
@@ -187,8 +233,6 @@ class CaptureDrain:
 
     async def tick(self) -> None:
         dropped, _overflow.dropped = _overflow.dropped, 0
-        if dropped:
-            log.warning("capture.overflowed", dropped=dropped)
         # Snapshot the current length so appends arriving mid-drain wait for the next tick.
         for _ in range(len(_QUEUE)):
             try:
@@ -206,6 +250,15 @@ class CaptureDrain:
                         log.exception("capture.tracker_failed", tracker=repr(tracker))
             finally:
                 _capturing.reset(token)
+        # After the drain above, so the queue it enqueues into is normally empty — the shortfall
+        # rides the very same seam as any other bug, one tick behind, rather than a warning line.
+        if dropped:
+            try:
+                raise CaptureQueueOverflowed(
+                    f"the capture queue shed {dropped} capture(s) it had no room for"
+                )
+            except CaptureQueueOverflowed as exc:
+                log.exception("capture.overflowed", exc_info=exc, dropped=dropped)
 
     async def _run(self) -> None:
         while True:

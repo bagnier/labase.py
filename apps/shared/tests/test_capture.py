@@ -1,10 +1,12 @@
 """The seam's own edges — what it sheds, what it refuses to count twice, what it still owes.
 
 ``apps/issues/tests/test_capture.py`` covers the round trip all the way to the issues tables.
-These hold what that round trip cannot state, all three about the *count* an issue carries:
+These hold what that round trip cannot state, all four about the *count* an issue carries:
 
-- the queue is bounded so a storm can never eat memory, which means it drops — and a dropped
-  capture is an issue nobody will ever see, so the shortfall is reported;
+- the queue is bounded so a storm can never eat memory, which means it drops — but it sheds by
+  fingerprint, so a storm's own duplicates pay for the room, never a distinct capture behind them;
+- the shortfall itself becomes a capture of its own, so it folds into an issue instead of ageing
+  out of the log window as a warning nobody tracks;
 - one exception is one occurrence however many loggers see it on its way out;
 - and the ones still queued when the process is asked to stop are folded in, not dropped.
 """
@@ -29,9 +31,25 @@ def _log_exceptions(count: int) -> None:
             log.exception("todo.blew_up")
 
 
+def test_a_storm_of_duplicates_never_evicts_the_distinct_capture_behind_it(monkeypatch):
+    """A blind FIFO eviction costs whatever sits at the front of the queue, storm or not — a
+    cheap 500 repeated a thousand times would then evict the one distinct failure that arrived
+    first. Shedding by fingerprint instead means the storm pays for its own room."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=2))
+    log = structlog.get_logger(_PROBE_LOGGER)
+    try:
+        raise KeyError("distinct")
+    except KeyError:
+        log.exception("todo.blew_up")
+
+    _log_exceptions(5)
+
+    assert [type(captured.exc) for captured in capture._QUEUE] == [KeyError, ValueError]
+
+
 @pytest.mark.asyncio
 async def test_the_drain_reports_the_captures_the_queue_had_to_shed(log_chain, monkeypatch):
-    """Silently dropping the oldest would lose the very exceptions the tracker exists to show,
+    """Silently dropping captures would lose the very exceptions the tracker exists to show,
     and the shortfall has to be said by the drain: the processor runs inside the logging chain,
     where a line of its own would re-enter capture."""
     monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=2))
@@ -41,10 +59,24 @@ async def test_the_drain_reports_the_captures_the_queue_had_to_shed(log_chain, m
     _log_exceptions(5)
     await capture.CaptureDrain(0).tick()
 
-    reported = [
-        (line.name, line.payload) for line in log_chain() if line.logger == capture.__name__
-    ]
-    assert reported == [("capture.overflowed", {"dropped": 3})]
+    [reported] = [line for line in log_chain() if line.logger == capture.__name__]
+    assert (reported.name, reported.payload["dropped"]) == ("capture.overflowed", 3)
+
+
+@pytest.mark.asyncio
+async def test_the_dropped_shortfall_becomes_its_own_trackable_capture(monkeypatch):
+    """A warning that ages out of the two-day log window leaves nothing an admin can find
+    tomorrow (AGENTS: A line says what no other record says) — the shortfall must instead be
+    something the seam itself can fold into an issue, the same way it folds any other bug."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=2))
+    monkeypatch.setattr(capture, "_trackers", [])
+    capture._overflow.dropped = 0
+
+    _log_exceptions(5)
+    await capture.CaptureDrain(0).tick()
+
+    queued = [(type(c.exc), c.context.get("dropped")) for c in capture._QUEUE]
+    assert queued == [(capture.CaptureQueueOverflowed, 3)]
 
 
 # An exception is logged more than once on its way out of the process, and the second logger is
