@@ -1032,6 +1032,27 @@ def test_the_classes_outside_the_component_layer_are_the_named_ones():
     assert outside == _OUTSIDE_THE_COMPONENT_LAYER
 
 
+def test_no_template_re_spells_card_panel_or_the_tab_shell():
+    """The `reuse-components` waiver's own example: `card-panel` is `card bg-base-100 border
+    border-base-300 shadow-sm`, yet a template still spells the shorter chain by hand, and the
+    `tabs-lift` panel shell repeats its own chain with no component class at all. Both at zero."""
+    spelled_out = {
+        str(path.relative_to(_ROOT)): count
+        for path in sorted(_APPS.rglob("*.html"))
+        if (
+            count := len(
+                re.findall(
+                    r"card bg-base-100 border border-base-300"
+                    r"|tab-content border-base-300 bg-base-100 p-4 sm:p-6",
+                    path.read_text(),
+                )
+            )
+        )
+    }
+
+    assert spelled_out == {}
+
+
 def test_nothing_reruns_a_failing_test():
     """ "Everything else is strict, zero rerun" — kept true the cheap way: the plugin that could
     rerun anything is not installed, no lane pulls it in at run time (`uv run --with`), and no

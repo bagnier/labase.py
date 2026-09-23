@@ -17,14 +17,13 @@
              aria-label="All events"
              data-tab="all"
              checked />
-      <div role="tabpanel"
-           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+      <div role="tabpanel" class="tab-panel">
         <div class="space-y-6">
           <p class="text-sm text-base-content/70">Every business event each app declares — wired to a reaction or not.</p>
           {% if by_app %}
             <ul class="space-y-3">
               {% for row in by_app %}
-                <li class="card bg-base-100 border border-base-300">
+                <li class="card-panel">
                   <div class="card-body gap-3 p-4">
                     <span class="badge badge-primary badge-sm">{{ row.app }}</span>
                     <ul class="flex flex-wrap gap-2">
@@ -48,8 +47,7 @@
              class="tab"
              aria-label="Connected"
              data-tab="connected" />
-      <div role="tabpanel"
-           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+      <div role="tabpanel" class="tab-panel">
         <div class="space-y-6">
           <p class="text-sm text-base-content/70">
             Every business event with a durable reaction — <em>when this happens, that runs</em>.
@@ -58,7 +56,7 @@
           {% if graph %}
             <ul class="space-y-3" data-event-graph>
               {% for row in graph %}
-                <li class="card bg-base-100 border border-base-300">
+                <li class="card-panel">
                   <div class="card-body gap-3 p-4">
                     <div class="flex items-center gap-2 flex-wrap">
                       <span class="badge badge-primary badge-sm">{{ row.owner }}</span>

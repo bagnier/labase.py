@@ -309,13 +309,6 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   divs — no `tabindex`, no key handler, absent from the tab order (measured), so a keyboard user
   can open the popover and neither choose nor clear. → real buttons and a listbox.
   [_combobox.html:42](apps/timeline/templates/timeline/_combobox.html#L42)
-- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("Reuse components instead of re-spelling utility chains"): `card-panel`
-  exists and is used by 29 templates, yet its chain is re-spelled six times in the console, less
-  its `shadow-sm`; `tab-content border-base-300 bg-base-100 p-4 sm:p-6` repeats 13 times across
-  four files. → the
-  component class, and one for the tab shell.
-  [_technical_env.html:3](apps/console/templates/console/_technical_env.html#L3),
-  [input.css:369](static/css/input.css#L369)
 - [ ] "Foundation apps — auth, organizations, console — are what the others are built on: they
   have no on/off switch and are not deleted; only feature apps can be." From AGENTS
   `Demo apps are disposable, the others loosely coupled` ("can be added, disabled, or deleted without touching the others"): every

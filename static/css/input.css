@@ -370,6 +370,12 @@
     @apply card bg-base-100 border border-base-300 shadow-sm;
   }
 
+  /* `tabs-lift` panel shell — DaisyUI leaves the panel unstyled, so every tab strip repeats
+     this border/background/padding by hand. */
+  .tab-panel {
+    @apply tab-content border-base-300 bg-base-100 p-4 sm:p-6;
+  }
+
   /* Type scale — the shared heading/meta ramp. Templates use these instead of
      hand-spelling text sizes, so titles stay consistent across every app. */
   .page-title {
