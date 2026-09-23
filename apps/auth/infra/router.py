@@ -81,7 +81,7 @@ from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.client_ip import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
-from apps.shared.logs.dependency import log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import auth_user_exists
 from apps.shared.settings.env import get_technical_settings
@@ -794,13 +794,16 @@ async def reset_password_endpoint(
     try:
         tokens = await confirm_signup(token_hash, type="recovery")
         await update_password(tokens.access_token, password)
-    except PasswordUpdateError as e:
-        # The recovery token is single-use and already consumed: a new link is needed.
-        error = f"{e}. Please request a new reset link."
-        return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
-        error = "This reset link is invalid or has expired. Please request a new one."
+        if isinstance(e, PasswordUpdateError) and is_refusal(e):
+            # The recovery token is single-use and already consumed: a new link is needed.
+            error = f"{e}. Please request a new reset link."
+        else:
+            # GoTrue broke rather than refused (e.g. a 503), or the flow raised something of
+            # its own: the verdict, not the exception's Python type, decides whether this
+            # reaches the log sink as a bug instead of vanishing.
+            _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
+            error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the journal attributed to the account holder.

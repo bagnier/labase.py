@@ -77,20 +77,12 @@ _NAMES_A_DEMO = {
     "apps/organizations/contract/entity_links.py says 'files'",
     "apps/organizations/contract/entity_links.py says 'todo'",
     "apps/organizations/contract/entity_links.py says 'todos'",
-    # The harness lists the demos' tables: cleanup truncates them, the privilege books expect
-    # their grants, the worktree test provisions a bucket per demo, the plugin list loads their
-    # steps.
+    # The harness lists the demos' tables: the privilege books expect their grants, the worktree
+    # test provisions a bucket per demo, the plugin list loads their steps.
     "tests/plugin.py says 'apps.calendar'",
     "tests/plugin.py says 'apps.files'",
     "tests/plugin.py says 'apps.learning'",
     "tests/plugin.py says 'apps.todo'",
-    "tests/e2e/cleanup.py says 'card_states'",
-    "tests/e2e/cleanup.py says 'cards'",
-    "tests/e2e/cleanup.py says 'deck_subscriptions'",
-    "tests/e2e/cleanup.py says 'decks'",
-    "tests/e2e/cleanup.py says 'org_file_share_tokens'",
-    "tests/e2e/cleanup.py says 'org_files'",
-    "tests/e2e/cleanup.py says 'todos'",
     "tests/test_db_privileges.py says 'calendar_events'",
     "tests/test_db_privileges.py says 'card_states'",
     "tests/test_db_privileges.py says 'cards'",
