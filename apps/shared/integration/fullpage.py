@@ -14,7 +14,8 @@ A provider that raises is isolated and logged; the rest of the page still render
 returning a key it never declared still logs and overwrites here — the mount-time check only
 catches what was declared. A route's own page extra (``**extra``) is unprefixed, so it is
 refused when it collides with a provider's declared, namespaced key or with the host's own
-seeded keys — checked against what each provider declared at mount, before any provider runs.
+``nav_items`` — checked against what each provider declared at mount, before any provider
+runs (``user`` cannot collide this way — see :func:`fullpage_context`).
 
 No global render hook injects data silently — a Jinja "context processor" or ASGI
 middleware would, and that is proscribed by the *Page composition* principle. Routes
@@ -63,11 +64,13 @@ async def fullpage_context(
 
     Called explicitly by routes, on full pages only (never HTMX fragments) — see the module
     docstring for the namespacing, collision and provider-isolation rules. A page extra named
-    like a provider's declared key, or like the host's own seeded keys, is refused rather than
-    silently overriding it — checked against what each provider declared at mount, before any
-    provider runs.
+    like a provider's declared key, or like the host's own ``nav_items``, is refused rather
+    than silently overriding it — checked against what each provider declared at mount, before
+    any provider runs. ``user`` cannot collide the same way: it is this function's own named
+    parameter, so a ``user=`` extra fails on a duplicate-argument ``TypeError`` before the body
+    ever runs.
     """
-    owner_by_key: dict[str, str] = dict.fromkeys(RESERVED_FULLPAGE_KEYS, "(host)")
+    owner_by_key: dict[str, str] = {"nav_items": "(host)"}
     for provider in host.fullpage_providers:
         for key in provider.keys:
             owner_by_key[f"{provider.name}_{key}"] = provider.name
