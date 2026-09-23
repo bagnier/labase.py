@@ -29,7 +29,7 @@ from apps.learning.infra.repository import CatalogRow, LearningRepository
 from apps.organizations.contract.current import CurrentOrg, CurrentOrgModel
 from apps.shared import clock
 from apps.shared.events.bus import events
-from apps.shared.http import json_and_html, or_404, wants_json
+from apps.shared.http import is_htmx, json_and_html, or_404, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.settings.live import SettingsView
@@ -92,8 +92,8 @@ async def _render_session(
         return JSONResponse(
             {"count": len(cards), "cards": [c.model_dump(mode="json") for c in cards]}
         )
-    is_htmx = request.headers.get("HX-Request") == "true"
-    template = "learning/_session_fragment.html" if is_htmx else "learning/session.html"
+    htmx = is_htmx(request)
+    template = "learning/_session_fragment.html" if htmx else "learning/session.html"
     org_handle = request.path_params.get("org_handle", "")
     available = await repo.available_decks()
     ctx = {
@@ -104,7 +104,7 @@ async def _render_session(
         "org_handle": org_handle,
         "org": org,
     }
-    if not is_htmx:
+    if not htmx:
         ctx |= await fullpage_context(session, current_user)
     return templates.TemplateResponse(request, template, ctx)
 

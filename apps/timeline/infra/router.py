@@ -16,7 +16,7 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.organizations.contract.queries import org_handles
 from apps.shared import clock
 from apps.shared.charts import chart_config
-from apps.shared.http import json_and_html, wants_json
+from apps.shared.http import is_htmx, json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import DEFAULT_WINDOW
@@ -323,7 +323,7 @@ async def timeline_screen(
     # A "load older" click asks for rows, not for a screen: the chart, the facets and the label
     # lookups above are the page's, and re-rendering them would swap them out from under the
     # reader. The button replaces itself with the next batch and its own successor.
-    if request.headers.get("HX-Request") == "true":
+    if is_htmx(request):
         return templates.TemplateResponse(request, "timeline/_entries.html", rows)
     return templates.TemplateResponse(
         request,
