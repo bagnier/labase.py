@@ -29,3 +29,12 @@ def test_a_column_sort_says_it_only_orders_the_page(driver):
     driver.sign_in_as_admin(_ADMIN)
 
     assert "data-sort-scope" in _timeline(driver, "?sort=name")
+
+
+def test_ascending_time_says_it_only_orders_the_page(driver):
+    """Each source is asked for its own *newest* rows regardless of direction, so ascending
+    time sorts a recent sample backwards rather than reaching the window's true oldest rows —
+    the same caveat the other non-exact sorts already carry."""
+    driver.sign_in_as_admin(_ADMIN)
+
+    assert "data-sort-scope" in _timeline(driver, "?sort=ts&dir=asc")

@@ -9,8 +9,9 @@ It never touches another context's tables: business events are read through the 
 All three now answer on the same session, which is what makes the ``logs`` source global rather
 than whatever the instance serving the page happened to have on its own disk. Sorting and the cut
 to the page size still happen in memory over the merged list: each source is asked for *its own*
-newest rows, which is exact for the default time order and a sample for any other column — the
-screen says so rather than imply otherwise.
+newest rows, which is exact for the default newest-first time order and a sample for any other
+sort — including time reversed, since the rows behind it are still each source's newest, not its
+oldest — the screen says so rather than imply otherwise.
 """
 
 import uuid
