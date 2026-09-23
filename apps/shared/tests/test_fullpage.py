@@ -1,22 +1,31 @@
-"""fullpage_context — page-slice assembly; a route's page extras must not silently clobber
-a slice already computed for this render — the host's own ``user``/``nav_items``, or a
-provider's namespaced key (see the *Page composition* principle: each slice is owned by
-the app that provides it). The session is never read on this path — every provider here is
-a fake that ignores it — so a bare, unbound ``AsyncSession`` stands in for it."""
+"""fullpage_context — a route's own page extra must not silently clobber a slice already
+claimed for this render: the host's own ``user``/``nav_items``, or a provider's declared,
+namespaced key (see the *Page composition* principle: each slice is owned by the app that
+provides it). Provider keys are declared at mount
+(:class:`~apps.shared.integration.host.FullpageProvider`), so the collision is checked
+against that declaration before any provider runs — no provider here is ever awaited, so a
+bare, unbound ``AsyncSession`` stands in for the session none of them reads.
+"""
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.integration.fullpage import FullpageQuery, fullpage_context
-from apps.shared.integration.host import FullpageProvider, host
+from apps.shared.integration.fullpage import fullpage_context
+from apps.shared.integration.host import Host
+
+
+async def _unreachable(query: object) -> dict:
+    raise AssertionError("collision must be caught before a provider ever runs")
 
 
 @pytest.mark.asyncio
-async def test_a_route_extra_named_like_a_provider_key_is_refused(monkeypatch):
-    async def provide_profile(query: FullpageQuery) -> dict:
-        return {"handle": "real-handle"}
-
-    monkeypatch.setattr(host, "fullpage_providers", [FullpageProvider("profile", provide_profile)])
+async def test_a_route_extra_named_like_a_providers_declared_key_is_refused(monkeypatch):
+    provider_host = Host()
+    provider_host.register_fullpage_provider("profile", ["handle"], _unreachable)
+    monkeypatch.setattr(
+        "apps.shared.integration.fullpage.host.fullpage_providers",
+        provider_host.fullpage_providers,
+    )
 
     with pytest.raises(ValueError, match="collides") as err:
         await fullpage_context(AsyncSession(), None, profile_handle="forged")
@@ -26,7 +35,7 @@ async def test_a_route_extra_named_like_a_provider_key_is_refused(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_route_extra_named_like_the_hosts_own_nav_items_key_is_refused(monkeypatch):
-    monkeypatch.setattr(host, "fullpage_providers", [])
+    monkeypatch.setattr("apps.shared.integration.fullpage.host.fullpage_providers", [])
 
     with pytest.raises(ValueError, match="collides") as err:
         await fullpage_context(AsyncSession(), None, nav_items=["forged"])
@@ -36,10 +45,15 @@ async def test_a_route_extra_named_like_the_hosts_own_nav_items_key_is_refused(m
 
 @pytest.mark.asyncio
 async def test_a_route_extra_with_no_matching_slice_key_lands_in_the_context(monkeypatch):
-    async def provide_profile(query: FullpageQuery) -> dict:
+    async def provide_profile(query: object) -> dict:
         return {"handle": "real-handle"}
 
-    monkeypatch.setattr(host, "fullpage_providers", [FullpageProvider("profile", provide_profile)])
+    provider_host = Host()
+    provider_host.register_fullpage_provider("profile", ["handle"], provide_profile)
+    monkeypatch.setattr(
+        "apps.shared.integration.fullpage.host.fullpage_providers",
+        provider_host.fullpage_providers,
+    )
 
     ctx = await fullpage_context(AsyncSession(), None, org_handle="acme")
 

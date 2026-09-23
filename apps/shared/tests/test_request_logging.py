@@ -5,6 +5,7 @@ non-asset path). Successful requests, bot scans and the browser's favicon probe 
 Pure middleware logic — no DB, no running app: the decision is exercised through fake requests.
 """
 
+import asyncio
 import uuid
 from collections import deque
 
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
+from starlette.types import Message, Receive, Scope, Send
 
 from apps.shared.http.exceptions import handle_http_error, handle_stale_data
 from apps.shared.logs import capture, request, sink
@@ -153,6 +155,23 @@ def test_a_5xx_on_an_asset_is_traced_too(log_chain):
 
 def test_an_asset_the_browser_fetched_itself_leaves_no_line(log_chain):
     assert _levels_for(log_chain, "/favicon.ico", 404, "https://example.com/home") == []
+
+
+# A liveness/readiness probe is silent while healthy — it is not traffic an admin needs to see on
+# every tick — but a 503 answer is the database going down at the exact moment the Timeline is read
+# for it, and that is not ours to swallow.
+
+
+def test_a_healthy_readiness_probe_leaves_no_line(log_chain):
+    assert _levels_for(log_chain, "/health/ready", 200) == []
+
+
+def test_a_failing_readiness_probe_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/health/ready", 503) == ["error"]
+
+
+def test_a_failing_liveness_probe_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/health/live", 503) == ["error"]
 
 
 # The load metrics count the same universe the timeline shows: our own traffic and our own
@@ -323,6 +342,44 @@ def test_a_handler_that_raises_still_leaves_its_finished_line(log_chain):
 
     lines = log_chain()
 
+    assert [(line.name, line.level, line.payload["status"]) for line in lines] == [
+        ("request.finished", "error", 500)
+    ]
+
+
+async def _cancelling_app(scope: Scope, receive: Receive, send: Send) -> None:
+    raise asyncio.CancelledError()
+
+
+async def _no_messages() -> Message:
+    return {"type": "http.disconnect"}
+
+
+async def _discard(message: Message) -> None:
+    pass
+
+
+def test_a_client_disconnect_still_leaves_its_finished_line(log_chain):
+    """A ``CancelledError`` — a client disconnect mid-handler, or a shutdown drain — used to leave
+    the task with no line, no duration and no metric: the middleware only caught ``Exception``,
+    and cancellation is a ``BaseException``. The line is written on the way out, same as any other
+    failure, and the cancellation still carries on."""
+    middleware = request.RequestLogger(_cancelling_app)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/boom",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "scheme": "http",
+        "client": None,
+    }
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(middleware(scope, _no_messages, _discard))
+
+    lines = log_chain()
     assert [(line.name, line.level, line.payload["status"]) for line in lines] == [
         ("request.finished", "error", 500)
     ]

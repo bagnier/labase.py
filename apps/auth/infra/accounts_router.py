@@ -22,7 +22,10 @@ from apps.auth.contract.events import (
     AccountEnabled,
     UserDeleted,
 )
+from apps.auth.domain.admin_guard import LastAdminViolation, ensure_not_last_admin
 from apps.auth.domain.models import AccountList
+from apps.auth.infra.admin_guard import lock_last_admin_guard
+from apps.auth.infra.user_repository import list_server_admins
 from apps.shared.dto import Message
 from apps.shared.events.bus import events
 from apps.shared.http import json_and_html, wants_full_page, wants_json
@@ -154,6 +157,21 @@ async def delete_user(
 ) -> Response:
     _ensure_enabled()
     _self_guard(current_user.id, user_id)
+    # Serializes against a concurrent self-deletion (apps/profile) or another console delete
+    # racing the same invariant through a different gate (issue #36) — held on admin_session,
+    # released at its commit below.
+    await lock_last_admin_guard(admin_session)
+    admins = await list_server_admins()
+    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.is_admin for u in admins)
+    try:
+        ensure_not_last_admin(
+            removes_admin=True,
+            target_is_admin=target_is_admin,
+            admin_count=sum(1 for u in admins if u.is_admin),
+        )
+    except LastAdminViolation as exc:
+        log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=user_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     await events.emit(
         AccountDeletedByAdmin(user_id=current_user.id, entity_id=uuid.UUID(user_id)), admin_session
     )
