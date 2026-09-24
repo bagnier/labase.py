@@ -2,7 +2,7 @@ import contextlib
 import tempfile
 from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
 
 from apps.auth.tests.given_helpers import (
     create_user,
@@ -354,22 +354,18 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def assert_row_controls_visible_when_focused(self, filename: str) -> None:
         self._on_files()
-        labels = [f"Rename {filename}", f"Share {filename}", f"Delete {filename}"]
-        opacities = [self._focus_by_tab_and_read_opacity(label) for label in labels]
-        assert opacities == ["1", "1", "1"], (
-            f"Expected each control opaque once it holds keyboard focus, got {opacities}"
-        )
+        for label in (f"Rename {filename}", f"Share {filename}", f"Delete {filename}"):
+            control = self._focus_by_tab(label)
+            expect(control).to_have_css("opacity", "1")
 
-    def _focus_by_tab_and_read_opacity(self, label: str) -> str:
+    def _focus_by_tab(self, label: str) -> Locator:
         """Reach the control named `label` the way a keyboard-only user does — pressing Tab
         from a blurred body, never a programmatic .focus(), which does not carry the keyboard
-        modality :focus-visible depends on — then read its settled computed opacity."""
+        modality :focus-visible depends on."""
         page = self.page
         page.evaluate("document.activeElement && document.activeElement.blur()")
         for _ in range(60):
             page.keyboard.press("Tab")
             if page.evaluate("document.activeElement.getAttribute('aria-label')") == label:
-                control = page.locator(f'[aria-label="{label}"]')
-                expect(control).to_have_css("opacity", "1")
-                return control.evaluate("el => getComputedStyle(el).opacity")
+                return page.locator(f'[aria-label="{label}"]')
         raise AssertionError(f"Could not reach {label!r} by Tab")
