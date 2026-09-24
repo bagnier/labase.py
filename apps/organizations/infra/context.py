@@ -94,6 +94,9 @@ async def get_membership_by_org_id(
     current_user: CurrentUser,
     session: RlsSession,
 ) -> Membership:
+    """Owner-gate resolver for routes with an ``{org_id}`` path parameter — binds ``org_id`` the
+    way ``get_current_org`` does, so a refusal on this lane correlates the same way (#95)."""
+    structlog.contextvars.bind_contextvars(org_id=str(org_id))
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, current_user.id)
     if membership is None:
@@ -102,9 +105,8 @@ async def get_membership_by_org_id(
 
 
 def _gate_owner(membership: Membership) -> Membership:
-    # request.finished already reports this 403 with the same user and path, and its detail via
-    # note_rejection — a line here would only restate it. (require_current_owner's callers also
-    # get org_id for free, bound by get_current_org; require_owner's do not — see #95.)
+    # request.finished already reports this 403 with the same user, org and path, and its
+    # detail via note_rejection — a line here would only restate it.
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership
