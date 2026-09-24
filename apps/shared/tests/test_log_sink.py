@@ -260,3 +260,21 @@ async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog
         ["log_sink.write_failed", "log_sink.write_recovered"],
         ["log_sink.write_recovered"],
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["INFO", "WARNING", "ERROR"])
+async def test_overflow_is_said_at_every_log_level(log_chain, caplog, store, monkeypatch, level):
+    """``timeline.log_level`` quiets the sink's ordinary lines, never the count of lines the
+    queue shed (AGENTS: the log sink — "a dropped line is one the Timeline will never show,
+    and silence there reads exactly like a quiet server"), the same reason the outage/recovery
+    pair is level-immune."""
+    monkeypatch.setattr(sink, "_QUEUE", deque(maxlen=2))
+    apply_log_level(level)
+
+    for i in range(5):
+        _enqueue(f"shed.{i}")
+    await LogDrain(interval_seconds=0).tick()
+
+    announced = [r for r in caplog.records if r.msg.get("event") == "log_sink.overflowed"]
+    assert len(announced) == 1

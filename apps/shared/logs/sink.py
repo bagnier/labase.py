@@ -176,10 +176,15 @@ def _write_to_files(lines: list[dict[str, Any]]) -> None:
 
 
 def report_overflow() -> None:
-    """Say what the queue shed since the last tick — once per tick, never once per lost line."""
+    """Say what the queue shed since the last tick — once per tick, never once per lost line.
+
+    Through ``_log``, not ``log``: a dropped line is one the Timeline will never show, so it must
+    reach it whatever ``timeline.log_level`` quiets — the same level-immune path the outage/
+    recovery pair uses, and for the same reason (AGENTS: the log sink).
+    """
     dropped, _overflow.dropped = _overflow.dropped, 0
     if dropped:
-        log.warning("log_sink.overflowed", dropped=dropped)
+        _log.warning("log_sink.overflowed", dropped=dropped)
 
 
 def report_write_outage() -> None:
