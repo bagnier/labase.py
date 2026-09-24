@@ -34,6 +34,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from collections import defaultdict, deque
 from collections.abc import MutableMapping
 from dataclasses import dataclass
@@ -42,7 +43,6 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from sqlalchemy import text
 
 from apps.shared import clock
 from apps.shared.logs.repository import LogRepository
@@ -297,12 +297,11 @@ class LogDrain:
         lines = _drain_queue()
         if lines:
             try:
+                lock_timeout_ms = math.ceil(
+                    get_technical_settings().log_drain_lock_timeout_seconds * 1000
+                )
                 async with admin_session_factory()() as session:
-                    lock_timeout_ms = get_technical_settings().log_drain_lock_timeout_seconds * 1000
-                    await session.execute(
-                        text(f"SET LOCAL lock_timeout = '{round(lock_timeout_ms)}ms'")
-                    )
-                    await LogRepository(session).append(lines)
+                    await LogRepository(session).append(lines, lock_timeout_ms=lock_timeout_ms)
                     await session.commit()
             except Exception:
                 # No ``log.exception`` and no verdict here: the store being down is already said by

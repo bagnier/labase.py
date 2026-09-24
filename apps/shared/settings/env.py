@@ -69,7 +69,9 @@ class TechnicalSettings(BaseSettings):
     firehose_flush_seconds: PollSeconds = 1.0  # drain of the log queue into ``log_lines``
     # How long the drain waits on a lock held elsewhere (e.g. a concurrent TRUNCATE) before giving
     # up on this tick and falling back to the day files, same as a store that refuses outright.
-    log_drain_lock_timeout_seconds: float = 2.0
+    # Floored above zero: to Postgres, a ``lock_timeout`` of ``0`` means *no* timeout — the one
+    # value here that would silently put the wait back to unbounded.
+    log_drain_lock_timeout_seconds: float = Field(default=2.0, ge=0.001)
     # Deployed version (git SHA in Docker); drives error-tracking regression detection.
     app_version: str = "dev"
     # These defaults target the local Supabase mail catcher (Mailpit); prod sets SMTP_* to any
