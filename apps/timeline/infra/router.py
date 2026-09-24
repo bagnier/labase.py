@@ -5,7 +5,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, get_args
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Request
@@ -40,7 +40,7 @@ def _settings_rows() -> list[SettingRow]:
     return get_settings(_TIMELINE_APP).rows()
 
 
-_GRAINS: tuple[Grain, ...] = ("hour", "day", "week", "month")
+_GRAINS: tuple[Grain, ...] = get_args(Grain)  # the Literal's own members, not a hand-kept copy
 # ``(source value, human series label)`` — the label rides the ApexCharts tooltip, and the colors
 # mirror the template's legend swatches (info/secondary/error), which is why the chart's own legend
 # stays off.
