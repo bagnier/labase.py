@@ -53,10 +53,11 @@ gh api "repos/{owner}/{repo}/pulls/$ARGUMENTS/comments"
 
 Stop, without a comment, when the pull request is not open. On the runner, stop too when it does
 not carry `reworking`: that label is the tick's hand-off, and one rework runs at a time. In a
-session, take it before touching anything, so the tick sees the pull request busy:
+session, take the pull request off the queue so the tick never hands it over beside you — never
+put `reworking` on by hand: that label fires the runner's run.
 
 ```sh
-gh pr edit "$ARGUMENTS" --add-label reworking
+gh pr edit "$ARGUMENTS" --remove-label to-rework
 ```
 
 The brief is every remark by the repository owner — review comments, inline comments, and the

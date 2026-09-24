@@ -1,8 +1,8 @@
 name: Tick
 
 # The pace of the two bots: one fix and one rework in flight, never more, never less while there
-# is work. This job puts `auto-fix` on the oldest `to-fix` issue, and `reworking` on the oldest
-# `to-rework` pull request, each when its own queue is clear — and does nothing otherwise. No
+# is work. This job puts `fixing` on the oldest `to-fix` issue, and `reworking` on the oldest
+# `to-rework` pull request, each when its own lane is clear — and does nothing otherwise. No
 # Claude run of its own: a handful of API calls and a label. The owner decides what and in which
 # order (`to-fix`, a `@claude` mention); the tick decides when (docs/workflow.md).
 # zizmor flags `workflow_run` for the job that checks out, downloads or interpolates what the
@@ -41,17 +41,18 @@ jobs:
       GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Put auto-fix on the next to-fix issue, when the way is clear
+      # A hand-off puts the new label on before taking the queue's off, in two commands: the step
+      # stops on the first failure, so an issue the bot could not be handed stays in its queue.
+      - name: Put fixing on the next to-fix issue, when the way is clear
         run: |
           in_flight=$(gh run list --workflow=fix.yml --status in_progress --json databaseId --jq 'length')
           taken=$(gh issue list --state open --label fixing --json number --jq 'length')
-          waiting=$(gh issue list --state open --label auto-fix --json number --jq 'length')
-          if [ "$in_flight" -gt 0 ] || [ "$taken" -gt 0 ] || [ "$waiting" -gt 0 ]; then
-            echo "a fix is in flight ($in_flight running, $taken fixing, $waiting auto-fix): nothing to do"
+          if [ "$in_flight" -gt 0 ] || [ "$taken" -gt 0 ]; then
+            echo "a fix is in flight ($in_flight running, $taken fixing): nothing to do"
             exit 0
           fi
 
-          # The Fix job takes only the owner's issues; any other would keep `auto-fix` forever.
+          # The Fix job takes only the owner's issues; any other would keep `fixing` forever.
           next=$(gh issue list --state open --label to-fix --author "$GITHUB_REPOSITORY_OWNER" \
             --search "-label:question -label:stalled sort:created-asc" \
             --limit 1 --json number --jq '.[0].number // empty')
@@ -59,7 +60,8 @@ jobs:
             echo "nothing to fix"
             exit 0
           fi
-          gh issue edit "$next" --remove-label to-fix --add-label auto-fix
+          gh issue edit "$next" --add-label fixing
+          gh issue edit "$next" --remove-label to-fix
           echo "issue #$next handed to the fix bot"
 
       # The two queues are independent — a fix and a rework run side by side, each alone in its
@@ -81,5 +83,6 @@ jobs:
             echo "nothing to rework"
             exit 0
           fi
-          gh pr edit "$next" --remove-label to-rework --add-label reworking
+          gh pr edit "$next" --add-label reworking
+          gh pr edit "$next" --remove-label to-rework
           echo "pull request #$next handed to the rework bot"

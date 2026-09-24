@@ -1,8 +1,8 @@
 name: Fix
 
-# One issue, one run: labelling an issue `auto-fix` hands it to the `ci-fix-issue` skill, which
-# reproduces it, fixes it, and opens the pull request from a `fix/<issue>` branch. Merging stays
-# with the user.
+# One issue, one run: tick.yml hands the oldest `to-fix` issue over by putting `fixing` on it,
+# and that label is what fires the `ci-fix-issue` skill, which reproduces the bug, fixes it, and
+# opens the pull request from a `fix/<issue>` branch. Merging stays with the user.
 on:
   issues:
     types: [labeled]
@@ -19,11 +19,11 @@ jobs:
     # because the issue body is the run's whole brief and the repo is public. Only the owner's
     # issues (and so the audit's, filed under the owner's token) can drive the bot.
     if: >-
-      github.event.label.name == 'auto-fix' &&
+      github.event.label.name == 'fixing' &&
       github.event.issue.user.login == github.repository_owner
     # One fix at a time, whatever labels were put on: one group for the whole bot, and no
-    # cancellation, so a second `auto-fix` waits for the first run to end (tick.yml paces them).
-    # On the job, not the workflow: every label fires a run, the bot's own `fixing` too, and a
+    # cancellation, so a second `fixing` waits for the first run to end (tick.yml paces them).
+    # On the job, not the workflow: every label fires a run, the owner's `to-fix` too, and a
     # workflow-level group would be joined before the `if` above skips it. A run that must stop
     # is cancelled by hand, `gh run cancel`, and lands on `stalled`.
     concurrency:
@@ -119,7 +119,7 @@ jobs:
 
       # A run that ends before its own end — cancelled, timed out, a turn that stopped — leaves
       # `fixing` with nobody behind it. Whatever happened, the label becomes a state the owner can
-      # see. Never `auto-fix` again: that would relaunch a lasting failure forever.
+      # see. Never `to-fix` again: that would relaunch a lasting failure forever.
       - name: Mark a run that died
         if: always()
         env:

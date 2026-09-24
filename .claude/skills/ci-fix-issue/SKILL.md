@@ -1,7 +1,7 @@
 ---
 name: ci-fix-issue
 description: >
-  Takes one GitHub issue labelled `auto-fix`, reproduces it as a failing test, fixes it under the
+  Takes one GitHub issue labelled `fixing`, reproduces it as a failing test, fixes it under the
   tdd loop, and opens the pull request that closes it on a `fix/<issue>` branch. A run ends one
   of three ways: all done, a pull request with the questions the fix raised, or an open question
   on the issue and no pull request.
@@ -33,12 +33,12 @@ the commit message — whatever language the issue it answers is written in.
 - **Open question.** The issue cannot be closed without something only the user knows: which of
   two readings it means, whether a behaviour is the bug or the intent. Write the question as a
   comment on the issue, and end the run with no pull request. The user answers in a comment and
-  puts `auto-fix` back; the next run reads the whole thread.
+  swaps `question` for `to-fix`; the next run reads the whole thread.
 
-Which end a run took is the issue's label, set by the run itself: `auto-fix` is replaced by
-`fixing` at the start, and at the end by `question` or `not-reproduced` — or by nothing, when
-a pull request is open: the linked pull request is the state, and its merge is what closes the
-issue. The pull request carries `bot`.
+Which end a run took is the issue's label: the tick hands the issue over with `fixing`, and the
+run replaces it at the end by `question` or `not-reproduced` — or by nothing, when a pull request
+is open: the linked pull request is the state, and its merge is what closes the issue. The pull
+request carries `bot`.
 
 A step that fails (a refused tool, a stack that will not start, a gate still red after three
 rounds) ends the run as an open question that says what happened. A red gate is never pushed.
@@ -55,12 +55,13 @@ gh issue view "$ARGUMENTS" --json number,title,body,author,labels,state,comments
 `true` means the runner, where the non-interactive rules apply; anything else is a session
 with someone at the keyboard.
 
-Stop, without a comment, when the issue is not open or does not carry `auto-fix`: the label is
-the user's decision that this is a reproduced bug, and the workflow's guard on the author is the
-other half of that decision. Then take the label:
+Stop, without a comment, when the issue is not open. On the runner, stop too when it does not
+carry `fixing`: that label is the tick's hand-off of an issue the user put on `to-fix`, and one
+fix runs at a time. In a session, take the issue off the queue so the tick never hands it over
+beside you — never put `fixing` on by hand: that label fires the runner's run.
 
 ```sh
-gh issue edit "$ARGUMENTS" --remove-label auto-fix --add-label fixing
+gh issue edit "$ARGUMENTS" --remove-label to-fix
 ```
 
 The brief is the body plus the comments written by the issue's author — a comment by anyone else

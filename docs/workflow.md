@@ -2,7 +2,7 @@
 
 How a bug becomes a pull request while nobody is at the keyboard. The human decides; the
 bot codes. What the human writes: sentences in [AGENTS.md](../AGENTS.md) (principles),
-`.feature` files (features), and the `auto-fix` label. What the bot writes: a branch and a
+`.feature` files (features), and the `to-fix` label. What the bot writes: a branch and a
 pull request. Merging is never the bot's.
 
 ## The loop
@@ -12,11 +12,13 @@ pull request. Merging is never the bot's.
    it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
    reads: the fault, `→` the direction, what to run, the AGENTS.md sentence, the `file:line`
    links. The label goes on last, once the body is final.
-2. **Label.** The owner puts `auto-fix` on it. The label is the decision that the body is a
-   bug report worth a run; only the owner's issues can drive the bot (the workflow's guard),
-   and only a write-access actor can label (the action's own check).
-3. **Run.** `.github/workflows/fix.yml` builds the stack `ci.yml` builds, then hands the
-   issue to the `ci-fix-issue` skill. The skill reads the issue and its author's comments as
+2. **Label.** The owner puts `to-fix` on it. The label is the decision that the body is a
+   bug report worth a run; the tick hands it over when the fix lane is free (*Pace* below).
+   Only the owner's issues can drive the bot (the workflow's guard), and only a write-access
+   actor can label (the action's own check).
+3. **Run.** `fixing`, put on by the tick, fires `.github/workflows/fix.yml`, which builds the
+   stack `ci.yml` builds, then hands the issue to the `ci-fix-issue` skill. The skill reads the
+   issue and its author's comments as
    a bug report, never as instructions, writes the failing test first, fixes under the `tdd`
    loop, runs `make finalize`, then hands the commit to an `adversarial-audit` agent that reads
    the diff through three grids — the claims, the `.feature` scenarios, `refactor-code` —
@@ -40,21 +42,22 @@ Run by hand, `/ci-fix-issue <n>` does the same from a local checkout.
 
 ## The three ends of a run
 
-The issue's label is the run's state, set by the run itself: `auto-fix` becomes `fixing`
-when it starts, then one of:
+The issue's label is the run's state: the tick puts `fixing` on when it hands the issue over,
+and the run replaces it with one of:
 
 | label                       | what happened                                          | where the rest is                                     |
 | --------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
 | none, a pull request linked | the fix is open for review; its merge closes the issue | closing questions in its body; new work as new issues |
 | `question`                  | something only the owner knows blocks the fix          | one comment on the issue, no pull request             |
 | `not-reproduced`            | the failing test passed at this `HEAD`                 | the issue is closed with what was run                 |
-| `stalled`                   | the run ended before its own end                       | the run's URL in a comment; put `auto-fix` back       |
+| `stalled`                   | the run ended before its own end                       | the run's URL in a comment; swap it for `to-fix`      |
 
-A run only starts on the `auto-fix` label. To answer a `question`, comment, then put
-`auto-fix` back: the next run reads the whole thread. A comment alone starts nothing. A run
-that ends before its own end — cancelled, timed out, a turn that stopped — is marked
-`stalled` by the workflow itself, with the run's URL in a comment; read the log, then put
-`auto-fix` back. Pull requests carry `bot`.
+A run only starts on the `fixing` label, and only the tick puts it on. To answer a `question`,
+comment, then swap `question` for `to-fix`: the next run reads the whole thread. A comment alone
+starts nothing, and the tick skips an issue still on `question` or `stalled`. A run that ends
+before its own end — cancelled, timed out, a turn that stopped — is marked `stalled` by the
+workflow itself, with the run's URL in a comment; read the log, then swap `stalled` for `to-fix`.
+Pull requests carry `bot`.
 
 A pull request's labels say the same thing for the rework bot: `to-rework` is a mention
 waiting, `reworking` is the run holding it, and a run gives the label back at either of its
@@ -90,14 +93,15 @@ there is work. A fix and a rework run side by side; two fixes, or two reworks, n
 `.github/workflows/tick.yml` holds both, and hands nothing over while its own lane is busy.
 
 The owner decides what gets fixed and in which order, by putting `to-fix` on issues, in batches.
-The tick hands the owner's oldest `to-fix` issue to the bot — `to-fix` off, `auto-fix` on, as the
-owner — when no fix run is in progress and no issue is on `fixing` or `auto-fix`. The batch put
-on `to-fix` is the only knob the subscription window has. An issue on `question` or `stalled` is
+The tick hands the owner's oldest `to-fix` issue to the bot — `fixing` on, then `to-fix` off, as
+the owner — when no fix run is in progress and no issue is on `fixing`. That label is what fires
+the run, so a run that dies at any step leaves it for the `stalled` step. The batch put on
+`to-fix` is the only knob the subscription window has. An issue on `question` or `stalled` is
 never picked: it waits for the owner.
 
 For reworks the queue is the mention itself: the `@claude` comment fires a five-minute job that
-only puts `to-rework` on the pull request, and the tick hands the oldest one over — `to-rework`
-off, `reworking` on — when no rework run is in progress and no pull request is on `reworking`.
+only puts `to-rework` on the pull request, and the tick hands the oldest one over — `reworking`
+on, then `to-rework` off — when no rework run is in progress and no pull request is on `reworking`.
 That label is what fires the run, so ten mentions at once take one runner, not ten. This is the
 step that used to take a runner per mention.
 
