@@ -416,8 +416,9 @@ read *then*, so a deletion or RLS cannot hide _who_, _where_ and _what_ later; t
 are shown on the row and are what free text searches, alongside the payload. Lines and occurrences
 inherit the ids from contextvars bound by the request / auth / org-scope layers. Only a fact knows
 an entity, hence the per-entity filter narrows to the journal alone. Sorting is newest-first over
-the whole window; any other column orders the loaded page only — each source is asked for its own
-newest rows — and the screen says so rather than pass a sample off as an ordering.
+the whole window; any sort other than newest-first orders the loaded page only — each source is
+asked for its own newest rows — and the screen says so rather than pass a sample off as an
+ordering.
 
 
 ### Load metrics belong to their app alone
