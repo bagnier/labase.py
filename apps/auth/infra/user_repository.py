@@ -20,10 +20,24 @@ class UserAdminStatus:
     user_id: uuid.UUID
     email: str
     is_admin: bool
+    is_banned: bool = False
+
+    @property
+    def can_act(self) -> bool:
+        """A banned admin still holds ``app_metadata.role`` but cannot sign in — every last-admin
+        guard call site counts *this*, not the raw role flag, so the rule lives in one place."""
+        return self.is_admin and not self.is_banned
 
 
 def _is_admin(app_metadata: dict[str, Any]) -> bool:
     return app_metadata.get("role") == _ADMIN_ROLE
+
+
+def is_user_banned(user: Any) -> bool:
+    """A GoTrue ban never expires in practice (``BAN_FOREVER``), so the raw flag alone answers
+    whether the account can currently sign in — shared with the accounts screen, since both read
+    the same claim off the same directory."""
+    return bool(getattr(user, "banned_until", None))
 
 
 async def _iter_all_users():
@@ -50,6 +64,7 @@ async def list_server_admins() -> list[UserAdminStatus]:
             user_id=uuid.UUID(u.id),
             email=u.email or "",
             is_admin=_is_admin(u.app_metadata),
+            is_banned=is_user_banned(u),
         )
         async for u in _iter_all_users()
     ]

@@ -25,7 +25,7 @@ from apps.auth.contract.events import (
 from apps.auth.domain.admin_guard import LastAdminViolation, ensure_not_last_admin
 from apps.auth.domain.models import AccountList
 from apps.auth.infra.admin_guard import lock_last_admin_guard
-from apps.auth.infra.user_repository import list_server_admins
+from apps.auth.infra.user_repository import is_user_banned, list_server_admins
 from apps.shared.dto import Message
 from apps.shared.events.bus import events
 from apps.shared.http import json_and_html, wants_full_page, wants_json
@@ -64,7 +64,7 @@ def _list_accounts() -> list[dict[str, Any]]:
                     "email": u.email or "",
                     "created_at": u.created_at.strftime("%Y-%m-%d") if u.created_at else "",
                     "confirmed": u.email_confirmed_at is not None,
-                    "disabled": _is_banned(u),
+                    "disabled": is_user_banned(u),
                     "is_admin": u.app_metadata.get("role") == "admin",
                 }
             )
@@ -73,11 +73,6 @@ def _list_accounts() -> list[dict[str, Any]]:
         page += 1
     accounts.sort(key=lambda a: a["created_at"], reverse=True)
     return accounts
-
-
-def _is_banned(user: Any) -> bool:
-    banned_until = getattr(user, "banned_until", None)
-    return bool(banned_until)
 
 
 @accounts_router.get("", responses=json_and_html(AccountList))
@@ -162,12 +157,12 @@ async def delete_user(
     # released at its commit below.
     await lock_last_admin_guard(admin_session)
     admins = await list_server_admins()
-    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.is_admin for u in admins)
+    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.can_act for u in admins)
     try:
         ensure_not_last_admin(
             removes_admin=True,
             target_is_admin=target_is_admin,
-            admin_count=sum(1 for u in admins if u.is_admin),
+            admin_count=sum(1 for u in admins if u.can_act),
         )
     except LastAdminViolation as exc:
         log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=user_id)

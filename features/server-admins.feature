@@ -67,6 +67,16 @@ Feature: Server admin management
     Then the action is forbidden
     And "root@example.com" appears in the admin list as a server admin
 
+  # A disabled account keeps its admin role in GoTrue but cannot sign in, so it must not count
+  # as the safety net that lets the server's one remaining acting admin give up their own rights.
+  Scenario: A disabled admin does not cover for the last acting admin's own revoke
+    Given a server admin is signed in as "root@example.com"
+    And "bob@example.com" is a server admin
+    When the admin disables the account "bob@example.com"
+    And the admin revokes the server admin rights of "root@example.com"
+    Then the action is forbidden
+    And "root@example.com" appears in the admin list as a server admin
+
   # Authorisation
 
   Scenario: A non-admin cannot designate server admins

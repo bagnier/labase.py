@@ -624,12 +624,12 @@ async def account_delete(
         # sign-in), so the target's actual status is read fresh, the same way the console's own
         # revoke path does.
         admins = await list_server_admins()
-        target_is_admin = any(u.user_id == current_user.id and u.is_admin for u in admins)
+        target_is_admin = any(u.user_id == current_user.id and u.can_act for u in admins)
         try:
             ensure_not_last_admin(
                 removes_admin=True,
                 target_is_admin=target_is_admin,
-                admin_count=sum(1 for u in admins if u.is_admin),
+                admin_count=sum(1 for u in admins if u.can_act),
             )
         except LastAdminViolation:
             error = "You are the server's last admin — promote another admin first."
