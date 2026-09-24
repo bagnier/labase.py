@@ -57,15 +57,16 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
+    now = clock.now()
     n = await count_where(
         query.session,
         CalendarEvent,
         CalendarEvent.org_id == query.org_id,
-        CalendarEvent.starts_at >= clock.now(),
+        CalendarEvent.starts_at >= now,
     )
     lines = [f"{n} upcoming"] if n else ["No upcoming events"]
     recent = (
-        await CalendarEventRepository(query.session, query.org_id).upcoming(RECENT_ITEMS)
+        await CalendarEventRepository(query.session, query.org_id).upcoming(now, RECENT_ITEMS)
         if n
         else []
     )

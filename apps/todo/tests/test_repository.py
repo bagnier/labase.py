@@ -1,8 +1,8 @@
 """`TodoRepository`'s bounded read of the open items, run against a real, RLS-enforcing session.
 
-The dashboard overview needs an org's most recently added open items without loading every
-task it has (done or not) — this holds `recent_open`'s contract (bounded, done items skipped,
-newest first) in isolation from the overview that calls it.
+The dashboard overview needs an org's topmost open items without loading every task it has
+(done or not) — this holds `recent_open`'s contract (bounded, done items skipped, ordered by
+`position` rather than by creation order) in isolation from the overview that calls it.
 """
 
 import uuid
@@ -37,16 +37,19 @@ async def _an_org(session: AsyncSession) -> AsyncGenerator[tuple[uuid.UUID, uuid
 
 
 @pytest.mark.asyncio
-async def test_recent_open_skips_done_items_and_caps_at_the_newest(db_session: AsyncSession):
+async def test_recent_open_orders_by_position_not_by_creation_order(db_session: AsyncSession):
+    """`oldest` is moved to the top after every item is created, so a query that ordered by id
+    (mint order) or by insertion order instead of `position` would return a different, wrong
+    pair — and done items are skipped regardless of where they sit."""
     async with _an_org(db_session) as (org_id, owner_id):
         repo = TodoRepository(db_session, org_id)
-        await repo.add(owner_id, "Oldest")
+        oldest = await repo.add(owner_id, "Oldest")
         await repo.add(owner_id, "Middle")
         closed = await repo.add(owner_id, "Closed")
-        await repo.add(owner_id, "Newest")
+        newest = await repo.add(owner_id, "Newest")
         closed.done = True
-        await db_session.flush()
+        await repo.move_above(oldest.id, newest.id)
 
         recent = await repo.recent_open(2)
 
-    assert [t.title for t in recent] == ["Newest", "Middle"]
+    assert [t.title for t in recent] == ["Oldest", "Newest"]
