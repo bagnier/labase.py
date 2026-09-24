@@ -77,6 +77,25 @@ def test_the_unheld_claims_are_the_backlog(request):
     assert len(unheld) == UNHELD_TODAY
 
 
+def test_the_health_probe_exemption_is_a_named_and_held_claim():
+    """AGENTS.md's one stated ``request.finished`` exemption — quoted whole by this claim — reads
+    as covering only the browser-fetched asset; #47 added a second, code-only one for a healthy
+    health probe with no claim naming it. This entry gives that carve-out a name next to
+    ``request-finished-once-per-request`` and binds it to the tests that hold it."""
+    match = [claim for claim in CLAIMS if claim.name == "health-probe-exemption"]
+
+    assert [(claim.quote, [holder.__name__ for holder in claim.held_by]) for claim in match] == [
+        (
+            "what the browser fetched by itself leaves nothing unless it 5xx'd",
+            [
+                "test_a_healthy_readiness_probe_leaves_no_line",
+                "test_a_failing_readiness_probe_is_traced_at_error",
+                "test_a_failing_liveness_probe_is_traced_at_error",
+            ],
+        )
+    ]
+
+
 def _agents_sentences() -> list[str]:
     """The sentences of AGENTS.md, diagrams and tables aside — each section split on its own, where
     a sentence ends and the next begins with a capital, a code span or emphasis (an abbreviation's

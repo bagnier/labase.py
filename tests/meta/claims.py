@@ -89,7 +89,10 @@ from apps.shared.tests.test_queue import (
     test_worker_runs_enqueued_task,
 )
 from apps.shared.tests.test_request_logging import (
+    test_a_failing_liveness_probe_is_traced_at_error,
+    test_a_failing_readiness_probe_is_traced_at_error,
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+    test_a_healthy_readiness_probe_leaves_no_line,
     test_a_raising_observer_never_replaces_the_handlers_own_exception,
 )
 from apps.shared.tests.test_uuid7 import test_uuid7_is_time_ordered_and_versioned
@@ -1101,6 +1104,13 @@ CLAIMS = [
         "raised",
         test_a_served_request_leaves_exactly_one_finished_line,
         test_a_request_whose_handler_raised_still_leaves_its_finished_line,
+    ),
+    held(
+        "health-probe-exemption",
+        "what the browser fetched by itself leaves nothing unless it 5xx'd",
+        test_a_healthy_readiness_probe_leaves_no_line,
+        test_a_failing_readiness_probe_is_traced_at_error,
+        test_a_failing_liveness_probe_is_traced_at_error,
     ),
     held(
         "timeline-writes-nothing",
