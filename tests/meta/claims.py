@@ -68,6 +68,7 @@ from apps.shared.tests.test_limiter import (
 )
 from apps.shared.tests.test_listener import (
     test_a_second_tick_does_not_refan_a_dispatched_fact,
+    test_a_wiring_without_the_consumer_does_not_foreclose_it_for_one_that_has_it,
     test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
     test_tick_runs_spread_handlers_per_instance_off_the_trail,
 )
@@ -1147,9 +1148,16 @@ CLAIMS = [
     ),
     held(
         "a-fact-is-fanned-out-once",
-        "It claims what it dispatches in the transaction that stamps it",
+        "N instances still never fan one fact out twice to the same consumer",
         test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
         test_a_second_tick_does_not_refan_a_dispatched_fact,
+    ),
+    held(
+        "dispatch-per-declared-consumer",
+        "Delivery is dispatched per declared consumer, off that consumer's own durable cursor — "
+        "never off a flag on the fact itself, which would let whichever instance saw it first "
+        "foreclose it for a consumer that instance's wiring does not carry",
+        test_a_wiring_without_the_consumer_does_not_foreclose_it_for_one_that_has_it,
     ),
     held(
         "csrf-without-tokens",

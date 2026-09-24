@@ -179,11 +179,11 @@ def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
 class EventRepository(BaseRepository[BusinessEventRecord]):
     """All ``business_events`` SQL, bound to one session.
 
-    The two delivery scans read whole :class:`BusinessEventRecord` objects: the journal already has
-    a typed shape, so the delivery path reads it rather than re-deriving a narrower one of its own.
-    What stays raw ``sql_text()`` is the plumbing proper — the ``dispatched_at`` cursor,
-    deliberately left off the fact model, and the ``consumed_events`` ledger, whose
-    ``ON CONFLICT`` reads best as SQL.
+    The delivery scans read whole :class:`BusinessEventRecord` objects: the journal already has a
+    typed shape, so the delivery path reads it rather than re-deriving a narrower one of its own.
+    What stays raw ``sql_text()`` is the plumbing proper — the ``checked_at`` marker, deliberately
+    left off the fact model, the per-topic ``event_dispatch_cursors``, and the ``consumed_events``
+    / ``dispatched_consumers`` ledgers, whose ``ON CONFLICT`` reads best as SQL.
     """
 
     model: ClassVar[type[BusinessEventRecord]] = BusinessEventRecord
@@ -232,48 +232,102 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
 
     # ── Delivery ─────────────────────────────────────────────────────────────────────────────
 
-    async def claim_undispatched(self, batch: int) -> list[BusinessEventRecord]:
-        """``SKIP LOCKED`` so N instances never double-claim; the caller marks them dispatched in
-        the same transaction. ``dispatched_at`` is queue mechanics, not part of what happened, so
-        the model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate
-        in an otherwise ORM query."""
+    async def claim_unchecked(self, batch: int) -> list[BusinessEventRecord]:
+        """``SKIP LOCKED`` so N instances never double-claim; the caller marks them checked in the
+        same transaction. ``checked_at`` is queue mechanics, not part of what happened, so the
+        model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate in
+        an otherwise ORM query. Bounds the *routability* check alone (an unrecognized ``kind``
+        surfaced as an issue): per-consumer delivery is a separate, per-topic cursor (see
+        :meth:`facts_above_cursor`), so this marker no longer gates whether a consumer gets its
+        task."""
         claimed = await self.session.scalars(
             select(BusinessEventRecord)
-            .where(sql_text("dispatched_at IS NULL"))
+            .where(sql_text("checked_at IS NULL"))
             .order_by(BusinessEventRecord.id)
             .with_for_update(skip_locked=True)
             .limit(batch)
         )
         return list(claimed)
 
-    async def mark_dispatched(self, ids: list[uuid.UUID]) -> None:
+    async def mark_checked(self, ids: list[uuid.UUID]) -> None:
         await self.session.execute(
-            sql_text("UPDATE business_events SET dispatched_at = now() WHERE id = ANY(:ids)"),
+            sql_text("UPDATE business_events SET checked_at = now() WHERE id = ANY(:ids)"),
             {"ids": ids},
         )
 
-    async def scan_spread(
-        self, cursor: uuid.UUID, kinds: list[str], settle_seconds: float
-    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
-        """The ``spread`` facts above ``cursor``, and the cursor its reader may safely take next.
+    _NIL_CURSOR: ClassVar[uuid.UUID] = uuid.UUID(int=0)
 
-        No lock and no dispatch mark — a ``spread`` handler runs on *every* instance, each
-        replaying off its own cursor. What that cursor may not do is outrun the commits. A key is
-        minted at INSERT, not at commit, so a slow transaction commits *after* a quick one that
-        started later: the slow fact surfaces holding the lower key, below a cursor that has
-        already passed it, and ``id > cursor`` never offers it again. Neither claim nor ledger
-        stands behind ``spread`` to catch what the comparison skipped.
+    async def lock_dispatch_cursor(self, topic: str) -> uuid.UUID | None:
+        """The topic's own cursor, locked for this tick — ``None`` when another instance already
+        holds it (skipped this tick, retried next). A topic seen for the first time anywhere gets
+        a fresh row at the nil cursor, so it starts owed every fact recorded before it existed —
+        an app switched on, then restarted, still catches up on what it missed."""
+        await self.session.execute(
+            sql_text(
+                "INSERT INTO event_dispatch_cursors (topic, cursor) VALUES (:topic, :nil) "
+                "ON CONFLICT (topic) DO NOTHING"
+            ),
+            {"topic": topic, "nil": self._NIL_CURSOR},
+        )
+        return await self.session.scalar(
+            sql_text(
+                "SELECT cursor FROM event_dispatch_cursors "
+                "WHERE topic = :topic FOR UPDATE SKIP LOCKED"
+            ),
+            {"topic": topic},
+        )
 
-        Time is what bounds it, and nothing else does: a fact still invisible belongs to a
-        transaction still open, so once ``settle_seconds`` have passed no unseen key can be older
-        than that. The cursor therefore stops at the last fact that old, and everything above it
-        comes back on every tick until it settles — the reader skips what it already applied,
-        which is why a replay costs nothing here.
-        """
-        settled_before = await self.session.scalar(
+    async def advance_dispatch_cursor(self, topic: str, cursor: uuid.UUID) -> None:
+        await self.session.execute(
+            sql_text("UPDATE event_dispatch_cursors SET cursor = :cursor WHERE topic = :topic"),
+            {"cursor": cursor, "topic": topic},
+        )
+
+    async def dispatch_consumer(self, event_id: uuid.UUID, topic: str) -> bool:
+        """Insert-or-nothing against the ``dispatched_consumers`` ledger — ``True`` the first time
+        this (event, topic) pair is seen, which is when the caller must actually enqueue the task;
+        a re-check before the topic's cursor has caught up finds the row and no-ops."""
+        result = await self.session.execute(
+            sql_text(
+                "INSERT INTO dispatched_consumers (event_id, topic) VALUES (:event_id, :topic) "
+                "ON CONFLICT DO NOTHING RETURNING event_id"
+            ),
+            {"event_id": event_id, "topic": topic},
+        )
+        return result.first() is not None
+
+    async def settled_before(self, settle_seconds: float) -> datetime:
+        """The cutoff a cursor may safely advance to, read once and shared across every cursor a
+        tick moves (:meth:`facts_above_cursor` is called once per durable consumer, and reading
+        this itself per call would cost one more round trip per topic for a value none of them own
+        — it names how long a transaction may stay open, not who is asking)."""
+        return await self.session.scalar(
             sql_text("SELECT now() - make_interval(secs => :settle)"),
             {"settle": settle_seconds},
         )
+
+    async def facts_above_cursor(
+        self, cursor: uuid.UUID, kinds: list[str], settled_before: datetime
+    ) -> tuple[list[BusinessEventRecord], uuid.UUID]:
+        """The facts above ``cursor`` whose kind is one of ``kinds``, and the cursor its reader may
+        safely take next — shared by ``spread`` (a cursor per process, in memory) and the durable
+        per-consumer backlog (a cursor per topic, in ``event_dispatch_cursors``): both replay off a
+        cursor of their own, so both share the one hazard a cursor has and a claim does not.
+
+        What a cursor may not do is outrun the commits. A key is minted at INSERT, not at commit,
+        so a slow transaction commits *after* a quick one that started later: the slow fact
+        surfaces holding the lower key, below a cursor that has already passed it, and
+        ``id > cursor`` never offers it again. Neither claim nor ledger stands behind a cursor to
+        catch what the comparison skipped on its own.
+
+        Time is what bounds it, and nothing else does: a fact still invisible belongs to a
+        transaction still open, so once ``settled_before`` (:meth:`settled_before`) is passed no
+        unseen key can be older than that. The cursor therefore stops at the last fact that old,
+        and everything above it comes back on every tick until it settles — unbounded on purpose,
+        so a burst larger than one batch is never left waiting behind its own cursor; the caller is
+        what dedupes a replay (``spread``'s in-memory applied set, or the durable consumer's
+        ``dispatched_consumers`` ledger), which is why offering it again costs nothing here.
+        """
         found = list(
             await self.session.scalars(
                 select(BusinessEventRecord)
