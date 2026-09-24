@@ -215,12 +215,19 @@ def test_the_fragment_walk_actually_finds_the_responses():
     assert len(_fragment_responses()) > 10
 
 
+def _routers() -> list[Path]:
+    """Every router module — not just the ones literally named ``router.py``
+    (``accounts_router.py``, ``invitation_router.py``), plus the one app with no ``infra/``
+    split. The same enumeration `_db_touches_in_routers` uses in test_ratchets.py."""
+    return [*sorted(_APPS.glob("*/infra/*router*.py")), _APPS / "health" / "router.py"]
+
+
 def _negotiation_header_offenders() -> set[str]:
-    """Every ``infra/router.py`` line reading ``HX-Request`` or ``Accept`` off
-    ``request.headers`` by hand instead of through ``wants_json`` / ``is_htmx`` /
-    ``wants_full_page`` — the single source of truth AGENTS.md names for that branch."""
+    """Every router line reading ``HX-Request`` or ``Accept`` off ``request.headers`` by hand
+    instead of through ``wants_json`` / ``is_htmx`` / ``wants_full_page`` — the single source
+    of truth AGENTS.md names for that branch."""
     offenders = set()
-    for path in sorted(_APPS.glob("*/infra/router.py")):
+    for path in _routers():
         relative = str(path.relative_to(_ROOT))
         for node in ast.walk(ast.parse(path.read_text())):
             if (
@@ -247,8 +254,8 @@ def test_no_router_reads_the_negotiation_headers_by_hand():
 
 
 def test_the_router_walk_actually_finds_the_files():
-    # Guards the guard: a glob that matched nothing would make the assertion above vacuous.
-    assert len(list(_APPS.glob("*/infra/router.py"))) > 10
+    # Guards the guard: a walk that matched nothing would make the assertion above vacuous.
+    assert len(_routers()) > 10
 
 
 def test_the_layout_walk_actually_finds_the_files():
