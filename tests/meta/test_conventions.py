@@ -28,9 +28,11 @@ _SESSION_PROVIDERS = {
 }
 
 # Link and settings tables keep their natural composite keys — a surrogate id on a row that *is*
-# its pair would be a second identity to keep unique. The share token is the README's own stated
-# exception: a security token stays a random uuid4, unguessable, with no timestamp to read off it.
-_NATURAL_COMPOSITE_KEYS = {"app_settings", "memberships", "org_app_settings"}
+# its pair would be a second identity to keep unique. A range-partitioned table is the other
+# reason: Postgres requires the partition column in every unique key, so `id` alone cannot be a
+# partitioned table's key. The share token is the README's own stated exception: a security
+# token stays a random uuid4, unguessable, with no timestamp to read off it.
+_NATURAL_COMPOSITE_KEYS = {"app_settings", "memberships", "org_app_settings", "log_lines"}
 _RANDOM_TOKEN_KEYS = {"org_file_share_tokens"}
 
 
