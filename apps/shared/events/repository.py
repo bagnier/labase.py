@@ -201,22 +201,26 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
     async def pinned_names(
         self, user_id: uuid.UUID | None, org_id: uuid.UUID | None
     ) -> tuple[str | None, str | None]:
-        """Resolve the actor's handle and the org's name *now*, to store them on the record.
+        """Resolve the actor's readable name and the org's name *now*, to store them on the record.
 
-        One round trip for both: the write path already sat on a query for the handle, and a second
+        One round trip for both: the write path already sat on a query for the name, and a second
         one per emitted fact would double the cost of every business mutation. Both are read on the
         caller's session, so they see the same transaction the fact commits with.
 
         Profiles are ``own read`` under RLS, so a member cannot resolve a co-member's handle at read
         time; an org can be renamed or deleted outright. Pinning both here is what keeps the journal
-        legible later."""
+        legible later.
+
+        ``handle`` is null until the account visits ``/profile`` (see
+        ``ProfileRepository.auto_handle``); ``email`` is set atomically at signup and never null,
+        so it is what a fact from an account that never opened its profile pins instead."""
         if not user_id and not org_id:
             return None, None
         try:
             names = (
                 await self.session.execute(
                     sql_text(
-                        "select (select handle from profiles where user_id = :u),"
+                        "select (select coalesce(handle, email) from profiles where user_id = :u),"
                         "       (select name from organizations where id = :o)"
                     ),
                     {"u": user_id, "o": org_id},
