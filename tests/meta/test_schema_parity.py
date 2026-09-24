@@ -162,9 +162,9 @@ def test_every_mapped_column_matches_the_database(live_schema: LiveSchema) -> No
 
 
 def test_every_mapped_primary_key_matches_the_database(live_schema: LiveSchema) -> None:
-    """A table partitioned by range must carry the partition column in its primary key
-    (Postgres requires it in every unique key) — so a model mapping only part of it disagrees
-    with the table on what identifies a row."""
+    """The ORM and the table must agree on which columns identify a row — the case that exposed
+    a mismatch was a table partitioned by range, where Postgres requires the partition column in
+    every unique key, but the rule holds for any table a model maps only part of the key of."""
     declared = {
         table.name: {column.name for column in table.primary_key.columns}
         for table in Base.metadata.tables.values()
