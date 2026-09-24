@@ -351,3 +351,25 @@ class OrgFileBrowserMixin(BrowserBase):
         expect(self.page.get_by_label(f"Share link for {filename}")).to_have_value(
             self._share_link_url or ""
         )
+
+    def assert_row_controls_visible_when_focused(self, filename: str) -> None:
+        self._on_files()
+        labels = [f"Rename {filename}", f"Share {filename}", f"Delete {filename}"]
+        opacities = [self._focus_by_tab_and_read_opacity(label) for label in labels]
+        assert opacities == ["1", "1", "1"], (
+            f"Expected each control opaque once it holds keyboard focus, got {opacities}"
+        )
+
+    def _focus_by_tab_and_read_opacity(self, label: str) -> str:
+        """Reach the control named `label` the way a keyboard-only user does — pressing Tab
+        from a blurred body, never a programmatic .focus(), which does not carry the keyboard
+        modality :focus-visible depends on — then read its settled computed opacity."""
+        page = self.page
+        page.evaluate("document.activeElement && document.activeElement.blur()")
+        for _ in range(60):
+            page.keyboard.press("Tab")
+            if page.evaluate("document.activeElement.getAttribute('aria-label')") == label:
+                control = page.locator(f'[aria-label="{label}"]')
+                expect(control).to_have_css("opacity", "1")
+                return control.evaluate("el => getComputedStyle(el).opacity")
+        raise AssertionError(f"Could not reach {label!r} by Tab")
