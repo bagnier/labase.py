@@ -342,3 +342,10 @@ class OrgFileBrowserMixin(BrowserBase):
                 expect(row.locator(".file-meta")).to_have_text(f"{size} · {date} · {email}")
                 return
         raise AssertionError(f"File '{filename}' not found in DOM")
+
+    def assert_upload_control_labelled(self) -> None:
+        self._on_files()
+        expect(self.page.get_by_label("Choose File")).to_be_visible()
+
+    def assert_share_link_field_labelled(self) -> None:
+        expect(self.page.get_by_label("Share link")).to_be_visible()
