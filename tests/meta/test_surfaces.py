@@ -683,8 +683,10 @@ def _icons_spelled_in_templates() -> dict[str, str]:
         for expr in re.findall(r"\bph ph-\{\{(.*?)\}\}", text):
             # `'google-logo' if provider == 'google' else 'github-logo'` — only the ternary's two
             # branches name an icon; a quoted string inside its condition (``'google'`` above)
-            # is a value being compared, not a glyph.
-            ternary = re.match(r"\s*'([a-z0-9-]+)'\s+if\b.*\belse\s+'([a-z0-9-]+)'\s*$", expr)
+            # is a value being compared, not a glyph. Either quote style, matching Jinja itself.
+            ternary = re.match(
+                r"""\s*['"]([a-z0-9-]+)['"]\s+if\b.*\belse\s+['"]([a-z0-9-]+)['"]\s*$""", expr
+            )
             if ternary:
                 found[ternary.group(1)] = site
                 found[ternary.group(2)] = site
