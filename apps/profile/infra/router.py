@@ -226,6 +226,7 @@ async def _profile_context(
     session: RlsSession,
     current_user: CurrentUser,
     repo: ProfileRepository,
+    *,
     profile_settings: SettingsView,
     users_settings: SettingsView,
 ) -> dict:
@@ -309,9 +310,9 @@ async def _profile_error(
     session: RlsSession,
     current_user: CurrentUser,
     repo: ProfileRepository,
+    *,
     profile_settings: SettingsView,
     users_settings: SettingsView,
-    *,
     key: str,
     message: str,
     status_code: int = 400,
@@ -319,7 +320,12 @@ async def _profile_error(
     if wants_json(request):
         return JSONResponse({"detail": message}, status_code=status_code)
     ctx = await _profile_context(
-        request, session, current_user, repo, profile_settings, users_settings
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
     )
     ctx[key] = message
     return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
@@ -342,7 +348,12 @@ async def profile_page(
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(
-        request, session, current_user, repo, profile_settings, users_settings
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
     )
     flash = request.query_params.get("flash")
     if flash in _PROFILE_FLASHES:
@@ -413,8 +424,8 @@ async def password_change(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="password_error",
             message=error,
         )
@@ -457,8 +468,8 @@ async def email_change(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="email_error",
             message=error,
         )
@@ -550,8 +561,8 @@ async def passkey_delete(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="passkey_error",
             message=str(e),
         )
@@ -579,8 +590,8 @@ async def twofa_enroll(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="twofa_error",
             message=str(e),
         )
@@ -627,8 +638,8 @@ async def twofa_verify(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="twofa_error",
             message=error,
         )
@@ -692,8 +703,8 @@ async def account_delete(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="deletion_error",
             message=error,
         )
@@ -742,8 +753,8 @@ async def avatar_upload(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="avatar_error",
             message=error,
         )
@@ -813,8 +824,8 @@ async def profile_update(
             session,
             current_user,
             repo,
-            profile_settings,
-            users_settings,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="error",
             message=message,
             status_code=status_code,
@@ -827,7 +838,12 @@ async def profile_update(
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
     ctx = await _profile_context(
-        request, session, current_user, repo, profile_settings, users_settings
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
     )
     ctx["success"] = "Profile updated."
     return templates.TemplateResponse(request, "profile.html", ctx)

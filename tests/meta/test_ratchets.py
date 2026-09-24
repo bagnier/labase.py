@@ -215,8 +215,8 @@ _ROUTERS_TOUCHING_THE_DB = {
 # (`ProfileSettings`, `UsersSettings`, `app_settings(...)` under `/{org_handle}`); the list only
 # shrinks.
 _ROUTERS_READING_SETTINGS_BY_STRING = {
-    "apps/files/infra/router.py:378",
-    "apps/timeline/infra/router.py:40",
+    "apps/files/infra/router.py::public_share_download",
+    "apps/timeline/infra/router.py::_settings_rows",
 }
 
 # Request functions on the BYPASSRLS session, counted per module. The README reserves
@@ -997,19 +997,30 @@ def test_no_router_reaches_the_database_itself():
     assert _db_touches_in_routers() == _ROUTERS_TOUCHING_THE_DB
 
 
+def _calls_get_settings(node: ast.AST) -> TypeGuard[ast.Call]:
+    """A ``get_settings(...)`` call, named or reached through a module attribute
+    (``live.get_settings(...)``) — either way the read skips a declared dependency."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "get_settings"
+    return isinstance(func, ast.Attribute) and func.attr == "get_settings"
+
+
 def _settings_reads_in_routers() -> set[str]:
-    """Every ``get_settings(...)`` call reached straight from a router module, by file and line —
-    the request-code half of "Handlers declare the app's settings dependency"."""
+    """Every ``get_settings(...)`` call reached straight from a router module, named by its
+    enclosing function — the request-code half of "Handlers declare the app's settings
+    dependency". Named by function rather than line, so an edit elsewhere in the file never
+    shifts a frozen site off its number."""
     found = set()
-    for path in sorted(_APPS.glob("*/infra/router.py")):
+    for path in sorted(_APPS.glob("*/infra/*router*.py")):
         relative = str(path.relative_to(_ROOT))
-        for node in ast.walk(ast.parse(path.read_text())):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "get_settings"
-            ):
-                found.add(f"{relative}:{node.lineno}")
+        tree = ast.parse(path.read_text())
+        owner = _enclosing(tree)
+        for node in ast.walk(tree):
+            if _calls_get_settings(node):
+                found.add(f"{relative}::{owner.get(node.lineno, '<module>')}")
     return found
 
 

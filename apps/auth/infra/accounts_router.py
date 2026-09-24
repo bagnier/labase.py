@@ -22,6 +22,7 @@ from apps.auth.contract.events import (
     AccountEnabled,
     UserDeleted,
 )
+from apps.auth.contract.settings import UsersSettings
 from apps.auth.domain.admin_guard import LastAdminViolation, ensure_not_last_admin
 from apps.auth.domain.models import AccountList
 from apps.auth.infra.admin_guard import lock_last_admin_guard
@@ -33,7 +34,7 @@ from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.supabase import get_admin_supabase
-from apps.shared.settings.live import get_settings
+from apps.shared.settings.live import SettingsView
 
 log = structlog.get_logger(__name__)
 
@@ -43,8 +44,8 @@ BAN_FOREVER = "876000h"  # ~100 years; GoTrue has no permanent ban flag
 _PAGE_SIZE = 1000
 
 
-def _ensure_enabled() -> None:
-    if not get_settings("users").user_management_enabled:
+def _ensure_enabled(users_settings: SettingsView) -> None:
+    if not users_settings.user_management_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
@@ -77,9 +78,13 @@ def _list_accounts() -> list[dict[str, Any]]:
 
 @accounts_router.get("", responses=json_and_html(AccountList))
 async def list_accounts(
-    request: Request, current_user: CurrentAdmin, session: AdminSession, q: str = ""
+    request: Request,
+    current_user: CurrentAdmin,
+    session: AdminSession,
+    users_settings: UsersSettings,
+    q: str = "",
 ) -> Response:
-    _ensure_enabled()
+    _ensure_enabled(users_settings)
     accounts = await asyncio.to_thread(_list_accounts)
     needle = q.strip().lower()
     if needle:
@@ -118,9 +123,13 @@ def _done(request: Request, message: str) -> Response:
 # the request, instead of being swallowed by a detached best-effort task.
 @accounts_router.post("/{user_id}/disable", responses=json_and_html(Message))
 async def disable_user(
-    request: Request, user_id: str, current_user: CurrentAdmin, admin_session: AdminSession
+    request: Request,
+    user_id: str,
+    current_user: CurrentAdmin,
+    admin_session: AdminSession,
+    users_settings: UsersSettings,
 ) -> Response:
-    _ensure_enabled()
+    _ensure_enabled(users_settings)
     _self_guard(current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
@@ -132,9 +141,13 @@ async def disable_user(
 
 @accounts_router.post("/{user_id}/enable", responses=json_and_html(Message))
 async def enable_user(
-    request: Request, user_id: str, current_user: CurrentAdmin, admin_session: AdminSession
+    request: Request,
+    user_id: str,
+    current_user: CurrentAdmin,
+    admin_session: AdminSession,
+    users_settings: UsersSettings,
 ) -> Response:
-    _ensure_enabled()
+    _ensure_enabled(users_settings)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": "none"})
     await events.emit(
@@ -149,8 +162,9 @@ async def delete_user(
     user_id: str,
     current_user: CurrentAdmin,
     admin_session: AdminSession,
+    users_settings: UsersSettings,
 ) -> Response:
-    _ensure_enabled()
+    _ensure_enabled(users_settings)
     _self_guard(current_user.id, user_id)
     # Serializes against a concurrent self-deletion (apps/profile) or another console delete
     # racing the same invariant through a different gate (issue #36) — held on admin_session,
