@@ -52,6 +52,16 @@ def test_get_invitation_unknown_token_html_returns_invalid_state(client):
         app.dependency_overrides.pop(get_admin_session, None)
 
 
+def test_get_invitation_unknown_token_html_has_main_landmark(client):
+    token = uuid.uuid4()
+    app.dependency_overrides[get_admin_session] = _mock_session_with(row=None)
+    try:
+        resp = client.get(f"/invitations/{token}", headers={"accept": "text/html"})
+        assert resp.text.count("<main") == 1
+    finally:
+        app.dependency_overrides.pop(get_admin_session, None)
+
+
 def test_get_invitation_unknown_token_json_returns_404(client):
     token = uuid.uuid4()
     app.dependency_overrides[get_admin_session] = _mock_session_with(row=None)
