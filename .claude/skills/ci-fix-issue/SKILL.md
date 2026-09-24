@@ -33,10 +33,10 @@ the commit message — whatever language the issue it answers is written in.
 - **Open question.** The issue cannot be closed without something only the user knows: which of
   two readings it means, whether a behaviour is the bug or the intent. Write the question as a
   comment on the issue, and end the run with no pull request. The user answers in a comment and
-  swaps `question` for `to-fix`; the next run reads the whole thread.
+  swaps `to-answer` for `to-fix`; the next run reads the whole thread.
 
 Which end a run took is the issue's label: the tick hands the issue over with `fixing`, and the
-run replaces it at the end by `question` or `not-reproduced` — or by nothing, when a pull request
+run replaces it at the end by `to-answer` or `not-reproduced` — or by nothing, when a pull request
 is open: the linked pull request is the state, and its merge is what closes the issue. The pull
 request carries `bot`.
 
@@ -147,7 +147,7 @@ issue link when it got one. No history, no narration.
 
 ```sh
 gh issue comment "$ARGUMENTS" --body-file /tmp/question.md
-gh issue edit "$ARGUMENTS" --remove-label fixing --add-label question
+gh issue edit "$ARGUMENTS" --remove-label fixing --add-label to-answer
 ```
 
 The comment says what was established, what is missing, and the two readings when there are two.

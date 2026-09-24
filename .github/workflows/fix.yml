@@ -25,7 +25,7 @@ jobs:
     # cancellation, so a second `fixing` waits for the first run to end (tick.yml paces them).
     # On the job, not the workflow: every label fires a run, the owner's `to-fix` too, and a
     # workflow-level group would be joined before the `if` above skips it. A run that must stop
-    # is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+    # is cancelled by hand, `gh run cancel`, and lands on `to-unblock`.
     concurrency:
       group: fix-bot
       cancel-in-progress: false
@@ -127,6 +127,6 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx fixing; then
-            gh issue edit "$ISSUE" --remove-label fixing --add-label stalled
+            gh issue edit "$ISSUE" --remove-label fixing --add-label to-unblock
             gh issue comment "$ISSUE" --body "The fix run ended without a result: $RUN_URL"
           fi

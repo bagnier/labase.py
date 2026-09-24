@@ -59,7 +59,7 @@ jobs:
     # cancellation, so a second hand-off waits for the first run to end (tick.yml paces them).
     # On the job, not the workflow: every comment and every label fires a run, the bot's own
     # `to-rework` too, and a workflow-level group would be joined before the `if` above skips it.
-    # A run that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+    # A run that must stop is cancelled by hand, `gh run cancel`, and lands on `to-unblock`.
     concurrency:
       group: rework-bot
       cancel-in-progress: false
@@ -147,6 +147,6 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if gh pr view "$PR" --json labels --jq '.labels[].name' | grep -qx reworking; then
-            gh pr edit "$PR" --remove-label reworking --add-label stalled
+            gh pr edit "$PR" --remove-label reworking --add-label to-unblock
             gh pr comment "$PR" --body "The rework run ended without a result: $RUN_URL"
           fi

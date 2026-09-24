@@ -48,22 +48,28 @@ and the run replaces it with one of:
 | label                       | what happened                                          | where the rest is                                     |
 | --------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
 | none, a pull request linked | the fix is open for review; its merge closes the issue | closing questions in its body; new work as new issues |
-| `question`                  | something only the owner knows blocks the fix          | one comment on the issue, no pull request             |
+| `to-answer`                 | something only the owner knows blocks the fix          | one comment on the issue, no pull request             |
 | `not-reproduced`            | the failing test passed at this `HEAD`                 | the issue is closed with what was run                 |
-| `stalled`                   | the run ended before its own end                       | the run's URL in a comment; swap it for `to-fix`      |
+| `to-unblock`                | the run ended before its own end, or never started     | the run's URL in a comment; swap it for `to-fix`      |
 
-A run only starts on the `fixing` label, and only the tick puts it on. To answer a `question`,
-comment, then swap `question` for `to-fix`: the next run reads the whole thread. A comment alone
-starts nothing, and the tick skips an issue still on `question` or `stalled`. A run that ends
-before its own end — cancelled, timed out, a turn that stopped — is marked `stalled` by the
-workflow itself, with the run's URL in a comment; read the log, then swap `stalled` for `to-fix`.
-Pull requests carry `bot`.
+A run only starts on the `fixing` label, and only the tick puts it on. To answer a question,
+comment, then swap `to-answer` for `to-fix`: the next run reads the whole thread. A comment alone
+starts nothing, and the tick skips an issue still on `to-answer` or `to-unblock`. A run that ends
+before its own end — cancelled, timed out, a turn that stopped — is marked `to-unblock` by the
+workflow itself, with the run's URL in a comment; read the log, then swap `to-unblock` for
+`to-fix`.
+A run that never started — skipped, or a pull request in conflict, on which GitHub fires no
+`pull_request` workflow — leaves no log: the tick releases an in-flight label with no run of its
+bot behind it, past a ten-minute grace, to `to-unblock` the same way. Only the owner puts a
+`to-unblock` subject back in its queue, so a lasting failure is never retried on its own. Pull
+requests carry `bot`.
 
 A pull request's labels say the same thing for the rework bot: `to-rework` is a mention
 waiting, `reworking` is the run holding it, and a run gives the label back at either of its
 two ends — pushed, or a question — so the pull request goes back to waiting for the owner.
-A rework run that dies lands on `stalled` too, with the run's URL in a comment, and the queue
-behind it moves on; a new `@claude` comment is what puts it back on `to-rework`.
+A rework run that dies, or never starts, lands on `to-unblock` too, with a URL in a comment, and
+the queue behind it moves on; taking `to-unblock` off, then a new `@claude` comment, is what puts
+it back on `to-rework`.
 
 ## Landing a batch
 
@@ -95,8 +101,8 @@ there is work. A fix and a rework run side by side; two fixes, or two reworks, n
 The owner decides what gets fixed and in which order, by putting `to-fix` on issues, in batches.
 The tick hands the owner's oldest `to-fix` issue to the bot — `fixing` on, then `to-fix` off, as
 the owner — when no fix run is in progress and no issue is on `fixing`. That label is what fires
-the run, so a run that dies at any step leaves it for the `stalled` step. The batch put on
-`to-fix` is the only knob the subscription window has. An issue on `question` or `stalled` is
+the run, so a run that dies at any step leaves it for the `to-unblock` step. The batch put on
+`to-fix` is the only knob the subscription window has. An issue on `to-answer` or `to-unblock` is
 never picked: it waits for the owner.
 
 For reworks the queue is the mention itself: the `@claude` comment fires a five-minute job that
@@ -110,7 +116,7 @@ empty, and the queueing job wakes it too, so a mention on an idle lane starts at
 cron, seven minutes off the quarter hours, is only the net: its schedule is best effort, and it
 fired once in six hours the day it was added. Each bot job also runs in one concurrency group of
 its own, without cancellation, so a label put on by hand queues rather than runs side by side; a
-run that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+run that must stop is cancelled by hand, `gh run cancel`, and lands on `to-unblock`.
 
 ## Cost
 

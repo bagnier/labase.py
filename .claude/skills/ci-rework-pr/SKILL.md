@@ -35,7 +35,7 @@ the runner (`GITHUB_ACTIONS` is `true`), the non-interactive rules apply.
 
 Either way the run gives the label back — `reworking` off, and nothing on: the pull request
 waits for the owner, and the queue behind it moves. A run that never reaches that line is
-`stalled` by the workflow (docs/workflow.md).
+`to-unblock` by the workflow (docs/workflow.md).
 
 A remark that is a critique with no ask — "weak tests" — is an ask: read the rule it points at
 (`write-tests`, AGENTS.md, the feature file) and make the change the rule implies. What cannot
