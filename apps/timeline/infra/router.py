@@ -22,7 +22,7 @@ from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import DEFAULT_WINDOW
 from apps.shared.persistence.database import AdminSession
 from apps.shared.settings.live import SettingRow, get_settings
-from apps.timeline.domain.models import TimelineEntry, TimelinePage
+from apps.timeline.domain.models import Grain, TimelineEntry, TimelinePage
 from apps.timeline.infra.repository import TimelineFilter, TimelineReader, request_desc
 
 router = APIRouter(tags=["timeline"])
@@ -40,7 +40,7 @@ def _settings_rows() -> list[SettingRow]:
     return get_settings(_TIMELINE_APP).rows()
 
 
-_GRAINS = ("hour", "day", "week", "month")
+_GRAINS: tuple[Grain, ...] = ("hour", "day", "week", "month")
 # ``(source value, human series label)`` — the label rides the ApexCharts tooltip, and the colors
 # mirror the template's legend swatches (info/secondary/error), which is why the chart's own legend
 # stays off.
@@ -49,10 +49,10 @@ _SOURCE_SERIES = (("logs", "Logs"), ("business", "Business"), ("issue", "Issue")
 # How many buckets the x-axis shows per grain — a *fixed* count ending at the current period, so the
 # axis width is stable and bounded however the data clusters. Aligned with the data windows in
 # ``repository._GRAIN_WINDOW``.
-_GRAIN_SPAN = {"hour": 24, "day": 14, "week": 12, "month": 12}
+_GRAIN_SPAN: dict[Grain, int] = {"hour": 24, "day": 14, "week": 12, "month": 12}
 
 
-def _bucket_label(key: str, grain: str) -> str:
+def _bucket_label(key: str, grain: Grain) -> str:
     """The compact x-axis label for a bucket key at the given grain."""
     if grain == "hour":
         return key[11:16]  # HH:00
@@ -63,7 +63,7 @@ def _bucket_label(key: str, grain: str) -> str:
     return key[5:]  # MM-DD (day)
 
 
-def _axis_keys(grain: str, now: datetime) -> list[str]:
+def _axis_keys(grain: Grain, now: datetime) -> list[str]:
     """The fixed run of consecutive bucket keys ending at the current period — the chart's x-axis.
     Fixed-length (see ``_GRAIN_SPAN``) so the axis stays a stable, bounded width; buckets with no
     data render as zero columns rather than collapsing the timeline."""
@@ -86,7 +86,7 @@ def _axis_keys(grain: str, now: datetime) -> list[str]:
 
 
 def _activity_chart(
-    activity: dict[str, dict[str, int]], grain: str, now: datetime
+    activity: dict[str, dict[str, int]], grain: Grain, now: datetime
 ) -> dict[str, Any]:
     """The stacked columns over the grain's fixed window ending now. Per-bucket tick marks are
     hidden and labels thinned to ~6, so even a 24-column hour view reads cleanly; the y-axis gets
@@ -272,7 +272,7 @@ async def timeline_screen(
 ) -> Response:
     flt = filters.to_filter()
     org_id, user_id, request_id = filters.org_id, filters.user_id, filters.request_id
-    grain = bucket if bucket in _GRAINS else "day"
+    grain: Grain = bucket if bucket in _GRAINS else "day"
     reader = TimelineReader(session)
     entries = await reader.search(flt, limit=_PAGE_SIZE)
     activity = await reader.activity(flt, grain=grain)

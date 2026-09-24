@@ -28,7 +28,7 @@ from apps.shared.events.models import BusinessEventRecord
 from apps.shared.events.repository import EventRepository
 from apps.shared.logs.models import LogLine
 from apps.shared.logs.repository import LogRepository
-from apps.timeline.domain.models import TimelineEntry, TimelineSource
+from apps.timeline.domain.models import Grain, TimelineEntry, TimelineSource
 
 _SORT_KEYS = {"ts", "source", "level", "org", "name", "user", "entity", "request"}
 
@@ -40,7 +40,7 @@ BUSINESS_LEVEL = "info"
 # zoom out to a month without the timeline pulling a year of rows. Bounds match the fixed x-axis
 # spans in ``router._GRAIN_SPAN``, and are skipped when the caller already set a date bound: a
 # filter wins.
-_GRAIN_WINDOW = {
+_GRAIN_WINDOW: dict[Grain, timedelta] = {
     "hour": timedelta(hours=24),
     "day": timedelta(days=14),
     "week": timedelta(weeks=12),
@@ -48,7 +48,7 @@ _GRAIN_WINDOW = {
 }
 
 
-def bucket_key(ts: datetime, grain: str) -> str:
+def bucket_key(ts: datetime, grain: Grain) -> str:
     """The activity bucket a timestamp falls in, for the selected grain. ``day`` returns the ISO
     date (the machine-readable contract the drivers assert on); the others widen or narrow it."""
     if grain == "hour":
@@ -166,7 +166,7 @@ class TimelineReader:
         return _sorted(entries, flt)[:limit]
 
     async def activity(
-        self, flt: TimelineFilter, *, grain: str = "day", cap: int = 20000
+        self, flt: TimelineFilter, *, grain: Grain = "day", cap: int = 20000
     ) -> dict[str, dict[str, int]]:
         """Per-bucket, per-source counts over the filtered window — feeds the stacked graph.
         Honours the same filters as the timeline (see the two activity scenarios); ``grain`` picks
