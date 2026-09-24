@@ -657,6 +657,38 @@ def test_the_icon_walk_actually_finds_the_declarations():
     assert len(_icons_declared()) > 10
 
 
+def _icons_spelled_in_templates() -> dict[str, str]:
+    """Every ``ph-<name>`` a template spells directly in its own markup, mapped to where. A
+    dynamic slot (``ph-{{ icon }}``) contributes no name here — there is no bareword to read."""
+    found = {}
+    for path in sorted(_APPS.glob("*/templates/**/*.html")):
+        for icon in re.findall(r"\bph ph-([a-z0-9-]+)", path.read_text()):
+            found[icon] = str(path.relative_to(_ROOT))
+    return found
+
+
+def test_every_icon_a_template_spells_has_a_glyph_to_render():
+    """A template that spells its own icon name never passes through `icon="…"`, so the walk
+    above never sees it — the tile still goes mute the same way."""
+    spelled = _icons_spelled_in_templates()
+
+    with_rule = _icons_with_a_rule()
+
+    mute = {f"{icon} ({site})" for icon, site in spelled.items() if icon not in with_rule}
+
+    assert mute == set()
+
+
+def test_the_template_icon_walk_finds_a_name_that_is_not_the_first_class():
+    # `class="drag-handle ph ph-dots-six-vertical …"` — the icon class sits second, not first.
+    assert "dots-six-vertical" in _icons_spelled_in_templates()
+
+
+def test_the_template_icon_walk_actually_finds_the_names():
+    # Guards the guard: a regex that matched nothing would make the assertion above vacuous.
+    assert len(_icons_spelled_in_templates()) > 10
+
+
 # A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕`` — instead of
 # reaching for the icon font. It renders the same to a sighted mouse user, but it is not
 # `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped first,

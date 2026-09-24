@@ -96,16 +96,18 @@ async def _render_session(
     template = "learning/_session_fragment.html" if htmx else "learning/session.html"
     org_handle = request.path_params.get("org_handle", "")
     available = await repo.available_decks()
-    ctx = {
-        "user": current_user,
+    extras = {
         "cards": cards,
         "available_decks": available,
         "sharing_enabled": settings.sharing_enabled,
         "org_handle": org_handle,
         "org": org,
     }
-    if not htmx:
-        ctx |= await fullpage_context(session, current_user)
+    ctx = (
+        {"user": current_user, **extras}
+        if htmx
+        else await fullpage_context(session, current_user, **extras)
+    )
     return templates.TemplateResponse(request, template, ctx)
 
 
@@ -233,6 +235,7 @@ async def resources(
     if wants_json(request):
         return JSONResponse([i.model_dump(mode="json") for i in items])
     org_handle = request.path_params.get("org_handle", "")
-    ctx = {"user": current_user, "resources": items, "org_handle": org_handle, "org": org}
-    ctx |= await fullpage_context(session, current_user)
+    ctx = await fullpage_context(
+        session, current_user, resources=items, org_handle=org_handle, org=org
+    )
     return templates.TemplateResponse(request, "learning/resources.html", ctx)

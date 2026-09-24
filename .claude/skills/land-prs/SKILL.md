@@ -13,7 +13,8 @@ disable-model-invocation: true
 ---
 
 This skill lands one batch and nothing else. It never commits, pushes or merges on `main`: it ends
-on a pull request the owner merges, the way `ci-fix-issue` ends on one.
+on a pull request the owner merges, the way `ci-fix-issue` ends on one. And it never works in the
+owner's checkout: everything from the listing on happens in a worktree of its own.
 
 What it writes into the repository is in English — the pull request, its body, every comment,
 the commit messages — whatever language the owner's own reviews and issues are written in.
@@ -45,10 +46,46 @@ gh pr list --state open --limit 100 --json number,title,statusCheckRollup
 are the ones most likely to conflict and most in need of landing.
 
 
-## Partition, without a worktree
+## The worktree, first
+
+The main checkout belongs to the owner. A `git switch -c` there moves the branch under whatever
+they have open, and a gate running twenty minutes holds it for twenty minutes. So the batch is cut
+its own worktree before the first merge, and every command from here on runs inside it — the
+fetches, the merges, the gate, the push.
+
+```sh
+make worktree NAME=batch    # the one command that runs in the main checkout
+cd worktrees/batch
+git fetch -q origin main
+git switch -c "integration/$(date +%Y-%m-%d)" origin/main
+```
+
+`make worktree` is what gives a checkout its own everything, and hand-rolling any of it is the
+mistake: it clones `.env` and `.env.test` from the main one onto the port block
+`test_block_base("batch")` derives from the name (545xx and up — the main checkout keeps its
+544xx), symlinks `node_modules`, and runs `uv sync --all-groups`. A `.env.test` copied verbatim
+instead points the stack at the main checkout's ports and it dies on `Bind for 0.0.0.0:54422
+failed: port is already allocated` — but only once `lint` has passed and `make test-stack` finally
+runs, so a first red gate hides the trap and the second one springs it.
+
+`NAME=batch` is the name, not a choice: the block is derived from it. The target also provisions a
+dev schema and bucket the gate never touches, so the dev stack has to be up — and if it is not, it
+dies having already made the worktree and its env files, leaving one half-cut to finish or remove
+by hand. It refuses outright when `worktrees/batch` is still there, so the last batch is torn down
+before the next is cut, never reused: it sits on that batch's commit.
+
+The `git switch` is where the branch is chosen, and it is the reason the worktree is not simply
+worked on as it comes: `make worktree` cuts its own `batch` branch from wherever the main checkout
+happens to stand, which is not what a batch is built on. A second batch the same day collides on
+the branch name — suffix it `-2`, `-3`, then read it back with `git branch --show-current` rather
+than spelling the date out again.
+
+
+## Partition, in memory
 
 `git merge-tree` merges in memory and `git commit-tree` chains the result, so the whole partition
-costs seconds and creates no ref, no branch and no checkout:
+costs seconds and leaves no branch and no checkout behind — only the `refs/prsim/*` this fetch
+writes, shared by every worktree of the repository:
 
 ```sh
 for n in 81 82 83; do git fetch -q origin "pull/$n/head:refs/prsim/$n" --force; done
@@ -80,42 +117,22 @@ Merge, never squash, never rebase. Each pull request's head becomes an ancestor 
 batch lands, and that is what closes every one of them by itself; a squash orphans them all and
 leaves them open against a base they can no longer reach.
 
+The worktree is already on the branch, at `origin/main`: there is nothing to switch, and no
+checkout of the owner's to switch it in.
+
 ```sh
-git switch -c "integration/$(date +%Y-%m-%d)" origin/main
 for n in 81 82; do git merge --no-ff -m "merge #$n" "refs/prsim/$n"; done
 ```
 
 
-## Gate it in a scratch worktree
+## Gate it
 
-Run this block whole, never the `cp` alone. A `.env.test` copied verbatim points at the main
-checkout's ports and the stack dies on `Bind for 0.0.0.0:54422 failed: port is already allocated` —
-but only once `lint` has passed and `make test-stack` finally runs, so a first red gate hides the
-trap and the second one springs it. `scripts/worktree.py` holds the port block each checkout gets.
-The guard names the five keys `test_stack_settings` rewrites and nothing else: `SUPABASE_STUDIO_URL`
-keeps its 544xx on purpose — `scripts/test_stack.py` excludes Studio, so it binds nothing — and a
-worktree's own block can start at 545xx, so neither is evidence of anything.
-
-```sh
-git worktree add --detach worktrees/batch HEAD
-cp .env .env.test worktrees/batch/
-ln -s "$PWD/node_modules" worktrees/batch/node_modules
-PYTHONPATH=. uv run python -c "
-from pathlib import Path
-from scripts.envfile import merge_env
-from scripts.worktree import test_block_base, test_stack_settings
-merge_env(Path('.env.test'), Path('worktrees/batch/.env.test'),
-          test_stack_settings(test_block_base('batch')))
-"
-grep -qE '^(SUPABASE_API_URL|SUPABASE_DATABASE_(USER|ADMIN)_URL|MAILPIT_URL|SMTP_PORT)=.*544[0-9][0-9]' worktrees/batch/.env.test && echo "PORTS NOT REWRITTEN — rerun the block"
-```
-
-Then `uv sync --all-groups && make finalize` in it, waited for as the rules say for where you are.
-`make finalize`, not `make check`: it opens on `js-build`, and a fresh worktree has none of the
-built assets — `static/js/htmx.min.js` and `static/css/tailwind.css` are gitignored outputs, so
-`git worktree add` does not bring them. A browser run without htmx sends no request at all, and
-every `expect_response` waits out its thirty seconds: a whole lane of timeouts, reproducible to
-the test, with not one assertion among them.
+`make finalize`, in the worktree, waited for as the rules say for where you are — the dependencies
+are already synced, `make worktree` having done it. `make finalize`, not `make check`: it opens on
+`js-build`, and a fresh worktree has none of the built assets — `static/js/htmx.min.js` and
+`static/css/tailwind.css` are gitignored outputs, so a new checkout does not bring them. A browser
+run without htmx sends no request at all, and every `expect_response` waits out its thirty
+seconds: a whole lane of timeouts, reproducible to the test, with not one assertion among them.
 
 Not `test-e2e` either: the browser lane is nine minutes, it is the lane a flake costs a scenario
 in, and the integration pull request's own CI runs it anyway. What the local gate owes is the
@@ -125,14 +142,30 @@ suite.
 `make … ; echo "exit:$?"` leaves the shell's own exit at 0, so a completion notification reports
 success on a red gate: the log's last line is the verdict, never the notification.
 
-Remove the worktree and its stack when the batch has landed — `make test-stack-rm` from inside it,
-then `git worktree remove`.
+Tear it down once the batch has landed: `make worktree-rm NAME=batch`, from the main checkout,
+drops the worktree with its test stack and volumes, its dev schema and bucket, and the `batch`
+branch `make worktree` cut. The integration branch is pushed by then, so it survives. The
+simulation refs are the run's other litter — they pin every head fetched, ejected ones included:
+
+```sh
+git for-each-ref --format='%(refname)' refs/prsim | xargs -n1 git update-ref -d
+```
 
 
 ## When the gate is red
 
 Each failure names a pair. The one that changes a contract stays, the one that consumes it is
 ejected, the branch is rebuilt without it and gated again. Eject, re-gate, until green.
+
+Rebuilding throws `.env.test` back to its committed content, port block and all — it is a tracked
+file, and `reset` restores it like any other. Carry it across, or the next stack comes up on the
+main checkout's ports:
+
+```sh
+cp .env.test /tmp/batch.env.test
+git reset --hard origin/main
+cp /tmp/batch.env.test .env.test
+```
 
 A failure that names no pair is not the batch's, and ejecting anything for it ejects an innocent.
 Read the failures before touching the branch:
@@ -158,8 +191,8 @@ everyone's work, and it hides the fault from the pull request that owns it.
 ## Pull request
 
 ```sh
-git push -u origin "integration/$(date +%Y-%m-%d)"
-gh pr create --base main --head "integration/$(date +%Y-%m-%d)" --label bot \
+git push -u origin HEAD
+gh pr create --base main --head "$(git branch --show-current)" --label bot \
   --title "<what the batch lands, as one sentence>" --body-file /tmp/batch.md
 ```
 

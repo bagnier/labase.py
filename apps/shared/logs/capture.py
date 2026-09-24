@@ -24,8 +24,11 @@ register directly here via :func:`on_captured` (``apps/issues`` subscribes its o
 the drain fans each exception out to them with log-and-skip isolation, so a failing tracker never
 worsens the exception it tracks. That isolation IS the doctrine: best-effort, never blocking, and a
 tracker that must never itself fail — so deleting the issues context simply leaves the exception
-untracked. The seam is deliberately off the event bus: an ``ExceptionCaptured`` is technical
-observability, not a persisted business fact.
+untracked. A tracker that starts failing is itself queued, once, on the tick after the one that
+found it broken — so a broken tracker becomes its own issue rather than a silent gap — and stays a
+warning for as long as it keeps failing, the same transition-not-tick verdict
+:mod:`apps.shared.logs.loop` holds for the other lifespan workers. The seam is deliberately off the
+event bus: an ``ExceptionCaptured`` is technical observability, not a persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
@@ -40,6 +43,7 @@ from collections.abc import Awaitable, Callable, MutableMapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
+from weakref import WeakKeyDictionary
 
 import structlog
 
@@ -70,8 +74,9 @@ class _Overflow:
 
 _overflow = _Overflow()
 
-# Set while the drain is delivering, so the capture path's own logs — a tracker's, and
-# ``capture.tracker_failed`` when one raises — never re-enter the capture processor.
+# Set while the drain is delivering, so a tracker's own ordinary logging never re-enters the
+# capture processor mid-drain. ``capture.tracker_failed`` is logged under the same guard, but the
+# exception behind a tracker's *first* failure is queued directly (see ``tick``), past the guard.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
 # An exception tracker, registered directly at mount by whoever tracks them (``apps/issues``) rather
@@ -79,6 +84,11 @@ _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 # only, hence a plain list and no MRO or type-key dispatch.
 ExceptionTracker = Callable[[ExceptionCaptured], Awaitable[None]]
 _trackers: list[ExceptionTracker] = []
+
+# Consecutive failures per tracker (AGENTS: a failure that repeats is one bug) — the level a
+# failure earns, and whether it is queued at all, follows the *transition* into and out of it,
+# not the tick. Weak-keyed so a tracker no longer subscribed is not held here for nothing.
+_tracker_failures: WeakKeyDictionary[ExceptionTracker, int] = WeakKeyDictionary()
 
 
 def on_captured(tracker: ExceptionTracker) -> None:
@@ -118,6 +128,20 @@ def _exc_from(value: Any) -> BaseException | None:
     return None
 
 
+def _enqueue(exc: BaseException, context: dict[str, Any]) -> None:
+    """Mark ``exc`` captured and append it, bounded — the part ``capture_processor`` and a
+    failing tracker's own capture (below) both need, the latter reached straight past the
+    ``_capturing`` guard that would otherwise swallow it."""
+    if getattr(exc, _CAPTURED, False):
+        return
+    # A C-level or ``__slots__`` exception takes no marks; capture it anyway, at the risk of twice.
+    with contextlib.suppress(AttributeError, TypeError):
+        setattr(exc, _CAPTURED, True)
+    if len(_QUEUE) == _QUEUE.maxlen:
+        _overflow.dropped += 1
+    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+
+
 def capture_processor(
     _logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
@@ -134,20 +158,45 @@ def capture_processor(
     if method_name != "error" or _capturing.get():
         return event_dict
     exc = _exc_from(event_dict.get("exc_info"))
-    if exc is None or getattr(exc, _CAPTURED, False):
+    if exc is None:
         return event_dict
-    # A C-level or ``__slots__`` exception takes no marks; capture it anyway, at the risk of twice.
-    with contextlib.suppress(AttributeError, TypeError):
-        setattr(exc, _CAPTURED, True)
     # request_id/user_id/org_id (merged in by merge_contextvars) are the load-bearing keys the
     # timeline joins on — and whether a request was in flight is read off request_id itself.
     context = {
         k: v for k, v in event_dict.items() if k not in _DROP_KEYS and isinstance(v, _SCALARS)
     }
-    if len(_QUEUE) == _QUEUE.maxlen:
-        _overflow.dropped += 1
-    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+    _enqueue(exc, context)
     return event_dict
+
+
+def _report_tracker_failure(
+    tracker: ExceptionTracker, tracker_exc: BaseException, context: dict[str, Any]
+) -> None:
+    """The level follows the *transition*: the first failure is queued (past the ``_capturing``
+    guard, which would otherwise swallow it) so a broken tracker becomes its own issue; a tracker
+    already known broken only warns, or every tick would re-enqueue its own failure and the queue
+    would never settle."""
+    failures = _tracker_failures.get(tracker, 0) + 1
+    _tracker_failures[tracker] = failures
+    if failures == 1:
+        log.exception("capture.tracker_failed", tracker=repr(tracker))
+        _enqueue(tracker_exc, {**context, "tracker": repr(tracker)})
+    else:
+        log.warning(
+            "capture.tracker_failed",
+            exc_info=tracker_exc,
+            tracker=repr(tracker),
+            failures=failures,
+        )
+
+
+def _report_tracker_recovery(tracker: ExceptionTracker) -> None:
+    if tracker in _tracker_failures:
+        log.info(
+            "capture.tracker_recovered",
+            tracker=repr(tracker),
+            failures=_tracker_failures.pop(tracker),
+        )
 
 
 async def drain_once() -> None:
@@ -161,7 +210,9 @@ async def drain_once() -> None:
     Not the answer for a dying interpreter — ``sys.excepthook`` runs with no loop and no pool, and
     writes its line to disk instead (see :mod:`apps.shared.logs.chain`).
     """
-    await CaptureDrain(interval_seconds=0).tick()
+    drain = CaptureDrain(interval_seconds=0)
+    await drain.tick()
+    await drain.tick()  # a tracker's own failure on that first tick is queued for this one
 
 
 class CaptureDrain:
@@ -186,6 +237,7 @@ class CaptureDrain:
                 await self._task
             self._task = None
         await self.tick()  # the exceptions before a restart are the ones that explain it
+        await self.tick()  # and a tracker failing on that tick queued its own failure too
 
     async def tick(self) -> None:
         dropped, _overflow.dropped = _overflow.dropped, 0
@@ -202,21 +254,23 @@ class CaptureDrain:
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
-                    except BaseException as exc:
+                    except BaseException as tracker_exc:
                         # Log-and-skip: a failing tracker must never worsen the exception it
                         # tracks, nor abort the others — whatever it raises, ``CancelledError``
-                        # included. Logged under the guard, so it does not re-capture. The one
-                        # carve-out is a *real* cancellation of this task (``Task.cancelling()``
-                        # counts ``cancel()`` calls still pending): that one must still unwind
-                        # the drain, or ``stop()`` hangs forever on a tracker that outlives it.
+                        # included. The one carve-out is a *real* cancellation of this task
+                        # (``Task.cancelling()`` counts ``cancel()`` calls still pending): that one
+                        # must still unwind the drain, or ``stop()`` hangs forever on a tracker
+                        # that outlives it.
                         task = asyncio.current_task()
                         if (
-                            isinstance(exc, asyncio.CancelledError)
+                            isinstance(tracker_exc, asyncio.CancelledError)
                             and task is not None
                             and task.cancelling()
                         ):
                             raise
-                        log.exception("capture.tracker_failed", tracker=repr(tracker))
+                        _report_tracker_failure(tracker, tracker_exc, captured.context)
+                    else:
+                        _report_tracker_recovery(tracker)
             finally:
                 _capturing.reset(token)
 

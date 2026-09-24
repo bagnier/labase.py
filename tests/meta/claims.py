@@ -90,6 +90,7 @@ from apps.shared.tests.test_queue import (
 )
 from apps.shared.tests.test_request_logging import (
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+    test_a_raising_observer_never_replaces_the_handlers_own_exception,
 )
 from apps.shared.tests.test_uuid7 import test_uuid7_is_time_ordered_and_versioned
 from apps.timeline.tests.test_pivots import test_a_row_correlates_by_the_request_it_names
@@ -179,6 +180,7 @@ from tests.meta.test_routes import (
     test_every_fixed_route_wins_its_first_match,
     test_every_json_face_declares_its_schema,
     test_every_mutation_declares_the_body_it_reads,
+    test_every_operation_has_its_own_id,
     test_no_org_handle_can_shadow_a_fixed_route,
     test_the_schema_describes_both_faces_of_every_page_but_the_named_ones,
 )
@@ -366,6 +368,7 @@ CLAIMS = [
         test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
         test_the_drain_reports_the_lines_the_queue_had_to_shed,
         test_the_drain_reports_the_captures_the_queue_had_to_shed,
+        test_a_raising_observer_never_replaces_the_handlers_own_exception,
     ),
     held(
         "scenarios-run-twice",
@@ -916,7 +919,8 @@ CLAIMS = [
     waived(
         "reuse-components",
         "Reuse components instead of re-spelling utility chains",
-        "nothing detects a re-spelled chain (ROADMAP: card-panel re-spelled six times)",
+        "a ratchet holds the two named chains (card-panel, the tab shell) at zero; nothing "
+        "yet detects an arbitrary re-spelled chain",
     ),
     held(
         "icons-are-phosphor",
@@ -1230,6 +1234,7 @@ CLAIMS = [
         "the OpenAPI schema is a full description of the app",
         test_every_mutation_declares_the_body_it_reads,
         test_every_json_face_declares_its_schema,
+        test_every_operation_has_its_own_id,
     ),
     waived(
         "client-is-generated",

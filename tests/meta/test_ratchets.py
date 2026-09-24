@@ -1035,6 +1035,27 @@ def test_the_classes_outside_the_component_layer_are_the_named_ones():
     assert outside == _OUTSIDE_THE_COMPONENT_LAYER
 
 
+def test_no_template_re_spells_card_panel_or_the_tab_shell():
+    """The `reuse-components` waiver's own example: `card-panel` is `card bg-base-100 border
+    border-base-300 shadow-sm`, yet a template still spells the shorter chain by hand, and the
+    `tabs-lift` panel shell repeats its own chain with no component class at all. Both at zero."""
+    spelled_out = {
+        str(path.relative_to(_ROOT)): count
+        for path in sorted(_APPS.rglob("*.html"))
+        if (
+            count := len(
+                re.findall(
+                    r"card bg-base-100 border border-base-300"
+                    r"|tab-content border-base-300 bg-base-100 p-4 sm:p-6",
+                    path.read_text(),
+                )
+            )
+        )
+    }
+
+    assert spelled_out == {}
+
+
 def test_nothing_reruns_a_failing_test():
     """ "Everything else is strict, zero rerun" — kept true the cheap way: the plugin that could
     rerun anything is not installed, no lane pulls it in at run time (`uv run --with`), and no
@@ -1111,9 +1132,10 @@ _DEFAULTS_OF_A_DECLARED_SETTING = {
 # Numbers that are not knobs: a status code carries the response's meaning, an SVG dimension is
 # the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
 # lengths *are* the fingerprint (moving one silently re-groups every past issue), 9 is the rung
-# count of the spaced-repetition ladder itself, and an advisory lock's key is an identifier, not
-# a duration or a size — there is nothing an operator would tune it to. Turning any of these into
-# a setting would offer an operator a lever that breaks the thing rather than tunes it.
+# count of the spaced-repetition ladder itself, an advisory lock's key is an identifier, not a
+# duration or a size, and the perf smoke's fail-ratio and p95 thresholds *are* the CI check, not
+# a deploy's opinion of it — there is nothing an operator would tune either to. Turning any of
+# these into a setting would offer an operator a lever that breaks the thing rather than tunes it.
 _NOT_A_TUNING_KNOB = {
     "apps/auth/infra/admin_guard.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
@@ -1134,13 +1156,16 @@ _NOT_A_TUNING_KNOB = {
     "apps/tasks/domain/strip.py::_MAX_TICKS = 8",
     "apps/tasks/domain/strip.py::_MIN_SHARE = 6.0",
     "apps/tasks/domain/strip.py::_MIN_WIDTH = 0.4",
+    "scripts/smoke.py::FAIL_RATIO_MAX = 0.01",
+    "scripts/smoke.py::P95_MS_MAX = 800.0",
 }
 
 # The backlog the sentence names: retention windows, poll and purge intervals, retry budgets,
 # batch sizes, page lengths, deadlines and caps — each one a value an operator has a reason to
-# change and today can only change by editing Python. This list only shrinks; a promotion to
-# `TechnicalSettings` or to an app's declared settings removes a line, and nothing adds one
-# without someone deciding to here.
+# change and today can only change by editing Python. A promotion to `TechnicalSettings` or to
+# an app's declared settings removes a line; widening the scan's perimeter to a root it never
+# read before enumerates knobs that were already there, unseen — the list grows once, on that
+# edit, and shrinks on every one after. Nothing adds a line without someone deciding to here.
 _KNOBS_AWAITING_PROMOTION = {
     "apps/api_keys/infra/repository.py::_LAST_USED_GRANULARITY_SECONDS = 300",
     "apps/auth/contract/impersonation.py::IMPERSONATION_MAX_SECONDS = 3600",
@@ -1191,6 +1216,10 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/timeline/infra/router.py::_EXPORT_LIMIT = 5000",
     "apps/timeline/infra/router.py::_PAGE_SIZE = 100",
     "apps/todo/contract/integration.py::_RECENT = 3",
+    "scripts/doctor.py::TIMEOUT_SECONDS = 5.0",
+    "scripts/doctor.py::WARN_SECONDS = 0.5",
+    "scripts/perf_smoke.py::_wait_ready(timeout=30.0)",
+    "scripts/smoke.py::_wait_for_personal_org(timeout=10.0)",
 }
 
 
@@ -1242,7 +1271,7 @@ def test_the_numbers_outside_the_settings_are_the_named_ones():
     of the three by an edit here, which is the decision the README says someone has to make."""
     found = {
         entry
-        for path, relative in _python_files(_APPS)
+        for path, relative in _python_files(_APPS, _ROOT / "scripts")
         if "/tests/" not in relative
         for entry in _numeric_literals(ast.parse(path.read_text()), relative)
     }
