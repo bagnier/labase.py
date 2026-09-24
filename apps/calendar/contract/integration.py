@@ -25,13 +25,12 @@ from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared import clock
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import overview_from_count
-from apps.shared.persistence.repository import count_all
+from apps.shared.overview import RECENT_ITEMS, overview_from_count
+from apps.shared.persistence.repository import count_all, count_where
 from apps.shared.settings.live import SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
 
-_RECENT = 3
 _WELCOME_TITLE = "Welcome to your team calendar"
 
 
@@ -58,16 +57,26 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    upcoming = await CalendarEventRepository(query.session, query.org_id).upcoming()
-    n = len(upcoming)
-    lines = [f"{n} upcoming"] if upcoming else ["No upcoming events"]
+    now = clock.now()
+    n = await count_where(
+        query.session,
+        CalendarEvent,
+        CalendarEvent.org_id == query.org_id,
+        CalendarEvent.starts_at >= now,
+    )
+    lines = [f"{n} upcoming"] if n else ["No upcoming events"]
+    recent = (
+        await CalendarEventRepository(query.session, query.org_id).upcoming(now, RECENT_ITEMS)
+        if n
+        else []
+    )
     return Overview(
         key="calendar",
         title="Calendar",
         icon="calendar-dots",
         href="calendar",
         template="calendar/_overview.html",
-        data={"lines": lines, "recent": [e.title for e in upcoming[:_RECENT]]},
+        data={"lines": lines, "recent": [e.title for e in recent]},
     )
 
 

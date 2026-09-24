@@ -17,6 +17,7 @@ from apps.files.contract.events import (
     FileShareLinkCreated,
     FileUploaded,
 )
+from apps.files.domain.models import OrgFile
 from apps.files.infra.repository import FileShareRepository, OrgFileRepository
 from apps.files.infra.router import public_router, router
 from apps.files.infra.storage import storage_path
@@ -25,13 +26,12 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import org_exists, seed_org_welcome, user_exists
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import pluralize
+from apps.shared.overview import RECENT_ITEMS, pluralize
+from apps.shared.persistence.repository import count_where
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
-
-_RECENT = 3
 
 _WELCOME_FILENAME = "welcome.txt"
 _WELCOME_BODY = (
@@ -95,12 +95,14 @@ def _human_size(num: int) -> str:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    files = await OrgFileRepository(query.session, query.org_id).all()
-    if files:
-        total = sum(f.size_bytes for f in files)
-        n = len(files)
+    repo = OrgFileRepository(query.session, query.org_id)
+    n = await count_where(query.session, OrgFile, OrgFile.org_id == query.org_id)
+    if n:
+        total = await repo.total_size()
+        recent = await repo.recent(RECENT_ITEMS)
         lines = [f"{n} {pluralize(n, 'file')}", _human_size(total)]
     else:
+        recent = []
         lines = ["No files yet"]
     return Overview(
         key="files",
@@ -108,7 +110,7 @@ async def _overview(query: OverviewQuery) -> Overview:
         icon="folder",
         href="files",
         template="files/_overview.html",
-        data={"lines": lines, "recent": [f.filename for f in files[:_RECENT]]},
+        data={"lines": lines, "recent": [f.filename for f in recent]},
     )
 
 

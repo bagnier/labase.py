@@ -35,6 +35,17 @@ Feature: Org dashboard overviews
     And the "learning" overview shows "2 cards"
     And the "learning" overview lists "Capitales"
 
+  Scenario: The dashboard's recent list caps at the newest items, the oldest dropped
+    Given "alice@example.com" has uploaded "one.txt" of 10 KB to the org
+    And "alice@example.com" has uploaded "two.txt" of 10 KB to the org
+    And "alice@example.com" has uploaded "three.txt" of 10 KB to the org
+    And "alice@example.com" has uploaded "four.txt" of 10 KB to the org
+    When they view their org dashboard
+    Then the "files" overview lists "four.txt"
+    And the "files" overview lists "three.txt"
+    And the "files" overview lists "two.txt"
+    And the "files" overview does not list "one.txt"
+
   Scenario: An app with no data still shows its overview in an empty state
     When they view their org dashboard
     Then the "todo" overview is visible on the dashboard
