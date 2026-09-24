@@ -294,3 +294,7 @@ class OrgApiMixin(ApiBase):
     def assert_overview_lists(self, key: str, text: str) -> None:
         recent = self._overview(key)["data"].get("recent", [])
         assert any(text in item for item in recent), f"{text!r} not in {key} recent {recent}"
+
+    def assert_overview_does_not_list(self, key: str, text: str) -> None:
+        recent = self._overview(key)["data"].get("recent", [])
+        assert not any(text in item for item in recent), f"{text!r} unexpectedly in {recent}"

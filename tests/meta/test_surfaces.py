@@ -628,15 +628,21 @@ def _icons_with_a_rule() -> set[str]:
     return set(re.findall(r"\.ph\.ph-([a-z0-9-]+):before", _ICON_CSS.read_text()))
 
 
+_ICON_DECLARED_RE = re.compile(
+    r'icon="([a-z0-9-]+)"'  # a call site: icon="shield-check"
+    r'|icon:\s*ClassVar\[PhosphorIcon\]\s*=\s*"([a-z0-9-]+)"'  # a class default: icon: ClassVar[…]
+)
+
+
 def _icons_declared() -> dict[str, str]:
-    """Every ``icon="…"`` a surface passes, mapped to where it says it. Tests aside: a fixture may
-    name an icon nothing renders."""
+    """Every ``icon="…"`` a surface passes, or declares as its ``ClassVar[PhosphorIcon]`` default,
+    mapped to where it says it. Tests aside: a fixture may name an icon nothing renders."""
     found = {}
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
             continue
-        for icon in re.findall(r'icon="([a-z0-9-]+)"', path.read_text()):
-            found[icon] = str(path.relative_to(_ROOT))
+        for call, default in _ICON_DECLARED_RE.findall(path.read_text()):
+            found[call or default] = str(path.relative_to(_ROOT))
     return found
 
 
@@ -657,13 +663,33 @@ def test_the_icon_walk_actually_finds_the_declarations():
     assert len(_icons_declared()) > 10
 
 
+def test_the_icon_walk_finds_a_classvar_default():
+    # `icon: ClassVar[PhosphorIcon] = "shield-check"` — the annotated form every event class
+    # uses, with no `icon="…"` call for the plain walk above to see.
+    assert "shield-check" in _icons_declared()
+
+
 def _icons_spelled_in_templates() -> dict[str, str]:
-    """Every ``ph-<name>`` a template spells directly in its own markup, mapped to where. A
-    dynamic slot (``ph-{{ icon }}``) contributes no name here — there is no bareword to read."""
+    """Every ``ph-<name>`` a template spells directly in its own markup, plus every quoted name a
+    Jinja ternary in that slot picks between (``ph-{{ 'a' if … else 'b' }}``), mapped to where. A
+    slot naming a bare variable (``ph-{{ icon }}``) contributes no name — there is nothing to
+    read."""
     found = {}
     for path in sorted(_APPS.glob("*/templates/**/*.html")):
-        for icon in re.findall(r"\bph ph-([a-z0-9-]+)", path.read_text()):
-            found[icon] = str(path.relative_to(_ROOT))
+        text = path.read_text()
+        site = str(path.relative_to(_ROOT))
+        for icon in re.findall(r"\bph ph-([a-z0-9-]+)", text):
+            found[icon] = site
+        for expr in re.findall(r"\bph ph-\{\{(.*?)\}\}", text):
+            # `'google-logo' if provider == 'google' else 'github-logo'` — only the ternary's two
+            # branches name an icon; a quoted string inside its condition (``'google'`` above)
+            # is a value being compared, not a glyph. Either quote style, matching Jinja itself.
+            ternary = re.match(
+                r"""\s*['"]([a-z0-9-]+)['"]\s+if\b.*\belse\s+['"]([a-z0-9-]+)['"]\s*$""", expr
+            )
+            if ternary:
+                found[ternary.group(1)] = site
+                found[ternary.group(2)] = site
     return found
 
 
@@ -689,13 +715,19 @@ def test_the_template_icon_walk_actually_finds_the_names():
     assert len(_icons_spelled_in_templates()) > 10
 
 
-# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕`` — instead of
-# reaching for the icon font. It renders the same to a sighted mouse user, but it is not
-# `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped first,
-# so prose that names the glyph — describing the affordance it used to be, as this file's own
-# templates once did — is not mistaken for markup. This is the curated set issue #131 reported,
-# not every character a template could misuse as an icon.
-_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕"}
+def test_the_template_icon_walk_finds_a_jinja_ternary_name():
+    # `class="ph ph-{{ 'google-logo' if provider == 'google' else 'github-logo' }}"` — a name
+    # picked at render time, not a bareword the plain walk above can read.
+    assert {"google-logo", "github-logo"} <= _icons_spelled_in_templates().keys()
+
+
+# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕``, ``↑``, ``✓`` —
+# instead of reaching for the icon font. It renders the same to a sighted mouse user, but it is
+# not `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped
+# first, so prose that names the glyph — describing the affordance it used to be, as this file's
+# own templates once did — is not mistaken for markup. A maintained set, grown as a violation
+# turns up (issue #131 reported the first three, #148 the next two), never frozen to one report.
+_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕", "↑", "✓"}
 
 
 def _template_markup_without_comments() -> dict[str, str]:

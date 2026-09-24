@@ -222,6 +222,9 @@ allowed-confusables = ["×", "–"]
 # Dry-runs the repo's own Makefile by name (`make -n <target>`) — the target is one of four
 # names hardcoded in the test itself, not outside input.
 "tests/test_makefile.py" = ["S603", "S607"]
+# Runs `ty check` (by absolute interpreter path) over a fixture script this test writes itself —
+# neither the interpreter nor the script content is outside input.
+"apps/timeline/tests/test_grain_type.py" = ["S603"]
 # A route handler's parameters *are* its HTTP contract — path params, `Form` fields and the
 # `Depends` injections. Most of the argument-count hits sit here, and bundling them into a
 # model would hide the contract FastAPI reads off the signature.

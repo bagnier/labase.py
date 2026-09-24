@@ -18,13 +18,11 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import overview_from_count
+from apps.shared.overview import RECENT_ITEMS, overview_from_count
 from apps.shared.persistence.repository import count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
-
-_RECENT = 3
 
 _WELCOME_DECK = "Welcome"
 _WELCOME_CARDS = [
@@ -83,7 +81,7 @@ async def _overview(query: OverviewQuery) -> Overview:
     decks = await count_where(query.session, Deck, Deck.org_id == query.org_id)
     cards = await count_where(query.session, Card, Card.org_id == query.org_id)
     if decks:
-        recent = await DeckRepository(query.session, query.org_id).recent(_RECENT)
+        recent = await DeckRepository(query.session, query.org_id).recent(RECENT_ITEMS)
         lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:
         recent = []

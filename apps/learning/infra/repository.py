@@ -31,24 +31,6 @@ class DeckRepository(OrgScopedRepository[Deck]):
             select(Deck).where(Deck.org_id == self.org_id, Deck.name == name)
         )
 
-    async def recent(self, limit: int) -> list[Deck]:
-        """This org's `limit` newest decks — a bounded query, never `all()` sliced after the
-        fact, so a large org's overview card costs `limit` rows, not every deck it has.
-
-        Tiebreaks on `id` (UUIDv7, minted in creation order): `created_at` alone is not a total
-        order — decks created in the same request, or under a pinned test clock, share an exact
-        timestamp, and `ORDER BY … LIMIT` over a tie is free to return any of them, chosen by
-        whichever plan Postgres picks rather than by the query.
-        """
-        return list(
-            await self.session.scalars(
-                select(Deck)
-                .where(Deck.org_id == self.org_id)
-                .order_by(Deck.created_at.desc(), Deck.id.desc())
-                .limit(limit)
-            )
-        )
-
 
 class LearningRepository:
     """Org-scoped catalog with per-user progress (subscriptions/states/reviews).

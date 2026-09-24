@@ -206,3 +206,8 @@ def step_overview_shows(driver, key, text):
 @then(parsers.parse('the "{key}" overview lists "{text}"'))
 def step_overview_lists(driver, key, text):
     driver.assert_overview_lists(key, text)
+
+
+@then(parsers.parse('the "{key}" overview does not list "{text}"'))
+def step_overview_does_not_list(driver, key, text):
+    driver.assert_overview_does_not_list(key, text)

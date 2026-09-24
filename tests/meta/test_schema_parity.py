@@ -43,11 +43,14 @@ class LiveSchema:
         columns: dict[tuple[str, str], bool],
         relation_names: set[str],
         closed_sets: dict[tuple[str, str], list[str]],
+        updated_at_triggers: set[str],
     ) -> None:
         self.columns = columns
         self.relation_names = relation_names
         # Every column typed by a Postgres enum, with the labels it may hold, in order.
         self.closed_sets = closed_sets
+        # Tables carrying a `before update ... execute function set_updated_at()` trigger.
+        self.updated_at_triggers = updated_at_triggers
 
     @property
     def tables(self) -> set[str]:
@@ -102,6 +105,28 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
+            # pg_catalog, not information_schema.triggers: the latter's action_statement is
+            # `pg_get_triggerdef`'s rendering, schema-qualified only when the function isn't on
+            # the session's search_path — so matching its text would go blind to every trigger
+            # the moment `search_path_connect_args` changed. tgtype 19 is ROW|BEFORE|UPDATE
+            # (Postgres' own bit values), tgattr empty means no column list narrows which
+            # updates fire it, and tgenabled excludes one turned off with `disable trigger`.
+            updated_at_triggers = (
+                await conn.execute(
+                    text(
+                        "select c.relname from pg_trigger t "
+                        "join pg_class c on c.oid = t.tgrelid "
+                        "join pg_namespace n on n.oid = c.relnamespace "
+                        "join pg_proc p on p.oid = t.tgfoid "
+                        "join pg_namespace pn on pn.oid = p.pronamespace "
+                        "where n.nspname = :schema and pn.nspname = :schema "
+                        "and p.proname = 'set_updated_at' and not t.tgisinternal "
+                        "and t.tgenabled <> 'D' and t.tgtype & 19 = 19 "
+                        "and t.tgattr = ''::int2vector"
+                    ),
+                    {"schema": schema},
+                )
+            ).all()
     finally:
         await engine.dispose()
 
@@ -109,6 +134,7 @@ async def live_schema() -> LiveSchema:
         columns={(table, column): nullable == "YES" for table, column, nullable in columns},
         relation_names={name for (name,) in relations},
         closed_sets={(table, column): list(labels) for table, column, labels in closed_sets},
+        updated_at_triggers={table for (table,) in updated_at_triggers},
     )
 
 
@@ -153,6 +179,22 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
     }
 
     missing = sorted(name for name in declared if name not in live_schema.relation_names)
+
+    assert missing == []
+
+
+def test_every_timestamped_table_carries_the_set_updated_at_trigger(
+    live_schema: LiveSchema,
+) -> None:
+    """`Timestamped` (`apps/shared/persistence/base.py`) promises that `updated_at` is "also
+    maintained by a DB trigger, so a write through PostgREST or psql is stamped exactly like a
+    write through the ORM" — a promise the Python-side ratchet
+    (`tests/meta/test_conventions.py::test_no_repository_assigns_updated_at_from_the_python_clock`)
+    cannot see. Every mapped table declaring an `updated_at` column is a `Timestamped` table,
+    since only that mixin ever adds one."""
+    timestamped = {table.name for table in Base.metadata.tables.values() if "updated_at" in table.c}
+
+    missing = sorted(timestamped - live_schema.updated_at_triggers)
 
     assert missing == []
 
