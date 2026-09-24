@@ -454,9 +454,10 @@ def test_register_unexpected_exception_returns_400(driver):
 
 
 def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
-    # GoTrue answering 500 on /token is the dependency breaking, not refusing — it must take
-    # the same log.exception capture path as any other broken dependency, not the brute-force
-    # warning reserved for an actual wrong-password refusal.
+    # GoTrue answering 500 with a JSON body on /token is the dependency breaking, not refusing —
+    # it must take the same log.exception capture path, and the same system-error response, as
+    # any other broken dependency (a 502/503/504, or a 500 with no JSON body), never the
+    # brute-force warning and "invalid password" answer reserved for an actual refusal (#104).
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Internal Server Error", 500, None)
     with (
@@ -464,12 +465,15 @@ def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
         patch("apps.auth.infra.router.log") as log,
     ):
         response = driver.client().post("/auth/login", data=creds)
-    assert response.status_code == 401
+    assert response.status_code == 503
+    assert "system error" in response.text.lower()
     log.warning.assert_not_called()
     log.exception.assert_called_once()
 
 
 def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
+    # Same fault as login above: a 500 with a JSON body must earn the same "unexpected error"
+    # answer as any other broken dependency, never GoTrue's raw internal message (#104).
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Internal Server Error", 500, None)
     with (
@@ -478,13 +482,17 @@ def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
     ):
         response = driver.client().post("/auth/register", data=creds)
     assert response.status_code == 400
+    assert "unexpected error" in response.text.lower()
     log.warning.assert_not_called()
     log.exception.assert_called_once()
 
 
 def test_login_refusal_still_warns_instead_of_opening_an_issue(driver):
     # Holds the other side of the branch above: a routine 4xx refusal (wrong password) keeps
-    # earning the brute-force warning, not the capture path the 5xx case earns.
+    # earning the brute-force warning, not the capture path the 5xx case earns. The warning now
+    # sits in the same broad ``except`` as the breakage path (#104), so it carries exc_info too —
+    # the AST rule in tests/meta/test_capture_sites.py holds that for every level, not only
+    # ``exception``.
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Invalid login credentials", 400, "invalid_credentials")
     with (
@@ -494,7 +502,9 @@ def test_login_refusal_still_warns_instead_of_opening_an_issue(driver):
         response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 401
     log.exception.assert_not_called()
-    log.warning.assert_called_once_with("auth.login_failed", email="x@test.local", ip="127.0.0.1")
+    log.warning.assert_called_once_with(
+        "auth.login_failed", exc_info=err, email="x@test.local", ip="127.0.0.1"
+    )
 
 
 def test_register_refusal_still_warns_instead_of_opening_an_issue(driver):
@@ -508,7 +518,11 @@ def test_register_refusal_still_warns_instead_of_opening_an_issue(driver):
     assert response.status_code == 400
     log.exception.assert_not_called()
     log.warning.assert_called_once_with(
-        "auth.register_failed", ip="127.0.0.1", email="x@test.local", code="user_already_exists"
+        "auth.register_failed",
+        exc_info=err,
+        ip="127.0.0.1",
+        email="x@test.local",
+        code="user_already_exists",
     )
 
 
