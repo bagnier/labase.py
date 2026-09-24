@@ -5,6 +5,7 @@ non-asset path). Successful requests, bot scans and the browser's favicon probe 
 Pure middleware logic — no DB, no running app: the decision is exercised through fake requests.
 """
 
+import asyncio
 import uuid
 from collections import deque
 
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
+from starlette.types import Message, Receive, Scope, Send
 
 from apps.shared.http.exceptions import handle_http_error, handle_stale_data
 from apps.shared.logs import capture, request, sink
@@ -155,6 +157,23 @@ def test_an_asset_the_browser_fetched_itself_leaves_no_line(log_chain):
     assert _levels_for(log_chain, "/favicon.ico", 404, "https://example.com/home") == []
 
 
+# A liveness/readiness probe is silent while healthy — it is not traffic an admin needs to see on
+# every tick — but a 503 answer is the database going down at the exact moment the Timeline is read
+# for it, and that is not ours to swallow.
+
+
+def test_a_healthy_readiness_probe_leaves_no_line(log_chain):
+    assert _levels_for(log_chain, "/health/ready", 200) == []
+
+
+def test_a_failing_readiness_probe_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/health/ready", 503) == ["error"]
+
+
+def test_a_failing_liveness_probe_is_traced_at_error(log_chain):
+    assert _levels_for(log_chain, "/health/live", 503) == ["error"]
+
+
 # The load metrics count the same universe the timeline shows: our own traffic and our own
 # failures, never the bot-scan / favicon noise that would otherwise flood ``GET unmatched``.
 
@@ -292,6 +311,22 @@ def test_the_metric_label_of_a_prefix_only_route_is_the_prefix(measured):
     assert [label for _m, label, *_rest in measured] == ["/console"]
 
 
+def test_an_observer_that_raises_is_isolated_from_the_others(measured):
+    """Log-and-skip, the same isolation the capture drain gives its trackers: the second
+    observer still runs the exchange the first one blew up on."""
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("observer broke")
+
+    request._observers.insert(0, boom)
+
+    _serve("/console/admins/a@b.example")
+
+    assert [(m, label, s, u) for m, label, s, _ms, u in measured] == [
+        ("GET", "/console/admins/{email}", 200, False)
+    ]
+
+
 # One line per served request, under one name: ``request.finished``, whose *level* carries the
 # outcome. That is the name the timeline feature, its mockup and both e2e drivers already read.
 
@@ -326,6 +361,67 @@ def test_a_handler_that_raises_still_leaves_its_finished_line(log_chain):
     assert [(line.name, line.level, line.payload["status"]) for line in lines] == [
         ("request.finished", "error", 500)
     ]
+
+
+async def _cancelling_app(scope: Scope, receive: Receive, send: Send) -> None:
+    raise asyncio.CancelledError()
+
+
+async def _no_messages() -> Message:
+    return {"type": "http.disconnect"}
+
+
+async def _discard(message: Message) -> None:
+    pass
+
+
+def test_a_client_disconnect_still_leaves_its_finished_line(log_chain):
+    """A ``CancelledError`` — a client disconnect mid-handler, or a shutdown drain — used to leave
+    the task with no line, no duration and no metric: the middleware only caught ``Exception``,
+    and cancellation is a ``BaseException``. The line is written on the way out, same as any other
+    failure, and the cancellation still carries on."""
+    middleware = request.RequestLogger(_cancelling_app)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/boom",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "scheme": "http",
+        "client": None,
+    }
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(middleware(scope, _no_messages, _discard))
+
+    lines = log_chain()
+    assert [(line.name, line.level, line.payload["status"]) for line in lines] == [
+        ("request.finished", "error", 500)
+    ]
+
+
+def test_a_raising_observer_never_replaces_the_handlers_own_exception(log_chain, monkeypatch):
+    """The capture drain isolates each tracker (AGENTS: so a failing tracker never worsens the
+    exception it tracks); an observer must be isolated the same way, or
+    its own failure fingerprints instead of the 500 it was only supposed to count — and the
+    finished line is lost with it."""
+
+    def _boom_observer(*args, **kwargs):
+        raise RuntimeError("observer broke")
+
+    monkeypatch.setattr(request, "_observers", [_boom_observer])
+
+    with pytest.raises(RuntimeError, match="the handler gave up"):
+        TestClient(_serving_app()).get("/boom")
+
+    lines = log_chain()
+
+    assert [(line.name, line.level) for line in lines] == [
+        ("request.finished", "error"),
+        ("request.observer_failed", "error"),
+    ]
+    assert next(line for line in lines if line.name == "request.finished").payload["status"] == 500
 
 
 # The four correlation keys are the timeline's whole point, and three of them are bound *below*

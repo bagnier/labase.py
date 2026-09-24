@@ -40,19 +40,19 @@ Behaviour the code gets wrong — a lost fact, a silent outage, a harness that l
 - [ ] Nothing in `config.toml` reaches a hosted project — no `supabase config push` anywhere. A
   hosted project mails GoTrue's default templates, whose links carry no `token_hash` for the
   reset route, and keeps its own email quota. → push the config from the deploy path.
-- [ ] README `Sign-in surface` ("mailed confirmation … resend on blocked unconfirmed sign-ins"):
+- [ ] AGENTS `A GET never delivers a session` ("mailed confirmation … resend on blocked unconfirmed sign-ins"):
   the shipped `config.toml` has `enable_confirmations = false`, so registering signs the account in
   at once, GoTrue never answers `email_not_confirmed` and the resend path is unreachable — while
   the JSON branch still answers "Please verify your email" (checked end to end). → turn
   confirmations on, or say the resend path waits on a deployment that does.
   [config.toml:22](supabase/config.toml#L22), [router.py:621](apps/auth/infra/router.py#L621)
-- [ ] README `Sign-in surface` ("settings-gated (`profile.*_enabled`)"): email change and account
+- [ ] AGENTS `A GET never delivers a session` ("settings-gated (`profile.*_enabled`)"): email change and account
   deletion also re-authenticate with a password, so an OAuth-only account cannot use either with
   both settings on — `400 "Current password is incorrect."` (checked on a passwordless account),
   and the form shows the field to everyone. → accept a recent-session proof for a passwordless
   account. [router.py:404](apps/profile/infra/router.py#L404),
   [router.py:608](apps/profile/infra/router.py#L608)
-- [ ] README `Testing` ("wraps each scenario in a rolled-back transaction"): the rollback isolates
+- [ ] AGENTS `Each scenario runs isolated, on both drivers` ("wraps each scenario in a rolled-back transaction"): the rollback isolates
   only what goes through the overridden sessions — GoTrue, the files driver's external orgs and
   Storage objects, `run_sql` given-helpers and the background admin sessions all commit around it,
   each paid for by a hand-written delete or truncate. → state the boundary, or route those writes
@@ -60,52 +60,48 @@ Behaviour the code gets wrong — a lost fact, a silent outage, a harness that l
   [driver_mixin_api.py:36](apps/files/tests/e2e/driver_mixin_api.py#L36)
 
 
-### the README overstates
+### the text overstates
 
-Code that made a defensible choice the README does not describe. Closed by a sentence as often as by code — and `claims.py` follows the sentence.
+Code that made a defensible choice AGENTS.md or the README does not describe. Closed by a sentence as often as by code — and `claims.py` follows the sentence.
 
-- [ ] README `Every business endpoint has two faces`: the "documented REST API" is now held —
+- [ ] AGENTS `Every business endpoint has two faces`: the "documented REST API" is now held —
   every mutation declares its body, every JSON face its model, and the API lane validates each
   answer against its schema (`tests/e2e/drivers/conformance.py`) — with two edges left: the 51
   `/{org_handle}` operations get their path parameter only from `export_openapi.py`'s patch, and
   the generated client sends no `Accept: application/json` (`smoke.py` adds it by hand). → the
   parameter declared in the app, and a client that asks for JSON.
   [export_openapi.py](scripts/export_openapi.py), [smoke.py:54](scripts/smoke.py#L54)
-- [ ] README `Integration is declarative` (`integration-is-declarative`): the activity-feed filters
+- [ ] AGENTS `Integration is declarative` (`integration-is-declarative`): the activity-feed filters
   of the org dashboard and the profile hard-code their `<option>`s, and not the same ones — the
   dashboard's add `organizations`, the profile's have `auth` and no `learning` — an app contributes a filter entry outside its mount, and a deleted app keeps its
   "Todos" option; a new app gets none, and nothing fails. → a contributed filter entry, collected
   like `OrgNavQuery`.
   [dashboard.html:57](apps/organizations/templates/organizations/dashboard.html#L57),
   [profile.html:97](apps/profile/templates/profile.html#L97)
-- [ ] README `One source of truth for the rest` ("every primary key"): `LogLine` maps `id` alone as
-  its key through `UUIDPk`, where the table's key is `(id, ts)`. → map the composite key.
-  [models.py:22](apps/shared/logs/models.py#L22),
-  [20260818000015_log_lines.sql:53](supabase/migrations/20260818000015_log_lines.sql#L53)
-- [ ] README `Architecture` (`three-audiences`): several business GETs have no fragment face — the
+- [ ] AGENTS `Architecture` (`three-audiences`): several business GETs have no fragment face — the
   calendar router never branches on HTMX (its only `_*.html` is the dashboard tile), nor do
   `list_issues`, `org_dashboard`, `list_members` and `nav_manager`; an HTMX request gets the full
   page. → a fragment per list/view, or a named exception list the test holds.
   [router.py:171](apps/calendar/infra/router.py#L171), [router.py:61](apps/issues/infra/router.py#L61)
-- [ ] README `Dashboard query` ("GET /{org}/ → contribs.collect(OverviewQuery)"): there is no
+- [ ] AGENTS `The dashboard collects one card per app` ("GET /{org}/ → contribs.collect(OverviewQuery)"): there is no
   route at an org's root — `/acme/` redirects to `/acme`, which falls to the public `/{slug}`
   catch-all and 404s; the collection lives at `/{org}/dashboard`. → serve the org root, or say
   `/{org}/dashboard` here and in the Integration table.
   [router.py:309](apps/organizations/infra/router.py#L309)
-- [ ] README `The Timeline reads all three` (`timeline-writes-nothing`): the app writes twice —
+- [ ] AGENTS `The Timeline reads the journal, the log sink and the issues` (`timeline-writes-nothing`): the app writes twice —
   `_purge` drops a partition and DELETEs from `log_lines`, the source it reads, and `_plant_purge`
   inserts into `task_queue` — while the holder test sees only `emit(`, `session.add` and imported
   DML *spelled inside the package*, so a write delegated to a shared repository is invisible.
   → tighten `test_the_timeline_writes_nothing` to the write helpers a package calls.
   [integration.py:103](apps/timeline/contract/integration.py#L103),
   [test_surfaces.py:489](tests/meta/test_surfaces.py#L489)
-- [ ] README `Auth & sessions` ("Each context's FastAPI dependencies live in its own
+- [ ] AGENTS `Three sessions, and RLS by default` ("Each context's FastAPI dependencies live in its own
   `contract/current.py`"): 7 of 17 contexts have that file — calendar's `CalendarRepo`, api_keys'
   `KeyRepo`, pages' `PageRepo`/`PageNavRepo` and timeline's query params sit in their routers, and
   auth's `UsersSettings`, consumed by profile, sits in `contract/settings.py`. → move them, or name
   the exceptions. [router.py:34](apps/calendar/infra/router.py#L34),
   [settings.py:22](apps/auth/contract/settings.py#L22)
-- [ ] README `Identity` (`entity-id-correlates`): the settings facts name their subject with a
+- [ ] AGENTS `Every key is a UUIDv7, every token a UUIDv4` (`entity-id-correlates`): the settings facts name their subject with a
   renameable handle — `app_settings` has no surrogate pk, so `OrgOverrideSet` and `SettingsChanged`
   carry the app (`target_app` on `SettingsChanged`), the key and an `entity_name`, with `entity_id` null and `entity_url()` returning
   `None`. → a pk on the settings rows, or state the handle-keyed exception.
@@ -129,7 +125,7 @@ Code that made a defensible choice the README does not describe. Closed by a sen
 
 A holder that stays green under the mutation it exists to catch. Closed by a tighter test; the waiver or the holder in `claims.py` moves with it.
 
-- [ ] README `The database enforces isolation and authorization`: the API lane now runs every
+- [ ] AGENTS `The database enforces isolation and authorization`: the API lane now runs every
   RLS session as `app_rls` under its caller's claims (`tests/e2e/drivers/test_api_rls.py`), so a
   missing grant fails the scenarios — revoking `SELECT` on `pages` turns all 24 pages scenarios red.
   A dropped *isolation policy* still does not: with "pages: member read" set to `using (true)`, all
@@ -138,7 +134,7 @@ A holder that stays green under the mutation it exists to catch. Closed by a tig
   → a scenario whose only guard is the policy (a direct read the route does not scope), or name
   the scenarios that claim isolation. [api_transaction.py](tests/e2e/drivers/api_transaction.py),
   [pages.feature:109](features/pages.feature#L109)
-- [ ] 16 README sentences nothing proves. `UNHELD_TODAY` is the most honest backlog in the repo:
+- [ ] 16 claimed sentences nothing proves. `UNHELD_TODAY` is the most honest backlog in the repo:
   every waived claim names what would have to be built to hold it. [claims.py:815](tests/meta/claims.py#L815)
 - [ ] README `Objectives` (`demo-apps-are-disposable`): non-demo code is hard-wired to the demos,
   and two ratchets now measure it — `test_the_modules_outside_a_demo_that_import_it_are_the_named_ones`
@@ -150,12 +146,12 @@ A holder that stays green under the mutation it exists to catch. Closed by a tig
   [entity_links.py:18](apps/organizations/contract/entity_links.py#L18),
   [test_surfaces.py](tests/meta/test_surfaces.py), [cleanup.py:61](tests/e2e/cleanup.py#L61),
   [seed.py:27](scripts/seed.py#L27), [rulebooks.py:4](tests/rulebooks.py#L4)
-- [ ] README `` `| None` means optional `` (`none-means-optional`): `_DEFENSIVE_READS` names each
+- [ ] AGENTS `` `| None` means optional `` (`none-means-optional`): `_DEFENSIVE_READS` names each
   `or` fallback, `typing.cast` and suppression by the function reading it, but a conditional
   fallback — `x.strftime(...) if u.created_at else ""` — is invisible to it. → add `IfExp` whose
   test is the value it guards. [test_ratchets.py](tests/meta/test_ratchets.py),
   [accounts_router.py:61](apps/auth/infra/accounts_router.py#L61)
-- [ ] README `Anti-flake e2e` (`expect-not-is-visible`): the browser mixins' assertions still read
+- [ ] AGENTS `Assert the settled DOM, never wait on time` (`expect-not-is-visible`): the browser mixins' assertions still read
   text and attributes once (`inner_text()`, `get_attribute()`, `.all()`) — 50 sites, frozen per file
   by `test_the_snapshot_reads_in_assertions_are_the_named_ones`; `count()` is gone. → `expect(...)`
   for each, lowering `_SNAPSHOT_READS_IN_ASSERTIONS`. [test_ratchets.py](tests/meta/test_ratchets.py)
@@ -178,7 +174,7 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   stack's GoTrue keys its limit on it — the setting that enables it is not named in
   `docs/production.md`. → one test on the test stack: N sign-ins from two forwarded addresses, a
   429 on one only. [supabase.py:19](apps/shared/persistence/supabase.py#L19)
-- [ ] README `Every business endpoint has two faces`: a dozen routes are not RESTful and each
+- [ ] AGENTS `Every business endpoint has two faces`: a dozen routes are not RESTful and each
   costs the schema an operation and the client a name. Three PATCHes on the org (`/{org_handle}`,
   `/handle`, `/timezone`) where one `PATCH /{org_handle}` with a `Partial` body would do; a verb
   in the URL — `POST /profile/delete` (an alias of `DELETE /profile`),
@@ -189,24 +185,24 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   from forms without JS, and the base assumes HTMX everywhere (`hx-delete` on a todo). → one
   route per resource and verb; `_JSON_ONLY` in `tests/meta/test_routes.py` shrinks with them.
   [test_routes.py:35](tests/meta/test_routes.py#L35), [router.py:370](apps/calendar/infra/router.py#L370)
-- [ ] README `Independent apps`: the only inter-app surfaces are meant to be contracts and the bus,
+- [ ] AGENTS `Demo apps are disposable, the others loosely coupled`: the only inter-app surfaces are meant to be contracts and the bus,
   yet a test imports another app's infra — allowed on purpose by `allowed_importers =
   ["apps.*.tests.**"]`. → tests of one app reach another through its contract only.
   [test_share_token_rls.py:20](apps/files/tests/test_share_token_rls.py#L20)
-- [ ] README `Independent apps` (`boundaries-are-hard`): "domain code never imports
+- [ ] AGENTS `Demo apps are disposable, the others loosely coupled` (`boundaries-are-hard`): "domain code never imports
   infrastructure" is checked as "never imports a package named `infra`": `auth/domain/service.py`
   imports `httpx`, `supabase_auth` and `get_user_supabase` and calls GoTrue, and
   `console/domain/admins.py` reaches `auth.infra.user_repository` through a contract re-export,
   which `allow_indirect_imports` lets through. → move the I/O to infra, forbid the libraries.
   [service.py:10](apps/auth/domain/service.py#L10), [admins.py:8](apps/console/domain/admins.py#L8),
   [pyproject.toml:271](pyproject.toml#L271)
-- [ ] README `Independent apps`: templates are an inter-app surface import-linter cannot see — six
+- [ ] AGENTS `Demo apps are disposable, the others loosely coupled`: templates are an inter-app surface import-linter cannot see — six
   auth templates and shared's `errors/error.html` extend public's `base_public.html`, timeline
   includes `console/_settings.html`. Without public, every error page raises `TemplateNotFound`.
   → shared layouts in `apps/shared/templates/`, or a checked template boundary.
   [login.html:1](apps/auth/templates/login.html#L1),
   [index.html:187](apps/timeline/templates/timeline/index.html#L187)
-- [ ] README `One source of truth for the rest` (`one-component-system`): `input.css` defines 35
+- [ ] AGENTS `One clock, one key, one style` (`one-component-system`): `input.css` defines 35
   classes outside `@layer components` in plain CSS with raw px — the `.cm-toolbar*`, `.heatmap*`,
   flip-card and `.strip-*`/`.task-*` vocabularies, and `paper` — which inverts the cascade: `paper border-2` computes 1px where `list-panel
   border-2` computes 2px, `task-bar w-56` 72px where `strip-name w-56` is 192px (measured in
@@ -214,163 +210,113 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   and may only shrink; its regex also counts a comment line, which is how `list-panel` is listed.
   → into the component layer, on Tailwind values.
   [input.css:497](static/css/input.css#L497), [test_ratchets.py:1019](tests/meta/test_ratchets.py#L1019)
-- [ ] README `One source of truth for the rest` ("markup is semantic and accessible"): the file
-  input (`opacity-0`, its visible label a `pointer-events-none` span), the share URL and the todo
-  rename input have no accessible name; the todo edit and delete buttons stay `opacity-0` on
-  keyboard focus. → labels, and `focus-visible:opacity-100`.
-  [files.html:26](apps/files/templates/files/files.html#L26),
-  [_share_result.html:2](apps/files/templates/files/_share_result.html#L2),
-  [_list_fragment.html:23](apps/todo/templates/todo/_list_fragment.html#L23)
-- [ ] README `Invariants are types, not checks`: an enum-typed column binds on assignment and in
+- [ ] AGENTS `Invariants are types, not checks`: an enum-typed column binds on assignment and in
   signatures only — `Membership(..., role="boss")` passes `ty`, since `DeclarativeBase.__init__`
   takes `**kwargs: Any`, and rows are built that way (`OrgInvitation(...)`). Same for every
   StrEnum column. → typed constructors, or a ty-visible `__init__` on the base.
   [models.py:33](apps/organizations/domain/models.py#L33),
   [repository.py:142](apps/organizations/infra/repository.py#L142)
-- [ ] README `Invariants are types, not checks`: `get_invitation_by_token` returns a bare `dict`,
-  and the invitation router compares `status` to string literals — `== "revokd"` passes `ty` and a
-  revoked invitation reads as valid. → return a typed read model, compare `InvitationStatus`.
-  [repository.py:183](apps/organizations/infra/repository.py#L183),
-  [invitation_router.py:64](apps/organizations/infra/invitation_router.py#L64)
-- [ ] README `Invariants are types, not checks`: the Timeline grain is a runtime tuple checked
-  once, then `grain: str` below — `bucket_key(now, "yeer")` silently buckets by day, `_axis_keys`
-  raises `KeyError`. → a `Literal`. [router.py:43](apps/timeline/infra/router.py#L43),
-  [repository.py:50](apps/timeline/infra/repository.py#L50)
-- [ ] README `Invariants are types, not checks`: an org's time zone and a handle are `str`,
+- [ ] AGENTS `Invariants are types, not checks`: an org's time zone and a handle are `str`,
   validated in the routers only — `set_timezone(org, "Mars/Olympus_Mons")` passes `ty`, then every
   calendar page raises `ZoneInfoNotFoundError`. → a `ZoneInfo` / handle value object at the
   repository. [repository.py:136](apps/organizations/infra/repository.py#L136),
   [router.py:53](apps/calendar/infra/router.py#L53)
-- [ ] README `Invariants are types, not checks`: a `CalendarEvent` may end before it starts in
+- [ ] AGENTS `Invariants are types, not checks`: a `CalendarEvent` may end before it starts in
   Python — the database refuses the row (`calendar_events_ends_after_starts_check`) and the route
   answers 422, but the domain type holds two bare datetimes. A `Span` value object would carry it,
   checked at construction (no checker rejects `end <= start` by value).
   [models.py:16](apps/calendar/domain/models.py#L16), [router.py:68](apps/calendar/infra/router.py#L68),
   [20260818000013_calendar.sql:17](supabase/migrations/20260818000013_calendar.sql#L17)
-- [ ] README `` `| None` means optional `` ("Not _not yet_"): `BusinessEvent.created_at` is `None`
+- [ ] AGENTS `` `| None` means optional `` ("Not _not yet_"): `BusinessEvent.created_at` is `None`
   on the emitted event and set only on the one a consumer receives — a lifecycle in every reader's
   type, compensated again by `if record.created_at else None` on a `not null` column. → a separate
   delivered type, or the stamp at construction. [types.py:137](apps/shared/events/types.py#L137)
-- [ ] README `Architecture` (`routers-own-http`): business rules sit in routers — todo's
+- [ ] AGENTS `Architecture` (`routers-own-http`): business rules sit in routers — todo's
   `creation_enabled` and per-org quota (todo has no domain service), `max_owned_orgs_per_user`,
   calendar's "end after start" and its multi-day span computation. → move them to `domain/`.
   [router.py:88](apps/todo/infra/router.py#L88),
   [router.py:178](apps/organizations/infra/router.py#L178),
   [router.py:61](apps/calendar/infra/router.py#L61)
-- [ ] README `A contract never exports a settings handle`: the rule only bites if request code
-  never calls `get_settings(name)` itself, and profile's router reads `get_settings("users")` —
-  auth's handle, by string, around `apps/auth/contract/settings.py`. Nothing states or checks it.
-  → the `UsersSettings` dependency, and a ratchet on `get_settings` in handlers.
-  [router.py:230](apps/profile/infra/router.py#L230)
-- [ ] README `A contract never exports a settings handle` ("org overrides applied under
+- [ ] AGENTS `A contract never exports a settings handle` ("org overrides applied under
   `/{org_handle}`"): the full-page slice reads `get_settings("profile").view().avatar_enabled`
   server-wide, while the console accepts a per-org override of it — an org that switches avatars
   off still shows them on its pages. Unverified — to run: override `profile.avatar_enabled=false`
   for an org, `GET /{org}/` as a member, read `profile_avatar_path`. → `FullpageQuery` carries the
   org. [fullpage.py:37](apps/profile/contract/fullpage.py#L37)
-- [ ] README `Import downward, event upward` (`auth-never-imports-organizations`): the contracts
+- [ ] AGENTS `Import downward, event upward` (`auth-never-imports-organizations`): the contracts
   set `exclude_type_checking_imports = true`, so a `if TYPE_CHECKING: from apps.organizations…` in
   auth keeps all 23 contracts green (scratch run) — `apps/shared/integration/fullpage.py` already
   names a context that way. → drop the exclusion, or forbid the edge in both forms.
   [pyproject.toml:268](pyproject.toml#L268), [fullpage.py:41](apps/shared/integration/fullpage.py#L41)
-- [ ] README `Load metrics` (`metrics-owns-the-counter`): shared does name the context —
+- [ ] AGENTS `Load metrics belong to their app alone` (`metrics-owns-the-counter`): shared does name the context —
   `metrics_flush_seconds` in `TechnicalSettings`, read only by `apps/metrics`, and shipped as the
   deploy contract `METRICS_FLUSH_SECONDS`; delete the app and the setting survives. It is the only
   poll knob naming a context. → the app declares its own interval.
   [env.py:61](apps/shared/settings/env.py#L61), [.env.example:68](.env.example#L68)
-- [ ] README `Content negotiation` ("centralize the … branching"): four routers re-spell the
-  header test by hand — timeline and metrics inline, issues and learning into a local `is_htmx`
-  that shadows the helper's name — against the module's own "single source of truth for the header".
-  → call `is_htmx`. [router.py:326](apps/timeline/infra/router.py#L326),
-  [router.py:109](apps/issues/infra/router.py#L109), [router.py:95](apps/learning/infra/router.py#L95),
-  [router.py:44](apps/metrics/infra/router.py#L44)
-- [ ] README `Page composition` ("declared, prefixed keys"): only the prefix is declared — the keys
+- [ ] AGENTS `A page's context is assembled from slices its apps own` ("declared, prefixed keys"): only the prefix is declared — the keys
   are whatever the coroutine returns, and the module's own "Current providers" table is already
   stale (`profile_avatar_path` is live and read by `base.html`, and unlisted). → declare the key
   set at registration. [fullpage.py:18](apps/shared/integration/fullpage.py#L18),
   [fullpage.py:38](apps/profile/contract/fullpage.py#L38)
-- [ ] README `Styling` ("Icons are Phosphor"): the build copies the woff2 only, so an icon renders
-  just when `input.css` carries its codepoint by hand — three used names are unmapped and render
-  nothing: `ph-mask-happy` (the impersonation banner), `ph-clock-counter-clockwise`,
-  `ph-arrow-bend-down-right` (checked in Chromium: `content: none`). → generate the mapping, or a
-  test over the names used. [base.html:24](apps/shared/templates/base.html#L24),
-  [index.html:118](apps/timeline/templates/timeline/index.html#L118)
-- [ ] README `Styling` ("Icons are Phosphor"): the timeline draws its sort state with `▲`/`▼` and
-  its filter-clear with `✕`, where `ph-caret-down` and `ph-x` are mapped and `ph-x` already serves
-  that meaning in todo. → the Phosphor icons.
-  [index.html:151](apps/timeline/templates/timeline/index.html#L151),
-  [_combobox.html:45](apps/timeline/templates/timeline/_combobox.html#L45)
-- [ ] README `Styling` ("real landmarks"): `invitations/accept.html` is its own document and its
-  body is `div`/`h1`/`p` — no `main`, no header, no skip link, where the six other root templates
-  carry one. → a landmark, or extend the public shell.
-  [accept.html:1](apps/organizations/templates/invitations/accept.html#L1)
-- [ ] README `Styling` ("labelled controls, visible focus rings"): the timeline filter's clear
+- [ ] AGENTS `daisyUI components, never re-spelled utility chains` ("labelled controls, visible focus rings"): the timeline filter's clear
   affordance is a `role="button"` span nested inside the pill button, and its options are plain
   divs — no `tabindex`, no key handler, absent from the tab order (measured), so a keyboard user
   can open the popover and neither choose nor clear. → real buttons and a listbox.
   [_combobox.html:42](apps/timeline/templates/timeline/_combobox.html#L42)
-- [ ] README `Styling` ("Reuse components instead of re-spelling utility chains"): `card-panel`
-  exists and is used by 29 templates, yet its chain is re-spelled six times in the console, less
-  its `shadow-sm`; `tab-content border-base-300 bg-base-100 p-4 sm:p-6` repeats 13 times across
-  four files. → the
-  component class, and one for the tab shell.
-  [_technical_env.html:3](apps/console/templates/console/_technical_env.html#L3),
-  [input.css:369](static/css/input.css#L369)
 - [ ] "Foundation apps — auth, organizations, console — are what the others are built on: they
-  have no on/off switch and are not deleted; only feature apps can be." From README
-  `Independent apps` ("can be added, disabled, or deleted without touching the others"): every
+  have no on/off switch and are not deleted; only feature apps can be." From AGENTS
+  `Demo apps are disposable, the others loosely coupled` ("can be added, disabled, or deleted without touching the others"): every
   app imports `console.contract`, 14 import `auth.contract`, 10 `organizations.contract`, and
   seven apps declare no `feature_switch()`.
   [main.py](apps/main.py)
 - [ ] "The front end has one small JS build — the CodeMirror editor bundled by esbuild, next to the
-  Tailwind CSS build — and no frontend project." From README `Every business endpoint has two
+  Tailwind CSS build — and no frontend project." From AGENTS `Every business endpoint has two
   faces` ("no JS build step"): `npm run build:editor` bundles `static/js/codemirror-editor.js`,
   gitignored and run by `make install`. [package.json](package.json), [Makefile:18](Makefile#L18)
 - [ ] "A mutation outside Postgres — a GoTrue call, a Storage object — cannot join the fact's
   transaction: it runs first, and its fact commits after it, or is lost with a later failure." From
-  README `Business events are facts, not sagas` ("the fact commits iff the mutation does, with no
+  AGENTS `Business events are facts, not sagas` ("the fact commits iff the mutation does, with no
   exception"): `add_admin` grants through GoTrue then emits, `account_delete` disables in GoTrue
   then commits `UserDeleted`, `delete_file` removes the object before the commit.
   [router.py:288](apps/console/infra/router.py#L288)
 - [ ] "`spread` handlers are per-instance and best-effort: one that raises is logged and not
-  retried, and the cursor moves past its fact." From README `Business events are facts, not sagas`
+  retried, and the cursor moves past its fact." From AGENTS `Business events are facts, not sagas`
   ("Reactions are durable"): `settings.reload` and `_reload_observability` run that way on purpose.
   [listener.py:133](apps/shared/events/listener.py#L133)
 - [ ] "A policy may also compare `user_id` with `auth.uid()` directly — the per-user rule, a third
-  kind next to isolation and authorization, stated in the policy alone." From README `The database
+  kind next to isolation and authorization, stated in the policy alone." From AGENTS `The database
   enforces isolation and authorization` ("A policy calls two kinds of helper"): `profiles: own …`,
   `memberships: self leave`, `deck_subscriptions` and `card_states: self all` rest on it, and
   `_POLICY_CALLS_SQL` reads `public` functions only, so no held test sees one removed.
   [20260818000014_learning.sql:108](supabase/migrations/20260818000014_learning.sql#L108),
   [test_db_privileges.py:92](tests/test_db_privileges.py#L92)
 - [ ] "Every log line is also written to stdout synchronously, on the caller's thread — stdout is
-  the durable copy, so a reader that stops reading stalls the server." From README `Observability
-  is built in` ("the rest never blocks, slows or fails the action it observes"): the
+  the durable copy, so a reader that stops reading stalls the server." From AGENTS `Facts, traces, bugs: three records` ("the rest never blocks, slows or fails the action it observes"): the
   `StreamHandler(sys.stdout)` renders and writes each call inline; 2 000 calls against an unread
   pipe did not finish in 3 s (scratch run). [chain.py:192](apps/shared/logs/chain.py#L192)
 - [ ] "The API lane calls the app in-process through an ASGI transport — no socket, no HTTP
   server — so the whole request shares the scenario's rolled-back transaction; only the browser
-  lane goes over the wire." From README `Tests are sincere` ("over real HTTP"): the API driver's
+  lane goes over the wire." From AGENTS `Tests are sincere` ("over real HTTP"): the API driver's
   `ASGISyncTransport` wraps `httpx.ASGITransport`.
   [transport.py:11](tests/e2e/drivers/transport.py#L11), [api_base.py:87](tests/e2e/drivers/api_base.py#L87)
 - [ ] "Collaborative tables — todos, calendar events, files, page drafts — let every member
-  write; owner-only rules are the named exceptions." From README `Multi-tenancy by default`
+  write; owner-only rules are the named exceptions." From AGENTS `Multi-tenancy by default`
   ("Members read, owners write"): the `member all` policies and their migration comments ("no
   owner-only rule in v1", "drafts are collaborative").
   [20260818000012_todo.sql:25](supabase/migrations/20260818000012_todo.sql#L25),
   [20260818000010_pages.sql:47](supabase/migrations/20260818000010_pages.sql#L47)
 - [ ] "The personal organization is a console switch, `organizations.auto_create_personal_org`,
-  on by default; off, a new account has no org until it creates or joins one." From README
+  on by default; off, a new account has no org until it creates or joins one." From AGENTS
   `Multi-tenancy by default` ("Every account gets a personal organization at sign-up").
   [integration.py:142](apps/organizations/contract/integration.py#L142)
 - [ ] "Three org surfaces live outside `/{org_handle}/…` because their visitor is not a member:
   share-token downloads, the featured org's public pages at the root, and invitation links." From
-  README `Multi-tenancy by default` ("org data lives under `/{org_handle}/…`").
+  AGENTS `Multi-tenancy by default` ("org data lives under `/{org_handle}/…`").
   [router.py:341](apps/files/infra/router.py#L341), [router.py:58](apps/public/infra/router.py#L58),
   [invitation_router.py:21](apps/organizations/infra/invitation_router.py#L21)
 - [ ] "The bootstrap promotes whoever registers while no live admin exists — not the first row of
   `auth.users`: a first user gone before delivery, or whose task is retried behind a later one,
-  leaves the role to the next." From README `The first to sign up is admin`, which already hands
+  leaves the role to the next." From AGENTS `The first to sign up is admin`, which already hands
   the role on when the first account is gone, not when its task is retried behind a later one: the
   handler tests the live admin count only, and `test_an_anonymized_actor_is_never_promoted` wants
   it so.
@@ -379,12 +325,12 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   [integration.py:117](apps/console/contract/integration.py#L117)
 - [ ] "Time has one clock per layer: Python reads `clock.now()`, SQL stamps its own `now()` for
   what PostgREST and raw inserts write — and a pinned test clock reaches only the first." From
-  README `One source of truth for the rest` ("Time comes from a single clock"): `updated_at`
+  AGENTS `One clock, one key, one style` ("Time comes from a single clock"): `updated_at`
   triggers, `task_queue.run_at` and the metrics purge are database-stamped, next to Python-stamped
   `created_at` and history windows. [20260818000001_foundation.sql:67](supabase/migrations/20260818000001_foundation.sql#L67),
   [router.py:72](apps/tasks/infra/router.py#L72)
 - [ ] "Every table with an entity of its own is keyed by a UUIDv7 `id`; link, settings and counter
-  tables keep their natural composite keys." From README `One source of truth for the rest`
+  tables keep their natural composite keys." From AGENTS `One clock, one key, one style`
   ("every primary key is a time-ordered UUIDv7"): `app_settings`, `org_app_settings`,
   `memberships`, `consumed_events`, `rate_limit_counters`. `log_lines` is keyed on its uuidv7 plus
   the partition column, which Postgres requires of any unique key on a partitioned table.
@@ -392,86 +338,84 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
   [20260818000006_queue.sql:59](supabase/migrations/20260818000006_queue.sql#L59)
 - [ ] "Where the org comes from the URL, a handler takes the settings dependency; where it comes
   from data — a share token, a stored row — it calls `get_settings(name).for_org(session, org_id)`;
-  with no org at all, `.view()`." From README `A contract never exports a settings handle`
+  with no org at all, `.view()`." From AGENTS `A contract never exports a settings handle`
   ("Non-request code uses `get_settings`"): the `get_settings` docstring draws that line, and the
   share download, share-link creation and several account/timeline routes follow it.
   [live.py:318](apps/shared/settings/live.py#L318), [router.py:367](apps/files/infra/router.py#L367)
 - [ ] "A third collaboration registry is pull-shaped and string-keyed: `host.fullpage_providers`,
-  whose prefixed slice names cross apps through templates alone." From README `Two collaboration
+  whose prefixed slice names cross apps through templates alone." From AGENTS `Two collaboration
   objects, two shapes` ("they are different objects — `host.events` … and `host.contribs`"):
   `register_fullpage_provider("profile", …)` yields `profile_handle`, read by the organizations
   dashboard template. The `Page composition` section states the registry, not its place in this
   count. [fullpage.py:1](apps/shared/integration/fullpage.py#L1),
   [integration.py:27](apps/profile/contract/integration.py#L27)
 - [ ] "Keying by type trades the magic string for a shared import: emitter and subscriber both
-  import the module that defines the event or query type." From README `Two collaboration objects,
+  import the module that defines the event or query type." From AGENTS `Two collaboration objects,
   two shapes` ("no magic strings and no shared imports"): `SettingsChanged` is imported by the
   console and the timeline, `console.contract.overviews` by 19 non-test modules, and organizations
   imports `auth.contract.events` to react. [integration.py:30](apps/timeline/contract/integration.py#L30)
 - [ ] "The bus decouples a third time, across instances: an app subscribes to its own fact through
   `spread` to reach every other process — in the emitting one the handler is indeed a function call
-  written the long way round." From README `An app may subscribe to its own business event` ("an
+  written the long way round." From AGENTS `An app may subscribe to its own business event` ("an
   app reacting to itself is legitimate exactly when it needs the second"): the console emits
   `settings.server_changed` and reloads its own handles on it, with nothing to roll back.
   [router.py:545](apps/console/infra/router.py#L545), [host.py:234](apps/shared/integration/host.py#L234)
 - [ ] "A feature may import another feature's contract where the edge is one-way and no contract
   forbids it: `public` reads `pages.contract.public`, `timeline` reads `issues.contract.queries`."
-  From README `Import downward, event upward` (whose two branches are a contract import *down* to
+  From AGENTS `Import downward, event upward` (whose two branches are a contract import *down* to
   the three foundations, or an event *up*). [router.py:7](apps/public/infra/router.py#L7),
   [repository.py:24](apps/timeline/infra/repository.py#L24)
 - [ ] "Publishers reach `events` in `apps.shared.events.bus`; collectors reach `contribs` in
-  `apps.shared.integration.contribs` — two singletons, in two packages." From README `Import
+  `apps.shared.integration.contribs` — two singletons, in two packages." From AGENTS `Import
   downward, event upward` ("publishers/collectors reach the process-wide `bus` singleton
   (`apps.shared.events.bus`)"): that module binds `events`, not `bus`, and `contribs.collect` never
   touches it. [bus.py:151](apps/shared/events/bus.py#L151),
   [contribs.py:65](apps/shared/integration/contribs.py#L65)
 - [ ] "`request.finished` is a `warning` on a refusal we made as well as on a dead link of ours —
-  every 4xx but 404." From README `Nothing escapes it` ("`warning` on a dead link of ours, `info`
+  every 4xx but 404." From AGENTS `Nothing escapes the log chain` ("`warning` on a dead link of ours, `info`
   otherwise"): `_refused_deliberately` promotes the level, and the middleware's own docstring says
   both halves. [request.py:293](apps/shared/logs/request.py#L293)
 - [ ] "A resolved issue regresses on any version that is not the one it was resolved in — git SHAs
-  have no ordering, so 'different' is the honest test." From README `Issues — a bug, with a
-  lifecycle` ("regresses on a later version"): an occurrence from an older release during a rolling
+  have no ordering, so 'different' is the honest test." From AGENTS `A bug is an issue with a lifecycle` ("regresses on a later version"): an occurrence from an older release during a rolling
   deploy or a rollback reopens the issue and alerts.
   [service.py:60](apps/issues/domain/service.py#L60)
 - [ ] "An authentication refusal is a `warning`, not the `info` an ordinary refusal earns: it is a
-  signal about a caller, and a run of them is what brute force looks like." From README `What
-  counts as a bug` ("an ordinary outcome at `info`"), which `What earns a line` contradicts by
+  signal about a caller, and a run of them is what brute force looks like." From AGENTS `A broken dependency is a bug, a refusal is not` ("an ordinary outcome at `info`"), which `What earns a line` contradicts by
   calling a refused attempt a `warning`: login, mfa, passkey, oauth and register failures all warn,
   and the threshold test's `info` allowlist holds none of them.
   [router.py:270](apps/auth/infra/router.py#L270),
   [test_log_thresholds.py:102](tests/meta/test_log_thresholds.py#L102)
 - [ ] "A client raising something of its own is breakage only when the call's outcome is unknown:
   a response the SDK cannot parse *after* the server applied it is an `info`, not an issue." From
-  README `What counts as a bug` ("a client raising something of its own — which is an issue"):
+  AGENTS `A broken dependency is a bug, a refusal is not` ("a client raising something of its own — which is an issue"):
   `set_server_admin` treats a pydantic `ValidationError` that way, and says why.
   [user_repository.py:70](apps/auth/infra/user_repository.py#L70)
 - [ ] "Two of the five lifespan loops stay off the verdict on purpose — the log drain and the
   capture drain are the machinery the seam runs on, so an `exception` from either would re-enter
   the queue it just failed to drain; both warn on every failed tick, with no transition and no
-  issue." From README `A failure that repeats is one bug` ("The five lifespan workers … They tick
+  issue." From AGENTS `A failure that repeats is one bug` ("The five lifespan workers … They tick
   once a second, so the level follows the transition"): `tests/meta/test_loop_verdicts.py` states
-  the exclusion, the README counts five. [sink.py:290](apps/shared/logs/sink.py#L290),
+  the exclusion, AGENTS.md counts five. [sink.py:290](apps/shared/logs/sink.py#L290),
   [capture.py:211](apps/shared/logs/capture.py#L211)
 - [ ] "OAuth and passkeys ship switched off — their settings default to `false`, so a fresh install
-  offers email/password and TOTP, and the console is where the rest is turned on." From README
-  `Sign-in surface` (which lists the four methods flat and calls only the profile pair
+  offers email/password and TOTP, and the console is where the rest is turned on." From AGENTS
+  `A GET never delivers a session` (which lists the four methods flat and calls only the profile pair
   settings-gated): at the declared defaults the provider and passkey routes answer 404 and the
   login page shows neither. [integration.py:96](apps/auth/contract/integration.py#L96)
 - [ ] "Process-wide page context — the theme, the theme list, the log levels — is installed as a
   Jinja global at mount, not as a slice: a per-request route argument is a poor carrier for a
-  setting no route chooses." From README `Page composition` ("merges them — called explicitly,
+  setting no route chooses." From AGENTS `A page's context is assembled from slices its apps own` ("merges them — called explicitly,
   never injected silently"): `base.html` renders `app_theme()` on every page, from a global no
   route mentions. [integration.py:74](apps/console/contract/integration.py#L74),
   [templates.py:40](apps/shared/http/templates.py#L40)
 - [ ] "A bearer credential is not a uuid: the API key is `secrets.token_hex(20)` behind its prefix
   and the PKCE verifier `secrets.token_urlsafe(64)` — a uuid4 carries 122 random bits, the wrong
   shape for a secret. The uuid4 exception covers the two table-stored tokens, invitations and file
-  shares." From README `Identity` ("Security tokens are the deliberate exception — they stay random
+  shares." From AGENTS `Every key is a UUIDv7, every token a UUIDv4` ("Security tokens are the deliberate exception — they stay random
   **UUIDv4**"). [service.py:22](apps/api_keys/domain/service.py#L22),
   [service.py:122](apps/auth/domain/service.py#L122)
 - [ ] "No suite reruns, and none can: the rerun plugin is deliberately absent, because a rerun
-  hides exactly what `make flakehunt` measures." From README `Anti-flake e2e` ("Reruns are opt-in
+  hides exactly what `make flakehunt` measures." From AGENTS `Assert the settled DOM, never wait on time` ("Reruns are opt-in
   and justified per named suite"): there is no opt-in mechanism and no named suite, and the
   Makefile, `flakehunt.sh` and the ratchet's docstring all say why.
   [Makefile:218](Makefile#L218), [test_ratchets.py:1035](tests/meta/test_ratchets.py#L1035)
@@ -551,7 +495,7 @@ Neither broken nor misdescribed: a type that could be tighter, a boundary the li
 - [ ] Should `jinja_globals` live in the host?
 - [ ] Split the SQLAlchemy models (`domain`) from the Pydantic models (`contract`), in every app.
 - [ ] 48 tuning knobs are still literals — retention windows, poll and purge intervals, retry
-  budgets, batch sizes, page lengths, deadlines, caps. README `No magic number` names them as
+  budgets, batch sizes, page lengths, deadlines, caps. AGENTS `No magic number` names them as
   settings; `_KNOBS_AWAITING_PROMOTION` enumerates them and only shrinks, so the count is the
   distance. [test_ratchets.py](tests/meta/test_ratchets.py)
 - [ ] Dataclass or Pydantic?
@@ -589,11 +533,6 @@ rebuilt — observability, `health/` probes, cross-instance rate limiting, RLS, 
 headers, `Sec-Fetch-Site` CSRF, backup docs. The gap is not the runtime, it is the path to
 production and its operation. Full runbook in [production.md](docs/production.md).
 
-- [ ] The preflight's `len(SUPABASE_SECRET_KEY) < 40` threshold is a heuristic that refuses boot
-  with no way out. Measured: a real `sb_secret_…` key is 41 characters — a one-character margin.
-  Legacy `service_role` keys are very long JWTs and sail through. A false positive locks production
-  out. → validate a prefix rather than a length, or downgrade to a warning.
-  [preflight.py](apps/shared/settings/preflight.py)
 - [ ] Deployment CI/CD — a pipeline gated on `make ci`, an image tagged by version (`apps/issues`
   already tracks regression by version), migration, rollback.
 - [ ] Alerting — the issue half is done: `issues.alerting_enabled` + `alert_email` send mail on an

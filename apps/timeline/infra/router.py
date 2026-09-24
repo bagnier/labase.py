@@ -16,7 +16,7 @@ from apps.auth.contract.current import CurrentAdmin
 from apps.organizations.contract.queries import org_handles
 from apps.shared import clock
 from apps.shared.charts import chart_config
-from apps.shared.http import json_and_html, wants_json
+from apps.shared.http import is_htmx, json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.logs.repository import DEFAULT_WINDOW
@@ -257,7 +257,7 @@ def _next_cursor(entries: list[TimelineEntry], flt: TimelineFilter) -> str | Non
     A full page is the signal: the reader cannot tell "exactly a hundred left" from "a hundred and
     more", and asking it to would cost a second query on every view to spare one empty click.
     """
-    if len(entries) < _PAGE_SIZE or flt.sort != "ts" or not flt.descending:
+    if len(entries) < _PAGE_SIZE or not flt.orders_whole_window():
         return None
     return entries[-1].ts.isoformat()
 
@@ -323,7 +323,7 @@ async def timeline_screen(
     # A "load older" click asks for rows, not for a screen: the chart, the facets and the label
     # lookups above are the page's, and re-rendering them would swap them out from under the
     # reader. The button replaces itself with the next batch and its own successor.
-    if request.headers.get("HX-Request") == "true":
+    if is_htmx(request):
         return templates.TemplateResponse(request, "timeline/_entries.html", rows)
     return templates.TemplateResponse(
         request,
@@ -344,6 +344,7 @@ async def timeline_screen(
             "filters": filters,
             "sort": flt.sort,
             "dir": "desc" if flt.descending else "asc",
+            "exact_order": flt.orders_whole_window(),
             # The three sources do not share a memory, and only one of them says so. Stated on
             # screen rather than left to be discovered by a correlation that came back short —
             # the same move as ``data-sort-scope`` one section down.
@@ -356,7 +357,18 @@ async def timeline_screen(
 
 
 _EXPORT_LIMIT = 5000
-_CSV_COLUMNS = ("ts", "source", "level", "name", "org_id", "user_id", "entity_id", "request_id")
+_CSV_COLUMNS = (
+    "ts",
+    "source",
+    "level",
+    "name",
+    "org_id",
+    "org_name",
+    "user_id",
+    "user_name",
+    "entity_id",
+    "request_id",
+)
 
 
 def _ndjson(rows: list[dict[str, Any]]) -> str:

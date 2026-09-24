@@ -6,7 +6,7 @@ the libraries emit through stdlib ``logging``. The two meet inside
 cross — so the log-sink and capture tees sit there, and nowhere else. Ours traverse two processor
 lists and a library's only one, so a tee in the structlog list would count our lines twice.
 
-The level is settled once (README: observability). Loggers are not cached here, which is what
+The level is settled once (AGENTS: observability). Loggers are not cached here, which is what
 makes it live: every call re-reads the current one.
 
 ``LOG_DEBUG`` no longer picks a level: with no ``debug`` tier there is none to pick. It selects the

@@ -22,7 +22,7 @@
       </span>
     </td>
     <td class="font-mono text-xs text-base-content/60" title="{{ e.org_id }}">
-      {{ correlate('org_id', e.org_id, labels.org.get(e.org_id)) }}
+      {{ correlate('org_id', e.org_id, e.org_name or labels.org.get(e.org_id)) }}
     </td>
     {# An issue row names the exception; the stack, the triage and the sibling occurrences live on
        the issue's own screen, so the name is the way there. #}
@@ -36,7 +36,7 @@
       {% endif %}
     </td>
     <td class="font-mono text-xs text-base-content/60"
-        title="{{ e.user_id }}">{{ correlate('user_id', e.user_id, labels.user.get(e.user_id)) }}</td>
+        title="{{ e.user_id }}">{{ correlate('user_id', e.user_id, e.user_name or labels.user.get(e.user_id)) }}</td>
     {# The name the fact pinned when it happened, falling back to the id when the subject had none
        (an account or membership action, whose subject is only an id). #}
     <td class="text-xs text-base-content/60"

@@ -9,7 +9,7 @@ The storage is :mod:`apps.shared.logs.repository`, whose ``LogRepository`` owns 
 against ``log_lines`` — the house word for "the object that holds a table's queries", and the twin
 of ``EventRepository`` on the journal side.
 
-Where a line goes, and the fallback when Postgres refuses a batch, are stated once (README: the
+Where a line goes, and the fallback when Postgres refuses a batch, are stated once (AGENTS: the
 log sink). What only this module can say is *why a table*: per-day JSON Lines on local disk read
 fine with one instance, and with two they made the Timeline lie by omission — the journal and the
 issues live in Postgres and are therefore global, so an admin correlating a request saw the fact
@@ -25,7 +25,7 @@ sense of the word, and internal consistency wins — the shape is already famili
 **The day files.** The dying-process hook writes there too, not only the refused batch — it runs
 during interpreter shutdown, with no loop and no pool left to await on.
 
-**Non-blocking (README: the log sink).** The runtime path touches neither disk nor database: the
+**Non-blocking (AGENTS: the log sink).** The runtime path touches neither disk nor database: the
 processor only *enqueues* — a plain :meth:`deque.append`, atomic under the GIL, so it is safe
 before the event loop exists and from worker threads, exactly like the capture queue.
 """
@@ -33,6 +33,7 @@ before the event loop exists and from worker threads, exactly like the capture q
 import asyncio
 import contextlib
 import json
+import logging
 from collections import defaultdict, deque
 from collections.abc import MutableMapping
 from dataclasses import dataclass
@@ -48,6 +49,28 @@ from apps.shared.persistence.database import admin_session_factory
 from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
+
+# The sink's own outage/recovery transitions must reach the Timeline whatever
+# ``timeline.log_level`` quiets (AGENTS: the log sink) — so they go through a bound logger built
+# with ``wrap_logger``, outside ``structlog.configure()``'s global state, immune to
+# ``apply_log_level`` re-pointing the console's filtering wrapper class. The underlying stdlib
+# logger is pinned to its own floor for the same reason: unpinned, it would inherit the root
+# logger's level, which ``apply_log_level`` raises too. The processors are ``chain.py``'s own
+# shared ones, copied rather than imported: ``chain.py`` imports this module, so the reverse
+# import would cycle. Named ``_log`` (not ``_logger``) so it cannot shadow ``log_processor``'s
+# own ``_logger`` parameter below.
+logging.getLogger(__name__).setLevel(logging.INFO)
+_log = structlog.wrap_logger(
+    logging.getLogger(__name__),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+    ],
+)
 
 
 def _parse_ts(value: Any) -> datetime:
@@ -166,10 +189,10 @@ def report_write_outage() -> None:
         # ``warning``, not ``error``: the batch is not lost, it went to the day files. What the
         # code could not carry through and absorbed is precisely the warning half of the doctrine
         # — and ``error`` with no exception behind it is the one level the capture seam skips.
-        log.warning("log_sink.write_failed")
+        _log.warning("log_sink.write_failed")
     elif not _outage.refusing and _outage.announced:
         _outage.announced = False
-        log.info("log_sink.write_recovered", lines=_outage.lines)
+        _log.info("log_sink.write_recovered", lines=_outage.lines)
         _outage.lines = 0
 
 

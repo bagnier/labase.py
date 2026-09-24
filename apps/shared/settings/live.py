@@ -8,7 +8,7 @@ their defaults, and registers the app's live :class:`AppSettings` handle in the 
 registry (:func:`get_settings`). The ``enabled`` gate a toggleable app checks right after is
 just a declared setting (via :func:`feature_switch`), read off the returned handle.
 
-A contract never exports a handle (README: a contract never exports a settings handle).
+A contract never exports a handle (AGENTS: a contract never exports a settings handle).
 Three
 sanctioned reads, chosen by *how the org is known*:
 

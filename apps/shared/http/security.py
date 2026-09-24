@@ -1,7 +1,8 @@
 """HTTP security middleware: response hardening headers + tokenless CSRF.
 
 Cross-site cookie-authenticated mutations are rejected from the ``Sec-Fetch-Site``
-header, so there are no CSRF tokens to plumb through forms (README: HTTP security).
+header, so there are no CSRF tokens to plumb through forms (AGENTS: CSRF needs no token,
+and the rate limiter fails open).
 
 Both are plain ASGI middleware rather than ``BaseHTTPMiddleware`` dispatch functions. Nothing
 here needs the difference, but they sit *under* ``RequestLogger``, and that base runs what it
