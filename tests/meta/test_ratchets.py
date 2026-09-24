@@ -207,6 +207,18 @@ _ROUTERS_TOUCHING_THE_DB = {
     "apps/health/router.py",
 }
 
+# `get_settings` read directly inside a router, for the two shapes no declared dependency covers:
+# the file share download (live.py's own "org known from data, not the URL" case — the download is
+# anonymous, and the org comes from the row, not `{org_handle}`), and the console's timeline
+# settings screen (it lists every declared setting to edit, not one app's effective value for this
+# request). Every other router request reads its settings through a declared dependency
+# (`ProfileSettings`, `UsersSettings`, `app_settings(...)` under `/{org_handle}`); the list only
+# shrinks.
+_ROUTERS_READING_SETTINGS_BY_STRING = {
+    "apps/files/infra/router.py:378",
+    "apps/timeline/infra/router.py:40",
+}
+
 # Request functions on the BYPASSRLS session, counted per module. The README reserves
 # `AdminSession` for event handlers, console queries and anonymous public surfaces; this is what
 # that reservation costs today, so widening it is an edit someone makes on purpose.
@@ -983,6 +995,29 @@ def test_no_router_reaches_the_database_itself():
     driven from a router — that goes through a repository. The business-logic half stays a
     review question; the readiness probe is the one named exception."""
     assert _db_touches_in_routers() == _ROUTERS_TOUCHING_THE_DB
+
+
+def _settings_reads_in_routers() -> set[str]:
+    """Every ``get_settings(...)`` call reached straight from a router module, by file and line —
+    the request-code half of "Handlers declare the app's settings dependency"."""
+    found = set()
+    for path in sorted(_APPS.glob("*/infra/router.py")):
+        relative = str(path.relative_to(_ROOT))
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "get_settings"
+            ):
+                found.add(f"{relative}:{node.lineno}")
+    return found
+
+
+def test_no_router_reads_settings_by_string():
+    """ "A contract never exports a settings handle" — a handler declares its app's settings
+    dependency and gets the request's effective values, rather than reaching `get_settings` by
+    string on the request path (AGENTS: "Handlers declare the app's `TodoSettings` dependency")."""
+    assert _settings_reads_in_routers() == _ROUTERS_READING_SETTINGS_BY_STRING
 
 
 def test_the_bypassrls_parameters_are_the_counted_ones():
