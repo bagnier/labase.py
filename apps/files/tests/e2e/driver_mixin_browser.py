@@ -2,7 +2,7 @@ import contextlib
 import tempfile
 from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
 
 from apps.auth.tests.given_helpers import (
     create_user,
@@ -351,3 +351,21 @@ class OrgFileBrowserMixin(BrowserBase):
         expect(self.page.get_by_label(f"Share link for {filename}")).to_have_value(
             self._share_link_url or ""
         )
+
+    def assert_row_controls_visible_when_focused(self, filename: str) -> None:
+        self._on_files()
+        for label in (f"Rename {filename}", f"Share {filename}", f"Delete {filename}"):
+            control = self._focus_by_tab(label)
+            expect(control).to_have_css("opacity", "1")
+
+    def _focus_by_tab(self, label: str) -> Locator:
+        """Reach the control named `label` the way a keyboard-only user does — pressing Tab
+        from a blurred body, never a programmatic .focus(), which does not carry the keyboard
+        modality :focus-visible depends on."""
+        page = self.page
+        page.evaluate("document.activeElement && document.activeElement.blur()")
+        for _ in range(60):
+            page.keyboard.press("Tab")
+            if page.evaluate("document.activeElement.getAttribute('aria-label')") == label:
+                return page.locator(f'[aria-label="{label}"]')
+        raise AssertionError(f"Could not reach {label!r} by Tab")
