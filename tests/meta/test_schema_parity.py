@@ -43,11 +43,14 @@ class LiveSchema:
         columns: dict[tuple[str, str], bool],
         relation_names: set[str],
         closed_sets: dict[tuple[str, str], list[str]],
+        updated_at_triggers: set[str],
     ) -> None:
         self.columns = columns
         self.relation_names = relation_names
         # Every column typed by a Postgres enum, with the labels it may hold, in order.
         self.closed_sets = closed_sets
+        # Tables carrying a `before update ... execute function set_updated_at()` trigger.
+        self.updated_at_triggers = updated_at_triggers
 
     @property
     def tables(self) -> set[str]:
@@ -102,6 +105,17 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
+            updated_at_triggers = (
+                await conn.execute(
+                    text(
+                        "select event_object_table from information_schema.triggers "
+                        "where trigger_schema = :schema and action_timing = 'BEFORE' "
+                        "and event_manipulation = 'UPDATE' "
+                        "and action_statement = 'EXECUTE FUNCTION set_updated_at()'"
+                    ),
+                    {"schema": schema},
+                )
+            ).all()
     finally:
         await engine.dispose()
 
@@ -109,6 +123,7 @@ async def live_schema() -> LiveSchema:
         columns={(table, column): nullable == "YES" for table, column, nullable in columns},
         relation_names={name for (name,) in relations},
         closed_sets={(table, column): list(labels) for table, column, labels in closed_sets},
+        updated_at_triggers={table for (table,) in updated_at_triggers},
     )
 
 
@@ -153,6 +168,22 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
     }
 
     missing = sorted(name for name in declared if name not in live_schema.relation_names)
+
+    assert missing == []
+
+
+def test_every_timestamped_table_carries_the_set_updated_at_trigger(
+    live_schema: LiveSchema,
+) -> None:
+    """`Timestamped` (`apps/shared/persistence/base.py`) promises that `updated_at` is "also
+    maintained by a DB trigger, so a write through PostgREST or psql is stamped exactly like a
+    write through the ORM" — a promise the Python-side ratchet
+    (`tests/meta/test_conventions.py::test_no_repository_assigns_updated_at_from_the_python_clock`)
+    cannot see. Every mapped table declaring an `updated_at` column is a `Timestamped` table,
+    since only that mixin ever adds one."""
+    timestamped = {table.name for table in Base.metadata.tables.values() if "updated_at" in table.c}
+
+    missing = sorted(timestamped - live_schema.updated_at_triggers)
 
     assert missing == []
 
