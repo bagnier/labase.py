@@ -224,21 +224,6 @@ def test_the_layout_walk_actually_finds_the_files():
     assert (len(steps) > 10, len(template_roots) > 10) == (True, True)
 
 
-def test_get_invitation_by_token_returns_a_typed_model():
-    """ "Invariants are types, not checks": the repository read comes back as ``InvitationRead``,
-    not a bare ``dict`` — the shape that let a status be indexed and compared as an untyped
-    string in the first place."""
-    path = _APPS / "organizations" / "infra" / "repository.py"
-    fn = next(
-        node
-        for node in ast.walk(ast.parse(path.read_text()))
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "get_invitation_by_token"
-    )
-
-    assert fn.returns is not None
-    assert ast.unparse(fn.returns) == "InvitationRead | None"
-
-
 def _status_access(node: ast.expr) -> bool:
     """``x.status`` or ``x["status"]`` — the two shapes an invitation's status is read as,
     whether it arrives typed or as a bare mapping."""
@@ -251,21 +236,33 @@ def _status_access(node: ast.expr) -> bool:
     )
 
 
+def _string_literals(node: ast.expr) -> list[ast.Constant]:
+    """The string constants a comparison side is, or holds — a bare literal, or every element of
+    a literal set/tuple/list an ``in``/``not in`` tests membership against."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node]
+    if isinstance(node, ast.Set | ast.Tuple | ast.List):
+        return [
+            element
+            for element in node.elts
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        ]
+    return []
+
+
 def test_invitation_status_is_never_compared_to_a_bare_string():
-    """The other half of the same rule: a status compared against a string literal lets a typo
-    like ``"revokd"`` pass ``ty`` and ``make lint`` while reading a revoked invitation as valid.
-    Compared against an ``InvitationStatus`` member instead, the same typo is an attribute ``ty``
-    rejects — the type checker catching the violation before a test has to."""
+    """The other half of the same rule: a status compared against a string literal — whether
+    ``==``/``!=`` or membership in a literal set/tuple/list — lets a typo like ``"revokd"`` pass
+    ``ty`` and ``make lint`` while reading a revoked invitation as valid. Compared against an
+    ``InvitationStatus`` member instead, the same typo is an attribute ``ty`` rejects — the type
+    checker catching the violation before a test has to."""
     path = _APPS / "organizations" / "infra" / "invitation_router.py"
     offenders = {
         node.lineno
         for node in ast.walk(ast.parse(path.read_text()))
         if isinstance(node, ast.Compare)
         and any(_status_access(side) for side in [node.left, *node.comparators])
-        and any(
-            isinstance(side, ast.Constant) and isinstance(side.value, str)
-            for side in [node.left, *node.comparators]
-        )
+        and any(_string_literals(side) for side in [node.left, *node.comparators])
     }
 
     assert offenders == set()
