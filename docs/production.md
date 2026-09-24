@@ -78,8 +78,9 @@ make preflight ENV_FILE=.env.production
 ```
 
 Blocking errors: `COOKIES_SECURE=false`, `CORS_ORIGINS` containing `*`, either the user
-or the admin database URL pointing at a local host, an unset/too-short secret key.
-Warnings: a non-production `ENVIRONMENT`, `APP_VERSION=dev`, `LOG_DEBUG=true` (logs would
+or the admin database URL pointing at a local host, a secret key that doesn't match
+Supabase's `sb_secret_…` shape or a legacy `service_role` JWT.
+Findings: a non-production `ENVIRONMENT`, `APP_VERSION=dev`, `LOG_DEBUG=true` (logs would
 render as human-readable console text rather than the JSON an aggregator parses — it no
 longer selects a level, since nothing is written below `INFO`), missing admin URL.
 
