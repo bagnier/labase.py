@@ -15,7 +15,8 @@ pull request. Merging is never the bot's.
 2. **Label.** The owner puts `to-fix` on it. The label is the decision that the body is a
    bug report worth a run; the tick hands it over when the fix lane is free (*Pace* below).
    Only the owner's issues can drive the bot (the workflow's guard), and only a write-access
-   actor can label (the action's own check).
+   actor can label (the action's own check). Issues one diff should fix go as one: the carrier
+   stays on `to-fix`, the others go on `carried` (*Carrying* below).
 3. **Run.** `fixing`, put on by the tick, fires `.github/workflows/fix.yml`, which builds the
    stack `ci.yml` builds, then hands the issue to the `ci-fix-issue` skill. The skill reads the
    issue and its author's comments as
@@ -70,6 +71,23 @@ two ends — pushed, or a question — so the pull request goes back to waiting 
 A rework run that dies, or never starts, lands on `to-unblock` too, with a URL in a comment, and
 the queue behind it moves on; taking `to-unblock` off, then a new `@claude` comment, is what puts
 it back on `to-rework`.
+
+## Carrying
+
+One run can close several issues: those on one subject, even across files, so the treatment is
+uniform, and those rewriting the same lines, which would conflict landed apart. Different subjects
+stay apart, even in one file. The oldest issue of the set is the carrier and stays on `to-fix`;
+each other one swaps `to-fix` for `carried`, and a comment of the owner's on the carrier names it
+(`Carries #<n>:`). The tick never picks a `carried` issue: the carrier's run reads each one's
+thread, gives each its own failing test, and opens one pull request that closes them all.
+
+`carried` is a link, not a run's state: no run takes it off, so the list shows the issue is taken
+care of, and a carrier put back on `to-fix` still finds what it carries. Only the owner detaches
+one, by swapping it back for `to-fix`. A set is joined before its run starts, since a run reads its
+thread once.
+
+The `triage-issues` skill proposes the sets from a local checkout — reading each issue against
+`main`, the pull requests and the other issues — and marks them once the owner agrees.
 
 ## Landing a batch
 
