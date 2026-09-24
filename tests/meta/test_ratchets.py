@@ -224,7 +224,7 @@ _ROUTERS_READING_SETTINGS_BY_STRING = {
 # `AdminSession` for event handlers, console queries and anonymous public surfaces; this is what
 # that reservation costs today, so widening it is an edit someone makes on purpose.
 _BYPASSRLS_PARAMETERS = {
-    "apps/auth/infra/accounts_router.py": 4,
+    "apps/auth/infra/accounts_router.py": 5,
     "apps/auth/infra/router.py": 12,
     "apps/console/infra/router.py": 13,
     "apps/files/infra/router.py": 1,

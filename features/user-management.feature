@@ -51,8 +51,7 @@ Feature: User management
     When the admin revokes the server admin rights of "root@example.com"
     And the admin tries to disable the account "bob@example.com"
     Then the action is forbidden
-    When a visitor signs in with email "bob@example.com" and password "Secret1!"
-    Then they are on their profile page
+    And the account "bob@example.com" is not disabled
 
   # Delete
 

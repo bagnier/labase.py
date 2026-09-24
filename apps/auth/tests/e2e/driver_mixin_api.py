@@ -398,6 +398,11 @@ class AuthApiMixin(ApiBase):
             headers={"accept": "application/json"},
         )
 
+    def assert_account_not_disabled(self, email: str) -> None:
+        account = next((a for a in self._accounts() if a["email"] == email), None)
+        assert account is not None, f"no account {email!r}"
+        assert not account["disabled"], f"{email!r} unexpectedly disabled"
+
     def try_open_accounts_screen(self) -> None:
         self.response = self.client().get(
             "/console/accounts", headers={"accept": "application/json"}

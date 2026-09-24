@@ -453,6 +453,15 @@ class AuthBrowserMixin(BrowserBase):
         button = self._account_row(email).get_by_role("button", name="Disable")
         self.last_response = self.click_and_capture(self.page, button, "POST", "/disable")
 
+    def assert_account_not_disabled(self, email: str) -> None:
+        # The forbidden POST navigated the plain (non-HTMX) form to the rendered error page — a
+        # public layout with no console nav — so follow its own way back before walking to the
+        # accounts screen again to read the row's live state.
+        with self.page.expect_navigation(wait_until="load"):
+            self.page.get_by_role("link", name="Back to home").click()
+        self.open_accounts_screen()
+        expect(self._account_row(email)).to_have_attribute("data-account-state", "active")
+
     def try_open_accounts_screen(self) -> None:
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None
