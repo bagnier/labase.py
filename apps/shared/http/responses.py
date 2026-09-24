@@ -26,7 +26,8 @@ from apps.shared.http.templates import templates
 # so naming both media types here is right whichever one the route already declared.
 #
 # Two types, three audiences: a fragment and a full page are both `text/html`, and which one
-# a request gets is `is_htmx`, not a media type. The schema has nothing finer to say.
+# a request gets is `wants_full_page`, not a media type — a history restore carries `HX-Request`
+# too, but gets the full page all the same. The schema has nothing finer to say.
 # It matters beyond the docs page: `client/` is generated from this schema, so a face the
 # schema omits is a face no external caller can reach.
 

@@ -7,18 +7,16 @@ def test_a_history_restore_of_the_todo_list_gets_the_full_page_not_the_fragment(
     fragment the same headers would otherwise pick."""
     driver.sign_in_as_fresh_user()
     slug = driver.active_org_handle
+    client = driver.client()
 
-    body = (
-        driver.client()
-        .get(
-            f"/{slug}/todos",
-            headers={
-                "accept": "text/html",
-                "HX-Request": "true",
-                "HX-History-Restore-Request": "true",
-            },
-        )
-        .text
-    )
+    restored = client.get(
+        f"/{slug}/todos",
+        headers={
+            "accept": "text/html",
+            "HX-Request": "true",
+            "HX-History-Restore-Request": "true",
+        },
+    ).text
+    plain = client.get(f"/{slug}/todos", headers={"accept": "text/html"}).text
 
-    assert "<html" in body
+    assert restored == plain
