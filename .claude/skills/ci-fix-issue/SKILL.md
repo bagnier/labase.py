@@ -1,10 +1,10 @@
 ---
 name: ci-fix-issue
 description: >
-  Takes one GitHub issue labelled `fixing`, reproduces it as a failing test, fixes it under the
-  tdd loop, and opens the pull request that closes it on a `fix/<issue>` branch. A run ends one
-  of three ways: all done, a pull request with the questions the fix raised, or an open question
-  on the issue and no pull request.
+  Takes one GitHub issue labelled `fixing`, with the issues it carries, reproduces each as a
+  failing test, fixes them under the tdd loop, and opens the pull request that closes them on a
+  `fix/<issue>` branch. A run ends one of three ways: all done, a pull request with the questions
+  the fix raised, or an open question on the issue and no pull request.
 
   Do NOT use for: filing what is wrong (maintain-principles), or a feature (feature).
 when_to_use: >
@@ -14,7 +14,7 @@ argument-hint: "<issue number>"
 disable-model-invocation: true
 ---
 
-This skill closes one issue and nothing else.
+This skill closes one issue, with the issues it carries, and nothing else.
 
 What it writes into the repository is in English — the pull request, its body, every comment,
 the commit message — whatever language the issue it answers is written in.
@@ -72,6 +72,25 @@ the fault, the file and line links, the direction after `→`, any "to run" comm
 answers to questions a previous run asked.
 
 
+## The issues it carries
+
+When one diff should fix several issues, the owner hands the others to one of them, the carrier:
+each carried issue leaves the queue for `carried`, and a comment of the author's on the carrier
+names it. The carried issues are those its author's
+comments reference that are open, on `carried`, and written by the same author — the workflow's
+guard only vetted the carrier's. Read each one's thread as the carrier's:
+
+```sh
+gh issue view <carried> --json number,title,body,author,labels,state,comments
+```
+
+From here on, "the issue" is the whole set: each issue gets its own failing test, all are fixed in
+one diff, on the carrier's branch, in one pull request. The carrier's number names the branch
+whatever reproduced. `carried` is a link, not a run's state: the run never takes it off, so the
+issue list still shows the carried issue is taken care of, and a carrier put back on `to-fix`
+still finds what it carries.
+
+
 ## Reproduce it as a failing test
 
 Load the `tdd` and `write-tests` skills and follow them: the first change is a test that fails
@@ -90,8 +109,9 @@ gh issue close "$ARGUMENTS" --reason "not planned"
 The comment reads "Not reproduced at <`git rev-parse --short HEAD`>:", then what was run and what
 it gave.
 
-Delete the test, and end the run. A reproduction that needs the browser lane runs it; the runner
-has Chromium and the test stack.
+Delete the test, and end the run. In a set, only that issue leaves: it is commented on and closed
+the same way, and the run goes on with the others; it ends only when none reproduced. A
+reproduction that needs the browser lane runs it; the runner has Chromium and the test stack.
 
 
 ## Fix it, then finalize
@@ -121,7 +141,7 @@ Once the gate is green and the commit made, hand the diff to one `adversarial-au
 in the foreground on the runner, where there is no background — with this prompt and nothing else:
 
 ```
-Read ${CLAUDE_SKILL_DIR}/review.md whole and follow it. Base: origin/main. Head: HEAD. It answers issue #<issue>.
+Read ${CLAUDE_SKILL_DIR}/review.md whole and follow it. Base: origin/main. Head: HEAD. It answers issues #<issue>[, #<carried>…].
 ```
 
 One review per run, never a second on the answer to the first. It never runs the gate, so a
@@ -137,9 +157,9 @@ gh pr create --base main --head "fix/$ARGUMENTS" --label bot \
 gh issue edit "$ARGUMENTS" --remove-label fixing
 ```
 
-The pull request body is the run's record, in this order: `Closes #<issue>`; the fault in one
-sentence; what the new test holds and where; what `make finalize` gave; what the review found and
-what was fixed from it; the reading taken on any ambiguity; the closing questions, each with its
+The pull request body is the run's record, in this order: one `Closes #<n>` line per issue it
+fixes; the fault in one sentence each; what the new tests hold and where; what `make finalize`
+gave; what the review found and what was fixed from it; the reading taken on any ambiguity; the closing questions, each with its
 issue link when it got one. No history, no narration.
 
 
@@ -151,7 +171,9 @@ gh issue edit "$ARGUMENTS" --remove-label fixing --add-label to-answer
 ```
 
 The comment says what was established, what is missing, and the two readings when there are two.
-One question per run: the first one that blocks, not a list.
+One question per run: the first one that blocks, not a list. It goes on the carrier even when it
+concerns a carried issue, naming it: only the carrier comes back through `to-answer`; the
+carried ones keep their label.
 
 
 ## Report
