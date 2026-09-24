@@ -310,15 +310,28 @@ async def verified_totp_factor(access_token: str) -> str | None:
     return None
 
 
-class PasswordUpdateError(Exception):
-    """GoTrue refused the new password (typically weak_password); message is user-safe."""
+class GoTrueUserUpdateError(Exception):
+    """A PUT to GoTrue's ``/auth/v1/user`` came back >= 400 — refused (4xx) or broken (5xx);
+    message is user-safe. Carries ``status_code`` so a caller can tell the two apart via the
+    base's dependency verdict (:func:`apps.shared.logs.dependency.is_refusal`) instead of
+    treating every instance as a refusal."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class PasswordUpdateError(GoTrueUserUpdateError):
+    """GoTrue refused the new password (typically weak_password), or GoTrue broke (a 5xx)."""
 
 
 async def _update_user(
-    access_token: str, payload: dict, error_type: type[Exception], fallback: str
+    access_token: str, payload: dict, error_type: type[GoTrueUserUpdateError], fallback: str
 ) -> None:
     """PUT to GoTrue's ``/auth/v1/user`` (password or email change) — stateless, like logout();
-    on a 4xx/5xx raise ``error_type`` carrying the user-safe GoTrue message."""
+    on a 4xx/5xx raise ``error_type`` carrying the user-safe GoTrue message and the response's
+    ``status_code``, so the dependency verdict can judge it instead of every instance reading as
+    a refusal."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.put(
@@ -327,7 +340,7 @@ async def _update_user(
             json=payload,
         )
     if res.status_code >= 400:
-        raise error_type(_error_message(res, fallback))
+        raise error_type(_error_message(res, fallback), res.status_code)
 
 
 async def update_password(access_token: str, new_password: str) -> None:
@@ -337,8 +350,8 @@ async def update_password(access_token: str, new_password: str) -> None:
     )
 
 
-class EmailChangeError(Exception):
-    """GoTrue refused the email change (invalid or taken address); message is user-safe."""
+class EmailChangeError(GoTrueUserUpdateError):
+    """GoTrue refused the email change (invalid or taken address), or GoTrue broke (a 5xx)."""
 
 
 async def request_email_change(access_token: str, new_email: str) -> None:

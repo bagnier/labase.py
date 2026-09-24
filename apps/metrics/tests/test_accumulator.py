@@ -1,5 +1,6 @@
 from apps.metrics.domain.accumulator import (
     BUCKET_BOUNDS_MS,
+    OTHER_METHOD,
     UNMATCHED_LABEL_CAP,
     UNMATCHED_ROUTE,
     MetricsAccumulator,
@@ -102,6 +103,18 @@ def test_matched_route_is_never_capped():
     acc = MetricsAccumulator()
     acc.observe("GET", "/todo", 200, 10)  # default: unmatched=False
     assert ("GET", "/todo") in acc.snapshot()
+
+
+def test_made_up_methods_collapse_into_one_label():
+    acc = MetricsAccumulator()
+    acc.observe("GET", "/todo", 200, 10)
+    acc.observe("FROBNICATE", "/todo", 404, 5)
+    acc.observe("WOMBAT", "/todo", 404, 5)
+
+    snap = acc.snapshot()
+    assert ("FROBNICATE", "/todo") not in snap
+    assert ("WOMBAT", "/todo") not in snap
+    assert snap[(OTHER_METHOD, "/todo")].requests == 2
 
 
 def test_route_stats_copy_is_deep_enough():

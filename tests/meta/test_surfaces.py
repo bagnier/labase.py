@@ -77,20 +77,12 @@ _NAMES_A_DEMO = {
     "apps/organizations/contract/entity_links.py says 'files'",
     "apps/organizations/contract/entity_links.py says 'todo'",
     "apps/organizations/contract/entity_links.py says 'todos'",
-    # The harness lists the demos' tables: cleanup truncates them, the privilege books expect
-    # their grants, the worktree test provisions a bucket per demo, the plugin list loads their
-    # steps.
+    # The harness lists the demos' tables: the privilege books expect their grants, the worktree
+    # test provisions a bucket per demo, the plugin list loads their steps.
     "tests/plugin.py says 'apps.calendar'",
     "tests/plugin.py says 'apps.files'",
     "tests/plugin.py says 'apps.learning'",
     "tests/plugin.py says 'apps.todo'",
-    "tests/e2e/cleanup.py says 'card_states'",
-    "tests/e2e/cleanup.py says 'cards'",
-    "tests/e2e/cleanup.py says 'deck_subscriptions'",
-    "tests/e2e/cleanup.py says 'decks'",
-    "tests/e2e/cleanup.py says 'org_file_share_tokens'",
-    "tests/e2e/cleanup.py says 'org_files'",
-    "tests/e2e/cleanup.py says 'todos'",
     "tests/test_db_privileges.py says 'calendar_events'",
     "tests/test_db_privileges.py says 'card_states'",
     "tests/test_db_privileges.py says 'cards'",
@@ -663,6 +655,67 @@ def test_every_icon_a_surface_declares_has_a_glyph_to_render():
 def test_the_icon_walk_actually_finds_the_declarations():
     # Guards the guard: a regex that matched nothing would make the assertion above vacuous.
     assert len(_icons_declared()) > 10
+
+
+def _icons_spelled_in_templates() -> dict[str, str]:
+    """Every ``ph-<name>`` a template spells directly in its own markup, mapped to where. A
+    dynamic slot (``ph-{{ icon }}``) contributes no name here — there is no bareword to read."""
+    found = {}
+    for path in sorted(_APPS.glob("*/templates/**/*.html")):
+        for icon in re.findall(r"\bph ph-([a-z0-9-]+)", path.read_text()):
+            found[icon] = str(path.relative_to(_ROOT))
+    return found
+
+
+def test_every_icon_a_template_spells_has_a_glyph_to_render():
+    """A template that spells its own icon name never passes through `icon="…"`, so the walk
+    above never sees it — the tile still goes mute the same way."""
+    spelled = _icons_spelled_in_templates()
+
+    with_rule = _icons_with_a_rule()
+
+    mute = {f"{icon} ({site})" for icon, site in spelled.items() if icon not in with_rule}
+
+    assert mute == set()
+
+
+def test_the_template_icon_walk_finds_a_name_that_is_not_the_first_class():
+    # `class="drag-handle ph ph-dots-six-vertical …"` — the icon class sits second, not first.
+    assert "dots-six-vertical" in _icons_spelled_in_templates()
+
+
+def test_the_template_icon_walk_actually_finds_the_names():
+    # Guards the guard: a regex that matched nothing would make the assertion above vacuous.
+    assert len(_icons_spelled_in_templates()) > 10
+
+
+# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕`` — instead of
+# reaching for the icon font. It renders the same to a sighted mouse user, but it is not
+# `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped first,
+# so prose that names the glyph — describing the affordance it used to be, as this file's own
+# templates once did — is not mistaken for markup. This is the curated set issue #131 reported,
+# not every character a template could misuse as an icon.
+_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕"}
+
+
+def _template_markup_without_comments() -> dict[str, str]:
+    return {
+        str(path.relative_to(_ROOT)): re.sub(r"\{#.*?#\}", "", path.read_text(), flags=re.DOTALL)
+        for path in _TEMPLATES
+    }
+
+
+def test_no_template_spells_an_icon_as_a_literal_glyph():
+    bodies = _template_markup_without_comments()
+
+    spelled = {
+        f"{glyph!r} in {site}"
+        for site, body in bodies.items()
+        for glyph in _ICON_LOOKALIKE_GLYPHS
+        if glyph in body
+    }
+
+    assert spelled == set()
 
 
 # ``data-hash-tabs`` is an opt-in: the markup asks for the behaviour, and the page has to load the

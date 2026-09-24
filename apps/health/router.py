@@ -6,8 +6,11 @@ database it cannot reach is a *repeated* failure, so the probe puts it through t
 as the background loops (:mod:`apps.shared.logs.loop`): the transition into degraded is
 the bug the console has to show, the probes after it are the same outage still running.
 
-Both paths are in ``RequestLogger``'s skip list — a probe every ten seconds would otherwise be
-most of the timeline — which is precisely why the probe has to say this itself.
+Both paths are silent in ``RequestLogger`` while healthy — a probe every ten seconds would
+otherwise be most of the timeline — but a failing readiness probe leaves its own
+``request.finished`` line like any other 5xx. ``LoopHealth`` is what keeps *this* line, the one
+naming why, from repeating on every tick of the same outage: the transition into degraded is the
+bug, the ticks after it are the same outage still running.
 """
 
 import structlog

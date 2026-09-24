@@ -1,6 +1,6 @@
 {# Smart combobox filter pill (see features/timeline.mockup.html).
 
-   A pill button shows `label + value` — muted italic "all" when inactive, bold with a ✕ to
+   A pill button shows `label + value` — muted italic "all" when inactive, bold with a ph-x icon to
    clear when a value is set. Clicking it opens a popover with a search field that narrows the
    options (with their occurrence counts) as you type. Picking an option — or clearing — writes
    the hidden field and submits the enclosing GET form, so the filter applies immediately and the
@@ -42,7 +42,7 @@
         <span class="opacity-70 hover:opacity-100"
               role="button"
               aria-label="clear {{ label }} filter"
-              @click.stop="clear()">✕</span>
+              @click.stop="clear()"><i class="ph ph-x" aria-hidden="true"></i></span>
       {% else %}
         <span class="italic opacity-60">all</span>
       {% endif %}

@@ -18,7 +18,7 @@ from apps.issues.infra.repository import IssueRepository
 from apps.shared import clock
 from apps.shared.charts import last_days, sparkline
 from apps.shared.events.bus import events
-from apps.shared.http import json_and_html, wants_json
+from apps.shared.http import is_htmx, json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -106,20 +106,21 @@ async def issue_detail(
                 "next_before_id": str(next_before_id) if next_before_id else None,
             }
         )
-    is_htmx = request.headers.get("HX-Request") == "true"
-    template = "issues/_occurrences.html" if is_htmx else "issues/detail.html"
-    ctx: dict[str, Any] = {
-        "user": current_user,
+    htmx = is_htmx(request)
+    template = "issues/_occurrences.html" if htmx else "issues/detail.html"
+    extras: dict[str, Any] = {
         "issue": issue_read,
         "occurrences": occurrence_reads,
         "next_before_id": next_before_id,
     }
-    if not is_htmx:
+    if htmx:
+        ctx = {"user": current_user, **extras}
+    else:
         counts = await repo.daily_counts(issue_id, days=_SPARK_DAYS)
         window = last_days(_SPARK_DAYS, end=clock.now().date())
-        ctx["spark"] = sparkline([counts.get(d.isoformat(), 0) for d in window], color="error")
-        ctx["spark_days"] = _SPARK_DAYS
-        ctx |= await fullpage_context(session, current_user)
+        extras["spark"] = sparkline([counts.get(d.isoformat(), 0) for d in window], color="error")
+        extras["spark_days"] = _SPARK_DAYS
+        ctx = await fullpage_context(session, current_user, **extras)
     return templates.TemplateResponse(request, template, ctx)
 
 

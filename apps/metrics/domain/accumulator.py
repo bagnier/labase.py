@@ -11,10 +11,12 @@ Labels stay low-cardinality by design: route *template* (``/{org_handle}/todos``
 not the expanded path), method, status class. A request that matched no route is
 recorded under its real path (so a dead link from ourselves is identifiable), but
 only up to ``UNMATCHED_LABEL_CAP`` distinct paths — the overflow collapses into
-``unmatched`` so nothing can explode the label set. And only 4xx worth an admin's
-eyes reach here at all: ``RequestLogger`` gates them to internal dead links, so bot
-scans, the favicon probe and ``/.well-known`` browser probes never feed the
-accumulator (see ``_feeds_load_metrics``).
+``unmatched`` so nothing can explode the label set. The method sits in every key
+regardless of route, so it is capped the same way but with a fixed set rather than
+a growing one: a verb outside ``KNOWN_METHODS`` collapses into ``OTHER_METHOD``. And
+only 4xx worth an admin's eyes reach here at all: ``RequestLogger`` gates them to
+internal dead links, so bot scans, the favicon probe and ``/.well-known`` browser
+probes never feed the accumulator (see ``_feeds_load_metrics``).
 """
 
 from dataclasses import dataclass, field
@@ -27,6 +29,13 @@ UNMATCHED_ROUTE = "unmatched"
 # ``unmatched``. A safety net only: what is recordable is already gated to our own dead links, a
 # handful, so this caps nothing but a same-host-referer scanner.
 UNMATCHED_LABEL_CAP = 25
+# The verbs our own routes ever declare, plus the two Starlette answers on their behalf (HEAD for
+# a GET route, OPTIONS for CORS preflight). The method sits in every label's key, so — unlike the
+# path — it is never let grow: a made-up verb collapses here instead of minting its own label.
+KNOWN_METHODS: frozenset[str] = frozenset(
+    {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+)
+OTHER_METHOD = "OTHER"
 
 
 def _empty_buckets() -> list[int]:
@@ -83,6 +92,8 @@ class MetricsAccumulator:
     ) -> None:
         if unmatched:
             route = self._bounded_unmatched_label(route)
+        if method not in KNOWN_METHODS:
+            method = OTHER_METHOD
         stats = self._stats.setdefault((method, route), RouteStats())
         status_class = f"{status_code // 100}xx"
         stats.by_status[status_class] = stats.by_status.get(status_class, 0) + 1

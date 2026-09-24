@@ -81,9 +81,9 @@ from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.client_ip import client_ip
 from apps.shared.http.limiter import rate_limit
 from apps.shared.http.templates import templates
-from apps.shared.logs.dependency import log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
-from apps.shared.persistence.supabase import auth_user_exists
+from apps.shared.persistence.supabase import auth_user_awaiting_confirmation
 from apps.shared.settings.env import get_technical_settings
 from apps.shared.settings.live import SettingsView
 
@@ -265,10 +265,17 @@ async def login_endpoint(
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        # Not a business fact: nothing happened, and the subject may not even be an account.
-        # ``warning``, not the ``info`` a refusal would otherwise earn: this is a signal about a
-        # *caller*, and a run of these is what brute force looks like.
-        log.warning("auth.login_failed", email=email, ip=ip)
+        if is_refusal(e):
+            # Not a business fact: nothing happened, and the subject may not even be an
+            # account. ``warning``, not the ``info`` a refusal would otherwise earn: this is a
+            # signal about a *caller*, and a run of these is what brute force looks like.
+            log.warning("auth.login_failed", email=email, ip=ip)
+        else:
+            # GoTrue answering 500 is not a routine "no" but the dependency breaking, which
+            # takes the same capture path as any other broken dependency — log.exception
+            # directly, since is_refusal(e) already settled the verdict above.
+            # (AGENTS: a broken dependency is a bug, a refusal is not)
+            log.exception("auth.login_failed", exc_info=e, email=email, ip=ip)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -636,7 +643,10 @@ async def register_endpoint(
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
     except AuthApiError as e:
         error = _friendly_auth_error(e)
-        log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
+        if is_refusal(e):
+            log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
+        else:
+            log.exception("auth.register_failed", exc_info=e, ip=ip, email=email, code=str(e.code))
 
     except Exception as exc:
         # Our own code as much as GoTrue's, like login above — always an issue, never a refusal.
@@ -764,11 +774,12 @@ async def resend_confirmation_endpoint(
     sent_message = "If an account exists for this address, a confirmation email is on its way."
     if email:
         # GoTrue is asked either way, so an unknown address costs the same round-trip as a known
-        # one — the timing keeps the neutral answer's secret. Only an account is a fact.
-        has_account = await auth_user_exists(admin_session, email)
+        # one — the timing keeps the neutral answer's secret. Only a mail actually sent is a fact:
+        # an already-confirmed account gets none from GoTrue, so it records none either.
+        awaiting_confirmation = await auth_user_awaiting_confirmation(admin_session, email)
         try:
             await resend_confirmation(email)
-            if has_account:
+            if awaiting_confirmation:
                 await events.emit(ConfirmationResent(entity_name=email), admin_session)
         except Exception as e:
             _log_gotrue_failure("auth.confirmation_resend_failed", e)
@@ -794,13 +805,16 @@ async def reset_password_endpoint(
     try:
         tokens = await confirm_signup(token_hash, type="recovery")
         await update_password(tokens.access_token, password)
-    except PasswordUpdateError as e:
-        # The recovery token is single-use and already consumed: a new link is needed.
-        error = f"{e}. Please request a new reset link."
-        return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
-        error = "This reset link is invalid or has expired. Please request a new one."
+        if isinstance(e, PasswordUpdateError) and is_refusal(e):
+            # The recovery token is single-use and already consumed: a new link is needed.
+            error = f"{e}. Please request a new reset link."
+        else:
+            # GoTrue broke rather than refused (e.g. a 503), or the flow raised something of
+            # its own: the verdict, not the exception's Python type, decides whether this
+            # reaches the log sink as a bug instead of vanishing.
+            _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
+            error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
     # The recovery session is dropped on purpose: the user signs in with the new password — but
     # decode its ``sub`` first, so the reset lands on the journal attributed to the account holder.

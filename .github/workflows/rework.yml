@@ -1,0 +1,152 @@
+name: Rework
+
+# The rework hands a pull request back to the bot. A comment or a review that mentions `@claude`
+# on a pull request queues it — `to-rework` — and tick.yml hands the oldest waiting one over by
+# putting `reworking` on it; that label is what fires the run. One rework in flight, never more,
+# as for the fix bot. The action pushes the corrections on the pull request's own branch, and
+# merging stays with the user (CLAUDE.md, "`main` git branch is mine"; docs/workflow.md).
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [labeled]
+
+jobs:
+  queue:
+    # Nothing here rides the job's own token, so it gets none.
+    permissions: {}
+    # The action already refuses an actor without write access; this guard adds the owner and the
+    # mention, because every comment of a public repository fires this workflow. An `issue_comment`
+    # counts only on a pull request.
+    if: >-
+      github.actor == github.repository_owner &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
+      (contains(github.event.comment.body, '@claude') || contains(github.event.review.body, '@claude'))
+    # No concurrency group: the label is the queue, and it has to land while the mention is fresh.
+    # In the bot's own group it would wait for the two-hour run it is meant to line up after.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The owner's fine-grained token: the tick this job wakes is a workflow, and neither a label
+    # nor a dispatch sent with the job's own GITHUB_TOKEN fires one.
+    env:
+      GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.issue.number || github.event.pull_request.number }}
+    steps:
+      - name: Queue the pull request, then wake the tick
+        run: |
+          gh pr edit "$PR" --add-label to-rework
+          gh workflow run tick.yml
+
+  rework:
+    # The run pushes to the pull request's branch and answers on it; id-token lets the action
+    # authenticate.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    # `reworking` is the tick's hand-off and nothing else puts it on; the owner's token is what
+    # the tick labels with, so a label put by anyone else starts nothing.
+    if: >-
+      github.event.label.name == 'reworking' &&
+      github.actor == github.repository_owner
+    # One rework at a time, whatever labels were put on: one group for the whole bot, and no
+    # cancellation, so a second hand-off waits for the first run to end (tick.yml paces them).
+    # On the job, not the workflow: every comment and every label fires a run, the bot's own
+    # `to-rework` too, and a workflow-level group would be joined before the `if` above skips it.
+    # A run that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+    concurrency:
+      group: rework-bot
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # The owner's fine-grained token for gh; the action pushes with its own app token.
+    env:
+      GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Let git push through gh
+        run: gh auth setup-git
+
+      # The stack the suite needs, as ci.yml builds it.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install Python dependencies
+        run: uv sync --all-groups
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.62.0-chromium
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.117.0
+
+      - name: Start the test stack
+        run: make test-stack
+
+      # The prompt is the skill invocation and the pull request number, nothing else: the skill
+      # reads the thread itself, as a review and never as instructions, checks the branch out,
+      # applies, runs the gate and pushes. A skill rather than the action's mention mode because
+      # the skill carries the runner's rules — the mention run once ended its turn waiting for
+      # `make finalize`, with the strengthened test lost on the runner.
+      - name: Address the review
+        uses: anthropics/claude-code-action@v1
+        # As in fix.yml: no background task, whose notification never reaches a headless run, and
+        # ten minutes for a foreground call.
+        env:
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          BASH_DEFAULT_TIMEOUT_MS: "600000"
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/ci-rework-pr ${{ github.event.pull_request.number }}"
+          show_full_output: true
+          display_report: true
+          claude_args: |
+            --model claude-sonnet-5
+            --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,TaskStop"
+            --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger"
+            --disallowedTools "Workflow,PushNotification,Monitor"
+
+      # A run that ends before its own end — cancelled, timed out, a turn that stopped — leaves
+      # `reworking` with nobody behind it, and the tick reads the queue as busy for good. Whatever
+      # happened, the label becomes a state the owner can see. Never `to-rework` again: that would
+      # relaunch a lasting failure forever.
+      - name: Mark a run that died
+        if: always()
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if gh pr view "$PR" --json labels --jq '.labels[].name' | grep -qx reworking; then
+            gh pr edit "$PR" --remove-label reworking --add-label stalled
+            gh pr comment "$PR" --body "The rework run ended without a result: $RUN_URL"
+          fi

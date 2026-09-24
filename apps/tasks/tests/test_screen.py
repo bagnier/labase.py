@@ -382,6 +382,31 @@ def test_changing_the_window_swaps_the_strip_without_leaving_the_tab(driver):
     assert ('id="task-history"' in body, "<html" in body) == (True, False)
 
 
+def test_a_history_restore_of_the_history_tab_gets_the_full_page_not_the_strip(driver):
+    """htmx sends ``HX-Request`` on a back-navigation too, but swaps the whole document rather
+    than the strip alone — so a restore of a pushed history-tab URL needs the shell, not the
+    fragment the same headers would otherwise pick."""
+    driver.sign_in_as_admin("tasks-admin-restore@example.com")
+    topic = f"test.parked_{uuid.uuid4().hex}"
+    _park(driver, topic, "boom")
+
+    body = (
+        driver.client()
+        .get(
+            "/console/tasks",
+            params={"panel": "history"},
+            headers={
+                "accept": "text/html",
+                "HX-Request": "true",
+                "HX-History-Restore-Request": "true",
+            },
+        )
+        .text
+    )
+
+    assert ('id="task-history"' in body, "<html" in body) == (True, True)
+
+
 def test_a_block_is_a_link_into_the_timeline_at_that_moment(driver):
     """Spotting a bad minute and having to retype it into another screen is the step this removes:
     the block already knows its slot and its topic, which is the pair the Timeline asks for."""

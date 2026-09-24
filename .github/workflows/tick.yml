@@ -1,20 +1,22 @@
 name: Tick
 
-# The pace of the fix bot: one fix in flight, never more, never less while there is work. This
-# job puts `auto-fix` on the oldest `queued` issue when nothing is running — and does nothing
-# otherwise. No Claude run of its own: three API calls and a label. The owner decides what and
-# in which order (`queued`); the tick decides when (docs/workflow.md).
+# The pace of the two bots: one fix and one rework in flight, never more, never less while there
+# is work. This job puts `auto-fix` on the oldest `to-fix` issue, and `reworking` on the oldest
+# `to-rework` pull request, each when its own queue is clear — and does nothing otherwise. No
+# Claude run of its own: a handful of API calls and a label. The owner decides what and in which
+# order (`to-fix`, a `@claude` mention); the tick decides when (docs/workflow.md).
 # zizmor flags `workflow_run` for the job that checks out, downloads or interpolates what the
 # upstream run produced, with secrets; this one reads nothing of it, and the job's `if` keeps a
-# fork's own "Fix" from firing it.
+# fork's own "Fix" or "Rework" from firing it.
 on:  # zizmor: ignore[dangerous-triggers]
-  # The end of any Fix run is the pace: the live one, and the skipped ones its labels fire.
+  # The end of any bot run is the pace: the live one, and the skipped ones its labels fire.
   workflow_run:
-    workflows: [Fix]
+    workflows: [Fix, Rework]
     types: [completed]
   # GitHub's schedule is best effort — it fired once in six hours on 2026-09-21 — so the cron
   # is only the net that starts an idle queue, seven minutes off the quarter hours where the
-  # load that drops scheduled runs sits.
+  # load that drops scheduled runs sits. A mention wakes this workflow itself (rework.yml), so
+  # an idle queue does not wait for it.
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
@@ -27,7 +29,7 @@ jobs:
     if: >-
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.head_repository.full_name == github.repository
-    # A run's closing label fires a skipped Fix run that ends with the live one: two ticks reading
+    # A run's closing label fires a skipped bot run that ends with the live one: two ticks reading
     # the way clear at once would hand out two issues. One reads, then the other.
     concurrency:
       group: tick
@@ -39,7 +41,7 @@ jobs:
       GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Put auto-fix on the next queued issue, when the way is clear
+      - name: Put auto-fix on the next to-fix issue, when the way is clear
         run: |
           in_flight=$(gh run list --workflow=fix.yml --status in_progress --json databaseId --jq 'length')
           taken=$(gh issue list --state open --label fixing --json number --jq 'length')
@@ -50,12 +52,34 @@ jobs:
           fi
 
           # The Fix job takes only the owner's issues; any other would keep `auto-fix` forever.
-          next=$(gh issue list --state open --label queued --author "$GITHUB_REPOSITORY_OWNER" \
+          next=$(gh issue list --state open --label to-fix --author "$GITHUB_REPOSITORY_OWNER" \
             --search "-label:question -label:stalled sort:created-asc" \
             --limit 1 --json number --jq '.[0].number // empty')
           if [ -z "$next" ]; then
-            echo "nothing queued"
+            echo "nothing to fix"
             exit 0
           fi
-          gh issue edit "$next" --remove-label queued --add-label auto-fix
+          gh issue edit "$next" --remove-label to-fix --add-label auto-fix
           echo "issue #$next handed to the fix bot"
+
+      # The two queues are independent — a fix and a rework run side by side, each alone in its
+      # own — so a busy fix queue above exits its step, not the job.
+      - name: Put reworking on the next to-rework pull request, when the way is clear
+        run: |
+          in_flight=$(gh run list --workflow=rework.yml --status in_progress --json databaseId --jq 'length')
+          taken=$(gh pr list --state open --label reworking --json number --jq 'length')
+          if [ "$in_flight" -gt 0 ] || [ "$taken" -gt 0 ]; then
+            echo "a rework is in flight ($in_flight running, $taken reworking): nothing to do"
+            exit 0
+          fi
+
+          # The bot pushes on the pull request's own branch, so only the owner's can be reworked.
+          next=$(gh pr list --state open --label to-rework --author "$GITHUB_REPOSITORY_OWNER" \
+            --search "-label:stalled sort:created-asc" \
+            --limit 1 --json number --jq '.[0].number // empty')
+          if [ -z "$next" ]; then
+            echo "nothing to rework"
+            exit 0
+          fi
+          gh pr edit "$next" --remove-label to-rework --add-label reworking
+          echo "pull request #$next handed to the rework bot"

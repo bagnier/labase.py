@@ -100,6 +100,44 @@ def test_the_uuid4_exception_is_exactly_the_token_columns():
     assert defaulting_to_uuid4 == _TOKEN_COLUMNS
 
 
+def _assigned_attrs(target: ast.expr):
+    """Flatten a (possibly tuple/list-unpacking) assignment target into the attributes it sets."""
+    if isinstance(target, ast.Tuple | ast.List):
+        for elt in target.elts:
+            yield from _assigned_attrs(elt)
+    elif isinstance(target, ast.Attribute):
+        yield target.attr
+
+
+def test_no_repository_assigns_updated_at_from_the_python_clock():
+    """Every ``Timestamped`` table's ``before update`` trigger overwrites ``updated_at`` on the
+    way in regardless of what the statement sent, so a repository writing it from Python
+    alongside — whether a plain assignment, an unpacked one, or a ``setattr`` — is dead code on
+    that path, only ever read back as the trigger's own Postgres ``now()``."""
+    offenders = {
+        f"{relative}:{node.lineno}"
+        for path, relative in _python_files(_APPS)
+        if "/tests/" not in relative
+        for node in ast.walk(ast.parse(path.read_text()))
+        if (
+            isinstance(node, ast.Assign)
+            and any(
+                attr == "updated_at" for target in node.targets for attr in _assigned_attrs(target)
+            )
+        )
+        or (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "setattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value == "updated_at"
+        )
+    }
+
+    assert offenders == set()
+
+
 def test_templates_tests_and_steps_live_with_their_context():
     """The layout half of self-containment: a template, a test or a step module parked outside
     its context is the piece a deletion leaves behind."""

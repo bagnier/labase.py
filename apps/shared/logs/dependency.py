@@ -5,10 +5,15 @@ dependency is a bug, a refusal is not): one
 verdict for GoTrue, Postgres and Storage alike, so an outage does not fill the issues screen or
 stay silent depending on the module it was reached through.
 
-An HTTP status is what tells the two apart, and each client library keeps it in a place of its
-own — hence :func:`refused_status` rather than a table of exception classes to maintain. Shared
-cannot import a bounded context's client anyway, and would not want to: the rule is about the
-*shape* of the answer, not about who answered.
+An HTTP status is what tells the two apart for GoTrue and Storage, and each client library keeps
+it in a place of its own — hence :func:`refused_status` rather than a table of exception classes
+to maintain. Postgres has no HTTP status, but the same shape: a SQLSTATE (on the driver exception,
+or on ``.orig`` where SQLAlchemy wrapped it) means the server *answered*, and most of what it can
+answer — an unmigrated table, a missing grant — is ordinary, same as a 4xx. A SQLSTATE is not
+itself proof of health, though: a class carrying its own failure (a lost connection, an exhausted
+resource, the server's own crash or bug) is the Postgres spelling of a 5xx, and stays a bug even
+though it answered. Shared cannot import a bounded context's client anyway, and would not want to:
+the rule is about the *shape* of the answer, not about who answered.
 
 Call :func:`log_dependency_failure` from the ``except`` block, passing the module's own logger —
 the timeline reads a line's app off the logger that wrote it, so a failure funnelled through here
@@ -50,10 +55,38 @@ def refused_status(exc: BaseException) -> int | None:
     return None
 
 
+def refused_sqlstate(exc: BaseException) -> str | None:
+    """The SQLSTATE Postgres answered with, or ``None`` if it never reached the server at all.
+
+    Checked on the exception itself (asyncpg's own error classes) and on ``.orig`` (where
+    SQLAlchemy wraps the driver exception, e.g. ``DBAPIError``) — a connection failure carries
+    neither, since the server never got the chance to answer. A connection *lost* mid-operation
+    does carry one (asyncpg's ``ConnectionDoesNotExistError`` is ``08003``), which is why this is
+    only "did it answer", never by itself "is it healthy" — :func:`is_refusal` still has to weigh
+    the class.
+    """
+    for holder in (exc, getattr(exc, "orig", None)):
+        sqlstate = getattr(holder, "sqlstate", None)
+        if isinstance(sqlstate, str):
+            return sqlstate
+    return None
+
+
+# SQLSTATE classes (the code's first two characters) where Postgres answered but the answer is
+# the server breaking, not the caller's mistake — the Postgres spelling of a 5xx: 08
+# connection_exception, 53 insufficient_resources, 57 operator_intervention, 58 (external) system
+# error, XX internal_error. https://www.postgresql.org/docs/current/errcodes-appendix.html
+_BROKEN_SQLSTATE_CLASSES = frozenset({"08", "53", "57", "58", "XX"})
+
+
 def is_refusal(exc: BaseException) -> bool:
-    """Whether the dependency answered *no* — a 4xx, which is an outcome and not a defect."""
+    """Whether the dependency answered *no* — a 4xx, or a Postgres SQLSTATE outside the classes
+    where Postgres itself is what broke — an outcome, not a defect."""
     status = refused_status(exc)
-    return status is not None and 400 <= status < 500
+    if status is not None:
+        return 400 <= status < 500
+    sqlstate = refused_sqlstate(exc)
+    return sqlstate is not None and sqlstate[:2] not in _BROKEN_SQLSTATE_CLASSES
 
 
 def log_dependency_failure(log: Any, event: str, exc: BaseException, **context: object) -> None:

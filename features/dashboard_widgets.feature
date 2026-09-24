@@ -33,6 +33,7 @@ Feature: Org dashboard overviews
     Then the "learning" overview is visible on the dashboard
     And the "learning" overview shows "1 deck"
     And the "learning" overview shows "2 cards"
+    And the "learning" overview lists "Capitales"
 
   Scenario: An app with no data still shows its overview in an empty state
     When they view their org dashboard

@@ -367,7 +367,8 @@ async def edit_event_form(
     return templates.TemplateResponse(request, "calendar/form.html", ctx)
 
 
-@router.api_route("/{event_id}", methods=["PATCH", "POST"], response_model=CalendarEventRead)
+@router.patch("/{event_id}", response_model=CalendarEventRead)
+@router.post("/{event_id}", response_model=CalendarEventRead)
 async def update_event(
     request: Request,
     event_id: uuid.UUID,

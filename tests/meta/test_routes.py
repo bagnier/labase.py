@@ -13,10 +13,12 @@ consumer can reach — which is the half of "two faces" that has a mechanical me
 """
 
 import re
+from collections import Counter
 
 from starlette.routing import Match
 
 import apps.main
+from apps.metrics.domain.accumulator import KNOWN_METHODS
 from apps.shared.integration import slugs
 
 # The routes that answer one audience, split by which one — because "one face" says nothing about
@@ -264,6 +266,34 @@ def test_every_mutation_declares_the_body_it_reads():
     }
 
     assert undeclared == _BODYLESS_MUTATIONS
+
+
+def test_every_declared_method_is_one_the_load_metrics_know():
+    """`KNOWN_METHODS` (apps/metrics) claims to be every verb our own routes ever declare, plus
+    the two Starlette answers on their behalf — the premise that lets a made-up verb collapse
+    into ``OTHER_METHOD`` without losing real traffic. Read against the mounted route table
+    rather than trusted on the comment alone, so a route declaring an uncommon verb (e.g.
+    `methods=["PURGE"]`) is caught here instead of silently merging into scanner noise."""
+    declared = {method.upper() for operations in _paths().values() for method in operations}
+
+    assert declared <= KNOWN_METHODS
+
+
+def test_every_operation_has_its_own_id():
+    """The generated client (`client/`) names one module per `operationId`: two operations
+    sharing an id collapse into one module, and the survivor answers for both — a form posting
+    to the collapsed method calls the wrong one. FastAPI's default id is one per *route*, not
+    per operation — suffixed with one arbitrary member of the route's own method set — so a
+    single `api_route(methods=[...])` decorator carrying more than one method gives every
+    operation on it the same id."""
+    ids = [
+        operation["operationId"]
+        for operations in _paths().values()
+        for operation in operations.values()
+    ]
+    duplicates = {operation_id for operation_id, count in Counter(ids).items() if count > 1}
+
+    assert duplicates == set()
 
 
 def test_every_json_face_declares_its_schema():

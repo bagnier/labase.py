@@ -238,6 +238,9 @@ the dev stack, 544xx the test one — see Parallel work below).
 
 Notes:
 
+- **Host-side scripts against `.env`** — `make db-seed`, `make preflight` and `make backup-storage`
+  default to `.env` and run on the host rather than in `docker compose`, so `host.docker.internal`
+  would not resolve; they rewrite it to `127.0.0.1` before reading settings.
 - **Front-end assets** — `static/` is gitignored; re-run `make install` after adding a
   Tailwind class (unused ones are purged) or bumping a `package.json` dependency.
 - **`COOKIES_SECURE=false`** is required over plain HTTP. Otherwise session cookies get

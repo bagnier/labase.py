@@ -10,6 +10,7 @@ import uuid
 import pytest
 import pytest_asyncio
 
+from apps.auth.tests.given_helpers import create_user, delete_user
 from apps.files.contract.integration import _seed_welcome
 from apps.shared.persistence import database as db
 from apps.shared.persistence.storage import admin_storage, bucket
@@ -46,5 +47,31 @@ async def test_a_seeder_whose_owner_is_already_gone_is_a_clean_no_op():
             stranded = await _objects_under(ghost_org)
             if stranded:  # a red run leaves the very blob this test is about
                 await admin_storage().from_(bucket()).remove([f"{ghost_org}/{n}" for n in stranded])
+
+    assert stranded == []
+
+
+@pytest.mark.asyncio
+async def test_a_seeder_whose_org_is_already_gone_strands_no_object():
+    """Regression (#75): the owner check alone let the seeder past a vanished *org* — the
+    upload landed in Storage before the insert failed on the org's own foreign key, and the
+    rollback that follows undoes the row but not the object it already wrote."""
+    owner_id = create_user(f"{uuid.uuid4()}@welcome-seeding.local", "Test1234!")
+    ghost_org = uuid.uuid7()  # never created
+
+    try:
+        async with db.admin_session_factory()() as session:
+            try:
+                await _seed_welcome(session, ghost_org, uuid.UUID(owner_id))
+            finally:
+                stranded = await _objects_under(ghost_org)
+                if stranded:  # a red run leaves the very blob this test is about
+                    await (
+                        admin_storage()
+                        .from_(bucket())
+                        .remove([f"{ghost_org}/{n}" for n in stranded])
+                    )
+    finally:
+        delete_user(owner_id)
 
     assert stranded == []

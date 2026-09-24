@@ -12,7 +12,7 @@ from apps.learning.domain.models import (
     DeckSubscription,
     Schedule,
 )
-from apps.shared.persistence.repository import count_where
+from apps.shared.persistence.repository import OrgScopedRepository, count_where
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,34 @@ class CatalogRow:
     deck: Deck
     card: Card
     state: CardState | None
+
+
+class DeckRepository(OrgScopedRepository[Deck]):
+    model = Deck
+    default_order = Deck.created_at.desc()
+
+    async def by_name(self, name: str) -> Deck | None:
+        return await self.session.scalar(
+            select(Deck).where(Deck.org_id == self.org_id, Deck.name == name)
+        )
+
+    async def recent(self, limit: int) -> list[Deck]:
+        """This org's `limit` newest decks — a bounded query, never `all()` sliced after the
+        fact, so a large org's overview card costs `limit` rows, not every deck it has.
+
+        Tiebreaks on `id` (UUIDv7, minted in creation order): `created_at` alone is not a total
+        order — decks created in the same request, or under a pinned test clock, share an exact
+        timestamp, and `ORDER BY … LIMIT` over a tie is free to return any of them, chosen by
+        whichever plan Postgres picks rather than by the query.
+        """
+        return list(
+            await self.session.scalars(
+                select(Deck)
+                .where(Deck.org_id == self.org_id)
+                .order_by(Deck.created_at.desc(), Deck.id.desc())
+                .limit(limit)
+            )
+        )
 
 
 class LearningRepository:
@@ -34,11 +62,10 @@ class LearningRepository:
         self.session = session
         self.org_id = org_id
         self.user_id = user_id
+        self._decks = DeckRepository(session, org_id)
 
     async def get_deck_by_name(self, name: str) -> Deck | None:
-        return await self.session.scalar(
-            select(Deck).where(Deck.org_id == self.org_id, Deck.name == name)
-        )
+        return await self._decks.by_name(name)
 
     async def get_card_by_external(self, external_id: str) -> Card | None:
         return await self.session.scalar(

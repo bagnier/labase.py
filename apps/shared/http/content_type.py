@@ -18,11 +18,18 @@ def is_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request") == "true"
 
 
+def is_history_restore(request: Request) -> bool:
+    """True on htmx's history restore — it also sends ``HX-Request``, but replaces the body."""
+    return request.headers.get("HX-History-Restore-Request") == "true"
+
+
 def wants_full_page(request: Request) -> bool:
     """True when the response is a standalone HTML page (not JSON, not an HTMX swap).
 
-    Only full pages extend base.html and therefore need the fullpage slices.
+    Only full pages extend base.html and therefore need the fullpage slices. A history
+    restore carries ``HX-Request`` too, but htmx swaps it into the whole body, so it needs
+    the full page rather than a fragment.
     """
     if wants_json(request):
         return False
-    return not is_htmx(request)
+    return not is_htmx(request) or is_history_restore(request)

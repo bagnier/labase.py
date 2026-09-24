@@ -22,6 +22,7 @@ from apps.auth.contract.admin import (
     LastAdminViolation,
     ensure_not_last_admin,
     list_server_admins,
+    lock_last_admin_guard,
 )
 from apps.auth.contract.current import AuthenticatedUser, CurrentUser, RlsSession
 from apps.auth.contract.deletion import disable_account
@@ -252,7 +253,7 @@ async def _profile_context(
             current_user.id, current_user.email, handle_enabled=profile_settings.handle_enabled
         )
         context = await fullpage_context(session, current_user)
-        orgs = context["org_nav"]
+        orgs = context.get("org_nav", [])
         handles = {o.id: o.handle for o in orgs}
         counts = await EventRepository(session).daily_counts(user_id=current_user.id)
         activity = await _activity_context(session, current_user.id, handles)
@@ -363,7 +364,7 @@ async def profile_activity(
     Load-older all re-render it. API callers get the same feed as JSON."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     context = await fullpage_context(session, current_user)
-    handles = {o.id: o.handle for o in context["org_nav"]}
+    handles = {o.id: o.handle for o in context.get("org_nav", [])}
     ctx = await _activity_context(
         session, current_user.id, handles, q=q, app=app, from_dt=from_dt, to_dt=to_dt, limit=limit
     )
@@ -615,6 +616,10 @@ async def account_delete(
             error = "Current password is incorrect."
 
     if error is None:
+        # Serializes against a concurrent console revoke (or another self-deletion) racing the
+        # same invariant through a different gate (issue #36) — held on admin_session, released
+        # at its commit below.
+        await lock_last_admin_guard(admin_session)
         # The JWT's ``is_admin`` claim can be stale (a promotion lands in it only on the next
         # sign-in), so the target's actual status is read fresh, the same way the console's own
         # revoke path does.
