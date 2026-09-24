@@ -41,6 +41,18 @@ Feature: User management
     And a visitor signs in with email "member@labase.dev" and password "Test1234!"
     Then they are on their profile page
 
+  # A self-revoke leaves the acting admin's own session still carrying the admin claim (the JWT
+  # only drops it on the next sign-in) — disabling the server's one remaining acting admin from
+  # that stale session must be refused the same way deleting or revoking it already is.
+  Scenario: An admin who just revoked their own rights cannot disable the last acting admin
+    Given the server has no admin yet
+    And a server admin is signed in as "root@example.com"
+    And "bob@example.com" is a server admin
+    When the admin revokes the server admin rights of "root@example.com"
+    And the admin tries to disable the account "bob@example.com"
+    Then the action is forbidden
+    And the account "bob@example.com" is not disabled
+
   # Delete
 
   Scenario: Deleting an account from the console closes its access

@@ -115,7 +115,7 @@ async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> N
     if event.user_id is None:
         return
     directory = await list_server_admins()
-    if any(u.is_admin for u in directory):
+    if any(u.can_act for u in directory):
         return
     if all(u.user_id != event.user_id for u in directory):
         log.info("bootstrap_first_admin.actor_gone", user_id=event.user_id)

@@ -118,6 +118,30 @@ def _done(request: Request, message: str) -> Response:
     return RedirectResponse("/console/accounts", status_code=status.HTTP_303_SEE_OTHER)
 
 
+async def _guard_last_admin(
+    admin_session: AdminSession, current_user_id: uuid.UUID, user_id: str
+) -> None:
+    """Refuses disable/delete when the target is the server's one remaining admin who can act —
+    shared so the console's two ways of taking an admin out of action (ban, delete) read the
+    invariant off one copy. Takes the lock itself, serializing against a concurrent self-deletion
+    (apps/profile) or the other console route racing the same invariant through a different gate
+    (issue #36) — released whenever ``admin_session``'s transaction ends, whether that is an
+    explicit commit below or the session dependency's teardown.
+    """
+    await lock_last_admin_guard(admin_session)
+    admins = await list_server_admins()
+    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.can_act for u in admins)
+    try:
+        ensure_not_last_admin(
+            removes_admin=True,
+            target_is_admin=target_is_admin,
+            admin_count=sum(1 for u in admins if u.can_act),
+        )
+    except LastAdminViolation as exc:
+        log.warning("settings.last_admin_violation", user_id=str(current_user_id), target=user_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
 # The gating mutation itself lives in GoTrue, so these handlers hold no transaction of their own —
 # but they take one anyway, for the fact: on a session the write either lands or fails loudly with
 # the request, instead of being swallowed by a detached best-effort task.
@@ -131,6 +155,7 @@ async def disable_user(
 ) -> Response:
     _ensure_enabled(users_settings)
     _self_guard(current_user.id, user_id)
+    await _guard_last_admin(admin_session, current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
     await events.emit(
@@ -166,21 +191,7 @@ async def delete_user(
 ) -> Response:
     _ensure_enabled(users_settings)
     _self_guard(current_user.id, user_id)
-    # Serializes against a concurrent self-deletion (apps/profile) or another console delete
-    # racing the same invariant through a different gate (issue #36) — held on admin_session,
-    # released at its commit below.
-    await lock_last_admin_guard(admin_session)
-    admins = await list_server_admins()
-    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.can_act for u in admins)
-    try:
-        ensure_not_last_admin(
-            removes_admin=True,
-            target_is_admin=target_is_admin,
-            admin_count=sum(1 for u in admins if u.can_act),
-        )
-    except LastAdminViolation as exc:
-        log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=user_id)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    await _guard_last_admin(admin_session, current_user.id, user_id)
     await events.emit(
         AccountDeletedByAdmin(user_id=current_user.id, entity_id=uuid.UUID(user_id)), admin_session
     )

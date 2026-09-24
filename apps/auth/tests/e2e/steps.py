@@ -251,6 +251,16 @@ def step_enable_account(driver, email):
     driver.set_account_state(email, "enable")
 
 
+@when(parsers.parse('the admin tries to disable the account "{email}"'))
+def step_try_disable_account(driver, email):
+    driver.try_disable_account(email)
+
+
+@then(parsers.parse('the account "{email}" is not disabled'))
+def step_assert_account_not_disabled(driver, email):
+    driver.assert_account_not_disabled(email)
+
+
 @when(parsers.parse('the admin deletes the account "{email}"'))
 def step_delete_account_console(driver, email):
     driver.set_account_state(email, "delete")
