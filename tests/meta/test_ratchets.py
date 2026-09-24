@@ -86,7 +86,6 @@ _DEFENSIVE_READS = [
     "apps/shared/http/exceptions.py::handle_http_error or {}",
     "apps/shared/http/limiter.py::_increment or 0",
     "apps/shared/http/templates.py::<module> cast",
-    "apps/shared/logs/repository.py::LogRepository.purge or 0",
     "apps/shared/logs/repository.py::LogRepository.roll or 0",
     'apps/shared/logs/repository.py::_columns or ""',
     'apps/shared/logs/repository.py::_columns or ""',
