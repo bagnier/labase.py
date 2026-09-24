@@ -192,6 +192,7 @@ _E2E_DOUBLES = {
     "tests/e2e/drivers/test_browser_launch.py": 3,
     "tests/plugin.py": 1,
     "tests/test_envfile.py": 2,
+    "tests/test_promote_admin.py": 2,
 }
 
 # The API driver re-routes the two raw session dependencies onto the scenario's rolled-back

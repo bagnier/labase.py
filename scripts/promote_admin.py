@@ -13,6 +13,7 @@ import argparse
 import os
 import secrets
 import sys
+from pathlib import Path
 
 import httpx
 
@@ -20,9 +21,12 @@ os.environ.setdefault("ENV_FILE", ".env")
 
 from apps.auth.tests.given_helpers import create_user, find_users, set_admin_role
 from apps.shared.settings.env import get_technical_settings
+from scripts.envfile import apply_host_overrides
 
 
 def promote_admin(email: str, password: str | None) -> None:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.environ["ENV_FILE"]))
     existing = find_users(email)
     if existing:
         uid = existing[0].id

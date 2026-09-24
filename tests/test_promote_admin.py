@@ -13,12 +13,31 @@ its silences cost a round trip:
 Both are things the script knows and does not say, which is the only reason they are bugs.
 """
 
+import os
 from unittest.mock import patch
 
 import httpx
 import pytest
 
 from scripts import promote_admin as pa
+
+
+def test_promoting_rewrites_a_docker_only_env_file_to_the_host(tmp_path, monkeypatch):
+    """Run from the host against a Docker-shaped ``.env``, the same rewrite `db-seed`,
+    `preflight` and `backup-storage` apply — SUPABASE_API_URL reachable at 127.0.0.1 —
+    instead of dying on `host.docker.internal`, which resolves only inside the app container."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("SUPABASE_API_URL=http://host.docker.internal:54321\n")
+    monkeypatch.setenv("ENV_FILE", str(env_file))
+    monkeypatch.delenv("SUPABASE_API_URL", raising=False)
+
+    with (
+        patch.object(pa, "find_users", return_value=[type("U", (), {"id": "uid-1"})()]),
+        patch.object(pa, "set_admin_role"),
+    ):
+        pa.promote_admin("az@az", None)
+
+    assert os.environ["SUPABASE_API_URL"] == "http://127.0.0.1:54321"
 
 
 def test_promoting_says_the_claim_only_lands_on_the_next_sign_in(capsys):
