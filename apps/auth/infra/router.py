@@ -13,7 +13,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from supabase_auth.errors import AuthApiError, AuthWeakPasswordError
+from supabase_auth.errors import AuthError, AuthWeakPasswordError
 
 from apps.auth.application import register_user
 from apps.auth.contract.current import CurrentAdmin, CurrentUser, OptionalCurrentUser
@@ -121,7 +121,7 @@ def _format_weak_password_reasons(reasons: list[str]) -> str:
     return ", ".join(labels) if labels else "requirements not met"
 
 
-def _friendly_auth_error(e: AuthApiError) -> str:
+def _friendly_auth_error(e: AuthError) -> str:
     code = str(e.code) if e.code else ""
     msg = _AUTH_ERROR_MESSAGES.get(code, e.message)
     return msg.strip('"')
@@ -264,47 +264,46 @@ async def login_endpoint(
         resp = RedirectResponse(_safe_next(next), status_code=status.HTTP_303_SEE_OTHER)
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
-    except AuthApiError as e:
+    except AuthError as e:
+        # is_refusal(e) settles refusal vs. breakage from the status GoTrue actually answered
+        # with, never from which AuthError subclass carried it — a 500 with a JSON body earns
+        # the same breakage answer as a 502/503/504 or a body-less 500.
         if is_refusal(e):
             # Not a business fact: nothing happened, and the subject may not even be an
             # account. ``warning``, not the ``info`` a refusal would otherwise earn: this is a
             # signal about a *caller*, and a run of these is what brute force looks like.
             log.warning("auth.login_failed", email=email, ip=ip)
-        else:
-            # GoTrue answering 500 is not a routine "no" but the dependency breaking, which
-            # takes the same capture path as any other broken dependency — log.exception
-            # directly, since is_refusal(e) already settled the verdict above.
-            # (AGENTS: a broken dependency is a bug, a refusal is not)
-            log.exception("auth.login_failed", exc_info=e, email=email, ip=ip)
-        code = str(e.code) if e.code else ""
-        error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
-        # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
-        offer_resend = code == "email_not_confirmed" and bool(
-            users_settings.resend_confirmation_enabled
-        )
-        return _error_response(
-            request,
-            "login.html",
-            error,
-            status.HTTP_401_UNAUTHORIZED,
-            email=email,
-            next=next,
-            resend_email=offer_resend and email,
-        )
+            code = str(e.code) if e.code else ""
+            error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
+            # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
+            offer_resend = code == "email_not_confirmed" and bool(
+                users_settings.resend_confirmation_enabled
+            )
+            return _error_response(
+                request,
+                "login.html",
+                error,
+                status.HTTP_401_UNAUTHORIZED,
+                email=email,
+                next=next,
+                resend_email=offer_resend and email,
+            )
+        # GoTrue breaking rather than refusing takes the same capture path as any other broken
+        # dependency. (AGENTS: a broken dependency is a bug, a refusal is not)
+        log.exception("auth.login_failed", exc_info=e, email=email, ip=ip)
     except Exception as exc:
-        # Not the dependency verdict, unlike the thin GoTrue wrappers below: this ``try`` holds
-        # the whole sign-in — the journal write, the cookies, the redirect — so what lands here is
-        # as likely to be our own code as GoTrue's. Judging it by "did the dependency refuse?"
-        # would let an exception that happens to carry a 4xx pass as an ordinary outcome.
-        log.exception("auth.login_error", exc_info=exc, ip=ip, email=email)
-        return _error_response(
-            request,
-            "login.html",
-            "A system error occurred. Please try again later.",
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            email=email,
-            next=next,
-        )
+        # Not the dependency verdict, unlike the GoTrue wrapper above: this ``try`` holds the
+        # whole sign-in — the journal write, the cookies, the redirect — so what lands here is
+        # our own code breaking, always an issue.
+        log.exception("auth.login_error", exc_info=exc, email=email, ip=ip)
+    return _error_response(
+        request,
+        "login.html",
+        "A system error occurred. Please try again later.",
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        email=email,
+        next=next,
+    )
 
 
 _MFA_COOKIE = "mfa_access_token"
@@ -641,13 +640,18 @@ async def register_endpoint(
         return redirect
     except AuthWeakPasswordError as e:
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
-    except AuthApiError as e:
-        error = _friendly_auth_error(e)
+    except AuthError as e:
+        # is_refusal(e) settles refusal vs. breakage from the status GoTrue actually answered
+        # with, never from which AuthError subclass carried it, like login above.
+        code = str(e.code) if e.code else ""
         if is_refusal(e):
-            log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
+            error = _friendly_auth_error(e)
+            log.warning("auth.register_failed", ip=ip, email=email, code=code)
         else:
-            log.exception("auth.register_failed", exc_info=e, ip=ip, email=email, code=str(e.code))
-
+            # GoTrue breaking rather than refusing takes the same capture path as any other
+            # broken dependency. (AGENTS: a broken dependency is a bug, a refusal is not)
+            log.exception("auth.register_failed", exc_info=e, ip=ip, email=email, code=code)
+            error = "An unexpected error occurred."
     except Exception as exc:
         # Our own code as much as GoTrue's, like login above — always an issue, never a refusal.
         log.exception("auth.register_error", exc_info=exc, ip=ip, email=email)
