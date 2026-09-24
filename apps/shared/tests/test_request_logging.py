@@ -159,11 +159,18 @@ def test_an_asset_the_browser_fetched_itself_leaves_no_line(log_chain):
 
 # A liveness/readiness probe is silent while healthy — it is not traffic an admin needs to see on
 # every tick — but a 503 answer is the database going down at the exact moment the Timeline is read
-# for it, and that is not ours to swallow.
+# for it, and that is not ours to swallow. These four hold only the health-probe half of the
+# claims.py entry "health-probe-exemption" (quoting AGENTS.md's "what the browser fetched by
+# itself leaves nothing unless it 5xx'd"): the browser-fetched-asset half is a separate,
+# code-only reading of the same sentence, not bound here.
 
 
 def test_a_healthy_readiness_probe_leaves_no_line(log_chain):
     assert _levels_for(log_chain, "/health/ready", 200) == []
+
+
+def test_a_healthy_liveness_probe_leaves_no_line(log_chain):
+    assert _levels_for(log_chain, "/health/live", 200) == []
 
 
 def test_a_failing_readiness_probe_is_traced_at_error(log_chain):

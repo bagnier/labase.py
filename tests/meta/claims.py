@@ -92,6 +92,7 @@ from apps.shared.tests.test_request_logging import (
     test_a_failing_liveness_probe_is_traced_at_error,
     test_a_failing_readiness_probe_is_traced_at_error,
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+    test_a_healthy_liveness_probe_leaves_no_line,
     test_a_healthy_readiness_probe_leaves_no_line,
     test_a_raising_observer_never_replaces_the_handlers_own_exception,
 )
@@ -1109,6 +1110,7 @@ CLAIMS = [
         "health-probe-exemption",
         "what the browser fetched by itself leaves nothing unless it 5xx'd",
         test_a_healthy_readiness_probe_leaves_no_line,
+        test_a_healthy_liveness_probe_leaves_no_line,
         test_a_failing_readiness_probe_is_traced_at_error,
         test_a_failing_liveness_probe_is_traced_at_error,
     ),
