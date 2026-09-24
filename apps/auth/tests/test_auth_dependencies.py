@@ -489,10 +489,7 @@ def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
 
 def test_login_refusal_still_warns_instead_of_opening_an_issue(driver):
     # Holds the other side of the branch above: a routine 4xx refusal (wrong password) keeps
-    # earning the brute-force warning, not the capture path the 5xx case earns. The warning now
-    # sits in the same broad ``except`` as the breakage path (#104), so it carries exc_info too —
-    # the AST rule in tests/meta/test_capture_sites.py holds that for every level, not only
-    # ``exception``.
+    # earning the brute-force warning, not the capture path the 5xx case earns.
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Invalid login credentials", 400, "invalid_credentials")
     with (
@@ -502,9 +499,7 @@ def test_login_refusal_still_warns_instead_of_opening_an_issue(driver):
         response = driver.client().post("/auth/login", data=creds)
     assert response.status_code == 401
     log.exception.assert_not_called()
-    log.warning.assert_called_once_with(
-        "auth.login_failed", exc_info=err, email="x@test.local", ip="127.0.0.1"
-    )
+    log.warning.assert_called_once_with("auth.login_failed", email="x@test.local", ip="127.0.0.1")
 
 
 def test_register_refusal_still_warns_instead_of_opening_an_issue(driver):
@@ -518,11 +513,7 @@ def test_register_refusal_still_warns_instead_of_opening_an_issue(driver):
     assert response.status_code == 400
     log.exception.assert_not_called()
     log.warning.assert_called_once_with(
-        "auth.register_failed",
-        exc_info=err,
-        ip="127.0.0.1",
-        email="x@test.local",
-        code="user_already_exists",
+        "auth.register_failed", ip="127.0.0.1", email="x@test.local", code="user_already_exists"
     )
 
 
