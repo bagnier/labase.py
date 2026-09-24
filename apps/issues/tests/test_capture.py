@@ -117,28 +117,33 @@ async def test_a_failing_contribution_provider_is_tracked_as_an_issue():
 
 
 @pytest.mark.asyncio
-async def test_drain_does_not_recurse_when_a_tracker_fails():
-    """The reentrancy guard: a failing tracker must not re-enqueue its own failure."""
+async def test_a_failing_tracker_becomes_an_issue_of_its_own():
+    """The reentrancy guard stops a tracker's *own* ordinary logging from feeding the queue back
+    to itself — it must not also make a broken tracker invisible. Its exception is queued for the
+    next tick and lands as an issue like any other."""
     marker = f"capture-test-{uuid.uuid4().hex}"
+    tracker_failure = f"tracker itself is down {marker}"
 
     async def failing_tracker(_captured: ExceptionCaptured) -> None:
-        raise RuntimeError("tracker itself is down")
+        raise RuntimeError(tracker_failure)
 
     capture.on_captured(failing_tracker)
+    log = structlog.get_logger(_PROBE_LOGGER)
     try:
-        log = structlog.get_logger(_PROBE_LOGGER)
         try:
             raise ValueError(marker)
         except ValueError:
             log.exception("test.capture_probe")
-        assert len(capture._QUEUE) == 1
-        await CaptureDrain(0).tick()  # failing_tracker logs under the guard → no re-enqueue
-        assert not capture._QUEUE, "the guard must stop the drain from feeding itself"
+        await CaptureDrain(0).tick()
+        assert len(capture._QUEUE) == 1, "the tracker's own failure waits for the next tick"
     finally:
         capture._trackers.remove(failing_tracker)
 
-    # The real tracker still ran alongside the failing one, so the issue landed.
+    await CaptureDrain(0).tick()  # only the real tracker runs now
+
+    # The original exception landed, and so did the tracker's own failure — each its own issue.
     assert await _issue_titled(marker) is not None
+    assert await _issue_titled(tracker_failure) is not None
 
 
 @pytest.mark.asyncio

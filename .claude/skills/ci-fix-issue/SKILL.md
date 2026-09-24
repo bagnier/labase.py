@@ -16,6 +16,9 @@ disable-model-invocation: true
 
 This skill closes one issue and nothing else.
 
+What it writes into the repository is in English — the pull request, its body, every comment,
+the commit message — whatever language the issue it answers is written in.
+
 
 ## The three ends of a run
 

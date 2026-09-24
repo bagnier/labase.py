@@ -109,6 +109,9 @@ _THE_SURPRISES = {
     "bootstrap_first_admin.actor_gone (apps/console/contract/integration.py)",
     "create_personal_org.actor_gone (apps/organizations/contract/integration.py)",
     "seed_org_welcome.actor_gone (apps/organizations/contract/queries.py)",
+    # The narrower half of that same race: the owner never left, but the org itself was deleted
+    # between the pre-check and the seeder's write.
+    "seed_org_welcome.org_gone (apps/organizations/contract/queries.py)",
     # An admin-role write the server took whose echoed record the SDK could not parse (an
     # anonymized identity): the action landed, and this explains the missing confirmation.
     "set_server_admin.record_unreadable (apps/auth/infra/user_repository.py)",
@@ -122,6 +125,8 @@ _THE_SURPRISES = {
     "<caller-supplied> (apps/shared/logs/loop.py)",
     # A request whose SQL crossed a threshold, naming the statements that cost the time.
     "db.heavy_request (apps/shared/persistence/sql_stats.py)",
+    # A capture tracker succeeding again after a run of failures, carrying how many it lost.
+    "capture.tracker_recovered (apps/shared/logs/capture.py)",
     # A production boot with a non-blocking preflight finding — a configuration observation,
     # not something the code absorbed or refused, but still not the sound-config happy path.
     "preflight.finding (apps/shared/settings/preflight.py)",

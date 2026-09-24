@@ -8,7 +8,7 @@ one takes a restart, which is what a deployment-owned value should cost. Its sib
 import os
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, PositiveInt, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The interval of a per-process background loop, in seconds — ``0`` disables that loop.
@@ -80,6 +80,10 @@ class TechnicalSettings(BaseSettings):
     smtp_starttls: bool = False
     # The catcher's HTTP API, beside its SMTP port: read by the e2e mailbox and `make doctor`.
     mailpit_url: str = "http://127.0.0.1:54324"
+    # Page length `scripts/backup_storage.py` requests per Storage `list` call while paging a
+    # folder to its end. `0` would never grow the offset past an empty page: a positive int
+    # rules that out at the type rather than a boot check only this script would run.
+    backup_storage_page_size: PositiveInt = 1000
 
     @model_validator(mode="after")
     def _default_storage_url(self) -> TechnicalSettings:

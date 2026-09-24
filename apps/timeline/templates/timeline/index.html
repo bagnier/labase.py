@@ -153,9 +153,10 @@
                        href="/console/timeline?sort={{ col }}&dir={{ 'asc' if sort == col and dir == 'desc' else 'desc' }}&bucket={{ grain }}{{ '&' ~ export_qs if export_qs }}">
                       {{ label }}
                       {% if sort == col %}
-                        <span aria-hidden="true">{{ "▼" if dir == "desc" else "▲" }}</span>
+                        <i class="ph {{ 'ph-caret-down' if dir == 'desc' else 'ph-caret-up' }} ph-4"
+                           aria-hidden="true"></i>
                       {% else %}
-                        <span class="opacity-30" aria-hidden="true">▲▼</span>
+                        <i class="ph ph-caret-up-down ph-4 opacity-30" aria-hidden="true"></i>
                       {% endif %}
                     </a>
                   </th>

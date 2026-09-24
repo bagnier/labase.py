@@ -11,7 +11,7 @@ from apps.metrics.domain.accumulator import accumulator
 from apps.metrics.domain.models import LoadPage, LoadPoint
 from apps.metrics.infra.repository import window_rows
 from apps.shared import clock
-from apps.shared.http import json_and_html, wants_json
+from apps.shared.http import is_htmx, json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.persistence.database import AdminSession
@@ -41,7 +41,7 @@ async def load_screen(
 
     # A drill on the chart reloads only the totals + routes for the brushed range; the
     # chart itself (the full window) stays put as the navigation surface.
-    if request.headers.get("hx-request"):
+    if is_htmx(request):
         return templates.TemplateResponse(
             request,
             "metrics/_detail.html",

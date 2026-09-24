@@ -1,5 +1,6 @@
-"""A resend answers the same way for a known and an unknown address (no enumeration), but only an
-address with an account is where anything happened — only what happened is a fact."""
+"""A resend answers the same way for a known and an unknown address (no enumeration), but only a
+resend that actually reaches an inbox is where anything happened — only what happened is a
+fact."""
 
 from unittest.mock import patch
 
@@ -32,6 +33,14 @@ def test_a_resend_to_an_unconfirmed_account_records_its_fact(driver):
     driver.resend_confirmation_to("pending-fact@example.com")
 
     assert _confirmation_resent_facts(driver) == ["pending-fact@example.com"]
+
+
+def test_a_resend_to_an_already_confirmed_account_records_no_fact(driver):
+    driver.register_confirmed("already-confirmed@example.com", "Test1234!")
+
+    driver.resend_confirmation_to("already-confirmed@example.com")
+
+    assert _confirmation_resent_facts(driver) == []
 
 
 def test_an_address_with_no_account_still_costs_the_gotrue_call(driver):

@@ -44,13 +44,21 @@ def create_org_for_user(name: str, user_id: str) -> dict:
 
     Committed outside any transaction — Supabase Storage RLS needs the org in the committed DB.
     Returns {"id": str, "handle": str}.
+
+    Marked ``is_personal``: this stands in for the org every account gets at sign-up, for a user
+    created straight through the admin API rather than ``/auth/register``. Left unmarked, a later
+    ``drain_task_queue()`` (any scenario's, not just this one's — the listener fans out whatever
+    is pending) would deliver this user's own ``UserCreated`` and seed a second org for them, live
+    only on the draining scenario's rolled-back connection — invisible to `run_sql`'s separate,
+    committed one, so the next raw-SQL write naming it fails its foreign key.
     """
     from apps.shared.integration.slugs import slugify
 
     handle = slugify(name) or "org"
     run_sql("delete from organizations where handle = :handle", {"handle": handle})
     rows = run_sql(
-        "insert into organizations (name, handle) values (:name, :handle) returning id::text as id",
+        "insert into organizations (name, handle, is_personal) values (:name, :handle, true)"
+        " returning id::text as id",
         {"name": name, "handle": handle},
         fetch=True,
     )

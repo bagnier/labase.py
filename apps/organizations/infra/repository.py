@@ -22,6 +22,8 @@ class OrganizationRepository(BaseRepository[Organization]):
         name: str,
         user_id: uuid.UUID,
         suggested_handle: str | None = None,
+        *,
+        is_personal: bool = False,
     ) -> Organization:
         base = suggested_handle or slugify(name)
         if not base:
@@ -30,8 +32,15 @@ class OrganizationRepository(BaseRepository[Organization]):
         org_id = uuid.uuid7()
         # One statement for both rows: the database hands out ownership only with a new org.
         await self.session.execute(
-            text("SELECT create_org_with_owner(:id, :name, :handle, :owner, :at)"),
-            {"id": org_id, "name": name, "handle": handle, "owner": user_id, "at": clock.now()},
+            text("SELECT create_org_with_owner(:id, :name, :handle, :owner, :at, :is_personal)"),
+            {
+                "id": org_id,
+                "name": name,
+                "handle": handle,
+                "owner": user_id,
+                "at": clock.now(),
+                "is_personal": is_personal,
+            },
         )
         return await self.session.get_one(Organization, org_id)
 
@@ -42,6 +51,19 @@ class OrganizationRepository(BaseRepository[Organization]):
             .where(
                 Membership.user_id == user_id,
                 Membership.role == OrgRole.owner,
+            )
+        )
+        return result.scalar_one()
+
+    async def count_personal_owned_by(self, user_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Membership)
+            .join(Organization, Organization.id == Membership.org_id)
+            .where(
+                Membership.user_id == user_id,
+                Membership.role == OrgRole.owner,
+                Organization.is_personal.is_(True),
             )
         )
         return result.scalar_one()

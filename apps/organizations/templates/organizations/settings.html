@@ -26,8 +26,7 @@
              aria-label="Naming"
              data-tab="naming"
              checked />
-      <div role="tabpanel"
-           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+      <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
           <section class="card-panel">
             <div class="card-body space-y-4">
@@ -127,10 +126,7 @@
              class="tab"
              aria-label="Members"
              data-tab="members" />
-      <div role="tabpanel"
-           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
-        {% include "organizations/_members_panel.html" %}
-      </div>
+      <div role="tabpanel" class="tab-content tab-panel">{% include "organizations/_members_panel.html" %}</div>
       {# ── API keys (and any other app-contributed sections) ──────────────── #}
       <input type="radio"
              name="org-settings-tabs"
@@ -138,8 +134,7 @@
              class="tab"
              aria-label="API keys"
              data-tab="api-keys" />
-      <div role="tabpanel"
-           class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
+      <div role="tabpanel" class="tab-content tab-panel">
         {% if settings_sections %}
           <div class="space-y-6">
             {% for section in settings_sections %}

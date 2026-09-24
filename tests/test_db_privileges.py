@@ -45,7 +45,8 @@ _TABLE_GRANTS = {
     ("authenticated", "org_file_share_tokens", "INSERT"),
     ("authenticated", "org_file_share_tokens", "SELECT"),
     ("authenticated", "organizations", "SELECT"),
-    ("authenticated", "organizations", "UPDATE"),
+    # UPDATE is column-scoped (name, handle, timezone, version), not table-wide — see
+    # test_authenticated_cannot_set_is_personal_through_postgrest.
 }
 
 _FUNCTION_GRANTS = {
@@ -148,6 +149,24 @@ async def test_api_roles_execute_only_the_functions_migrations_grant(
     granted = {tuple(row) for row in rows}
 
     assert granted == _FUNCTION_GRANTS
+
+
+@pytest.mark.asyncio
+async def test_authenticated_cannot_set_is_personal_through_postgrest(admin_conn: AsyncConnection):
+    """``is_personal`` is stamped once by ``create_org_with_owner`` (SECURITY DEFINER); a raw
+    PostgREST client wielding the JWT must not be able to write it directly — flipping it on a
+    team org would forever dodge the personal-org guard, flipping it off would let a redelivered
+    ``UserCreated`` duplicate the real one."""
+    rows = await admin_conn.execute(
+        text(
+            "select has_column_privilege('authenticated', 'public.organizations',"
+            " 'is_personal', 'UPDATE')"
+        )
+    )
+
+    can_update = rows.scalar_one()
+
+    assert can_update is False
 
 
 @pytest.mark.asyncio
