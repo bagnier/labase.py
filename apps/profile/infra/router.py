@@ -95,7 +95,7 @@ from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings.env import get_technical_settings
-from apps.shared.settings.live import SettingsView, get_settings
+from apps.shared.settings.live import SettingsView
 
 log = structlog.get_logger(__name__)
 
@@ -222,7 +222,13 @@ async def _activity_context(
 
 
 async def _profile_context(
-    request: Request, session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
+    request: Request,
+    session: RlsSession,
+    current_user: CurrentUser,
+    repo: ProfileRepository,
+    *,
+    profile_settings: SettingsView,
+    users_settings: SettingsView,
 ) -> dict:
     """The page context, assembled outside DI: profile routes carry no org, so the server view is
     the effective one.
@@ -232,8 +238,6 @@ async def _profile_context(
     they overlap each other *and* the sequential DB work below, rather than serializing three waits
     on the critical path of the site's busiest HTML page.
     """
-    profile_settings = get_settings("profile").view()
-    users_settings = get_settings("users").view()
     access_token = request.cookies.get("access_token", "")
 
     two_factor_enabled = bool(users_settings.two_factor_enabled)
@@ -307,13 +311,22 @@ async def _profile_error(
     current_user: CurrentUser,
     repo: ProfileRepository,
     *,
+    profile_settings: SettingsView,
+    users_settings: SettingsView,
     key: str,
     message: str,
     status_code: int = 400,
 ) -> Response:
     if wants_json(request):
         return JSONResponse({"detail": message}, status_code=status_code)
-    ctx = await _profile_context(request, session, current_user, repo)
+    ctx = await _profile_context(
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
+    )
     ctx[key] = message
     return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
 
@@ -325,6 +338,7 @@ async def profile_page(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if wants_json(request):
         profile = await repo.get_with_auto_handle(
@@ -333,7 +347,14 @@ async def profile_page(
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(request, session, current_user, repo)
+    ctx = await _profile_context(
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
+    )
     flash = request.query_params.get("flash")
     if flash in _PROFILE_FLASHES:
         key, message = _PROFILE_FLASHES[flash]
@@ -381,6 +402,8 @@ async def password_change(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     current_password, new_password = body.current_password, body.new_password
     error: str | None = None
@@ -401,7 +424,14 @@ async def password_change(
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="password_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="password_error",
+            message=error,
         )
 
     await events.emit(PasswordChanged(user_id=current_user.id), session)
@@ -418,6 +448,7 @@ async def email_change(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.email_change_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -441,7 +472,14 @@ async def email_change(
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="email_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="email_error",
+            message=error,
         )
 
     await events.emit(EmailChangeRequested(user_id=current_user.id, new_email=new_email), session)
@@ -519,6 +557,7 @@ async def passkey_delete(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
     users_settings: UsersSettings,
 ) -> Response:
     access_token = _ensure_passkeys(users_settings, current_user)
@@ -526,7 +565,14 @@ async def passkey_delete(
         await delete_passkey(access_token, str(passkey_id))
     except PasskeyError as e:
         return await _profile_error(
-            request, session, current_user, repo, key="passkey_error", message=str(e)
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="passkey_error",
+            message=str(e),
         )
     await events.emit(PasskeyRemoved(user_id=current_user.id, entity_id=passkey_id), session)
     if wants_json(request):
@@ -540,6 +586,7 @@ async def twofa_enroll(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
     users_settings: UsersSettings,
 ) -> Response:
     access_token = _ensure_two_factor(users_settings, current_user)
@@ -547,7 +594,14 @@ async def twofa_enroll(
         enrollment = await enroll_totp(access_token)
     except TotpError as e:
         return await _profile_error(
-            request, session, current_user, repo, key="twofa_error", message=str(e)
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="twofa_error",
+            message=str(e),
         )
     if wants_json(request):
         return JSONResponse(
@@ -577,6 +631,7 @@ async def twofa_verify(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
     users_settings: UsersSettings,
 ) -> Response:
     access_token = _ensure_two_factor(users_settings, current_user)
@@ -587,7 +642,14 @@ async def twofa_verify(
     except TotpError:
         error = "That code did not work. Try the next one from your app."
         return await _profile_error(
-            request, session, current_user, repo, key="twofa_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="twofa_error",
+            message=error,
         )
     await events.emit(TwoFactorEnabled(user_id=current_user.id), session)
     response: Response = (
@@ -610,6 +672,7 @@ async def account_delete(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.account_deletion_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -644,7 +707,14 @@ async def account_delete(
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="deletion_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="deletion_error",
+            message=error,
         )
 
     await events.emit(AccountDeleted(user_id=current_user.id, entity_id=current_user.id), session)
@@ -675,6 +745,7 @@ async def avatar_upload(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -686,7 +757,14 @@ async def avatar_upload(
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="avatar_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="avatar_error",
+            message=error,
         )
 
     path = f"avatars/{current_user.id}.{ext}"
@@ -736,6 +814,7 @@ async def profile_update(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.handle_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -753,6 +832,8 @@ async def profile_update(
             session,
             current_user,
             repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="error",
             message=message,
             status_code=status_code,
@@ -764,6 +845,13 @@ async def profile_update(
         await events.emit(HandleChanged(user_id=current_user.id, new_handle=handle), session)
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(request, session, current_user, repo)
+    ctx = await _profile_context(
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
+    )
     ctx["success"] = "Profile updated."
     return templates.TemplateResponse(request, "profile.html", ctx)

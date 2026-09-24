@@ -171,6 +171,7 @@ from tests.meta.test_ratchets import (
     test_no_assertion_step_reaches_a_page_by_url,
     test_no_compensating_assert_narrows_an_annotation,
     test_no_router_reaches_the_database_itself,
+    test_no_router_reads_settings_by_string,
     test_no_state_wait_is_a_sleep,
     test_nothing_reruns_a_failing_test,
     test_the_defensive_reads_are_the_named_ones,
@@ -555,11 +556,11 @@ CLAIMS = [
         "nothing checks the shared homes",
     ),
     # ── AGENTS Integration ────────────────────────────────────────────────────────────────
-    waived(
+    held(
         "settings-dependency-per-request",
         "Handlers declare the app's `TodoSettings` dependency",
-        "test_no_contract_exports_a_settings_handle holds the negative; nothing checks that a "
-        "handler reads its settings through the dependency rather than get_settings",
+        test_no_contract_exports_a_settings_handle,
+        test_no_router_reads_settings_by_string,
     ),
     waived(
         "non-request-settings-read",
@@ -1275,4 +1276,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 58
+UNHELD_TODAY = 57
