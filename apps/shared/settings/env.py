@@ -67,6 +67,9 @@ class TechnicalSettings(BaseSettings):
     static_cache_seconds: int = 3600
     # At 0 the background writer stops, and the runtime log path drops lines rather than block.
     firehose_flush_seconds: PollSeconds = 1.0  # drain of the log queue into ``log_lines``
+    # How long the drain waits on a lock held elsewhere (e.g. a concurrent TRUNCATE) before giving
+    # up on this tick and falling back to the day files, same as a store that refuses outright.
+    log_drain_lock_timeout_seconds: float = 2.0
     # Deployed version (git SHA in Docker); drives error-tracking regression detection.
     app_version: str = "dev"
     # These defaults target the local Supabase mail catcher (Mailpit); prod sets SMTP_* to any

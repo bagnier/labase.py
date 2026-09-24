@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from sqlalchemy import text
 
 from apps.shared import clock
 from apps.shared.logs.repository import LogRepository
@@ -297,6 +298,10 @@ class LogDrain:
         if lines:
             try:
                 async with admin_session_factory()() as session:
+                    lock_timeout_ms = get_technical_settings().log_drain_lock_timeout_seconds * 1000
+                    await session.execute(
+                        text(f"SET LOCAL lock_timeout = '{round(lock_timeout_ms)}ms'")
+                    )
                     await LogRepository(session).append(lines)
                     await session.commit()
             except Exception:

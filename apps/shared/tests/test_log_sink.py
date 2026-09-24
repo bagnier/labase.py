@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 
 from apps.shared import clock
 from apps.shared.logs import sink
@@ -164,6 +165,28 @@ async def test_a_batch_the_store_refuses_lands_in_the_day_file():
         for raw in path.read_text(encoding="utf-8").splitlines()
     ]
     assert [one["event"] for one in written] == ["lost.line"]
+
+
+@pytest.mark.asyncio
+async def test_a_lock_the_drain_cannot_get_falls_back_like_a_refusal(monkeypatch, store):
+    """``log_lines`` is a table another session can hold exclusively — the e2e browser driver's
+    cross-scenario TRUNCATE (tests/e2e/cleanup.py) does exactly that. The drain must give up on a
+    lock it cannot get, the same as it gives up on a store that is down, rather than sit blocked
+    behind the holder (issue #119). The bound is the drain's own setting, pinned small here; the
+    outer guard is what fails the test when nothing bounds the wait."""
+    monkeypatch.setattr(get_technical_settings(), "log_drain_lock_timeout_seconds", 0.05)
+    _enqueue("locked.line")
+    await store.execute(text("LOCK TABLE log_lines IN ACCESS EXCLUSIVE MODE"))
+
+    async with asyncio.timeout(5):
+        await LogDrain(interval_seconds=0).tick()
+
+    written = [
+        json.loads(raw)["event"]
+        for path in fallback_dir().glob("firehose-*.jsonl")
+        for raw in path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert written == ["locked.line"]
 
 
 @pytest.mark.asyncio
