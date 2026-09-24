@@ -18,8 +18,9 @@ log = structlog.get_logger(__name__)
 # Hosts that must never appear in a production database URL.
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "host.docker.internal")
 
-# Supabase's own secret key shapes: the current `sb_secret_…` format, or a legacy
-# `service_role` key, which is a JWT and so always starts on its base64 `{"alg"` header.
+# Supabase's own secret key shapes: the current `sb_secret_…` format, or a legacy key,
+# always a JWT and so starting on its base64 `{"alg"` header — the preflight checks the
+# shape, not which role the JWT carries.
 _SUPABASE_SECRET_KEY_PREFIXES = ("sb_secret_", "eyJ")
 
 
@@ -48,10 +49,14 @@ def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]
     ):
         if any(host in url for host in _LOCAL_HOSTS):
             errors.append(f"{name} points at a local host — not a production database.")
-    if not settings.supabase_secret_key.startswith(_SUPABASE_SECRET_KEY_PREFIXES):
+    if not any(
+        settings.supabase_secret_key.startswith(prefix)
+        and len(settings.supabase_secret_key) > len(prefix)
+        for prefix in _SUPABASE_SECRET_KEY_PREFIXES
+    ):
         errors.append(
             "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a "
-            "service_role JWT."
+            "legacy JWT."
         )
 
     if not settings.is_production:

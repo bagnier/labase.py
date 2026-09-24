@@ -75,17 +75,27 @@ def test_a_local_admin_database_blocks_the_deploy():
 
 
 def test_a_malformed_secret_key_blocks_the_deploy():
-    errors, _ = check_production(_settings(supabase_secret_key="too-short"))
+    errors, _ = check_production(_settings(supabase_secret_key="sb_publishable_" + "x" * 32))
     assert errors == [
-        (
-            "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a "
-            "service_role JWT."
-        )
+        "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a legacy JWT."
+    ]
+
+
+def test_a_bare_prefix_secret_key_blocks_the_deploy():
+    errors, _ = check_production(_settings(supabase_secret_key="sb_secret_"))
+    assert errors == [
+        "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a legacy JWT."
     ]
 
 
 def test_a_short_but_well_shaped_secret_key_does_not_block_the_deploy():
     errors, _ = check_production(_settings(supabase_secret_key="sb_secret_" + "x" * 29))
+    assert errors == []
+
+
+def test_a_legacy_jwt_secret_key_does_not_block_the_deploy():
+    jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.sig"
+    errors, _ = check_production(_settings(supabase_secret_key=jwt))
     assert errors == []
 
 
