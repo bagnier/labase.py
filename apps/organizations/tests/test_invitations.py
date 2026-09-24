@@ -52,12 +52,18 @@ def test_get_invitation_unknown_token_html_returns_invalid_state(client):
         app.dependency_overrides.pop(get_admin_session, None)
 
 
-def test_get_invitation_unknown_token_html_has_main_landmark(client):
+def test_get_invitation_unknown_token_html_has_the_site_landmarks(client):
     token = uuid.uuid4()
     app.dependency_overrides[get_admin_session] = _mock_session_with(row=None)
     try:
         resp = client.get(f"/invitations/{token}", headers={"accept": "text/html"})
-        assert resp.text.count("<main") == 1
+        landmark_counts = (
+            resp.text.count("<main"),
+            resp.text.count("<header"),
+            resp.text.count('href="#main-content"'),
+            resp.text.count("<h1"),
+        )
+        assert landmark_counts == (1, 1, 1, 1)
     finally:
         app.dependency_overrides.pop(get_admin_session, None)
 
