@@ -33,7 +33,10 @@ class LogLine(Base, UUIDPk):
 
     __tablename__ = "log_lines"
 
-    ts: Mapped[Any] = mapped_column(DateTime(timezone=True))
+    # Also part of the primary key: the table is partitioned by range on `ts`, and Postgres
+    # requires the partition column in every unique key — `id` alone cannot be the key `(id, ts)`
+    # the migration declares.
+    ts: Mapped[Any] = mapped_column(DateTime(timezone=True), primary_key=True)
     level: Mapped[str]
     # The logger that wrote it — the app axis the Timeline browses by.
     logger: Mapped[str]
