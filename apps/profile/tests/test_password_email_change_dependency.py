@@ -1,6 +1,7 @@
-"""A GoTrue outage on the profile's password/email change must reach the dependency verdict
-as a bug, not be swallowed by the "wrong current password" branch, which used to catch every
-``PasswordUpdateError``/``EmailChangeError`` and log nothing (issue #106, same as #52)."""
+"""``password_change``/``email_change`` branch a ``PasswordUpdateError``/``EmailChangeError`` on
+``is_refusal``: a refusal (e.g. a weak password) keeps its own message and stays out of the
+capture seam; a break (a GoTrue outage) reaches the dependency verdict as a bug (issue #106,
+same rule as #52's ``reset_password_endpoint``)."""
 
 from unittest.mock import patch
 
