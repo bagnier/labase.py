@@ -9,11 +9,12 @@ producer no longer does — so it never knows its consumers nor waits for them:
   topic) claims its own backlog off its own durable cursor (:meth:`EventRepository.
   facts_above_cursor`) — never a flag on the record itself, which would let whichever instance
   checked a fact first foreclose it for a consumer *that instance's* wiring simply does not carry
-  (a rolling deploy; an app switched on and not yet restarted everywhere — README: `dispatch per
-  declared consumer`). A fact is dispatched to a topic on first sight and the topic's cursor only
+  (a rolling deploy; an app switched on and not yet restarted everywhere — AGENTS: dispatched
+  per declared consumer). A fact is dispatched to a topic on first sight and the topic's cursor
+  only
   advances past the contiguous *settled* prefix, so a still-unsettled retry is possible — the
   ``dispatched_consumers`` ledger is what makes that retry a no-op rather than a second task
-  (README: background work).
+  (AGENTS: Deferred work rides a durable Postgres queue).
 - **Routability, separately.** Each tick also claims un-checked records with ``FOR UPDATE SKIP
   LOCKED`` and stamps ``checked_at`` — bounding a single, unrelated concern: a fact whose ``kind``
   maps to no registered class can be routed to no one, ever, and is surfaced as an issue once.
@@ -116,8 +117,8 @@ class EventListener:
         - **routability** — claim a batch of never-checked facts (``FOR UPDATE SKIP LOCKED``),
           surface an unrecognized ``kind`` as an issue, stamp them checked. Bounds one concern
           only: whether a fact can be routed at all, never whether a consumer got it (that is
-          :meth:`_dispatch_backlog`, entirely independent of this marker — README: `dispatch per
-          declared consumer`).
+          :meth:`_dispatch_backlog`, entirely independent of this marker — AGENTS: dispatched
+          per declared consumer).
         - **``on`` / async** — see :meth:`_dispatch_backlog`.
         - **``spread``** — read facts newer than this process's cursor whose kind has a ``spread``
           subscriber and run those handlers **in-process** (config reload). No claim, no mark:
