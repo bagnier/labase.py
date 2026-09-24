@@ -215,6 +215,42 @@ def test_the_fragment_walk_actually_finds_the_responses():
     assert len(_fragment_responses()) > 10
 
 
+def _negotiation_header_offenders() -> set[str]:
+    """Every ``infra/router.py`` line reading ``HX-Request`` or ``Accept`` off
+    ``request.headers`` by hand instead of through ``wants_json`` / ``is_htmx`` /
+    ``wants_full_page`` — the single source of truth AGENTS.md names for that branch."""
+    offenders = set()
+    for path in sorted(_APPS.glob("*/infra/router.py")):
+        relative = str(path.relative_to(_ROOT))
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "headers"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and node.args[0].value.lower() in {"hx-request", "accept"}
+            ):
+                offenders.add(f"{relative}:{node.lineno}")
+    return offenders
+
+
+def test_no_router_reads_the_negotiation_headers_by_hand():
+    """ "One set of helpers branches JSON, fragment and page" — a router re-spelling
+    ``HX-Request`` or ``Accept`` by hand instead of calling ``wants_json`` / ``is_htmx`` /
+    ``wants_full_page`` passes the rest of the suite the same way the four routers #130 fixed
+    did before that fix."""
+    assert _negotiation_header_offenders() == set()
+
+
+def test_the_router_walk_actually_finds_the_files():
+    # Guards the guard: a glob that matched nothing would make the assertion above vacuous.
+    assert len(list(_APPS.glob("*/infra/router.py"))) > 10
+
+
 def test_the_layout_walk_actually_finds_the_files():
     # Guards the guard: globs that matched nothing would make the assertion above vacuous.
     steps = list(_APPS.rglob("steps.py"))

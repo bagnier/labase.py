@@ -106,6 +106,7 @@ from tests.meta.test_capture_sites import test_a_broad_except_never_logs_without
 from tests.meta.test_conventions import (
     test_every_mapped_primary_key_is_a_time_ordered_uuid7,
     test_no_fragment_response_starts_inside_a_table,
+    test_no_router_reads_the_negotiation_headers_by_hand,
     test_templates_tests_and_steps_live_with_their_context,
     test_the_session_dependencies_are_exactly_the_three_named,
     test_the_uuid4_exception_is_exactly_the_token_columns,
@@ -872,10 +873,10 @@ CLAIMS = [
         "Durable async event delivery rides the same queue",
         test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
     ),
-    waived(
+    held(
         "negotiation-goes-through-the-helpers",
         "centralize the JSON / fragment / page branching",
-        "nothing checks a router branches only through these helpers",
+        test_no_router_reads_the_negotiation_headers_by_hand,
     ),
     waived(
         "a-page-is-assembled-from-slices",
@@ -1263,4 +1264,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 58
+UNHELD_TODAY = 57
