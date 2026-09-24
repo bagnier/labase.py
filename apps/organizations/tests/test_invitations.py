@@ -88,7 +88,7 @@ def test_get_invitation_revoked_json_returns_404(client):
         "role": "member",
         "token": token,
         "status": "revoked",
-        "created_at": None,
+        "created_at": now(),
     }
     app.dependency_overrides[get_admin_session] = _mock_session_with(row=fake_row)
     try:
@@ -132,7 +132,7 @@ def test_get_invitation_already_accepted_html_shows_state(client):
         "role": "member",
         "token": token,
         "status": "accepted",
-        "created_at": None,
+        "created_at": now(),
     }
     mock_org = MagicMock()
     mock_org.name = "Test Org"
@@ -171,7 +171,7 @@ def test_accept_already_accepted_invitation_is_idempotent(client):
         "role": "member",
         "token": token,
         "status": "accepted",
-        "created_at": None,
+        "created_at": now(),
     }
     mock_org = MagicMock()
     mock_org.handle = "test-org"
@@ -206,7 +206,7 @@ def test_accept_non_pending_invitation_returns_404(client):
         "role": "member",
         "token": token,
         "status": "revoked",
-        "created_at": None,
+        "created_at": now(),
     }
     # The invitation is read on the invitee's own session, through get_invitation_by_token.
     app.dependency_overrides[get_user_session] = _mock_session_with(row=fake_row)
