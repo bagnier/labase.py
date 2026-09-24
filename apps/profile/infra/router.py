@@ -91,7 +91,7 @@ from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.integration.slugs import validate_handle
-from apps.shared.logs.dependency import log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings.env import get_technical_settings
@@ -393,7 +393,11 @@ async def password_change(
         except WrongPassword:
             error = "Current password is incorrect."
         except PasswordUpdateError as e:
-            error = str(e)
+            if is_refusal(e):
+                error = str(e)
+            else:
+                log_dependency_failure(log, "profile.password_change_failed", e)
+                error = "Password update failed. Please try again."
 
     if error is not None:
         return await _profile_error(
@@ -429,7 +433,11 @@ async def email_change(
         except WrongPassword:
             error = "Current password is incorrect."
         except EmailChangeError as e:
-            error = str(e)
+            if is_refusal(e):
+                error = str(e)
+            else:
+                log_dependency_failure(log, "profile.email_change_failed", e)
+                error = "Email change failed. Please try again."
 
     if error is not None:
         return await _profile_error(
