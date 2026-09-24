@@ -448,6 +448,11 @@ class AuthBrowserMixin(BrowserBase):
         self._account_row(email).get_by_role("button", name=button).click()
         self.page.wait_for_load_state("load")
 
+    def try_disable_account(self, email: str) -> None:
+        self.open_accounts_screen()
+        button = self._account_row(email).get_by_role("button", name="Disable")
+        self.last_response = self.click_and_capture(self.page, button, "POST", "/disable")
+
     def try_open_accounts_screen(self) -> None:
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None

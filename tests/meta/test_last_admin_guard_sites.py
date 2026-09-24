@@ -113,7 +113,7 @@ def _unguarded_sites(functions: list[_Fn]) -> list[str]:
 # Every function that currently calls ``ensure_not_last_admin`` — pinned by name, not just by
 # count, so the scan finding zero sites (an empty ``apps/`` tree, a renamed root) fails loudly
 # instead of reading as "nothing to report".
-_KNOWN_GUARD_SITES = {"set_admin", "account_delete", "delete_user"}
+_KNOWN_GUARD_SITES = {"set_admin", "account_delete", "delete_user", "disable_user"}
 
 
 def test_every_last_admin_guard_check_is_preceded_by_the_lock():
