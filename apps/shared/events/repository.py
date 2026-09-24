@@ -209,14 +209,18 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
 
         Profiles are ``own read`` under RLS, so a member cannot resolve a co-member's handle at read
         time; an org can be renamed or deleted outright. Pinning both here is what keeps the journal
-        legible later."""
+        legible later.
+
+        ``handle`` is null until the account visits ``/profile`` (see
+        ``ProfileRepository.auto_handle``); ``email`` is set atomically at signup and never null,
+        so it is what a fact from an account that never opened its profile pins instead."""
         if not user_id and not org_id:
             return None, None
         try:
             names = (
                 await self.session.execute(
                     sql_text(
-                        "select (select handle from profiles where user_id = :u),"
+                        "select (select coalesce(handle, email) from profiles where user_id = :u),"
                         "       (select name from organizations where id = :o)"
                     ),
                     {"u": user_id, "o": org_id},
