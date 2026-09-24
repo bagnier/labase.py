@@ -27,6 +27,8 @@ _FEATURES = _ROOT / "features"
 # claim's only sanctioned exception, and it costs a line here.
 _BROWSER_ONLY = {
     "profile.feature: The profile is reached from the account area, not the main navigation",
+    "todo.feature: A todo row's edit and delete buttons stay visible when reached by keyboard",
+    "todo.feature: Renaming a todo item from the keyboard reaches a labelled field",
 }
 
 

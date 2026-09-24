@@ -52,6 +52,21 @@ Feature: Todo list
     When they delete the todo item "Buy groceries"
     Then "Buy groceries" no longer appears in their todo list
 
+  @web
+  Scenario: A todo row's edit and delete buttons stay visible when reached by keyboard
+    Given they have a todo item "Buy groceries"
+    When they tab to the edit button of "Buy groceries"
+    Then the focused button is visible
+    When they tab to the delete button of "Buy groceries"
+    Then the focused button is visible
+
+  @web
+  Scenario: Renaming a todo item from the keyboard reaches a labelled field
+    Given they have a todo item "Buy groceries"
+    When they tab to the edit button of "Buy groceries"
+    And they press Enter
+    Then the rename field for "Buy groceries" holds keyboard focus
+
   Scenario: A per-organisation override caps that organisation's tasks
     Given the "todo" setting "max_items_per_org" is overridden to "1" for their organisation
     And they have a todo item "Only one"
