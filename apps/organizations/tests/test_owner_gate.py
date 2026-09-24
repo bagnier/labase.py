@@ -43,11 +43,10 @@ async def test_require_current_owner_forbids_member_without_a_line_of_its_own():
 
 @pytest.mark.asyncio
 async def test_get_membership_by_org_id_binds_org_id_the_way_get_current_org_does(monkeypatch):
-    """``require_owner``'s lane (an ``{org_id}`` path param) never runs ``get_current_org`` — the
-    only other place ``org_id`` is bound as a contextvar — so a 403 on that lane left
-    ``request.finished`` without it, unfindable by the Timeline's org filter (#95)."""
-    org_id = uuid.uuid7()
-    membership = Membership(org_id=org_id, user_id=uuid.uuid7(), role=OrgRole.member)
+    """``require_owner``'s lane (an ``{org_id}`` path param) is the only other place ``org_id``
+    must be bound as a contextvar, so its refusals correlate with the Timeline's org filter the
+    same way ``require_current_owner``'s lane does."""
+    membership = _membership(OrgRole.member)
 
     async def fake_get_membership(self, org, user):
         return membership
@@ -57,10 +56,10 @@ async def test_get_membership_by_org_id_binds_org_id_the_way_get_current_org_doe
 
     try:
         await get_membership_by_org_id(
-            org_id=org_id,
+            org_id=membership.org_id,
             current_user=AuthenticatedUser(id=membership.user_id, email="member@test.local"),
             session=AsyncMock(),
         )
-        assert structlog.contextvars.get_contextvars() == {"org_id": str(org_id)}
+        assert structlog.contextvars.get_contextvars() == {"org_id": str(membership.org_id)}
     finally:
         structlog.contextvars.clear_contextvars()

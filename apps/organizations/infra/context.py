@@ -94,8 +94,9 @@ async def get_membership_by_org_id(
     current_user: CurrentUser,
     session: RlsSession,
 ) -> Membership:
-    """Owner-gate resolver for routes with an ``{org_id}`` path parameter — binds ``org_id`` the
-    way ``get_current_org`` does, so a refusal on this lane correlates the same way (#95)."""
+    """Owner-gate resolver for routes with an ``{org_id}`` path parameter. Unlike ``{org_handle}``,
+    the org is already named by the caller — no resolution can fail — so ``org_id`` is bound as a
+    contextvar up front, and every refusal on this lane correlates with it."""
     structlog.contextvars.bind_contextvars(org_id=str(org_id))
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, current_user.id)
