@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
-from apps.shared.http.content_type import is_htmx, wants_json
+from apps.shared.http.content_type import is_htmx, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 
 # What a negotiating handler answers, said where the schema can read it.
@@ -102,12 +102,12 @@ def render_list(
 ) -> Response:
     if wants_json(request):
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
-    htmx = is_htmx(request)
-    template = fragment if htmx else full
+    full_page = wants_full_page(request)
+    template = full if full_page else fragment
     org_handle = request.path_params.get("org_handle", "")
     ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
     if extra:
         ctx |= extra
-    if not htmx and context:
+    if full_page and context:
         ctx |= context
     return templates.TemplateResponse(request, template, ctx)
