@@ -9,12 +9,17 @@ concerned entity).
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from apps.shared.settings.live import SettingRow
 from apps.shared.vocabulary import AppName
+
+# The activity chart's bucket size — narrowed once at the router (from a query param) and carried
+# as this type from there through the repository, so a wrong value is a type error rather than a
+# silent fall-through to ``day`` or a ``KeyError`` past the one place that checked.
+Grain = Literal["hour", "day", "week", "month"]
 
 
 class TimelineSource(StrEnum):
