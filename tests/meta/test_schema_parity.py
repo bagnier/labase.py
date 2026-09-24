@@ -105,13 +105,24 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
+            # pg_catalog, not information_schema.triggers: the latter's action_statement is
+            # `pg_get_triggerdef`'s rendering, schema-qualified only when the function isn't on
+            # the session's search_path — so matching its text would go blind to every trigger
+            # the moment `search_path_connect_args` changed. tgtype 19 is ROW|BEFORE|UPDATE
+            # (Postgres' own bit values), tgattr empty means no column list narrows which
+            # updates fire it, and tgenabled excludes one turned off with `disable trigger`.
             updated_at_triggers = (
                 await conn.execute(
                     text(
-                        "select event_object_table from information_schema.triggers "
-                        "where trigger_schema = :schema and action_timing = 'BEFORE' "
-                        "and event_manipulation = 'UPDATE' "
-                        "and action_statement = 'EXECUTE FUNCTION set_updated_at()'"
+                        "select c.relname from pg_trigger t "
+                        "join pg_class c on c.oid = t.tgrelid "
+                        "join pg_namespace n on n.oid = c.relnamespace "
+                        "join pg_proc p on p.oid = t.tgfoid "
+                        "join pg_namespace pn on pn.oid = p.pronamespace "
+                        "where n.nspname = :schema and pn.nspname = :schema "
+                        "and p.proname = 'set_updated_at' and not t.tgisinternal "
+                        "and t.tgenabled <> 'D' and t.tgtype & 19 = 19 "
+                        "and t.tgattr = ''::int2vector"
                     ),
                     {"schema": schema},
                 )
