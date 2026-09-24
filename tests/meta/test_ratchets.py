@@ -1180,9 +1180,12 @@ _DEFAULTS_OF_A_DECLARED_SETTING = {
 # the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
 # lengths *are* the fingerprint (moving one silently re-groups every past issue), 9 is the rung
 # count of the spaced-repetition ladder itself, an advisory lock's key is an identifier, not a
-# duration or a size, and the perf smoke's fail-ratio and p95 thresholds *are* the CI check, not
-# a deploy's opinion of it — there is nothing an operator would tune either to. Turning any of
-# these into a setting would offer an operator a lever that breaks the thing rather than tunes it.
+# duration or a size, ``lock_timeout_ms=0`` is Postgres's own "no timeout" sentinel — every caller
+# but the drain means it, and the drain's own bound already lives in
+# ``TechnicalSettings.log_drain_lock_timeout_seconds`` — and the perf smoke's fail-ratio and p95
+# thresholds *are* the CI check, not a deploy's opinion of it — there is nothing an operator would
+# tune either to. Turning any of these into a setting would offer an operator a lever that breaks
+# the thing rather than tunes it.
 _NOT_A_TUNING_KNOB = {
     "apps/auth/infra/admin_guard.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
@@ -1197,6 +1200,7 @@ _NOT_A_TUNING_KNOB = {
     "apps/shared/events/repository.py::search(offset=0)",
     "apps/shared/http/responses.py::mutation_response(status_code=200)",
     "apps/shared/logs/repository.py::_MAX_STATEMENT_PARAMS = 32767",
+    "apps/shared/logs/repository.py::append(lock_timeout_ms=0)",
     "apps/shared/persistence/sql_stats.py::_KEPT_STATEMENTS = 5",
     "apps/shared/persistence/sql_stats.py::_MAX_STATEMENT = 300",
     "apps/tasks/domain/strip.py::_MAX_BUCKETS = 400",

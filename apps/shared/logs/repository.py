@@ -90,7 +90,9 @@ class LogRepository(BaseRepository[LogLine]):
 
     model: ClassVar[type[LogLine]] = LogLine
 
-    async def append(self, lines: list[dict[str, Any]], *, instance: str = INSTANCE) -> None:
+    async def append(
+        self, lines: list[dict[str, Any]], *, instance: str = INSTANCE, lock_timeout_ms: int = 0
+    ) -> None:
         """Append a batch of queued lines; the caller commits.
 
         One ``execute`` for the whole batch: a burst costs one round trip, not one per line — the
@@ -102,6 +104,11 @@ class LogRepository(BaseRepository[LogLine]):
         shutdown — already the doctrine here (the queue is bounded and drops, the drain is
         best-effort, stdout carries the durable copy). ``LOCAL``, so it dies with the transaction
         and never leaks onto a caller that meant to be durable.
+
+        ``lock_timeout``, also ``LOCAL``, is the drain's own bound on a lock held elsewhere (e.g.
+        a concurrent TRUNCATE) — past it the insert gives up rather than sit blocked, and the
+        sink's existing store-refused fallback takes it from there. ``0`` (the default here) is
+        Postgres's own "no timeout", for every other caller of this repository.
 
         Nothing here has to silence itself any more: with no per-statement line, this INSERT
         writes nothing that the next drain would insert and log again.
@@ -117,6 +124,8 @@ class LogRepository(BaseRepository[LogLine]):
         if not lines:
             return
         await self.session.execute(sql_text("SET LOCAL synchronous_commit = off"))
+        if lock_timeout_ms:
+            await self.session.execute(sql_text(f"SET LOCAL lock_timeout = '{lock_timeout_ms}ms'"))
         rows = [_columns(line, instance) for line in lines]
         per_row = len(LogLine.__table__.columns)
         chunk_size = _MAX_STATEMENT_PARAMS // per_row
