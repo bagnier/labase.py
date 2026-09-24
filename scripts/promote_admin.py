@@ -47,18 +47,16 @@ def promote_admin(email: str, password: str | None) -> None:
 
 
 def _unreachable(exc: httpx.ConnectError) -> None:
-    """Answer a host that does not resolve with the one line that fixes it.
+    """Answer an unreachable GoTrue with the URL that was tried, not forty lines of traceback.
 
-    A ``.env`` written for the app container points at ``host.docker.internal``, which resolves
-    only inside it — and this script runs on the host, where the same service is on localhost.
-    Without this, the failure is forty lines of httpx traceback naming neither the host nor the
-    way round it.
+    ``apply_host_overrides`` already rewrites a Docker-only ``host.docker.internal`` to the host
+    before this runs, so reaching here means the service at that URL is down or misconfigured for
+    another reason — the override below points this run at a different one instead.
     """
     url = get_technical_settings().supabase_api_url
     print(f"Cannot reach GoTrue at {url} ({exc}).", file=sys.stderr)
     print(
-        "If that host only resolves inside the app container, point this run at the same "
-        "service on the host:\n"
+        "Point this run at a reachable GoTrue instead, e.g.:\n"
         "  SUPABASE_API_URL=http://127.0.0.1:54321 make promote-admin "
         "ENV_FILE=.env EMAIL=you@example.com",
         file=sys.stderr,
