@@ -3,7 +3,7 @@ name: triage-issues
 description: >
   Sorts the open GitHub issues against `main`, the pull requests and each other — fixed,
   duplicated, riding on a pull request, or best fixed in one diff — and, once the owner agrees,
-  hands the issues one diff should fix to a carrier under the `carried` label.
+  puts the open ones on `to-fix`, handing those one diff should fix to a carrier under `carried`.
 
   Do NOT use for: filing an issue (file-issue), fixing one (ci-fix-issue), or landing pull
   requests (land-prs).
@@ -68,12 +68,12 @@ The owner's rule:
 - **Different subjects → apart**, even in one file or one registry, when their hunks are far enough
   for git to merge them.
 
-Pair only issues on `to-fix` with no pull request and no `fixing`: `carried` on an issue the owner
-never put on `to-fix` would fix it without their decision. The carrier is the oldest of the set,
-the one the tick hands over first.
+Pair the issues left **open** — no pull request, no `fixing` — whether or not they are on `to-fix`
+yet. The carrier is the oldest of the set, the one the tick hands over first.
 
-Propose each set with its reason in one line, and each pair set aside with its own. Nothing is
-written before the owner agrees.
+Propose each set with its reason in one line, each pair set aside with its own, and the open issues
+that would go on `to-fix` alone. `to-fix` and `carried` are the owner's decision that an issue gets
+a run: nothing is written before the owner agrees, and only on the issues they agreed to.
 
 
 ## Mark, once agreed
@@ -85,23 +85,28 @@ before writing, re-read every issue of the set:
 gh issue view <n> --json state,labels,closedByPullRequestsReferences
 ```
 
-All open, on `to-fix`, no linked pull request — or nothing is written for that set, and "When the
-set has already moved" applies. Then, carrier first:
+All open, none on `fixing`, no linked pull request — or nothing is written for that set, and "When
+the set has already moved" applies. Then the comment first and `to-fix` last, so the tick never
+hands the carrier over before its thread names what it carries:
 
 ```sh
 gh label create carried --force --color c5def5 \
   --description "Fixed with the issue whose comment names it; the tick never picks it"
 gh issue comment <carrier> --body-file /tmp/carries-<carrier>.md
 gh issue edit <carried> --remove-label to-fix --add-label carried   # each carried issue
+gh issue edit <carrier> --add-label to-fix
 ```
+
+An issue agreed alone gets `to-fix` and nothing else.
 
 The comment opens `Carries #<n>[ and #<m>]:`, then in one sentence why one diff fixes them — the
 shared subject or the shared lines. It is posted as the owner: `ci-fix-issue` reads only the
 author's comments, and takes only carried issues by the carrier's author. A posted comment is never
 edited.
 
-`carried` is a link, not a run's state: no run takes it off, so the list keeps showing the issue is
-taken care of. Only the owner detaches one, by swapping it for `to-fix`.
+`carried` holds until the carrier's run settles the set: `ci-fix-issue` takes it off where it takes
+`fixing` off, save on an open question, where it is what the next run finds the set by. Until then
+only the owner detaches one, by swapping it for `to-fix`.
 
 
 ## When the set has already moved
@@ -119,5 +124,5 @@ offer the two ways:
 ## Report
 
 The verdicts, grouped: fixed (with the line), duplicates, in a pull request, written against a pull
-request, the sets proposed or marked with their carrier, the pairs set aside and why. Links for
-every comment posted.
+request, the sets proposed or marked with their carrier, the issues put on `to-fix` alone, the
+pairs set aside and why. Links for every comment posted.

@@ -37,8 +37,9 @@ the commit message — whatever language the issue it answers is written in.
 
 Which end a run took is the issue's label: the tick hands the issue over with `fixing`, and the
 run replaces it at the end by `to-answer` or `not-reproduced` — or by nothing, when a pull request
-is open: the linked pull request is the state, and its merge is what closes the issue. The pull
-request carries `bot`.
+is open: the linked pull request is the state, and its merge is what closes the issue. The
+carried issues' `carried` goes the same way, save on an open question. The pull request carries
+`bot`.
 
 A step that fails (a refused tool, a stack that will not start, a gate still red after three
 rounds) ends the run as an open question that says what happened. A red gate is never pushed.
@@ -86,9 +87,10 @@ gh issue view <carried> --json number,title,body,author,labels,state,comments
 
 From here on, "the issue" is the whole set: each issue gets its own failing test, all are fixed in
 one diff, on the carrier's branch, in one pull request. The carrier's number names the branch
-whatever reproduced. `carried` is a link, not a run's state: the run never takes it off, so the
-issue list still shows the carried issue is taken care of, and a carrier put back on `to-fix`
-still finds what it carries.
+whatever reproduced. `carried` is taken off where `fixing` is: a pull request opened links each
+carried issue through its `Closes` line, and one not reproduced is closed on `not-reproduced`. An
+open question is the one end that keeps it, since it is how the carrier, put back on `to-fix`,
+finds what it carries.
 
 
 ## Reproduce it as a failing test
@@ -110,7 +112,8 @@ The comment reads "Not reproduced at <`git rev-parse --short HEAD`>:", then what
 it gave.
 
 Delete the test, and end the run. In a set, only that issue leaves: it is commented on and closed
-the same way, and the run goes on with the others; it ends only when none reproduced. A
+the same way — a carried one swapping `carried` for `not-reproduced` — and the run goes on with the
+others; it ends only when none reproduced. A
 reproduction that needs the browser lane runs it; the runner has Chromium and the test stack.
 
 
@@ -155,6 +158,7 @@ git push -u origin "fix/$ARGUMENTS"
 gh pr create --base main --head "fix/$ARGUMENTS" --label bot \
   --title "<the commit subject>" --body-file /tmp/pr-body.md
 gh issue edit "$ARGUMENTS" --remove-label fixing
+gh issue edit <carried> --remove-label carried   # each carried issue the pull request closes
 ```
 
 The pull request body is the run's record, in this order: one `Closes #<n>` line per issue it
@@ -173,7 +177,7 @@ gh issue edit "$ARGUMENTS" --remove-label fixing --add-label to-answer
 The comment says what was established, what is missing, and the two readings when there are two.
 One question per run: the first one that blocks, not a list. It goes on the carrier even when it
 concerns a carried issue, naming it: only the carrier comes back through `to-answer`; the
-carried ones keep their label.
+carried ones keep `carried`, which is how its next run finds them.
 
 
 ## Report

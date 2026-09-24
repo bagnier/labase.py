@@ -12,8 +12,9 @@ pull request. Merging is never the bot's.
    it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
    reads: the fault, `→` the direction, what to run, the AGENTS.md sentence, the `file:line`
    links. The label goes on last, once the body is final.
-2. **Label.** The owner puts `to-fix` on it. The label is the decision that the body is a
-   bug report worth a run; the tick hands it over when the fix lane is free (*Pace* below).
+2. **Label.** The owner puts `to-fix` on it, by hand or by agreeing to what `triage-issues`
+   proposes. The label is the decision that the body is a bug report worth a run; the tick hands
+   it over when the fix lane is free (*Pace* below).
    Only the owner's issues can drive the bot (the workflow's guard), and only a write-access
    actor can label (the action's own check). Issues one diff should fix go as one: the carrier
    stays on `to-fix`, the others go on `carried` (*Carrying* below).
@@ -81,13 +82,15 @@ each other one swaps `to-fix` for `carried`, and a comment of the owner's on the
 (`Carries #<n>:`). The tick never picks a `carried` issue: the carrier's run reads each one's
 thread, gives each its own failing test, and opens one pull request that closes them all.
 
-`carried` is a link, not a run's state: no run takes it off, so the list shows the issue is taken
-care of, and a carrier put back on `to-fix` still finds what it carries. Only the owner detaches
-one, by swapping it back for `to-fix`. A set is joined before its run starts, since a run reads its
-thread once.
+`carried` follows the carrier's `fixing`: the run takes it off when its pull request, whose
+`Closes` lines link each one, is open, or when it closes one as not reproduced. An open question
+keeps it, since it is how the carrier, put back on `to-fix`, finds what it carries. Until then only
+the owner detaches one, by swapping it back for `to-fix`. A set is joined before its run starts,
+since a run reads its thread once.
 
 The `triage-issues` skill proposes the sets from a local checkout — reading each issue against
-`main`, the pull requests and the other issues — and marks them once the owner agrees.
+`main`, the pull requests and the other issues — and, once the owner agrees, puts the carriers and
+the lone issues on `to-fix`, the carried ones on `carried`.
 
 ## Landing a batch
 
