@@ -510,3 +510,7 @@ class OrgBrowserMixin(BrowserBase):
     def assert_overview_lists(self, key: str, text: str) -> None:
         content = self._overview_text(key)
         assert text in content, f"{text!r} not listed in {key} overview: {content!r}"
+
+    def assert_overview_does_not_list(self, key: str, text: str) -> None:
+        content = self._overview_text(key)
+        assert text not in content, f"{text!r} unexpectedly listed in {key} overview: {content!r}"

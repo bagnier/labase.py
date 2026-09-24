@@ -30,13 +30,11 @@ from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import overview_from_count
-from apps.shared.persistence.repository import count_all
+from apps.shared.overview import RECENT_ITEMS, overview_from_count
+from apps.shared.persistence.repository import count_all, count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
-
-_RECENT = 3
 
 _WELCOME_TITLE = "Welcome"
 _WELCOME_SLUG = "welcome"
@@ -85,16 +83,16 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    pages = await PageRepository(query.session, query.org_id).all()
-    n = len(pages)
+    n = await count_where(query.session, Page, Page.org_id == query.org_id)
     lines = overview_from_count(n, "page", "No pages yet")
+    recent = await PageRepository(query.session, query.org_id).recent(RECENT_ITEMS) if n else []
     return Overview(
         key="pages",
         title="Pages",
         icon="file-text",
         href="pages",
         template="pages/_overview.html",
-        data={"lines": lines, "recent": [p.title for p in pages[:_RECENT]]},
+        data={"lines": lines, "recent": [p.title for p in recent]},
     )
 
 

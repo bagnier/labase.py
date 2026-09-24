@@ -12,18 +12,22 @@ class CalendarEventRepository(OrgScopedRepository[CalendarEvent]):
     model = CalendarEvent
     default_order = CalendarEvent.starts_at.asc()
 
-    async def upcoming(self) -> list[CalendarEvent]:
-        """Events that have not started yet, soonest first — drives the dashboard overview."""
-        return list(
-            await self.session.scalars(
-                select(CalendarEvent)
-                .where(
-                    CalendarEvent.org_id == self.org_id,
-                    CalendarEvent.starts_at >= clock.now(),
-                )
-                .order_by(CalendarEvent.starts_at)
+    async def upcoming(self, limit: int | None = None) -> list[CalendarEvent]:
+        """Events that have not started yet, soonest first — drives the dashboard overview.
+
+        A bounded query when `limit` is given, never a full fetch sliced after the fact, so a
+        large org's overview card costs `limit` rows, not every future event it has."""
+        query = (
+            select(CalendarEvent)
+            .where(
+                CalendarEvent.org_id == self.org_id,
+                CalendarEvent.starts_at >= clock.now(),
             )
+            .order_by(CalendarEvent.starts_at)
         )
+        if limit is not None:
+            query = query.limit(limit)
+        return list(await self.session.scalars(query))
 
     async def add(
         self,
