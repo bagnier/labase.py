@@ -125,7 +125,9 @@ class LogRepository(BaseRepository[LogLine]):
 
     async def roll(self, *, today: date, retention_days: int) -> int:
         """Create the day partitions just ahead of ``today``, drop those past retention, and
-        delete the stragglers the drop could not reach as a whole partition; returns the total.
+        delete the stragglers the drop could not reach as a whole partition; returns how many
+        rows the row-level delete removed (a dropped partition is a table, not a row, and is not
+        counted in this number).
 
         Working *ahead* is the correctness condition, not an optimisation: a partition cannot be
         created for a range the default partition already holds rows for, so a day the roll misses
@@ -135,14 +137,14 @@ class LogRepository(BaseRepository[LogLine]):
         in this one SQL function (``roll_log_partitions``) — never in Python, so there is only one
         expression to keep in agreement with what ``roll`` actually kept whole.
         """
-        dropped = await self.session.scalar(
+        deleted = await self.session.scalar(
             # Unqualified, like the journal's ``record_business_event``: the search_path picks the
             # schema, which is what makes a worktree or the test schema manage its own partitions
             # rather than reach into ``public``.
             sql_text("SELECT roll_log_partitions(:today, :days)"),
             {"today": today, "days": retention_days},
         )
-        return int(dropped or 0)
+        return int(deleted or 0)
 
     async def purge(self, *, retention_days: int) -> int:
         """Drop lines past the retention window; returns how many. The delete the day files
@@ -151,8 +153,7 @@ class LogRepository(BaseRepository[LogLine]):
         ``roll`` owns the whole move, because the table is partitioned by day and a day can end
         up in either place: it drops yesterday's whole day as a partition — instant, and it
         leaves no dead tuples for VACUUM — then deletes the stragglers still in the default
-        partition against the very same floor day, so nothing here recomputes it a second time
-        (issue #92, following #43: two independent floors agreed only by accident).
+        partition against the very same floor day, so nothing here computes a floor of its own.
 
         Takes its date from ``clock.now()``, never from Postgres' ``current_date``: one clock,
         here as everywhere, which is also what lets a test pin it.

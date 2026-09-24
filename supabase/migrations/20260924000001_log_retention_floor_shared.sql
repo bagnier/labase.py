@@ -7,7 +7,9 @@
 --
 -- The straggler DELETE moves into this function, next to the `floor_day` it must agree with, so
 -- one statement — and one floor — owns both the partition drop and the row-level cleanup.
--- `purge` no longer computes a floor of its own; it just calls this and returns what it reports.
+-- `purge` no longer computes a floor of its own; it just calls this. The return value keeps its
+-- prior meaning (the row count a straggler DELETE removed) rather than mixing it with the
+-- partition count, whose unit is a table, not a line.
 create or replace function public.roll_log_partitions(
   p_today date,
   p_retention_days int,
@@ -59,10 +61,12 @@ begin
   -- reach — a line dated outside every range, or a day the roll fell behind on, both of which
   -- land in the default partition. Never the exact instant `p_retention_days` ago: that finer
   -- floor falls inside the floor day itself, row-deleting part of the very partition just kept.
+  -- `dropped` (the partition count) stays a local count, not part of the return: a table and a
+  -- row are different units, and mixing them into one number would report neither honestly.
   delete from public.log_lines where ts < floor_day;
   get diagnostics stragglers = row_count;
 
-  return dropped + stragglers;
+  return stragglers;
 end;
 $$;
 
