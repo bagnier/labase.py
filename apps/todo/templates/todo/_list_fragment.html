@@ -20,7 +20,7 @@
             data-edit-id="{{ todo.id }}"
             aria-label="Edit “{{ todo.title }}”"
             onclick="startEdit('{{ todo.id }}')"
-            class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-primary">
+            class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-base-content/50 hover:text-primary">
       <i class="ph ph-pencil ph-sm" aria-hidden="true"></i>
     </button>
     <button type="button"
@@ -30,7 +30,7 @@
             hx-target="#todo-list"
             hx-swap="innerHTML"
             hx-confirm="Delete this task?"
-            class="opacity-0 group-hover:opacity-100 transition-opacity text-base-content/50 hover:text-error">
+            class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-base-content/50 hover:text-error">
       <i class="ph ph-x ph-sm" aria-hidden="true"></i>
     </button>
     <form id="rename-form-{{ todo.id }}"
@@ -41,6 +41,7 @@
       <input type="text"
              name="title"
              value="{{ todo.title }}"
+             aria-label="Rename “{{ todo.title }}”"
              class="input input-sm w-full text-sm"
              onblur="submitRename('{{ todo.id }}')"
              onkeydown="if(event.key==='Enter'){event.preventDefault();submitRename('{{ todo.id }}')}else if(event.key==='Escape'){cancelEdit('{{ todo.id }}','{{ todo.title|e }}')}" />
