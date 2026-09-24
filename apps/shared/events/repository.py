@@ -201,9 +201,9 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
     async def pinned_names(
         self, user_id: uuid.UUID | None, org_id: uuid.UUID | None
     ) -> tuple[str | None, str | None]:
-        """Resolve the actor's handle and the org's name *now*, to store them on the record.
+        """Resolve the actor's readable name and the org's name *now*, to store them on the record.
 
-        One round trip for both: the write path already sat on a query for the handle, and a second
+        One round trip for both: the write path already sat on a query for the name, and a second
         one per emitted fact would double the cost of every business mutation. Both are read on the
         caller's session, so they see the same transaction the fact commits with.
 
