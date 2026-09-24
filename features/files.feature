@@ -124,7 +124,7 @@ Feature: Org file storage
   Scenario: The share link field has an accessible name
     Given they have uploaded "rapport.pdf" to the org
     And they have generated a share link for "rapport.pdf"
-    Then the share link field is reachable by screen readers
+    Then the share link field for "rapport.pdf" is reachable by screen readers
 
   # Seeded by a durable consumer of OrganizationCreated, off the journal. Seeding is off by
   # default under test — starter rows would break every other scenario's assertions — so this

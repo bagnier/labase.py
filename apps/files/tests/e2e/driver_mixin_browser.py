@@ -345,7 +345,9 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def assert_upload_control_labelled(self) -> None:
         self._on_files()
-        expect(self.page.get_by_label("Choose File")).to_be_visible()
+        expect(self.page.get_by_label("Choose File")).to_have_attribute("type", "file")
 
-    def assert_share_link_field_labelled(self) -> None:
-        expect(self.page.get_by_label("Share link")).to_be_visible()
+    def assert_share_link_field_labelled(self, filename: str) -> None:
+        expect(self.page.get_by_label(f"Share link for {filename}")).to_have_value(
+            self._share_link_url or ""
+        )
