@@ -265,10 +265,17 @@ async def login_endpoint(
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthApiError as e:
-        # Not a business fact: nothing happened, and the subject may not even be an account.
-        # ``warning``, not the ``info`` a refusal would otherwise earn: this is a signal about a
-        # *caller*, and a run of these is what brute force looks like.
-        log.warning("auth.login_failed", email=email, ip=ip)
+        if is_refusal(e):
+            # Not a business fact: nothing happened, and the subject may not even be an
+            # account. ``warning``, not the ``info`` a refusal would otherwise earn: this is a
+            # signal about a *caller*, and a run of these is what brute force looks like.
+            log.warning("auth.login_failed", email=email, ip=ip)
+        else:
+            # GoTrue answering 500 is not a routine "no" but the dependency breaking, which
+            # takes the same capture path as any other broken dependency — log.exception
+            # directly, since is_refusal(e) already settled the verdict above.
+            # (AGENTS: a broken dependency is a bug, a refusal is not)
+            log.exception("auth.login_failed", exc_info=e, email=email, ip=ip)
         code = str(e.code) if e.code else ""
         error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
         # GoTrue blocks unconfirmed accounts itself; the app adds the way out.
@@ -636,7 +643,10 @@ async def register_endpoint(
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
     except AuthApiError as e:
         error = _friendly_auth_error(e)
-        log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
+        if is_refusal(e):
+            log.warning("auth.register_failed", ip=ip, email=email, code=str(e.code))
+        else:
+            log.exception("auth.register_failed", exc_info=e, ip=ip, email=email, code=str(e.code))
 
     except Exception as exc:
         # Our own code as much as GoTrue's, like login above — always an issue, never a refusal.
