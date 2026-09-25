@@ -726,19 +726,16 @@ def test_the_template_icon_walk_finds_a_jinja_ternary_name():
     assert {"google-logo", "github-logo"} <= _icons_spelled_in_templates().keys()
 
 
-# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕``, ``↑``, ``✓`` —
-# instead of reaching for the icon font. It renders the same to a sighted mouse user, but it is
-# not `aria-hidden`-able the way an icon is, and it is not Phosphor. Jinja comments are stripped
-# first, so prose that names the glyph — describing the affordance it used to be, as this file's
-# own templates once did — is not mistaken for markup. A maintained set, grown as a violation
-# turns up (issue #131 reported the first three, #148 the next two), never frozen to one report.
-_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕", "↑", "✓", "←", "‹", "›", "→"}
-
-
-def test_icon_lookalike_glyphs_cover_the_remaining_directional_arrows():
-    # ← ‹ › → spell a back link, a month-nav caret and a "goes to" arrow the same way ▲/▼/✕/↑/✓
-    # already do — none of them were in the denylist, so a template spelling one stayed green.
-    assert {"←", "‹", "›", "→"} <= _ICON_LOOKALIKE_GLYPHS
+# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕``, ``↑``, ``✓``,
+# a back arrow, a "goes to" arrow, or a caret pair — instead of reaching for the icon font. It
+# renders the same to a sighted mouse user, but it is not `aria-hidden`-able the way an icon is,
+# and it is not Phosphor. Jinja comments are stripped first, so prose that names the glyph —
+# describing the affordance it used to be, as this file's own templates once did — is not
+# mistaken for markup. A maintained set, grown as a violation turns up (issue #131 reported the
+# first three, #148 the next two, #181 the last four) never frozen to one report. The last two,
+# U+2039/U+203A, are spelled by code point rather than by character, so the source stays clear of
+# the pair ruff's homoglyph check (RUF001) exists to flag.
+_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕", "↑", "✓", "←", "→", chr(0x2039), chr(0x203A)}
 
 
 def _template_markup_without_comments() -> dict[str, str]:

@@ -199,9 +199,8 @@ ignore = [
 ]
 
 # Deliberate typography, declared character by character rather than switching RUF001-003 off:
-# the rule stays armed against real homoglyphs. `×` = dimensions, `–` = en dash in prose,
-# `‹`/`›` name the literal glyphs a template must not spell in place of a Phosphor icon.
-allowed-confusables = ["×", "–", "‹", "›"]
+# the rule stays armed against real homoglyphs. `×` = dimensions, `–` = en dash in prose.
+allowed-confusables = ["×", "–"]
 
 [tool.ruff.lint.per-file-ignores]
 # A provider callback keeps the registry's signature whether it reads the query or not —
