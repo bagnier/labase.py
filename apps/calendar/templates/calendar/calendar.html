@@ -22,11 +22,13 @@
           <div class="flex items-center gap-2">
             <a class="btn btn-sm"
                href="?month={{ prev_month }}"
-               aria-label="Previous month">‹</a>
+               aria-label="Previous month"><i class="ph ph-caret-left"
+   aria-hidden="true"></i></a>
             <span class="text-sm font-semibold min-w-32 text-center">{{ month_label }}</span>
             <a class="btn btn-sm"
                href="?month={{ next_month }}"
-               aria-label="Next month">›</a>
+               aria-label="Next month"><i class="ph ph-caret-right"
+   aria-hidden="true"></i></a>
           </div>
           <a class="btn btn-sm" href="/{{ org_handle }}/calendar">Today</a>
         </div>
@@ -47,7 +49,7 @@
                       {% if ev.is_start %}
                         {{ ev.title }}
                       {% else %}
-                        <span aria-hidden="true">‹</span> {{ ev.title }}
+                        <i class="ph ph-caret-left" aria-hidden="true"></i> {{ ev.title }}
                       {% endif %}
                     </a>
                   {% else %}

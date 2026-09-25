@@ -629,20 +629,19 @@ def _icons_with_a_rule() -> set[str]:
 
 
 _ICON_DECLARED_RE = re.compile(
-    r'icon="([a-z0-9-]+)"'  # a call site: icon="shield-check"
-    r'|icon:\s*ClassVar\[PhosphorIcon\]\s*=\s*"([a-z0-9-]+)"'  # a class default: icon: ClassVar[…]
+    r'icon(?::[^=\n]+)?\s*=\s*"([a-z0-9-]+)"'  # a call site, or a typed default: icon: ClassVar[…]
 )
 
 
 def _icons_declared() -> dict[str, str]:
-    """Every ``icon="…"`` a surface passes, or declares as its ``ClassVar[PhosphorIcon]`` default,
-    mapped to where it says it. Tests aside: a fixture may name an icon nothing renders."""
+    """Every ``icon="…"`` a surface passes, or declares as a typed default, mapped to where it
+    says it. Tests aside: a fixture may name an icon nothing renders."""
     found = {}
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
             continue
-        for call, default in _ICON_DECLARED_RE.findall(path.read_text()):
-            found[call or default] = str(path.relative_to(_ROOT))
+        for icon in _ICON_DECLARED_RE.findall(path.read_text()):
+            found[icon] = str(path.relative_to(_ROOT))
     return found
 
 
@@ -667,6 +666,12 @@ def test_the_icon_walk_finds_a_classvar_default():
     # `icon: ClassVar[PhosphorIcon] = "shield-check"` — the annotated form every event class
     # uses, with no `icon="…"` call for the plain walk above to see.
     assert "shield-check" in _icons_declared()
+
+
+def test_icon_declared_re_matches_a_plain_annotated_default():
+    # `icon: str = "file-text"` — `OrgNavItem`'s shape: a typed default with no `ClassVar[…]`
+    # wrapper, and no `icon="…"` call site of its own for the plain walk to see either.
+    assert _ICON_DECLARED_RE.findall('icon: str = "file-text"') == ["file-text"]
 
 
 def _icons_spelled_in_templates() -> dict[str, str]:
@@ -727,7 +732,13 @@ def test_the_template_icon_walk_finds_a_jinja_ternary_name():
 # first, so prose that names the glyph — describing the affordance it used to be, as this file's
 # own templates once did — is not mistaken for markup. A maintained set, grown as a violation
 # turns up (issue #131 reported the first three, #148 the next two), never frozen to one report.
-_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕", "↑", "✓"}
+_ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕", "↑", "✓", "←", "‹", "›", "→"}
+
+
+def test_icon_lookalike_glyphs_cover_the_remaining_directional_arrows():
+    # ← ‹ › → spell a back link, a month-nav caret and a "goes to" arrow the same way ▲/▼/✕/↑/✓
+    # already do — none of them were in the denylist, so a template spelling one stayed green.
+    assert {"←", "‹", "›", "→"} <= _ICON_LOOKALIKE_GLYPHS
 
 
 def _template_markup_without_comments() -> dict[str, str]:
