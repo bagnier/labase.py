@@ -225,6 +225,9 @@ allowed-confusables = ["×", "–"]
 # Runs `ty check` (by absolute interpreter path) over a fixture script this test writes itself —
 # neither the interpreter nor the script content is outside input.
 "apps/timeline/tests/test_grain_type.py" = ["S603"]
+# Runs `git` by name against a throwaway repo this test creates itself — the command and its
+# arguments are all hardcoded in the test, not outside input.
+"tests/meta/test_gitignore.py" = ["S603"]
 # A route handler's parameters *are* its HTTP contract — path params, `Form` fields and the
 # `Depends` injections. Most of the argument-count hits sit here, and bundling them into a
 # model would hide the contract FastAPI reads off the signature.
