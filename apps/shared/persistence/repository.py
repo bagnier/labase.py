@@ -76,6 +76,25 @@ class OrgScopedRepository[T: Base](BaseRepository[T]):
     async def count(self) -> int:
         return await count_where(self.session, self.model, self.model.org_id == self.org_id)
 
+    async def recent(self, limit: int) -> list[T]:
+        """This org's `limit` newest rows in `default_order` — a bounded query, never `all()`
+        sliced after the fact, so a large org's overview card costs `limit` rows, not every one
+        it has.
+
+        Tiebroken on `id` (UUIDv7, minted in creation order): `default_order` alone is not a
+        total order when it is a timestamp — two rows created in the same request, or under a
+        pinned test clock, share an exact instant, and `ORDER BY … LIMIT` over a tie is free to
+        return either one, chosen by whichever plan Postgres picks rather than by the query.
+        """
+        order = [self.default_order] if self.default_order is not None else []
+        query = (
+            select(self.model)
+            .where(self.model.org_id == self.org_id)
+            .order_by(*order, self.model.id.desc())
+            .limit(limit)
+        )
+        return cast(list[T], list(await self.session.scalars(query)))
+
 
 class PositionedRepository[T: Base](OrgScopedRepository[T]):
     """Org-scoped rows kept in a dense, 0-based `position` order.

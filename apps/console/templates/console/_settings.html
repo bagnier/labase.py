@@ -47,7 +47,9 @@
       {% endif %}
       <div class="text-right" aria-live="polite">
         {% if saved_key == s.key %}
-          <span class="saved-flash text-xs font-medium text-success" role="status">Saved ✓</span>
+          <span class="saved-flash text-xs font-medium text-success" role="status">
+            Saved <i class="ph ph-check" aria-hidden="true"></i>
+          </span>
         {% endif %}
       </div>
     </form>

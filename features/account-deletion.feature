@@ -49,3 +49,14 @@ Feature: Account deletion
     When they delete their account confirming with password "Test1234!"
     Then the account deletion is rejected
     And "root@example.com" can open the console
+
+  # A disabled account keeps its admin role in GoTrue but cannot sign in, so it must not count
+  # as the safety net that lets the server's one remaining acting admin delete their own account.
+  Scenario: A disabled admin does not cover for the last acting admin's own deletion
+    Given the server has no admin yet
+    And a server admin is signed in as "root@example.com"
+    And "bob@example.com" is a server admin
+    When the admin disables the account "bob@example.com"
+    And they delete their account confirming with password "Test1234!"
+    Then the account deletion is rejected
+    And "root@example.com" can open the console

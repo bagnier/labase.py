@@ -1,9 +1,10 @@
 name: Tick
 
 # The pace of the two bots: one fix and one rework in flight, never more, never less while there
-# is work. This job puts `auto-fix` on the oldest `to-fix` issue, and `reworking` on the oldest
-# `to-rework` pull request, each when its own queue is clear — and does nothing otherwise. No
-# Claude run of its own: a handful of API calls and a label. The owner decides what and in which
+# is work. This job puts `fixing` on the oldest `to-fix` issue, and `reworking` on the oldest
+# `to-rework` pull request, each when its own lane is clear, after releasing an in-flight label
+# no run stands behind — and does nothing otherwise. No Claude run of its own: a handful of API
+# calls and a label. The owner decides what and in which
 # order (`to-fix`, a `@claude` mention); the tick decides when (docs/workflow.md).
 # zizmor flags `workflow_run` for the job that checks out, downloads or interpolates what the
 # upstream run produced, with secrets; this one reads nothing of it, and the job's `if` keeps a
@@ -41,25 +42,66 @@ jobs:
       GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Put auto-fix on the next to-fix issue, when the way is clear
+      # A label put on is not a run started: GitHub fires no `pull_request` workflow on a pull
+      # request in conflict, and a run can be skipped or die before its last step. An in-flight
+      # label with no run of its bot behind it holds the lane for nothing; past the grace it
+      # becomes `to-unblock`, and the steps below hand the lane over in the same tick.
+      - name: Release an in-flight label no run stands behind
+        env:
+          # How long a label may wait for its run to be listed: seconds in practice, and a run
+          # waiting for a runner or for its concurrency group already counts as in flight.
+          STALE_AFTER_MINUTES: "10"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          release() {  # <issue|pr> <workflow> <in-flight label>
+            kind=$1 workflow=$2 label=$3
+            alive=0
+            for status in requested queued pending waiting in_progress; do
+              count=$(gh run list --workflow="$workflow" --status "$status" --json databaseId --jq 'length')
+              alive=$((alive + count))
+            done
+            if [ "$alive" -gt 0 ]; then
+              echo "$workflow: $alive run(s) in flight, \`$label\` stands"
+              return
+            fi
+            for n in $(gh "$kind" list --state open --label "$label" --json number --jq '.[].number'); do
+              at=$(gh api --paginate "repos/$GH_REPO/issues/$n/events" \
+                --jq ".[] | select(.event == \"labeled\" and .label.name == \"$label\") | .created_at" | tail -n 1)
+              age=$(( ($(date +%s) - $(date -d "$at" +%s)) / 60 ))
+              if [ "$age" -lt "$STALE_AFTER_MINUTES" ]; then
+                echo "$kind #$n: \`$label\` put on $age min ago, waiting for its run"
+                continue
+              fi
+              gh "$kind" edit "$n" --add-label to-unblock
+              gh "$kind" edit "$n" --remove-label "$label"
+              gh "$kind" comment "$n" --body "No $workflow run behind \`$label\` for $age minutes, released: $RUN_URL"
+              echo "$kind #$n released from \`$label\` after $age min"
+            done
+          }
+          release issue fix.yml fixing
+          release pr rework.yml reworking
+
+      # A hand-off puts the new label on before taking the queue's off, in two commands: the step
+      # stops on the first failure, so an issue the bot could not be handed stays in its queue.
+      - name: Put fixing on the next to-fix issue, when the way is clear
         run: |
           in_flight=$(gh run list --workflow=fix.yml --status in_progress --json databaseId --jq 'length')
           taken=$(gh issue list --state open --label fixing --json number --jq 'length')
-          waiting=$(gh issue list --state open --label auto-fix --json number --jq 'length')
-          if [ "$in_flight" -gt 0 ] || [ "$taken" -gt 0 ] || [ "$waiting" -gt 0 ]; then
-            echo "a fix is in flight ($in_flight running, $taken fixing, $waiting auto-fix): nothing to do"
+          if [ "$in_flight" -gt 0 ] || [ "$taken" -gt 0 ]; then
+            echo "a fix is in flight ($in_flight running, $taken fixing): nothing to do"
             exit 0
           fi
 
-          # The Fix job takes only the owner's issues; any other would keep `auto-fix` forever.
+          # The Fix job takes only the owner's issues; any other would keep `fixing` forever.
           next=$(gh issue list --state open --label to-fix --author "$GITHUB_REPOSITORY_OWNER" \
-            --search "-label:question -label:stalled sort:created-asc" \
+            --search "-label:to-answer -label:to-unblock sort:created-asc" \
             --limit 1 --json number --jq '.[0].number // empty')
           if [ -z "$next" ]; then
             echo "nothing to fix"
             exit 0
           fi
-          gh issue edit "$next" --remove-label to-fix --add-label auto-fix
+          gh issue edit "$next" --add-label fixing
+          gh issue edit "$next" --remove-label to-fix
           echo "issue #$next handed to the fix bot"
 
       # The two queues are independent — a fix and a rework run side by side, each alone in its
@@ -75,11 +117,12 @@ jobs:
 
           # The bot pushes on the pull request's own branch, so only the owner's can be reworked.
           next=$(gh pr list --state open --label to-rework --author "$GITHUB_REPOSITORY_OWNER" \
-            --search "-label:stalled sort:created-asc" \
+            --search "-label:to-unblock sort:created-asc" \
             --limit 1 --json number --jq '.[0].number // empty')
           if [ -z "$next" ]; then
             echo "nothing to rework"
             exit 0
           fi
-          gh pr edit "$next" --remove-label to-rework --add-label reworking
+          gh pr edit "$next" --add-label reworking
+          gh pr edit "$next" --remove-label to-rework
           echo "pull request #$next handed to the rework bot"

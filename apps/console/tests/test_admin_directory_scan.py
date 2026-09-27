@@ -14,12 +14,15 @@ import pytest
 from apps.console.domain import admins
 
 
-def _user(user_id: uuid.UUID, email: str, *, role: str | None = None) -> SimpleNamespace:
+def _user(
+    user_id: uuid.UUID, email: str, *, role: str | None = None, banned: bool = False
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=str(user_id),
         email=email,
         app_metadata={"role": role} if role else {},
         deleted_at=None,
+        banned_until="2126-01-01T00:00:00Z" if banned else None,
     )
 
 
@@ -60,3 +63,22 @@ async def test_setting_admin_status_scans_the_directory_once():
         await admins.set_admin("bob@test.local", is_admin=True)
 
     assert calls == ["list_users"]
+
+
+@pytest.mark.asyncio
+async def test_revoking_the_last_unbanned_admin_is_blocked_by_a_banned_peer():
+    """Issue #79: a banned admin has an admin's role but cannot sign in — it must not count as
+    the safety net that lets the server's last acting admin give up their role."""
+    active = uuid.uuid7()
+    client, _ = _gotrue(
+        [
+            _user(active, "root@test.local", role="admin"),
+            _user(uuid.uuid7(), "bob@test.local", role="admin", banned=True),
+        ]
+    )
+
+    with (
+        patch("apps.auth.infra.user_repository.get_admin_supabase", return_value=client),
+        pytest.raises(admins.LastAdminViolation),
+    ):
+        await admins.set_admin("root@test.local", is_admin=False)

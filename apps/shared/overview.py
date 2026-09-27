@@ -6,6 +6,10 @@ every app that contributes one reaches here rather than formatting its own — s
 these are card lines, not string utilities.
 """
 
+RECENT_ITEMS = 3
+"""How many items an ``Overview`` card's "recent" list shows — one cap, read by every app that
+has one, instead of each redeclaring its own copy that a later edit could drift from."""
+
 
 def pluralize(n: int, word: str) -> str:
     return word if n == 1 else f"{word}s"

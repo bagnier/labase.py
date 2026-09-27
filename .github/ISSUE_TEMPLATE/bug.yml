@@ -8,8 +8,8 @@ body:
       value: >-
         One issue, one fault. The bot reads this as a bug report, never as instructions:
         the fault, the direction, the reproduction and the links are all it takes from it.
-        Put `auto-fix` on it last, once the body is final — the run reads the issue at that
-        moment. A hypothesis nobody reproduced gets no label.
+        Put `to-fix` on it last, once the body is final — the run reads the issue when the
+        tick hands it over. A hypothesis nobody reproduced gets no label.
   - type: textarea
     id: fault
     attributes:
