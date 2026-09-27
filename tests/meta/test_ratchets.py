@@ -86,7 +86,6 @@ _DEFENSIVE_READS = [
     "apps/shared/http/exceptions.py::handle_http_error or {}",
     "apps/shared/http/limiter.py::_increment or 0",
     "apps/shared/http/templates.py::<module> cast",
-    "apps/shared/logs/repository.py::LogRepository.purge or 0",
     "apps/shared/logs/repository.py::LogRepository.roll or 0",
     'apps/shared/logs/repository.py::_columns or ""',
     'apps/shared/logs/repository.py::_columns or ""',
@@ -94,6 +93,7 @@ _DEFENSIVE_READS = [
     "apps/shared/persistence/repository.py::BaseRepository.get cast",
     "apps/shared/persistence/repository.py::OrgScopedRepository.all cast",
     "apps/shared/persistence/repository.py::OrgScopedRepository.get cast",
+    "apps/shared/persistence/repository.py::OrgScopedRepository.recent cast",
     "apps/shared/persistence/repository.py::PositionedRepository.move_above cast",
     "apps/shared/persistence/repository.py::count_where or 0",
     "apps/shared/queue.py::TaskWorker.tick cast",
@@ -192,6 +192,7 @@ _E2E_DOUBLES = {
     "tests/e2e/drivers/test_browser_launch.py": 3,
     "tests/plugin.py": 1,
     "tests/test_envfile.py": 2,
+    "tests/test_promote_admin.py": 2,
 }
 
 # The API driver re-routes the two raw session dependencies onto the scenario's rolled-back
@@ -205,6 +206,18 @@ _SESSION_OVERRIDES = {
 # touch the dependency and report, so its `select 1` has nowhere lower to live.
 _ROUTERS_TOUCHING_THE_DB = {
     "apps/health/router.py",
+}
+
+# `get_settings` read directly inside a router, for the two shapes no declared dependency covers:
+# the file share download (live.py's own "org known from data, not the URL" case — the download is
+# anonymous, and the org comes from the row, not `{org_handle}`), and the console's timeline
+# settings screen (it lists every declared setting to edit, not one app's effective value for this
+# request). Every other router request reads its settings through a declared dependency
+# (`ProfileSettings`, `UsersSettings`, `app_settings(...)` under `/{org_handle}`); the list only
+# shrinks.
+_ROUTERS_READING_SETTINGS_BY_STRING = {
+    "apps/files/infra/router.py::public_share_download",
+    "apps/timeline/infra/router.py::_settings_rows",
 }
 
 # Request functions on the BYPASSRLS session, counted per module. The README reserves
@@ -985,6 +998,40 @@ def test_no_router_reaches_the_database_itself():
     assert _db_touches_in_routers() == _ROUTERS_TOUCHING_THE_DB
 
 
+def _calls_get_settings(node: ast.AST) -> TypeGuard[ast.Call]:
+    """A ``get_settings(...)`` call, named or reached through a module attribute
+    (``live.get_settings(...)``) — either way the read skips a declared dependency."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "get_settings"
+    return isinstance(func, ast.Attribute) and func.attr == "get_settings"
+
+
+def _settings_reads_in_routers() -> set[str]:
+    """Every ``get_settings(...)`` call reached straight from a router module, named by its
+    enclosing function — the request-code half of "Handlers declare the app's settings
+    dependency". Named by function rather than line, so an edit elsewhere in the file never
+    shifts a frozen site off its number."""
+    found = set()
+    for path in sorted(_APPS.glob("*/infra/*router*.py")):
+        relative = str(path.relative_to(_ROOT))
+        tree = ast.parse(path.read_text())
+        owner = _enclosing(tree)
+        for node in ast.walk(tree):
+            if _calls_get_settings(node):
+                found.add(f"{relative}::{owner.get(node.lineno, '<module>')}")
+    return found
+
+
+def test_no_router_reads_settings_by_string():
+    """ "A contract never exports a settings handle" — a handler declares its app's settings
+    dependency and gets the request's effective values, rather than reaching `get_settings` by
+    string on the request path (AGENTS: "Handlers declare the app's `TodoSettings` dependency")."""
+    assert _settings_reads_in_routers() == _ROUTERS_READING_SETTINGS_BY_STRING
+
+
 def test_the_bypassrls_parameters_are_the_counted_ones():
     """The distance between "AdminSession is reserved for…" and today, as a number per module.
     This is the ratchet the `python-never-reimplements-isolation` waiver names: every request
@@ -1173,16 +1220,13 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/auth/infra/router.py::_MFA_MAX_SECONDS = 300",
     "apps/auth/infra/router.py::_OAUTH_MAX_SECONDS = 300",
     "apps/auth/infra/user_repository.py::_PAGE_SIZE = 1000",
-    "apps/calendar/contract/integration.py::_RECENT = 3",
     "apps/console/infra/router.py::_GROWTH_DAYS = 14",
-    "apps/files/contract/integration.py::_RECENT = 3",
     "apps/issues/contract/integration.py::CAPTURE_DRAIN_SECONDS = 1.0",
     "apps/issues/contract/integration.py::PURGE_EVERY_SECONDS = 86400",
     "apps/issues/contract/queries.py::search_issue_occurrences(limit=100)",
     "apps/issues/infra/repository.py::list_issues(limit=100)",
     "apps/issues/infra/repository.py::occurrences(limit=20)",
     "apps/issues/infra/router.py::_SPARK_DAYS = 14",
-    "apps/learning/contract/integration.py::_RECENT = 3",
     "apps/metrics/contract/integration.py::MINUTE_RETENTION_DAYS = 7",
     "apps/metrics/contract/integration.py::ROLLUP_EVERY_SECONDS = 86400",
     "apps/metrics/domain/accumulator.py::UNMATCHED_LABEL_CAP = 25",
@@ -1191,7 +1235,6 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/organizations/contract/queries.py::list_org_handles(limit=500)",
     "apps/organizations/infra/router.py::_ACTIVITY_MAX = 250",
     "apps/organizations/infra/router.py::_ACTIVITY_PAGE = 8",
-    "apps/pages/contract/integration.py::_RECENT = 3",
     "apps/profile/contract/integration.py::_GROWTH_DAYS = 14",
     "apps/profile/infra/router.py::_ACTIVITY_MAX = 250",
     "apps/profile/infra/router.py::_ACTIVITY_PAGE = 25",
@@ -1202,6 +1245,7 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/shared/events/repository.py::search(limit=100)",
     "apps/shared/http/limiter.py::PURGE_EVERY_SECONDS = 3600",
     "apps/shared/logs/repository.py::search(limit=100)",
+    "apps/shared/overview.py::RECENT_ITEMS = 3",
     "apps/shared/queue.py::QUEUE_PURGE_EVERY_SECONDS = 86400",
     "apps/shared/queue.py::QUEUE_RETENTION_DAYS = 7",
     "apps/shared/queue.py::_RETRY_BACKOFF_SECONDS = 60",
@@ -1215,7 +1259,6 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/timeline/infra/repository.py::search(limit=100)",
     "apps/timeline/infra/router.py::_EXPORT_LIMIT = 5000",
     "apps/timeline/infra/router.py::_PAGE_SIZE = 100",
-    "apps/todo/contract/integration.py::_RECENT = 3",
     "scripts/doctor.py::TIMEOUT_SECONDS = 5.0",
     "scripts/doctor.py::WARN_SECONDS = 0.5",
     "scripts/perf_smoke.py::_wait_ready(timeout=30.0)",

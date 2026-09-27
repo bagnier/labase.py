@@ -62,7 +62,7 @@ async def get_invitation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=_NOT_FOUND_DETAIL,
             )
-        if invitation["status"] == "revoked":
+        if invitation.status == InvitationStatus.revoked:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=_NOT_FOUND_DETAIL,
@@ -70,17 +70,7 @@ async def get_invitation(
         # Serialized here rather than handed back as a model: every negotiating handler in the
         # base returns its own Response, which is what lets the annotation say `-> Response` and
         # FastAPI skip building a response model it would only use on one of the two branches.
-        return JSONResponse(
-            InvitationRead(
-                id=invitation["id"],
-                org_id=invitation["org_id"],
-                email=invitation["email"],
-                role=invitation["role"],
-                token=invitation["token"],
-                status=InvitationStatus(invitation["status"]),
-                created_at=invitation["created_at"],
-            ).model_dump(mode="json")
-        )
+        return JSONResponse(invitation.model_dump(mode="json"))
 
     if invitation is None:
         return templates.TemplateResponse(
@@ -89,19 +79,17 @@ async def get_invitation(
             {"state": "invalid", "token": str(token), "org_name": "", "email": ""},
             status_code=404,
         )
-    org = await repo.get(invitation["org_id"])
+    org = await repo.get(invitation.org_id)
     org_name = org.name if org else ""
-    if invitation["status"] == "accepted":
+    if invitation.status == InvitationStatus.accepted:
         state = "already_accepted"
-    elif invitation["status"] == "revoked":
+    elif invitation.status == InvitationStatus.revoked:
         state = "invalid"
+    elif current_user is not None:
+        state = "valid"
     else:
-        email = invitation.get("email", "")
-        if current_user is not None:
-            state = "valid"
-        else:
-            account_exists = await auth_user_exists(admin_session, email)
-            state = "valid_login" if account_exists else "valid_register"
+        account_exists = await auth_user_exists(admin_session, invitation.email)
+        state = "valid_login" if account_exists else "valid_register"
     return templates.TemplateResponse(
         request,
         "invitations/accept.html",
@@ -109,7 +97,7 @@ async def get_invitation(
             "state": state,
             "token": str(token),
             "org_name": org_name,
-            "email": invitation.get("email", ""),
+            "email": invitation.email,
         },
     )
 
@@ -128,20 +116,20 @@ async def accept_invitation(
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
-    if invitation["status"] == "accepted":
-        return await _dashboard_redirect(request, rls_repo, invitation["org_id"])  # idempotent
+    if invitation.status == InvitationStatus.accepted:
+        return await _dashboard_redirect(request, rls_repo, invitation.org_id)  # idempotent
 
-    if invitation["status"] != "pending":
+    if invitation.status != InvitationStatus.pending:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
-    if current_user.email.lower() != invitation["email"].lower():
-        org = await rls_repo.get(invitation["org_id"])
+    if current_user.email.lower() != invitation.email.lower():
+        org = await rls_repo.get(invitation.org_id)
         org_name = org.name if org else ""
         log.warning(
             "organizations.invitation_email_mismatch",
             user_id=str(current_user.id),
-            org_id=str(invitation["org_id"]),
-            invited=invitation["email"],
+            org_id=str(invitation.org_id),
+            invited=invitation.email,
         )
         if wants_json(request):
             raise HTTPException(
@@ -155,7 +143,7 @@ async def accept_invitation(
                 "state": "wrong_email",
                 "token": str(token),
                 "org_name": org_name,
-                "email": invitation["email"],
+                "email": invitation.email,
             },
             status_code=403,
         )
@@ -180,7 +168,5 @@ async def accept_invitation(
         # ``log.exception`` here would fold a second occurrence into the same issue per failure.
         raise
 
-    await events.emit(
-        MemberJoined(user_id=current_user.id, org_id=invitation["org_id"]), rls_session
-    )
-    return await _dashboard_redirect(request, rls_repo, invitation["org_id"])
+    await events.emit(MemberJoined(user_id=current_user.id, org_id=invitation.org_id), rls_session)
+    return await _dashboard_redirect(request, rls_repo, invitation.org_id)

@@ -72,7 +72,8 @@ def test_a_skipped_run_cannot_cancel_the_live_one(workflow):
 def test_a_bot_run_never_runs_beside_another_of_its_own(workflow, group):
     """One run in flight per bot, to spread the subscription window. The group names the bot, not
     the issue or the pull request, so a second hand-off waits instead of taking its own runner —
-    and nothing is cancelled: a run that must stop is cancelled by hand and lands on `stalled`."""
+    and nothing is cancelled: a run that must stop is cancelled by hand and lands on
+    `to-unblock`."""
     concurrency = _bot_job(workflow)["concurrency"]
 
     assert concurrency == {"group": group, "cancel-in-progress": False}
@@ -168,6 +169,6 @@ def test_a_run_that_dies_releases_its_subject(workflow):
     action = next(i for i, step in enumerate(steps) if _is_action(step))
     after = [step for step in steps[action + 1 :] if step.get("if") == "always()"]
 
-    assert [(_IN_FLIGHT[workflow] in s["run"], "stalled" in s["run"]) for s in after] == [
+    assert [(_IN_FLIGHT[workflow] in s["run"], "to-unblock" in s["run"]) for s in after] == [
         (True, True)
     ]

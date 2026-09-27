@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
-from apps.shared.http.content_type import is_htmx, wants_json
+from apps.shared.http.content_type import is_htmx, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 
 # What a negotiating handler answers, said where the schema can read it.
@@ -26,7 +26,8 @@ from apps.shared.http.templates import templates
 # so naming both media types here is right whichever one the route already declared.
 #
 # Two types, three audiences: a fragment and a full page are both `text/html`, and which one
-# a request gets is `is_htmx`, not a media type. The schema has nothing finer to say.
+# a request gets is `wants_full_page`, not a media type — a history restore carries `HX-Request`
+# too, but gets the full page all the same. The schema has nothing finer to say.
 # It matters beyond the docs page: `client/` is generated from this schema, so a face the
 # schema omits is a face no external caller can reach.
 
@@ -102,12 +103,12 @@ def render_list(
 ) -> Response:
     if wants_json(request):
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
-    htmx = is_htmx(request)
-    template = fragment if htmx else full
+    full_page = wants_full_page(request)
+    template = full if full_page else fragment
     org_handle = request.path_params.get("org_handle", "")
     ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
     if extra:
         ctx |= extra
-    if not htmx and context:
+    if full_page and context:
         ctx |= context
     return templates.TemplateResponse(request, template, ctx)

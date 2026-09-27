@@ -262,6 +262,27 @@
 .ph.ph-users:before {
   content: "\e4d6";
 }
+.ph.ph-user-plus:before {
+  content: "\e4d0";
+}
+.ph.ph-user-minus:before {
+  content: "\e4ce";
+}
+.ph.ph-user-gear:before {
+  content: "\e4cc";
+}
+.ph.ph-shield-check:before {
+  content: "\e40c";
+}
+.ph.ph-circle:before {
+  content: "\e18a";
+}
+.ph.ph-google-logo:before {
+  content: "\e292";
+}
+.ph.ph-github-logo:before {
+  content: "\e576";
+}
 .ph.ph-x:before {
   content: "\e4f6";
 }
@@ -291,6 +312,9 @@
 }
 .ph.ph-check-square:before {
   content: "\e186";
+}
+.ph.ph-check:before {
+  content: "\e182";
 }
 .ph.ph-text-strikethrough:before {
   content: "\e5c2";

@@ -50,9 +50,10 @@ from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 
-# The sink's own outage/recovery transitions must reach the Timeline whatever
-# ``timeline.log_level`` quiets (AGENTS: the log sink) — so they go through a bound logger built
-# with ``wrap_logger``, outside ``structlog.configure()``'s global state, immune to
+# The sink's own reports on itself — the outage/recovery transitions, and what the queue had to
+# shed — must reach the Timeline whatever ``timeline.log_level`` quiets (AGENTS: the log sink) —
+# so they go through a bound logger built with ``wrap_logger``, outside ``structlog.configure()``'s
+# global state, immune to
 # ``apply_log_level`` re-pointing the console's filtering wrapper class. The underlying stdlib
 # logger is pinned to its own floor for the same reason: unpinned, it would inherit the root
 # logger's level, which ``apply_log_level`` raises too. The processors are ``chain.py``'s own
@@ -176,10 +177,15 @@ def _write_to_files(lines: list[dict[str, Any]]) -> None:
 
 
 def report_overflow() -> None:
-    """Say what the queue shed since the last tick — once per tick, never once per lost line."""
+    """Say what the queue shed since the last tick — once per tick, never once per lost line.
+
+    Through ``_log``, not ``log``: a dropped line is one the Timeline will never show (see
+    :class:`_Overflow`), so it must reach it whatever ``timeline.log_level`` quiets — the same
+    level-immune path the outage/recovery pair uses, and for the same reason.
+    """
     dropped, _overflow.dropped = _overflow.dropped, 0
     if dropped:
-        log.warning("log_sink.overflowed", dropped=dropped)
+        _log.warning("log_sink.overflowed", dropped=dropped)
 
 
 def report_write_outage() -> None:
