@@ -115,7 +115,7 @@ async def at_rest(monkeypatch):
     async with AsyncSession(bind=conn, expire_on_commit=False) as session:
         await session.execute(text("delete from task_queue"))
         await session.execute(
-            text("update business_events set dispatched_at = now() where dispatched_at is null")
+            text("update business_events set checked_at = now() where checked_at is null")
         )
         await session.commit()
 
