@@ -33,6 +33,8 @@ _BROWSER_ONLY = {
         "files.feature: A file row's rename, share and delete controls stay visible when"
         " focused by keyboard"
     ),
+    "todo.feature: A todo row's edit and delete buttons stay visible when reached by keyboard",
+    "todo.feature: Renaming a todo item from the keyboard reaches a labelled field",
 }
 
 

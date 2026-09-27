@@ -28,9 +28,14 @@ _SESSION_PROVIDERS = {
 }
 
 # Link and settings tables keep their natural composite keys — a surrogate id on a row that *is*
-# its pair would be a second identity to keep unique. The share token is the README's own stated
-# exception: a security token stays a random uuid4, unguessable, with no timestamp to read off it.
+# its pair would be a second identity to keep unique; none of their columns owes uuid7. The share
+# token is the README's own stated exception: a security token stays a random uuid4, unguessable,
+# with no timestamp to read off it.
 _NATURAL_COMPOSITE_KEYS = {"app_settings", "memberships", "org_app_settings"}
+# A range-partitioned table is a different reason to be composite: Postgres requires the
+# partition column in every unique key, so the key pairs it with the table's own uuid7 surrogate
+# — named here, so that surrogate still owes uuid7 rather than skipping the check altogether.
+_PARTITIONED_COMPOSITE_KEYS = {"log_lines": "ts"}
 _RANDOM_TOKEN_KEYS = {"org_file_share_tokens"}
 
 
@@ -65,19 +70,29 @@ def _key_generator(column) -> object:
 
 def test_every_mapped_primary_key_is_a_time_ordered_uuid7():
     """ "Every primary key is a time-ordered UUIDv7" — walked over every mapped table, not proven
-    on the mixin alone. The two exception families are frozen above, so a new composite key or a
-    new token is an edit here, made on purpose."""
+    on the mixin alone. The three exception families are frozen above, so a new composite key or
+    a new token is an edit here, made on purpose. A partitioned table's surrogate `id` still owes
+    uuid7 even though the pair as a whole is exempt from being one."""
     composite, tokens, strays = set(), set(), set()
     for table in Base.metadata.tables.values():
         keys = list(table.primary_key.columns)
         if len(keys) > 1:
             composite.add(table.name)
+            partition_column = _PARTITIONED_COMPOSITE_KEYS.get(table.name)
+            if partition_column is not None:
+                surrogate = next(key for key in keys if key.name != partition_column)
+                if _key_generator(surrogate) is not uuid.uuid7:
+                    strays.add(f"{table.name}.{surrogate.name}")
         elif _key_generator(keys[0]) is uuid.uuid4:
             tokens.add(table.name)
         elif _key_generator(keys[0]) is not uuid.uuid7:
             strays.add(f"{table.name}.{keys[0].name}")
 
-    assert (composite, tokens, strays) == (_NATURAL_COMPOSITE_KEYS, _RANDOM_TOKEN_KEYS, set())
+    assert (composite, tokens, strays) == (
+        _NATURAL_COMPOSITE_KEYS | set(_PARTITIONED_COMPOSITE_KEYS),
+        _RANDOM_TOKEN_KEYS,
+        set(),
+    )
 
 
 # The security tokens, named: the columns that must stay uuid4 — unguessable, with no timestamp
@@ -213,6 +228,49 @@ def test_no_fragment_response_starts_inside_a_table():
 def test_the_fragment_walk_actually_finds_the_responses():
     # Guards the guard: a walk that matched nothing would make the assertion above vacuous.
     assert len(_fragment_responses()) > 10
+
+
+def _routers() -> list[Path]:
+    """Every router module — not just the ones literally named ``router.py``
+    (``accounts_router.py``, ``invitation_router.py``), plus the one app with no ``infra/``
+    split. The same enumeration `_db_touches_in_routers` uses in test_ratchets.py."""
+    return [*sorted(_APPS.glob("*/infra/*router*.py")), _APPS / "health" / "router.py"]
+
+
+def _negotiation_header_offenders() -> set[str]:
+    """Every router line reading ``HX-Request`` or ``Accept`` off ``request.headers`` by hand
+    instead of through ``wants_json`` / ``is_htmx`` / ``wants_full_page`` — the single source
+    of truth AGENTS.md names for that branch."""
+    offenders = set()
+    for path in _routers():
+        relative = str(path.relative_to(_ROOT))
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "headers"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and node.args[0].value.lower() in {"hx-request", "accept"}
+            ):
+                offenders.add(f"{relative}:{node.lineno}")
+    return offenders
+
+
+def test_no_router_reads_the_negotiation_headers_by_hand():
+    """ "One set of helpers branches JSON, fragment and page" — a router re-spelling
+    ``HX-Request`` or ``Accept`` by hand instead of calling ``wants_json`` / ``is_htmx`` /
+    ``wants_full_page`` passes the rest of the suite the same way the four routers #130 fixed
+    did before that fix."""
+    assert _negotiation_header_offenders() == set()
+
+
+def test_the_router_walk_actually_finds_the_files():
+    # Guards the guard: a walk that matched nothing would make the assertion above vacuous.
+    assert len(_routers()) > 10
 
 
 def test_the_layout_walk_actually_finds_the_files():
