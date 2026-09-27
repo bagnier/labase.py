@@ -28,9 +28,14 @@ _SESSION_PROVIDERS = {
 }
 
 # Link and settings tables keep their natural composite keys — a surrogate id on a row that *is*
-# its pair would be a second identity to keep unique. The share token is the README's own stated
-# exception: a security token stays a random uuid4, unguessable, with no timestamp to read off it.
+# its pair would be a second identity to keep unique; none of their columns owes uuid7. The share
+# token is the README's own stated exception: a security token stays a random uuid4, unguessable,
+# with no timestamp to read off it.
 _NATURAL_COMPOSITE_KEYS = {"app_settings", "memberships", "org_app_settings"}
+# A range-partitioned table is a different reason to be composite: Postgres requires the
+# partition column in every unique key, so the key pairs it with the table's own uuid7 surrogate
+# — named here, so that surrogate still owes uuid7 rather than skipping the check altogether.
+_PARTITIONED_COMPOSITE_KEYS = {"log_lines": "ts"}
 _RANDOM_TOKEN_KEYS = {"org_file_share_tokens"}
 
 
@@ -65,19 +70,29 @@ def _key_generator(column) -> object:
 
 def test_every_mapped_primary_key_is_a_time_ordered_uuid7():
     """ "Every primary key is a time-ordered UUIDv7" — walked over every mapped table, not proven
-    on the mixin alone. The two exception families are frozen above, so a new composite key or a
-    new token is an edit here, made on purpose."""
+    on the mixin alone. The three exception families are frozen above, so a new composite key or
+    a new token is an edit here, made on purpose. A partitioned table's surrogate `id` still owes
+    uuid7 even though the pair as a whole is exempt from being one."""
     composite, tokens, strays = set(), set(), set()
     for table in Base.metadata.tables.values():
         keys = list(table.primary_key.columns)
         if len(keys) > 1:
             composite.add(table.name)
+            partition_column = _PARTITIONED_COMPOSITE_KEYS.get(table.name)
+            if partition_column is not None:
+                surrogate = next(key for key in keys if key.name != partition_column)
+                if _key_generator(surrogate) is not uuid.uuid7:
+                    strays.add(f"{table.name}.{surrogate.name}")
         elif _key_generator(keys[0]) is uuid.uuid4:
             tokens.add(table.name)
         elif _key_generator(keys[0]) is not uuid.uuid7:
             strays.add(f"{table.name}.{keys[0].name}")
 
-    assert (composite, tokens, strays) == (_NATURAL_COMPOSITE_KEYS, _RANDOM_TOKEN_KEYS, set())
+    assert (composite, tokens, strays) == (
+        _NATURAL_COMPOSITE_KEYS | set(_PARTITIONED_COMPOSITE_KEYS),
+        _RANDOM_TOKEN_KEYS,
+        set(),
+    )
 
 
 # The security tokens, named: the columns that must stay uuid4 — unguessable, with no timestamp

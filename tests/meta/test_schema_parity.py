@@ -26,6 +26,7 @@ from apps.shared.settings.env import get_technical_settings
 _EXTRA_MODEL_MODULES = (
     "apps.shared.events.models",
     "apps.shared.settings.store",
+    "apps.shared.logs.models",
 )
 
 
@@ -44,6 +45,7 @@ class LiveSchema:
         relation_names: set[str],
         closed_sets: dict[tuple[str, str], list[str]],
         updated_at_triggers: set[str],
+        primary_keys: dict[str, set[str]],
     ) -> None:
         self.columns = columns
         self.relation_names = relation_names
@@ -51,6 +53,8 @@ class LiveSchema:
         self.closed_sets = closed_sets
         # Tables carrying a `before update ... execute function set_updated_at()` trigger.
         self.updated_at_triggers = updated_at_triggers
+        # Every table's primary key columns, by table name.
+        self.primary_keys = primary_keys
 
     @property
     def tables(self) -> set[str]:
@@ -127,14 +131,32 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
+            primary_keys = (
+                await conn.execute(
+                    text(
+                        "select tc.table_name, kcu.column_name "
+                        "from information_schema.table_constraints tc "
+                        "join information_schema.key_column_usage kcu "
+                        "  on kcu.constraint_name = tc.constraint_name "
+                        "  and kcu.table_schema = tc.table_schema "
+                        "where tc.constraint_type = 'PRIMARY KEY' and tc.table_schema = :schema"
+                    ),
+                    {"schema": schema},
+                )
+            ).all()
     finally:
         await engine.dispose()
+
+    pk_by_table: dict[str, set[str]] = {}
+    for table, column in primary_keys:
+        pk_by_table.setdefault(table, set()).add(column)
 
     return LiveSchema(
         columns={(table, column): nullable == "YES" for table, column, nullable in columns},
         relation_names={name for (name,) in relations},
         closed_sets={(table, column): list(labels) for table, column, labels in closed_sets},
         updated_at_triggers={table for (table,) in updated_at_triggers},
+        primary_keys=pk_by_table,
     )
 
 
@@ -160,6 +182,24 @@ def test_every_mapped_column_matches_the_database(live_schema: LiveSchema) -> No
         key: {"orm_nullable": nullable, "database": live_schema.columns.get(key, "absent")}
         for key, nullable in declared.items()
         if live_schema.columns.get(key, "absent") != nullable
+    }
+
+    assert disagreements == {}
+
+
+def test_every_mapped_primary_key_matches_the_database(live_schema: LiveSchema) -> None:
+    """The ORM and the table must agree on which columns identify a row — the case that exposed
+    a mismatch was a table partitioned by range, where Postgres requires the partition column in
+    every unique key, but the rule holds for any table a model maps only part of the key of."""
+    declared = {
+        table.name: {column.name for column in table.primary_key.columns}
+        for table in Base.metadata.tables.values()
+    }
+
+    disagreements = {
+        name: {"orm": columns, "database": live_schema.primary_keys.get(name, set())}
+        for name, columns in declared.items()
+        if live_schema.primary_keys.get(name, set()) != columns
     }
 
     assert disagreements == {}
