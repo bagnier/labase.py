@@ -29,6 +29,10 @@ _BROWSER_ONLY = {
     "profile.feature: The profile is reached from the account area, not the main navigation",
     "files.feature: The upload control has an accessible name",
     "files.feature: The share link field has an accessible name",
+    (
+        "files.feature: A file row's rename, share and delete controls stay visible when"
+        " focused by keyboard"
+    ),
 }
 
 

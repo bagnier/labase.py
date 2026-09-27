@@ -20,12 +20,15 @@ from apps.console.contract.integration import _bootstrap_first_admin
 _NO_SESSION = cast(AsyncSession, None)  # the handler runs on the GoTrue admin API, not the session
 
 
-def _user(user_id: uuid.UUID, *, role: str | None = None, deleted: bool = False) -> SimpleNamespace:
+def _user(
+    user_id: uuid.UUID, *, role: str | None = None, deleted: bool = False, banned: bool = False
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=str(user_id),
         email=f"{user_id}@example.com",
         app_metadata={"role": role} if role else {},
         deleted_at="2026-08-20T00:00:00Z" if deleted else None,
+        banned_until="2126-08-20T00:00:00Z" if banned else None,
     )
 
 
@@ -63,6 +66,20 @@ async def test_an_existing_admin_ends_the_bootstrap():
         await _bootstrap_first_admin(_NO_SESSION, _created(actor))
 
     assert updates == []
+
+
+@pytest.mark.asyncio
+async def test_a_banned_admin_does_not_cover_the_bootstrap():
+    """A banned admin still carries ``app_metadata.role == "admin"`` in GoTrue but cannot sign
+    in — so a server left with only a banned admin must still promote the next registrant
+    (issue #158), the same way it would if the role claim were absent entirely."""
+    actor = uuid.uuid7()
+    client, updates = _gotrue([_user(uuid.uuid7(), role="admin", banned=True), _user(actor)])
+
+    with patch("apps.auth.infra.user_repository.get_admin_supabase", return_value=client):
+        await _bootstrap_first_admin(_NO_SESSION, _created(actor))
+
+    assert updates == [(str(actor), {"app_metadata": {"role": "admin"}})]
 
 
 @pytest.mark.asyncio

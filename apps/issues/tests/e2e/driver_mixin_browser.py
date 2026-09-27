@@ -49,7 +49,7 @@ class IssuesBrowserMixin(BrowserBase):
     def _back_to_the_list(self) -> None:
         """Triage leaves the admin on an issue's detail page; the way back to the list is the
         page's own link, which is also what a human would click."""
-        back = self.page.get_by_role("link", name="← Issues")
+        back = self.page.get_by_role("link", name="Back to issues")
         if back.count():
             back.click()
             self.page.wait_for_selector("[data-issue]", timeout=5000)

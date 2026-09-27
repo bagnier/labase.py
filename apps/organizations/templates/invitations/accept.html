@@ -30,7 +30,7 @@
           <h1 class="card-title text-xl justify-center">Invitation already accepted</h1>
           <p class="text-sm text-base-content/70">You are already a member of <strong>{{ org_name }}</strong>.</p>
           <a href="/profile"
-             class="inline-block mt-4 text-sm text-primary font-medium link link-hover">Go to dashboard →</a>
+             class="inline-block mt-4 text-sm text-primary font-medium link link-hover">Go to dashboard <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
         </div>
       {% elif state == "wrong_email" %}
         <div role="alert" data-error class="text-center space-y-3">
@@ -41,14 +41,14 @@
             Please sign in with that address and try again.
           </p>
           <a href="/profile"
-             class="inline-block mt-4 text-sm text-primary font-medium link link-hover">Back to home →</a>
+             class="inline-block mt-4 text-sm text-primary font-medium link link-hover">Back to home <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
         </div>
       {% else %}
         <div role="alert" data-error class="text-center space-y-3">
           <h1 class="card-title text-xl justify-center">Invalid or expired link</h1>
           <p class="text-sm text-base-content/70">This invitation is no longer valid. Ask the organisation admin for a new link.</p>
           <a href="/profile"
-             class="inline-block mt-4 text-sm text-primary font-medium link link-hover">Back to home →</a>
+             class="inline-block mt-4 text-sm text-primary font-medium link link-hover">Back to home <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
         </div>
       {% endif %}
     </div>
