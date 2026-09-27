@@ -25,11 +25,14 @@
       {{ empty_state('No traffic recorded yet. Metrics are flushed every minute — check back shortly.', attr='data-load-empty') }}
     {% endif %}
     <p class="text-sm space-x-4">
-      <a class="link" href="/console/metrics">Settings →</a>
+      <a class="link" href="/console/metrics">Settings <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
       {% if studio_url %}
-        <a class="link" href="{{ studio_url }}" rel="noopener">Database stats → Supabase</a>
+        <a class="link"
+           href="{{ studio_url }}"
+           rel="noopener">Database stats <i class="ph ph-arrow-right"
+    aria-hidden="true"></i> Supabase</a>
       {% endif %}
-      <a class="link" href="/metrics">Raw Prometheus exposition →</a>
+      <a class="link" href="/metrics">Raw Prometheus exposition <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
     </p>
   </div>
 {% endblock %}
