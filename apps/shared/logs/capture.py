@@ -27,8 +27,12 @@ tracker that must never itself fail — so deleting the issues context simply le
 untracked. A tracker that starts failing is itself queued, once, on the tick after the one that
 found it broken — so a broken tracker becomes its own issue rather than a silent gap — and stays a
 warning for as long as it keeps failing, the same transition-not-tick verdict
-:mod:`apps.shared.logs.loop` holds for the other lifespan workers. The seam is deliberately off the
-event bus: an ``ExceptionCaptured`` is technical observability, not a persisted business fact.
+:mod:`apps.shared.logs.loop` holds for the other lifespan workers. A capture no tracker took is not
+lost with the outage it would explain: it rejoins the back of the queue and ends the tick, so for as
+long as the tracker stays down each tick probes it with one capture rather than the whole queue, and
+the outage adds nothing to the queue of its own but the tracker's one failure. The seam is
+deliberately off the event bus: an ``ExceptionCaptured`` is technical observability, not a
+persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so
@@ -284,12 +288,14 @@ class CaptureDrain:
                 if _trackers and not taken:
                     # Postgres down is a tracker raising, not a capture that stops mattering: kept
                     # for the next tick's retry rather than lost with the outage it would explain.
-                    # Snapshotted past this round (see above), so it is not retried this same tick.
                     # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
                     # already, so the marking path would read the retry as a duplicate and drop it.
                     # Bound like any other append: a concurrent request can fill the freed slot
                     # while the tracker awaits, and the eviction that follows counts the same way.
                     _append(captured)
+                    # And it ends the tick: what is still queued behind it would only cost the
+                    # tracker that is down one more failing call each, every tick of the outage.
+                    break
             finally:
                 _capturing.reset(token)
 
