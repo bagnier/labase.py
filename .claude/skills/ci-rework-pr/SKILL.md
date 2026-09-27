@@ -35,7 +35,7 @@ the runner (`GITHUB_ACTIONS` is `true`), the non-interactive rules apply.
 
 Either way the run gives the label back — `reworking` off, and nothing on: the pull request
 waits for the owner, and the queue behind it moves. A run that never reaches that line is
-`stalled` by the workflow (docs/workflow.md).
+`to-unblock` by the workflow (docs/workflow.md).
 
 A remark that is a critique with no ask — "weak tests" — is an ask: read the rule it points at
 (`write-tests`, AGENTS.md, the feature file) and make the change the rule implies. What cannot
@@ -53,10 +53,11 @@ gh api "repos/{owner}/{repo}/pulls/$ARGUMENTS/comments"
 
 Stop, without a comment, when the pull request is not open. On the runner, stop too when it does
 not carry `reworking`: that label is the tick's hand-off, and one rework runs at a time. In a
-session, take it before touching anything, so the tick sees the pull request busy:
+session, take the pull request off the queue so the tick never hands it over beside you — never
+put `reworking` on by hand: that label fires the runner's run.
 
 ```sh
-gh pr edit "$ARGUMENTS" --add-label reworking
+gh pr edit "$ARGUMENTS" --remove-label to-rework
 ```
 
 The brief is every remark by the repository owner — review comments, inline comments, and the

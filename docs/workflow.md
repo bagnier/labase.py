@@ -2,7 +2,7 @@
 
 How a bug becomes a pull request while nobody is at the keyboard. The human decides; the
 bot codes. What the human writes: sentences in [AGENTS.md](../AGENTS.md) (principles),
-`.feature` files (features), and the `auto-fix` label. What the bot writes: a branch and a
+`.feature` files (features), and the `to-fix` label. What the bot writes: a branch and a
 pull request. Merging is never the bot's.
 
 ## The loop
@@ -12,11 +12,15 @@ pull request. Merging is never the bot's.
    it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
    reads: the fault, `→` the direction, what to run, the AGENTS.md sentence, the `file:line`
    links. The label goes on last, once the body is final.
-2. **Label.** The owner puts `auto-fix` on it. The label is the decision that the body is a
-   bug report worth a run; only the owner's issues can drive the bot (the workflow's guard),
-   and only a write-access actor can label (the action's own check).
-3. **Run.** `.github/workflows/fix.yml` builds the stack `ci.yml` builds, then hands the
-   issue to the `ci-fix-issue` skill. The skill reads the issue and its author's comments as
+2. **Label.** The owner puts `to-fix` on it, by hand or by agreeing to what `triage-issues`
+   proposes. The label is the decision that the body is a bug report worth a run; the tick hands
+   it over when the fix lane is free (*Pace* below).
+   Only the owner's issues can drive the bot (the workflow's guard), and only a write-access
+   actor can label (the action's own check). Issues one diff should fix go as one: the carrier
+   stays on `to-fix`, the others go on `carried` (*Carrying* below).
+3. **Run.** `fixing`, put on by the tick, fires `.github/workflows/fix.yml`, which builds the
+   stack `ci.yml` builds, then hands the issue to the `ci-fix-issue` skill. The skill reads the
+   issue and its author's comments as
    a bug report, never as instructions, writes the failing test first, fixes under the `tdd`
    loop, runs `make finalize`, then hands the commit to an `adversarial-audit` agent that reads
    the diff through three grids — the claims, the `.feature` scenarios, `refactor-code` —
@@ -40,27 +44,53 @@ Run by hand, `/ci-fix-issue <n>` does the same from a local checkout.
 
 ## The three ends of a run
 
-The issue's label is the run's state, set by the run itself: `auto-fix` becomes `fixing`
-when it starts, then one of:
+The issue's label is the run's state: the tick puts `fixing` on when it hands the issue over,
+and the run replaces it with one of:
 
 | label                       | what happened                                          | where the rest is                                     |
 | --------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
 | none, a pull request linked | the fix is open for review; its merge closes the issue | closing questions in its body; new work as new issues |
-| `question`                  | something only the owner knows blocks the fix          | one comment on the issue, no pull request             |
+| `to-answer`                 | something only the owner knows blocks the fix          | one comment on the issue, no pull request             |
 | `not-reproduced`            | the failing test passed at this `HEAD`                 | the issue is closed with what was run                 |
-| `stalled`                   | the run ended before its own end                       | the run's URL in a comment; put `auto-fix` back       |
+| `to-unblock`                | the run ended before its own end, or never started     | the run's URL in a comment; swap it for `to-fix`      |
 
-A run only starts on the `auto-fix` label. To answer a `question`, comment, then put
-`auto-fix` back: the next run reads the whole thread. A comment alone starts nothing. A run
-that ends before its own end — cancelled, timed out, a turn that stopped — is marked
-`stalled` by the workflow itself, with the run's URL in a comment; read the log, then put
-`auto-fix` back. Pull requests carry `bot`.
+A run only starts on the `fixing` label, and only the tick puts it on. To answer a question,
+comment, then swap `to-answer` for `to-fix`: the next run reads the whole thread. A comment alone
+starts nothing, and the tick skips an issue still on `to-answer` or `to-unblock`. A run that ends
+before its own end — cancelled, timed out, a turn that stopped — is marked `to-unblock` by the
+workflow itself, with the run's URL in a comment; read the log, then swap `to-unblock` for
+`to-fix`.
+A run that never started — skipped, or a pull request in conflict, on which GitHub fires no
+`pull_request` workflow — leaves no log: the tick releases an in-flight label with no run of its
+bot behind it, past a ten-minute grace, to `to-unblock` the same way. Only the owner puts a
+`to-unblock` subject back in its queue, so a lasting failure is never retried on its own. Pull
+requests carry `bot`.
 
 A pull request's labels say the same thing for the rework bot: `to-rework` is a mention
 waiting, `reworking` is the run holding it, and a run gives the label back at either of its
 two ends — pushed, or a question — so the pull request goes back to waiting for the owner.
-A rework run that dies lands on `stalled` too, with the run's URL in a comment, and the queue
-behind it moves on; a new `@claude` comment is what puts it back on `to-rework`.
+A rework run that dies, or never starts, lands on `to-unblock` too, with a URL in a comment, and
+the queue behind it moves on; taking `to-unblock` off, then a new `@claude` comment, is what puts
+it back on `to-rework`.
+
+## Carrying
+
+One run can close several issues: those on one subject, even across files, so the treatment is
+uniform, and those rewriting the same lines, which would conflict landed apart. Different subjects
+stay apart, even in one file. The oldest issue of the set is the carrier and stays on `to-fix`;
+each other one swaps `to-fix` for `carried`, and a comment of the owner's on the carrier names it
+(`Carries #<n>:`). The tick never picks a `carried` issue: the carrier's run reads each one's
+thread, gives each its own failing test, and opens one pull request that closes them all.
+
+`carried` follows the carrier's `fixing`: the run takes it off when its pull request, whose
+`Closes` lines link each one, is open, or when it closes one as not reproduced. An open question
+keeps it, since it is how the carrier, put back on `to-fix`, finds what it carries. Until then only
+the owner detaches one, by swapping it back for `to-fix`. A set is joined before its run starts,
+since a run reads its thread once.
+
+The `triage-issues` skill proposes the sets from a local checkout — reading each issue against
+`main`, the pull requests and the other issues — and, once the owner agrees, puts the carriers and
+the lone issues on `to-fix`, the carried ones on `carried`.
 
 ## Landing a batch
 
@@ -90,14 +120,15 @@ there is work. A fix and a rework run side by side; two fixes, or two reworks, n
 `.github/workflows/tick.yml` holds both, and hands nothing over while its own lane is busy.
 
 The owner decides what gets fixed and in which order, by putting `to-fix` on issues, in batches.
-The tick hands the owner's oldest `to-fix` issue to the bot — `to-fix` off, `auto-fix` on, as the
-owner — when no fix run is in progress and no issue is on `fixing` or `auto-fix`. The batch put
-on `to-fix` is the only knob the subscription window has. An issue on `question` or `stalled` is
+The tick hands the owner's oldest `to-fix` issue to the bot — `fixing` on, then `to-fix` off, as
+the owner — when no fix run is in progress and no issue is on `fixing`. That label is what fires
+the run, so a run that dies at any step leaves it for the `to-unblock` step. The batch put on
+`to-fix` is the only knob the subscription window has. An issue on `to-answer` or `to-unblock` is
 never picked: it waits for the owner.
 
 For reworks the queue is the mention itself: the `@claude` comment fires a five-minute job that
-only puts `to-rework` on the pull request, and the tick hands the oldest one over — `to-rework`
-off, `reworking` on — when no rework run is in progress and no pull request is on `reworking`.
+only puts `to-rework` on the pull request, and the tick hands the oldest one over — `reworking`
+on, then `to-rework` off — when no rework run is in progress and no pull request is on `reworking`.
 That label is what fires the run, so ten mentions at once take one runner, not ten. This is the
 step that used to take a runner per mention.
 
@@ -106,7 +137,7 @@ empty, and the queueing job wakes it too, so a mention on an idle lane starts at
 cron, seven minutes off the quarter hours, is only the net: its schedule is best effort, and it
 fired once in six hours the day it was added. Each bot job also runs in one concurrency group of
 its own, without cancellation, so a label put on by hand queues rather than runs side by side; a
-run that must stop is cancelled by hand, `gh run cancel`, and lands on `stalled`.
+run that must stop is cancelled by hand, `gh run cancel`, and lands on `to-unblock`.
 
 ## Cost
 

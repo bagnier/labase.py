@@ -27,8 +27,12 @@ tracker that must never itself fail — so deleting the issues context simply le
 untracked. A tracker that starts failing is itself queued, once, on the tick after the one that
 found it broken — so a broken tracker becomes its own issue rather than a silent gap — and stays a
 warning for as long as it keeps failing, the same transition-not-tick verdict
-:mod:`apps.shared.logs.loop` holds for the other lifespan workers. The seam is deliberately off the
-event bus: an ``ExceptionCaptured`` is technical observability, not a persisted business fact.
+:mod:`apps.shared.logs.loop` holds for the other lifespan workers. A capture no tracker took is not
+lost with the outage it would explain: it rejoins the back of the queue and ends the tick, so for as
+long as the tracker stays down each tick probes it with one capture rather than the whole queue, and
+the outage adds nothing to the queue of its own but the tracker's one failure. The seam is
+deliberately off the event bus: an ``ExceptionCaptured`` is technical observability, not a
+persisted business fact.
 
 The processor never touches the event loop or the DB: ``log.exception`` can fire before the loop
 exists (mount/startup) and from worker threads (auth's ``asyncio.to_thread`` GoTrue calls), so the
@@ -89,6 +93,19 @@ class _Overflow:
 
 
 _overflow = _Overflow()
+
+
+def _append(captured: ExceptionCaptured) -> None:
+    """Append to the bounded queue, shedding by fingerprint when it is full and counting the
+    eviction — shared by the processor's own capture and the drain's retry, an ordinary append
+    either way. It does not mark: the retry re-queues a capture whose exception ``_enqueue``
+    marked already."""
+    with _lock:
+        if len(_QUEUE) == _QUEUE.maxlen:
+            _overflow.dropped += 1
+            _shed()
+        _QUEUE.append(captured)
+
 
 # Set while the drain is delivering, so a tracker's own ordinary logging never re-enters the
 # capture processor mid-drain. ``capture.tracker_failed`` is logged under the same guard, but the
@@ -191,11 +208,7 @@ def _enqueue(exc: BaseException, context: dict[str, Any]) -> None:
     # Warm the fingerprint cache now, spread over every capture as it arrives, so a storm's first
     # overflow never pays to walk a thousand tracebacks it should have already had cached.
     _shed_key(exc)
-    with _lock:
-        if len(_QUEUE) == _QUEUE.maxlen:
-            _overflow.dropped += 1
-            _shed()
-        _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+    _append(ExceptionCaptured(exc=exc, context=context))
 
 
 def capture_processor(
@@ -304,11 +317,24 @@ class CaptureDrain:
                 if not _QUEUE:
                     break
                 captured = _QUEUE.popleft()
-            await self._deliver(captured)
+            if not await self._deliver(captured):
+                # Postgres down is a tracker raising, not a capture that stops mattering: kept
+                # for the next tick's retry rather than lost with the outage it would explain.
+                # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
+                # already, so the marking path would read the retry as a duplicate and drop it.
+                # Bound and shed like any other append: a concurrent request can fill the freed slot
+                # while the tracker awaits, and the eviction that follows counts the same way.
+                _append(captured)
+                # And it ends the tick: what is still queued behind it would only cost the
+                # tracker that is down one more failing call each, every tick of the outage.
+                break
         if dropped:
             await self._report_overflow(dropped)
 
-    async def _deliver(self, captured: ExceptionCaptured) -> None:
+    async def _deliver(self, captured: ExceptionCaptured) -> bool:
+        """Hand ``captured`` to every tracker, isolated; whether it is done with — taken by a
+        tracker, or with no tracker subscribed to take it."""
+        taken = False
         token = _capturing.set(True)
         try:
             for tracker in _trackers:
@@ -330,25 +356,34 @@ class CaptureDrain:
                         raise
                     _report_tracker_failure(tracker, tracker_exc, captured.context)
                 else:
+                    taken = True
                     _report_tracker_recovery(tracker)
         finally:
             _capturing.reset(token)
+        return taken or not _trackers
 
     async def _report_overflow(self, dropped: int) -> None:
         """Deliver the shortfall straight to the trackers, in this same tick, rather than
         enqueuing it for the next one: ``stop()`` runs exactly one tick before the process ends,
-        and a storm's drop sitting one tick behind would die with it, unfolded."""
+        and a storm's drop sitting one tick behind would die with it, unfolded.
+
+        One no tracker took is kept like any such capture, but as its count rather than as a
+        capture, and said only once taken: the report a tracker finally takes carries the whole
+        shortfall, and the line says it once rather than on every tick of the outage."""
         try:
             raise CaptureQueueOverflowed(
                 f"the capture queue shed {dropped} capture(s) it had no room for"
             )
         except CaptureQueueOverflowed as exc:
+            if not await self._deliver(ExceptionCaptured(exc=exc, context={"dropped": dropped})):
+                with _lock:
+                    _overflow.dropped += dropped
+                return
             token = _capturing.set(True)
             try:
                 log.exception("capture.overflowed", exc_info=exc, dropped=dropped)
             finally:
                 _capturing.reset(token)
-            await self._deliver(ExceptionCaptured(exc=exc, context={"dropped": dropped}))
 
     async def _run(self) -> None:
         while True:

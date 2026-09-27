@@ -17,7 +17,9 @@
     {% if paused %}
       <span class="w-2 h-2 rounded-full bg-warning"></span>
       Paused — browsing a period
-      <a class="link link-primary" href="{{ back_href }}">↑ Back to live</a>
+      <a class="link link-primary" href="{{ back_href }}">
+        <i class="ph ph-arrow-up" aria-hidden="true"></i> Back to live
+      </a>
     {% else %}
       <span class="w-2 h-2 rounded-full bg-success"></span>
       Live

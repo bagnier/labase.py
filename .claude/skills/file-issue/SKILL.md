@@ -3,7 +3,7 @@ name: file-issue
 description: >
   Files one or more GitHub issues in the shape the fix bot reads, from whatever names the fault:
   a ROADMAP.md line, an audit break, a failing test, a sentence from the user. Fills the form's
-  sections, runs `gh issue create`, never puts `auto-fix` on.
+  sections, runs `gh issue create`, never puts `to-fix` on.
 
   Do NOT use for: fixing anything (ci-fix-issue), or finding what is wrong (maintain-principles).
 when_to_use: >
@@ -62,6 +62,6 @@ EOF
 )"
 ```
 
-The form's labels (`bug`) and nothing else: `auto-fix` is the user's decision, on the issue,
+The form's labels (`bug`) and nothing else: `to-fix` is the user's decision, on the issue,
 later. For a batch, write the drafts to a file under `.cache/` first, read them once as the bot
 will, then file them in one loop. End with the URLs, one per line.
