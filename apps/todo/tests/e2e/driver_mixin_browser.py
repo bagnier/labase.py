@@ -187,6 +187,28 @@ class TodoBrowserMixin(BrowserBase):
         assert titles is not None, "view the tenant's todo list first"
         assert title not in titles, f"'{title}' leaked into another tenant's todo list: {titles}"
 
+    # ── keyboard access ──────────────────────────────────────────────────
+    def tab_to_todo_edit_button(self, title: str) -> None:
+        self._on_todos()
+        row = self.find_row(self.page, "#todo-list > li", "[data-title-id]", title)
+        row.locator("input[data-todo-id]").focus()
+        self.page.keyboard.press("Tab")
+        self._focused_control = row.locator("[data-edit-id]")
+
+    def tab_to_todo_delete_button(self, title: str) -> None:
+        row = self.find_row(self.page, "#todo-list > li", "[data-title-id]", title)
+        self.page.keyboard.press("Tab")
+        self._focused_control = row.locator("[data-delete-id]")
+
+    def assert_focused_control_visible(self) -> None:
+        expect(self._focused_control).to_have_css("opacity", "1")
+
+    def press_enter(self) -> None:
+        self.page.keyboard.press("Enter")
+
+    def assert_rename_field_focused(self, title: str) -> None:
+        expect(self.page.get_by_label(f"Rename “{title}”")).to_be_focused()
+
     def assert_dashboard_badges(self, badges: list[str]) -> None:
         # The card sits on the org dashboard, one sidebar click from the list they ticked it in.
         self.reach_org_nav(getattr(self, "active_org_handle", ""), "dashboard", fresh=True)
