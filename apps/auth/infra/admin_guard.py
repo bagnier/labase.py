@@ -1,7 +1,8 @@
 """Serializes the last-admin guard's count-then-act against every caller that can make an
 admin stop being one — a console revoke, the admin's own account deletion (apps/profile), and
-an admin deleting another account from the console (apps/auth) — plus a console grant, whose
-directory read-then-write is the same shape even though a promotion can only raise the count.
+an admin disabling or deleting another account from the console (apps/auth) — plus a console
+grant, whose directory read-then-write is the same shape even though a promotion can only raise
+the count.
 
 Held for the caller's own transaction: a second concurrent caller blocks here until the first
 commits, then re-reads a count that already reflects it — so two callers can no longer both

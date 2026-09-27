@@ -390,6 +390,19 @@ class AuthApiMixin(ApiBase):
         )
         assert resp.status_code == 200, f"{action}: {resp.status_code} {resp.text}"
 
+    def try_disable_account(self, email: str) -> None:
+        account = next((a for a in self._accounts() if a["email"] == email), None)
+        assert account is not None, f"no account {email!r}"
+        self.response = self.client().post(
+            f"/console/accounts/{account['id']}/disable",
+            headers={"accept": "application/json"},
+        )
+
+    def assert_account_not_disabled(self, email: str) -> None:
+        account = next((a for a in self._accounts() if a["email"] == email), None)
+        assert account is not None, f"no account {email!r}"
+        assert not account["disabled"], f"{email!r} unexpectedly disabled"
+
     def try_open_accounts_screen(self) -> None:
         self.response = self.client().get(
             "/console/accounts", headers={"accept": "application/json"}
