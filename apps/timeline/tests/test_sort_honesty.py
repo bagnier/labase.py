@@ -1,9 +1,11 @@
 """What a column sort actually sorts — and the timeline saying so.
 
 The reader asks each of its three sources for *its own* newest rows, merges them, sorts and cuts
-to the page size. On the default ``ts`` sort that is exact: the newest hundred overall can only
-come from the newest hundred of each source. On any other column it is not — sorting by name
-ascending returns the alphabetically first hundred *of a recent sample*, never of the timeline.
+to the page size. On the default newest-first ``ts`` sort that is exact: the newest hundred overall
+can only come from the newest hundred of each source. On any other sort it is not — sorting by name
+ascending returns the alphabetically first hundred *of a recent sample*, never of the timeline, and
+sorting ``ts`` ascending only reverses that same recent sample, never reaching the window's true
+oldest rows.
 
 Fixing that means sorting in each source, which the log sink cannot do without reading
 all of it. Until the sources are one queryable store, the honest move is to keep the sort and say

@@ -34,6 +34,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from collections import defaultdict, deque
 from collections.abc import MutableMapping
 from dataclasses import dataclass
@@ -296,8 +297,11 @@ class LogDrain:
         lines = _drain_queue()
         if lines:
             try:
+                lock_timeout_ms = math.ceil(
+                    get_technical_settings().log_drain_lock_timeout_seconds * 1000
+                )
                 async with admin_session_factory()() as session:
-                    await LogRepository(session).append(lines)
+                    await LogRepository(session).append(lines, lock_timeout_ms=lock_timeout_ms)
                     await session.commit()
             except Exception:
                 # No ``log.exception`` and no verdict here: the store being down is already said by
