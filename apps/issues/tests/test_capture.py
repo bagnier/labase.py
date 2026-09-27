@@ -38,7 +38,10 @@ def _clear_engine_caches() -> None:
 @pytest_asyncio.fixture(autouse=True)
 async def issues_isolation():
     _clear_engine_caches()
-    capture._QUEUE.clear()  # other tests' log.exception calls must not bleed in
+    # Other tests' log.exception calls must not bleed in — including a leftover overflow count,
+    # now that a drop folds into a capture of its own on the very same queue this test drains.
+    capture._QUEUE.clear()
+    capture._overflow.dropped = 0
     yield
     capture._QUEUE.clear()
     async with db.admin_session_factory()() as session:
