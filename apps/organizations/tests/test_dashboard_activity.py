@@ -33,7 +33,8 @@ def test_dashboard_lists_the_orgs_recent_business_events(driver):
     body = client.get(f"/{org['handle']}/dashboard", headers={"accept": "text/html"}).text
 
     section = body.split("data-recent-activity")[1].split("</section>")[0]
-    assert "Event created" in section  # the event key, humanised
+    assert _EMAIL in section  # the actor's pinned name: no handle set yet, so its email
+    assert "event created" in section  # the event key, humanised
     assert "calendar.event_created" not in section  # raw keys and payloads stay internal
     # The activity block sits above the apps' overview cards.
     assert body.index("data-org-activity") < body.index("grid grid-cols-1 sm:grid-cols-2 gap-4")
@@ -62,8 +63,8 @@ def test_activity_fragment_groups_by_day_and_filters_by_type(driver):
     ).text
 
     assert "Today" in fragment  # newest-first entries land in a day-grouped section
-    assert "Created" in fragment  # todo.created, humanised
-    assert "Event created" not in fragment  # the type filter narrows to todo.* only
+    assert "created" in fragment  # todo.created, humanised (lowercased: the actor is named)
+    assert "event created" not in fragment  # the type filter narrows to todo.* only
 
 
 def test_a_members_dashboard_does_not_count_the_invitations_only_owners_read(driver):

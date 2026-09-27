@@ -30,7 +30,7 @@ class ActivityEntry:
     projected fields; the raw ``kind`` and the rest of the payload never reach here. Templates
     read it by attribute (``e.who``, ``e.icon``)."""
 
-    who: str | None  # the actor's handle, or None on the viewer's own journal
+    who: str | None  # the actor's pinned name (handle, else email), or None on the own journal
     label: str  # the humanized verb (``Created``), never the dotted kind
     detail: str | None  # the subject's own name (a todo title, a page slug)
     app: AppName  # shown as a subtle source line under the entry
