@@ -454,9 +454,10 @@ def test_register_unexpected_exception_returns_400(driver):
 
 
 def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
-    # GoTrue answering 500 on /token is the dependency breaking, not refusing — it must take
-    # the same log.exception capture path as any other broken dependency, not the brute-force
-    # warning reserved for an actual wrong-password refusal.
+    # GoTrue answering 500 with a JSON body on /token is the dependency breaking, not refusing —
+    # it must take the same log.exception capture path, and the same system-error response, as
+    # any other broken dependency (a 502/503/504, or a 500 with no JSON body), never the
+    # brute-force warning and "invalid password" answer reserved for an actual refusal (#104).
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Internal Server Error", 500, None)
     with (
@@ -464,12 +465,15 @@ def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
         patch("apps.auth.infra.router.log") as log,
     ):
         response = driver.client().post("/auth/login", data=creds)
-    assert response.status_code == 401
+    assert response.status_code == 503
+    assert "system error" in response.text.lower()
     log.warning.assert_not_called()
     log.exception.assert_called_once()
 
 
 def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
+    # Same fault as login above: a 500 with a JSON body must earn the same "unexpected error"
+    # answer as any other broken dependency, never GoTrue's raw internal message (#104).
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Internal Server Error", 500, None)
     with (
@@ -478,6 +482,7 @@ def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
     ):
         response = driver.client().post("/auth/register", data=creds)
     assert response.status_code == 400
+    assert "unexpected error" in response.text.lower()
     log.warning.assert_not_called()
     log.exception.assert_called_once()
 
