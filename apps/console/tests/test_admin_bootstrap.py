@@ -69,17 +69,18 @@ async def test_an_existing_admin_ends_the_bootstrap():
 
 
 @pytest.mark.asyncio
-async def test_a_banned_admin_does_not_cover_the_bootstrap():
-    """A banned admin still carries ``app_metadata.role == "admin"`` in GoTrue but cannot sign
-    in — so a server left with only a banned admin must still promote the next registrant
-    (issue #158), the same way it would if the role claim were absent entirely."""
+async def test_a_banned_admin_still_covers_the_bootstrap():
+    """The seat goes to whoever signs up while the server has *no* admin — the first account, or
+    the next one if that account was gone before its bootstrap ran (AGENTS: The first to sign up
+    is admin). A banned admin is not gone: the ban is an operator's decision about that account,
+    and turning it into a vacancy would hand admin to the next anonymous sign-up."""
     actor = uuid.uuid7()
     client, updates = _gotrue([_user(uuid.uuid7(), role="admin", banned=True), _user(actor)])
 
     with patch("apps.auth.infra.user_repository.get_admin_supabase", return_value=client):
         await _bootstrap_first_admin(_NO_SESSION, _created(actor))
 
-    assert updates == [(str(actor), {"app_metadata": {"role": "admin"}})]
+    assert updates == []
 
 
 @pytest.mark.asyncio

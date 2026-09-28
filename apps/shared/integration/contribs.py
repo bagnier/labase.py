@@ -19,14 +19,11 @@ collaborator, not the whole :class:`~apps.shared.integration.host.Host`. Mount w
 dispatch share one registry.
 """
 
-import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 import structlog
-
-from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 
@@ -49,30 +46,26 @@ class Contribs:
         return tuple(self._providers.get(query_type, ()))
 
     async def collect(self, query: object) -> list[Any]:
-        """Run every provider for this query type; log and skip failing or hanging providers.
+        """Run every provider for this query type; log and skip failing providers.
 
         A provider failure is a bug: ``log.exception`` feeds it to the capture seam, which folds
         it into an issue (``query_type`` names the query so it survives into the issue's
         context). The drain delivers under a reentrancy guard, so a tracker that is itself a
-        failing provider here cannot recurse. A provider that hangs rather than raises is just as
-        down: each call is bounded by ``contribs_provider_timeout_seconds``, so it never holds the
-        page open for good.
+        failing provider here cannot recurse.
 
-        Providers share the caller's session (every query type carries one), so they run one after
-        another — the page waits at most that bound once per provider — and a provider's own SQL
-        error, or its timeout, would abort that shared transaction: a savepoint around each call
-        confines the abort to it, leaving later providers and the caller's own queries unaffected.
+        Providers share the caller's session (every query type carries one), so a provider's own
+        SQL error aborts that shared transaction — a savepoint around each call confines the
+        abort to it, leaving later providers and the caller's own queries unaffected: a down app
+        can't break the page.
         """
-        timeout_seconds = get_technical_settings().contribs_provider_timeout_seconds
         session = getattr(query, "session", None)
         results: list[Any] = []
         for provider in self._providers[type(query)]:
             try:
                 if session is None:
-                    async with asyncio.timeout(timeout_seconds):
-                        results.append(await provider(query))
+                    results.append(await provider(query))
                 else:
-                    async with session.begin_nested(), asyncio.timeout(timeout_seconds):
+                    async with session.begin_nested():
                         results.append(await provider(query))
             except Exception:
                 log.exception(

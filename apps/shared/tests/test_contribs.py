@@ -1,6 +1,5 @@
 """Contribs — the pull/collect contribution registry, split out of the event bus."""
 
-import asyncio
 from dataclasses import dataclass
 
 import pytest
@@ -8,7 +7,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.integration.contribs import Contribs
-from apps.shared.settings.env import get_technical_settings
 
 
 @dataclass(frozen=True)
@@ -71,30 +69,6 @@ async def test_collect_isolates_a_failing_provider_and_keeps_the_rest():
 
 
 @pytest.mark.asyncio
-async def test_collect_isolates_a_provider_that_hangs_past_its_timeout(monkeypatch):
-    """A down app can't break the page (README: host.contribs — pull) — including one that
-    hangs rather than raises. The bound is the registry's own setting, pinned small here; the
-    outer guard is what fails the test when nothing bounds the hang."""
-    monkeypatch.setattr(get_technical_settings(), "contribs_provider_timeout_seconds", 0.05)
-    contribs = Contribs()
-
-    async def hangs(q: _Query) -> str:
-        await asyncio.Event().wait()
-        return "never"
-
-    async def ok(q: _Query) -> str:
-        return "ok"
-
-    contribs.provide(_Query, hangs)
-    contribs.provide(_Query, ok)
-
-    async with asyncio.timeout(5):
-        results = await contribs.collect(_Query("x"))
-
-    assert results == ["ok"]
-
-
-@pytest.mark.asyncio
 async def test_collect_of_an_unknown_query_type_is_empty():
     assert await Contribs().collect(_Query("x")) == []
 
@@ -121,3 +95,25 @@ async def test_collect_isolates_a_failing_sql_provider_so_the_session_stays_usab
     assert result == [2]
     after = await db_session.execute(text("select 3"))
     assert after.scalar() == 3
+
+
+@pytest.mark.asyncio
+async def test_collect_waits_for_a_slow_sql_provider_and_leaves_the_session_usable(
+    db_session: AsyncSession,
+):
+    """Cutting a provider off mid-query cancels the driver call, which invalidates the caller's
+    session: the page's next query then raises ``PendingRollbackError``, so a slow app broke the
+    whole page instead of only slowing it (AGENTS: a down app can't break the page). The sleep
+    outlasts the 2s bound a timeout here used to default to."""
+    contribs = Contribs()
+
+    async def slow(q: _SessionQuery) -> str:
+        await q.session.execute(text("select pg_sleep(2.5)"))
+        return "slow"
+
+    contribs.provide(_SessionQuery, slow)
+    results = await contribs.collect(_SessionQuery(db_session))
+
+    after = await db_session.execute(text("select 3"))
+
+    assert (results, after.scalar()) == (["slow"], 3)
