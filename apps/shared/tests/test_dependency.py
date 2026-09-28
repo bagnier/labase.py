@@ -95,19 +95,6 @@ def test_a_dependency_that_answers_4xx_is_refusing(exc):
 @pytest.mark.parametrize(
     "exc",
     [
-        _PostgresAnswered("42P01"),  # undefined_table — an unmigrated database, not a bug
-        _PostgresAnswered("42501"),  # insufficient_privilege — permission denied
-        _PostgresAnsweredThroughSqlalchemy("42P01"),
-        _PostgresAnsweredThroughSqlalchemy("42501"),
-    ],
-)
-def test_a_postgres_answer_is_refusing(exc):
-    assert is_refusal(exc) is True
-
-
-@pytest.mark.parametrize(
-    "exc",
-    [
         _Answered(500),  # the dependency broke while answering
         _AnsweredOnItsResponse(503),
         _AnsweredInText("503"),
@@ -120,6 +107,15 @@ def test_a_postgres_answer_is_refusing(exc):
         _PostgresAnswered("57P03"),  # cannot_connect_now — admin shutdown in progress
         _PostgresAnswered("58030"),  # io_error — the server's own disk failed
         _PostgresAnswered("XX000"),  # internal_error — a bug in Postgres itself
+        # Every SQL the verdict sees is ours (the settings store, the rate-limit store): an
+        # answer naming our own schema or statement wrong is our bug, and read as a refusal it
+        # would leave the limiter failing open with no issue — off for good (AGENTS: CSRF needs
+        # no token, and the rate limiter fails open).
+        _PostgresAnswered("42P01"),  # undefined_table — an unmigrated table
+        _PostgresAnswered("42703"),  # undefined_column
+        _PostgresAnswered("42601"),  # syntax_error
+        _PostgresAnswered("42501"),  # insufficient_privilege — a missing grant
+        _PostgresAnsweredThroughSqlalchemy("42P01"),
     ],
 )
 def test_anything_else_is_the_dependency_breaking(exc):
