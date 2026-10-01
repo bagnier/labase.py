@@ -18,19 +18,24 @@ log = structlog.get_logger(__name__)
 # Hosts that must never appear in a production database URL.
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "host.docker.internal")
 
+# Supabase's own secret key shapes: the current `sb_secret_…` format, or a legacy key,
+# always a JWT and so starting on its base64 `{"alg"` header — the preflight checks the
+# shape, not which role the JWT carries.
+_SUPABASE_SECRET_KEY_PREFIXES = ("sb_secret_", "eyJ")
+
 
 class PreflightError(RuntimeError):
     """Raised at boot when a production configuration fails a blocking check."""
 
 
 def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]:
-    """Return ``(errors, warnings)`` for a would-be production configuration.
+    """Return ``(errors, findings)`` for a would-be production configuration.
 
-    Errors are blocking (they fail the gate and refuse boot); warnings are
+    Errors are blocking (they fail the gate and refuse boot); findings are
     surfaced but non-blocking.
     """
     errors: list[str] = []
-    warnings: list[str] = []
+    findings: list[str] = []
 
     if not settings.cookies_secure:
         errors.append(
@@ -44,28 +49,35 @@ def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]
     ):
         if any(host in url for host in _LOCAL_HOSTS):
             errors.append(f"{name} points at a local host — not a production database.")
-    if len(settings.supabase_secret_key) < 40:
-        errors.append("SUPABASE_SECRET_KEY looks unset or too short.")
+    if not any(
+        settings.supabase_secret_key.startswith(prefix)
+        and len(settings.supabase_secret_key) > len(prefix)
+        for prefix in _SUPABASE_SECRET_KEY_PREFIXES
+    ):
+        errors.append(
+            "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a "
+            "legacy JWT."
+        )
 
     if not settings.is_production:
-        warnings.append(
+        findings.append(
             "ENVIRONMENT is not 'production' — the boot-time preflight gate stays inactive."
         )
     if settings.app_version == "dev":
-        warnings.append(
+        findings.append(
             "APP_VERSION is 'dev' — set the git SHA so error-tracking regression detection works."
         )
     if settings.log_debug:
-        warnings.append(
+        findings.append(
             "LOG_DEBUG is true — logs render as human-readable console text instead of the "
             "JSON an aggregator can parse."
         )
     if not settings.supabase_database_admin_url:
-        warnings.append(
+        findings.append(
             "SUPABASE_DATABASE_ADMIN_URL is empty — event handlers and console queries need it."
         )
 
-    return errors, warnings
+    return errors, findings
 
 
 def enforce_at_boot(settings: TechnicalSettings | None = None) -> None:
@@ -73,8 +85,8 @@ def enforce_at_boot(settings: TechnicalSettings | None = None) -> None:
     settings = settings or get_technical_settings()
     if not settings.is_production:
         return
-    errors, warnings = check_production(settings)
-    for detail in warnings:
+    errors, findings = check_production(settings)
+    for detail in findings:
         # A finding is a configuration observation, not something the code absorbed or refused
         # — the ``warning`` tier is for those. It is still a point of surprise (a production boot
         # that is not fully sound), which is what ``info`` is for.

@@ -74,33 +74,53 @@ def test_a_local_admin_database_blocks_the_deploy():
     ]
 
 
-def test_a_short_secret_key_blocks_the_deploy():
-    errors, _ = check_production(_settings(supabase_secret_key="too-short"))
-    assert errors == ["SUPABASE_SECRET_KEY looks unset or too short."]
+def test_a_malformed_secret_key_blocks_the_deploy():
+    errors, _ = check_production(_settings(supabase_secret_key="sb_publishable_" + "x" * 32))
+    assert errors == [
+        "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a legacy JWT."
+    ]
 
 
-def test_a_non_production_environment_only_warns():
-    errors, warnings = check_production(_settings(environment="staging"))
-    assert (errors, warnings) == (
+def test_a_bare_prefix_secret_key_blocks_the_deploy():
+    errors, _ = check_production(_settings(supabase_secret_key="sb_secret_"))
+    assert errors == [
+        "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a legacy JWT."
+    ]
+
+
+def test_a_short_but_well_shaped_secret_key_does_not_block_the_deploy():
+    errors, _ = check_production(_settings(supabase_secret_key="sb_secret_" + "x" * 29))
+    assert errors == []
+
+
+def test_a_legacy_jwt_secret_key_does_not_block_the_deploy():
+    jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.sig"
+    errors, _ = check_production(_settings(supabase_secret_key=jwt))
+    assert errors == []
+
+
+def test_a_non_production_environment_only_reports_a_finding():
+    errors, findings = check_production(_settings(environment="staging"))
+    assert (errors, findings) == (
         [],
         ["ENVIRONMENT is not 'production' — the boot-time preflight gate stays inactive."],
     )
 
 
-def test_an_unset_app_version_only_warns():
-    _, warnings = check_production(_settings(app_version="dev"))
-    assert warnings == [
+def test_an_unset_app_version_only_reports_a_finding():
+    _, findings = check_production(_settings(app_version="dev"))
+    assert findings == [
         "APP_VERSION is 'dev' — set the git SHA so error-tracking regression detection works."
     ]
 
 
-def test_console_rendering_only_warns():
+def test_console_rendering_only_reports_a_finding():
     """``LOG_DEBUG`` no longer picks a level — with no ``debug`` tier there is none to pick. What
     it still decides is the renderer, and a production server rendering console text is one whose
-    aggregator has nothing to parse. Warned, not blocked: the logs are readable either way."""
-    _, warnings = check_production(_settings(log_debug=True))
+    aggregator has nothing to parse. Surfaced, not blocked: the logs are readable either way."""
+    _, findings = check_production(_settings(log_debug=True))
 
-    assert warnings == [
+    assert findings == [
         (
             "LOG_DEBUG is true — logs render as human-readable console text instead of the "
             "JSON an aggregator can parse."
@@ -108,9 +128,9 @@ def test_console_rendering_only_warns():
     ]
 
 
-def test_a_missing_admin_database_only_warns():
-    _, warnings = check_production(_settings(supabase_database_admin_url=""))
-    assert warnings == [
+def test_a_missing_admin_database_only_reports_a_finding():
+    _, findings = check_production(_settings(supabase_database_admin_url=""))
+    assert findings == [
         "SUPABASE_DATABASE_ADMIN_URL is empty — event handlers and console queries need it."
     ]
 
