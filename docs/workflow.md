@@ -11,7 +11,8 @@ pull request. Merging is never the bot's.
    that fails today. A hypothesis stays in [ROADMAP.md](../ROADMAP.md) until someone made
    it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
    reads: the fault, `→` the direction, what to run, the AGENTS.md sentence, the `file:line`
-   links. The label goes on last, once the body is final.
+   links. The label goes on last, once the body is final. Faults found in bulk reach it through
+   *Finding* below.
 2. **Label.** The owner puts `to-fix` on it, by hand or by agreeing to what `triage-issues`
    proposes. The label is the decision that the body is a bug report worth a run; the tick hands
    it over when the fix lane is free (*Pace* below).
@@ -41,6 +42,20 @@ pull request. Merging is never the bot's.
    lands on its own check; several land together, *Landing a batch* below.
 
 Run by hand, `/ci-fix-issue <n>` does the same from a local checkout.
+
+## Finding
+
+Three skills, each a tool that knows nothing of the others; the pipe between them is a file.
+
+| step | skill                  | reads                                   | writes                                          |
+| ---- | ---------------------- | --------------------------------------- | ----------------------------------------------- |
+| 1    | `/maintain-principles` | AGENTS.md, the README, the code         | `.cache/maintain-principles/<HEAD>.md` — breaks |
+| 2    | `/qualify-issues`      | faults: a breaks file, a report, a line | `.cache/qualify-issues/<HEAD>.md` — drafts      |
+| 3    | `/file-issue`          | a fault, or a drafts file               | GitHub issues, without `to-fix`                 |
+
+Each step is read before the next: the breaks file is where the audit ends, the drafts file is
+where the owner sees what will cost a fix run and what was set aside — latent, drift, not
+reproduced, already filed — and why.
 
 ## The three ends of a run
 
