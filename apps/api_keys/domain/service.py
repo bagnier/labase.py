@@ -1,4 +1,4 @@
-"""Pure key-material logic — no framework or persistence imports."""
+"""Key generation and hashing."""
 
 import hashlib
 import secrets
@@ -9,9 +9,9 @@ from apps.auth.contract.api_keys import API_KEY_PREFIX
 
 @dataclass(frozen=True)
 class NewKey:
-    token: str  # the full secret, shown once and never stored
-    prefix: str  # displayable head, kept for identification
-    key_hash: str  # sha256 hex, the only thing at rest
+    token: str  # shown once, never stored
+    prefix: str
+    key_hash: str  # sha256 hex, what is stored
 
 
 def hash_token(token: str) -> str:

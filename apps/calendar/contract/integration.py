@@ -1,9 +1,4 @@
-"""How the calendar context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the org-scoped
-router, answers the dashboard ``OverviewQuery`` (upcoming events) and the server-wide
-``ConsoleOverviewQuery`` (total events), and seeds a welcome event on ``OrganizationCreated``.
-"""
+"""The calendar mount, and the welcome event each new org gets."""
 
 import uuid
 from datetime import timedelta
@@ -25,13 +20,12 @@ from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared import clock
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import overview_from_count
-from apps.shared.persistence.repository import count_all
+from apps.shared.overview import RECENT_ITEMS, overview_from_count
+from apps.shared.persistence.repository import count_all, count_where
 from apps.shared.settings.live import SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
 
-_RECENT = 3
 _WELCOME_TITLE = "Welcome to your team calendar"
 
 
@@ -58,16 +52,26 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    upcoming = await CalendarEventRepository(query.session, query.org_id).upcoming()
-    n = len(upcoming)
-    lines = [f"{n} upcoming"] if upcoming else ["No upcoming events"]
+    now = clock.now()
+    n = await count_where(
+        query.session,
+        CalendarEvent,
+        CalendarEvent.org_id == query.org_id,
+        CalendarEvent.starts_at >= now,
+    )
+    lines = [f"{n} upcoming"] if n else ["No upcoming events"]
+    recent = (
+        await CalendarEventRepository(query.session, query.org_id).upcoming(now, RECENT_ITEMS)
+        if n
+        else []
+    )
     return Overview(
         key="calendar",
         title="Calendar",
         icon="calendar-dots",
         href="calendar",
         template="calendar/_overview.html",
-        data={"lines": lines, "recent": [e.title for e in upcoming[:_RECENT]]},
+        data={"lines": lines, "recent": [e.title for e in recent]},
     )
 
 
@@ -80,10 +84,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
-    """Drop a single welcome event dated today, so a brand-new org's calendar isn't empty.
-
-    A durable async consumer of ``OrganizationCreated`` — suppressed in the test schema (via
-    ``seed_org_welcome``), so it never runs under the E2E drivers."""
+    """One welcome event today, so a new org's calendar is not empty."""
     await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 

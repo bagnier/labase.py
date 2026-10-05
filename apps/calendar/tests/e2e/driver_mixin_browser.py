@@ -12,13 +12,11 @@ class CalendarBrowserMixin(BrowserBase):
         )
 
     def _cal_goto(self, handle: str | None = None) -> None:
-        """Into the calendar by the sidebar entry — the only way in that a person has."""
+        """Through the sidebar."""
         self.follow_org_nav(handle or getattr(self, "active_org_handle", ""), "calendar")
 
     def _cal_on(self, handle: str | None = None, *, fresh: bool = False) -> None:
-        """On the calendar, without walking back to it when it is already the page shown.
-        ``fresh`` for whoever reads the events off it, rather than only heading somewhere from
-        there."""
+        """On the calendar; ``fresh`` reloads it to read the events."""
         self.reach_org_nav(
             handle or getattr(self, "active_org_handle", ""), "calendar", fresh=fresh
         )
@@ -77,8 +75,7 @@ class CalendarBrowserMixin(BrowserBase):
 
     def try_create_event(self, title: str | None, start: str, end: str) -> None:
         self._cal_open_new_form()
-        # A single space satisfies the client-side `required` yet the server strips it to empty,
-        # so the "no title" case still reaches the server-side 422 (true cross-driver parity).
+        # A space passes `required` and is stripped by the server, which answers 422.
         fields = {"Title": title if title is not None else " ", **self._cal_time_fields(start, end)}
         self.last_response = self.submit_labelled_form(
             self.page,
@@ -89,8 +86,7 @@ class CalendarBrowserMixin(BrowserBase):
         )
 
     def open_event(self, title: str) -> None:
-        # From the list as the server renders it now: the row clicked has to be the one the last
-        # action left, and what the detail then shows is read as the stored event.
+        # From a fresh list.
         self._cal_on(fresh=True)
         self.page.locator(
             "#event-list a.event-title", has_text=re.compile(rf"^{re.escape(title)}$")

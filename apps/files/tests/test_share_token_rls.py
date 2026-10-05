@@ -1,9 +1,5 @@
-"""A share token is the download gate, so RLS scopes it to the members of the file's org.
-
-The foreign key only proves the file exists — it is checked without RLS — so these tests drive
-the table the way a PostgREST client holding its own JWT would: raw SQL on the ``authenticated``
-session, bypassing the route that looks the file up first.
-"""
+"""Share tokens are scoped by RLS to the file's org members (the foreign key is checked without
+RLS); driven as raw SQL on the ``authenticated`` session."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -40,7 +36,7 @@ async def _a_file_and_a_stranger(session: AsyncSession) -> AsyncGenerator[Shared
     member = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     stranger = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, member):

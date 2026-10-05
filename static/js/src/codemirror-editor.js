@@ -33,8 +33,7 @@ function applyLinePrefix(view, prefix) {
   view.focus();
 }
 
-// Insert a Markdown link (`lead` = "[") or image (`lead` = "![") wrapping the selection
-// (or `placeholder`), leaving the "url" part selected for the user to type over.
+// Wraps the selection (or `placeholder`) in a link (`lead` "[") or image ("!["), "url" selected.
 function applyLinkLike(view, lead, placeholder) {
   const { from, to } = view.state.selection.main;
   const selected = view.state.sliceDoc(from, to);
@@ -61,7 +60,7 @@ function replaceText(view, needle, replacement) {
     view.dispatch({ changes: { from: idx, to: idx + needle.length, insert: replacement } });
 }
 
-// Upload an image to the org's file storage (the files app) and embed it as Markdown.
+// Uploads an image to the org's files and embeds it.
 function uploadImage(view, uploadUrl) {
   if (!uploadUrl) return applyImage(view);
   const input = document.createElement('input');

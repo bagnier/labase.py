@@ -1,6 +1,4 @@
-"""Technical substrate for API tests: event loop, unified multi-user client
-management, rolled-back test transaction.
-Feature mixins inherit this; ApiDriver assembles them."""
+"""The API driver's base: event loop, one client per user, rolled-back test transaction."""
 
 from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
@@ -28,12 +26,11 @@ app = host.app
 
 _T = TypeVar("_T")
 _PASSWORD = "Secret1!"
-VISITOR = "visitor"  # sentinel — unauthenticated client, no associated user
+VISITOR = "visitor"  # the unauthenticated client
 
 
 class ApiBase:
-    # The canonical e2e password: ``client_for()`` re-authenticates every seeded email with it, so a
-    # scenario that only *names* a user — no auth intent — can omit it.
+    # Every seeded user's password, so a scenario naming a user can omit it.
     PASSWORD = _PASSWORD
 
     def __init__(self) -> None:
@@ -45,14 +42,8 @@ class ApiBase:
 
     @property
     def response(self) -> httpx.Response:
-        """The last response this driver captured.
-
-        "No request has been made yet" is a lifecycle of the driver, not a value a step can
-        meaningfully branch on: a step that reads a response before sending one is a broken
-        scenario. So the state stays in ``_response`` — private, and the only ``| None`` here —
-        while readers get a plain ``Response`` and one raise in one place instead of an
-        ``assert ... is not None`` at each of them. A step that genuinely asks *whether* a request
-        happened reads ``_response`` directly."""
+        """The last response; raises if none yet (a broken scenario). Read ``_response`` to ask
+        whether a request happened."""
         if self._response is None:
             raise AssertionError("No response stored — the scenario asserted before requesting")
         return self._response
@@ -74,7 +65,7 @@ class ApiBase:
 
     # ── lifecycle ──────────────────────────────────────────────────────────────
     def start(self) -> None:
-        """Nothing left to start: the runner's loop runs from the driver's construction."""
+        """Nothing to start: the loop runs from construction."""
 
     def stop(self) -> None:
         self._close_clients()
@@ -84,8 +75,7 @@ class ApiBase:
         return self._runner.run(coro)
 
     def _make_client(self) -> httpx.Client:
-        # Every JSON answer is checked against the schema its route declares, so each scenario
-        # also holds the documentation of the routes it drives (see ``conformance``).
+        # Every JSON answer is checked against its route's schema (see ``conformance``).
         return httpx.Client(
             transport=ASGISyncTransport(self._runner),
             base_url="http://testserver",
@@ -105,7 +95,7 @@ class ApiBase:
     def reset_session(self) -> None:
         self._close_clients()
         self._acting_email = VISITOR
-        self._response = None  # back to "no request made"; the base owns the field, so it resets it
+        self._response = None
 
     # ── test isolation ─────────────────────────────────────────────────────────
     def setup_test(self) -> None:
@@ -114,7 +104,6 @@ class ApiBase:
         app.dependency_overrides[get_admin_session] = db.override_get_session
 
     def teardown_test(self) -> None:
-        """Roll back the test transaction, then clean up data committed outside it."""
         app.dependency_overrides.pop(get_user_session, None)
         app.dependency_overrides.pop(get_admin_session, None)
         conn = db._test_connection
@@ -125,21 +114,16 @@ class ApiBase:
         self._cleanup_auth_users()
 
     def _cleanup_committed_data(self) -> None:
-        """Hook: feature mixins override to delete data committed outside the transaction."""
+        """Mixins delete here what they committed outside the transaction."""
 
     def test_session_factory(self) -> Callable[[], AsyncSession]:
-        """A session factory bound to the rolled-back test connection — for driving background loops
-        (listener, worker, settings refresher) on the transaction a request just wrote to, since
-        the real polling loops are off under tests and could not see it anyway."""
+        """Sessions on the test connection, to drive the background loops (off under tests) on
+        what a request just wrote."""
         return db.session_on_test_connection
 
     def drain_task_queue(self) -> None:
-        """Deliver async work now: fan persisted facts out to consumers (listener), then run them
-        (worker), looping until both are dry so an event that emits an event is delivered too.
-
-        The polling worker is off under tests, so a scenario reading what a reaction produced has
-        to drain first.
-        """
+        """Run the listener and the worker until both are dry, so reactions (and the facts they
+        emit) are done. The loops are off under tests."""
         factory = self.test_session_factory()
         listener = EventListener(0, session_factory=factory)
         worker = TaskWorker(0, session_factory=factory)
@@ -157,8 +141,7 @@ class ApiBase:
             self._test_auth_emails.append(email)
 
     def _cleanup_auth_users(self) -> None:
-        # GoTrue's writes escape this driver's rollback; ``delete_user`` sweeps the user's journal
-        # events too, and the profile cascades when the GoTrue user goes.
+        # GoTrue escapes the rollback: ``delete_user`` also sweeps the user's facts.
         for email in self._test_auth_emails:
             delete_user_if_exists(email)
         self._test_auth_emails.clear()
@@ -170,8 +153,7 @@ class ApiBase:
             if email != VISITOR:
                 creds = {"email": email, "password": _PASSWORD}
                 client.post("/auth/register", json=creds)
-                # Run UserCreated's reactions (personal org, admin bootstrap) before login: they
-                # are async off the journal, and the JWT must already carry the admin claim.
+                # UserCreated's reactions before login, so the JWT carries any admin role.
                 self.drain_task_queue()
                 client.post("/auth/login", json=creds)
                 self._track_auth_email(email)
@@ -179,14 +161,12 @@ class ApiBase:
         return self._clients[email]
 
     def set_acting_email(self, email: str) -> None:
-        """Adopt `email` as the acting user, promoting the visitor session if one exists."""
         if VISITOR in self._clients and email not in self._clients:
             self._clients[email] = self._clients.pop(VISITOR)
         self._acting_email = email
 
     def adopt_current_client(self, email: str) -> None:
-        """The acting (visitor) client just authenticated as `email`: key it under
-        that identity, replacing any stale client left from an earlier session."""
+        """Key the client that just signed in under `email`, replacing a stale one."""
         old = self._acting_email
         if old == email or old not in self._clients:
             self._acting_email = email
@@ -198,8 +178,7 @@ class ApiBase:
         self._acting_email = email
 
     def rekey_acting_identity(self, email: str) -> None:
-        """The acting user changed identity in place (e.g. confirmed an email change):
-        their live session keeps its cookies but now answers to the new email."""
+        """After an email change: the same cookies, under the new email."""
         old = self._acting_email
         if old != email and old in self._clients and email not in self._clients:
             self._clients[email] = self._clients.pop(old)

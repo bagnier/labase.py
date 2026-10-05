@@ -1,9 +1,5 @@
-"""OAuth callback and email-confirm routes, GoTrue mocked at the router seam.
-
-The provider round-trip itself is manual (docs/oauth.md); these tests own the
-branching the app performs once GoTrue hands the browser back: session issuance,
-the TOTP step-up, and the failure landings.
-"""
+"""OAuth callback and email-confirm routes, GoTrue mocked: session, TOTP step-up, failures. The
+provider round-trip itself is tested by hand (docs/oauth.md)."""
 
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -18,11 +14,7 @@ _TOKENS = AuthTokens(access_token="the-access-token", refresh_token="the-refresh
 
 @contextmanager
 def _two_factor_enabled():
-    """Flip the live ``users`` settings handle for the duration of a test.
-
-    Uses the documented test seam (poking ``_raw`` drops the coercion cache);
-    restores the previous values so the session-scoped server is left untouched.
-    """
+    """Set live ``users`` settings for one test, restoring them after."""
     handle = get_settings("users")
     before = handle._raw
     handle._raw = {**before, "two_factor_enabled": "true"}
@@ -37,7 +29,7 @@ def _callback(driver, **patches):
     client.cookies.set("oauth_code_verifier", "the-verifier")
     client.cookies.set("oauth_next", "/profile")
     defaults = {
-        "exchange_oauth_code": (_TOKENS, True),  # (tokens, is_new): default to a first sign-in
+        "exchange_oauth_code": (_TOKENS, True),
         "decode_jwt": {"sub": "00000000-0000-0000-0000-000000000001"},
         "verified_totp_factor": None,
         "totp_challenge": "challenge-1",
@@ -64,12 +56,11 @@ def test_callback_issues_the_session_and_clears_the_oauth_cookies(driver):
     assert response.headers["location"] == "/profile"
     assert response.cookies.get("access_token") == _TOKENS.access_token
     set_cookie = ",".join(response.headers.get_list("set-cookie"))
-    assert 'oauth_code_verifier=""' in set_cookie  # deleted, not left lying around
+    assert 'oauth_code_verifier=""' in set_cookie
 
 
 def test_callback_with_totp_enrolled_asks_for_the_code_before_any_session(driver):
-    """The step-up branch: 2FA switched on server-wide AND the account has a verified TOTP factor —
-    the callback must park the tokens and challenge, never issue the session cookies directly."""
+    """With 2FA on and a verified factor, the tokens wait for the challenge; no session yet."""
     with _two_factor_enabled():
         response = _callback(driver, verified_totp_factor="factor-1")
     assert response.status_code == 200
@@ -95,8 +86,7 @@ def test_callback_without_the_verifier_cookie_lands_back_on_login(driver):
 
 
 def test_confirm_failure_lands_on_login_with_a_visible_message(driver):
-    """Regression: the redirect used ?info=registered, a key absent from _INFO_MESSAGES — the user
-    got a blank login page after clicking a dead link."""
+    """Every ``?info=`` key exists in ``_INFO_MESSAGES``."""
     from apps.auth.infra.router import _INFO_MESSAGES
 
     err = AuthApiError("Email link is invalid or has expired", 403, "otp_expired")
@@ -114,8 +104,7 @@ def test_confirm_failure_lands_on_login_with_a_visible_message(driver):
 
 
 def test_opening_a_signup_link_spends_nothing_until_the_reader_confirms(driver):
-    """A GET is what a cross-site page can make a browser send: were it to sign in, an attacker's
-    own link would sign the victim into the attacker's account."""
+    """(AGENTS: a GET never delivers a session)"""
     with patch("apps.auth.infra.router.confirm_signup", return_value=_TOKENS) as confirm:
         response = driver.client().get(
             "/auth/confirm?token_hash=the-hash&type=signup", follow_redirects=False

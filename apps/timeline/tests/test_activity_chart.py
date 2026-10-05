@@ -1,9 +1,4 @@
-"""The activity graph draws the timeline's sources — all of them.
-
-The chart reads the per-bucket counts by source key, so a source renamed on one side and not
-the other leaves a series silently stuck at zero: the bars vanish and nothing fails, because
-the e2e drivers assert on the raw activity dict and never on the rendered series.
-"""
+"""The chart draws every source: one renamed on one side would sit silently at zero."""
 
 from datetime import UTC, datetime
 

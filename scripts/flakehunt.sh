@@ -2,12 +2,8 @@
 
 # Flake hunt for the browser-driver scenarios.
 #
-# Runs the target N times in a row and aggregates failures per test: one that fails 3 times
-# out of 15 is intermittent, not broken. No rerun plugin here on purpose — a rerun would hide
-# exactly what this is looking for.
-#
-# Each run gets a fresh test schema (provision-test) so a leftover row from run N-1 cannot
-# masquerade as a flake in run N.
+# Runs the target N times and counts failures per test. No rerun plugin: it would hide the
+# flakes. Each run gets a fresh schema, so a leftover row never passes for a flake.
 #
 # Usage:
 #   scripts/flakehunt.sh [N] [pytest target...]
@@ -34,9 +30,7 @@ for i in $(seq 1 "$N"); do
     log="$OUT/run$i.log"
     provision_out="$(make provision-test 2>&1)"
     printf '%s\n' "$provision_out" > "$OUT/provision$i.log"
-    # provision-test names this run's schema/bucket after its own `make` pid (Makefile,
-    # TEST_RUN_SCHEMA/BUCKET) — read back what it actually provisioned rather than assume
-    # .env.test's committed default, which two runs sharing this checkout must not share.
+    # The schema/bucket provision-test named after its `make` pid, not .env.test's default.
     if [[ "$provision_out" =~ Provisioned\ schema\ \'([^\']+)\'\ \+\ bucket\ \'([^\']+)\'\. ]]; then
         schema="${BASH_REMATCH[1]}"
         bucket="${BASH_REMATCH[2]}"
@@ -54,9 +48,7 @@ for i in $(seq 1 "$N"); do
     ec=$?
     summary="$(grep -oE '[0-9]+ (passed|failed|error)[^$]*' "$log" | tail -1)"
     printf '  run %2d : exit=%d  %s\n' "$i" "$ec" "$summary"
-    # Only 0 (all passed) and 1 (tests failed) are results. Anything else — usage error,
-    # collection error, interrupt — means the run never happened, and produces no FAILED
-    # line: without this, the aggregation below would report a clean green on zero tests.
+    # Only 0 and 1 are results: any other exit ran no test and would count as green.
     if [ "$ec" -gt 1 ]; then
         echo
         echo "run $i did not run (exit $ec) — the hunt proves nothing. Tail:"

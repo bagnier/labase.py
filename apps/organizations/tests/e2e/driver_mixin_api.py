@@ -91,8 +91,7 @@ class OrgApiMixin(ApiBase):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def assert_org_absent_for(self, email: str, org_name: str) -> None:
-        """Named observer: the org is gone for someone *other* than whoever acted last — which is
-        the whole point when the actor deleted their own account."""
+        """Seen by a named observer: the actor may have deleted their own account."""
         orgs = self.client_for(email).get("/organizations").json()
         names = [o["name"] for o in orgs]
         assert org_name not in names, f"{org_name!r} should be absent for {email}, got: {names}"
@@ -130,7 +129,7 @@ class OrgApiMixin(ApiBase):
         assert found["role"] == role, f"Expected role={role!r} for {email!r}, got {found['role']!r}"
 
     def assert_member_absent(self, email: str) -> None:
-        # Use primary client (owner) if current client may have lost org access (e.g. after leave)
+        # The owner's client: the acting one may have left the org.
         primary = getattr(self, "primary_email", None)
         client = self.client_for(primary) if primary else self.client()
         resp = client.get(f"/{self._handle()}/members")
@@ -177,7 +176,7 @@ class OrgApiMixin(ApiBase):
             self._last_invitation_email = email
 
     def assert_invitation_email_delivered(self, email: str) -> None:
-        self.drain_task_queue()  # the mail is outboxed; deliver it before polling the catcher
+        self.drain_task_queue()  # deliver the queued mail
         mailbox.assert_invitation_delivered(email, getattr(self, "_last_invitation_token", None))
 
     def view_pending_invitations(self) -> None:
@@ -272,7 +271,7 @@ class OrgApiMixin(ApiBase):
     def visit_org_dashboard_unauthenticated(self) -> None:
         self.response = self.client().get("/any-org/dashboard")
 
-    # ── Dashboard overviews (verified via the REST JSON endpoint) ────────────────
+    # ── Dashboard overviews (JSON) ───────────────────────────────────────────────
     def _overview(self, key: str) -> dict:
         slug = getattr(self, "active_org_handle", "")
         resp = self.client().get(f"/{slug}/dashboard/overviews.json")
@@ -294,3 +293,7 @@ class OrgApiMixin(ApiBase):
     def assert_overview_lists(self, key: str, text: str) -> None:
         recent = self._overview(key)["data"].get("recent", [])
         assert any(text in item for item in recent), f"{text!r} not in {key} recent {recent}"
+
+    def assert_overview_does_not_list(self, key: str, text: str) -> None:
+        recent = self._overview(key)["data"].get("recent", [])
+        assert not any(text in item for item in recent), f"{text!r} unexpectedly in {recent}"

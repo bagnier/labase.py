@@ -1,11 +1,5 @@
-"""Meta-tests for the API driver's RLS door: the lane's sessions run as production's do.
-
-The API lane rolls a whole scenario back on one connection, so every session a request opens —
-the RLS one, the admin one — shares it. Production gives each its own connection: the RLS session
-runs as ``app_rls`` under the caller's claims, the admin one as ``postgres``. Unless the lane says
-the same thing statement by statement, every scenario runs as ``postgres`` and the policies it
-claims to exercise are never met. Runs only under the API driver.
-"""
+"""On the API lane's shared connection, each session still runs as its own role (``app_rls`` or
+``postgres``), or no scenario would meet a policy."""
 
 import pytest
 from sqlalchemy import text
@@ -23,8 +17,7 @@ def api(driver) -> ApiDriver:
 
 
 async def _roles_in_turn() -> tuple[str, str, str]:
-    """``current_user`` as an RLS session, then an admin session, then the RLS one again — the
-    interleaving a request making both reads produces on the shared connection."""
+    """RLS, admin, RLS again, as one request may interleave them."""
     user_sessions = db.override_get_session()
     admin_sessions = db.override_get_session()
     user = await anext(user_sessions)

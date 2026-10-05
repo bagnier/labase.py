@@ -1,12 +1,5 @@
-"""Production configuration safety checks.
-
-Two entry points share one rule set:
-
-* ``make preflight`` (``scripts/preflight.py``) — a deploy gate: point it at the
-  production env file and it exits non-zero on any blocking error.
-* :func:`enforce_at_boot` — called from the composition root; when
-  ``ENVIRONMENT=production`` a bad config raises and the process refuses to boot
-  instead of serving traffic with development defaults.
+"""Production configuration checks, run by ``make preflight`` (``scripts/preflight.py``) as a
+deploy gate and by :func:`enforce_at_boot`, which refuses a production boot on a blocking error.
 """
 
 import structlog
@@ -24,11 +17,7 @@ class PreflightError(RuntimeError):
 
 
 def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]:
-    """Return ``(errors, warnings)`` for a would-be production configuration.
-
-    Errors are blocking (they fail the gate and refuse boot); warnings are
-    surfaced but non-blocking.
-    """
+    """``(errors, warnings)``: errors fail the gate and the boot, warnings do not."""
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -69,22 +58,18 @@ def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]
 
 
 def enforce_at_boot(settings: TechnicalSettings | None = None) -> None:
-    """Fail fast at startup when running in production with a blocking misconfig."""
+    """Raise :class:`PreflightError` on a blocking error, in production only."""
     settings = settings or get_technical_settings()
     if not settings.is_production:
         return
     errors, warnings = check_production(settings)
     for detail in warnings:
-        # A finding is a configuration observation, not something the code absorbed or refused
-        # — the ``warning`` tier is for those. It is still a point of surprise (a production boot
-        # that is not fully sound), which is what ``info`` is for.
+        # A surprise, not something absorbed or refused.
+        # (AGENTS: a line says what no other record says)
         log.info("preflight.finding", detail=detail)
     if errors:
-        # The details ride the exception rather than lines of their own. The process is about to
-        # die on it, so its message is what an operator reads — and a ``log.error`` carrying no
-        # exception is exactly the spelling the capture seam skips, which made the one report
-        # that mattered the one nothing could act on. A sound boot — no errors, no findings —
-        # is the only one that says nothing at all.
+        # The details go in the exception the process dies on: it is what the operator reads,
+        # and the capture seam ignores a ``log.error`` without one.
         raise PreflightError(
             f"production preflight failed with {len(errors)} blocking error(s); "
             f"refusing to boot: {'; '.join(errors)}"

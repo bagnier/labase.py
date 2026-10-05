@@ -1,8 +1,4 @@
-"""The console's two status inputs, narrowed where the router owns them.
-
-Both end up compared against a Postgres enum column, so a value that is not one of ours raises
-down in the driver — a 500, and an issue about the crafted request that provoked it.
-"""
+"""The router narrows both status inputs; an unknown value would be a 500 from the driver."""
 
 import pytest
 from fastapi import HTTPException
@@ -35,7 +31,6 @@ def test_triage_accepts_the_three_statuses_a_human_may_set():
 
 
 def test_triage_refuses_a_status_only_the_tracker_may_set():
-    """``new`` and ``regressed`` are the tracker's own verdicts — a human sets neither by hand."""
     with pytest.raises(HTTPException) as refused:
         _triage_status("regressed")
 

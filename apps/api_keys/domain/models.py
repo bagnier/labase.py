@@ -15,7 +15,7 @@ class ApiKey(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
 
     created_by: Mapped[uuid.UUID]
     name: Mapped[str]
-    prefix: Mapped[str]  # displayable head of the token
+    prefix: Mapped[str]  # the token's displayable head
     key_hash: Mapped[str]
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
@@ -39,6 +39,6 @@ class ApiKeyCreate(BaseModel):
 
 
 class ApiKeyCreated(ApiKeyRead):
-    """Creation response only: the one and only time the secret is readable."""
+    """The only time the secret is readable."""
 
     secret: str

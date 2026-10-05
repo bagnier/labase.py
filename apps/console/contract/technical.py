@@ -1,6 +1,4 @@
-"""Env/process diagnostics tile — folds into the "Settings" console tile via
-``ConsoleOverview.group`` (see :mod:`apps.console.infra.router`'s ``_fold_groups``).
-"""
+"""The process diagnostics tile, folded into the "Settings" tile by ``ConsoleOverview.group``."""
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.console.domain import technical

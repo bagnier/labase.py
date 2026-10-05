@@ -1,14 +1,7 @@
-"""Authorization rules, stated once and checked at both doors.
-
-A rule says whether a role may act on a target row. The database holds it (the policy), and the
-route repeats it so the refusal is a clean 403. Each app writes its rules once, in a ``RuleBook``,
-and ``tests/test_authorization_rules.py`` reads every book twice: once sending each action as SQL
-on the API role, the way a PostgREST client would, and once through the route, whose sessions
-bypass RLS, so only the route's own check answers. An act no route offers has the database door
-alone.
-
-``tests/test_db_privileges.py`` checks the books' reach: every table whose policies call an
-authorization helper has rules.
+"""Authorization rules, stated once per app in a ``RuleBook`` and checked at both doors
+(AGENTS: the database enforces isolation and authorization): as SQL on the API role, like a
+PostgREST client, and through the route on a BYPASSRLS session, so only its own check answers.
+``tests/test_db_privileges.py`` checks every table with authorization policies has rules.
 """
 
 import uuid
@@ -29,7 +22,6 @@ from tests.e2e.drivers.api import ApiDriver
 from tests.e2e.sql_setup import run_sql
 from tests.rls import acting_as
 
-# Who acts on a rule, and who only stands in an org to be acted on.
 Role = Literal["owner", "member"]
 Stranger = Literal["other", "outsider"]
 Person = Role | Stranger
@@ -124,7 +116,7 @@ async def an_org_in_db(session: AsyncSession) -> AsyncGenerator[Org]:
         person: UserId(create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")) for person in _PEOPLE
     }
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, people["owner"]):
@@ -144,14 +136,14 @@ async def an_org_in_db(session: AsyncSession) -> AsyncGenerator[Org]:
             delete_user(user)
 
 
-_OWNER = "owner-acme@example.com"  # the owner `sign_in_as_member_of_org` seats
+_OWNER = "owner-acme@example.com"  # seated by `sign_in_as_member_of_org`
 _MEMBER = "member@example.com"
 
 
 @contextmanager
 def strangers() -> Iterator[dict[Stranger, UserId]]:
-    """``other`` and ``outsider``, who never act at the route door, so they need an account and
-    no session. Deleted only once the test transactions that locked their rows are gone."""
+    """``other`` and ``outsider``: accounts without sessions, deleted after the transactions
+    locking their rows."""
     people: dict[Stranger, UserId] = {
         stranger: UserId(create_user(f"{uuid.uuid4()}@rules.local", "Test1234!"))
         for stranger in _STRANGERS
@@ -168,7 +160,7 @@ def an_org_through_routes(
 ) -> tuple[Org, dict[Role, httpx.Client]]:
     """The org, committed, and a signed-in client per role."""
     driver.sign_in_as_member_of_org(_MEMBER, "Acme")
-    # Signed in, not registered: registering an existing account answers slowly on purpose.
+    # Signed in, not registered: re-registering answers slowly on purpose.
     driver.clear_acting_email()
     driver.sign_in(_OWNER, driver.PASSWORD)
     owner = driver.client()

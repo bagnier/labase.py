@@ -1,4 +1,4 @@
-"""Series shaping for the declarative charts.js contract."""
+"""Chart configs for charts.js."""
 
 from datetime import date
 

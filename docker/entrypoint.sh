@@ -6,8 +6,7 @@ if [ -n "$SSL_CERTFILE" ] && [ -n "$SSL_KEYFILE" ]; then
     SSL_ARGS="--certfile $SSL_CERTFILE --keyfile $SSL_KEYFILE"
 fi
 
-# Drain in-flight requests on SIGTERM before exiting, for zero-downtime deploys.
-# `exec` makes Hypercorn PID 1 so it receives the signal directly (no wrapper eats it).
+# `exec`: Hypercorn is PID 1 and gets SIGTERM itself, to drain requests before exiting.
 GRACEFUL_ARGS="--graceful-timeout ${GRACEFUL_TIMEOUT:-25}"
 
 # shellcheck disable=SC2086

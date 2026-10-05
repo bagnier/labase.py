@@ -11,9 +11,7 @@ create table public.pages (
   slug          text                    not null,
   content       text                    not null default '',
   visibility    public.page_visibility  not null default 'draft',
-  -- Stored generated tsvector across title + body, GIN-indexed; the list screen ranks matches with
-  -- ts_rank / websearch_to_tsquery. Immutable expression (constant 'english' regconfig), so it is
-  -- valid as a generated column — and never null, since both inputs are coalesced.
+  -- Full-text search over title and body; a constant regconfig keeps it immutable.
   search_vector tsvector                generated always as (
                                           to_tsvector(
                                             'english',
@@ -35,10 +33,8 @@ create trigger pages_updated_at
 
 alter table public.pages enable row level security;
 
--- Members read every page of their org and write its drafts (drafts are collaborative); an owner
--- writes any page, which is what publishing, and changing what is published, takes. The routes
--- answer the same rule with a clean 403.
--- `to authenticated`: anon holds no EXECUTE on the helpers, and has no org anyway.
+-- Members read every page and write drafts; publishing takes an owner.
+-- `to authenticated`: anon holds no EXECUTE on the helpers.
 create policy "pages: member read"
   on public.pages for select
   to authenticated
@@ -104,10 +100,8 @@ grant select, insert, update, delete on public.page_nav_items to service_role;
 
 -- ── What a visitor outside the org reads ────────────────────────────────────────────────────────
 --
--- Its public pages, and the nav items that point at them. The rule is here, not in the route: a
--- signed-in non-member and an anonymous visitor read through these on the app's own RLS
--- connection, never a BYPASSRLS one. Executable by `app_rls` alone, so PostgREST's surface stays
--- the column-limited `pages: anon read` above.
+-- Its public pages and their nav items, on the RLS connection. `app_rls` alone: PostgREST keeps
+-- the column-limited `pages: anon read`.
 
 create function public.public_pages(p_org_id uuid)
 returns setof public.pages language sql stable security definer set search_path = '' as $$

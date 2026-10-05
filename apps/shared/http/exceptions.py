@@ -1,12 +1,8 @@
-"""Turning a failure into an answer, in whichever shape the caller asked for.
+"""Exception handlers answering in the caller's shape: JSON, a redirect an HTMX swap follows, or
+an error page.
 
-Registered on the FastAPI app at the foundation's mount. Each handler answers the way the rest of
-the base does — JSON for an API caller, a redirect an HTMX swap can follow, or a rendered error
-page — so a failure still looks like the app that produced it rather than a framework default.
-
-None of them logs a line. The exchange is already stated once by ``request.finished``, and a
-handler writing its own would tell the same story twice; it calls
-:func:`~apps.shared.logs.request.note_rejection` instead, leaving the *reason* on that one line.
+None logs a line: ``request.finished`` states the exchange, and
+:func:`~apps.shared.logs.request.note_rejection` adds the reason to it.
 """
 
 import structlog
@@ -50,14 +46,8 @@ async def handle_stale_data(request: Request, _exc: Exception) -> Response:
 
 
 def _echo_request_id(response: Response) -> Response:
-    """Put the request id on a response the request middleware never got to see.
-
-    ``RequestLogger`` stamps every response it hands back, but a 500 is built *above* it, by
-    Starlette's own error middleware, on the way out of an exception that flew past. Without this
-    the one page where the id matters most — the error page a user is looking at while an admin
-    asks "when was this?" — is the only one that does not carry it. Read from the contextvar the
-    middleware bound, which this handler still sees: it runs on the same task, not a child of it.
-    """
+    """Add ``X-Request-ID`` to a 500: Starlette builds it above ``RequestLogger``, which stamps
+    every other response. The contextvar is still readable on the same task."""
     request_id = structlog.contextvars.get_contextvars().get("request_id")
     if request_id is not None:
         response.headers["X-Request-ID"] = str(request_id)
@@ -65,9 +55,7 @@ def _echo_request_id(response: Response) -> Response:
 
 
 async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
-    # This line *is* the capture seam — the processor folds it into an issue, so nothing else
-    # has to. ``exc`` is passed rather than left to ``sys.exc_info()``: the seam then holds
-    # wherever the handler is called from, not only from inside a live ``except`` block.
+    # The issue comes from this line. ``exc`` is explicit: there may be no live ``except`` here.
     log.exception(
         "request.unhandled_error",
         exc_info=exc,
@@ -80,11 +68,6 @@ async def handle_unhandled_error(request: Request, exc: Exception) -> Response:
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> Response:
-    # Every rejected request lands here, and none of them writes a line: ``request.finished``
-    # already reports this exchange once, with its status and now with this reason. A second line
-    # said the same thing twice — and, unlike the first, traced the asset 404s the browser fetches
-    # on its own. Security-relevant rejections still emit their typed BusinessEvent from their own
-    # call site; this is only the shape of the answer.
     note_rejection(str(exc.detail))
     if exc.status_code == 401:
         if is_htmx(request):

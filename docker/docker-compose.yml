@@ -11,10 +11,9 @@ services:
     env_file:
       - ../.env
     environment:
-      # Deployed version for error-tracking regression detection (git SHA in prod).
+      # Lets issues detect a regression across versions.
       APP_VERSION: ${APP_VERSION:-dev}
-    # Supabase local runs on the host via `supabase start`.
-    # extra_hosts lets the container reach host ports via host.docker.internal.
+    # Supabase runs on the host (`supabase start`).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

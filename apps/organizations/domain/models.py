@@ -22,10 +22,9 @@ class Organization(Base, UUIDPk, Versioned, Timestamped):
 
     name: Mapped[str]
     handle: Mapped[str] = mapped_column(default="")
-    # IANA timezone the org's dates are entered and shown in (calendar, etc.).
+    # IANA timezone for the org's dates.
     timezone: Mapped[str] = mapped_column(default="UTC")
-    # The one every account gets at sign-up, as opposed to one a member created through
-    # `POST /organizations` — set once at creation, structural rather than inferred.
+    # The org every account gets at sign-up; set once.
     is_personal: Mapped[bool] = mapped_column(default=False)
 
 
@@ -78,7 +77,7 @@ class OrganizationCreate(BaseModel):
 
 
 class OrganizationRename(BaseModel):
-    """Blank stays blank: the handler answers the form with its own message, not a 422."""
+    """Blank is allowed: the handler answers it, not a 422."""
 
     name: str = ""
 
@@ -130,8 +129,6 @@ class MemberRead(BaseModel):
 
 
 class OverviewCard(BaseModel):
-    """One app's dashboard card, as ``overviews.json`` serves it to the page's own fetch."""
-
     key: str
     title: str
     data: dict[str, Any]

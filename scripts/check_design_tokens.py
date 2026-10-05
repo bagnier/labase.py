@@ -1,22 +1,9 @@
-"""Design-token guard — `make lint` calls this to keep the styling system honest.
+"""Design-token guard, run by `make lint`; prints every offence and exits non-zero.
 
-The base has one styling source of truth: daisyUI semantic tokens (base-*, primary,
-success…) driven by the active theme. Two ways that truth erodes over time, both caught
-here so a regression fails CI instead of shipping:
-
-1. **Raw palette / hex colours.** A `text-gray-500` or a `#1e1e2e` bypasses the token
-   system: it ignores the active theme and breaks under the dark / non-default themes.
-   Templates must use semantic tokens; the same holds for the component layer in
-   ``static/css/input.css``. (Transactional *email* templates are exempt — mail clients
-   can't resolve CSS variables, so inline hex there is correct.)
-
-2. **Theme-list drift.** The themes offered to admins are declared twice — in
-   ``input.css`` (the two custom ``@plugin "daisyui/theme"`` blocks plus the built-in
-   ``themes:`` roster) and in ``apps/console/contract/appearance.py`` (``THEMES``). If the
-   two disagree the console can offer a theme the CSS never built, or vice-versa. This
-   asserts they are the same set.
-
-Read-only. Exits non-zero (and prints every offence) on any violation.
+1. No raw palette or hex colour in templates or ``static/css/input.css``: it ignores the theme.
+   Email templates are exempt, since mail clients cannot resolve CSS variables.
+2. The themes in ``input.css`` and ``THEMES`` in ``apps/console/contract/appearance.py`` are the
+   same set.
 """
 
 import re
@@ -31,22 +18,19 @@ _PALETTE_NAMES = (
     "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|"
     "teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose"
 )
-# A Tailwind palette utility carrying a numeric shade — ``text-gray-500``, ``bg-indigo-600``,
-# ``border-slate-200``. daisyUI tokens (``bg-primary``, ``text-base-content``) carry no shade, so
-# they never match.
+# A palette utility with a shade (``text-gray-500``); daisyUI tokens have none.
 RAW_PALETTE = re.compile(
     r"\b(?:text|bg|border|ring|ring-offset|from|via|to|divide|fill|stroke|outline|"
     r"shadow|decoration|accent|caret)-(?:" + _PALETTE_NAMES + r")-"
     r"(?:50|100|200|300|400|500|600|700|800|900|950)\b"
 )
 
-# A CSS hex literal. A Phosphor glyph escape (``content: "\e058"``) uses a backslash, not a hash, so
-# it never matches.
+# A hex colour; a Phosphor glyph escape (``"\e058"``) has no hash.
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 
 def _iter_template_files():
-    """Served Jinja templates, minus email bodies (inline hex there is legitimate)."""
+    """Served templates, without email bodies."""
     for path in (ROOT / "apps").rglob("*.html"):
         parts = set(path.parts)
         if "templates" in parts and "email" not in parts:
@@ -83,9 +67,7 @@ def _css_theme_names() -> set[str]:
 
 
 def _appearance_themes() -> set[str]:
-    # Parsed by regex rather than importing/ast-parsing the module: keeps the guard
-    # free of app imports and independent of the runner's Python (appearance.py uses
-    # PEP 758 unparenthesized `except`, which only parses on 3.14+).
+    # By regex: no app import, and appearance.py needs Python 3.14 to parse.
     src = APPEARANCE.read_text(encoding="utf-8")
     block = re.search(r"THEMES\s*=\s*\[(.*?)\]", src, re.DOTALL)
     if not block:

@@ -1,13 +1,8 @@
-"""Conditional-GET (ETag) support for fully-rendered responses.
+"""Conditional GET on a rendered response. The ETag hashes the rendered bytes, which covers every
+input of the page (row, nav, CSS build, the viewer's auth state).
 
-A reader-facing page is assembled from many inputs — the page row, the nav, the CSS build
-version, the viewer's auth state — so we validate on the rendered bytes rather than any single
-upstream field: the hash captures every input for free. Browsers revalidate transparently via
-their HTTP cache, so this works for both plain navigation and HTMX-boosted fetches.
-
-If these pages ever become auth-invariant and CDN-fronted, switch `_CACHE_CONTROL` to
-``public`` and add ``Vary: Cookie``; today bodies vary by the auth cookie so we keep them
-``private``.
+``private``: bodies vary by the auth cookie. A CDN-fronted, auth-invariant page would need
+``public`` and ``Vary: Cookie``.
 """
 
 import hashlib
@@ -26,13 +21,8 @@ def _matches(if_none_match: str | None, etag: str) -> bool:
 
 
 def with_etag(request: Request, response: Response) -> Response:
-    """Tag an already-rendered response with a content ETag and revalidation headers.
-
-    Returns a bare ``304 Not Modified`` when the client already holds the current version
-    (its ``If-None-Match`` matches), otherwise attaches ``ETag`` + ``Cache-Control`` to
-    ``response`` and returns it. Call at the return site with a rendered response — a
-    ``TemplateResponse``'s body is available right after construction.
-    """
+    """``304`` if ``If-None-Match`` matches, else ``response`` with its ``ETag``. Call it with a
+    rendered response: a ``TemplateResponse`` has its body once constructed."""
     etag = f'"{hashlib.blake2b(response.body, digest_size=16).hexdigest()}"'
     if _matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": _CACHE_CONTROL})

@@ -37,13 +37,12 @@ class TodoEdit(BaseModel):
     title: str
 
 
-# One PATCH route, two forms behind it — the body is one or the other, never a mix, and the
-# schema says so rather than declaring two optionals a reader would have to null-check.
+# One PATCH route, two forms: one body or the other, never two optionals.
 TodoPatch = TodoTick | TodoEdit
 
 
 class TodoMove(BaseModel):
-    """A drop: the task now sits above ``above_id``, or at the end when it names nothing."""
+    """Above ``above_id``, or last."""
 
     above_id: uuid.UUID | None = None
 

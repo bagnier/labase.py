@@ -17,9 +17,7 @@ router = APIRouter(tags=["public"])
 async def _featured_org(
     admin: AsyncSession, public_settings: SettingsView
 ) -> OrganizationRead | None:
-    """The configured featured org, or ``None`` when unset or unknown — the shared preamble
-    of the two public routes (each decides its own bail: home page vs 404). Its pages are then
-    read on the RLS connection, through ``public_pages``: the database decides what is public."""
+    """The featured org, or ``None``. Its pages are then read through ``public_pages``."""
     handle: str = public_settings.featured_org_handle  # type: ignore[assignment]
     if not handle:
         return None

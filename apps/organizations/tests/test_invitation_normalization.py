@@ -1,6 +1,5 @@
-"""The invite endpoint canonicalises the email before dedup — otherwise `Foo@x.com`
-and `foo@x.com` both pass the pending-invitation check (the accept RPC lower()s, so both
-stay redeemable by the same person). Driven by calling the handler directly with mocks."""
+"""The invite endpoint lowercases the email before the pending check, which `Foo@x.com` would
+otherwise dodge. The handler is called directly, with mocks."""
 
 import json
 import uuid
@@ -38,7 +37,6 @@ async def test_invite_dedup_uses_lowercased_email():
     repo = AsyncMock()
     repo.get_membership = AsyncMock(return_value=None)
     repo.list_invitations = AsyncMock(return_value=[])
-    # A pending invitation already exists for the canonical address.
     repo.get_invitation_by_email = AsyncMock(return_value=MagicMock())
     repo.create_invitation = AsyncMock()
 
@@ -61,8 +59,8 @@ async def test_invite_dedup_uses_lowercased_email():
             settings,
         )
 
-    assert exc.value.status_code == 409  # rejected as a duplicate pending invite
+    assert exc.value.status_code == 409
     repo.get_invitation_by_email.assert_awaited_once_with(
         org_id, "foo@x.com", InvitationStatus.pending
     )
-    repo.create_invitation.assert_not_awaited()  # dedup short-circuited before create
+    repo.create_invitation.assert_not_awaited()

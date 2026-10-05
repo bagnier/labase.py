@@ -1,10 +1,7 @@
-"""Async engines and session factories — the DB I/O substrate.
+"""Engines and session dependencies (AGENTS: three sessions, and RLS by default).
 
-Two engines: user-role (RLS enforced) and BYPASSRLS admin, each pinned to the worktree's
-schema via ``search_path`` and instrumented for the per-query SQL tally. Request sessions
-commit before the response is sent; ``AdminSession`` is the BYPASSRLS session reserved for
-event handlers, console queries and anonymous public surfaces
-(AGENTS: three DB session dependencies).
+Two engines, user role and BYPASSRLS admin, both pinned to the worktree's schema and instrumented
+for the per-request SQL tally.
 """
 
 from collections.abc import AsyncGenerator
@@ -20,15 +17,12 @@ from apps.shared.settings.env import TechnicalSettings, get_technical_settings
 
 
 def search_path_connect_args(settings: TechnicalSettings) -> dict:
-    """asyncpg ``connect_args`` pinning every connection to the worktree's schema.
-
-    One source of truth for the three engines that need it (user, admin, and the
-    throwaway mount-time engine in ``settings_store``)."""
+    """Pins a connection to the worktree's schema; also used by ``settings.store``'s engine."""
     return {"server_settings": {"search_path": f"{settings.supabase_database_schema},public"}}
 
 
 def admin_url(settings: TechnicalSettings) -> str:
-    """The BYPASSRLS admin DB URL, falling back to the user URL when unset."""
+    """Falls back to the user URL when unset."""
     return settings.supabase_database_admin_url or settings.supabase_database_user_url
 
 
@@ -71,13 +65,8 @@ admin_session_factory = _make_session_factory(_admin_engine)
 
 
 async def dispose_engines() -> None:
-    """Close both pools while the loop still runs — the shutdown counterpart of the engines.
-
-    Every background component stops on its own hook (task worker, listener, flusher, drains); the
-    pools were the one piece left to the interpreter's teardown, where closing an asyncpg
-    connection has neither loop nor greenlet to await in. Only engines that were actually built
-    are disposed: touching the lru_cache here would create one just to close it.
-    """
+    """Close the pools at shutdown, while a loop remains to close asyncpg connections on. Only
+    engines already built: calling the cached builder would create one to close it."""
     for build in (_user_engine, _admin_engine):
         if build.cache_info().currsize:
             await build().dispose()
@@ -85,7 +74,6 @@ async def dispose_engines() -> None:
 
 @asynccontextmanager
 async def _commit_on_success(session: AsyncSession):
-    """Commit on clean exit, rollback on exception."""
     try:
         yield
         await session.commit()
@@ -95,10 +83,8 @@ async def _commit_on_success(session: AsyncSession):
 
 
 async def _session(factory, request: Request | None = None) -> AsyncGenerator[AsyncSession]:
-    # Transaction boundary: ideally commit before the response is sent.
-    # FastAPI exposes fastapi_function_astack, whose teardown runs BEFORE
-    # the response is sent (unlike fastapi_inner_astack, which runs after).
-    # Without a request (e.g. direct tests), fallback: commit after yield.
+    # Commit before the response is sent: ``fastapi_function_astack`` unwinds before it,
+    # ``fastapi_inner_astack`` after. Without a request (direct tests), commit after the yield.
     async with factory()() as session:
         func_stack: AsyncExitStack | None = (
             request.scope.get("fastapi_function_astack") if request is not None else None
@@ -121,5 +107,4 @@ async def get_admin_session(request: Request) -> AsyncGenerator[AsyncSession]:
         yield session
 
 
-# A BYPASSRLS session — shared infra, owned by no context.
 AdminSession = Annotated[AsyncSession, Depends(get_admin_session)]

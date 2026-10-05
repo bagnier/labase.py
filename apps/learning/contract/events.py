@@ -1,9 +1,4 @@
-"""Learning's business events — a review recorded on the shared journal.
-
-Reviewing a card advances its schedule, so :class:`CardReviewed` derives from
-:class:`~apps.shared.events.EntityUpdated` (``kind`` → ``"learning.reviewed"``) and carries the
-review outcome; the router emits it on the request's session, scoped by actor/org.
-"""
+"""``learning.reviewed``: a card reviewed, with its outcome."""
 
 from dataclasses import dataclass
 from typing import ClassVar

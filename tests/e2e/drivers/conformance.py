@@ -1,14 +1,6 @@
-"""Every JSON answer the API lane receives is checked against the schema its route declares.
-
-A route that says ``responses=json_and_html(list[TodoRead])`` has made a promise to the generated
-client; nothing else in the suite reads that promise back. Hooked onto the API driver's httpx
-client, this validates each 2xx JSON body against the OpenAPI schema of the operation that served
-it, so every scenario the lane already runs also proves the documentation of every route it
-touches — a DTO declared wrong, a field added without regenerating, a dict assembled by hand
-where a model is declared, all fail the scenario that met them, by name.
-
-A face the schema leaves blank is not checked: ``tests/meta/test_routes`` counts those, and the
-count is what has to reach zero.
+"""Each 2xx JSON answer the API lane receives is validated against its operation's OpenAPI
+schema, so every scenario also holds the routes' documentation (AGENTS: a form is JSON at the
+door). Undocumented faces are counted by ``tests/meta/test_routes``.
 """
 
 import re
@@ -21,11 +13,9 @@ _TEMPLATE_VAR = re.compile(r"\{[^}]+\}")
 
 
 class Conformance:
-    """The check, bound to one OpenAPI document — the app's, or a test's own."""
-
     def __init__(self, schema: dict[str, Any]) -> None:
         self._schema = schema
-        # Most literal template first: `/{org_handle}/todos` beats `/{slug}` on `/acme/todos`.
+        # Most literal template first: `/{org_handle}/todos` beats `/{slug}`.
         self._templates = sorted(
             (
                 (re.compile("^" + _TEMPLATE_VAR.sub("[^/]+", path) + "$"), path)

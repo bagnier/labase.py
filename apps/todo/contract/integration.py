@@ -1,8 +1,4 @@
-"""How the to-do context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the router,
-answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrganizationCreated``.
-"""
+"""The to-do mount, and the welcome tasks each new org gets."""
 
 import uuid
 
@@ -14,6 +10,7 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
+from apps.shared.overview import RECENT_ITEMS
 from apps.shared.persistence.repository import count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 from apps.todo.contract.events import (
@@ -28,8 +25,6 @@ from apps.todo.infra.repository import TodoRepository
 from apps.todo.infra.router import router
 
 PHASE = MountPhase.ORG
-
-_RECENT = 3
 
 _WELCOME_TODOS = [
     "Invite a teammate to this organisation",
@@ -72,18 +67,22 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    repo = TodoRepository(query.session, query.org_id)
-    items = await repo.all()
-    open_items = [t for t in items if not t.done]
-    done = len(items) - len(open_items)
-    lines = [f"{len(open_items)} open", f"{done} done"] if items else ["No tasks yet"]
+    total = await count_where(query.session, Todo, Todo.org_id == query.org_id)
+    done = await count_where(query.session, Todo, Todo.org_id == query.org_id, Todo.done)
+    open_n = total - done
+    lines = [f"{open_n} open", f"{done} done"] if total else ["No tasks yet"]
+    recent = (
+        await TodoRepository(query.session, query.org_id).recent_open(RECENT_ITEMS)
+        if open_n
+        else []
+    )
     return Overview(
         key="todo",
         title="To-do",
         icon="clipboard-text",
         href="todos",
         template="todo/_overview.html",
-        data={"lines": lines, "recent": [t.title for t in open_items[:_RECENT]]},
+        data={"lines": lines, "recent": [t.title for t in recent]},
     )
 
 
@@ -93,6 +92,6 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
     repo = TodoRepository(session, org_id)
-    # add() prepends, so insert in reverse to keep list order.
+    # add() prepends: reversed to keep the order.
     for title in reversed(_WELCOME_TODOS):
         await repo.add(owner_id, title)

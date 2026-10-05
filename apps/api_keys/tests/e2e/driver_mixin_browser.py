@@ -7,7 +7,7 @@ from tests.e2e.drivers.browser_base import BrowserBase
 class ApiKeysBrowserMixin(BrowserBase):
     _api_key_secret: str | None = None
     _api_key_org_handle: str = ""
-    _key_response: httpx.Response  # what the key got back from its last write
+    _key_response: httpx.Response  # the key's last write
 
     def reset_session(self) -> None:
         self._api_key_secret = None
@@ -15,12 +15,8 @@ class ApiKeysBrowserMixin(BrowserBase):
         super().reset_session()
 
     def _open_keys_panel(self) -> None:
-        """The keys section sits in the org settings page's "API keys" tab (client-side daisyUI
-        tabs): in by the sidebar's owner-only Settings entry, then check the tab's radio.
-
-        Entered afresh every time, never reused where it already stands: the settings page an
-        org rename leaves behind is mid-swap, and its Create key button detaches under the click.
-        """
+        """Settings → "API keys" tab, entered afresh: after a rename the page is mid-swap, and
+        its button detaches under the click."""
         self.follow_org_nav(getattr(self, "active_org_handle", ""), "settings")
         self.page.get_by_role("tab", name="API keys", exact=True).check()
 
@@ -35,12 +31,12 @@ class ApiKeysBrowserMixin(BrowserBase):
     def assert_api_key_secret_revealed(self) -> None:
         assert self._api_key_secret is not None
         assert self._api_key_secret.startswith("lbk_"), self._api_key_secret
-        # Reloading the page they are on is what "once" means: the secret is gone for good.
+        # After a reload the secret is gone.
         self.page.reload(wait_until="load")
         expect(self.page.locator("[data-api-key-secret]")).to_have_count(0)
 
     def _sessionless_get(self, path: str) -> httpx.Response:
-        """Straight HTTP against the live server — no browser context, no cookies."""
+        """Plain HTTP, no cookies."""
         assert self._api_key_secret is not None, "no API key created"
         return httpx.get(
             f"{self.base_url}{path}",
@@ -73,7 +69,7 @@ class ApiKeysBrowserMixin(BrowserBase):
         assert resp.status_code == 403, f"expected 403, got {resp.status_code}: {resp.text}"
 
     def try_open_api_keys_page(self) -> None:
-        # The keys route is owner-gated; a member hitting it is blocked before any redirect.
+        # Owner-gated before any redirect.
         probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None
         slug = getattr(self, "active_org_handle", "")

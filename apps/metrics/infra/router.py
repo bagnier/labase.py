@@ -25,7 +25,7 @@ WINDOW_HOURS = 24
 
 @exposition_router.get("/metrics", response_class=PlainTextResponse)
 async def metrics_exposition(current_user: CurrentAdmin) -> PlainTextResponse:
-    """Live Prometheus counters — the interop layer for real scrapers later."""
+    """Live Prometheus counters, for scrapers."""
     return PlainTextResponse(
         accumulator.render_prometheus(), media_type="text/plain; version=0.0.4"
     )
@@ -39,8 +39,7 @@ async def load_screen(
     since, until, windowed = _detail_window(request, full_since)
     routes, totals = service.aggregate(await window_rows(session, since, until))
 
-    # A drill on the chart reloads only the totals + routes for the brushed range; the
-    # chart itself (the full window) stays put as the navigation surface.
+    # A brush on the chart reloads the totals and routes only; the chart stays.
     if is_htmx(request):
         return templates.TemplateResponse(
             request,
@@ -83,8 +82,7 @@ async def load_screen(
 def _detail_window(
     request: Request, full_since: datetime
 ) -> tuple[datetime, datetime | None, bool]:
-    """Resolve the totals/routes window from the chart's ``from``/``to`` brush (epoch ms).
-    Absent or malformed params fall back to the full ``WINDOW_HOURS`` — a drill never errors."""
+    """The brushed ``from``/``to`` (epoch ms), else the full ``WINDOW_HOURS``; never an error."""
     since = _from_ms(request.query_params.get("from")) or full_since
     until = _from_ms(request.query_params.get("to"))
     windowed = since is not full_since or until is not None
@@ -101,7 +99,6 @@ def _from_ms(raw: str | None) -> datetime | None:
 
 
 def _series_chart_json(series: list[LoadPoint]) -> str:
-    """Shape the time series into the charts.js declarative config (an area chart)."""
     requests = [[int(p.bucket_start.timestamp() * 1000), p.requests] for p in series]
     errors = [[int(p.bucket_start.timestamp() * 1000), p.errors] for p in series]
     return json.dumps(
@@ -111,13 +108,11 @@ def _series_chart_json(series: list[LoadPoint]) -> str:
                 {"name": "Requests", "data": requests},
                 {"name": "Errors", "data": errors},
             ],
-            # Brushing the chart reloads #load-detail for the selected range (charts.js).
             "drilldown": {"url": "/console/load", "target": "#load-detail"},
             "options": {
                 "colors": ["primary", "error"],
                 "chart": {"height": 240, "stacked": False},
-                # Stepline, not a spline: each step is exactly one bucket's count — no
-                # interpolated dips or phantom peaks between the real data points.
+                # Stepline: a spline would invent peaks between buckets.
                 "stroke": {"curve": "stepline"},
                 "xaxis": {"type": "datetime"},
                 "yaxis": {"min": 0, "forceNiceScale": True},
@@ -128,6 +123,6 @@ def _series_chart_json(series: list[LoadPoint]) -> str:
 
 
 def _studio_url() -> str | None:
-    """The console's own verdict on where Studio is — ``None`` hides the link."""
+    """``None`` hides the Studio link."""
     settings = get_technical_settings()
     return studio_base_url(settings.supabase_studio_url, settings.supabase_api_url)

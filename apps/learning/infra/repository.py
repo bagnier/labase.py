@@ -31,32 +31,10 @@ class DeckRepository(OrgScopedRepository[Deck]):
             select(Deck).where(Deck.org_id == self.org_id, Deck.name == name)
         )
 
-    async def recent(self, limit: int) -> list[Deck]:
-        """This org's `limit` newest decks — a bounded query, never `all()` sliced after the
-        fact, so a large org's overview card costs `limit` rows, not every deck it has.
-
-        Tiebreaks on `id` (UUIDv7, minted in creation order): `created_at` alone is not a total
-        order — decks created in the same request, or under a pinned test clock, share an exact
-        timestamp, and `ORDER BY … LIMIT` over a tie is free to return any of them, chosen by
-        whichever plan Postgres picks rather than by the query.
-        """
-        return list(
-            await self.session.scalars(
-                select(Deck)
-                .where(Deck.org_id == self.org_id)
-                .order_by(Deck.created_at.desc(), Deck.id.desc())
-                .limit(limit)
-            )
-        )
-
 
 class LearningRepository:
-    """Org-scoped catalog with per-user progress (subscriptions/states/reviews).
-
-    Deliberately NOT an `OrgScopedRepository`: it spans four models (decks, cards,
-    subscriptions, states) as one query surface, so the single-aggregate CRUD base
-    does not apply. It satisfies the domain's `ReviewRepositoryProtocol` port.
-    """
+    """The org's catalog with a user's progress, implementing `ReviewRepositoryProtocol`. Not an
+    `OrgScopedRepository`: it spans four models."""
 
     def __init__(self, session: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID) -> None:
         self.session = session
@@ -85,7 +63,6 @@ class LearningRepository:
             await self.session.flush()
 
     async def available_decks(self) -> list[Deck]:
-        """Decks in this org that the user is not yet subscribed to, ordered by position."""
         subscribed = select(DeckSubscription.deck_id).where(
             DeckSubscription.user_id == self.user_id
         )
@@ -97,7 +74,6 @@ class LearningRepository:
         return list(rows.scalars())
 
     async def catalog(self) -> list[CatalogRow]:
-        """All cards of the user's subscribed decks with this user's state, in deck/card order."""
         rows = await self.session.execute(
             select(Deck, Card, CardState)
             .join(DeckSubscription, DeckSubscription.deck_id == Deck.id)
@@ -112,7 +88,7 @@ class LearningRepository:
         return [CatalogRow(deck=d, card=c, state=s) for d, c, s in rows.all()]
 
     async def reviews_today(self, today: date) -> int:
-        """Distinct cards this user already reviewed today (re-marking a card doesn't add)."""
+        """Distinct cards reviewed today."""
         return await count_where(
             self.session,
             CardState,
