@@ -563,9 +563,9 @@ _ICON_DECLARED_RE = re.compile(
 
 
 def _icons_declared() -> dict[str, str]:
-    """Each ``icon="…"`` or typed default outside tests, with where it is — plus ``_GROUP_DISPLAY``'s
-    and every mounted ``NavItem``'s, read from the live objects rather than pattern-matched: neither
-    carries an ``icon`` word anywhere near its value."""
+    """Each ``icon="…"`` or typed default outside tests, with where it is — plus
+    ``_GROUP_DISPLAY``'s and every mounted ``NavItem``'s, read from the live objects rather than
+    pattern-matched: neither carries an ``icon`` word anywhere near its value."""
     found = {}
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
