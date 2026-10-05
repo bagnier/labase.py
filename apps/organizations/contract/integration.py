@@ -1,9 +1,5 @@
-"""How the organizations context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the
-collection, invitation and org-scoped routers, claims the ``invitations`` slug, and reacts to
-auth's ``UserCreated`` by creating the user's personal org then emitting ``OrganizationCreated``
-— the journal record that also triggers the welcome seeders.
+"""The organizations mount, and the reactions creating a user's personal org and forgetting a
+deleted user (AGENTS: sign-up is a chain of durable reactions).
 """
 
 import uuid
@@ -43,15 +39,12 @@ PHASE = MountPhase.ORG
 
 log = structlog.get_logger(__name__)
 
-# Mounts the org-scoped catch-all router under /{org_handle}; the composition root mounts such
-# contexts last (see apps.main) so fixed-prefix routers (e.g. /console) are never shadowed.
-
 
 def mount(host: Host) -> None:
-    # Core context (owns /{org_handle}); never gated off, so it declares no on/off switch.
+    # A core context: no on/off switch.
     host.register_settings(_declare_settings())
     host.app.include_router(invitation_router)
-    host.app.include_router(router)  # /organizations collection
+    host.app.include_router(router)
     host.app.include_router(org_router, prefix=ORG_PREFIX)
     host.events.declare(
         OrganizationCreated,
@@ -71,9 +64,6 @@ def mount(host: Host) -> None:
     host.register_nav(
         NavItem("Settings", "gear", "settings", "/settings", order=110, owner_only=True)
     )
-    # Both top-level paths this context routes: `/organizations` (the list) and
-    # `/invitations/{token}` (the accept link). An org handle taking either would leave one of
-    # the two unreachable — the list is the one it would shadow at its own name.
     host.reserve("organizations", "invitations")
     host.register_open_list("organizations", org_handle_taken)
 
@@ -126,36 +116,27 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         title="Organisations",
         icon="buildings",
         section="identity",
-        # No "growth" slice: every sign-up auto-creates a personal org, so orgs-per-day would
-        # just shadow the Sign-ups series on the console growth chart. ``is_personal`` now
-        # distinguishes a team org from one, but a team-orgs-per-day series is its own signal,
-        # not a fix to this one — out of scope here.
+        # No "growth": orgs per day would mirror sign-ups, one personal org each.
         data={"lines": lines},
     )
 
 
 async def _create_org(session: AsyncSession, event: UserCreated) -> None:
-    """Durable consumer of ``UserCreated``: create the user's personal org, then emit
-    ``OrganizationCreated`` (the fact the welcome seeders react to). Runs off the journal on the
-    worker's session — the worker commits the org and the emitted fact together, so the seeders
-    (delivered after that commit) always read the org back. Idempotent (the ``already_owns_one``
-    guard), so a task retry never double-creates."""
+    """Create the user's personal org and record ``OrganizationCreated``, committed together by
+    the worker. Idempotent, for a retried delivery."""
     if not get_settings("organizations").auto_create_personal_org:
         return
     user_id = event.user_id
     if user_id is None:
         return
-    # A business event is an immutable fact, not a saga step: the actor may be gone by the time this
-    # durable consumer runs (self-deletion between emit and delivery). Seat off ``auth.users`` — no
-    # user, no org — so a vanished subject is a clean no-op, not an FK crash + park.
+    # The user may have deleted their account since: a clean no-op.
     if not await user_exists(session, user_id):
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    # A *personal* org specifically — not any owned org, which a self-created team org (through
-    # `POST /organizations`, before this delivery) would also satisfy and wrongly skip (#71).
+    # A personal org: a team org created meanwhile must not count.
     already_owns_one = await OrganizationRepository(session).count_personal_owned_by(user_id)
     if already_owns_one:
-        return  # retried delivery of a UserCreated already handled — idempotency, not a re-visit
+        return
     try:
         org = await OrganizationRepository(session).create_with_owner(
             name=event.email,
@@ -163,18 +144,14 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
             is_personal=True,
         )
     except IntegrityError:
-        # The race remains: gone between the check above and the membership insert. But the clause
-        # names a *type*, and an ``IntegrityError`` says nothing about which constraint broke — a
-        # handle collision and the last-owner trigger arrive spelled exactly the same. Asking the
-        # same question once the transaction is rolled back is what tells them apart; an actor who
-        # never left contradicts the no-op, so the failure goes back to the worker, whose park is
-        # what opens an issue.
+        # Which constraint failed is unknown: if the user still exists, it was not their
+        # deletion, and the worker retries then parks.
         await session.rollback()
         if await user_exists(session, user_id):
             raise
         log.info("create_personal_org.actor_gone", user_id=str(user_id))
         return
-    await session.flush()  # assign org.id; the worker commits the whole unit
+    await session.flush()  # assigns org.id
     await events.emit(
         OrganizationCreated(
             user_id=user_id,
@@ -187,18 +164,11 @@ async def _create_org(session: AsyncSession, event: UserCreated) -> None:
 
 
 async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
-    """Account deletion: drop the user's memberships, reaping any org the departure
-    would leave without an owner (nobody could run it) or without any member.
+    """Drop the deleted user's memberships, deleting any org left without owner or member.
 
-    A durable async consumer of ``UserDeleted`` (run on the admin session off the listener, keyed on
-    the removed user's ``entity_id``), so cleanup never sits on the deleting request's path and is
-    retried/parked on failure. A last-owner seat is not deleted directly — the DB guard forbids
-    orphaning an org, and deleting it would strand any remaining members in an ownerless org — so we
-    reap the whole org instead (SQL cascade takes its memberships and org-scoped rows, and the
-    cascade's own membership deletes are exempt from the guard because the org is already gone).
+    A last owner's org is deleted whole: the database refuses an ownerless org, and its cascade is
+    exempt from that guard.
     """
-    # entity_id is the removed user's pk (a uuid, re-parsed by from_payload). Defensive no-op if a
-    # malformed row ever carries none.
     user_id = event.entity_id
     if user_id is None:
         return
@@ -215,8 +185,6 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
             Membership.role == OrgRole.owner,
             Membership.user_id != user_id,
         )
-        # Losing the last owner leaves the org unmanageable — reap it whole rather than
-        # delete this seat (which the guard would refuse anyway). Otherwise drop the seat.
         if membership.role == OrgRole.owner and other_owners == 0:
             doomed.add(membership.org_id)
         else:

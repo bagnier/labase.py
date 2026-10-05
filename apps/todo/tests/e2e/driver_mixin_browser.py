@@ -26,16 +26,13 @@ class TodoBrowserMixin(BrowserBase):
         self._on_todos(fresh=True)
 
     def _on_todos(self, *, fresh: bool = False) -> None:
-        """On the list, by the sidebar entry — the only way in that a person has — unless it is
-        already what they are looking at. ``fresh`` for the read-back after an action: what the
-        server stored, not what the swap left behind."""
+        """On the list, through the sidebar; ``fresh`` reloads it after a swap."""
         self.reach_org_nav(getattr(self, "active_org_handle", ""), "todos", fresh=fresh)
 
     def try_add_todo(self, title: str) -> None:
-        # HTMX drops 4xx swaps; fire the request the form would send and keep the
-        # response so "the action is forbidden" asserts server-side enforcement.
+        # HTMX drops a 4xx: send the form's request so the server's refusal is checked.
         slug = getattr(self, "active_org_handle", "")
-        probe = getattr(self, "_probe_blocked", None)  # provided by the organizations mixin
+        probe = getattr(self, "_probe_blocked", None)  # organizations mixin
         assert probe is not None
         probe("POST", f"/{slug}/todos", form={"title": title})
 
@@ -170,8 +167,7 @@ class TodoBrowserMixin(BrowserBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_todo_list_as(self, email: str) -> None:
-        # The other tenant's org is seeded by the "is a member of" step; read its list from its
-        # own handle.
+        # Seeded by the "is a member of" step.
         page = self.page_for(email)
         slug = getattr(self, "secondary_handles", {}).get(
             email, getattr(self, "active_org_handle", "")
@@ -210,6 +206,5 @@ class TodoBrowserMixin(BrowserBase):
         expect(self.page.get_by_label(f"Rename “{title}”")).to_be_focused()
 
     def assert_dashboard_badges(self, badges: list[str]) -> None:
-        # The card sits on the org dashboard, one sidebar click from the list they ticked it in.
         self.reach_org_nav(getattr(self, "active_org_handle", ""), "dashboard", fresh=True)
         expect(self.page.locator('[data-overview="todo"] .badge')).to_have_text(badges)

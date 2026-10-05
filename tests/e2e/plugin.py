@@ -1,9 +1,5 @@
-"""E2e driver fixtures: the session-scoped driver and per-test isolation.
-
-Registered via ``pytest_plugins`` from ``tests.plugin`` so these reach every BDD
-scenario under ``app/`` while keeping the driver concerns grouped under e2e.
-The ``--driver`` option itself stays in ``tests.plugin`` (the ``-p`` entry point),
-since ``pytest_addoption`` is only honoured for plugins loaded at startup.
+"""The session-scoped driver and per-test isolation, registered from ``tests.plugin``, which keeps
+``--driver``: ``pytest_addoption`` works only in startup plugins.
 """
 
 import asyncio
@@ -29,20 +25,9 @@ def driver(request) -> Iterator[ApiDriver | BrowserDriver]:
 
 @pytest.fixture(autouse=True)
 def db_rollback(driver: ApiDriver | BrowserDriver):
-    """Each test/scenario runs inside its driver's isolation boundary.
-
-    ApiDriver wraps the test in a rolled-back transaction shared by all sessions;
-    BrowserDriver truncates app tables after the fact. Each driver owns its own
-    strategy via setup_test/teardown_test (see tests/e2e/drivers/).
-
-    reset_session() then clears the (session-scoped) driver's per-scenario state —
-    client/cookies, browser context, acting-as user — so every scenario starts
-    clean without each entry @given having to remember to do it.
-
-    The settings snapshot is the half neither driver can roll back: a scenario that edits a
-    setting from the console re-points the in-memory handles too (``SettingsChanged`` travels by
-    ``spread``), and that copy outlives both the transaction and the truncation.
-    """
+    """Each test inside its driver's isolation (rollback or truncation), then
+    ``reset_session()``. In-memory settings handles, which neither undoes, are snapshotted and
+    restored."""
     settings = settings_snapshot()
     driver.setup_test()
     driver.reset_session()

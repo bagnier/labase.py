@@ -1,4 +1,4 @@
-"""How the public context plugs into the running app: mounts the landing-page router."""
+"""The public mount: the landing page."""
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.public.infra.router import router

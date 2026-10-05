@@ -1,9 +1,6 @@
-"""The API roles hold exactly the privileges a migration grants them — nothing inherited.
-
-Supabase's default privileges hand ``anon`` and ``authenticated`` every table privilege and
-EXECUTE on every new object in ``public``; the foundation migration revokes that, so a table or
-function a migration forgets to grant stays closed instead of wide open to the publishable key.
-These tests read the catalog of the stack's ``public`` schema — the one PostgREST serves.
+"""The API roles hold only what migrations grant: Supabase's defaults (all privileges on every
+new object) are revoked, so a forgotten grant stays closed. Read from ``public``, which PostgREST
+serves.
 """
 
 from collections.abc import AsyncIterator
@@ -45,8 +42,7 @@ _TABLE_GRANTS = {
     ("authenticated", "org_file_share_tokens", "INSERT"),
     ("authenticated", "org_file_share_tokens", "SELECT"),
     ("authenticated", "organizations", "SELECT"),
-    # UPDATE is column-scoped (name, handle, timezone, version), not table-wide — see
-    # test_authenticated_cannot_set_is_personal_through_postgrest.
+    # UPDATE is column-scoped; see test_authenticated_cannot_set_is_personal_through_postgrest.
 }
 
 _FUNCTION_GRANTS = {
@@ -65,13 +61,11 @@ _FUNCTION_GRANTS = {
     ("authenticated", "uuidv7"),
 }
 
-# The helpers a policy may call, each in one list. Isolation says which org a row belongs to; only
-# SQL holds it. Authorization says which role may act on it; the route repeats it for a clean 403.
+# The helpers a policy may call (AGENTS: the database enforces isolation and authorization).
 _ISOLATION_HELPERS = {"storage_path_org_id", "user_org_ids"}
 _AUTHORIZATION_HELPERS = {"user_is_org_owner"}
 
-# Every relation, partitions included: PostgREST does not serve a partition, but a SQL session on
-# an API role reaches it directly, where the parent's RLS does not apply.
+# Partitions included: a SQL session reaches them past the parent's RLS.
 _TABLE_GRANTS_SQL = """
 select r.rolname, c.relname, a.privilege_type
   from pg_class c
@@ -94,8 +88,7 @@ select coalesce(r.rolname, 'PUBLIC'), p.proname
    and (a.grantee = 0 or r.rolname in ('anon', 'authenticated', 'app_rls'))
 """
 
-# Postgres records each function a policy expression calls as a dependency of that policy. Every
-# table counts, storage.objects included: its policies call the same helpers.
+# A policy depends on the functions it calls; storage.objects included.
 _POLICY_CALLS_SQL = """
 select distinct p.proname
   from pg_policy pol
@@ -153,10 +146,8 @@ async def test_api_roles_execute_only_the_functions_migrations_grant(
 
 @pytest.mark.asyncio
 async def test_authenticated_cannot_set_is_personal_through_postgrest(admin_conn: AsyncConnection):
-    """``is_personal`` is stamped once by ``create_org_with_owner`` (SECURITY DEFINER); a raw
-    PostgREST client wielding the JWT must not be able to write it directly — flipping it on a
-    team org would forever dodge the personal-org guard, flipping it off would let a redelivered
-    ``UserCreated`` duplicate the real one."""
+    """Set once by ``create_org_with_owner``: flipped, it would dodge or break the personal-org
+    guard."""
     rows = await admin_conn.execute(
         text(
             "select has_column_privilege('authenticated', 'public.organizations',"
@@ -171,8 +162,7 @@ async def test_authenticated_cannot_set_is_personal_through_postgrest(admin_conn
 
 @pytest.mark.asyncio
 async def test_the_secret_key_only_reads_the_journal(admin_conn: AsyncConnection):
-    """A fact has one writer, ``record_business_event``: a direct write from the secret key would
-    post a fact the listener delivers, or rewrite an append-only journal."""
+    """Only ``record_business_event`` writes facts; the secret key cannot post or rewrite one."""
     rows = await admin_conn.execute(
         text(
             "select a.privilege_type from pg_class c"
@@ -187,9 +177,8 @@ async def test_the_secret_key_only_reads_the_journal(admin_conn: AsyncConnection
     assert granted == {"SELECT"}
 
 
-# The secret key's table privileges: data, not schema. Supabase's defaults hand `service_role`
-# TRUNCATE, TRIGGER, REFERENCES and MAINTAIN on every table too — a leaked key could then wipe a
-# table past its RLS-free DELETE, or plant a trigger that runs on every tenant's writes.
+# The secret key's privileges: data only, not TRUNCATE or TRIGGER, with which a leaked key could
+# wipe a table or plant a trigger on every tenant's writes.
 _SERVICE_ROLE_TABLE_SQL = """
 select c.relname, a.privilege_type
   from pg_class c
@@ -225,8 +214,7 @@ async def test_the_secret_key_holds_data_privileges_only(admin_conn: AsyncConnec
 async def test_a_table_created_later_gives_the_secret_key_data_privileges_only(
     admin_conn: AsyncConnection,
 ):
-    """The default privileges are what a new table inherits — a log partition rolled tomorrow, or
-    the next app's table — so they are held apart from today's tables."""
+    """What a new table inherits: tomorrow's log partition, the next app's table."""
     rows = await admin_conn.execute(
         text(
             "select a.privilege_type from pg_default_acl d"
@@ -258,7 +246,7 @@ async def test_every_public_table_enforces_row_level_security(admin_conn: AsyncC
 
 @pytest.mark.asyncio
 async def test_every_security_definer_function_pins_its_search_path(admin_conn: AsyncConnection):
-    # Unpinned, an unqualified name resolves on the caller's search_path, with the owner's rights.
+    # Unpinned, a name resolves on the caller's search_path with the owner's rights.
     rows = await admin_conn.execute(
         text(
             "select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace"
@@ -285,8 +273,7 @@ async def test_every_function_a_policy_calls_is_a_declared_guard(admin_conn: Asy
 async def test_every_table_an_authorization_helper_guards_has_its_rules(
     admin_conn: AsyncConnection,
 ):
-    """Holds the reach of the rules, not their content: a table is covered by one rule, whatever
-    commands its policies guard, and an action no rule names can still differ between the doors."""
+    """Each table with authorization policies has at least one rule."""
     rows = await admin_conn.execute(
         text(_GUARDED_TABLES_SQL), {"helpers": sorted(_AUTHORIZATION_HELPERS)}
     )
@@ -337,7 +324,7 @@ def test_the_publishable_key_cannot_list_share_tokens():
 
 
 def test_the_publishable_key_cannot_roll_log_partitions():
-    # A window long enough to drop nothing, should the call get through.
+    # A window dropping nothing, should the call pass.
     status = _as_anon(
         "POST", "rpc/roll_log_partitions", json={"p_today": "2026-01-01", "p_retention_days": 36500}
     )

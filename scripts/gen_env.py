@@ -1,18 +1,10 @@
-"""Generate a local .env from `supabase status -o env`.
+"""Generate the local .env from `supabase status -o env`: names mapped to ``TechnicalSettings``,
+asyncpg URLs for the user (app_user, RLS) and admin (postgres) connections, through
+``host.docker.internal`` (see .env.example).
 
-Maps the Supabase CLI variable names to the names expected by
-``apps.shared.settings.env.TechnicalSettings`` and rewrites the local DB URLs to the
-asyncpg driver, splitting the user (app_user, RLS) and service (postgres)
-connections. Host-side scripts and the Docker app both reach the stack through
-``host.docker.internal`` (see comments in .env.example).
-
-The migrations leave ``app_user`` unable to log in; this opens it on the local stack with the
-password the .env holds, or a generated one. Kept across refreshes, since worktrees clone the
-main checkout's .env and share its stack.
-
-Merges into any existing .env rather than overwriting it, so per-worktree
-overrides (SUPABASE_DATABASE_SCHEMA, SUPABASE_STORAGE_BUCKET, APP_PORT — see
-scripts/worktree.py) survive a key refresh.
+``app_user`` cannot log in after the migrations: this sets its password, the one already in .env
+if any, since worktrees share the stack. Merged into an existing .env, so worktree overrides
+survive.
 """
 
 from __future__ import annotations
@@ -31,8 +23,8 @@ from scripts.envfile import merge_env
 
 ENV_PATH = Path(".env")
 DOCKER_HOST = "host.docker.internal"
-# What `secrets.token_urlsafe(32)` yields: anything else in the .env is replaced, not trusted. The
-# charset is also what lets the password sit unquoted in a URL and in ALTER ROLE.
+# `secrets.token_urlsafe(32)`'s shape: anything else is replaced. Safe unquoted in a URL and in
+# ALTER ROLE.
 GENERATED_PASSWORD = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
@@ -55,7 +47,7 @@ def supabase_status() -> dict[str, str]:
 
 
 def user_password(env_path: Path) -> str:
-    """The password the .env's user URL holds if it was generated, a fresh one otherwise."""
+    """The .env's generated password, else a fresh one."""
     lines = env_path.read_text().splitlines() if env_path.exists() else []
     for line in lines:
         key, _, value = line.partition("=")
@@ -81,9 +73,7 @@ def build_overrides(status: dict[str, str], password: str) -> dict[str, str]:
     return {
         "SUPABASE_API_URL": api_url.replace("127.0.0.1", DOCKER_HOST),
         "SUPABASE_STORAGE_URL": api_url,
-        # Browser-facing (the admin's browser follows it), so no DOCKER_HOST rewrite; the local
-        # Studio serves the default project under this base. A stack without a Studio (the CLI
-        # can exclude it) leaves the key empty, which hides the console's links.
+        # Browser-facing: no Docker rewrite. Empty without a Studio, hiding the console's links.
         "SUPABASE_STUDIO_URL": (
             f"{status['STUDIO_URL']}/project/default" if status.get("STUDIO_URL") else ""
         ),

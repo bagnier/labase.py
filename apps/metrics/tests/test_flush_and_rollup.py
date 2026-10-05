@@ -1,4 +1,4 @@
-"""Integration: the flusher really persists deltas; rollup downsamples and purges."""
+"""The flusher persists deltas; the rollup downsamples and purges."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -24,11 +24,7 @@ def _clear_engine_caches() -> None:
 @pytest_asyncio.fixture(autouse=True)
 async def metrics_isolation(monkeypatch):
     _clear_engine_caches()
-    # Pin the clock. Flush and rollup call clock.now() several times to derive
-    # minute/hour buckets; against the real wall clock those calls can straddle a
-    # minute or hour boundary (e.g. seeding "old" then "old + 1 min" at :59 lands
-    # them in two different hours), which made this suite fail ~1 run in 60. A
-    # fixed instant makes the bucket maths deterministic.
+    # A pinned clock: several clock.now() calls could straddle a minute or hour boundary.
     monkeypatch.setattr(clock, "now", lambda: datetime(2024, 1, 15, 12, 0, tzinfo=UTC))
     yield
     async with db.admin_session_factory()() as session:
@@ -49,9 +45,8 @@ async def _rows(route: str) -> list[RequestMetric]:
 
 @pytest.mark.asyncio
 async def test_flusher_persists_deltas_and_merges_within_a_minute():
-    flusher = MetricsFlusher(interval_seconds=0)  # tick() driven by hand
-    # The accumulator is process-global: baseline on its current state so this
-    # tick flushes only the observations below, not traffic from other tests.
+    flusher = MetricsFlusher(interval_seconds=0)
+    # The accumulator is process-global: baseline on it, ignoring other tests' traffic.
     flusher._previous = accumulator.snapshot()
     accumulator.observe("GET", MARKER_ROUTE, 200, 80)
     accumulator.observe("GET", MARKER_ROUTE, 500, 30)
@@ -63,23 +58,21 @@ async def test_flusher_persists_deltas_and_merges_within_a_minute():
     assert row.resolution == MetricResolution.minute
 
     accumulator.observe("GET", MARKER_ROUTE, 200, 80)
-    await flusher.tick()  # delta of 1, merged into the same minute row
+    await flusher.tick()  # merged into the same minute row
 
     (row,) = await _rows(MARKER_ROUTE)
     assert row.requests == 3
 
-    await flusher.tick()  # idle tick writes nothing
+    await flusher.tick()
     (row,) = await _rows(MARKER_ROUTE)
     assert row.requests == 3
 
 
 @pytest.mark.asyncio
 async def test_stopping_the_flusher_persists_the_interval_it_was_holding():
-    """SIGTERM is how every deploy ends a process, so the traffic since the last tick is what a
-    deploy routinely costs the Load screen — a visible dip at exactly the moment worth watching.
-    The log drain already emptied on its way out; this one dropped its interval."""
+    """Every deploy stops the process: the interval since the last tick must not be lost."""
     route = f"{MARKER_ROUTE}-shutdown"
-    flusher = MetricsFlusher(interval_seconds=0)  # never started: nothing ticks on its own
+    flusher = MetricsFlusher(interval_seconds=0)
     flusher._previous = accumulator.snapshot()
     accumulator.observe("GET", route, 200, 40)
 

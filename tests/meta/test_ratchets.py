@@ -1,16 +1,6 @@
-"""Rules the README states as absolutes, held as the enumerated list of what is left.
-
-Some of the base's conventions are already true everywhere and need a guard so they stay that way;
-others are true almost everywhere, and the README states them anyway. Both are held the same way
-here — the sites are enumerated and frozen — because the two only differ by today's number.
-
-A frozen list is not a suppression. A suppression makes a rule stop applying to a site; a freeze
-makes the site *visible*, in one place, next to the reason it is there. The tell is direction:
-nothing here may grow without an edit to this file, and every edit is a decision someone made on
-purpose.
-
-``tests/meta/claims.py`` says which of these hold a README claim outright and which only measure
-the distance left — a claim whose ratchet is not yet at zero stays waived, and names its ratchet.
+"""AGENTS.md's absolute rules, held as frozen lists of the sites left, each with its reason. A
+list may only shrink; adding to it is a decision made here. A claim whose ratchet is not at zero
+stays waived in ``tests/meta/claims.py``.
 """
 
 import ast
@@ -24,12 +14,8 @@ from tests.meta.readme import text as readme
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
 
-# The demos are meant to be deleted, and these are the non-demo modules that would break the day
-# one is: the two e2e drivers composing every app's mixins, the rule books and the dev seed. Each
-# is a coupling the base has chosen over a registration; the list only shrinks, since a demo
-# deleted with any of these still in place takes the harness down with it. Two readers are left
-# out on purpose: the composition root, whose job is to mount every app, and this package, which
-# reads the reference app to hold the README's word on it.
+# Non-demo modules that break when a demo is deleted: the drivers composing every mixin, the rule
+# books, the dev seed. Exempt: the composition root, and this package, reading the reference app.
 _REACHES_INTO_A_DEMO = {
     "scripts/seed.py": {"todo"},
     "tests/e2e/drivers/api.py": {"calendar", "files", "learning", "todo"},
@@ -37,21 +23,17 @@ _REACHES_INTO_A_DEMO = {
     "tests/rulebooks.py": {"files", "learning"},
 }
 
-# The clock's own module, and the six test-side stamps that record *when the test asked*, which is
-# a fact about the run and not about the domain — pinning them to the domain clock would make a
-# mail-arrival window compare a real timestamp with a frozen one.
+# The clock itself, and the test-side stamps of when a test asked (a mail-arrival window must
+# compare real times, not a frozen one).
 _MAY_READ_THE_WALL_CLOCK = ("apps/shared/clock.py", "/tests/")
 
-# The logs subsystem computes the name it writes (the dependency verdict picks `…_failed` or
-# `…_unreachable`, the chain re-emits whatever a library named its record). Everywhere else the
-# name is a literal, which is what makes it greppable and what the Timeline's `app` axis reads.
+# The logs subsystem computes its line names (the verdict, a library's record); elsewhere a name
+# is a literal, greppable.
 _NAMES_ITS_LINES_AT_RUNTIME = "apps/shared/logs/"
 
-# Reads tolerating a `None` — a fallback after `or`, a `typing.cast`, a suppression — named by the
-# function that makes them. Most answer a shape from outside: an aggregate's scalar (`None` over no
-# rows), a GoTrue or Starlette optional, SQLAlchemy's untyped `get`/`scalars`, pydantic-settings'
-# env-built constructor. Each is not slack in one of our own annotations, which is the distinction
-# the README's rule turns on; the list only shrinks, and a new entry is a decision.
+# Reads tolerating a `None` (`or`, `typing.cast`, a suppression), by function. Each answers a shape
+# from outside (an aggregate over no rows, GoTrue, Starlette, SQLAlchemy, pydantic-settings), not
+# slack in our own annotations (AGENTS: `| None` means optional).
 _DEFENSIVE_READS = [
     "apps/auth/domain/service.py::confirm_signup cast",
     'apps/auth/domain/service.py::exchange_oauth_code or ""',
@@ -86,7 +68,6 @@ _DEFENSIVE_READS = [
     "apps/shared/http/exceptions.py::handle_http_error or {}",
     "apps/shared/http/limiter.py::_increment or 0",
     "apps/shared/http/templates.py::<module> cast",
-    "apps/shared/logs/repository.py::LogRepository.purge or 0",
     "apps/shared/logs/repository.py::LogRepository.roll or 0",
     'apps/shared/logs/repository.py::_columns or ""',
     'apps/shared/logs/repository.py::_columns or ""',
@@ -94,6 +75,7 @@ _DEFENSIVE_READS = [
     "apps/shared/persistence/repository.py::BaseRepository.get cast",
     "apps/shared/persistence/repository.py::OrgScopedRepository.all cast",
     "apps/shared/persistence/repository.py::OrgScopedRepository.get cast",
+    "apps/shared/persistence/repository.py::OrgScopedRepository.recent cast",
     "apps/shared/persistence/repository.py::PositionedRepository.move_above cast",
     "apps/shared/persistence/repository.py::count_where or 0",
     "apps/shared/queue.py::TaskWorker.tick cast",
@@ -108,15 +90,9 @@ _DEFENSIVE_READS = [
     'apps/timeline/infra/repository.py::_sort_value or ""',
 ]
 
-# Every navigation the browser mixins still make by URL, and why each one is an *arrival* rather
-# than a deep link. The rule the list applies: a person reaches a page by following a link or
-# submitting a form, except when they arrive from outside the app entirely — the front door, a
-# mailed link, an invitation token, an address typed by someone who is not signed in, a machine
-# endpoint, a download. Everything else goes through the sidebar, a card or a button, like a human.
-#
-# A `then` may never navigate at all, whatever the reason: an assertion that fetches its own page
-# asserts about a page nobody reached, and keeps passing after the app's own way there breaks.
-# ``test_no_assertion_step_reaches_a_page_by_url`` holds that half; this list holds the other.
+# The browser mixins' URL navigations, each an arrival from outside the app (front door, mailed
+# link, invitation, a stranger's typed address, a machine endpoint, a download); everything else is
+# clicked. A `then` never navigates (``test_no_assertion_step_reaches_a_page_by_url``).
 _ARRIVES_FROM_OUTSIDE = {
     # ── the front door: the sign-in and registration pages ──────────────────────────────────────
     "auth.start_to_sign_in": "a visitor sets out to sign in",
@@ -152,11 +128,8 @@ _ARRIVES_FROM_OUTSIDE = {
     "metrics.fetch_metrics_exposition": "the Prometheus endpoint, which no page links to",
 }
 
-# Requests the driver fires itself instead of clicking. Seven of the nine are the base's own answer
-# to "hiding the control is not proof": the affordance is absent or disabled for this actor, so the
-# request it would have sent is fired from their own authenticated context and the server has to
-# be the one refusing. The other two are the smell the README warns about, written down rather
-# than left implicit.
+# Requests the driver sends instead of clicking. Seven prove the server refuses what a hidden
+# control would send; the other two are the smell AGENTS.md names, written down.
 _ASKS_THE_SERVER_DIRECTLY = {
     "organizations._probe_blocked": "the shared probe: the hidden control's own request, so a "
     "refusal is the server's and not the template's",
@@ -175,43 +148,42 @@ _ASKS_THE_SERVER_DIRECTLY = {
     "neighbour move_todo_to_end really drags. The one site here that is a smell",
 }
 
-# The driver substrate's own navigations, outside any mixin: the entry point each scenario starts
-# from, and the isolation tests that assert two contexts really are two.
+# The driver base's own navigations: each scenario's entry point, and the isolation tests.
 _SUBSTRATE_DEEP_LINKS = {
     "tests/e2e/drivers/browser_base.py": 2,
     "tests/e2e/drivers/test_browser_isolation.py": 2,
 }
 
-# Every test double `_sites` finds under `tests/` (the two e2e lanes, plus any other unit test
-# that reaches for one) — "Nothing business-critical is mocked" holds because this list is what
-# it is. The clock pin is the sanctioned time control (both drivers run the app in-process, so
-# one setattr pins every `clock.now()`); the browser-launch tests steer the env var that picks a
-# Chromium; `test_envfile.py` pins the process environment `apply_host_overrides` reads — ambient
-# control, not a double, in every case.
+# Every test double under `tests/`: the clock pin, the env var picking a Chromium, the
+# environment `apply_host_overrides` reads. Ambient control, not doubles of business code.
 _E2E_DOUBLES = {
     "tests/e2e/drivers/test_browser_launch.py": 3,
     "tests/plugin.py": 1,
     "tests/test_envfile.py": 2,
+    "tests/test_promote_admin.py": 2,
 }
 
-# The API driver re-routes the two raw session dependencies onto the scenario's rolled-back
-# transaction — a real database reached differently; `get_rls_session` runs untouched on top, as it
-# does in the browser lane.
+# The API driver's session overrides: the real database, through the rolled-back transaction.
 _SESSION_OVERRIDES = {
     "tests/e2e/drivers/api_base.py": 2,
 }
 
-# The one router allowed to drive the database itself: the readiness probe's whole job is to
-# touch the dependency and report, so its `select 1` has nowhere lower to live.
+# The readiness probe's `select 1` is its job.
 _ROUTERS_TOUCHING_THE_DB = {
     "apps/health/router.py",
 }
 
-# Request functions on the BYPASSRLS session, counted per module. The README reserves
-# `AdminSession` for event handlers, console queries and anonymous public surfaces; this is what
-# that reservation costs today, so widening it is an edit someone makes on purpose.
+# `get_settings` in a router, where no dependency fits: the share download (org from the row) and
+# the timeline settings screen (every declared setting, not effective values).
+_ROUTERS_READING_SETTINGS_BY_STRING = {
+    "apps/files/infra/router.py::public_share_download",
+    "apps/timeline/infra/router.py::_settings_rows",
+}
+
+# Request functions on the BYPASSRLS session, per module (AGENTS: three sessions, and RLS by
+# default).
 _BYPASSRLS_PARAMETERS = {
-    "apps/auth/infra/accounts_router.py": 4,
+    "apps/auth/infra/accounts_router.py": 5,
     "apps/auth/infra/router.py": 12,
     "apps/console/infra/router.py": 13,
     "apps/files/infra/router.py": 1,
@@ -225,11 +197,8 @@ _BYPASSRLS_PARAMETERS = {
     "apps/timeline/infra/router.py": 3,
 }
 
-# Class selectors defined outside `@layer components` in `static/css/input.css`. Everything here
-# is plain CSS that beats the layered components in the cascade — `list-panel` and `paper` are
-# even *redefinitions* of layered classes — which is the inversion the README's "one component
-# system" forbids. The list only shrinks: moving one into the layer is the fix, adding one here
-# is a decision.
+# Classes outside `@layer components` in `static/css/input.css`: they beat the layered components
+# in the cascade (`list-panel` and `paper` redefine some). The fix moves them into the layer.
 _OUTSIDE_THE_COMPONENT_LAYER = {
     "activity-timeline",
     "cm-toolbar",
@@ -282,9 +251,7 @@ _SNAPSHOT_READS = {
     "text_content",
 }
 
-# Per browser mixin, the snapshot reads its assertions still make. None is a `count()`: those are
-# `expect(...).to_have_count(n)` now. What is left reads text or an attribute once — the backlog
-# of `expect-not-is-visible`, and it only shrinks.
+# Snapshot reads of text or attributes left in each browser mixin's assertions.
 _SNAPSHOT_READS_IN_ASSERTIONS = {
     "apps/auth/tests/e2e/driver_mixin_browser.py": 4,
     "apps/calendar/tests/e2e/driver_mixin_browser.py": 4,
@@ -300,10 +267,8 @@ _SNAPSHOT_READS_IN_ASSERTIONS = {
     "apps/todo/tests/e2e/driver_mixin_browser.py": 2,
 }
 
-# Driver state a `when` sets and a `then` reads, narrowed by an assert at the reader — the
-# lifecycle the README says belongs in a constructor or one narrowing accessor (as
-# `ApiBase.response` and `active_test_connection` do). Each is a scenario-shaped state no
-# constructor can own yet; the list only shrinks.
+# Driver state a `when` sets and a `then` narrows with an assert: a lifecycle that belongs in one
+# narrowing accessor, as `ApiBase.response` does.
 _LIFECYCLES_THE_TESTS_NARROW = {
     "apps/api_keys/tests/e2e/driver_mixin_api.py": [
         "ApiKeysApiMixin._sessionless_get self._api_key_secret",
@@ -431,7 +396,7 @@ def _python_files(*roots: Path):
 
 
 def _sites(pattern: str, *roots: Path) -> dict[str, int]:
-    """How many times ``pattern`` occurs, per file, over ``roots`` — the shape a ratchet freezes."""
+    """Occurrences of ``pattern`` per file under ``roots``."""
     counts = {}
     for path, relative in _python_files(*roots):
         found = len(re.findall(pattern, path.read_text()))
@@ -441,7 +406,6 @@ def _sites(pattern: str, *roots: Path) -> dict[str, int]:
 
 
 def _log_calls():
-    """Every ``log.<level>(…)`` under ``apps/``, tests aside, with the file it sits in."""
     for path, relative in _python_files(_APPS):
         if "/tests/" in path.as_posix():
             continue
@@ -467,8 +431,8 @@ _CLOCK_FROM_BUCKET = {
 
 
 def _clock_bindings(tree: ast.Module) -> tuple[dict[str, set[str]], list[int]]:
-    """What this module's imports bind the clock-shaped names to, bucketed — plus the lines that
-    import the clock's `now` by value, a stray in themselves."""
+    """The module's clock-shaped imports, bucketed, and the lines importing the clock's `now` by
+    value."""
     bound: dict[str, set[str]] = {
         "datetime": {"datetime"},
         "date": {"date"},
@@ -515,10 +479,8 @@ def _is_wall_clock_call(node: ast.Call, bound: dict[str, set[str]]) -> bool:
 
 
 def _wall_clock_reads(tree: ast.Module) -> list[int]:
-    """Line numbers of every wall-clock read in one module — `datetime.now`/`utcnow`,
-    `date.today` and `time.time` through any import alias, plus the clock's own `now` imported
-    by value, which a patch of `apps.shared.clock.now` never reaches. `time.monotonic` and
-    `perf_counter` measure durations, not the wall, and stay allowed."""
+    """Lines reading the wall clock, through any alias, or importing the clock's `now` by value,
+    which the test patch misses. Duration clocks are allowed."""
     bound, reads = _clock_bindings(tree)
     return reads + [
         node.lineno
@@ -528,9 +490,7 @@ def _wall_clock_reads(tree: ast.Module) -> list[int]:
 
 
 def test_time_comes_from_the_one_clock():
-    """A second reading of the wall clock is how a test that pins time stops pinning anything —
-    and `from apps.shared.clock import now` is the same leak one step removed: bound by value,
-    the reader keeps the function the harness's patch of the clock module no longer names."""
+    """Another wall-clock read, or the clock's `now` bound by value, escapes the test's pin."""
     strays = {
         f"{relative}:{line}"
         for path, relative in _python_files(_APPS)
@@ -542,8 +502,7 @@ def test_time_comes_from_the_one_clock():
 
 
 def _narrowed(test: ast.expr) -> ast.expr | None:
-    """What an assert narrows — ``x`` in ``assert x is not None`` or a bare ``assert x`` — when
-    ``x`` is a name or an attribute of one; ``None`` for an assert that checks anything else."""
+    """The name or attribute ``assert x is not None`` or ``assert x`` narrows, else ``None``."""
     if (
         isinstance(test, ast.Compare)
         and [type(op) for op in test.ops] == [ast.IsNot]
@@ -559,9 +518,8 @@ def _narrowed(test: ast.expr) -> ast.expr | None:
 
 
 def _compensating_asserts(*roots: Path, lifecycles_only: bool = False) -> list[str]:
-    """Every narrowing assert under ``roots``, named by the function it sits in. With
-    ``lifecycles_only``, only those narrowing state that outlives the call — an attribute, or a
-    module global — since in a test a local checked for ``None`` is the assertion itself."""
+    """Narrowing asserts under ``roots``, by function. ``lifecycles_only`` keeps attributes and
+    globals: in a test, a local checked for ``None`` is the assertion itself."""
     found = []
     for path, relative in _python_files(*roots):
         tree = ast.parse(path.read_text())
@@ -589,19 +547,14 @@ def _compensating_asserts(*roots: Path, lifecycles_only: bool = False) -> list[s
 
 
 def test_no_compensating_assert_narrows_an_annotation():
-    """The first of the README's three tells that an annotation is wider than the truth: one
-    `assert x is not None` — or a bare `assert x` — is how a `| None` that no writer produces
-    survives its first reader. At zero in `apps/`, which is the only interesting place for it."""
+    """(AGENTS: `| None` means optional) At zero in `apps/`."""
     in_apps = [site for site in _compensating_asserts(_APPS) if "/tests/" not in site]
 
     assert in_apps == []
 
 
 def test_the_lifecycles_the_tests_narrow_are_the_named_ones():
-    """The same tell in the harness, where it marks a lifecycle: a driver attribute a `when` sets
-    and a `then` reads, a module global bound per scenario. The README's cure — a constructor, or
-    one accessor that narrows — reshapes a scenario's state, so what is left is named here and
-    only shrinks."""
+    """In the harness, the same tell marks scenario lifecycles, frozen here."""
     in_tests: dict[str, list[str]] = {}
     for site in _compensating_asserts(_APPS, _ROOT / "tests", lifecycles_only=True):
         path, narrowed = site.split("::", 1)
@@ -616,8 +569,7 @@ _SUPPRESSION = re.compile(r"#\s*(type|ty|pyright):\s*ignore")
 
 
 def _enclosing(tree: ast.Module) -> dict[int, str]:
-    """Each line of a module, mapped to the qualified name of the innermost def or class around
-    it — ``<module>`` outside all of them."""
+    """Line → innermost enclosing def or class, or ``<module>``."""
     owner: dict[int, str] = {}
 
     def visit(node: ast.AST, prefix: str) -> None:
@@ -635,9 +587,7 @@ def _enclosing(tree: ast.Module) -> dict[int, str]:
 
 
 def _defensive_reads(source: str) -> list[tuple[int, str]]:
-    """Every tell of a `None` tolerated at the read, by line: a fallback after `or`, a
-    `typing.cast` (whatever name it was imported under — SQLAlchemy's SQL `cast` is not one), and a
-    type checker's suppression comment."""
+    """Lines tolerating a `None`: `or`, `typing.cast` (not SQLAlchemy's `cast`), a suppression."""
     tree = ast.parse(source)
     casts = {
         alias.asname or alias.name
@@ -667,10 +617,7 @@ def _defensive_reads(source: str) -> list[tuple[int, str]]:
 
 
 def test_the_defensive_reads_are_the_named_ones():
-    """The second tell, and the one that cannot go to zero: some of these `None`s come from
-    outside the process. Named by the function that reads, not counted per file — a count lets a
-    slack read take a legitimate one's place — so a new one lands here as a question: is this an
-    external shape, or an annotation we could narrow?"""
+    """Named per function, not counted, so a slack read cannot replace a legitimate one."""
     reads = sorted(
         f"{relative}::{_enclosing(ast.parse(source)).get(line, '<module>')} {spelling}"
         for path, relative in _python_files(_APPS)
@@ -683,17 +630,12 @@ def test_the_defensive_reads_are_the_named_ones():
 
 
 def test_no_state_wait_is_a_sleep():
-    """`networkidle` waits for the network to go quiet, `wait_for_timeout` waits for the clock —
-    neither waits for the state being asserted, which is why both flake under load and pass on a
-    fast laptop. Both at zero; this keeps them there."""
+    """(AGENTS: assert the settled DOM, never wait on time)"""
     assert _sites(r"networkidle|wait_for_timeout\(", _APPS, _ROOT / "tests") == {}
 
 
 def test_dom_state_is_asserted_through_expect():
-    """`locator.is_visible()` reads the DOM once, at whatever moment an HTMX swap happens to be
-    in. `expect(...)` retries to the settled state. The read is what is banned, not the line
-    shape: an `if loc.is_visible(): return` or a bound `seen = loc.is_visible` is the same
-    snapshot with the `assert` moved elsewhere."""
+    """Any `is_visible()` read, not only in an `assert`: it is a snapshot either way."""
     reads = {
         f"{relative}:{node.lineno}"
         for path, relative in _python_files(_APPS, _ROOT / "tests")
@@ -705,9 +647,7 @@ def test_dom_state_is_asserted_through_expect():
 
 
 def _snapshot_reads_in_assertions(path: Path) -> int:
-    """Snapshot DOM reads inside a mixin's ``assert_*`` methods — each one is compared once, at
-    whatever state the page happens to be in, where ``expect(...)`` would retry to the settled
-    one."""
+    """Snapshot DOM reads in a mixin's ``assert_*`` methods."""
     return sum(
         1
         for fn in ast.walk(ast.parse(path.read_text()))
@@ -720,9 +660,7 @@ def _snapshot_reads_in_assertions(path: Path) -> int:
 
 
 def test_the_snapshot_reads_in_assertions_are_the_named_ones():
-    """The half of `expect-not-is-visible` a banned spelling cannot reach: a `count() == 0` read
-    before a swap lands passes however wrong the page is about to be. `count` is gone; the reads
-    left compare text or attributes, and only shrink."""
+    """Snapshot reads that no banned spelling catches, frozen."""
     reads = {
         str(mixin.relative_to(_ROOT)): found
         for mixin in sorted(_APPS.glob("*/tests/e2e/driver_mixin_browser.py"))
@@ -733,7 +671,6 @@ def test_the_snapshot_reads_in_assertions_are_the_named_ones():
 
 
 def _called_attributes(fn: ast.AST) -> list[str]:
-    """Every ``x.name(...)`` called inside ``fn``, by attribute name."""
     return [
         node.func.attr
         for node in ast.walk(fn)
@@ -742,9 +679,8 @@ def _called_attributes(fn: ast.AST) -> list[str]:
 
 
 def _mixin_methods(mixin: Path) -> tuple[dict[str, int], dict[str, set[str]]]:
-    """``({method: goto calls}, {method: methods it calls})`` for one browser mixin — its class
-    bodies and its module-level functions alike, since a helper hoisted out of the class navigates
-    just the same."""
+    """``({method: goto calls}, {method: methods it calls})`` for a mixin, module functions
+    included."""
     gotos, calls = {}, {}
     for node in ast.parse(mixin.read_text()).body:
         functions = node.body if isinstance(node, ast.ClassDef) else [node]
@@ -775,9 +711,8 @@ def _steps_reaching(steps: Path) -> dict[str, set[str]]:
 
 
 def _propagated(reached: dict[str, set[str]], calls: dict[str, set[str]]) -> dict[str, set[str]]:
-    """A helper answers for every step type that reaches its callers — run to a fixpoint, since a
-    private method is often two hops from the step that uses it."""
-    for method in calls:  # a method no step names still receives what its callers were reached by
+    """Propagate step types to the helpers callers reach, to a fixpoint."""
+    for method in calls:
         reached.setdefault(method, set())
     settled = False
     while not settled:
@@ -791,8 +726,7 @@ def _propagated(reached: dict[str, set[str]], calls: dict[str, set[str]]) -> dic
 
 
 def _step_navigations(steps: Path) -> dict[str, tuple[set[str], int]]:
-    """``{steps.function: (its step types, goto calls)}`` — a step that navigates itself, without
-    going through the driver, is a navigation no mixin walk would ever see."""
+    """``{steps.function: (step types, goto calls)}``: steps navigating without the driver."""
     found = {}
     if not steps.exists():
         return found
@@ -810,12 +744,8 @@ def _step_navigations(steps: Path) -> dict[str, tuple[set[str], int]]:
 
 
 def _mixin_navigations() -> dict[str, tuple[set[str], int]]:
-    """``{app.method: (step types that reach it, goto calls)}``, over the driver the mixins compose.
-
-    One call graph for every browser mixin, and every step module feeding it — an app's steps call
-    methods other apps' mixins define, since the composed driver is one class. Walking each app on
-    its own saw only the steps beside its mixin, so a `then` reaching another app's navigation
-    stayed invisible."""
+    """``{app.method: (step types reaching it, goto calls)}``, one graph for the composed driver:
+    an app's steps call other apps' mixins."""
     navigations: dict[str, list[tuple[str, int]]] = defaultdict(list)
     calls: dict[str, set[str]] = defaultdict(set)
     step_modules = [_ROOT / "tests" / "e2e" / "steps_common.py"]
@@ -844,9 +774,7 @@ def _mixin_navigations() -> dict[str, tuple[set[str], int]]:
 
 
 def test_no_assertion_step_reaches_a_page_by_url():
-    """The sharpest half of "the browser driver navigates like a human": a `then` that navigates
-    is not asserting about the page the scenario produced, it is asserting about a page it fetched
-    itself — and it keeps passing after the app's own way there breaks."""
+    """A `then` that navigates asserts about a page nobody reached by the app's own way."""
     under_assertion = {
         method for method, (kinds, _) in _mixin_navigations().items() if "then" in kinds
     }
@@ -855,16 +783,13 @@ def test_no_assertion_step_reaches_a_page_by_url():
 
 
 def test_every_deep_link_is_an_arrival_from_outside():
-    """The other half: what is left may only be someone coming in from outside the app. A new
-    name here is a claim that a person really arrives at that URL — the reason is written next to
-    it, and nothing else navigates by URL at all."""
+    """URL navigations are arrivals from outside the app, each with its reason."""
     navigating = set(_mixin_navigations())
 
     assert navigating == set(_ARRIVES_FROM_OUTSIDE)
 
 
 def _is_a_request_call(node: ast.AST) -> bool:
-    """``….fetch(…)``, or any verb on a request context — ``context.request.put(…)``."""
     if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
         return False
     if node.func.attr == "fetch":
@@ -877,9 +802,8 @@ def _is_a_request_call(node: ast.AST) -> bool:
 
 
 def _fires_its_own_request(fn: ast.AST) -> bool:
-    """Does this method send a request rather than click? Either through Playwright's own
-    request context — ``fetch``, or a verb on ``….request`` — or through a ``fetch(`` written into
-    a script it evaluates in the page."""
+    """Whether it sends a request rather than click: Playwright's request context, or a
+    ``fetch(`` in an evaluated script."""
     return any(
         _is_a_request_call(node)
         or (
@@ -892,9 +816,7 @@ def _fires_its_own_request(fn: ast.AST) -> bool:
 
 
 def test_every_request_the_driver_fires_itself_is_named():
-    """The other half of the README's sentence: ``fetch()`` is a smell too. Firing a request the
-    UI would not let this actor send is how the base proves the *server* refuses — but each site
-    has to say so, and the one that only stands in for an interaction says that instead."""
+    """``fetch()`` is a smell too: each site says why (most prove the server refuses)."""
     firing = set()
     for mixin in sorted(_APPS.glob("*/tests/e2e/driver_mixin_browser.py")):
         app = mixin.relative_to(_APPS).parts[0]
@@ -912,14 +834,12 @@ def test_every_request_the_driver_fires_itself_is_named():
 
 
 def test_the_driver_substrate_navigates_only_where_a_scenario_starts():
-    """Outside the mixins there is no step to attribute a navigation to — so these are frozen by
-    file, and there are four of them."""
+    """Frozen by file: no step to attribute them to."""
     assert _sites(r"\.goto\(", _ROOT / "tests") == _SUBSTRATE_DEEP_LINKS
 
 
 def test_every_log_line_is_named_by_a_dotted_snake_case_literal():
-    """The name is the Timeline's `app` axis and the thing an operator greps. A computed name is
-    invisible to both — and to the AST walks that hold the rest of the log vocabulary."""
+    """A computed name escapes grep and the AST checks of the log vocabulary."""
     strays = {
         f"{relative}:{node.lineno}"
         for relative, node in _log_calls()
@@ -935,10 +855,7 @@ def test_every_log_line_is_named_by_a_dotted_snake_case_literal():
 
 
 def test_the_e2e_doubles_are_the_named_ones():
-    """ "Nothing business-critical is mocked" — held as the complete, counted list of what
-    `tests/` doubles: the two e2e lanes' pinned clock, driver env control and session overrides,
-    plus any other unit test's own ambient-env control. GoTrue, Postgres, Storage and the mail
-    catcher are all real; a new double lands here as a question."""
+    """(AGENTS: tests are sincere) GoTrue, Postgres, Storage and the mail catcher are real."""
     doubles = _sites(
         r"monkeypatch\.(setattr|setenv|delenv|setitem)|\bMagicMock\b|\bMock\(|mock\.patch",
         _ROOT / "tests",
@@ -953,8 +870,7 @@ def test_the_e2e_doubles_are_the_named_ones():
 
 
 def _db_touches_in_routers() -> set[str]:
-    """Router modules that reach the database themselves — a DML/select/text import from
-    sqlalchemy (typing and exception imports stay free), or a session driven directly."""
+    """Routers importing SQLAlchemy statements, or driving a session."""
     dml = {"select", "insert", "update", "delete", "text", "func", "literal"}
     driving = {"execute", "scalar", "scalars", "add", "add_all", "merge", "flush"}
     touching = set()
@@ -979,16 +895,41 @@ def _db_touches_in_routers() -> set[str]:
 
 
 def test_no_router_reaches_the_database_itself():
-    """The mechanical half of "Routers own HTTP and nothing else": no DML import, no session
-    driven from a router — that goes through a repository. The business-logic half stays a
-    review question; the readiness probe is the one named exception."""
+    """(AGENTS: routers own HTTP and nothing else) The checkable half."""
     assert _db_touches_in_routers() == _ROUTERS_TOUCHING_THE_DB
 
 
+def _calls_get_settings(node: ast.AST) -> TypeGuard[ast.Call]:
+    """``get_settings(...)`` or ``live.get_settings(...)``."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "get_settings"
+    return isinstance(func, ast.Attribute) and func.attr == "get_settings"
+
+
+def _settings_reads_in_routers() -> set[str]:
+    """``get_settings`` calls in router modules, by function, which survives edits."""
+    found = set()
+    for path in sorted(_APPS.glob("*/infra/*router*.py")):
+        relative = str(path.relative_to(_ROOT))
+        tree = ast.parse(path.read_text())
+        owner = _enclosing(tree)
+        for node in ast.walk(tree):
+            if _calls_get_settings(node):
+                found.add(f"{relative}::{owner.get(node.lineno, '<module>')}")
+    return found
+
+
+def test_no_router_reads_settings_by_string():
+    """(AGENTS: a contract never exports a settings handle)"""
+    assert _settings_reads_in_routers() == _ROUTERS_READING_SETTINGS_BY_STRING
+
+
 def test_the_bypassrls_parameters_are_the_counted_ones():
-    """The distance between "AdminSession is reserved for…" and today, as a number per module.
-    This is the ratchet the `python-never-reimplements-isolation` waiver names: every request
-    function on the BYPASSRLS session is one place Python may be re-deciding what RLS should."""
+    """The `python-never-reimplements-isolation` waiver's ratchet: each request on BYPASSRLS may
+    redecide what RLS should."""
     parameters = {}
     for path, relative in _python_files(_APPS):
         if "/tests/" in relative:
@@ -1020,9 +961,7 @@ def _component_layer_span(css: str) -> tuple[int, int]:
 
 
 def test_the_classes_outside_the_component_layer_are_the_named_ones():
-    """The ratchet the `one-component-system` waiver names: a class defined in plain CSS outside
-    `@layer components` beats every layered component in the cascade, whatever the specificity —
-    the inversion behind `paper border-2` computing 1px. The set may only shrink."""
+    """The `one-component-system` waiver's ratchet (it made `paper border-2` compute 1px)."""
     css = (_ROOT / "static" / "css" / "input.css").read_text()
     start, end = _component_layer_span(css)
 
@@ -1036,9 +975,7 @@ def test_the_classes_outside_the_component_layer_are_the_named_ones():
 
 
 def test_no_template_re_spells_card_panel_or_the_tab_shell():
-    """The `reuse-components` waiver's own example: `card-panel` is `card bg-base-100 border
-    border-base-300 shadow-sm`, yet a template still spells the shorter chain by hand, and the
-    `tabs-lift` panel shell repeats its own chain with no component class at all. Both at zero."""
+    """No template spells out `card-panel`'s chain or the `tabs-lift` panel shell by hand."""
     spelled_out = {
         str(path.relative_to(_ROOT)): count
         for path in sorted(_APPS.rglob("*.html"))
@@ -1057,10 +994,8 @@ def test_no_template_re_spells_card_panel_or_the_tab_shell():
 
 
 def test_nothing_reruns_a_failing_test():
-    """ "Everything else is strict, zero rerun" — kept true the cheap way: the plugin that could
-    rerun anything is not installed, no lane pulls it in at run time (`uv run --with`), and no
-    hook of ours takes over the run protocol, which is the one place a rerun could be written by
-    hand and reported as a pass."""
+    """Zero rerun: no rerun plugin installed or pulled in at run time, and no hook of ours takes
+    over the run protocol."""
     pyproject = (_ROOT / "pyproject.toml").read_text()
     lanes = "\n".join(
         (_ROOT / name).read_text() for name in ("Makefile", ".github/workflows/ci.yml")
@@ -1078,7 +1013,7 @@ def test_nothing_reruns_a_failing_test():
 
 
 def _demos() -> set[str]:
-    """The contexts the README's demo table lists — what "meant to be deleted" applies to."""
+    """The demo apps the README lists."""
     table = readme()[readme().index("| Demo") :]
     return set(re.findall(r"^\| `(\w+)/`", table[: table.index("\n\n")], re.MULTILINE))
 
@@ -1100,10 +1035,8 @@ def _demos_imported_by(path: Path, demos: set[str]) -> set[str]:
 
 
 def test_the_modules_outside_a_demo_that_import_it_are_the_named_ones():
-    """The ratchet the `demo-apps-are-disposable` and `apps-are-self-contained` waivers name: an
-    import of a demo from anywhere but the demo itself or the composition root is a module that
-    stops loading the day the demo is deleted. Frozen per module, and only the import edge — a
-    template hard-coding a demo's name is the half a walk over imports cannot see."""
+    """The `demo-apps-are-disposable` waiver's ratchet: modules importing a demo, which break
+    when it is deleted. Templates naming a demo are not seen."""
     demos = _demos()
     reaching = {
         relative: imported
@@ -1118,24 +1051,19 @@ def test_the_modules_outside_a_demo_that_import_it_are_the_named_ones():
 
 # ── No magic number ─────────────────────────────────────────────────────────────────────────────
 #
-# Every numeric literal in ``apps/`` bound to a module constant or to a parameter's default —
-# the two shapes a tuning knob takes when it is not a setting. Three groups, because the sentence
-# forbids one thing and not the other two, and only the third is a backlog.
+# Numeric literals in ``apps/`` bound to a module constant or a parameter default, in three groups;
+# only the third is a backlog (AGENTS: no magic number).
 
-# The literal *is* the setting's declared fallback: the console owns the live value and this is
-# what it falls back to. Exactly what the principle asks for, so it never leaves this list.
+# A setting's declared default.
 _DEFAULTS_OF_A_DECLARED_SETTING = {
     "apps/shared/persistence/sql_stats.py::DEFAULT_HEAVY_MS = 500",
     "apps/shared/persistence/sql_stats.py::DEFAULT_HEAVY_QUERIES = 30",
 }
 
-# Numbers that are not knobs: a status code carries the response's meaning, an SVG dimension is
-# the drawing, 53 is how many weeks a year can hold, a fingerprint's frame count and truncation
-# lengths *are* the fingerprint (moving one silently re-groups every past issue), 9 is the rung
-# count of the spaced-repetition ladder itself, an advisory lock's key is an identifier, not a
-# duration or a size, and the perf smoke's fail-ratio and p95 thresholds *are* the CI check, not
-# a deploy's opinion of it — there is nothing an operator would tune either to. Turning any of
-# these into a setting would offer an operator a lever that breaks the thing rather than tunes it.
+# Not knobs, a lever would break them: status codes, SVG dimensions, 53 weeks a year, the
+# fingerprint's frame count and lengths (changing them re-groups past issues), the 9 rungs of the
+# repetition ladder, an advisory lock key, ``lock_timeout_ms=0`` (Postgres's "no timeout"), the
+# perf smoke's thresholds (the CI check itself).
 _NOT_A_TUNING_KNOB = {
     "apps/auth/infra/admin_guard.py::_LAST_ADMIN_GUARD_LOCK_KEY = 3600360036",
     "apps/issues/domain/service.py::_STACK_MAX = 8000",
@@ -1150,6 +1078,7 @@ _NOT_A_TUNING_KNOB = {
     "apps/shared/events/repository.py::search(offset=0)",
     "apps/shared/http/responses.py::mutation_response(status_code=200)",
     "apps/shared/logs/repository.py::_MAX_STATEMENT_PARAMS = 32767",
+    "apps/shared/logs/repository.py::append(lock_timeout_ms=0)",
     "apps/shared/persistence/sql_stats.py::_KEPT_STATEMENTS = 5",
     "apps/shared/persistence/sql_stats.py::_MAX_STATEMENT = 300",
     "apps/tasks/domain/strip.py::_MAX_BUCKETS = 400",
@@ -1160,12 +1089,8 @@ _NOT_A_TUNING_KNOB = {
     "scripts/smoke.py::P95_MS_MAX = 800.0",
 }
 
-# The backlog the sentence names: retention windows, poll and purge intervals, retry budgets,
-# batch sizes, page lengths, deadlines and caps — each one a value an operator has a reason to
-# change and today can only change by editing Python. A promotion to `TechnicalSettings` or to
-# an app's declared settings removes a line; widening the scan's perimeter to a root it never
-# read before enumerates knobs that were already there, unseen — the list grows once, on that
-# edit, and shrinks on every one after. Nothing adds a line without someone deciding to here.
+# The backlog: retention windows, intervals, retry budgets, batch sizes, page lengths, deadlines,
+# caps. Promoting one to a setting removes its line; widening the scan adds the knobs it finds.
 _KNOBS_AWAITING_PROMOTION = {
     "apps/api_keys/infra/repository.py::_LAST_USED_GRANULARITY_SECONDS = 300",
     "apps/auth/contract/impersonation.py::IMPERSONATION_MAX_SECONDS = 3600",
@@ -1173,16 +1098,13 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/auth/infra/router.py::_MFA_MAX_SECONDS = 300",
     "apps/auth/infra/router.py::_OAUTH_MAX_SECONDS = 300",
     "apps/auth/infra/user_repository.py::_PAGE_SIZE = 1000",
-    "apps/calendar/contract/integration.py::_RECENT = 3",
     "apps/console/infra/router.py::_GROWTH_DAYS = 14",
-    "apps/files/contract/integration.py::_RECENT = 3",
     "apps/issues/contract/integration.py::CAPTURE_DRAIN_SECONDS = 1.0",
     "apps/issues/contract/integration.py::PURGE_EVERY_SECONDS = 86400",
     "apps/issues/contract/queries.py::search_issue_occurrences(limit=100)",
     "apps/issues/infra/repository.py::list_issues(limit=100)",
     "apps/issues/infra/repository.py::occurrences(limit=20)",
     "apps/issues/infra/router.py::_SPARK_DAYS = 14",
-    "apps/learning/contract/integration.py::_RECENT = 3",
     "apps/metrics/contract/integration.py::MINUTE_RETENTION_DAYS = 7",
     "apps/metrics/contract/integration.py::ROLLUP_EVERY_SECONDS = 86400",
     "apps/metrics/domain/accumulator.py::UNMATCHED_LABEL_CAP = 25",
@@ -1191,7 +1113,6 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/organizations/contract/queries.py::list_org_handles(limit=500)",
     "apps/organizations/infra/router.py::_ACTIVITY_MAX = 250",
     "apps/organizations/infra/router.py::_ACTIVITY_PAGE = 8",
-    "apps/pages/contract/integration.py::_RECENT = 3",
     "apps/profile/contract/integration.py::_GROWTH_DAYS = 14",
     "apps/profile/infra/router.py::_ACTIVITY_MAX = 250",
     "apps/profile/infra/router.py::_ACTIVITY_PAGE = 25",
@@ -1202,6 +1123,7 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/shared/events/repository.py::search(limit=100)",
     "apps/shared/http/limiter.py::PURGE_EVERY_SECONDS = 3600",
     "apps/shared/logs/repository.py::search(limit=100)",
+    "apps/shared/overview.py::RECENT_ITEMS = 3",
     "apps/shared/queue.py::QUEUE_PURGE_EVERY_SECONDS = 86400",
     "apps/shared/queue.py::QUEUE_RETENTION_DAYS = 7",
     "apps/shared/queue.py::_RETRY_BACKOFF_SECONDS = 60",
@@ -1215,7 +1137,6 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/timeline/infra/repository.py::search(limit=100)",
     "apps/timeline/infra/router.py::_EXPORT_LIMIT = 5000",
     "apps/timeline/infra/router.py::_PAGE_SIZE = 100",
-    "apps/todo/contract/integration.py::_RECENT = 3",
     "scripts/doctor.py::TIMEOUT_SECONDS = 5.0",
     "scripts/doctor.py::WARN_SECONDS = 0.5",
     "scripts/perf_smoke.py::_wait_ready(timeout=30.0)",
@@ -1224,9 +1145,8 @@ _KNOBS_AWAITING_PROMOTION = {
 
 
 def _numeric_literals(tree: ast.AST, relative: str) -> set[str]:
-    """Numeric literals in the two places a knob hides: bound to a module-level name, or standing
-    as a parameter's default. A literal inside an expression is arithmetic, not configuration, and
-    is deliberately out of scope — the rule is about values someone would want to change."""
+    """Numeric literals bound to a module-level name or a parameter default; one inside an
+    expression is arithmetic."""
     found = set()
     for node in getattr(tree, "body", []):
         target, value = None, None
@@ -1241,8 +1161,7 @@ def _numeric_literals(tree: ast.AST, relative: str) -> set[str]:
             continue
         args = node.args
         positional = args.args[len(args.args) - len(args.defaults) :]
-        # Both pairings are equal-length by construction: a default per trailing positional,
-        # and one slot per keyword-only argument, holding ``None`` where it has no default.
+        # Equal lengths: defaults align with trailing positionals, kw_defaults hold ``None``.
         pairs = [
             *zip(args.defaults, positional, strict=True),
             *zip(args.kw_defaults, args.kwonlyargs, strict=True),
@@ -1256,19 +1175,14 @@ def _numeric_literals(tree: ast.AST, relative: str) -> set[str]:
 
 
 def _is_number(node: ast.AST | None) -> TypeGuard[ast.Constant]:
-    """A numeric literal — narrowing to ``ast.Constant``, so each caller reads ``.value`` off a
-    node the checker knows it has. A bool is an ``int`` in Python and a flag to a reader, so it
-    is not a magic number."""
+    """A numeric ``ast.Constant``; a bool is a flag, not a number."""
     if not isinstance(node, ast.Constant):
         return False
     return isinstance(node.value, int | float) and not isinstance(node.value, bool)
 
 
 def test_the_numbers_outside_the_settings_are_the_named_ones():
-    """ "No magic number" — held as the enumerated list of what is left, since the sentence is an
-    aim and the list is its distance. Every literal below is either a setting's own default, a
-    number that is not a knob at all, or a knob nobody has promoted yet; a new one belongs to one
-    of the three by an edit here, which is the decision the README says someone has to make."""
+    """(AGENTS: no magic number) A new literal joins one of the three lists by a decision here."""
     found = {
         entry
         for path, relative in _python_files(_APPS, _ROOT / "scripts")

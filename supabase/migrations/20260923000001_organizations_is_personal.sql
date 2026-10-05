@@ -1,17 +1,11 @@
--- A personal org was structurally indistinguishable from a team one, so `_create_org`'s
--- idempotency guard (#14) could only ask "does this user own *any* org" — which also matches a
--- team org that user created themselves through `POST /organizations` before the worker
--- delivered their `UserCreated`, and skipped seeding the personal org every account is promised
--- at sign-up (#71). `is_personal` gives the guard a real predicate to ask instead.
+-- `_create_org`'s idempotency guard asks for the user's personal org, not any org they own: a
+-- team org created before `UserCreated` was delivered skipped the personal one (#71).
 
 alter table public.organizations
   add column is_personal boolean not null default false;
 
--- Every account before this migration already got its personal org at sign-up — `_create_org`
--- (#14) always seeded it first, so it is the earliest org each user owns. Backfilling on that
--- rule is what lets the guard trust `is_personal` for an account that signed up before today:
--- without it, every pre-migration account would read as owning no personal org, and the next
--- redelivered `UserCreated` for one of them would seed a second one.
+-- The earliest org each user owns is their personal one; without the backfill a redelivered
+-- `UserCreated` would seed a second.
 with first_owned as (
   select distinct on (m.user_id) m.org_id
     from public.memberships as m
@@ -24,17 +18,12 @@ update public.organizations as o
   from first_owned as f
  where o.id = f.org_id;
 
--- Table-wide UPDATE (granted to `authenticated` in the foundation migration) let every owner-
--- writable column share one grant because they all were owner-writable. `is_personal` breaks
--- that: it must be stamped once, by `create_org_with_owner` alone, never by a client holding the
--- JWT — so it is carved out with a column-level grant instead of joining the table-wide one.
--- `version` is included because SQLAlchemy's optimistic-lock write always sets it, on every
--- update, whichever column changed.
+-- Column-level UPDATE: `is_personal` is stamped by `create_org_with_owner` alone. `version`, as
+-- SQLAlchemy's optimistic lock writes it on every update.
 revoke update on public.organizations from authenticated;
 grant update (name, handle, timezone, version) on public.organizations to authenticated;
 
--- `create or replace` cannot add a parameter in place — Postgres would keep the old 5-arg
--- overload and pick between it and this one by the defaults, ambiguously. Drop it first.
+-- Dropped first: `create or replace` would keep the 5-arg overload beside this one, ambiguously.
 drop function if exists public.create_org_with_owner(uuid, text, text, uuid, timestamptz);
 
 create function public.create_org_with_owner(

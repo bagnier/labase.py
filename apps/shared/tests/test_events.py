@@ -1,13 +1,5 @@
-"""BusinessEvent vocabulary + the ``event → record → event`` chain that carries it.
-
-Covers ``kind`` derivation (so apps write no dotted strings), the secret-field refusal, and the
-round trip a fact makes through the serialized chain — ``event_to_record`` → ``task_payload`` →
-``from_payload`` — which is where the lifted columns and the fold-back must agree.
-
-What ``emit`` itself promises is next door: it persists on the session the caller names and runs no
-handler (``test_write_path`` for the transaction, ``test_emit_durability`` for what a rollback
-takes with it, ``test_listener`` for the reactions that run off the journal afterwards).
-"""
+"""``BusinessEvent``: ``kind`` derivation, the secret-field refusal, and the round trip
+``event_to_record`` → ``task_payload`` → ``from_payload``."""
 
 import json
 import uuid
@@ -98,10 +90,9 @@ async def test_emit_does_not_run_handlers_in_process():
     async def reload(event: ConfigChanged) -> None:
         seen.append(event)
 
-    own.declare(ConfigChanged)  # emit refuses an undeclared event
+    own.declare(ConfigChanged)
     bus.spread(ConfigChanged, reload)
 
-    # The write is stubbed: what is under test is that emit runs no handler, not the persistence.
     with patch("apps.shared.events.bus.EventRepository", return_value=AsyncMock()):
         await bus.emit(ConfigChanged(), cast(AsyncSession, None))
 
@@ -113,7 +104,7 @@ def test_event_to_record_lifts_scoping_and_carries_metadata():
     record = event_to_record(
         WidgetCreated(user_id=actor, org_id=org, entity_id=eid, entity_name="Gizmo")
     )
-    # The two halves, not `kind`: that one is generated in the DB, so an unwritten record has none.
+    # Not `kind`: the database generates it.
     assert (record.app_name, record.verb) == ("widget", "created")
     assert record.icon == "cube"
     assert record.user_id == actor
@@ -130,24 +121,19 @@ def test_event_to_record_lifts_scoping_and_carries_metadata():
 
 # ── One serialized shape, closed by a round-trip ───────────────────────────────────────────────
 #
-# A fact crosses the persistence/delivery boundary through one record and two mirrored loops: the
-# columns `event_to_record` lifts out of the payload, and the keys `task_payload` folds back before
-# `from_payload` rebuilds the event. These tests fix that agreement, so a base field added to
-# `BusinessEvent` without threading it through fails here, loudly, not by vanishing in between.
+# A base field added to `BusinessEvent` without threading it through fails here.
 
 
 @dataclass(frozen=True, kw_only=True)
 class _NoteEvent(BusinessEvent):
     app_name = "test_note"
     verb = "noted"
-    note: str | None = None  # a plain string riding in the payload
-    ref_id: uuid.UUID | None = None  # a uuid FK riding in the payload (stringified at the edge)
+    note: str | None = None
+    ref_id: uuid.UUID | None = None
 
 
 def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
-    """Drive an event through the real serialized chain without a DB: `event_to_record` builds the
-    record, then `task_payload` + `from_payload` rebuild it, exactly as the listener does off a
-    claimed one. The delivery reads the record itself, so there is no third shape to fake here."""
+    """The listener's chain, without a database."""
     return type(event).from_payload(task_payload(event_to_record(event)))
 
 
@@ -176,7 +162,6 @@ def _reconstruct_through_delivery(event: BusinessEvent) -> BusinessEvent:
     ],
 )
 def test_a_fact_round_trips_identically_through_the_serialized_chain(event: BusinessEvent):
-    # Frozen-dataclass equality compares every instance field: the *whole* event survives.
     assert _reconstruct_through_delivery(event) == event
 
 
@@ -201,18 +186,17 @@ async def test_the_write_path_calls_the_definer_function_with_the_records_column
     )
     await _append_record(cast(AsyncSession, _FakeSession()), record)
 
-    assert captured["statement"] is _RECORD  # the writer function, never an ORM INSERT
+    assert captured["statement"] is _RECORD
     params = cast(dict, captured["params"])
     assert (params["app_name"], params["verb"], params["icon"]) == ("todo", "created", "check")
     assert params["user_id"] == record.user_id
-    assert params["payload"] == json.dumps({"k": "v"})  # json-encoded for the jsonb arg
+    assert params["payload"] == json.dumps({"k": "v"})
 
 
 # ── A delivered event is self-descriptive (its own instant) and correlated (the request) ───────
 
 
 def _scanned_record(**over: object) -> BusinessEventRecord:
-    """A record with every delivered column set, overridable — what a delivery scan returns."""
     columns: dict[str, object] = {
         "id": uuid.uuid7(),
         "kind": "test_note.noted",
@@ -261,11 +245,10 @@ def test_request_id_rides_to_the_log_context_not_onto_the_event():
 class _RefEvent(BusinessEvent):
     app_name = "test_ref"
     verb = "happened"
-    ref_id: uuid.UUID | None = None  # a plain FK carried as uuid on the DTO
+    ref_id: uuid.UUID | None = None
 
 
 def test_event_to_record_stringifies_uuid_payload_fields():
-    # stdlib json cannot dump a UUID, so the JSONB column can only take it stringified.
     ref = uuid.uuid7()
     record = event_to_record(_RefEvent(user_id=uuid.uuid7(), ref_id=ref))
     assert record.payload is not None
@@ -294,7 +277,6 @@ def test_from_payload_is_defensive_on_unparseable_strings():
 
 
 def test_a_secret_named_field_is_refused_at_class_definition():
-    # Refused before ``@dataclass`` even applies, and the message names the alternative.
     with pytest.raises(TypeError, match="secret material") as exc:
 
         @dataclass(frozen=True, kw_only=True)
@@ -303,7 +285,7 @@ def test_a_secret_named_field_is_refused_at_class_definition():
             verb = "leaked"
             api_key: str | None = None
 
-    assert "api_key_id" in str(exc.value)  # points to carrying the pk instead
+    assert "api_key_id" in str(exc.value)
 
 
 @pytest.mark.parametrize(
@@ -333,14 +315,13 @@ def test_is_secret_field_name_carves_out_id_references():
     assert _is_secret_field_name("api_key") is True
     assert _is_secret_field_name("access_token") is True
     assert _is_secret_field_name("recovery_code") is True
-    assert _is_secret_field_name("api_key_id") is False  # the pk of the secret-bearing entity
+    assert _is_secret_field_name("api_key_id") is False
     assert _is_secret_field_name("entity_id") is False
     assert _is_secret_field_name("title") is False
 
 
 def test_from_payload_refuses_a_stored_null_for_a_required_field():
-    """Dataclasses do not validate at runtime, so without this the event comes back claiming
-    ``org_id=None`` while its type promises a uuid — a lie handed to a consumer."""
+    """Dataclasses do not validate: the event would claim ``org_id=None`` against its type."""
     with pytest.raises(TypeError):
         WidgetCreated.from_payload({"org_id": None, "entity_id": str(uuid.uuid7())})
 
@@ -357,12 +338,7 @@ def test_from_payload_reparses_a_uuid_entity_id():
 
 
 def test_two_classes_cannot_claim_the_same_kind():
-    """A kind is the journal's stored identity, so it must map back to exactly one class.
-
-    The catalog is keyed by kind: were a second claimant to replace the first, the listener would
-    hand the *wrong* type to that kind's durable consumers — a fixture declaring "auth.signed_in"
-    is enough to displace the shipped event process-wide.
-    """
+    """Else the listener would rebuild stored facts into the wrong class."""
 
     @dataclass(frozen=True, kw_only=True)
     class First(BusinessEvent):
@@ -378,9 +354,7 @@ def test_two_classes_cannot_claim_the_same_kind():
 
 
 def test_redeclaring_the_same_class_stays_idempotent():
-    """A module reimported — or a class defined in a test body that runs twice — re-creates the
-    same declaration. That must not trip the guard, so it compares where a class is declared
-    rather than object identity."""
+    """A reimported module or a test body run twice re-creates the same declaration."""
 
     def declare() -> type[BusinessEvent]:
         @dataclass(frozen=True, kw_only=True)
@@ -391,4 +365,4 @@ def test_redeclaring_the_same_class_stays_idempotent():
         return Same
 
     declare()
-    declare()  # same module and qualname: allowed
+    declare()

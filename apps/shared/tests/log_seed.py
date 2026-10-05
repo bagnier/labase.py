@@ -1,13 +1,5 @@
-"""Seeding ``log_lines`` directly — for tests that need a log line without logging one.
-
-The twin of :mod:`apps.shared.tests.journal_seed`. Production fills this table exactly one way:
-the structlog processor enqueues, the ``LogDrain`` batches. A test often needs the opposite — a
-line of some logger's, at some level, dated last week, with no code path that would produce it.
-
-It also has to *clear*: the store is shared and committed, where the per-day files it replaced
-gave every test a scratch directory for free. A test asserting "these are the log entries" has to
-say which run they belong to, or start from empty.
-"""
+"""Lines written straight to ``log_lines``, for tests needing a line no code path produces, and
+a way to empty the shared store."""
 
 from datetime import datetime
 
@@ -29,7 +21,6 @@ async def seed_log_line(
     instance: str = "test",
     **fields: object,
 ) -> None:
-    """Append one line and commit — the arrangement has to outlive the request under test."""
     line = {
         "event": event,
         "logger": logger,
@@ -42,6 +33,5 @@ async def seed_log_line(
 
 
 async def clear_log_lines(session: AsyncSession) -> None:
-    """Empty the store, so a test that asserts over *all* log entries means its own."""
     await session.execute(delete(LogLine))
     await session.commit()

@@ -1,9 +1,5 @@
-"""Admin-gated impersonation: mint a real GoTrue session for a target user.
-
-``generate_link(magiclink)`` on the admin API returns the hashed token without
-sending any mail; ``verify_otp`` exchanges it for the target's session. The
-resulting JWT is genuine, so RLS and every downstream check behave exactly as
-if the user had signed in themselves.
+"""Impersonation: a real GoTrue session for the target, minted from an unsent magic link, so RLS
+and every check behave as if the user signed in.
 """
 
 import asyncio
@@ -13,16 +9,13 @@ from supabase_auth.errors import AuthError
 from apps.auth.domain.service import AuthTokens, confirm_signup
 from apps.shared.persistence.supabase import get_admin_supabase
 
-# Where the admin's own session is stashed while impersonating: their presence is what renders the
-# banner, and deleting them is what ends the disguise.
+# The admin's stashed session: its presence shows the banner, its deletion ends the disguise.
 IMPERSONATOR_COOKIE = "impersonator_access_token"
 IMPERSONATOR_REFRESH_COOKIE = "impersonator_refresh_token"
 
-# The absolute unix deadline of the impersonation window, so a mid-window token refresh re-caps the
-# re-emitted target session to the time it has left instead of the long login TTL.
+# The window's unix deadline, so a refresh caps the target session to the time left.
 IMPERSONATOR_DEADLINE_COOKIE = "impersonator_deadline"
 
-# The time-box: every impersonation cookie dies after this long, disguise included.
 IMPERSONATION_MAX_SECONDS = 3600
 
 

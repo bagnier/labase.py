@@ -24,8 +24,7 @@ class UserAdminStatus:
 
     @property
     def can_act(self) -> bool:
-        """A banned admin still holds ``app_metadata.role`` but cannot sign in — every last-admin
-        guard call site counts *this*, not the raw role flag, so the rule lives in one place."""
+        """A banned admin keeps the role but cannot sign in; the last-admin guard counts this."""
         return self.is_admin and not self.is_banned
 
 
@@ -34,16 +33,14 @@ def _is_admin(app_metadata: dict[str, Any]) -> bool:
 
 
 def is_user_banned(user: Any) -> bool:
-    """A GoTrue ban never expires in practice (``BAN_FOREVER``), so the raw flag alone answers
-    whether the account can currently sign in — shared with the accounts screen, since both read
-    the same claim off the same directory."""
+    """A ban never expires in practice (``BAN_FOREVER``), so the flag alone says the account
+    cannot sign in."""
     return bool(getattr(user, "banned_until", None))
 
 
 async def _iter_all_users():
-    """Every *live* auth user. Soft-deleted tombstones are skipped: they can't sign in, their
-    email/identities are anonymized, and counting a soft-deleted admin would wrongly report the
-    server as still having an owner (blocking the first-user bootstrap)."""
+    """Every live auth user. A soft-deleted admin must not count as the server's owner, which
+    would block the first-user bootstrap."""
     admin = get_admin_supabase().auth.admin
     page = 1
     while True:
@@ -58,7 +55,6 @@ async def _iter_all_users():
 
 
 async def list_server_admins() -> list[UserAdminStatus]:
-    """Every auth user with their server-admin flag, read from ``app_metadata.role``."""
     return [
         UserAdminStatus(
             user_id=uuid.UUID(u.id),
@@ -75,7 +71,7 @@ async def count_server_admins() -> int:
 
 
 async def set_server_admin(user_id: uuid.UUID, *, is_admin: bool) -> None:
-    """Set or clear the admin-only ``app_metadata.role`` claim. Effective on next sign-in."""
+    """Set or clear the ``app_metadata.role`` claim; effective at the next sign-in."""
     admin = get_admin_supabase().auth.admin
     role = _ADMIN_ROLE if is_admin else None
     try:
@@ -83,9 +79,8 @@ async def set_server_admin(user_id: uuid.UUID, *, is_admin: bool) -> None:
             admin.update_user_by_id, str(user_id), {"app_metadata": {"role": role}}
         )
     except ValidationError:
-        # The SDK parses the response after the server applied it — a non-2xx raises AuthApiError
-        # before any parsing — so this can only mean the write landed and the returned record is
-        # unreadable (an anonymized identity missing ``identity_data``). The action succeeded.
+        # A non-2xx raises AuthApiError first, so here the write landed and only the returned
+        # record is unreadable (an anonymized identity without ``identity_data``).
         log.info("set_server_admin.record_unreadable", user_id=str(user_id))
 
 
@@ -97,18 +92,8 @@ async def find_user_id_by_email(email: str) -> uuid.UUID | None:
 
 
 def _report_lookup_failures(failures: list[BaseException], total: int) -> None:
-    """One verdict for the whole batch, never one per id.
-
-    The lookups gather concurrently, so a directory that is down fails all of them at once: a line
-    per id filed the same outage once per name on the screen, which on a busy timeline is sixty
-    occurrences against one issue for a single page view. Reported once, with how many of how many
-    failed — the shape a reader actually needs.
-
-    The batch is as broken as its *worst* answer. A refusal (an account that is gone, a stale id
-    off an old log line) is an ordinary outcome and must not speak for a batch that also hit a real
-    outage, so the report is given the first failure that was not a refusal, and falls back to the
-    refusal only when that is all there was.
-    """
+    """One line for the batch, not one per id: a directory outage fails every lookup at once. It
+    is judged on the first failure that is not a refusal (a gone account is ordinary)."""
     if not failures:
         return
     worst = next((exc for exc in failures if not is_refusal(exc)), failures[0])
@@ -122,11 +107,8 @@ async def resolve_user_emails(user_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]
     failures: list[BaseException] = []
 
     async def _get(uid: uuid.UUID) -> tuple[uuid.UUID, str]:
-        # Best-effort, per id: the caller only wants a label, so an id the directory no longer
-        # knows resolves to "" — and so does a record that cannot be read at all. Catching every
-        # exception, not just AuthApiError: the batch gathers concurrently, so anything escaping
-        # here fails the whole page, and a GoTrue record the SDK's own model rejects is enough.
-        # Kept, not logged: what it means is a property of the batch, judged once below.
+        # Any failure resolves to "": anything escaping would fail the whole page, and the SDK's
+        # own model may reject a record. Kept for the batch verdict below.
         try:
             resp = await asyncio.to_thread(admin.get_user_by_id, str(uid))
         except Exception as exc:

@@ -1,27 +1,11 @@
-"""Fullpage context assembly — ownerless infra (peer of EventBus / Host).
+"""A full page's template context, assembled from slices
+(AGENTS: a page's context is assembled from slices its apps own).
 
-A full HTML page's template context is composed of *slices*, each owned by the app
-that knows it. An app registers a *fullpage provider* at its ``mount()`` via
-:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`, passing a ``name``, the
-raw keys its function returns, and the function itself — the collector namespaces each key as
-``f"{name}_{key}"`` (name ``profile`` declaring ``handle`` lands in the context as
-``profile_handle``). Keys stay flat — no nested sub-dicts — so templates read
-``{{ profile_handle }}``. A namespaced key colliding with another provider's, or with the
-context's own seeded keys, is rejected at registration — see
-:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`.
-
-A provider that raises is isolated and logged; the rest of the page still renders. A chunk
-returning a key it never declared still logs and overwrites here — the mount-time check only
-catches what was declared. A route's own page extra (``**extra``) is unprefixed, so it is
-refused when it collides with a provider's declared, namespaced key or with the host's own
-``nav_items`` — checked against what each provider declared at mount, before any provider
-runs (``user`` cannot collide this way — see :func:`fullpage_context`).
-
-No global render hook injects data silently — a Jinja "context processor" or ASGI
-middleware would, and that is proscribed by the *Page composition* principle. Routes
-call :func:`fullpage_context` explicitly, only on full pages (not HTMX fragments).
-
-Current providers (grep ``register_fullpage_provider`` to confirm):
+An app registers a provider at mount with
+:meth:`~apps.shared.integration.host.Host.register_fullpage_provider`, declaring its keys. Each key
+is namespaced flat: provider ``profile`` returning ``handle`` gives ``{{ profile_handle }}``.
+Collisions between declared keys are refused at registration; a provider that raises is logged
+and skipped. Routes call :func:`fullpage_context` explicitly, on full pages only.
 
 ==================  =======  =======================================
 key                 name     provider
@@ -51,8 +35,6 @@ log = structlog.get_logger(__name__)
 
 @dataclass(frozen=True)
 class FullpageQuery:
-    """Passed to each provider; carries the request session and the current user."""
-
     session: AsyncSession
     user: AuthenticatedUser | None
 
@@ -60,15 +42,10 @@ class FullpageQuery:
 async def fullpage_context(
     session: AsyncSession, user: AuthenticatedUser | None, **extra: object
 ) -> dict:
-    """Full template context for a page: nav + provider slices + user + page extras.
+    """Nav, provider slices, ``user`` and the route's ``extra``.
 
-    Called explicitly by routes, on full pages only (never HTMX fragments) — see the module
-    docstring for the namespacing, collision and provider-isolation rules. A page extra named
-    like a provider's declared key, or like the host's own ``nav_items``, is refused rather
-    than silently overriding it — checked against what each provider declared at mount, before
-    any provider runs. ``user`` cannot collide the same way: it is this function's own named
-    parameter, so a ``user=`` extra fails on a duplicate-argument ``TypeError`` before the body
-    ever runs.
+    Raises ``ValueError`` when an extra is named like a declared slice key or ``nav_items``. A
+    provider returning an undeclared key that collides is only logged.
     """
     owner_by_key: dict[str, str] = {"nav_items": "(host)"}
     for provider in host.fullpage_providers:
@@ -79,8 +56,7 @@ async def fullpage_context(
             raise ValueError(f"page extra {key!r} collides with the {owner_by_key[key]} slice")
 
     ctx: dict = {"user": user, "nav_items": sorted(host.nav_items, key=lambda i: i.order)}
-    # Kept identical to RESERVED_FULLPAGE_KEYS so a provider mount-time check protects
-    # against exactly the keys seeded here.
+    # Registration refuses exactly these keys.
     assert set(ctx) == RESERVED_FULLPAGE_KEYS
     query = FullpageQuery(session, user)
     for provider in host.fullpage_providers:

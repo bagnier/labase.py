@@ -12,10 +12,9 @@ class ProfileApiMixin(ApiBase):
 
     # ── email change ──────────────────────────────────────────────────────────
     def request_email_change(self, new_email: str, password: str) -> None:
-        # Self-healing (register_disposable pattern): a previous run's confirmed
-        # change leaves the new address registered; GoTrue refuses reusing it.
+        # A previous run's change may hold the address.
         delete_user_if_exists(new_email)
-        self._track_auth_email(new_email)  # the confirmed user carries this email at teardown
+        self._track_auth_email(new_email)
         self._email_change_requested_at = datetime.now(UTC)
         self.response = self.client().post(
             "/profile/email",
@@ -51,8 +50,7 @@ class ProfileApiMixin(ApiBase):
         )
 
     def assert_email_change_not_offered(self, email: str) -> None:
-        # REST face of "the option is gone": the endpoint itself answers 404 — asked as the
-        # account the switch concerns, not as the admin who flipped it.
+        # A 404, asked as the account concerned, not the admin.
         resp = self.client_for(email).post(
             "/profile/email",
             json={"new_email": "probe@labase.dev", "current_password": "x"},
@@ -62,14 +60,14 @@ class ProfileApiMixin(ApiBase):
 
     # ── account deletion ──────────────────────────────────────────────────────
     def delete_account(self, password: str) -> None:
-        # text/html accept: success is the 303 to the sign-in page, like a browser.
+        # As a browser: success is a 303 to sign-in.
         self.response = self.client().request(
             "DELETE",
             "/profile",
             json={"current_password": password},
             headers={"accept": "text/html"},
         )
-        self.drain_task_queue()  # run UserDeleted's reactions (reap the orgs, forget the profile)
+        self.drain_task_queue()  # UserDeleted's reactions
 
     def assert_account_deletion_rejected(self) -> None:
         assert self.response.status_code == 400, f"expected 400, got {self.response.status_code}"
@@ -138,9 +136,7 @@ class ProfileApiMixin(ApiBase):
         )
 
     def assert_email_read_only(self) -> None:
-        # REST translation of "email is read-only": the API surfaces the email but exposes no
-        # way to mutate it (POST /profile only accepts `handle`). So we assert the email is
-        # returned, then unchanged after an update.
+        # The API returns the email and has no way to change it: unchanged after an update.
         before = self.client().get("/profile").json()
         email = before.get("email")
         assert email, f"Expected an email in profile JSON, got {before}"
@@ -156,9 +152,7 @@ class ProfileApiMixin(ApiBase):
     def visit_profile_unauthenticated(self) -> None:
         self.response = self.client().get("/profile")
 
-    # The following steps are "navigation/discoverability" claims in the feature. A REST client
-    # has no page chrome (footer/nav), so we validate the RESTful equivalent: the target
-    # resource is discoverable and reachable via the API (HTTP 200 at its canonical URL).
+    # Navigation steps, without page chrome: the target answers 200.
 
     def assert_link_to_org_dashboard(self) -> None:
         handle = getattr(self, "active_org_handle", "")

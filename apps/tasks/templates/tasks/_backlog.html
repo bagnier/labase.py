@@ -24,8 +24,7 @@
               <td>
                 {% set label = labels[task.topic] %}
                 <code class="text-xs">{{ label.name }}</code>
-                {# What the row *is*, under its name — the event it answers, or the clock it runs
-                   on. Never both: a reaction is enqueued per fact, a chore per tick. #}
+                {# The event it answers, or its cadence: never both. #}
                 {% if label.kind or task.recurring_seconds %}
                   <div class="task-sub">{{ label.kind or spell_cadence(task.recurring_seconds) }}</div>
                 {% endif %}

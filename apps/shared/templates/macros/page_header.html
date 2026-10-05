@@ -1,12 +1,8 @@
-{# The one page-title block: h1 (section-title), optional subtitle, optional actions.
-   Actions come through a call block, kept right-aligned on the same row:
+{# The page title, an optional subtitle, and actions through the call block:
 
      {% call page_header('Pages', 'Everything published here.') %}
        <a href="…" class="btn btn-primary btn-sm">New page</a>
-     {% endcall %}
-
-   Auth's card headers (card-title) and the error page stay hand-rolled: they are
-   card/hero idioms, not page headers. #}
+     {% endcall %} #}
 {% macro page_header(title, subtitle='', title_class='') %}
   <div class="flex flex-wrap items-start justify-between gap-4">
     <div>

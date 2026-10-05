@@ -1,9 +1,5 @@
-"""Server-admin logic: the small orchestrations the console runs on top of auth's admin
-contract (look up by email, grant, revoke) — the last-admin guard itself lives in
-``apps.auth.contract.admin``, shared with every other path that can remove an admin.
-
-The guard is the server-scope twin of the organisations' last-owner guard
-(``ensure_not_last_owner``).
+"""Granting and revoking server admin, over auth's admin contract, which holds the last-admin
+guard (the server twin of ``ensure_not_last_owner``).
 """
 
 import uuid
@@ -38,21 +34,14 @@ def _by_email(users: list[UserAdminStatus], email: str) -> UserAdminStatus | Non
 
 
 async def list_admins() -> list[UserAdminStatus]:
-    """The server's admins, ordered by email."""
     return _sorted_admins(await list_server_admins())
 
 
 async def grant_admin(email: str) -> tuple[list[UserAdminStatus], bool, uuid.UUID]:
-    """Promote the account at ``email``; raises :class:`AdminNotFound` if none exists.
+    """Promote ``email``; returns whether it changed (record a fact only then) and the id.
+    Raises :class:`AdminNotFound`.
 
-    Returns whether the account was newly granted (``False`` for one already admin, which the
-    caller must not journal as a fresh fact) and its id, for the caller's own entity
-    correlation — one directory scan serves the lookup, the guard and the listing alike, where
-    the previous version made up to four.
-
-    GoTrue's admin API has no compare-and-set: ``set_server_admin`` is a blind write, so a
-    second grant racing between this read and that write can still re-promote and re-journal.
-    Reading once instead of several times only narrows that window; it does not close it.
+    GoTrue has no compare-and-set: a concurrent grant can still promote twice.
     """
     if not email:
         raise AdminNotFound(email)
@@ -68,15 +57,10 @@ async def grant_admin(email: str) -> tuple[list[UserAdminStatus], bool, uuid.UUI
 
 
 async def set_admin(email: str, *, is_admin: bool) -> tuple[list[UserAdminStatus], bool, uuid.UUID]:
-    """Grant or revoke admin for ``email``, guarding the last-admin rule.
+    """Grant or revoke admin; returns whether it changed (record a fact only then) and the id.
+    Raises :class:`AdminNotFound` or :class:`LastAdminViolation`.
 
-    Raises :class:`AdminNotFound` for an unknown email and :class:`LastAdminViolation` when the
-    revoke would leave the server with no admin. Returns whether the status actually changed
-    (``False`` when ``email`` already held the requested status, which the caller must not
-    journal as a fresh fact) and the account's id — one directory scan, as in :func:`grant_admin`.
-    The caller must hold the last-admin guard's lock (``apps.auth.contract.admin
-    .lock_last_admin_guard``) for the duration of this call — the read-then-act here is only
-    atomic under that lock (issue #36).
+    The caller holds ``lock_last_admin_guard``: the count-then-act is atomic only under it.
     """
     users = await list_server_admins()
     target = _by_email(users, email)

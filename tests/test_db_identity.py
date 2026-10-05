@@ -1,17 +1,5 @@
-"""The SQL half of the key shape holds the ordering the README's `Identity` principle promises.
-
-Two generators mint primary keys in this tree. The ORM mints one Python-side with
-``uuid.uuid7()`` (the ``UUIDPk`` mixin); ``public.uuidv7()`` mints the ones no Python ever
-touches — the signup trigger's rows, written inside GoTrue's own transaction where the app has
-no session to join, and *every* row of ``business_events``, whose single writer
-``record_business_event`` passes no id and so falls to the column default.
-
-That last one is what makes ordering load-bearing rather than decorative: the event listener
-reads ``business_events.id`` as a cursor (``scan_spread``'s ``id > cursor``), so a key sorting
-below the one minted before it is a fact the cursor steps straight over.
-
-Read against the live stack, because the property belongs to the SQL function rather than to
-anything the ORM declares about it.
+"""``public.uuidv7()`` mints in order (AGENTS: every key is a UUIDv7, every token a UUIDv4): it
+keys every fact, and the listener's cursor would skip one sorting below its predecessor.
 """
 
 from collections.abc import AsyncIterator
@@ -24,13 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from apps.shared.settings.env import get_technical_settings
 
-# The generator answers some five hundred times per millisecond on this stack, so a burst an
-# order of magnitude past that leaves most consecutive pairs sharing one millisecond — which is
-# exactly where the 48-bit timestamp stops separating two keys and the bits below it have to.
+# Enough keys to share milliseconds, where the bits below the timestamp must keep the order.
 _BURST = 2000
 
-# Ordered by the series index, never by the key itself: the question *is* whether minting order
-# and sort order are the same thing.
+# Ordered by minting, to compare with the keys' own order.
 _MINT_BURST_SQL = """
 select public.uuidv7() as key
   from generate_series(1, :count) as i

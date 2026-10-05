@@ -1,9 +1,4 @@
-"""Calendar's business events — an event's lifecycle on the shared journal.
-
-Plain CRUD: ``kind`` derives to ``"calendar.created"`` / ``"calendar.updated"`` /
-``"calendar.deleted"`` from the shared abstracts; the router emits them on the request's session,
-scoped by ``user_id``/``org_id``.
-"""
+"""Calendar facts, plain CRUD: ``calendar.created``, ``.updated``, ``.deleted``."""
 
 from dataclasses import dataclass
 from typing import ClassVar

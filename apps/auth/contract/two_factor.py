@@ -1,9 +1,6 @@
-"""Two-factor (TOTP) — the auth surface the profile section calls.
-
-GoTrue owns factors, challenges and AAL; the app wires the two UI moments
-(enrolment on the profile, step-up at sign-in). The ``users.two_factor_enabled``
-setting gates both — switching it off also bypasses the sign-in challenge,
-which is the admin escape hatch for lost authenticators.
+"""Two-factor (TOTP), called by the profile. GoTrue owns factors and challenges.
+``users.two_factor_enabled`` gates enrolment and the sign-in step-up; switching it off is the
+escape hatch for lost authenticators.
 """
 
 from apps.auth.domain.service import (

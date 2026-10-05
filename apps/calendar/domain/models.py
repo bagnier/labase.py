@@ -21,11 +21,8 @@ class CalendarEvent(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
 
 
 def format_event_time(starts_at: datetime, ends_at: datetime) -> str:
-    """Human-readable event time — the single source for the cross-driver display string.
-
-    Same-day events read ``1 July 2026, 14:00 – 15:00``; multi-day events spell out both ends.
-    Rendered verbatim in the HTML detail view and exposed as the ``when`` field on
-    :class:`CalendarEventRead`, so the browser and API drivers assert the very same literal.
+    """``1 July 2026, 14:00 – 15:00``, or both ends spelled out across days. Shown as is in the
+    page and as ``when`` in JSON, so both drivers assert the same string.
     """
 
     def day(dt: datetime) -> str:
@@ -40,9 +37,8 @@ def format_event_time(starts_at: datetime, ends_at: datetime) -> str:
 
 
 class CalendarEventCreate(BaseModel):
-    """What the new-event form or a JSON caller sends. A time comes either whole (``start``,
-    ``end`` — the JSON shape) or split into the form's date and time inputs; blanks are refused
-    by the handler with its own message, on the form."""
+    """Times come whole (``start``, ``end``, JSON) or split into the form's date and time
+    inputs. Blanks are refused by the handler, on the form."""
 
     title: str = ""
     start: str = ""
@@ -56,8 +52,7 @@ class CalendarEventCreate(BaseModel):
 
 
 class CalendarEventPatch(Partial):
-    """A partial update: the editor sends the whole form, a JSON caller only what changed, and
-    the handler reads what was ``sent``."""
+    """The editor sends the whole form, a JSON caller what changed."""
 
     title: str = ""
     start: str = ""

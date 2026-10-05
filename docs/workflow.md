@@ -11,11 +11,14 @@ pull request. Merging is never the bot's.
    that fails today. A hypothesis stays in [ROADMAP.md](../ROADMAP.md) until someone made
    it fall. The `Bug` issue form (`.github/ISSUE_TEMPLATE/bug.yml`) holds the shape the bot
    reads: the fault, `→` the direction, what to run, the AGENTS.md sentence, the `file:line`
-   links. The label goes on last, once the body is final.
-2. **Label.** The owner puts `to-fix` on it. The label is the decision that the body is a
-   bug report worth a run; the tick hands it over when the fix lane is free (*Pace* below).
+   links. The label goes on last, once the body is final. Faults found in bulk reach it through
+   *Finding* below.
+2. **Label.** The owner puts `to-fix` on it, by hand or by agreeing to what `triage-issues`
+   proposes. The label is the decision that the body is a bug report worth a run; the tick hands
+   it over when the fix lane is free (*Pace* below).
    Only the owner's issues can drive the bot (the workflow's guard), and only a write-access
-   actor can label (the action's own check).
+   actor can label (the action's own check). Issues one diff should fix go as one: the carrier
+   stays on `to-fix`, the others go on `carried` (*Carrying* below).
 3. **Run.** `fixing`, put on by the tick, fires `.github/workflows/fix.yml`, which builds the
    stack `ci.yml` builds, then hands the issue to the `ci-fix-issue` skill. The skill reads the
    issue and its author's comments as
@@ -39,6 +42,20 @@ pull request. Merging is never the bot's.
    lands on its own check; several land together, *Landing a batch* below.
 
 Run by hand, `/ci-fix-issue <n>` does the same from a local checkout.
+
+## Finding
+
+Three skills, each a tool that knows nothing of the others; the pipe between them is a file.
+
+| step | skill                  | reads                                   | writes                                          |
+| ---- | ---------------------- | --------------------------------------- | ----------------------------------------------- |
+| 1    | `/maintain-principles` | AGENTS.md, the README, the code         | `.cache/maintain-principles/<HEAD>.md` — breaks |
+| 2    | `/qualify-issues`      | faults: a breaks file, a report, a line | `.cache/qualify-issues/<HEAD>.md` — drafts      |
+| 3    | `/file-issue`          | a fault, or a drafts file               | GitHub issues, without `to-fix`                 |
+
+Each step is read before the next: the breaks file is where the audit ends, the drafts file is
+where the owner sees what will cost a fix run and what was set aside — latent, drift, not
+reproduced, already filed — and why.
 
 ## The three ends of a run
 
@@ -70,6 +87,25 @@ two ends — pushed, or a question — so the pull request goes back to waiting 
 A rework run that dies, or never starts, lands on `to-unblock` too, with a URL in a comment, and
 the queue behind it moves on; taking `to-unblock` off, then a new `@claude` comment, is what puts
 it back on `to-rework`.
+
+## Carrying
+
+One run can close several issues: those on one subject, even across files, so the treatment is
+uniform, and those rewriting the same lines, which would conflict landed apart. Different subjects
+stay apart, even in one file. The oldest issue of the set is the carrier and stays on `to-fix`;
+each other one swaps `to-fix` for `carried`, and a comment of the owner's on the carrier names it
+(`Carries #<n>:`). The tick never picks a `carried` issue: the carrier's run reads each one's
+thread, gives each its own failing test, and opens one pull request that closes them all.
+
+`carried` follows the carrier's `fixing`: the run takes it off when its pull request, whose
+`Closes` lines link each one, is open, or when it closes one as not reproduced. An open question
+keeps it, since it is how the carrier, put back on `to-fix`, finds what it carries. Until then only
+the owner detaches one, by swapping it back for `to-fix`. A set is joined before its run starts,
+since a run reads its thread once.
+
+The `triage-issues` skill proposes the sets from a local checkout — reading each issue against
+`main`, the pull requests and the other issues — and, once the owner agrees, puts the carriers and
+the lone issues on `to-fix`, the carried ones on `carried`.
 
 ## Landing a batch
 

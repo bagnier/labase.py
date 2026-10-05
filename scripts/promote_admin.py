@@ -3,16 +3,15 @@
 Usage:
     uv run python scripts/promote_admin.py <email> [<password>]
 
-Idempotent: an existing user is left as-is and simply (re-)promoted; a missing
-user is created (confirmed) with the given password, or a generated one that is
-printed to stdout. Promotion sets the admin-only ``app_metadata.role`` claim,
-which lands in the JWT on the user's next sign-in.
+Idempotent. A missing user is created, confirmed, with the given password or a printed generated
+one. The role reaches the JWT at the next sign-in.
 """
 
 import argparse
 import os
 import secrets
 import sys
+from pathlib import Path
 
 import httpx
 
@@ -20,9 +19,12 @@ os.environ.setdefault("ENV_FILE", ".env")
 
 from apps.auth.tests.given_helpers import create_user, find_users, set_admin_role
 from apps.shared.settings.env import get_technical_settings
+from scripts.envfile import apply_host_overrides
 
 
 def promote_admin(email: str, password: str | None) -> None:
+    # Runs on the host, where the app container's `host.docker.internal` does not resolve.
+    apply_host_overrides(Path(os.environ["ENV_FILE"]))
     existing = find_users(email)
     if existing:
         uid = existing[0].id
@@ -36,25 +38,16 @@ def promote_admin(email: str, password: str | None) -> None:
 
     set_admin_role(uid)
     print(f"  → promoted {email} to server admin")
-    # The claim lives in ``app_metadata``, which GoTrue embeds in the *access token* — a session
-    # opened before this call carries none of it. Said here because "promoted" with no admin
-    # button in the app looks exactly like a promotion that failed.
+    # Said, because an open session lacks the role and would look like a failed promotion.
     print("  → sign out and back in: the claim only reaches the session on the next sign-in")
 
 
 def _unreachable(exc: httpx.ConnectError) -> None:
-    """Answer a host that does not resolve with the one line that fixes it.
-
-    A ``.env`` written for the app container points at ``host.docker.internal``, which resolves
-    only inside it — and this script runs on the host, where the same service is on localhost.
-    Without this, the failure is forty lines of httpx traceback naming neither the host nor the
-    way round it.
-    """
+    """An unreachable GoTrue: the URL tried and an override, not a traceback."""
     url = get_technical_settings().supabase_api_url
     print(f"Cannot reach GoTrue at {url} ({exc}).", file=sys.stderr)
     print(
-        "If that host only resolves inside the app container, point this run at the same "
-        "service on the host:\n"
+        "Point this run at a reachable GoTrue instead, e.g.:\n"
         "  SUPABASE_API_URL=http://127.0.0.1:54321 make promote-admin "
         "ENV_FILE=.env EMAIL=you@example.com",
         file=sys.stderr,

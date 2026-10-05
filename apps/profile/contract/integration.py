@@ -1,4 +1,4 @@
-"""How the profile context plugs into the running app: mounts its router, claims its slug."""
+"""The profile mount."""
 
 import uuid
 
@@ -66,10 +66,7 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
-    """Account deletion: drop the profile row. A durable async consumer of ``UserDeleted`` (admin
-    session, off the listener), keyed on the removed user's ``entity_id``."""
-    # from_payload already re-parsed the polymorphic entity_id to a uuid (the removed user's pk);
-    # narrow the union, re-parsing only as a defensive fallback.
+    """Delete the deleted user's profile row."""
     entity_id = event.entity_id
     user_id = entity_id if isinstance(entity_id, uuid.UUID) else uuid.UUID(entity_id)
     profile = await session.scalar(select(Profile).where(Profile.user_id == user_id))
@@ -81,8 +78,7 @@ async def _forget_user(session: AsyncSession, event: UserDeleted) -> None:
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
     count = await count_where(query.session, Profile)
     handles = await count_where(query.session, Profile, Profile.handle.isnot(None))
-    # A profile exists 1:1 per account, so the raw total just echoes the Users tile.
-    # Lead with what's profile-specific instead: handle adoption (public identity).
+    # One profile per account: the handle adoption says more than the total.
     if count:
         lines = [f"{handles} with a handle", f"{count - handles} without"]
     else:
@@ -94,9 +90,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
         section="identity",
         data={
             "lines": lines,
-            # Sign-ups per day (every account gets a profile row on creation) — the
-            # console landing folds every tile's "growth" slice into one chart. The
-            # series reads "Sign-ups", not the tile title, via "growth_label".
+            # Profiles per day are sign-ups: labelled so on the console chart.
             "growth": await count_created_per_day(query.session, Profile, days=_GROWTH_DAYS),
             "growth_label": "Sign-ups",
         },

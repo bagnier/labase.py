@@ -1,11 +1,5 @@
-"""What a fact says about who did it and where — the half only a business event can pin.
-
-``emit`` resolves the actor's handle and the org's name *at write time* and pins them on the
-fact's own ``user_name``/``org_name`` columns, so the journal stays legible once an account is
-closed or an org renamed. The timeline read them live instead of off the fact: an id with no
-``profiles`` row or ``organizations`` row left resolves to nothing, and the row fell back to
-eight hex characters where the fact still held the name.
-"""
+"""The Timeline shows a fact's pinned actor and org names, not a live lookup that finds
+nothing once the account or org is gone."""
 
 import uuid
 
@@ -18,11 +12,8 @@ _ORG_NAME = "Acme Widgets"
 
 
 def _seed_fact_from_a_gone_actor_and_org():
-    """A fact whose ``user_id``/``org_id`` resolve nowhere (no signed-up account, no org row) —
-    standing in for the account closed, and the org renamed or deleted, since the write path
-    itself resolves names live at the moment the fact is recorded. ``app_name`` names no real
-    context on purpose — a seeded fact needs no owner, and a made-up one keeps this test off the
-    demo-naming ratchet in tests/meta/test_surfaces.py."""
+    """A fact whose ids resolve nowhere, as after a closed account or deleted org. A made-up
+    ``app_name`` keeps it off the demo-naming ratchet (tests/meta/test_surfaces.py)."""
     return seed_fact(
         BusinessEventRecord(
             app_name="sample",

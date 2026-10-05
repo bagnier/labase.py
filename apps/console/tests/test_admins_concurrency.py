@@ -1,12 +1,5 @@
-"""The last-admin guard's atomicity (issue #36), across every gate that can remove an admin.
-
-``set_admin`` reads the admin count, then acts on it, as two separate steps with nothing
-between them — and so does the account-deletion route's own read-then-check. Two concurrent
-callers, through the same gate or two different ones, can both read the same stale count, both
-pass the guard, and leave the server with no admin — exactly what each route now prevents by
-holding ``lock_last_admin_guard`` (the same orchestration the route itself runs) around the
-read.
-"""
+"""The last-admin guard under concurrency: every path that can remove an admin holds
+``lock_last_admin_guard`` around its count-then-act."""
 
 import asyncio
 import uuid
@@ -33,9 +26,7 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def admin_guard_isolation():
-    # A fresh engine bound to this test's event loop — the module-cached one may belong to a
-    # different, already-closed loop from an earlier test (the same shape apps/metrics and
-    # apps/timeline use around their own concurrent-session fixtures).
+    # A fresh engine on this loop: the cached one may belong to a closed loop.
     _clear_engine_caches()
     yield
     await db._admin_engine().dispose()
@@ -53,8 +44,7 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
     async def fake_list_server_admins() -> list[UserAdminStatus]:
         nonlocal list_calls
         list_calls += 1
-        # Snapshot now, as a real GoTrue call would: the query already ran and its answer is
-        # fixed before the (here, simulated) network hop back delivers it.
+        # Snapshot now, as a real call fixes its answer before the network hop.
         snapshot = dict(admin_flags)
         if list_calls == 1:
             first_list_entered.set()
@@ -75,8 +65,7 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
     observer = db.admin_session_factory()()
 
     async def revoke(email: str, session) -> tuple[list[UserAdminStatus], bool, uuid.UUID]:
-        # The exact orchestration `update_admin` runs: acquire the guard's lock, then the
-        # domain call — set_admin itself never touches the session.
+        # As `update_admin`: the lock, then the domain call.
         await lock_last_admin_guard(session)
         return await set_admin(email, is_admin=False)
 
@@ -88,10 +77,7 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(asyncio.shield(task_b), timeout=0.2)
 
-        # task_b is not merely slow — it is genuinely parked *waiting* on the guard's advisory
-        # lock, visible from a third, independent connection. ``granted`` is false for the
-        # request that is queued, not for the one holding it — the holder is a second, separate
-        # row, which this leaves out on purpose.
+        # task_b waits on the advisory lock, seen from a third connection (``granted`` false).
         waiting_on_guard_lock = (
             await observer.execute(
                 text(
@@ -118,9 +104,7 @@ async def test_two_concurrent_revocations_leave_the_server_with_one_admin(monkey
 
 @pytest.mark.asyncio
 async def test_a_concurrent_revoke_and_self_deletion_leave_the_server_with_one_admin(monkeypatch):
-    """The gate #80 opened: a console revoke and the target's own account deletion race the
-    same invariant through two different routes. Both must go through the same lock, or each
-    can read the same stale count and both pass — the symptom of issue #36, by another path."""
+    """A console revoke and the target's self-deletion take the same lock."""
     root_id, bob_id = uuid.uuid7(), uuid.uuid7()
     admin_flags = {root_id: True, bob_id: True}
     deleted: set[uuid.UUID] = set()
@@ -132,8 +116,7 @@ async def test_a_concurrent_revoke_and_self_deletion_leave_the_server_with_one_a
         nonlocal list_calls
         list_calls += 1
         snapshot = dict(admin_flags)
-        # Mirrors `_iter_all_users`, which skips a soft-deleted tombstone: an account the
-        # deletion orchestration already marked gone stops being counted, live or not.
+        # Like `_iter_all_users`: a soft-deleted account no longer counts.
         live_snapshot = {uid: is_admin for uid, is_admin in snapshot.items() if uid not in deleted}
         if list_calls == 1:
             first_list_entered.set()
@@ -154,15 +137,12 @@ async def test_a_concurrent_revoke_and_self_deletion_leave_the_server_with_one_a
     session_b = db.admin_session_factory()()
 
     async def revoke_bob(session) -> tuple[list[UserAdminStatus], bool, uuid.UUID]:
-        # The exact orchestration `update_admin` (console) runs.
+        # As `update_admin` (console).
         await lock_last_admin_guard(session)
         return await set_admin("bob@example.com", is_admin=False)
 
     async def root_deletes_own_account(session) -> None:
-        # The exact orchestration `account_delete` (profile) runs: acquire the guard's lock,
-        # read the directory fresh, then the same shared invariant — no directory write of its
-        # own, root simply stops being counted once soft-deleted (mirroring
-        # `_iter_all_users`, which skips a ``deleted_at`` tombstone).
+        # As `account_delete` (profile): the lock, a fresh read, the same invariant.
         await lock_last_admin_guard(session)
         current = await fake_list_server_admins()
         target_is_admin = any(u.user_id == root_id and u.is_admin for u in current)

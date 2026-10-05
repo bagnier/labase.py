@@ -1,10 +1,8 @@
 name: Rework
 
-# The rework hands a pull request back to the bot. A comment or a review that mentions `@claude`
-# on a pull request queues it — `to-rework` — and tick.yml hands the oldest waiting one over by
-# putting `reworking` on it; that label is what fires the run. One rework in flight, never more,
-# as for the fix bot. The action pushes the corrections on the pull request's own branch, and
-# merging stays with the user (CLAUDE.md, "`main` git branch is mine"; docs/workflow.md).
+# A `@claude` mention on a pull request queues it (`to-rework`); tick.yml labels the oldest
+# `reworking`, which fires the run, one at a time. Corrections are pushed on the pull request's
+# branch; the user merges (docs/workflow.md).
 on:
   issue_comment:
     types: [created]
@@ -17,21 +15,17 @@ on:
 
 jobs:
   queue:
-    # Nothing here rides the job's own token, so it gets none.
     permissions: {}
-    # The action already refuses an actor without write access; this guard adds the owner and the
-    # mention, because every comment of a public repository fires this workflow. An `issue_comment`
-    # counts only on a pull request.
+    # Every comment of a public repository fires this: only the owner's mention on a pull request
+    # counts.
     if: >-
       github.actor == github.repository_owner &&
       (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
       (contains(github.event.comment.body, '@claude') || contains(github.event.review.body, '@claude'))
-    # No concurrency group: the label is the queue, and it has to land while the mention is fresh.
-    # In the bot's own group it would wait for the two-hour run it is meant to line up after.
+    # No concurrency group: the bot's would hold the label behind a two-hour run.
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The owner's fine-grained token: the tick this job wakes is a workflow, and neither a label
-    # nor a dispatch sent with the job's own GITHUB_TOKEN fires one.
+    # The owner's token: GITHUB_TOKEN's labels and dispatches fire no workflow.
     env:
       GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
       GH_REPO: ${{ github.repository }}
@@ -43,29 +37,22 @@ jobs:
           gh workflow run tick.yml
 
   rework:
-    # The run pushes to the pull request's branch and answers on it; id-token lets the action
-    # authenticate.
     permissions:
       contents: write
       pull-requests: write
       issues: write
       id-token: write
-    # `reworking` is the tick's hand-off and nothing else puts it on; the owner's token is what
-    # the tick labels with, so a label put by anyone else starts nothing.
+    # Only the tick, with the owner's token, puts `reworking` on.
     if: >-
       github.event.label.name == 'reworking' &&
       github.actor == github.repository_owner
-    # One rework at a time, whatever labels were put on: one group for the whole bot, and no
-    # cancellation, so a second hand-off waits for the first run to end (tick.yml paces them).
-    # On the job, not the workflow: every comment and every label fires a run, the bot's own
-    # `to-rework` too, and a workflow-level group would be joined before the `if` above skips it.
-    # A run that must stop is cancelled by hand, `gh run cancel`, and lands on `to-unblock`.
+    # One run at a time, queued, never cancelled; on the job, as in fix.yml.
     concurrency:
       group: rework-bot
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # The owner's fine-grained token for gh; the action pushes with its own app token.
+    # The owner's token for gh; the action pushes with its own.
     env:
       GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
     steps:
@@ -76,7 +63,7 @@ jobs:
       - name: Let git push through gh
         run: gh auth setup-git
 
-      # The stack the suite needs, as ci.yml builds it.
+      # The suite's stack, as in ci.yml.
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
         with:
@@ -113,15 +100,11 @@ jobs:
       - name: Start the test stack
         run: make test-stack
 
-      # The prompt is the skill invocation and the pull request number, nothing else: the skill
-      # reads the thread itself, as a review and never as instructions, checks the branch out,
-      # applies, runs the gate and pushes. A skill rather than the action's mention mode because
-      # the skill carries the runner's rules — the mention run once ended its turn waiting for
-      # `make finalize`, with the strengthened test lost on the runner.
+      # The skill reads the thread as a review, never as instructions. A skill, not the action's
+      # mention mode, because it carries the runner's rules.
       - name: Address the review
         uses: anthropics/claude-code-action@v1
-        # As in fix.yml: no background task, whose notification never reaches a headless run, and
-        # ten minutes for a foreground call.
+        # As in fix.yml.
         env:
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
           BASH_DEFAULT_TIMEOUT_MS: "600000"
@@ -136,10 +119,7 @@ jobs:
             --disallowedTools "ScheduleWakeup,CronCreate,CronDelete,CronList,RemoteTrigger"
             --disallowedTools "Workflow,PushNotification,Monitor"
 
-      # A run that ends before its own end — cancelled, timed out, a turn that stopped — leaves
-      # `reworking` with nobody behind it, and the tick reads the queue as busy for good. Whatever
-      # happened, the label becomes a state the owner can see. Never `to-rework` again: that would
-      # relaunch a lasting failure forever.
+      # As in fix.yml: `reworking` becomes a visible state, never `to-rework` again.
       - name: Mark a run that died
         if: always()
         env:

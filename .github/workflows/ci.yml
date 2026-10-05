@@ -12,13 +12,12 @@ on:
       - '**/*.md'
       - 'docs/**'
 
-# Supersede in-flight runs on the same ref: a newer push cancels the older run
-# instead of queueing behind it — fewer billed minutes, faster feedback.
+# A newer push cancels the older run on the same ref.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege: the job only reads the repo to check it out and run the suite.
+# Least privilege: read the repo, run the suite.
 permissions:
   contents: read
 
@@ -28,14 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # We never push from CI, so don't persist the token in .git/config.
+          # CI never pushes.
           persist-credentials: false
 
-      # Dockerfile linting (droast) is its own step: the linter is a Rust binary,
-      # outside the uv/npm toolchain `make ci` uses, so it ships as a self-contained
-      # action rather than a Makefile target. Skipped false positives: DF049
-      # (external-image `COPY --from`) and DF077 (docker/.dockerignore is not at the
-      # build-context root, so Docker never reads it).
+      # droast, a Rust binary outside `make ci`'s toolchain, as an action. False positives skipped:
+      # DF049 (external-image `COPY --from`), DF077 (docker/.dockerignore is not at the context
+      # root, so Docker never reads it).
       - name: Lint Dockerfiles
         uses: immanuwell/dockerfile-roast@1.7.0
         with:
@@ -43,7 +40,7 @@ jobs:
           min-severity: error
           skip: DF049,DF077
 
-      # setup-uv publishes no major tag since v8 (immutable releases only), so the full version.
+      # setup-uv has no major tag since v8.
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
         with:
@@ -77,9 +74,7 @@ jobs:
         with:
           version: 2.117.0
 
-      # The checkout's own test stack, on the ports .env.test points at (scripts/test_stack.py
-      # names the services it leaves out). `make ci` would start it anyway; its own step keeps
-      # the pull and boot time out of the suite's.
+      # The test stack in its own step, keeping its boot time out of the suite's.
       - name: Start the test stack
         run: make test-stack
 

@@ -1,5 +1,4 @@
-"""A resend answers the same way for a known and an unknown address (no enumeration), but only a
-resend that actually reaches an inbox is where anything happened — only what happened is a
+"""A resend answers alike for any address (no enumeration); only a mail actually sent is a
 fact."""
 
 from unittest.mock import patch
@@ -44,9 +43,8 @@ def test_a_resend_to_an_already_confirmed_account_records_no_fact(driver):
 
 
 def test_an_address_with_no_account_still_costs_the_gotrue_call(driver):
-    """GoTrue's resend is doubled because the interaction is the behaviour: skipping the call for
-    an unknown address answers measurably faster, and that timing enumerates the accounts the
-    neutral message hides."""
+    """GoTrue is called even for an unknown address: skipping it would answer measurably faster,
+    and enumerate accounts."""
     asked: list[str] = []
 
     async def resend(email: str) -> None:

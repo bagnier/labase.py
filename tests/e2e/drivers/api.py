@@ -30,4 +30,4 @@ class ApiDriver(
     OrgApiMixin,
     ApiBase,
 ):
-    """In-process API driver: feature mixins over the ApiBase substrate."""
+    """Feature mixins over ``ApiBase``."""

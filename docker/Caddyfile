@@ -1,6 +1,5 @@
-# Caddy in front of the app: automatic HTTPS via Let's Encrypt.
-# DOMAIN and ACME_EMAIL are injected from the environment (docker-compose.prod.yml).
-# Caddy terminates TLS and reverse-proxies to the app container on :8000.
+# TLS via Let's Encrypt, proxied to the app on :8000; DOMAIN and ACME_EMAIL from
+# docker-compose.prod.yml.
 {
 	email {$ACME_EMAIL}
 }

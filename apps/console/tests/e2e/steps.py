@@ -36,8 +36,7 @@ def step_open_settings(driver, app):
     driver.open_console_settings(app)
 
 
-# Also a Given: a setting is the act under test in console.feature, but plain arrangement
-# wherever a scenario needs the server configured a certain way before it starts.
+# Also a Given: arrangement for other scenarios.
 @given(parsers.parse('the admin sets the "{app}" setting "{key}" to "{value}"'))
 @when(parsers.parse('the admin sets the "{app}" setting "{key}" to "{value}"'))
 def step_set_setting(driver, app, key, value):
@@ -72,7 +71,6 @@ def step_assert_org_override_listed(driver, app, key, value):
 
 
 # ── Server admins ──────────────────────────────────────────────────────────────
-# Reuses the org "the action is forbidden" step for the last-admin guard.
 
 
 @given("the server has no admin yet")

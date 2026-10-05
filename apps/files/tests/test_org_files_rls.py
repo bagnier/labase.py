@@ -1,8 +1,5 @@
-"""A file row names only its own object, and only its uploader or an owner changes it.
-
-The share link and the download sign ``storage_path`` with the service key, so a path the row does
-not own would serve another org's bytes. Driven the way a member's PostgREST client would.
-"""
+"""A file row names only its org's object (the service key signs its path), and only its
+uploader or an owner changes it; driven as a member's PostgREST client."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -40,7 +37,7 @@ async def _a_file_uploaded_by_a_member(session: AsyncSession) -> AsyncGenerator[
         create_user(f"{uuid.uuid4()}@rls.local", "Test1234!") for _ in range(3)
     )
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, owner):

@@ -1,9 +1,5 @@
-"""Process-wide technical settings, read once from the environment (``.env``).
-
-Infrastructure knobs — DB URLs, SMTP, cache TTLs — cached for the process lifetime. Changing
-one takes a restart, which is what a deployment-owned value should cost. Its sibling
-:mod:`apps.shared.settings.live` holds the other lifetime: admin-tunable, per-app, reloaded live.
-"""
+"""Technical settings: read once from the environment (``.env``) and cached; a change takes a
+restart, as a deployment-owned value should."""
 
 import os
 from functools import lru_cache
@@ -16,8 +12,7 @@ type PollSeconds = float
 
 
 class TechnicalSettings(BaseSettings):
-    # populate_by_name: `environment` carries a validation_alias, which would otherwise make it
-    # the one field settable only by its alias and not by its own name.
+    # populate_by_name: else `environment`, which has an alias, could not be set by its own name.
     model_config = SettingsConfigDict(
         env_file=os.getenv("ENV_FILE", ".env"), extra="ignore", populate_by_name=True
     )
@@ -32,57 +27,51 @@ class TechnicalSettings(BaseSettings):
     supabase_database_user_url: str
     supabase_database_admin_url: str = ""
     supabase_database_schema: str = "public"
-    # "production" activates the boot-time preflight gate (apps/shared/settings/preflight.py).
+    # "production" turns on the boot-time preflight gate.
     environment: str = Field(
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "LABASE_ENV"),
     )
     log_debug: bool = False
-    # Where a batch goes when Postgres refuses it: lines are rendered to stdout and appended to
-    # ``log_lines``, and only a failing write falls back to per-day JSON files here — a database
-    # outage is exactly when an operator still wants the log. Production points this at a real
-    # log volume. The env var keeps its FIREHOSE_ name, which a deploy already sets.
+    # Per-day files for the log batches Postgres refuses. Production points it at a real volume.
+    # (AGENTS: the log sink traces the machinery off the request's path)
     firehose_dir: str = ".cache/firehose"
     cookies_secure: bool = True
     rate_limit_enabled: bool = True
-    # How long a request waits on the counter store before failing open — connect, pool and query
-    # alike. Past it the request goes through unlimited, and the dependency verdict opens an issue.
+    # Past this wait on the counter store (connect, pool, query), the request goes through
+    # unlimited and the dependency verdict opens an issue.
     rate_limit_store_timeout_seconds: float = 2.0
-    # How long `Contribs.collect` waits on one provider — a down app can't break the page it
-    # contributes to, and a hang is exactly as "down" as a raise.
+    # Per provider in `Contribs.collect`: a hanging app is skipped like a failing one.
     contribs_provider_timeout_seconds: float = 2.0
-    # Behind a reverse proxy/LB, the socket peer is the proxy, so the real client sits in
-    # X-Forwarded-For. Off by default: trusting that header when nothing upstream strips it
-    # lets any caller spoof their IP (evading rate limits, poisoning logs). Turn on ONLY when a
-    # proxy we control sets it — then the left-most entry (the edge-observed client) is used.
+    # Use the left-most X-Forwarded-For entry as the client IP. Only behind a proxy we control:
+    # otherwise any caller can spoof its IP, evading rate limits and poisoning logs.
     trust_forwarded_for: bool = False
-    # Closed by default: no cross-origin access until CORS_ORIGINS lists the exact front-end
-    # origins that need it. "*" is honoured but forces credentials off (see cors_config).
+    # No cross-origin access until listed. "*" works but turns credentials off (see cors_config).
     cors_origins: list[str] = []
     settings_refresh_seconds: PollSeconds = 30  # re-read, for cross-instance freshness
-    task_worker_interval_seconds: PollSeconds = 1.0  # the task worker's claim poll
-    metrics_flush_seconds: PollSeconds = 60  # flush of the request accumulator
-    # Browser cache TTL for un-fingerprinted static files; fingerprinted ones (?v=…) are served
-    # immutable regardless. 0 → always revalidate (dev).
+    task_worker_interval_seconds: PollSeconds = 1.0
+    metrics_flush_seconds: PollSeconds = 60
+    # For un-fingerprinted static files; `?v=…` ones are immutable. 0 always revalidates (dev).
     static_cache_seconds: int = 3600
-    # At 0 the background writer stops, and the runtime log path drops lines rather than block.
-    firehose_flush_seconds: PollSeconds = 1.0  # drain of the log queue into ``log_lines``
-    # Deployed version (git SHA in Docker); drives error-tracking regression detection.
+    # Drain of the log queue into ``log_lines``. At 0 the drain stops and new lines are dropped.
+    firehose_flush_seconds: PollSeconds = 1.0
+    # Past this wait on a lock (a concurrent TRUNCATE), the batch goes to the day files. Above
+    # zero: to Postgres a ``lock_timeout`` of 0 means no timeout at all.
+    log_drain_lock_timeout_seconds: float = Field(default=2.0, ge=0.001)
+    # Git SHA in Docker; an issue seen again on a newer version regresses.
     app_version: str = "dev"
-    # These defaults target the local Supabase mail catcher (Mailpit); prod sets SMTP_* to any
-    # provider, and sending stays best-effort (see apps/shared/email.py). 127.0.0.1 rather than
-    # localhost keeps DNS out of every local connection.
+    # Defaults target the local mail catcher (Mailpit). 127.0.0.1, not localhost, keeps DNS out
+    # of local connections.
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 54325
     smtp_sender: str = "labase <noreply@labase.local>"
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_starttls: bool = False
-    # The catcher's HTTP API, beside its SMTP port: read by the e2e mailbox and `make doctor`.
+    # Mailpit's HTTP API, read by the e2e mailbox and `make doctor`.
     mailpit_url: str = "http://127.0.0.1:54324"
-    # Page length `scripts/backup_storage.py` requests per Storage `list` call while paging a
-    # folder to its end. `0` would never grow the offset past an empty page: a positive int
-    # rules that out at the type rather than a boot check only this script would run.
+    # Page length of `scripts/backup_storage.py`'s Storage listing. Positive: at 0 the paging
+    # never advances.
     backup_storage_page_size: PositiveInt = 1000
 
     @model_validator(mode="after")
@@ -98,8 +87,7 @@ class TechnicalSettings(BaseSettings):
 
 @lru_cache
 def get_technical_settings() -> TechnicalSettings:
-    # The one construction that passes nothing: pydantic-settings fills the required fields from
-    # the environment, while the generated __init__ advertises them as parameters. Kept as a
-    # suppression rather than a TYPE_CHECKING `__init__(**values)`, which would clear this line at
-    # the cost of checking test_preflight's nine explicit kwargs.
+    # pydantic-settings fills the required fields from the environment; the generated __init__
+    # still lists them as parameters. A TYPE_CHECKING `__init__(**values)` would clear this line
+    # but stop checking the explicit kwargs in test_preflight.
     return TechnicalSettings()  # pyright: ignore[reportCallIssue]

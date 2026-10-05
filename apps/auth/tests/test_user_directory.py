@@ -1,10 +1,5 @@
-"""Reading the auth directory — resolving user ids to emails for the console's screens.
-
-The console labels ids it finds in logs and events with the account's email. Those ids come from
-history, and history outlives the directory: an account can be gone, or its GoTrue record can be
-something the SDK's own models refuse to parse. Neither is a reason to fail the page that merely
-wanted a label, which is what these tests pin.
-"""
+"""Resolving user ids to emails for console labels: a gone or unparseable account never fails
+the page."""
 
 import uuid
 from types import SimpleNamespace
@@ -23,18 +18,14 @@ class _RequiresIdentityData(BaseModel):
 
 
 def _unparseable_record() -> ValidationError:
-    """The failure GoTrue produced for real: a user whose identity carries no ``identity_data``,
-    a field the SDK's pydantic model declares required. Built here the same way — by validating a
-    record that misses a required field — so the test breaks on the real exception type, not a
-    stand-in."""
+    """The real ``ValidationError`` of an identity without ``identity_data``."""
     with pytest.raises(ValidationError) as caught:
         _RequiresIdentityData.model_validate({})
     return caught.value
 
 
 def _directory(records: dict[uuid.UUID, str | Exception]) -> MagicMock:
-    """A stubbed GoTrue admin API: each id maps to the email it resolves to, or to the exception
-    reading it raises."""
+    """Each id maps to its email, or to the exception reading it raises."""
 
     def get_user_by_id(user_id: str) -> SimpleNamespace:
         record = records[uuid.UUID(user_id)]
@@ -49,11 +40,7 @@ def _directory(records: dict[uuid.UUID, str | Exception]) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_a_record_the_sdk_cannot_parse_blanks_only_that_id():
-    """Regression: this took down the whole Logs screen with a 500.
-
-    The batch resolves every id concurrently, so an exception escaping one of them propagates out
-    of the gather and fails the request — one unreadable account out of hundreds was enough. Only
-    ``AuthApiError`` was caught, and a malformed record raises a ``ValidationError`` instead."""
+    """One unreadable record must not fail the concurrent batch, hence the page."""
     healthy, malformed = uuid.uuid7(), uuid.uuid7()
     client = _directory({healthy: "ada@example.com", malformed: _unparseable_record()})
 
@@ -65,8 +52,6 @@ async def test_a_record_the_sdk_cannot_parse_blanks_only_that_id():
 
 @pytest.mark.asyncio
 async def test_an_id_the_directory_no_longer_knows_blanks_too():
-    """The case the code already handled: a deleted account, or a stale id read off an old log
-    line. It resolves to a blank label, never an error."""
     healthy, gone = uuid.uuid7(), uuid.uuid7()
     client = _directory(
         {healthy: "ada@example.com", gone: AuthApiError("user not found", 404, "user_not_found")}
@@ -78,9 +63,7 @@ async def test_an_id_the_directory_no_longer_knows_blanks_too():
     assert emails == {healthy: "ada@example.com", gone: ""}
 
 
-# A batch resolves concurrently, so whatever is wrong with the directory is wrong with every id at
-# once. That makes the *level* and the *count* of what it says two separate questions: a broken
-# directory has to reach the issues screen, and it has to reach it once.
+# A broken directory fails every id at once: it must open one issue, not one per id.
 
 
 @pytest.fixture(autouse=True)
@@ -92,8 +75,6 @@ def _empty_capture_queue():
 
 @pytest.mark.asyncio
 async def test_a_directory_that_is_down_is_one_issue_for_the_whole_batch():
-    """A line per failed id would file the same outage once per name on the screen — sixty
-    occurrences against one issue for a single page view. The batch reports once."""
     ids = [uuid.uuid7() for _ in range(3)]
     client = _directory({uid: ConnectionError("gotrue is unreachable") for uid in ids})
 
@@ -108,8 +89,6 @@ async def test_a_directory_that_is_down_is_one_issue_for_the_whole_batch():
 
 @pytest.mark.asyncio
 async def test_ids_the_directory_no_longer_knows_are_not_a_bug():
-    """A deleted account is the directory answering, and answering no is an ordinary outcome —
-    the console labels the id and moves on. Nothing to triage."""
     ids = [uuid.uuid7() for _ in range(2)]
     client = _directory({uid: AuthApiError("user not found", 404, "user_not_found") for uid in ids})
 

@@ -1,8 +1,5 @@
-"""Who may change the decks and their cards.
-
-Members read and study; owners write the catalogue. No route writes it, so these rules have the
-database door alone.
-"""
+"""Who may change decks and cards: owners; members read and study. No route writes them, so only
+the database is tested."""
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession

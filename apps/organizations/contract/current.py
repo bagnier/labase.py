@@ -1,13 +1,5 @@
-"""Organizations' public FastAPI dependencies — the current org, membership and settings.
-
-The sanctioned inter-context surface for org scoping: ``CurrentOrg`` resolves the
-``{org_handle}`` slug to an org the caller is a member of (RLS-gated), and the
-others derive from it (model, membership, owner gate). Other contexts also import
-``OrgRole`` / ``Membership`` from here rather than reaching into the domain layer.
-
-:func:`app_settings` lives here too (not in ``apps.shared``, which may not import
-contexts): an app's *effective settings for the request* need the very same org
-resolution when the request carries one.
+"""Org dependencies for other contexts: the current org from ``{org_handle}`` (RLS-gated), the
+membership, the owner gate, and :func:`app_settings`, which needs the same org resolution.
 """
 
 from collections.abc import Awaitable, Callable
@@ -37,12 +29,8 @@ CurrentOwnerMembership = Annotated[Membership, Depends(require_current_owner)]
 
 
 def app_settings(app_name: str) -> Callable[..., Awaitable[SettingsView]]:
-    """The one way a handler reads ``app_name``'s settings: a resolver of its *effective*
-    values for the request. Under ``/{org_handle}`` with an authenticated member, server values
-    overlaid with that org's console overrides (read through the request's RLS session — same
-    403 and reserved-slug guards as ``CurrentOrg``); on any other route (anonymous included),
-    the plain server values. No first-org fallback: no org named in the URL means no override
-    applies.
+    """A dependency giving ``app_name``'s effective settings: under ``/{org_handle}`` for a
+    member, with the org's overrides (same guards as ``CurrentOrg``); elsewhere, the server values.
 
     Usage, in an app's ``contract/current.py``::
 

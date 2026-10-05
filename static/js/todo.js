@@ -1,5 +1,4 @@
-// Inline rename editor for todo rows. These are invoked from inline on* handlers in
-// todo/_list_fragment.html, so they must be global — hence the window.* assignments.
+// Inline rename for todo rows; global for the on* handlers in todo/_list_fragment.html.
 window.startEdit = (id) => {
   const span = document.querySelector(`[data-title-id="${id}"]`);
   const form = document.getElementById(`rename-form-${id}`);

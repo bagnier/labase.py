@@ -4,7 +4,6 @@ from datetime import datetime
 from sqlalchemy import select
 
 from apps.calendar.domain.models import CalendarEvent
-from apps.shared import clock
 from apps.shared.persistence.repository import OrgScopedRepository
 
 
@@ -12,18 +11,16 @@ class CalendarEventRepository(OrgScopedRepository[CalendarEvent]):
     model = CalendarEvent
     default_order = CalendarEvent.starts_at.asc()
 
-    async def upcoming(self) -> list[CalendarEvent]:
-        """Events that have not started yet, soonest first — drives the dashboard overview."""
-        return list(
-            await self.session.scalars(
-                select(CalendarEvent)
-                .where(
-                    CalendarEvent.org_id == self.org_id,
-                    CalendarEvent.starts_at >= clock.now(),
-                )
-                .order_by(CalendarEvent.starts_at)
-            )
+    async def upcoming(self, now: datetime, limit: int) -> list[CalendarEvent]:
+        """The `limit` soonest events from `now`, ties broken on `id`. `now` is the caller's, who
+        counts upcoming events by the same instant."""
+        query = (
+            select(CalendarEvent)
+            .where(CalendarEvent.org_id == self.org_id, CalendarEvent.starts_at >= now)
+            .order_by(CalendarEvent.starts_at, CalendarEvent.id)
+            .limit(limit)
         )
+        return list(await self.session.scalars(query))
 
     async def add(
         self,

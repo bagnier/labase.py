@@ -91,11 +91,11 @@ from apps.shared.http import json_and_html, wants_json
 from apps.shared.http.templates import templates
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.integration.slugs import validate_handle
-from apps.shared.logs.dependency import log_dependency_failure
+from apps.shared.logs.dependency import is_refusal, log_dependency_failure
 from apps.shared.persistence.database import AdminSession
 from apps.shared.persistence.storage import admin_storage, bucket
 from apps.shared.settings.env import get_technical_settings
-from apps.shared.settings.live import SettingsView, get_settings
+from apps.shared.settings.live import SettingsView
 
 log = structlog.get_logger(__name__)
 
@@ -105,9 +105,7 @@ _AVATAR_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 _AVATAR_MEDIA = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
 _AVATAR_MAX_BYTES = 2 * 1024 * 1024
 
-# Where the 2FA enrolment secret waits: generated once per POST, it must survive the
-# post/redirect/get to /profile, so it is parked in a short-lived cookie — the MFA step-up and OAuth
-# PKCE idiom — rather than re-rendered at the POST URL.
+# The 2FA enrolment secret survives the post/redirect/get in a short-lived cookie.
 _ENROLLMENT_COOKIE = "twofa_enrollment"
 _ENROLLMENT_MAX_SECONDS = 300
 
@@ -136,13 +134,8 @@ def _encode_enrollment(enrollment: TotpEnrollment) -> str:
 
 
 def _decode_enrollment(raw: str) -> dict | None:
-    """The enrollment handed back by the form, or ``None`` when it is not one.
-
-    ``ValueError`` and nothing wider: bad base64 (``binascii.Error``), undecodable bytes
-    (``UnicodeDecodeError``) and malformed JSON (``JSONDecodeError``) are all subclasses of it, so
-    the narrow clause covers every way a tampered or stale cookie can fail — while an
-    ``AttributeError`` from a bug of ours goes on raising instead of reading as "malformed".
-    """
+    """The enrolment from the cookie, or ``None`` if malformed. ``ValueError`` covers bad
+    base64, bytes and JSON; a bug of ours still raises."""
     try:
         return json.loads(base64.urlsafe_b64decode(raw.encode()).decode())
     except ValueError:
@@ -156,12 +149,12 @@ async def _get_profile_repo(session: RlsSession) -> ProfileRepository:
 ProfileRepo = Annotated[ProfileRepository, Depends(_get_profile_repo)]
 
 
-_ACTIVITY_PAGE = 25  # facts per activity view; "Load older" grows the window by this step
-_ACTIVITY_MAX = 250  # a personal feed is bounded — cap the growable window
+_ACTIVITY_PAGE = 25  # facts per "Load older" step
+_ACTIVITY_MAX = 250
 
 
 def _parse_dt(value: str | None) -> datetime | None:
-    """A date/datetime from the toolbar's date inputs, or None when blank/unparseable."""
+    """``None`` when blank or unparseable."""
     if not value:
         return None
     try:
@@ -171,7 +164,7 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 
 def _activity_query(q: str, app: str, from_dt: str, to_dt: str) -> str:
-    """The current filter as a ``&``-prefixed querystring, to carry across a Load-older click."""
+    """The filter as a ``&``-prefixed query string, for "Load older"."""
     raw = {"q": q, "app": app, "from_dt": from_dt, "to_dt": to_dt}
     params = {k: v for k, v in raw.items() if v}
     return f"&{urlencode(params)}" if params else ""
@@ -188,13 +181,8 @@ async def _activity_context(
     to_dt: str = "",
     limit: int = _ACTIVITY_PAGE,
 ) -> dict:
-    """The day-grouped activity feed under the given filters — shared by the profile page's
-    initial render and the ``/profile/activity`` HTMX fragment.
-
-    Reads on the request's own RLS session: the ``business_events`` policy scopes the journal to the
-    reader (own actions + their orgs), so ``user_id`` narrows to the user's own journal. Each entry
-    deep-links to the concerned entity, resolving the record's org to a handle from the user's own
-    orgs (``handles``). ``who`` is dropped — every fact is the viewer's."""
+    """The user's own facts under the filters, on the RLS session, with entity links through the
+    user's org ``handles``; no ``who``."""
     records = await EventRepository(session).search(
         user_id=user_id,
         app=app or None,
@@ -222,18 +210,16 @@ async def _activity_context(
 
 
 async def _profile_context(
-    request: Request, session: RlsSession, current_user: CurrentUser, repo: ProfileRepository
+    request: Request,
+    session: RlsSession,
+    current_user: CurrentUser,
+    repo: ProfileRepository,
+    *,
+    profile_settings: SettingsView,
+    users_settings: SettingsView,
 ) -> dict:
-    """The page context, assembled outside DI: profile routes carry no org, so the server view is
-    the effective one.
-
-    The verified-factor lookup and the passkey list are two independent GoTrue round-trips that gate
-    display state only, touching neither the DB session nor each other. They are fired up front so
-    they overlap each other *and* the sequential DB work below, rather than serializing three waits
-    on the critical path of the site's busiest HTML page.
-    """
-    profile_settings = get_settings("profile").view()
-    users_settings = get_settings("users").view()
+    """The page context. The two GoTrue calls (verified factor, passkeys) start first, to
+    overlap each other and the database work."""
     access_token = request.cookies.get("access_token", "")
 
     two_factor_enabled = bool(users_settings.two_factor_enabled)
@@ -258,7 +244,6 @@ async def _profile_context(
         counts = await EventRepository(session).daily_counts(user_id=current_user.id)
         activity = await _activity_context(session, current_user.id, handles)
     except BaseException:
-        # Don't leave the in-flight GoTrue calls dangling if the DB work fails.
         for task in (twofa_task, passkeys_task):
             if task is not None:
                 task.cancel()
@@ -269,7 +254,7 @@ async def _profile_context(
         try:
             twofa_active = bool(await twofa_task)
         except Exception as exc:
-            # Unknown is not "off": the section would claim 2FA is disabled. Say nothing instead.
+            # Unknown is not "off": the section says nothing.
             log_dependency_failure(log, "profile.twofa_lookup_failed", exc)
             two_factor_enabled = False
     passkeys: list[dict] = []
@@ -277,7 +262,7 @@ async def _profile_context(
         try:
             passkeys = await passkeys_task
         except PasskeyError:
-            passkeys_enabled = False  # server-side feature off: hide the section
+            passkeys_enabled = False
     now = clock.now()
     return {
         "user": current_user,
@@ -307,13 +292,22 @@ async def _profile_error(
     current_user: CurrentUser,
     repo: ProfileRepository,
     *,
+    profile_settings: SettingsView,
+    users_settings: SettingsView,
     key: str,
     message: str,
     status_code: int = 400,
 ) -> Response:
     if wants_json(request):
         return JSONResponse({"detail": message}, status_code=status_code)
-    ctx = await _profile_context(request, session, current_user, repo)
+    ctx = await _profile_context(
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
+    )
     ctx[key] = message
     return templates.TemplateResponse(request, "profile.html", ctx, status_code=status_code)
 
@@ -325,6 +319,7 @@ async def profile_page(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if wants_json(request):
         profile = await repo.get_with_auto_handle(
@@ -333,7 +328,14 @@ async def profile_page(
         if profile is None:
             return JSONResponse({"id": None, "handle": None, "email": current_user.email})
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(request, session, current_user, repo)
+    ctx = await _profile_context(
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
+    )
     flash = request.query_params.get("flash")
     if flash in _PROFILE_FLASHES:
         key, message = _PROFILE_FLASHES[flash]
@@ -344,7 +346,6 @@ async def profile_page(
         ctx["twofa_enrollment"] = enrollment
     response = templates.TemplateResponse(request, "profile.html", ctx)
     if enrollment_raw:
-        # One-shot: the enrolment secret is shown once, then cleared.
         response.delete_cookie(_ENROLLMENT_COOKIE, path="/profile")
     return response
 
@@ -360,8 +361,7 @@ async def profile_activity(
     to_dt: str = "",
     limit: int = _ACTIVITY_PAGE,
 ) -> Response:
-    """The day-grouped activity feed as an HTMX fragment — search, type filter, date range and
-    Load-older all re-render it. API callers get the same feed as JSON."""
+    """The activity feed fragment, re-rendered by its filters and "Load older"; JSON too."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     context = await fullpage_context(session, current_user)
     handles = {o.id: o.handle for o in context.get("org_nav", [])}
@@ -381,6 +381,8 @@ async def password_change(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     current_password, new_password = body.current_password, body.new_password
     error: str | None = None
@@ -393,11 +395,22 @@ async def password_change(
         except WrongPassword:
             error = "Current password is incorrect."
         except PasswordUpdateError as e:
-            error = str(e)
+            if is_refusal(e):
+                error = str(e)
+            else:
+                log_dependency_failure(log, "profile.password_change_failed", e)
+                error = "Password update failed. Please try again."
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="password_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="password_error",
+            message=error,
         )
 
     await events.emit(PasswordChanged(user_id=current_user.id), session)
@@ -414,6 +427,7 @@ async def email_change(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.email_change_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -429,11 +443,22 @@ async def email_change(
         except WrongPassword:
             error = "Current password is incorrect."
         except EmailChangeError as e:
-            error = str(e)
+            if is_refusal(e):
+                error = str(e)
+            else:
+                log_dependency_failure(log, "profile.email_change_failed", e)
+                error = "Email change failed. Please try again."
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="email_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="email_error",
+            message=error,
         )
 
     await events.emit(EmailChangeRequested(user_id=current_user.id, new_email=new_email), session)
@@ -443,16 +468,13 @@ async def email_change(
 
 
 # ── Passkeys (WebAuthn) ─────────────────────────────────────────────────────────
-# JSON-only: the profile page's JS drives navigator.credentials.create() between
-# the two calls; deletion is a plain form for the no-JS path.
+# JSON: the page's script calls navigator.credentials.create() between the two. Deletion is a
+# plain form.
 
 
 def _session_token(current_user: AuthenticatedUser) -> str:
-    """The caller's live GoTrue token — the one `CurrentUser` resolved, refreshed included.
-
-    A principal authenticated by an org API key holds no GoTrue session (`access_token` is empty),
-    and GoTrue's user-scoped endpoints below are meaningless for it: these surfaces answer 404, as
-    they do when the feature is switched off."""
+    """The caller's GoTrue token; an API-key principal has none, and gets a 404 as when the
+    feature is off."""
     if not current_user.access_token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return current_user.access_token
@@ -511,6 +533,7 @@ async def passkey_delete(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
     users_settings: UsersSettings,
 ) -> Response:
     access_token = _ensure_passkeys(users_settings, current_user)
@@ -518,7 +541,14 @@ async def passkey_delete(
         await delete_passkey(access_token, str(passkey_id))
     except PasskeyError as e:
         return await _profile_error(
-            request, session, current_user, repo, key="passkey_error", message=str(e)
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="passkey_error",
+            message=str(e),
         )
     await events.emit(PasskeyRemoved(user_id=current_user.id, entity_id=passkey_id), session)
     if wants_json(request):
@@ -532,6 +562,7 @@ async def twofa_enroll(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
     users_settings: UsersSettings,
 ) -> Response:
     access_token = _ensure_two_factor(users_settings, current_user)
@@ -539,7 +570,14 @@ async def twofa_enroll(
         enrollment = await enroll_totp(access_token)
     except TotpError as e:
         return await _profile_error(
-            request, session, current_user, repo, key="twofa_error", message=str(e)
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="twofa_error",
+            message=str(e),
         )
     if wants_json(request):
         return JSONResponse(
@@ -569,6 +607,7 @@ async def twofa_verify(
     current_user: CurrentUser,
     session: RlsSession,
     repo: ProfileRepo,
+    profile_settings: ProfileSettings,
     users_settings: UsersSettings,
 ) -> Response:
     access_token = _ensure_two_factor(users_settings, current_user)
@@ -579,7 +618,14 @@ async def twofa_verify(
     except TotpError:
         error = "That code did not work. Try the next one from your app."
         return await _profile_error(
-            request, session, current_user, repo, key="twofa_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="twofa_error",
+            message=error,
         )
     await events.emit(TwoFactorEnabled(user_id=current_user.id), session)
     response: Response = (
@@ -587,7 +633,7 @@ async def twofa_verify(
         if wants_json(request)
         else _profile_redirect("twofa_enabled")
     )
-    # Enrolled, the account's aal1 token is refused: keep the aal2 one the code just earned.
+    # Once enrolled, aal1 is refused: keep the aal2 token the code earned.
     set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     return response
 
@@ -602,6 +648,7 @@ async def account_delete(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.account_deletion_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -616,13 +663,9 @@ async def account_delete(
             error = "Current password is incorrect."
 
     if error is None:
-        # Serializes against a concurrent console revoke (or another self-deletion) racing the
-        # same invariant through a different gate (issue #36) — held on admin_session, released
-        # at its commit below.
+        # The last-admin lock, until admin_session commits.
         await lock_last_admin_guard(admin_session)
-        # The JWT's ``is_admin`` claim can be stale (a promotion lands in it only on the next
-        # sign-in), so the target's actual status is read fresh, the same way the console's own
-        # revoke path does.
+        # Read fresh: the token's ``is_admin`` changes only at the next sign-in.
         admins = await list_server_admins()
         target_is_admin = any(u.user_id == current_user.id and u.can_act for u in admins)
         try:
@@ -636,12 +679,18 @@ async def account_delete(
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="deletion_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="deletion_error",
+            message=error,
         )
 
     await events.emit(AccountDeleted(user_id=current_user.id, entity_id=current_user.id), session)
-    # The UserDeleted fact rides the admin session — it commits iff the deletion does. Its forget
-    # consumers (organizations, profile) then run asynchronously off the listener, by user id.
+    # UserDeleted commits with the deletion; organizations and profile clean up after.
     await events.emit(
         UserDeleted(user_id=current_user.id, entity_id=current_user.id), session=admin_session
     )
@@ -667,6 +716,7 @@ async def avatar_upload(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -678,7 +728,14 @@ async def avatar_upload(
 
     if error is not None:
         return await _profile_error(
-            request, session, current_user, repo, key="avatar_error", message=error
+            request,
+            session,
+            current_user,
+            repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
+            key="avatar_error",
+            message=error,
         )
 
     path = f"avatars/{current_user.id}.{ext}"
@@ -706,8 +763,7 @@ async def avatar_image(
     session: RlsSession,
     profile_settings: ProfileSettings,
 ) -> Response:
-    """Streams the avatar to whoever may read the profile — its owner and their co-members, a
-    policy's decision: a profile RLS hides is a 404, not a 403 that would confirm the account."""
+    """The avatar, for whoever RLS lets read the profile (owner, co-members); else a 404."""
     if not profile_settings.avatar_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     profile = await ProfileRepository(session).get_by_user_id(user_id)
@@ -728,6 +784,7 @@ async def profile_update(
     session: RlsSession,
     repo: ProfileRepo,
     profile_settings: ProfileSettings,
+    users_settings: UsersSettings,
 ) -> Response:
     if not profile_settings.handle_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -745,6 +802,8 @@ async def profile_update(
             session,
             current_user,
             repo,
+            profile_settings=profile_settings,
+            users_settings=users_settings,
             key="error",
             message=message,
             status_code=status_code,
@@ -756,6 +815,13 @@ async def profile_update(
         await events.emit(HandleChanged(user_id=current_user.id, new_handle=handle), session)
     if wants_json(request):
         return JSONResponse(ProfileRead.model_validate(profile).model_dump(mode="json"))
-    ctx = await _profile_context(request, session, current_user, repo)
+    ctx = await _profile_context(
+        request,
+        session,
+        current_user,
+        repo,
+        profile_settings=profile_settings,
+        users_settings=users_settings,
+    )
     ctx["success"] = "Profile updated."
     return templates.TemplateResponse(request, "profile.html", ctx)

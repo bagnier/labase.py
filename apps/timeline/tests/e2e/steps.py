@@ -28,8 +28,7 @@ def step_seed_event_user(driver, event, email):
     driver.seed_event_by_user(event, email)
 
 
-# Anchored regex (not parse): the "at level" variants below share this prefix, and parse's
-# fields greedily swallow the inner quotes — the `[^"]+` + `$` keeps each sentence unambiguous.
+# Anchored regex, not parse: its greedy fields would swallow the "at level" variants below.
 @given(parsers.re(r'a request log entry "(?P<event>[^"]+)" from org "(?P<org>[^"]+)"$'))
 def step_seed_request_org(driver, event, org):
     driver.seed_request_from_org(event, org)
@@ -60,8 +59,7 @@ def step_seed_error_leveled(driver, event, level, org):
     driver.seed_error_from_org(event, org)
 
 
-# Anchored regex, for the reason the request-log steps above are: the dated variant below adds a
-# trailing clause, and parse's greedy fields would let this sentence swallow it whole.
+# Anchored regex, like above: the dated variant below adds a trailing clause.
 _CORRELATED = (
     r'request "(?P<rid>[^"]+)" in org "(?P<org>[^"]+)" recorded a request log, '
     r'a business event "(?P<event>[^"]+)", and a captured error "(?P<error>[^"]+)"'

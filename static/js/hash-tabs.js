@@ -1,12 +1,6 @@
-// Deep-linkable daisyUI tabs — keep the open tab in the URL hash so a tab is shareable and
-// survives a reload. Opt in by marking the `role="tablist"` with `data-hash-tabs` and giving
-// each `<input role="tab">` a `data-tab="<slug>"`.
-//
-//   - `#<slug>` selects the matching tab, on first load AND on later hashchange (so a link works
-//     whether the page is opened fresh or already visible). With no hash, the server-rendered
-//     default tab wins (e.g. the tab reopened to show a form error after a POST).
-//   - Picking a tab rewrites the hash in place with `replaceState`, so it does NOT add a history
-//     entry: the browser Back button leaves the page rather than cycling through tabs.
+// The open tab lives in the URL hash. Opt in with `data-hash-tabs` on the `role="tablist"` and
+// `data-tab="<slug>"` on each `<input role="tab">`. Without a hash, the server's tab wins (e.g.
+// the one showing a form error).
 (() => {
   const currentHash = () => decodeURIComponent(location.hash.replace(/^#/, ""));
 

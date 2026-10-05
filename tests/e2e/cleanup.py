@@ -1,4 +1,4 @@
-"""Browser-test teardown helpers — full table truncation and leftover data purge."""
+"""Browser-test teardown: truncation and leftover data purge."""
 
 import asyncio
 import threading
@@ -46,8 +46,7 @@ def _run_blocking(coro_factory):
     return result[0]
 
 
-# Excluded from the blanket TRUNCATE: the targeted DELETE below empties it while sparing a
-# recurring singleton, which a full wipe would leave with no worker to re-enqueue it.
+# Emptied by a DELETE below that spares the recurring rows: nothing would replant them.
 _KEEP_TABLES = ["task_queue"]
 
 _TABLES_QUERY = """
@@ -61,20 +60,15 @@ select c.relname
 
 
 def truncate_app_tables() -> None:
-    """Truncates every table of the schema — used in browser test teardown.
-
-    Enumerated from the catalog rather than a hand-kept list: a fixed list survives exactly until
-    the next migration adds a table nothing else references, at which point ``CASCADE`` can never
-    reach it (issue #65).
-    """
+    """Truncate every table of the schema, read from the catalog: ``CASCADE`` misses a new
+    table nothing references."""
 
     s = get_technical_settings().supabase_database_schema
 
     async def _truncate() -> None:
         engine = _service_engine()
         try:
-            # In-flight background writes (audit, metrics flush) can turn the
-            # multi-table TRUNCATE into a deadlock victim — transient, retry.
+            # A background write can make the TRUNCATE a deadlock victim: retry.
             for attempt in range(3):
                 try:
                     async with engine.begin() as conn:
@@ -84,9 +78,7 @@ def truncate_app_tables() -> None:
                             "TRUNCATE TABLE " + ", ".join(f"{s}.{t}" for t in tables) + " CASCADE"
                         )
                         await conn.execute(text(truncate))
-                        # One-shot tasks (e.g. queued emails) must not leak across
-                        # scenarios; recurring singletons stay — they are only
-                        # replanted at app startup.
+                        # Recurring rows stay: only startup replants them.
                         await conn.execute(
                             text(f"DELETE FROM {s}.task_queue WHERE recurring_seconds IS NULL")
                         )
@@ -109,8 +101,7 @@ def truncate_app_tables() -> None:
 
 
 def truncate_tables(names: list[str]) -> None:
-    """Committed TRUNCATE of specific tables — for data written outside the API driver's
-    rolled-back transaction (e.g. audit/issue rows persisted via a background admin session)."""
+    """Truncate ``tables``, for rows committed outside the API driver's transaction."""
     s = get_technical_settings().supabase_database_schema
     stmt = "TRUNCATE TABLE " + ", ".join(f"{s}.{t}" for t in names) + " CASCADE"
 
@@ -126,13 +117,8 @@ def truncate_tables(names: list[str]) -> None:
 
 
 def reset_app_switches() -> None:
-    """Clears persisted ``enabled`` overrides so feature switches don't leak across runs.
-
-    Each app's ``mount()`` reads its ``enabled`` switch once, at process start (see
-    apps.shared.settings.live) — there's no live unmount. So a leftover ``enabled = false`` in the
-    shared dev/test DB would keep an app unmounted for the whole suite, until the next process
-    start. Called from ``pytest_configure``, before any test module imports ``apps.main``.
-    """
+    """Delete stored ``enabled`` switches before ``apps.main`` is imported: mount reads them once,
+    and a leftover ``false`` would unmount an app for the whole run."""
 
     async def _reset() -> None:
         engine = _service_engine()
@@ -150,14 +136,8 @@ _SEEDING_KEY = "seed_welcome_content"
 
 
 def disable_welcome_seeding() -> None:
-    """Turn welcome seeding off for the whole run, the way an admin would.
-
-    Starter rows in every new organisation would break the assertions of every scenario that
-    counts what it created itself, so the suite runs with them off — and the scenarios that
-    observe the seeding chain turn it back on from the console. Called from ``pytest_configure``,
-    before any test module imports ``apps.main``: ``mount()`` reads the value once, and this
-    write has to already be there.
-    """
+    """Turn welcome seeding off for the run, as an admin would, before ``apps.main`` is imported:
+    starter rows would skew every count. Seeding scenarios turn it back on."""
 
     async def _disable() -> None:
         engine = _service_engine()
@@ -177,7 +157,7 @@ def disable_welcome_seeding() -> None:
 
 
 async def purge_leftover_test_data() -> None:
-    """Deletes test data that survives teardowns (from test email domains)."""
+    """Delete what survives teardowns (test email domains)."""
     engine = _service_engine()
     try:
         async with engine.begin() as conn:
