@@ -10,6 +10,9 @@ the event loop exists and from worker threads (auth's ``asyncio.to_thread`` GoTr
 ``deque.append`` is still safe. :class:`CaptureDrain` hands each exception to the trackers
 registered with :func:`on_captured` (``apps/issues``). Off the event bus: an exception is not a
 business fact.
+
+A capture no tracker took rejoins the back of the queue and ends the tick: a tracker that is
+down is probed with one capture per tick, and the outage adds only the tracker's one failure.
 """
 
 import asyncio
@@ -48,6 +51,15 @@ class _Overflow:
 
 
 _overflow = _Overflow()
+
+
+def _append(captured: ExceptionCaptured) -> None:
+    """Append, counting what a full queue sheds. Shared by the processor and the drain's retry;
+    it does not mark, since the retried exception is marked already."""
+    if len(_QUEUE) == _QUEUE.maxlen:
+        _overflow.dropped += 1
+    _QUEUE.append(captured)
+
 
 # Set while the drain delivers, so a tracker's own logging is not captured again.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
@@ -93,9 +105,7 @@ def _enqueue(exc: BaseException, context: dict[str, Any]) -> None:
     # Some exceptions take no attribute; capture them anyway, at the risk of twice.
     with contextlib.suppress(AttributeError, TypeError):
         setattr(exc, _CAPTURED, True)
-    if len(_QUEUE) == _QUEUE.maxlen:
-        _overflow.dropped += 1
-    _QUEUE.append(ExceptionCaptured(exc=exc, context=context))
+    _append(ExceptionCaptured(exc=exc, context=context))
 
 
 def capture_processor(
@@ -189,9 +199,11 @@ class CaptureDrain:
                 break
             token = _capturing.set(True)
             try:
+                taken = False
                 for tracker in _trackers:
                     try:
                         await tracker(captured)
+                        taken = True
                     except BaseException as tracker_exc:
                         # Skip whatever a tracker raises, ``CancelledError`` included, except a
                         # real cancellation of this task: ``stop()`` would hang on it.
@@ -205,6 +217,17 @@ class CaptureDrain:
                         _report_tracker_failure(tracker, tracker_exc, captured.context)
                     else:
                         _report_tracker_recovery(tracker)
+                if _trackers and not taken:
+                    # Postgres down is a tracker raising, not a capture that stops mattering: kept
+                    # for the next tick's retry rather than lost with the outage it would explain.
+                    # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
+                    # already, so the marking path would read the retry as a duplicate and drop it.
+                    # Bound like any other append: a concurrent request can fill the freed slot
+                    # while the tracker awaits, and the eviction that follows counts the same way.
+                    _append(captured)
+                    # And it ends the tick: what is still queued behind it would only cost the
+                    # tracker that is down one more failing call each, every tick of the outage.
+                    break
             finally:
                 _capturing.reset(token)
 

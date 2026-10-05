@@ -5,14 +5,11 @@ Mount registers providers on ``host.contribs``, which is :data:`contribs` in pro
 code collects on :data:`contribs` directly.
 """
 
-import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 import structlog
-
-from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 
@@ -33,22 +30,20 @@ class Contribs:
         return tuple(self._providers.get(query_type, ()))
 
     async def collect(self, query: object) -> list[Any]:
-        """Run every provider of the query's exact type, in turn; one that raises or exceeds
-        ``contribs_provider_timeout_seconds`` is logged as a bug and skipped.
+        """Run every provider of the query's exact type, in turn; one that raises is logged as a
+        bug and skipped.
 
-        Providers share the query's session: each runs in a savepoint, so its SQL error or
-        timeout does not abort the caller's transaction.
+        Providers share the query's session: each runs in a savepoint, so its SQL error does not
+        abort the caller's transaction.
         """
-        timeout_seconds = get_technical_settings().contribs_provider_timeout_seconds
         session = getattr(query, "session", None)
         results: list[Any] = []
         for provider in self._providers[type(query)]:
             try:
                 if session is None:
-                    async with asyncio.timeout(timeout_seconds):
-                        results.append(await provider(query))
+                    results.append(await provider(query))
                 else:
-                    async with session.begin_nested(), asyncio.timeout(timeout_seconds):
+                    async with session.begin_nested():
                         results.append(await provider(query))
             except Exception:
                 log.exception(

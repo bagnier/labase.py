@@ -104,3 +104,28 @@ def step_assert_todo_dashboard_badges(driver, badges):
 @then(parsers.parse('"{title}" is not in that todo list'))
 def step_assert_todo_hidden(driver, title):
     driver.assert_todo_hidden_from_view(title)
+
+
+@when(parsers.parse('they tab to the edit button of "{title}"'))
+def step_tab_to_edit_button(driver, title):
+    driver.tab_to_todo_edit_button(title)
+
+
+@when(parsers.parse('they tab to the delete button of "{title}"'))
+def step_tab_to_delete_button(driver, title):
+    driver.tab_to_todo_delete_button(title)
+
+
+@then("the focused button is visible")
+def step_assert_focused_button_visible(driver):
+    driver.assert_focused_control_visible()
+
+
+@when("they press Enter")
+def step_press_enter(driver):
+    driver.press_enter()
+
+
+@then(parsers.parse('the rename field for "{title}" holds keyboard focus'))
+def step_assert_rename_field_focused(driver, title):
+    driver.assert_rename_field_focused(title)

@@ -18,17 +18,17 @@ def main() -> int:
     # Runs on the host, where the app container's `host.docker.internal` does not resolve.
     apply_host_overrides(Path(os.getenv("ENV_FILE", ".env")))
     settings = get_technical_settings()
-    errors, warnings = check_production(settings)
+    errors, findings = check_production(settings)
 
-    for detail in warnings:
-        print(f"  warn:  {detail}")
+    for detail in findings:
+        print(f"  finding: {detail}")
     for detail in errors:
-        print(f"  ERROR: {detail}")
+        print(f"  ERROR:   {detail}")
 
     if errors:
         print(f"\npreflight: {len(errors)} blocking error(s) — not production-ready.")
         return 1
-    print(f"\npreflight: OK — {len(warnings)} warning(s).")
+    print(f"\npreflight: OK — {len(findings)} finding(s).")
     return 0
 
 
