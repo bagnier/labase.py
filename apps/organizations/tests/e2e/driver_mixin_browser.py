@@ -10,8 +10,7 @@ from tests.e2e.drivers.browser_base import _PASSWORD, _VISITOR, BrowserBase
 
 class OrgBrowserMixin(BrowserBase):
     if TYPE_CHECKING:
-        # Brought to the composed driver by the auth mixin; declared here so the borrowing is
-        # part of this mixin's contract instead of a suppression at the call site.
+        # Provided by the auth mixin.
         def sign_in(self, email: str, password: str) -> None: ...
 
     _org_list_response: list[dict] | None = None
@@ -31,8 +30,7 @@ class OrgBrowserMixin(BrowserBase):
         super().reset_session()
 
     def _read_org_cards_from_profile(self, page: Page) -> list[dict]:
-        # The org list is what the server holds now — a membership granted or an account deleted
-        # since this page rendered is exactly what these readers are looking for.
+        # Reloaded: a membership or deletion since the render is what these readers look for.
         self.reach_profile(page, fresh=True)
         cards = page.locator("[data-organisation-card]").all()
         result = []
@@ -46,7 +44,6 @@ class OrgBrowserMixin(BrowserBase):
     def _fetch_orgs_for(self, email: str) -> list[dict]:
         if email == getattr(self, "primary_email", ""):
             return self._read_org_cards_from_profile(self.page)
-        # That actor's own browser, left on the page their sign-in landed on.
         return self._read_org_cards_from_profile(self.page_for(email))
 
     def _active_slug(self) -> str:
@@ -58,19 +55,14 @@ class OrgBrowserMixin(BrowserBase):
         return self.active_org_handle
 
     def _walk_to_members(self, slug: str, target: Page) -> None:
-        """The way anyone in the org gets to the member list: the org dashboard, then its Members
-        card — the one link to that screen, owner or not."""
+        """Dashboard → Members card."""
         self.follow_org_nav(slug, "dashboard", target)
         with target.expect_navigation(wait_until="load"):
             target.locator(f"a[href='/{slug}/members']").first.click()
 
     def _goto_members(self, page: Page | None = None, handle: str | None = None) -> Page:
-        """The member list as the server renders it, every time. Never the DOM a swap left: the
-        controls read here decide what this driver does next — a missing Remove means the server
-        is asked to refuse instead — and a stale row would send it down the wrong branch and pass.
-
-        Already on the list, that read is a reload; from anywhere else, the walk in is the read.
-        """
+        """The member list freshly rendered, never a swap's leftover: its controls decide the
+        driver's next branch."""
         target = page if page is not None else self.page
         slug = handle or self._active_slug()
         self.be_on(
@@ -84,11 +76,8 @@ class OrgBrowserMixin(BrowserBase):
         return users[0].id
 
     def _probe_blocked(self, method: str, path: str, **fetch_kwargs) -> None:
-        """The owner-only UI control is hidden for the acting user. UI-hiding alone is
-        not proof of server enforcement, so fire the request the control would have
-        triggered — from the acting user's authenticated context — and store the
-        response so assert_forbidden can require the server itself to reject it.
-        """
+        """The control is hidden; send its request anyway, for assert_forbidden to require the
+        server's refusal."""
         self.last_response = self.page.request.fetch(
             f"{self.base_url}{path}", method=method, **fetch_kwargs
         )
@@ -120,7 +109,7 @@ class OrgBrowserMixin(BrowserBase):
         slug = org_name.lower().replace(" ", "-")
         owner = f"owner-{slug}@example.com"
         self.context_for(owner)
-        owner_page = self.page_for(owner)  # their own browser, where their sign-in left it
+        owner_page = self.page_for(owner)
         handle = self._own_org_handle(owner_page, slug)
         self._rename_org(owner_page, handle, org_name)
         token = self._invite_and_read_token(owner_page, handle, email)
@@ -178,15 +167,13 @@ class OrgBrowserMixin(BrowserBase):
         assert org_name not in names, f"{org_name!r} should be absent but found in: {names}"
 
     def assert_org_absent_for(self, email: str, org_name: str) -> None:
-        """Named observer: the org is gone for someone *other* than whoever acted last — which is
-        the whole point when the actor deleted their own account."""
+        """Seen by a named observer: the actor may have deleted their own account."""
         names = [o["name"] for o in self._fetch_orgs_for(email)]
         assert org_name not in names, f"{org_name!r} should be absent for {email}, got: {names}"
 
     def rename_org(self, new_name: str) -> None:
         slug = self._active_slug()
-        # Settings is owner-only, sidebar entry included: a member is offered no way in, so the
-        # server itself has to be the one refusing the request the form would have sent.
+        # A member has no way in: the server must refuse the form's request.
         if self.page.locator(f"aside a[href='/{slug}/settings']").count() == 0:
             self._probe_blocked("PATCH", f"/{slug}", form={"name": new_name})
             return
@@ -201,8 +188,7 @@ class OrgBrowserMixin(BrowserBase):
         )
 
     def try_create_org(self, name: str) -> None:
-        # Fire the create request from the acting user's authenticated context and capture
-        # the response, so the server itself must enforce the owned-org limit.
+        # Sent directly, so the server enforces the owned-org limit.
         self.last_response = self.page.request.fetch(
             f"{self.base_url}/organizations", method="POST", form={"name": name}
         )
@@ -215,9 +201,7 @@ class OrgBrowserMixin(BrowserBase):
         self._goto_members()
 
     def _the_member_list(self):
-        """The member list is the org's, and the account that can always read it is the one that
-        owns it — a member who just left cannot, and an assertion read off their 403 would pass
-        for the wrong reason."""
+        """Read as the owner: a member who just left would get a 403."""
         owner = getattr(self, "primary_email", "")
         if owner:
             self.set_acting_email(owner)
@@ -241,9 +225,7 @@ class OrgBrowserMixin(BrowserBase):
     def set_member_role(self, email: str, role: str) -> None:
         page = self._goto_members()
         action = "[data-promote]" if role == "owner" else "[data-demote]"
-        # The self-row's Manage combo only offers "Leave" — promote/demote render for *other*
-        # members. When the role action is absent (e.g. demoting the sole owner, who is the
-        # acting user), UI-hiding isn't proof: probe the API so the server itself must reject it.
+        # Absent on one's own row: probe the API so the server must refuse.
         if page.query_selector(f"[data-member-email='{email}'] {action}") is None:
             self._probe_blocked(
                 "PATCH",
@@ -251,16 +233,14 @@ class OrgBrowserMixin(BrowserBase):
                 form={"role": role},
             )
             return
-        page.click(f"[data-member-email='{email}'] [data-manage]")  # open the dropdown
+        page.click(f"[data-member-email='{email}'] [data-manage]")
         self.last_response = self.click_and_capture(
             page, f"[data-member-email='{email}'] {action}", "PATCH", "/members/"
         )
 
     def remove_member(self, email: str) -> None:
         page = self._goto_members()
-        # "Remove" renders only on *other* members' rows; the self-row combo offers "Leave", not
-        # "Remove". When it's absent (e.g. removing the sole owner, who is the acting user), probe
-        # the API so the server's last-owner guard — not just the hidden control — is what rejects.
+        # Absent on one's own row: probe the API so the last-owner guard must refuse.
         if page.query_selector(f"[data-member-email='{email}'] [data-remove]") is None:
             self._probe_blocked(
                 "DELETE", f"/{self._active_slug()}/members/{self._user_id_for(email)}"
@@ -273,7 +253,7 @@ class OrgBrowserMixin(BrowserBase):
 
     def leave_org(self) -> None:
         page = self._goto_members()
-        # Leave lives inside the row's Manage combo — open that row's combo before clicking.
+        # Leave is in the row's Manage menu.
         manage = page.query_selector("li:has([data-leave]) [data-manage]")
         if manage is None:
             self._probe_blocked("DELETE", f"/{self._active_slug()}/members/me")
@@ -315,11 +295,10 @@ class OrgBrowserMixin(BrowserBase):
                 self._last_invitation_token = link.rsplit("/", 1)[-1]
 
     def assert_invitation_email_delivered(self, email: str) -> None:
-        self.drain_task_queue()  # the mail is outboxed; deliver it before polling the catcher
+        self.drain_task_queue()  # deliver the queued mail
         mailbox.assert_invitation_delivered(email, self._last_invitation_token)
 
     def _fetch_pending_invitations(self) -> list[dict]:
-        """Read pending invitations from the rendered members page (no JSON API)."""
         rows = self.page.query_selector_all("[data-invitation-email]")
         return [
             {
@@ -353,10 +332,7 @@ class OrgBrowserMixin(BrowserBase):
         page = self._goto_members()
         revoke = page.query_selector(f"[data-invitation-email='{email}'] [data-revoke]")
         if revoke is None:
-            # A member can't see the invitation list, so the real invitation id is
-            # not available here. The CurrentOwnerMembership gate resolves before the
-            # handler looks up the id, so any id proves enforcement: a member gets 403;
-            # a broken gate would fall through to 404 and fail this assertion.
+            # Any id will do: the owner gate answers 403 before the id is looked up.
             self._probe_blocked("DELETE", f"/{self._active_slug()}/invitations/{uuid.uuid4()}")
             return
         self.last_response = self.click_and_capture(
@@ -377,7 +353,7 @@ class OrgBrowserMixin(BrowserBase):
 
     def _follow_accept_to_registration(self, page: Page, token: str) -> None:
         page.goto(f"{self.base_url}/invitations/{token}", wait_until="load")
-        page.click("[data-accept]")  # "Create account to accept" → /auth/register?next=…
+        page.click("[data-accept]")  # → /auth/register?next=…
         page.wait_for_load_state("load")
 
     def _register(self, page: Page, email: str) -> None:
@@ -387,7 +363,7 @@ class OrgBrowserMixin(BrowserBase):
         page.wait_for_load_state("load")
 
     def _sign_in_on_this_page(self, page: Page, email: str) -> None:
-        """Registration lands on the login page, ``next`` preserved — sign in where it left us."""
+        """Sign in from the login page registration lands on, ``next`` kept."""
         page.get_by_label("Email").fill(email)
         page.get_by_label("Password").fill(_PASSWORD)
         page.get_by_role("button", name="Sign in").click()
@@ -402,7 +378,6 @@ class OrgBrowserMixin(BrowserBase):
         page.wait_for_load_state("load")
 
     def _become(self, email: str, ctx: BrowserContext, page: Page) -> None:
-        """Promote the visitor context to this user, so the following steps act as them."""
         self._contexts[email] = ctx
         self._pages[email] = page
 
@@ -444,7 +419,6 @@ class OrgBrowserMixin(BrowserBase):
         assert page.query_selector("[data-error]") is not None, (
             "Expected the already-accepted acknowledgement on the page"
         )
-        # The user is already a member: their org dashboard is the resolved destination.
         self._last_accept_response = {"redirect": f"/{self._active_slug()}/dashboard"}
 
     def assert_redirected_to_org_dashboard(self) -> None:
@@ -464,12 +438,11 @@ class OrgBrowserMixin(BrowserBase):
             )
 
     def assert_action_fails_with(self, message: str) -> None:
-        # A revoked/used invitation link renders an error page with no accept control;
-        # the browser proves the failure from that rendered state, not an API error string.
+        # A revoked or used link renders an error page without the accept button.
         if self._invitation_action_failed:
             self._invitation_action_failed = False
             return
-        # Invite errors surface as a rendered HTML fragment (200 + [data-error]).
+        # Errors come back as a fragment (200 with [data-error]).
         err = self._last_error_text
         if err:
             self._last_error_text = None
@@ -494,7 +467,7 @@ class OrgBrowserMixin(BrowserBase):
     def visit_org_dashboard_unauthenticated(self) -> None:
         self.last_response = self.page.goto(f"{self.base_url}/any-org/dashboard", wait_until="load")
 
-    # ── Dashboard overviews (verified via the rendered web view) ─────────────────
+    # ── Dashboard overviews (rendered) ───────────────────────────────────────────
     def _overview_text(self, key: str) -> str:
         card = self.page.locator(f"[data-overview='{key}']")
         assert card.count() > 0, f"Overview {key!r} not found on dashboard"

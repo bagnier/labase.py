@@ -1,11 +1,7 @@
-"""Mount-time CRUD for per-app settings — the console's settings repository at startup.
+"""The live settings tables, and the reads and seeds ``mount()`` makes before the event loop runs.
 
-Apps **declare** their settings and **read** their values inside ``mount()`` (sync, before the
-serving loop), via :mod:`apps.shared.settings.live`. This module owns the persisted tables and the
-concrete DB plumbing for that moment: a throwaway engine driven by :func:`asyncio.run`.
-
-The lru_cached admin engine must not be touched here, or its asyncpg pool would bind to this
-short-lived loop and break the serving loop — hence the disposable engine.
+Those go through a throwaway engine under :func:`asyncio.run`: the cached admin engine's asyncpg
+pool would bind to that short-lived loop and break the serving one.
 """
 
 import asyncio
@@ -25,29 +21,25 @@ from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 
-# The stored form of a boolean setting value.
 BOOL_TRUE = "true"
 BOOL_FALSE = "false"
 
-# Reserved key for an app's on/off switch, stored like any other setting value.
+# The on/off switch's key.
 ENABLED_KEY = "enabled"
 
 
 class AppSetting(Base, Versioned, Timestamped):
-    """The persisted value of one app setting — seeded on declaration, edited from the console."""
+    """A server-wide setting value, seeded at declaration, edited from the console."""
 
     __tablename__ = "app_settings"
 
     app_name: Mapped[str] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(primary_key=True)
-    value: Mapped[str]  # stored as text; coerced by the app's declared SettingDef.type
+    value: Mapped[str]  # coerced by the declared SettingDef.type
 
 
 class OrgAppSetting(Base, Versioned, Timestamped):
-    """A per-organisation override of one app setting — managed from the console.
-
-    Unset (app_name, key, org) triples fall back to the server-wide `AppSetting` value.
-    """
+    """A per-org override of an `AppSetting`, edited from the console."""
 
     __tablename__ = "org_app_settings"
 
@@ -58,22 +50,17 @@ class OrgAppSetting(Base, Versioned, Timestamped):
 
 
 def disabled_apps_select() -> Select[tuple[str]]:
-    """Select the slugs of apps whose persisted ``enabled`` value is ``false``.
-
-    Used by the admin-session repository to render the console's toggle state.
-    """
+    """The apps switched off."""
     return select(AppSetting.app_name).where(
         AppSetting.key == ENABLED_KEY, AppSetting.value == BOOL_FALSE
     )
 
 
 def _app_settings_select(app: str) -> Select[tuple[str, str]]:
-    """Every persisted ``(key, value)`` for ``app`` — read at mount on a throwaway engine."""
     return select(AppSetting.key, AppSetting.value).where(AppSetting.app_name == app)
 
 
 async def _on_throwaway_engine[T](work: Callable[[AsyncConnection], Awaitable[T]]) -> T:
-    """Run ``work`` on a fresh connection from a disposable engine, then dispose it."""
     settings = get_technical_settings()
     engine = create_async_engine(
         admin_url(settings), connect_args=search_path_connect_args(settings)
@@ -86,11 +73,7 @@ async def _on_throwaway_engine[T](work: Callable[[AsyncConnection], Awaitable[T]
 
 
 def read_values(app: str) -> dict[str, str]:
-    """An app's persisted ``key → value`` settings, read straight from ``app_settings``.
-
-    Degrades to ``{}`` on any failure, so mounting without a reachable DB (unit tests) never
-    blows up.
-    """
+    """An app's stored values, or ``{}`` when the database is unreachable."""
 
     async def _work(conn: AsyncConnection) -> dict[str, str]:
         rows = (await conn.execute(_app_settings_select(app))).all()
@@ -99,20 +82,14 @@ def read_values(app: str) -> dict[str, str]:
     try:
         return asyncio.run(_on_throwaway_engine(_work))
     except Exception as exc:
-        # A database unreachable at mount is a broken dependency, and the base has one verdict for
-        # those. The app then runs on defaults and every request that needed a stored value is
-        # silently wrong, which is precisely the kind of failure that must not read as "nothing
-        # happened". Tests and probes boot DB-less and see it too.
+        # The app now runs on defaults, silently wrong wherever a stored value differs: an issue.
         log_dependency_failure(log, "settings.read_values_failed", exc, app=app)
         return {}
 
 
 def seed_values(app: str, initial: dict[str, str]) -> None:
-    """Create the row for each declared setting that does not exist yet (create-if-absent).
-
-    The declared value is the setting's initial value; an existing value is left untouched.
-    No-op on any failure, so mounting without a reachable DB never blows up.
-    """
+    """Insert the settings not stored yet, leaving existing values alone. Logs and returns when
+    the database is unreachable."""
     if not initial:
         return
 
@@ -128,6 +105,4 @@ def seed_values(app: str, initial: dict[str, str]) -> None:
     try:
         asyncio.run(_on_throwaway_engine(_work))
     except Exception as exc:
-        # Broken dependency at mount, like read_values above: the declared settings never reached
-        # the table, so the console shows an app whose rows do not exist.
         log_dependency_failure(log, "settings.seed_values_failed", exc, app=app)

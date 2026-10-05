@@ -1,11 +1,5 @@
-"""How the api_keys context plugs into the running app.
-
-Single composition entry (:func:`mount`): mounts the owner-only management router under
-/{org_handle}/api-keys (create/revoke + JSON list), contributes the keys panel as a section
-of the org settings page (answering ``OrgSettingsSectionQuery``), and answers auth's
-``ApiKeyQuery`` — the seam that turns an ``Authorization: Bearer lbk_...`` header into an
-authenticated, org-pinned principal. Deleting this context removes the feature without
-touching auth.
+"""The api_keys mount: owner-only routes under ``/{org_handle}/api-keys``, a section of the org
+settings page, and the answer to auth's ``ApiKeyQuery``. Deleting the app leaves auth untouched.
 """
 
 from apps.api_keys.contract.events import ApiKeyIssued, ApiKeyRevoked
@@ -45,7 +39,6 @@ def mount(host: Host) -> None:
 
 
 async def _settings_section(query: OrgSettingsSectionQuery) -> OrgSettingsSection:
-    """Answer the org settings page: the org's API keys, as an embedded management section."""
     repo = ApiKeyRepository(query.session, query.org_id)
     keys = [ApiKeyRead.model_validate(k) for k in await repo.all()]
     return OrgSettingsSection(
@@ -65,12 +58,8 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _resolve(query: ApiKeyQuery) -> AuthenticatedUser | None:
-    """Bearer token → org-pinned principal; None lets auth answer 401.
-
-    Runs pre-auth on the request's own connection, identity-less (no JWT exists yet — the hash
-    lookup is the explicit check). RLS still applies downstream: the request proceeds with the
-    key creator's synthesized claims.
-    """
+    """The principal for a bearer token, limited to its org, or ``None`` for auth's 401. The
+    request then runs under the creator's RLS claims."""
     if not query.token.startswith(API_KEY_PREFIX):
         return None
     principal = await resolve_key_principal(query.session, hash_token(query.token))

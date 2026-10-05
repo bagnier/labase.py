@@ -1,10 +1,5 @@
-"""The facts this context owns — what happened to an issue, never what was logged about one.
-
-A captured exception is not one of these: it is a technical sighting the drain folds into an
-occurrence. What reaches the journal is the issue's *lifecycle* — it opened, it came back on a
-later release, an admin triaged it. The first two are the tracker's own verdicts, server-wide, so
-``user_id``/``org_id`` stay ``None`` (console-only rows); ``IssueStatusChanged`` carries the
-acting admin. Alerting is one consumer of these facts, not their purpose.
+"""An issue's lifecycle facts: opened, regressed (server-wide, no user or org), triaged (by an
+admin). A captured exception itself is an occurrence, not a fact.
 """
 
 import uuid
@@ -22,9 +17,8 @@ class IssueEvent(BusinessEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class IssueSubject:
-    """The base's entity slots, narrowed to required: an alert with no issue to point at is
-    meaningless. A base rather than a redeclaration per event — overriding a field that carries
-    a default cannot express "required again", while inheriting one that never had a default can."""
+    """The entity fields made required: an alert must point at an issue. A base, since a
+    subclass cannot make a defaulted field required again."""
 
     entity_id: uuid.UUID
     entity_name: str
@@ -32,8 +26,6 @@ class IssueSubject:
 
 @dataclass(frozen=True, kw_only=True)
 class IssueOpened(IssueSubject, IssueEvent):
-    """A new issue appeared. The issue *is* the subject."""
-
     verb: ClassVar[str] = "opened"
 
 

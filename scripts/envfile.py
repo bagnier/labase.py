@@ -1,12 +1,11 @@
-"""Shared env-file merge: write known overrides, preserve every other line untouched."""
+"""Env-file merging: write the given keys, keep every other line."""
 
 import os
 import re
 from pathlib import Path
 
-# The settings a Docker-shaped `.env` (`make env`) may point at `host.docker.internal`, which
-# resolves only inside the app container — a host-side script (`make db-seed`, `make preflight`,
-# `make backup-storage`, a worktree's seed) reaches the same services at 127.0.0.1 instead.
+# Settings a Docker-shaped `.env` points at `host.docker.internal`, which only the container
+# resolves; host-side scripts reach them at 127.0.0.1.
 _HOST_ONLY_SETTINGS = {
     "SUPABASE_API_URL",
     "SUPABASE_STORAGE_URL",
@@ -17,7 +16,6 @@ _HOST_ONLY_SETTINGS = {
 
 
 def host_reachable_overrides(env_file: Path) -> dict[str, str]:
-    """The tracked settings whose `env_file` value is Docker-only, rewritten to 127.0.0.1."""
     if not env_file.exists():
         return {}
     out: dict[str, str] = {}
@@ -29,9 +27,8 @@ def host_reachable_overrides(env_file: Path) -> dict[str, str]:
 
 
 def apply_host_overrides(env_file: Path) -> None:
-    """Put `env_file`'s Docker-only settings into the environment, host-reachable — an explicit
-    value already set (an operator's own override) is left alone. Call from inside the entry
-    point (never at import time): a module a test imports must not mutate the test's own env."""
+    """Put `env_file`'s Docker-only settings in the environment, host-reachable, unless already
+    set. Call from the entry point, never at import: tests import these modules."""
     for key, value in host_reachable_overrides(env_file).items():
         os.environ.setdefault(key, value)
 

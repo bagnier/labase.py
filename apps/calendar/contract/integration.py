@@ -1,9 +1,4 @@
-"""How the calendar context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the org-scoped
-router, answers the dashboard ``OverviewQuery`` (upcoming events) and the server-wide
-``ConsoleOverviewQuery`` (total events), and seeds a welcome event on ``OrganizationCreated``.
-"""
+"""The calendar mount, and the welcome event each new org gets."""
 
 import uuid
 from datetime import timedelta
@@ -89,10 +84,7 @@ async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
 
 
 async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
-    """Drop a single welcome event dated today, so a brand-new org's calendar isn't empty.
-
-    A durable async consumer of ``OrganizationCreated`` — suppressed in the test schema (via
-    ``seed_org_welcome``), so it never runs under the E2E drivers."""
+    """One welcome event today, so a new org's calendar is not empty."""
     await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 

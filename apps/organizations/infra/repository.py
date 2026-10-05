@@ -31,7 +31,7 @@ class OrganizationRepository(BaseRepository[Organization]):
             base = "org"
         handle = await unique_handle(base, self.session)
         org_id = uuid.uuid7()
-        # One statement for both rows: the database hands out ownership only with a new org.
+        # One statement: the database grants ownership only with a new org.
         await self.session.execute(
             text("SELECT create_org_with_owner(:id, :name, :handle, :owner, :at, :is_personal)"),
             {
@@ -211,7 +211,7 @@ class OrganizationRepository(BaseRepository[Organization]):
         return InvitationRead.model_validate(dict(row)) if row is not None else None
 
     async def accept_org_invitation(self, token: uuid.UUID) -> None:
-        """Must be called with an RLS session so auth.uid() is set from the JWT."""
+        """On an RLS session, so ``auth.uid()`` is the caller."""
         await self.session.execute(
             text("SELECT accept_org_invitation(:token)"),
             {"token": str(token)},

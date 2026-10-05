@@ -1,5 +1,4 @@
-"""Settings domain logic — framework-free. Pairs a declared setting with its stored value and
-validates a written value against its declared type."""
+"""Settings: pair declared settings with stored values, validate a written value."""
 
 from apps.console.domain.models import SettingView
 from apps.shared.settings.live import SettingDef, SettingsDeclaration
@@ -15,7 +14,7 @@ class InvalidSettingValue(Exception):
 
 
 def settings_view(group: SettingsDeclaration, values: dict[str, str]) -> list[SettingView]:
-    """Each declared setting paired with its stored value (declared default if not yet seeded)."""
+    """Each declared setting with its stored value, or its default."""
     return [
         SettingView(
             key=d.key,
@@ -29,7 +28,7 @@ def settings_view(group: SettingsDeclaration, values: dict[str, str]) -> list[Se
 
 
 def validate(group: SettingsDeclaration, key: str, value: str) -> str:
-    """Validate ``value`` against the declared :class:`SettingDef`; return its stored form."""
+    """``value`` in its stored form, validated against its :class:`SettingDef`."""
     definition = _find(group, key)
     return _normalise(definition, value)
 

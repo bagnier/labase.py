@@ -1,4 +1,4 @@
-"""Integration: a log.exception really lands as an occurrence, wherever it was written."""
+"""Any ``log.exception`` lands as an occurrence."""
 
 import uuid
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ import pytest_asyncio
 import structlog
 from sqlalchemy import select
 
-import apps.main  # noqa: F401 — mounts every context, including issues' subscriber
+import apps.main  # noqa: F401 — mounts issues' tracker
 from apps.issues.contract.queries import search_issue_occurrences
 from apps.issues.domain.models import Issue, IssueStatus
 from apps.issues.infra.repository import see_occurrence
@@ -18,10 +18,7 @@ from apps.shared.logs import capture
 from apps.shared.logs.capture import CaptureDrain, ExceptionCaptured
 from apps.shared.persistence import database as db
 
-# The line these tests fabricate stands in for ordinary application code — the doctrine is
-# "any log.exception", not "one written here". Stated rather than taken from ``__name__``
-# because the logger name is an input now: it picks the timeline source and the app axis, and
-# it is stored in the occurrence's context.
+# Stands in for application code; spelled out because the logger name decides the app axis.
 _PROBE_LOGGER = "apps.todo.infra.router"
 
 
@@ -38,7 +35,7 @@ def _clear_engine_caches() -> None:
 @pytest_asyncio.fixture(autouse=True)
 async def issues_isolation():
     _clear_engine_caches()
-    capture._QUEUE.clear()  # other tests' log.exception calls must not bleed in
+    capture._QUEUE.clear()
     yield
     capture._QUEUE.clear()
     async with db.admin_session_factory()() as session:
@@ -59,7 +56,6 @@ async def _issue_titled(fragment: str) -> Issue | None:
 
 @pytest.mark.asyncio
 async def test_log_exception_is_captured():
-    """The doctrine: any log.exception is queued and drained into an issue."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     log = structlog.get_logger(_PROBE_LOGGER)
     try:
@@ -79,8 +75,7 @@ async def test_log_exception_is_captured():
 
 @pytest.mark.asyncio
 async def test_an_occurrence_keeps_the_logger_that_raised():
-    """The pivot back to the log sink: an occurrence and the line that produced it correlate on
-    the logger, which is what tells a reader *where* in the code the issue came from."""
+    """The logger ties an occurrence to its line, and says where in the code it came from."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     log = structlog.get_logger(_PROBE_LOGGER)
     try:
@@ -104,8 +99,8 @@ async def test_a_failing_contribution_provider_is_tracked_as_an_issue():
 
     host.contribs.provide(_DummyQuery, boom)
     try:
-        # collect() logs "query.provider_failed" (log.exception) → the processor enqueues it.
-        await host.contribs.collect(_DummyQuery(marker))  # must not raise: log-and-skip
+        # collect() logs "query.provider_failed" as an exception.
+        await host.contribs.collect(_DummyQuery(marker))
     finally:
         host.contribs._providers[_DummyQuery].remove(boom)
 
@@ -118,9 +113,7 @@ async def test_a_failing_contribution_provider_is_tracked_as_an_issue():
 
 @pytest.mark.asyncio
 async def test_a_failing_tracker_becomes_an_issue_of_its_own():
-    """The reentrancy guard stops a tracker's *own* ordinary logging from feeding the queue back
-    to itself — it must not also make a broken tracker invisible. Its exception is queued for the
-    next tick and lands as an issue like any other."""
+    """Its exception is queued for the next tick, past the reentrancy guard."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     tracker_failure = f"tracker itself is down {marker}"
 
@@ -139,9 +132,8 @@ async def test_a_failing_tracker_becomes_an_issue_of_its_own():
     finally:
         capture._trackers.remove(failing_tracker)
 
-    await CaptureDrain(0).tick()  # only the real tracker runs now
+    await CaptureDrain(0).tick()
 
-    # The original exception landed, and so did the tracker's own failure — each its own issue.
     assert await _issue_titled(marker) is not None
     assert await _issue_titled(tracker_failure) is not None
 
@@ -179,10 +171,7 @@ async def test_occurrences_group_by_fingerprint_and_regress_after_resolve():
 
 @pytest.mark.asyncio
 async def test_the_fact_that_opens_an_issue_points_back_at_the_request():
-    """``_track`` runs on the drain's task, minutes after the request that failed and with none of
-    its context — so the fact it records had no request id at all, and the one filter an admin
-    reaches for (correlate by request) showed the log line and the occurrence but never the
-    "this issue just opened" that explains them."""
+    """The drain's task has no request: the id comes from the captured context."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     request_id = uuid.uuid7()
     log = structlog.get_logger(_PROBE_LOGGER)
@@ -202,8 +191,7 @@ async def test_the_fact_that_opens_an_issue_points_back_at_the_request():
                 select(BusinessEventRecord).where(BusinessEventRecord.request_id == request_id)
             )
         )
-    # No actor and no org, deliberately: the journal is RLS-readable by the user it names, so
-    # attributing an internal issue to whoever tripped it would put it in *their* activity feed.
+    # No actor: the issue would show in their activity feed.
     assert [(f.kind, f.request_name, f.user_id, f.org_id) for f in facts] == [
         ("issues.opened", "GET /acme/todo", None, None)
     ]

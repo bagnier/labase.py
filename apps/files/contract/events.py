@@ -1,11 +1,5 @@
-"""Files' business events — uploads, renames, deletes and share-link activity.
-
-CRUD-ish actions derive from the shared abstracts (overriding ``verb`` for the domain word:
-*uploaded*, *renamed*); the share-link actions are not CRUD (a download carries no actor at all —
-the link is anonymous), so they subclass :class:`~apps.shared.events.BusinessEvent` directly and
-spell out a ``verb`` of their own. No share token is carried: a secret-named field is refused at
-class definition (:meth:`~apps.shared.events.BusinessEvent.__init_subclass__`), so only the file's
-id and name ever reach the journal.
+"""Files' facts: uploads, renames, deletes, share links. A share download has no actor. A share
+token is never carried, only the file's id and name.
 """
 
 from dataclasses import dataclass
@@ -33,7 +27,7 @@ class FileDeleted(OrgScoped, FileEvent, EntityDeleted):
 @dataclass(frozen=True, kw_only=True)
 class FileRenamed(OrgScoped, FileEvent, EntityUpdated):
     verb: ClassVar[str] = "renamed"
-    # the new name is the subject's name (entity_name); only the previous one is extra payload
+    # entity_name is the new name
     old_filename: str
 
 

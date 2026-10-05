@@ -1,33 +1,9 @@
-"""The log sink — everything that carries a technical line from the code to where it is kept.
+"""The log sink: carries each line from the chain to ``log_lines``
+(AGENTS: the log sink traces the machinery off the request's path).
 
-A *sink* is what dedicated tooling (Serilog, Vector, OpenTelemetry) calls a log destination, and
-what it means there is the whole write-side apparatus: the entry point, the buffering, the retry
-and the fallback — not the storage itself. Here that is the structlog processor, the bounded queue
-between the request path and the writer, the background :class:`LogDrain`, and the day files.
-
-The storage is :mod:`apps.shared.logs.repository`, whose ``LogRepository`` owns the SQL
-against ``log_lines`` — the house word for "the object that holds a table's queries", and the twin
-of ``EventRepository`` on the journal side.
-
-Where a line goes, and the fallback when Postgres refuses a batch, are stated once (AGENTS: the
-log sink). What only this module can say is *why a table*: per-day JSON Lines on local disk read
-fine with one instance, and with two they made the Timeline lie by omission — the journal and the
-issues live in Postgres and are therefore global, so an admin correlating a request saw the fact
-and the occurrence and missed every line between them, depending on which instance answered the
-page. Retention had the mirror problem: per-day rotation was supposed to make it "a plain file
-delete", and nothing ever deleted.
-
-**The two words.** A *sink* is where log lines land — the term dedicated tooling uses (Serilog,
-Vector, OpenTelemetry). A *drain* here is what this codebase already means by it: a lifespan task
-that empties a bounded queue into whoever consumes it, exactly like ``CaptureDrain``. Not Heroku's
-sense of the word, and internal consistency wins — the shape is already familiar.
-
-**The day files.** The dying-process hook writes there too, not only the refused batch — it runs
-during interpreter shutdown, with no loop and no pool left to await on.
-
-**Non-blocking (AGENTS: the log sink).** The runtime path touches neither disk nor database: the
-processor only *enqueues* — a plain :meth:`deque.append`, atomic under the GIL, so it is safe
-before the event loop exists and from worker threads, exactly like the capture queue.
+:func:`log_processor` only appends to a bounded deque, safe before the event loop exists and from
+worker threads. :class:`LogDrain` writes batches through :mod:`apps.shared.logs.repository`, and
+to per-day files when Postgres refuses them. The dying-process hook writes to those files too.
 """
 
 import asyncio
@@ -51,16 +27,10 @@ from apps.shared.settings.env import get_technical_settings
 
 log = structlog.get_logger(__name__)
 
-# The sink's own reports on itself — the outage/recovery transitions, and what the queue had to
-# shed — must reach the Timeline whatever ``timeline.log_level`` quiets (AGENTS: the log sink) —
-# so they go through a bound logger built with ``wrap_logger``, outside ``structlog.configure()``'s
-# global state, immune to
-# ``apply_log_level`` re-pointing the console's filtering wrapper class. The underlying stdlib
-# logger is pinned to its own floor for the same reason: unpinned, it would inherit the root
-# logger's level, which ``apply_log_level`` raises too. The processors are ``chain.py``'s own
-# shared ones, copied rather than imported: ``chain.py`` imports this module, so the reverse
-# import would cycle. Named ``_log`` (not ``_logger``) so it cannot shadow ``log_processor``'s
-# own ``_logger`` parameter below.
+# The sink's reports on itself (outage, recovery, overflow) must reach the Timeline whatever
+# level an admin set, so ``_log`` is built outside ``structlog.configure()`` and its stdlib logger
+# pinned to INFO: ``apply_log_level`` re-points both. The processors copy ``chain.py``'s, which
+# imports this module.
 logging.getLogger(__name__).setLevel(logging.INFO)
 _log = structlog.wrap_logger(
     logging.getLogger(__name__),
@@ -85,24 +55,15 @@ def _parse_ts(value: Any) -> datetime:
     return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
 
 
-# ── The sink ─────────────────────────────────────────────────────────────────────────────────
-
-
 # ── The fallback: per-day files, for when the store is what is down ──────────────────────────
 
 
 @dataclass
 class _Outage:
-    """Whether the *store* is refusing lines, and how many it has refused since it last took one.
+    """Whether the store refuses lines, and how many it refused since it last took one.
 
-    The store, not the files: the files are where a refused batch goes, so their success is not
-    news — what an operator needs told is that the Timeline has stopped seeing new lines.
-
-    Reported on its two *transitions* and silent in between, for the reason the capture queue
-    counts its overflow rather than logging it: the report is itself a log line, so one per refused
-    write would feed the very queue that cannot be drained. Stdout still works during an outage, so
-    the entry line reaches an aggregator immediately even while the store cannot take it; the exit
-    line carries the toll, which is only final once the store accepts again.
+    Reported on its two transitions only: each report is itself a line for the queue that cannot
+    drain. The recovery line carries the count.
     """
 
     lines: int = 0
@@ -115,14 +76,8 @@ _outage = _Outage()
 
 @dataclass
 class _Overflow:
-    """How many lines the bounded queue shed before any drain could take them — the twin of the
-    capture queue's counter, and for the same reason: a dropped line is one the Timeline will
-    never show, and silence there reads exactly like a quiet server.
-
-    Counted rather than logged where it happens: the shedding happens inside
-    :func:`enqueue_line`, on the log path itself, so a line of its own would feed the very queue
-    that is already full. The drain says it instead, once per tick.
-    """
+    """Lines the full queue dropped. Reported by the drain: logging from :func:`enqueue_line`
+    would feed the full queue."""
 
     dropped: int = 0
 
@@ -131,23 +86,14 @@ _overflow = _Overflow()
 
 
 def fallback_dir() -> Path:
-    """Where a batch goes when the store refuses it.
-
-    Still read from ``FIREHOSE_DIR``: the env var is deployment-visible and documented
-    (docs/production.md), so it outlives the code's own vocabulary rather than breaking a running
-    deploy for a name.
-    """
+    """The day files' directory, ``FIREHOSE_DIR`` (named in docs/production.md)."""
     path = Path(get_technical_settings().firehose_dir)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _write_batch(path: Path, lines: list[dict[str, Any]]) -> bool:
-    """Append several lines to one day's file in a single ``open``. Returns whether they landed.
-
-    Best-effort by doctrine: neither the store nor this fallback may break the request that logged
-    the line. What was refused is tallied on :data:`_outage`.
-    """
+    """Append lines to one day's file; returns whether they landed."""
     try:
         with path.open("a", encoding="utf-8") as fh:
             fh.writelines(json.dumps(one, default=str) + "\n" for one in lines)
@@ -157,17 +103,11 @@ def _write_batch(path: Path, lines: list[dict[str, Any]]) -> bool:
 
 
 def append_to_file(line: dict[str, Any]) -> None:
-    """Append one line to its day file — the low-level synchronous fallback writer."""
     _write_to_files([line])
 
 
 def _write_to_files(lines: list[dict[str, Any]]) -> None:
-    """Send a batch to the day files, grouped so a burst spanning midnight costs two ``open``s
-    rather than one per line, and the directory is resolved once for the whole batch rather than
-    once per line.
-
-    The fallback of a fallback: if the disk refuses too there is nowhere left to put the line, and
-    saying so would mean writing one. It stays silent by design — stdout already carried it."""
+    """One ``open`` per day file. Silent if the disk refuses too: stdout already has the lines."""
     base = fallback_dir()
     batches: dict[Path, list[dict[str, Any]]] = defaultdict(list)
     for line in lines:
@@ -178,24 +118,16 @@ def _write_to_files(lines: list[dict[str, Any]]) -> None:
 
 
 def report_overflow() -> None:
-    """Say what the queue shed since the last tick — once per tick, never once per lost line.
-
-    Through ``_log``, not ``log``: a dropped line is one the Timeline will never show (see
-    :class:`_Overflow`), so it must reach it whatever ``timeline.log_level`` quiets — the same
-    level-immune path the outage/recovery pair uses, and for the same reason.
-    """
+    """Report what the queue dropped since the last tick."""
     dropped, _overflow.dropped = _overflow.dropped, 0
     if dropped:
         _log.warning("log_sink.overflowed", dropped=dropped)
 
 
 def report_write_outage() -> None:
-    """Say that the store stopped accepting lines, or started again — once per transition."""
     if _outage.refusing and not _outage.announced:
         _outage.announced = True
-        # ``warning``, not ``error``: the batch is not lost, it went to the day files. What the
-        # code could not carry through and absorbed is precisely the warning half of the doctrine
-        # — and ``error`` with no exception behind it is the one level the capture seam skips.
+        # A warning: absorbed, the batch went to the day files.
         _log.warning("log_sink.write_failed")
     elif not _outage.refusing and _outage.announced:
         _outage.announced = False
@@ -205,18 +137,12 @@ def report_write_outage() -> None:
 
 # ── The queue between the log path and the writer ────────────────────────────────────────────
 
-# Bounded so that with no writer draining — a unit run that logs but never starts the lifespan
-# task — the queue self-caps by dropping the oldest line instead of growing without limit. The
-# sink is a best-effort tail, never load-bearing.
+# Bounded: with no drain running (a unit test), the oldest lines are dropped.
 _QUEUE: deque[dict[str, Any]] = deque(maxlen=10000)
 
 
 def enqueue_line(line: dict[str, Any]) -> None:
-    """Hand one line to the writer queue — a plain ``deque.append``, no I/O and no await, so it is
-    safe on the request's critical path, before the loop exists, and from worker threads.
-
-    A full queue displaces its oldest line; that one is tallied here and reported by the drain.
-    """
+    """Queue one line, no I/O; a full queue drops its oldest."""
     if len(_QUEUE) == _QUEUE.maxlen:
         _overflow.dropped += 1
     _QUEUE.append(line)
@@ -225,22 +151,14 @@ def enqueue_line(line: dict[str, Any]) -> None:
 def log_processor(
     _logger: Any, _method_name: str, event_dict: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
-    """structlog processor: enqueue the line for the sink, pass it through.
-
-    Sits in the terminal chain (see :mod:`apps.shared.logs.chain`), after the shared
-    processors have given the line its timestamp, level, logger and correlation ids, and before the
-    renderer — so it sees a plain dict, whoever wrote it. Enqueue only: the write happens off the
-    request path in :class:`LogDrain`. A snapshot (``dict(event_dict)``) is queued because
-    the renderer mutates the live mapping. Below-level calls never reach here, so the sink is
-    gated by the live log level without testing it.
-    """
+    """Queue a copy of the line (the renderer mutates it) and pass it on. Lines below the live
+    level never get here."""
     enqueue_line(dict(event_dict))
     return event_dict
 
 
 def _drain_queue() -> list[dict[str, Any]]:
-    """Take what is queued *now*. Snapshotting the length first means a line appended mid-drain
-    simply waits for the next one, rather than extending this pass indefinitely."""
+    """Take what is queued now; lines appended meanwhile wait for the next pass."""
     taken = []
     for _ in range(len(_QUEUE)):
         try:
@@ -251,16 +169,12 @@ def _drain_queue() -> list[dict[str, Any]]:
 
 
 def flush_to_files() -> None:
-    """Write everything queued to the day files, now, on the calling thread.
-
-    The only way out for a line nobody will be around to drain — the last one a dying process
-    logs, written from the interpreter's exit hook where there is no loop and no pool left.
-    """
+    """Write the queue to the day files, synchronously: for the exit hook of a dying process."""
     _write_to_files(_drain_queue())
 
 
 def clear_log_sink() -> None:
-    """Drop queued lines and delete every fallback file — test isolation between scenarios."""
+    """Reset the queue, counters and day files between test scenarios."""
     _QUEUE.clear()
     _outage.lines, _outage.refusing, _outage.announced = 0, False, False
     _overflow.dropped = 0
@@ -269,12 +183,7 @@ def clear_log_sink() -> None:
 
 
 class LogDrain:
-    """Lifespan task that drains the log queue to the store, off the request path.
-
-    Same shape as ``MetricsFlusher``/``CaptureDrain`` — idempotent ``start``, cancel-and-await
-    ``stop`` (with a final drain so a graceful shutdown loses no buffered line), and a ``tick``
-    tests can drive by hand.
-    """
+    """Lifespan task draining the queue to the store; ``stop`` drains once more."""
 
     def __init__(self, interval_seconds: float) -> None:
         self._interval = interval_seconds
@@ -290,10 +199,9 @@ class LogDrain:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-        await self.tick()  # flush whatever the cancelled loop left behind
+        await self.tick()
 
     async def tick(self) -> None:
-        """Drain once: to the store, and to the day files if the store refuses."""
         lines = _drain_queue()
         if lines:
             try:
@@ -304,19 +212,14 @@ class LogDrain:
                     await LogRepository(session).append(lines, lock_timeout_ms=lock_timeout_ms)
                     await session.commit()
             except Exception:
-                # No ``log.exception`` and no verdict here: the store being down is already said by
-                # ``report_write_outage``, once per transition, and an exception at this point
-                # would be one more line feeding the queue that cannot be drained.
+                # Not logged here: ``report_write_outage`` says it once per transition.
                 _outage.refusing = True
                 _outage.lines += len(lines)
-                # Off the loop: building the JSONL rows and writing them is exactly the blocking
-                # work this fallback must never inflict on whoever else the loop is serving.
+                # Blocking file I/O, off the event loop.
                 await asyncio.to_thread(_write_to_files, lines)
             else:
                 _outage.refusing = False
             report_write_outage()
-        # Outside the guard above: what the queue shed is owed whether or not this pass had
-        # anything left to write.
         report_overflow()
 
     async def _run(self) -> None:
@@ -325,6 +228,5 @@ class LogDrain:
             try:
                 await self.tick()
             except Exception as exc:
-                # A drain failure is degraded-but-manageable; warn (never ``log.exception``, which
-                # the sink would re-enqueue) and retry next tick with the lines still queued.
+                # Not log.exception, which the sink would queue again; retried next tick.
                 log.warning("log_sink.drain_failed", exc_info=exc)

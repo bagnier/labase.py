@@ -4,7 +4,7 @@ from tests.e2e.drivers.api_base import VISITOR, ApiBase
 
 
 def _decode(content: str) -> str:
-    """Gherkin passes ``\\n`` literally; turn it into a real newline for Markdown."""
+    """Gherkin passes ``\\n`` literally."""
     return content.replace("\\n", "\n")
 
 
@@ -108,8 +108,7 @@ class PagesApiMixin(ApiBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_pages_list_as(self, email: str) -> None:
-        # The other tenant's org is seeded by the "is a member of" step; read its list from its
-        # own handle.
+        # Seeded by the "is a member of" step.
         slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
         self._viewed_page_titles = [
             p["title"] for p in self._list(client=self.client_for(email), handle=slug)
@@ -136,7 +135,6 @@ class PagesApiMixin(ApiBase):
         )
 
     def _page(self, slug: str, client: httpx.Client | None = None) -> dict:
-        """The page as its own document — the JSON face, not the markup the browser lane reads."""
         resp = (client or self.client()).get(self._pages_url(f"/{slug}"))
         assert resp.status_code == 200, f"view got {resp.status_code}: {resp.text}"
         return resp.json()
@@ -151,9 +149,7 @@ class PagesApiMixin(ApiBase):
         return page
 
     def assert_rendered_heading(self, text: str) -> None:
-        # The heading *is* the title: the template renders it, the Markdown engine never sees it
-        # (apps/pages/domain/render.py). The datum is what this lane can hold; the browser lane
-        # holds the <h1> itself.
+        # The template renders the title as the heading; the browser lane checks the <h1>.
         title = self._opened_page()["title"]
         assert title == text, f"page title is {title!r}, expected {text!r}"
 
@@ -166,8 +162,6 @@ class PagesApiMixin(ApiBase):
         assert body, "the page came back with no rendered body"
 
     def assert_cannot_edit(self, slug: str) -> None:
-        # The page says so itself, rather than the absence of a link in a template saying it for
-        # it — and the neighbouring scenario holds the server side of the same rule.
         assert self._page(slug)["can_edit"] is False, f"page '{slug}' reports itself editable"
 
     def assert_visible_to_members(self, slug: str) -> None:

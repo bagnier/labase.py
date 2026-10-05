@@ -1,14 +1,8 @@
-"""The request side of the sink: one line per exchange, and the ids that tie everything to it.
+"""The request middleware: writes ``request.finished``, binds the ids every other line correlates
+on, and offers each exchange to the load metrics.
 
-:class:`RequestLogger` is the ASGI middleware every request passes through. It writes
-``request.finished`` — the single line stating the exchange, so nothing else has to — and binds the
-``request_id`` contextvar that the sink, the capture seam and the console Timeline all correlate on.
-
-Most of what is here is filtering, and that is the point: a line is worth writing only where a
-reader would learn something. What the browser fetched by itself, an infrastructure probe, a
-liveness check — none of them earn one unless they 5xx'd, which is our fault whatever asked. The
-same predicates decide what counts as *load*, so the metrics measure our own traffic rather than
-whatever scanned us.
+Most of it decides what is worth a line (AGENTS: nothing escapes the log chain). The same
+predicates decide what counts as load, so metrics measure our traffic, not whatever scanned us.
 """
 
 import time
@@ -50,15 +44,11 @@ _ASSET_SUFFIXES = (
 
 
 def _route_template(request: Request) -> str | None:
-    """The matched route's template with every prefix on it — ``/console/admins/{email}``, the
-    low-cardinality label the metrics count under. ``None`` when nothing matched.
+    """The matched route's full template, ``/console/admins/{email}``, or ``None``.
 
-    Since FastAPI 0.137 ``include_router`` keeps the child router instead of cloning its path
-    operations under the prefix, so ``scope["route"]`` is the route *as the child declared it* and
-    its ``.path`` has lost the prefix (``/admins/{email}``, or ``""`` for the prefix itself). The
-    assembled template lives on the effective route context FastAPI stashes in the scope; that
-    context has no public accessor yet, hence the plain dict reads, with the route's own path as
-    the fallback (the two coincide for a route declared straight on the app).
+    ``scope["route"].path`` lacks the router prefix: FastAPI's ``include_router`` keeps the child
+    route as declared. The full template is on the scope's effective route context, which has no
+    public accessor.
     """
     context = request.scope.get("fastapi", {}).get("effective_route_context")
     template = getattr(context, "path_format", None)
@@ -68,37 +58,25 @@ def _route_template(request: Request) -> str | None:
 
 
 def _is_asset(path: str) -> bool:
-    """A browser-fetched asset (favicon, static bundle, image/font) — never an interesting
-    'dead link', so its 4xx stays out of the timeline even when the referer is ours."""
     return path == "/favicon.ico" or path.startswith("/static/") or path.endswith(_ASSET_SUFFIXES)
 
 
 def _is_infra_probe(path: str) -> bool:
-    """A path the browser or infra fetches on its own — Chrome's devtools probe, ACME
-    challenges — always under ``/.well-known/``, never one of our links. Its 404 is noise
-    for both the timeline and the load metrics, even with a same-host referer."""
+    """Chrome's devtools probe, ACME challenges: never one of our links."""
     return path.startswith(_INFRA_PROBE_PREFIXES)
 
 
 def _is_health_probe(path: str) -> bool:
-    """Our own liveness/readiness endpoint. Silent while it answers healthy — an admin has no
-    use for a line on every tick — but never on its own account: a status the app never means
-    to give it (a 5xx, the database unreachable) is exactly the incident the Timeline exists
-    for, so it is not dropped unconditionally the way an asset or an infra probe is."""
     return path in _HEALTH_PROBE_PATHS
 
 
 def _is_internal_referer(request: Request) -> bool:
-    """Whether the request followed a link from one of our own pages — a same-host ``Referer``.
-    That's what makes a 404 a *dead link from ourselves* rather than a bot scan or a stray URL."""
     referer = request.headers.get("referer")
     return bool(referer) and urlparse(referer).hostname == request.url.hostname
 
 
 def _is_internal_dead_link(request: Request, status: int) -> bool:
-    """A 4xx that is a dead link from ourselves — a same-host ``Referer`` to a real, non-asset,
-    non-infra-probe path. The single test shared by the timeline (what to log) and the load
-    metrics (what to count)."""
+    """A 4xx reached from one of our own pages: a bug, unlike a bot scan or a stray URL."""
     path = request.url.path
     return (
         400 <= status < 500
@@ -109,10 +87,8 @@ def _is_internal_dead_link(request: Request, status: int) -> bool:
 
 
 def _is_traced(request: Request, status: int) -> bool:
-    """Whether this exchange earns a timeline line. Everything the *user* asked for does; what
-    the browser fetched on its own — a static bundle, the favicon, a ``/.well-known`` probe —
-    does not, since a row per image would bury the traffic it sits between. A 5xx is our fault
-    whoever asked, so it is traced regardless."""
+    """Whether the exchange earns a line: not what the browser fetched on its own, nor a healthy
+    probe, unless it failed on our side."""
     path = request.url.path
     if _is_health_probe(path):
         return status >= 400
@@ -120,13 +96,8 @@ def _is_traced(request: Request, status: int) -> bool:
 
 
 def _feeds_load_metrics(request: Request, status: int) -> bool:
-    """Which requests count toward ``/console/load``. A liveness/readiness probe never counts,
-    5xx included: it is our own infra hitting us on a timer, not load an admin needs sized, and
-    it is the one path that parts ways with the timeline here (a failing probe is traced, never
-    metered). Everything else shares the timeline's universe — our own traffic and our own
-    failures, never the noise: 2xx/3xx and every 5xx always count; a 4xx (all of ``unmatched`` —
-    a 404 before routing — plus matched 4xx) counts only when it's a dead link from ourselves,
-    so bot scans, the favicon probe and stray URLs stay out."""
+    """Whether the exchange counts toward ``/console/load``: everything but health probes, and a
+    4xx only when it is our own dead link."""
     path = request.url.path
     if _is_health_probe(path):
         return False
@@ -134,12 +105,8 @@ def _feeds_load_metrics(request: Request, status: int) -> bool:
 
 
 class RequestObserver(Protocol):
-    """Whoever wants the exchanges this middleware measured, called once per counted request.
-
-    Positional-only up to ``unmatched``: the middleware never passes these by name, so a
-    subscriber is free to call its second parameter ``route`` where it only ever sees templates,
-    or ``label`` where it also sees the raw paths of what matched nothing.
-    """
+    """Called once per exchange counted as load. ``label`` is the route template, or the raw
+    path when ``unmatched``. Positional-only, so a subscriber names its parameters freely."""
 
     def __call__(
         self,
@@ -153,10 +120,7 @@ class RequestObserver(Protocol):
     ) -> None: ...
 
 
-# Registered at mount by the app that counts load (``apps/metrics``), the same way ``apps/issues``
-# subscribes to captured exceptions. Shared may not name a bounded context, so what it measures is
-# *offered*, not pushed: with that app switched off or deleted, this list is empty and the exchange
-# never notices. One shape only, hence a plain list and no type-key dispatch.
+# (AGENTS: load metrics belong to their app alone)
 _observers: list[RequestObserver] = []
 
 
@@ -165,71 +129,32 @@ def on_request_measured(observer: RequestObserver) -> None:
     _observers.append(observer)
 
 
-# What refused this exchange, set by the exception handlers that shape the answer and read by the
-# one line that reports it. A contextvar rather than a return value because the two are three
-# layers apart: the handler runs under Starlette's ExceptionMiddleware, well below this one — and
-# on the *same* task, which is exactly what plain-ASGI middlewares buy (see the class docstring).
+# Set by the exception handlers, layers below, on the same task (see ``RequestLogger``).
 _rejection: ContextVar[str | None] = ContextVar("labase_rejection", default=None)
 
 
 def note_rejection(detail: str) -> None:
-    """Record why this exchange was refused, for ``request.finished`` to carry.
-
-    Called instead of logging a line of its own: a refusal that wrote one left the timeline saying
-    the same exchange twice, once with the status and once with the reason.
-    """
+    """Have ``request.finished`` carry why the exchange was refused, instead of a second line."""
     _rejection.set(detail)
 
 
 def _refused_deliberately(status: int) -> bool:
-    """Whether a 4xx is something we refused rather than something that is simply not there.
-
-    Every 4xx but ``404``: a 401, a 403, a 409, a 422 all say *we would not do that*, which is the
-    warning half of the doctrine — the code could not carry the exchange through and answered with
-    something. A 404 says there is nothing at that address, which for a stray URL or a bot scan is
-    not ours to fix; ``_is_internal_dead_link`` is what promotes the ones that are.
-    """
+    """Every 4xx but 404: a refusal is a warning; a 404 is a warning only as our own dead link."""
     return 400 <= status < 500 and status != 404
 
 
 def new_request_id() -> str:
-    """A whole UUIDv7 for the request — the base's one key shape (the v4 carve-out is for security
-    tokens, and this is not one: it is echoed back in ``X-Request-ID``).
-
-    Whole, because truncating to 8 hex chars at the source cost 32 bits: a birthday collision lands
-    around 77k requests, and the Logs screen correlates on this exact value — two unrelated requests
-    would merge under one filter. ``_short`` shortens it for display, which is where that helps.
-
-    Time-ordered, because an id read off a log line then tells you *when*, and its index grows by
-    append instead of splitting pages at random — the same reason every pk here is a v7."""
+    """A whole UUIDv7: the Timeline filters on this exact value, and 8 hex chars would collide
+    around 77k requests. Shortened for display only."""
     return str(uuid.uuid7())
 
 
 class RequestLogger:
     """Per-request correlation and telemetry (AGENTS: facts, traces, bugs: three records).
 
-    Binds a ``request_id`` in a contextvar so every log line of the request correlates, times the
-    request, and feeds the load metrics. It logs **once per served request**, under one name —
-    ``request.finished`` — whose *level* carries the outcome: ``error`` on a 5xx (our own bug or an
-    exception nobody handled), ``warning`` on a refusal we made or a dead link from one of our own
-    pages, ``info`` on everything else. It carries the refusal's ``detail`` too, which is all a
-    second line about the same exchange ever added. This is the ``http`` source of the timeline,
-    and the only one: a line written anywhere else is ``app``.
-
-    **A plain ASGI middleware, not a ``BaseHTTPMiddleware``.** That base runs the rest of the app
-    in a *child task*, which gets a copy of the context — so the ``user_id``/``org_id`` that auth
-    and organizations bind while serving the request never travel back up here, and the finished
-    line named neither. Awaiting the app directly keeps one context for the whole exchange, and the
-    same move puts the exception on this frame: a handler that raises now leaves its line (at
-    ``error``) before the exception carries on to Starlette's 500 handler, which is what turns it
-    into an issue. Both properties are lost again the moment a ``BaseHTTPMiddleware`` is mounted
-    *underneath* this one, hence the ones next to it in the stack are plain ASGI too.
-
-    What the browser fetches on its own leaves nothing behind — static assets, the favicon and
-    ``/.well-known`` probes — unless it 5xx'd, which is our fault whatever asked for it.
-    A liveness/readiness probe is silent the same way while healthy, but not on a 5xx: the
-    status is only known once the app has answered, so it is decided at the same place as
-    every other exchange rather than skipped up front.
+    Plain ASGI, not ``BaseHTTPMiddleware``, which runs the app in a child task: the
+    ``user_id``/``org_id`` bound below would not reach this frame, nor would a handler's exception
+    before Starlette's 500 handler. A ``BaseHTTPMiddleware`` mounted underneath breaks both too.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -243,23 +168,20 @@ class RequestLogger:
         request = Request(scope)
         request_id = new_request_id()
         structlog.contextvars.clear_contextvars()
-        # These ride every log line *and* every business event of this request (the journal's
-        # write path reads them off these contextvars). The name is bound here, before the app
-        # runs, because a fact emitted mid-request must already carry it — the matched route
-        # template is only readable afterwards, and the raw path is what a reader wants anyway.
+        # Read by every log line and by the journal's writer: bound before the app runs, so a
+        # fact emitted mid-request carries them.
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
             ip=request.client.host if request.client else None,
             request_name=f"{request.method} {request.url.path}",
         )
-        # A health probe never gets the SQL drill-down: its own `SELECT 1` would otherwise trip
-        # `db.heavy_request` on a merely slow database, one line with nothing to correlate it to
-        # on the ticks that stay silent (AGENTS: a line says what no other record says already).
+        # A probe's `SELECT 1` on a slow database would trip `db.heavy_request` with nothing to
+        # correlate it to.
         if not _is_health_probe(request.url.path):
             start_request_stats()
         _rejection.set(None)
 
-        status = 500  # what Starlette answers if the app raises before saying otherwise
+        status = 500  # Starlette's answer if the app raises before starting a response
         start = time.perf_counter()
 
         async def send_with_request_id(message: Message) -> None:
@@ -272,11 +194,8 @@ class RequestLogger:
         try:
             await self.app(scope, receive, send_with_request_id)
         except BaseException:
-            # The line first, then the exception on its way: it is the 500 handler further up
-            # that captures it as an issue, and this middleware's job is only to say the exchange
-            # ended — which is exactly what used to go missing on the requests that mattered most.
-            # ``BaseException``, not ``Exception``: a client disconnect or a shutdown drain raises
-            # ``CancelledError`` through this same frame, and that is not ours to swallow either.
+            # The 500 handler above turns the exception into an issue; this only writes the line.
+            # ``BaseException``: a client disconnect raises ``CancelledError`` through here.
             self._finish(request, status, start)
             raise
         self._finish(request, status, start)
@@ -284,29 +203,21 @@ class RequestLogger:
     def _finish(self, request: Request, status: int, start: float) -> None:
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         self._observe(request, status, duration_ms)
-        # Before the exchange line, and only when there is a surprise: the elaboration comes
-        # first, the line that closes the exchange last.
+        # Before the line that closes the exchange.
         report_heavy_request()
         self._log_finished(request, status, duration_ms)
 
     @staticmethod
     def _observe(request: Request, status: int, duration_ms: float) -> None:
-        """Feed the load metrics under the matched route template — a low-cardinality label the
-        router only fills in while serving, hence read here rather than up front.
-
-        Log-and-skip around each observer (AGENTS: so a failing tracker never worsens the
-        exception it tracks) — an observer that raises must never replace the exchange's own
-        exception, nor cost the finished line that was still to come.
-        """
+        """Offer the exchange to the observers, each isolated: a failing one must not replace the
+        exchange's exception nor cost its line."""
         if not _feeds_load_metrics(request, status):
             return
         route = _route_template(request)
         if route is not None:
             label, unmatched = route, False
         else:
-            # No route matched, so there is no template: the real path travels instead, flagged,
-            # and the counter decides how many such labels it keeps before collapsing them — a
-            # genuine dead link of ours stays identifiable without the label set exploding.
+            # The observer decides how many raw paths it keeps before collapsing them.
             label, unmatched = request.url.path, True
         for observe in _observers:
             try:
@@ -316,7 +227,7 @@ class RequestLogger:
 
     @staticmethod
     def _log_finished(request: Request, status: int, duration_ms: float) -> None:
-        """Emit the request's single line, or nothing when the browser asked for it itself."""
+        """``error`` on a 5xx, ``warning`` on a refusal or our dead link, ``info`` otherwise."""
         if not _is_traced(request, status):
             return
         db = read_request_stats()

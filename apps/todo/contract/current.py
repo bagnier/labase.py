@@ -1,5 +1,4 @@
-"""To-do's settings dependency — the request's effective values (server ⊕ current-org
-overrides), resolved fresh per request; see
+"""To-do's settings for the request; see
 :func:`apps.organizations.contract.current.app_settings`."""
 
 from typing import Annotated

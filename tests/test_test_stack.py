@@ -1,8 +1,4 @@
-"""The checkout's own test stack: its name, and the ports the CLI binds it on.
-
-Pure mapping only — starting a stack is the Makefile's `test-stack` target, exercised by the
-suite itself running against it.
-"""
+"""The checkout's test stack name and ports."""
 
 from apps.shared.settings.env import TechnicalSettings
 from scripts import test_stack
@@ -26,7 +22,7 @@ def test_prunable_worktrees_are_the_ones_whose_directory_is_gone():
 
 
 def test_cli_ports_are_the_ones_the_test_settings_point_at():
-    # A block no env file uses, so the values can only come from this object.
+    # Ports no env file uses.
     settings = TechnicalSettings(
         supabase_api_url="http://127.0.0.1:55521",
         supabase_publishable_key="sb_publishable_x",

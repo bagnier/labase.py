@@ -1,13 +1,6 @@
-"""The seam's own edges — what it sheds, what it refuses to count twice, what it still owes.
-
-``apps/issues/tests/test_capture.py`` covers the round trip all the way to the issues tables.
-These hold what that round trip cannot state, all three about the *count* an issue carries:
-
-- the queue is bounded so a storm can never eat memory, which means it drops — and a dropped
-  capture is an issue nobody will ever see, so the shortfall is reported;
-- one exception is one occurrence however many loggers see it on its way out;
-- and the ones still queued when the process is asked to stop are folded in, not dropped.
-"""
+"""The capture seam's edges: what the full queue drops, one capture per exception, the drain at
+shutdown, failing trackers. The round trip to the issues tables is in
+``apps/issues/tests/test_capture.py``."""
 
 import asyncio
 import logging
@@ -32,11 +25,9 @@ def _log_exceptions(count: int) -> None:
 
 @pytest.mark.asyncio
 async def test_the_drain_reports_the_captures_the_queue_had_to_shed(log_chain, monkeypatch):
-    """Silently dropping the oldest would lose the very exceptions the tracker exists to show,
-    and the shortfall has to be said by the drain: the processor runs inside the logging chain,
-    where a line of its own would re-enter capture."""
+    """Reported by the drain: a line from the processor would re-enter capture."""
     monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=2))
-    monkeypatch.setattr(capture, "_trackers", [])  # the seam, not what issues does with it
+    monkeypatch.setattr(capture, "_trackers", [])
     capture._overflow.dropped = 0
 
     _log_exceptions(5)
@@ -48,17 +39,11 @@ async def test_the_drain_reports_the_captures_the_queue_had_to_shed(log_chain, m
     assert reported == [("capture.overflowed", {"dropped": 3})]
 
 
-# An exception is logged more than once on its way out of the process, and the second logger is
-# not ours. Starlette's ServerErrorMiddleware calls the 500 handler — which is the capture seam —
-# and then *re-raises*, so the ASGI server catches the very same object and logs it again through
-# stdlib `logging`, which the chain now joins. Two lines, one failure: measured on a real
-# hypercorn server, a single unhandled 500 arrived here twice.
+# An unhandled 500 is logged by Starlette's 500 handler, then again by the ASGI server.
 
 
 def test_one_exception_is_one_capture_however_often_it_is_logged(log_chain):
-    """The seam counts failures, not the lines written about them: a second sighting of the same
-    object is the same failure travelling, and folding it in again would double every 500's
-    occurrence count — the one number an admin reads to judge how bad an issue is."""
+    """Else every 500 would count two occurrences."""
     boom = RuntimeError("the request blew up")
     capture._QUEUE.clear()
 
@@ -72,8 +57,7 @@ def test_one_exception_is_one_capture_however_often_it_is_logged(log_chain):
 
 
 def test_a_second_failure_of_the_same_kind_is_still_its_own_capture(log_chain):
-    """The guard is per *instance*, never per type or per message — two requests failing the same
-    way are two occurrences, which is exactly what an issue's count is for."""
+    """The guard is per instance: two requests failing alike are two occurrences."""
     first, second = RuntimeError("blew up"), RuntimeError("blew up")
     capture._QUEUE.clear()
     log = structlog.get_logger(_PROBE_LOGGER)
@@ -84,21 +68,14 @@ def test_a_second_failure_of_the_same_kind_is_still_its_own_capture(log_chain):
     assert [captured.exc for captured in capture._QUEUE] == [first, second]
 
 
-# Shutdown is not a special case: SIGTERM is how every deploy ends a process, so whatever sits in
-# the queue at that moment is the *normal* amount to lose, not an edge one. The log drain
-# already emptied on its way out; this one dropped the exceptions it was holding.
+# Every deploy ends the process with SIGTERM: what the queue holds then must be delivered.
 
 
-# ``asyncio.CancelledError`` derives from ``BaseException``, not ``Exception`` — a tracker that
-# raises it (its own bug, not the drain task being cancelled) must be log-and-skipped exactly
-# like any other failing tracker, never left to abort the tick mid-queue.
+# A tracker raising ``CancelledError`` (a ``BaseException``) is skipped like any failing tracker.
 
 
 @pytest.mark.asyncio
 async def test_a_tracker_raising_cancelled_error_does_not_kill_the_drain(log_chain, monkeypatch):
-    """A misbehaving tracker raising ``CancelledError`` must not worsen the exceptions queued
-    after it: the doctrine (README: 'a failing tracker never worsens the exception it tracks')
-    does not carve out ``BaseException`` subclasses."""
     tracked: list[capture.ExceptionCaptured] = []
 
     async def flaky(_captured: capture.ExceptionCaptured) -> None:
@@ -126,9 +103,6 @@ async def test_a_tracker_raising_cancelled_error_does_not_kill_the_drain(log_cha
 
 @pytest.mark.asyncio
 async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(monkeypatch):
-    """The isolation is not a list of exception types to keep pace with: whatever a tracker
-    raises — ``CancelledError`` is one case among the whole ``BaseException`` tree, not the
-    only member of it — the rest of the queue must still be drained."""
     tracked: list[capture.ExceptionCaptured] = []
 
     async def flaky(_captured: capture.ExceptionCaptured) -> None:
@@ -156,17 +130,15 @@ async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(monk
 
 @pytest.mark.asyncio
 async def test_stopping_the_drain_folds_in_what_it_was_still_holding(log_chain, monkeypatch):
-    """The last exceptions before a deploy are the ones most likely to explain it."""
     folded: list[capture.ExceptionCaptured] = []
 
     async def fold(captured: capture.ExceptionCaptured) -> None:
         folded.append(captured)
 
-    # The seam, not what issues does with it — the real tracker would open a database session on
-    # this test's loop and leave a cached engine bound to it.
+    # Not the real tracker, which would leave a cached engine bound to this loop.
     monkeypatch.setattr(capture, "_trackers", [fold])
     capture._QUEUE.clear()
-    drain = capture.CaptureDrain(interval_seconds=0)  # never started: nothing ticks on its own
+    drain = capture.CaptureDrain(interval_seconds=0)
     structlog.get_logger(_PROBE_LOGGER).exception(
         "todo.blew_up", exc_info=RuntimeError("caught by the shutdown")
     )
@@ -178,10 +150,8 @@ async def test_stopping_the_drain_folds_in_what_it_was_still_holding(log_chain, 
 
 @pytest.mark.asyncio
 async def test_stopping_the_drain_still_cancels_it_mid_tracker(monkeypatch):
-    """The guard that lets a tracker's own ``CancelledError`` through checks ``Task.cancelling()``
-    precisely so that ``stop()``'s real ``cancel()`` — landing while the drain happens to be
-    suspended inside a tracker's own await — still wins: otherwise every deploy would hang on
-    whichever tracker was mid-flight."""
+    """``stop()``'s real ``cancel()`` wins over the tracker isolation, or a deploy hangs on a
+    tracker mid-flight."""
     started = asyncio.Event()
 
     async def stuck(_captured: capture.ExceptionCaptured) -> None:
@@ -197,10 +167,8 @@ async def test_stopping_the_drain_still_cancels_it_mid_tracker(monkeypatch):
     assert task is not None
 
     await asyncio.wait_for(started.wait(), timeout=1)
-    # Not `asyncio.wait_for(drain.stop(), ...)`: its own timeout would cancel `stop()` itself,
-    # and `stop()`'s `contextlib.suppress(CancelledError)` around `await self._task` would
-    # swallow that unrelated cancellation too, letting `stop()` return normally regardless of
-    # whether the background task ever actually ended — a hang that reads as a pass.
+    # Not `asyncio.wait_for(drain.stop(), ...)`: `stop()` would swallow that timeout's
+    # cancellation and return normally, a hang reading as a pass.
     stop_task = asyncio.ensure_future(drain.stop())
     try:
         done, _pending = await asyncio.wait({stop_task}, timeout=1)
@@ -214,15 +182,11 @@ async def test_stopping_the_drain_still_cancels_it_mid_tracker(monkeypatch):
     assert task.cancelled()
 
 
-# The reentrancy guard exists so a tracker's own *ordinary* logging never feeds the queue back to
-# itself — not to make a broken tracker invisible. ``capture.tracker_failed`` is logged under that
-# same guard, so without a path around it, the one bug the seam most needs to surface is the one
-# it cannot see.
+# The reentrancy guard must not hide a broken tracker: its failure is queued around the guard.
 
 
 @pytest.mark.asyncio
 async def test_a_failing_tracker_is_still_captured(log_chain, monkeypatch):
-    """A broken tracker must reach the queue itself, or it can never become an issue."""
     monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
 
     async def failing_tracker(_captured: capture.ExceptionCaptured) -> None:
@@ -242,8 +206,7 @@ async def test_a_failing_tracker_is_still_captured(log_chain, monkeypatch):
 async def test_a_failing_trackers_capture_keeps_the_original_correlation_keys(
     log_chain, monkeypatch
 ):
-    """``captured.context`` carries the request/user/org ids the timeline joins on — dropping them
-    for the tracker's own failure would open an issue no filter can pivot back to its request."""
+    """So the tracker's issue still leads back to its request."""
     monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
     capture._tracker_failures.clear()
 
@@ -266,9 +229,7 @@ async def test_a_failing_trackers_capture_keeps_the_original_correlation_keys(
     }
 
 
-# A tracker stuck failing every tick must not promote every tick to its own capture (AGENTS: a
-# failure that repeats is one bug) — that would file the same breakage anew every second and,
-# fed its own failure back as new input, never let the queue settle.
+# A tracker failing every tick is captured once. (AGENTS: a failure that repeats is one bug)
 
 
 @pytest.mark.asyncio
@@ -290,7 +251,7 @@ async def test_a_permanently_broken_tracker_does_not_keep_the_queue_growing(log_
     assert len(capture._QUEUE) == 0
     reported = [
         line.level
-        for line in reversed(log_chain())  # oldest first, matching the order the ticks ran in
+        for line in reversed(log_chain())  # oldest first
         if line.logger == capture.__name__ and line.name == "capture.tracker_failed"
     ]
     assert reported == ["error", "warning"]
@@ -300,8 +261,7 @@ async def test_a_permanently_broken_tracker_does_not_keep_the_queue_growing(log_
 async def test_stopping_the_drain_also_folds_in_a_failing_trackers_own_failure(
     log_chain, monkeypatch
 ):
-    """``stop`` is the last tick a loop about to exit gets — a tracker breaking on it must not
-    leave its own failure sitting in a queue nobody will ever drain again."""
+    """``stop`` ticks twice, so a tracker failing on the first is delivered too."""
     monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
     capture._tracker_failures.clear()
     folded: list[str] = []

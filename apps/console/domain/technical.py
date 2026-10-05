@@ -1,8 +1,5 @@
-"""Environment / process diagnostics — framework-free. Feeds the "Settings" console tab that
-shows admins what the running process actually sees: env vars, config, and resource usage.
-
-Values whose name looks sensitive (secret, password, token, key, credential, private, auth, or
-a database connection URL) are masked before leaving this module — never returned in the clear.
+"""What the running process sees (env, config, resources), for the console. Values named like a
+secret (secret, password, token, key, credential, private, auth, a database URL) are masked here.
 """
 
 import asyncio
@@ -48,12 +45,11 @@ def _env_var(name: str, value: str) -> EnvVar:
 
 
 def env_snapshot() -> list[EnvVar]:
-    """Every variable the process sees, masking anything whose name looks sensitive."""
     return [_env_var(n, v) for n, v in sorted(os.environ.items())]
 
 
 def technical_settings_snapshot() -> dict[str, str]:
-    """The app's own parsed config (:class:`TechnicalSettings`), same masking rule."""
+    """:class:`TechnicalSettings`, masked alike."""
     return {
         key: _mask(str(value)) if _is_sensitive(key) else str(value)
         for key, value in get_technical_settings().model_dump().items()

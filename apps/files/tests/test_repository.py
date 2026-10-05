@@ -1,10 +1,4 @@
-"""`OrgFileRepository`'s bounded read, run directly against a real, RLS-enforcing session.
-
-The dashboard overview needs an org's most recent files without loading every one of them —
-this holds `OrgScopedRepository.recent`'s contract (bounded, newest first) for a repository
-other than the one it was first written for, so a shared implementation is what every caller
-gets, not a copy some of them missed.
-"""
+"""`OrgScopedRepository.recent` (bounded, newest first) through `OrgFileRepository`."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -25,7 +19,7 @@ from tests.rls import acting_as
 async def _an_org(session: AsyncSession) -> AsyncGenerator[uuid.UUID]:
     owner = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, owner):

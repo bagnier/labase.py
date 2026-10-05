@@ -77,8 +77,7 @@ from apps.shared.integration.contribs import contribs
 from apps.shared.integration.fullpage import fullpage_context
 from apps.shared.integration.slugs import validate_handle
 
-# A curated shortlist for the org timezone picker: any IANA zone is accepted by the endpoint, which
-# validates against ``zoneinfo`` — this only keeps the dropdown scannable.
+# The picker's shortlist; the endpoint accepts any IANA zone.
 COMMON_TIMEZONES: tuple[str, ...] = (
     "UTC",
     "Europe/London",
@@ -102,11 +101,9 @@ COMMON_TIMEZONES: tuple[str, ...] = (
 
 log = structlog.get_logger(__name__)
 
-# The collection router — multi-org, not scoped by a handle, mounted at the root.
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
-# The org-scoped router: every route resolves its org from the ``{org_handle}`` path parameter (via
-# ``CurrentOrg``) and negotiates JSON vs HTML. Mounted under ``/{org_handle}``.
+# Mounted under ``/{org_handle}``.
 org_router = APIRouter(tags=["organizations"])
 
 
@@ -180,7 +177,7 @@ async def create_organization(
     repo: OrgRepo,
     org_settings: OrganizationsSettings,
 ) -> Response:
-    # An API key acts inside the one org it was minted for; a new org is outside it by definition.
+    # An API key is bound to its own org.
     if current_user.api_key_org_id is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -206,7 +203,6 @@ async def create_organization(
         ),
         repo.session,
     )
-    # session has expire_on_commit=False, so `org` stays usable for the response below.
     await repo.session.commit()
     result = OrganizationWithRoleRead.model_validate({**org.__dict__, "role": OrgRole.owner})
     return mutation_response(
@@ -224,7 +220,7 @@ async def list_organizations(
     repo: OrgRepo,
 ) -> list[OrganizationWithRoleRead]:
     pairs = await repo.list_with_role_for_user(current_user.id)
-    # An API key authenticates as its creator, but sees only the org it was minted for.
+    # An API key sees only its own org.
     bound = current_user.api_key_org_id
     return [
         OrganizationWithRoleRead.model_validate({**org.__dict__, "role": role})
@@ -236,12 +232,12 @@ async def list_organizations(
 # ── Org-scoped pages ────────────────────────────────────────────────────────────
 
 
-_ACTIVITY_PAGE = 8  # facts shown by default; "Load older" grows the window by this step
-_ACTIVITY_MAX = 250  # the dashboard feed is bounded — cap the growable window
+_ACTIVITY_PAGE = 8  # facts per "Load older" step
+_ACTIVITY_MAX = 250
 
 
 def _parse_dt(value: str | None) -> datetime | None:
-    """A date/datetime from the toolbar's date inputs, or None when blank/unparseable."""
+    """``None`` when blank or unparseable."""
     if not value:
         return None
     try:
@@ -251,7 +247,7 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 
 def _activity_query(q: str, app: str, from_dt: str, to_dt: str) -> str:
-    """The current filter as a ``&``-prefixed querystring, to carry across a Load-older click."""
+    """The filter as a ``&``-prefixed query string, for "Load older"."""
     raw = {"q": q, "app": app, "from_dt": from_dt, "to_dt": to_dt}
     params = {k: v for k, v in raw.items() if v}
     return f"&{urlencode(params)}" if params else ""
@@ -268,13 +264,8 @@ async def _activity_context(
     to_dt: str = "",
     limit: int = _ACTIVITY_PAGE,
 ) -> dict:
-    """The org's day-grouped activity feed under the given filters — shared by the dashboard's
-    initial render and the ``/{org}/dashboard/activity`` HTMX fragment.
-
-    Reads on the request's own RLS session: the ``business_events`` policy lets a member read
-    every event of any org they belong to, so ``org_id`` narrows to this org's journal. Each entry
-    keeps its actor (``who did what``, a shared org feed) and deep-links to the concerned entity
-    where the app exposes a page. Exposes only humanized labels and moments — never payloads."""
+    """The org's activity feed under the filters, on the RLS session (a member reads their orgs'
+    facts), with actors and entity links."""
     records = await EventRepository(session).search(
         org_id=org_id,
         app=app or None,
@@ -301,8 +292,7 @@ async def _activity_context(
     }
 
 
-# A composed document, not a resource: its data is its own routes (`overviews.json`, the
-# activity feed), each of which answers JSON — so this page declares the one face it has.
+# HTML only: its data has JSON routes of its own (`overviews.json`, the activity feed).
 @org_router.get("/dashboard", response_class=HTMLResponse)
 async def org_dashboard(
     request: Request,
@@ -316,9 +306,8 @@ async def org_dashboard(
     org_handle = request.path_params.get("org_handle", org.handle)
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle)
     overviews = sorted(await contribs.collect(OverviewQuery(session, org_id)), key=lambda o: o.key)
-    # The org's own numbers — apps contribute cards below, these two are organizations'.
     ctx["member_count"] = len(await repo.list_members(org_id))
-    # Invitations are an owner's to read, so a member's dashboard has no count to show.
+    # Invitations are for owners: a member sees no count.
     ctx["pending_invitations"] = (
         len(await repo.list_invitations(org_id)) if membership.role == OrgRole.owner else None
     )
@@ -333,11 +322,8 @@ async def org_dashboard(
 
 
 def _render_overview_cards(overviews: list[Overview], ctx: dict) -> list[str]:
-    """Each app's own partial (``o.template``), rendered one at a time so a card that raises —
-    a missing template, a bad macro call — is dropped instead of 500ing the whole dashboard
-    (the *contribs* provider itself is already isolated by ``collect``; this isolates its
-    render). Marked ``| safe`` by the caller, not here: the html is already autoescaped by
-    the render below."""
+    """Render one card's partial; a card that fails to render is dropped, not a 500. Autoescaped
+    here; the caller marks it ``| safe``."""
     cards = []
     for o in overviews:
         try:
@@ -360,8 +346,7 @@ async def org_dashboard_activity(
     to_dt: str = "",
     limit: int = _ACTIVITY_PAGE,
 ) -> Response:
-    """The org's day-grouped activity feed as an HTMX fragment — search, type filter, date range
-    and Load-older all re-render it. API callers get the same feed as JSON."""
+    """The activity feed fragment, re-rendered by its filters and "Load older"; JSON too."""
     limit = max(_ACTIVITY_PAGE, min(limit, _ACTIVITY_MAX))
     org = or_404(await repo.get(org_id))
     org_handle = request.path_params.get("org_handle", org.handle)
@@ -388,10 +373,8 @@ async def org_dashboard_overviews(
 async def _settings_context(
     session, current_user, org, org_handle, role: str, *, repo: OrganizationRepository
 ) -> dict:
-    """Full template context for the settings page: fullpage chrome, the members panel
-    (Members tab) and the settings sections apps contribute (:class:`OrgSettingsSectionQuery`,
-    API keys tab). Shared by every route that renders ``settings.html`` so all tab loops
-    are always defined."""
+    """The settings page's context, members and contributed sections, for every route
+    rendering ``settings.html``."""
     ctx = await fullpage_context(session, current_user, org=org, org_handle=org_handle, role=role)
     ctx["settings_sections"] = sorted(
         await contribs.collect(OrgSettingsSectionQuery(session, org.id, role == "owner")),
@@ -405,14 +388,13 @@ async def _settings_context(
         raw_invs = await repo.list_invitations(org.id)
         invitations = [InvitationRead.model_validate(inv) for inv in raw_invs]
     ctx["invitations"] = invitations
-    # The org's current zone always appears in the picker even if it is not in the shortlist.
+    # The org's own zone, even outside the shortlist.
     ctx["timezones"] = sorted({*COMMON_TIMEZONES, org.timezone})
     ctx["current_timezone"] = org.timezone
     return ctx
 
 
-# Same argument as the dashboard: a composed form page whose data is `/members` and the
-# contributed sections — the JSON callers read those.
+# HTML only, like the dashboard: JSON callers read `/members` and the sections.
 @org_router.get("/settings", response_class=HTMLResponse)
 async def org_settings(
     request: Request,
@@ -691,8 +673,7 @@ async def remove_member(
     await events.emit(
         MemberRemoved(user_id=current_user.id, org_id=org_id, entity_id=user_id), repo.session
     )
-    # HTML stays on the members page and re-renders an OOB count, not a redirect,
-    # so this only ever uses delete_response's JSON branch.
+    # HTML re-renders in place: delete_response serves JSON only.
     if wants_json(request):
         return delete_response(request)
     members = await _build_members(repo, org_id)
@@ -713,8 +694,7 @@ async def _issue_invitation(
     inviter_id: uuid.UUID,
     max_invites: int,
 ) -> OrgInvitation:
-    """The invitation, or :class:`InvitationRefused` carrying why. One outcome, so the caller
-    never holds a missing invitation and a refusal side by side and has to know only one is set."""
+    """The invitation, or :class:`InvitationRefused` saying why."""
     existing_user_id = await find_user_id_by_email(email)
     if existing_user_id is not None and await repo.get_membership(org_id, existing_user_id):
         raise InvitationRefused("already a member")
@@ -743,8 +723,7 @@ async def create_invitation(
     membership: CurrentOwnerMembership,
     org_settings: OrganizationsSettings,
 ) -> Response:
-    # Canonicalise once: the accept RPC matches case-insensitively (lower()), so without this
-    # `Foo@x.com` and `foo@x.com` slip past the pending-dedup and both stay acceptable.
+    # Lowercased: acceptance ignores case, so `Foo@x.com` would dodge the pending check.
     email = body.email.strip().lower()
 
     try:
@@ -769,7 +748,7 @@ async def create_invitation(
     link = f"{base_url}/invitations/{invitation.token}"
     inviting_org = await repo.get(org_id)
     org_name = inviting_org.name if inviting_org else ""
-    # Outbox: the mail task commits (or rolls back) with the invitation itself.
+    # The mail commits with the invitation.
     await enqueue_email(repo.session, invitation_email(to=email, org_name=org_name, link=link))
 
     if wants_json(request):
@@ -778,7 +757,7 @@ async def create_invitation(
             status_code=status.HTTP_201_CREATED,
         )
 
-    # Success: return invite result + OOB swap to refresh the pending invitations list.
+    # With an OOB swap refreshing the pending list.
     result_html = bytes(
         templates.TemplateResponse(
             request,
@@ -820,8 +799,7 @@ async def revoke_invitation(
         InvitationRevoked(user_id=current_user.id, org_id=org_id, entity_id=invitation_id),
         repo.session,
     )
-    # HTML re-renders the pending-invitations fragment in place, not a redirect,
-    # so this only ever uses delete_response's JSON branch.
+    # HTML re-renders in place: delete_response serves JSON only.
     if wants_json(request):
         return delete_response(request)
     pending_invitations_html = await _pending_invitations_html(

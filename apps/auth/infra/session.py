@@ -13,21 +13,9 @@ async def get_rls_session(
     current_user: AuthenticatedUser | None = Depends(try_get_current_user),
     session: AsyncSession = Depends(get_user_session),
 ) -> AsyncGenerator[AsyncSession]:
-    """The single authenticated DB session for a request.
-
-    The RLS context (role + JWT claims) is set **once** here; FastAPI caches the
-    dependency, so every consumer in the request (fullpage provider, route, sub-deps)
-    shares this same session and its single set-config round-trip. The context is
-    transaction-local, so the request's commit/rollback clears it — no reset needed.
-    Tolerant to anonymous callers — authentication (401) is enforced separately by
-    ``CurrentUser`` where a route requires it.
-
-    It is a session, and nothing else: ``emit`` takes the session it writes on, so a fact's
-    durability is stated at its call site rather than inherited from whichever route happened to
-    depend on this function.
-    """
-    # Anonymous too: left on the login role, which holds no privilege, a query would fail. The
-    # app's role with claims naming nobody is what a policy reads as "outside every org".
+    """The request's RLS session; FastAPI caches it, so the context is set once per request.
+    Anonymous callers get one too; ``CurrentUser`` is what demands a sign-in."""
+    # An anonymous caller gets claims naming nobody: on the bare login role every query fails.
     claims = current_user.claims if current_user is not None else {"role": "anon"}
     await set_rls_context(session, claims)
     yield session

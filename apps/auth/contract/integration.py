@@ -1,8 +1,4 @@
-"""How the auth context plugs into the running app: mounts the auth router, claims its slugs.
-
-Event wiring for sign-up (``UserCreated`` emission, compensation) lives in the registration
-orchestrator (:mod:`app.registration`), not here.
-"""
+"""Auth's mount: routers, events, settings, console tile and slugs."""
 
 from apps.auth.contract.events import (
     AccountDeletedByAdmin,
@@ -40,9 +36,7 @@ def mount(host: Host) -> None:
     host.contribs.provide(ConsoleOverviewQuery, _console_overview)
     host.register_settings(_declare_settings())
     host.reserve("auth", "login", "logout", "signup")
-    # Auth owns two event namespaces: the sign-in/identity ``auth.*`` facts and the admin
-    # ``accounts.*`` actions (both emitted from the auth routers). Each event names its own, so one
-    # declaration covers both.
+    # ``auth.*`` and ``accounts.*``: each event names its own app.
     host.events.declare(
         UserCreated,
         UserDeleted,
@@ -112,8 +106,6 @@ def _declare_settings() -> SettingsDeclaration:
             ),
         ],
         supabase=SupabaseLink("Manage users in Supabase Auth", "auth/users"),
-        # Both people-management screens hang off the Users tile (their "right place"),
-        # not off floating buttons in the console header.
         links=(
             ConsoleLink("Accounts", "/console/accounts"),
             ConsoleLink("Manage admins", "/console/admins"),
@@ -122,7 +114,7 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _console_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    # Accounts live in Supabase GoTrue, not a table — count via the admin API.
+    # Accounts live in GoTrue: counted through the admin API.
     count = len(await list_server_admins())
     lines = [f"{count} user" + ("s" if count > 1 else "")] if count else ["No users yet"]
     return ConsoleOverview(

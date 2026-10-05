@@ -25,8 +25,7 @@ def _auth_headers(access_token: str) -> dict[str, str]:
 
 
 def _error_message(res: httpx.Response, fallback: str) -> str:
-    """The GoTrue error ``msg`` from a failed response, or ``fallback`` when the body is absent
-    or not JSON — the user-safe message extraction shared by the stateless GoTrue calls."""
+    """GoTrue's user-safe ``msg``, or ``fallback`` when the body is absent or not JSON."""
     try:
         return res.json().get("msg", fallback)
     except ValueError:
@@ -59,9 +58,8 @@ async def logout(access_token: str) -> None:
                 headers=_auth_headers(access_token),
             )
     except Exception as exc:
-        # Two failures wear the same coat here: the token was already expired — GoTrue answered,
-        # and the cookies come off regardless — or GoTrue is unreachable, in which case nobody's
-        # session is being revoked anywhere. The verdict is what tells them apart.
+        # An expired token (a refusal: the cookies come off anyway) or GoTrue unreachable (no
+        # session is revoked anywhere: an issue).
         log_dependency_failure(log, "auth.signout_failed", exc)
 
 
@@ -79,11 +77,10 @@ async def refresh_session(refresh_token: str) -> AuthTokens:
 @dataclass
 class RegisterResult:
     user_id: str
-    access_token: str | None  # None when email confirmation is required
+    access_token: str | None  # None until the email is confirmed
 
 
 async def register(email: str, password: str, client_ip: str | None = None) -> RegisterResult:
-    """Signs up a new user. access_token is None when email confirmation is required."""
     supabase = await get_user_supabase(client_ip)
     res = await supabase.auth.sign_up({"email": email, "password": password})
     if res.user is None:
@@ -95,7 +92,7 @@ async def register(email: str, password: str, client_ip: str | None = None) -> R
 
 
 async def request_password_reset(email: str) -> None:
-    """Ask GoTrue to send the recovery email (Supabase template, zero app mail code)."""
+    """GoTrue sends the recovery email from its own template."""
     supabase = await get_user_supabase()
     await supabase.auth.reset_password_for_email(email)
 
@@ -114,11 +111,7 @@ class OAuthError(Exception):
 
 
 def pkce_pair() -> tuple[str, str]:
-    """A fresh PKCE (verifier, S256 challenge) pair.
-
-    The app keeps no session between the redirect and the callback, so the
-    verifier travels in a short-lived httpOnly cookie — the MFA parking pattern.
-    """
+    """A fresh PKCE ``(verifier, S256 challenge)`` pair."""
     verifier = secrets.token_urlsafe(64)
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
     challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
@@ -126,7 +119,6 @@ def pkce_pair() -> tuple[str, str]:
 
 
 def oauth_authorize_url(provider: str, redirect_to: str, code_challenge: str) -> str:
-    """The GoTrue authorize URL the browser is sent to — GoTrue drives the provider."""
     s = get_technical_settings()
     query = urlencode(
         {
@@ -140,29 +132,26 @@ def oauth_authorize_url(provider: str, redirect_to: str, code_challenge: str) ->
 
 
 def _parse_ts(value: str) -> datetime:
-    """Parse a GoTrue timestamp, tolerating nanosecond precision (9 digits) and a trailing ``Z`` —
-    ``datetime`` only handles microseconds (6 digits) and a numeric offset."""
+    """GoTrue's timestamps may carry nanoseconds and a ``Z``, which ``fromisoformat`` refuses."""
     value = re.sub(r"(\.\d{6})\d+", r"\1", value).replace("Z", "+00:00")
     return datetime.fromisoformat(value)
 
 
 def _is_first_sign_in(user: dict) -> bool:
-    """Whether a GoTrue user object is at its very first sign-in, so the OAuth callback provisions
-    the account (``UserCreated``) once and never on a returning login. GoTrue stamps ``created_at``
-    and ``last_sign_in_at`` in the same sign-up (milliseconds apart); a returning user's last
-    sign-in is far later. A user with no recorded sign-in yet also counts as new."""
+    """GoTrue stamps ``created_at`` and ``last_sign_in_at`` milliseconds apart at sign-up; no
+    sign-in recorded yet also counts as first."""
     created = user.get("created_at")
     last = user.get("last_sign_in_at")
     if not created:
-        return False  # nothing to key on — don't provision
+        return False
     if not last:
-        return True  # exists but never signed in → this is the first
+        return True
     return abs(_parse_ts(last) - _parse_ts(created)) < timedelta(seconds=5)
 
 
 async def exchange_oauth_code(code: str, code_verifier: str) -> tuple[AuthTokens, bool]:
-    """PKCE code-for-session exchange — stateless, like every GoTrue call here. Returns the tokens
-    and whether this is the user's first sign-in (so the callback provisions the account once)."""
+    """Exchange a PKCE code for a session; returns the tokens and whether it is the user's first
+    sign-in."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.post(
@@ -189,7 +178,7 @@ class PasskeyError(Exception):
 async def _passkey_request(
     method: str, path: str, json: dict | None = None, access_token: str | None = None
 ) -> Any:
-    """Stateless GoTrue passkeys call (beta API, no supabase-py support yet)."""
+    """GoTrue's passkeys API is beta; supabase-py does not cover it."""
     s = get_technical_settings()
     headers = {"apikey": s.supabase_publishable_key}
     if access_token:
@@ -204,7 +193,7 @@ async def _passkey_request(
 
 
 async def passkey_registration_options(access_token: str) -> dict[str, Any]:
-    """WebAuthn creation options for the signed-in user — {challenge_id, options, …}."""
+    """WebAuthn creation options for the signed-in user: ``{challenge_id, options, …}``."""
     return await _passkey_request("POST", "/registration/options", {}, access_token)
 
 
@@ -228,7 +217,7 @@ async def delete_passkey(access_token: str, passkey_id: str) -> None:
 
 
 async def passkey_authentication_options() -> dict[str, Any]:
-    """Anonymous discoverable-credential request options — {challenge_id, options, …}."""
+    """Anonymous discoverable-credential request options: ``{challenge_id, options, …}``."""
     return await _passkey_request("POST", "/authentication/options", {})
 
 
@@ -255,8 +244,8 @@ class TotpEnrollment:
 
 
 async def _factors_request(method: str, path: str, access_token: str, json: dict) -> dict:
-    """Stateless GoTrue MFA call (like update_password) — the supabase-py MFA
-    client wants a stateful session we deliberately don't keep."""
+    """Called over HTTP: supabase-py's MFA client needs a stateful session, which we do not
+    keep."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.request(
@@ -287,7 +276,7 @@ async def totp_challenge(access_token: str, factor_id: str) -> str:
 async def verify_totp(
     access_token: str, factor_id: str, challenge_id: str, code: str
 ) -> AuthTokens:
-    """A correct code upgrades the session (AAL2) — GoTrue returns fresh tokens."""
+    """A correct code returns fresh AAL2 tokens."""
     data = await _factors_request(
         "POST", f"/{factor_id}/verify", access_token, {"challenge_id": challenge_id, "code": code}
     )
@@ -295,14 +284,14 @@ async def verify_totp(
 
 
 async def verified_totp_factor(access_token: str) -> str | None:
-    """The id of the account's verified TOTP factor, if any (drives the login step-up)."""
+    """The account's verified TOTP factor id, if any."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.get(
             f"{s.supabase_api_url}/auth/v1/user",
             headers=_auth_headers(access_token),
         )
-    # This lookup is the 2FA gate: a failure must not read as "no factor", or it skips the step-up.
+    # The 2FA gate: a failure must not read as "no factor", which would skip the step-up.
     res.raise_for_status()
     for factor in res.json().get("factors") or []:
         if factor.get("factor_type") == "totp" and factor.get("status") == "verified":
@@ -311,10 +300,8 @@ async def verified_totp_factor(access_token: str) -> str | None:
 
 
 class GoTrueUserUpdateError(Exception):
-    """A PUT to GoTrue's ``/auth/v1/user`` came back >= 400 — refused (4xx) or broken (5xx);
-    message is user-safe. Carries ``status_code`` so a caller can tell the two apart via the
-    base's dependency verdict (:func:`apps.shared.logs.dependency.is_refusal`) instead of
-    treating every instance as a refusal."""
+    """A PUT to ``/auth/v1/user`` answered >= 400; the message is user-safe, and ``status_code``
+    feeds :func:`apps.shared.logs.dependency.is_refusal`."""
 
     def __init__(self, message: str, status_code: int) -> None:
         super().__init__(message)
@@ -322,16 +309,13 @@ class GoTrueUserUpdateError(Exception):
 
 
 class PasswordUpdateError(GoTrueUserUpdateError):
-    """GoTrue refused the new password (typically weak_password), or GoTrue broke (a 5xx)."""
+    """Typically ``weak_password``, or a 5xx."""
 
 
 async def _update_user(
     access_token: str, payload: dict, error_type: type[GoTrueUserUpdateError], fallback: str
 ) -> None:
-    """PUT to GoTrue's ``/auth/v1/user`` (password or email change) — stateless, like logout();
-    on a 4xx/5xx raise ``error_type`` carrying the user-safe GoTrue message and the response's
-    ``status_code``, so the dependency verdict can judge it instead of every instance reading as
-    a refusal."""
+    """PUT to ``/auth/v1/user`` (password or email change); raises ``error_type`` on >= 400."""
     s = get_technical_settings()
     async with httpx.AsyncClient() as client:
         res = await client.put(
@@ -351,7 +335,7 @@ async def update_password(access_token: str, new_password: str) -> None:
 
 
 class EmailChangeError(GoTrueUserUpdateError):
-    """GoTrue refused the email change (invalid or taken address), or GoTrue broke (a 5xx)."""
+    """An invalid or taken address, or a 5xx."""
 
 
 async def request_email_change(access_token: str, new_email: str) -> None:

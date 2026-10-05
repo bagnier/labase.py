@@ -1,9 +1,5 @@
-"""The event bus's registration surface and the wiring it writes — ``declare`` ownership and the
-emit gate, ``on`` registration with the MRO fan-out set, the idempotency guard the
-reconstructed-typed-event wrapper folds in, and how a test isolates or restores the wiring.
-
-Delivery itself (journal → task_queue) is the listener's job; see test_listener.py.
-"""
+"""The bus and its wiring: ``declare`` and the emit gate, ``on`` registration, the idempotent
+delivery wrapper, and wiring isolation. Delivery itself is in test_listener.py."""
 
 import re
 import uuid
@@ -43,9 +39,7 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def bus_isolation():
-    # Snapshot what the process already wired: apps.main (imported by the e2e drivers) registered
-    # real task handlers / durable consumers at mount, so we restore rather than clear — a global
-    # reset would silently unregister the app's own consumers for every later test.
+    # Restore rather than clear: later tests need the consumers apps.main registered.
     _clear_engine_caches()
     saved_handlers = dict(_handlers)
     saved_wiring = wiring.snapshot()
@@ -76,8 +70,7 @@ async def _noop(session, event) -> None:
 
 
 def test_declare_records_the_owner_app_and_gates_emit():
-    """Declaring activates a fact; it never attributes one. The owner is the app the event itself
-    names, so a mount cannot spell it differently from the class."""
+    """The owner is the app the event class names."""
     own = EventWiring()
     assert own.is_declared(_Ticked) is False
     own.declare(_Ticked)
@@ -87,8 +80,6 @@ def test_declare_records_the_owner_app_and_gates_emit():
 
 
 def test_declare_rejects_an_event_that_names_no_app_and_verb():
-    """Without both halves an event has no kind: it never entered the catalog, so a persisted fact
-    could not be rebuilt from it. Usually an abstract base handed over instead of its subclasses."""
 
     class _Abstract(BusinessEvent):
         pass
@@ -102,8 +93,8 @@ def test_declare_rejects_an_event_that_names_no_app_and_verb():
 async def test_emit_refuses_an_undeclared_event():
     bus = EventBus()
     with pytest.raises(ValueError, match="declared by no app"):
-        # The gate runs before the session is ever touched, so a stand-in is enough here.
-        await bus.emit(_Ticked(), cast(AsyncSession, None))  # no app declared it
+        # The gate runs before the session is touched.
+        await bus.emit(_Ticked(), cast(AsyncSession, None))
 
 
 # ── on() registration ────────────────────────────────────────────────────────────────────────
@@ -116,9 +107,6 @@ def test_on_rejects_a_duplicate_consumer_name_for_the_same_event():
 
 
 def test_on_rejects_an_event_type_with_no_kind():
-    """An abstract base with no app_name/verb never enters the catalog, so the listener could not
-    rebuild it from a stored record — and its topic would be ``evt::<name>``, indistinguishable
-    from any other kindless type's, silently colliding in the queue's handler registry."""
 
     class _Kindless(BusinessEvent):
         pass
@@ -129,10 +117,7 @@ def test_on_rejects_an_event_type_with_no_kind():
 
 
 def test_on_rejects_a_duplicate_topic_across_different_event_types():
-    """The topic, not the event class, is what keys the queue's handler registry — so uniqueness
-    has to be checked across every registered consumer, not scoped to one event type's own list
-    (which is what let two distinct kindless types share ``evt::counter`` and silently overwrite
-    each other)."""
+    """The queue keys its handlers by topic, not by event class."""
 
     class _First:
         kind = "test_bus.duplicated"
@@ -151,9 +136,7 @@ def test_on_rejects_a_duplicate_topic_across_different_event_types():
 def test_consumers_of_walks_the_mro_so_a_base_subscription_catches_subclasses():
     events.on(_Ticked, _noop, name="counter", app="test_bus")
     expected = ["evt:test_bus.ticked:counter"]
-    # A subscriber on the base type is delivered for a subclass event too.
     assert [s.topic for s in wiring.consumers_of(_TickedSub)] == expected
-    # And an exact-type event sees its own subscriber.
     assert [s.topic for s in wiring.consumers_of(_Ticked)] == expected
 
 
@@ -161,8 +144,6 @@ def test_consumers_of_walks_the_mro_so_a_base_subscription_catches_subclasses():
 
 
 def test_restoring_a_snapshot_drops_what_was_registered_after_it():
-    """A test that exercises the *real* fan-out has to register on the process-wide bus, then put
-    back what it found — otherwise its consumer keeps firing for every later test in the run."""
     own = EventWiring()
     own.declare(_Ticked)
     own.add_consumer(_Ticked, "before", as_actor=False, app="test_bus")
@@ -174,17 +155,13 @@ def test_restoring_a_snapshot_drops_what_was_registered_after_it():
 
     assert [r.name for r in own.consumers_of(_Ticked)] == ["before"]
     assert own.is_declared(_TickedSub) is False
-    # And the snapshot is a copy, not a view: mutating after taking it left it untouched, so the
-    # same snapshot restores the same state twice (a fixture reused across tests in one module).
+    # A copy, not a view: the same snapshot restores the same state twice.
     own.add_consumer(_Ticked, "after", as_actor=False, app="test_bus")
     own.restore(saved)
     assert [r.name for r in own.consumers_of(_Ticked)] == ["before"]
 
 
 def test_a_bus_given_its_own_wiring_stays_out_of_the_process_one():
-    """Handing a bus a fresh wiring is how a test keeps its registrations to itself — the default is
-    the process's, which the live `events` writes. What events *exist* is shared either way: that is
-    the catalog, filled at import, and there is nothing to isolate about it."""
     own = EventWiring()
     EventBus(own).on(_Ticked, _noop, name="isolated", app="test_bus")
 
@@ -223,19 +200,17 @@ async def test_idempotent_consumer_runs_once_across_a_redelivery():
         "event_id": str(uuid.uuid7()),
     }
     async with db.admin_session_factory()() as session:
-        await wrapper(session, payload)  # first delivery
-        await wrapper(session, payload)  # at-least-once re-delivery, same event_id
+        await wrapper(session, payload)
+        await wrapper(session, payload)  # re-delivery, same event_id
         await session.commit()
     assert len(calls) == 1
-    assert isinstance(calls[0], _Ticked)  # reconstructed as the typed event, not a dict
+    assert isinstance(calls[0], _Ticked)
 
 
 @pytest.mark.asyncio
 async def test_a_reaction_runs_with_the_request_and_fact_bound_to_its_log_context():
-    """A reaction runs off the journal on a background task with no request context of its own. The
-    wrapper binds the originating request_id (correlation) and the fact's event_id (causation) onto
-    structlog, so the reaction's log lines join the emitting request's timeline — then restores the
-    context, so nothing leaks into the next task the worker runs."""
+    """``request_id`` and ``event_id`` are bound during the handler, then unbound for the next
+    task."""
     seen: dict[str, object] = {}
 
     async def handler(session, event) -> None:
@@ -246,9 +221,9 @@ async def test_a_reaction_runs_with_the_request_and_fact_bound_to_its_log_contex
     request_id, event_id = uuid.uuid7(), uuid.uuid7()
     payload = {"label": "x", "request_id": str(request_id), "event_id": str(event_id)}
 
-    # idempotent=False → the ledger check is skipped, so no DB session is touched by the wrapper.
+    # idempotent=False: the wrapper touches no session.
     await wrapper(cast(AsyncSession, None), payload)
 
     assert seen["request_id"] == str(request_id)
     assert seen["event_id"] == str(event_id)
-    assert "request_id" not in structlog.contextvars.get_contextvars()  # restored after the handler
+    assert "request_id" not in structlog.contextvars.get_contextvars()

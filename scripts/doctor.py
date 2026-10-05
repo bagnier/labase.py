@@ -1,14 +1,6 @@
-"""Local stack health *and latency* checks — `make doctor`.
-
-Reachability alone is not health: a degraded Docker proxy (seen after an
-OrbStack freeze) still accepts TCP but multiplies every round-trip, silently
-stretching the test suite several-fold. Each check therefore reports its
-round-trip time and warns beyond `WARN_SECONDS` — a per-call budget, which is
-what stays true as the suite grows.
-
-Run host-side against the local stack: `make doctor` (ENV_FILE=.env.test).
-The guardrail test in tests/test_config.py reuses these checks so a degraded
-environment fails the suite loudly instead of just slowly.
+"""`make doctor`: local stack reachability and latency. A degraded Docker proxy still accepts TCP
+but slows every round trip, so each check warns past `WARN_SECONDS`, a per-call budget.
+tests/test_config.py reuses them, failing a degraded run.
 """
 
 import asyncio

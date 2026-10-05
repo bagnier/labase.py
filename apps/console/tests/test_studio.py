@@ -1,7 +1,4 @@
-"""The Studio base is configuration first: `SUPABASE_STUDIO_URL` is browser-facing, so nothing
-derived from the server-side `SUPABASE_API_URL` (a docker host, a worktree port) can stand in for
-it. Empty means what it says — this deployment has no Studio — except for a hosted project, whose
-dashboard URL really is derivable from the project ref, for everyone, forever."""
+"""The Studio base URL (see :mod:`apps.console.domain.studio`)."""
 
 from apps.console.domain.studio import studio_base_url, studio_link
 

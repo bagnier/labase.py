@@ -53,7 +53,7 @@ def step_delete_file(driver, filename):
 
 @given("the org has a file size limit of 50 MB")
 def step_file_size_limit():
-    pass  # no-op — limit is always enforced
+    pass  # the limit is always on
 
 
 @given(parsers.parse("the organisation storage quota is {mb:d} MB"))

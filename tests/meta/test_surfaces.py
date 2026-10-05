@@ -1,15 +1,5 @@
-"""What every app must declare, checked against the mount surface rather than against its prose.
-
-The README's integration section is one long promise about *uniformity*: every context mounts the
-same way, contributes through the same registries, and is therefore deletable without a trace.
-Uniformity is the kind of claim that decays one app at a time — the app that skips the console
-tile, the shared module that learns one context's name, the contract nobody adds to
-``pyproject.toml`` — and none of those breaks anything the day it lands. They only make the
-sentence in the README a little less true.
-
-Everything here reads a *declaration*: the manifest an app passes to ``Host.register_app``, the
-module list the composition root sorts, the contracts import-linter enforces. Nothing here reads
-behaviour — that is what the rest of the suite is for.
+"""Every app mounts alike and leaves no trace when deleted (AGENTS: an app declares every surface
+it contributes). Checked on declarations: manifests, the composition root, import-linter contracts.
 """
 
 import ast
@@ -41,24 +31,21 @@ from tests.meta.test_ratchets import _demos
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
 
-# Strings through which `apps/shared` names a context *on purpose* — each one a real coupling the
-# guard below would otherwise report, kept visible here rather than suppressed in the walk. A new
-# entry is a decision: is this the multi-tenancy floor, or a trace an app's deletion would leave?
+# Strings by which `apps/shared` names a context on purpose, each with its reason.
 _NAMED_ON_PURPOSE = {
-    # The journal writer pins the actor's handle and org name onto each fact, so a later deletion
-    # or RLS cannot hide who and where — the one shared SQL allowed to read those two tables.
+    # The journal writer pins the actor's and org's names onto each fact.
     "apps/shared/events/repository.py says 'organizations'",
     "apps/shared/events/repository.py says 'profiles'",
-    # The 401 handler bounces a browser to the sign-in form; that URL is auth's.
+    # The 401 handler redirects to auth's sign-in.
     "apps/shared/http/exceptions.py says '/auth'",
-    # The request logger skips the probes' own polling; the probe paths are health's.
+    # The request logger knows health's probe paths.
     "apps/shared/logs/request.py says '/health'",
-    # Multi-tenancy's floor: the `OrgScoped` mixin and the settings DDL name the org table's pk.
+    # Multi-tenancy: `OrgScoped` and the settings tables reference organizations.
     "apps/shared/persistence/base.py says 'organizations'",
     "apps/shared/settings/store.py says 'organizations'",
-    # Postgres' own schema, not the `public` context — it predates the context by every migration.
+    # Postgres's schema, not the context.
     "apps/shared/settings/env.py says 'public'",
-    # The shared shell links the account and operator surfaces of the foundation apps by URL.
+    # The shared shell links the foundation apps' pages.
     "apps/shared/templates/base.html says '/auth'",
     "apps/shared/templates/base.html says '/console'",
     "apps/shared/templates/base.html says '/profile'",
@@ -66,19 +53,16 @@ _NAMED_ON_PURPOSE = {
 }
 
 
-# Strings through which something outside a demo names it — each a trace the demo's deletion
-# would leave: a dead route, a table no longer there, a suite that no longer loads. Frozen by the
-# string it spells; the list only shrinks, and `demo-apps-are-disposable` holds when it is empty.
+# Strings naming a demo outside it, each a trace its deletion would leave. Empty, the
+# `demo-apps-are-disposable` claim holds.
 _NAMES_A_DEMO = {
-    # Organizations maps each app's entity to its detail route by name — the one production trace,
-    # a hard-wired table where a registered surface belongs.
+    # Entity links, hard-wired by app name: the one production trace.
     "apps/organizations/contract/entity_links.py says '/calendar'",
     "apps/organizations/contract/entity_links.py says 'calendar'",
     "apps/organizations/contract/entity_links.py says 'files'",
     "apps/organizations/contract/entity_links.py says 'todo'",
     "apps/organizations/contract/entity_links.py says 'todos'",
-    # The harness lists the demos' tables: the privilege books expect their grants, the worktree
-    # test provisions a bucket per demo, the plugin list loads their steps.
+    # The harness: privilege expectations, the worktree test, the steps plugin list.
     "tests/plugin.py says 'apps.calendar'",
     "tests/plugin.py says 'apps.files'",
     "tests/plugin.py says 'apps.learning'",
@@ -92,14 +76,14 @@ _NAMES_A_DEMO = {
     "tests/test_db_privileges.py says 'org_files'",
     "tests/test_db_privileges.py says 'todos'",
     "tests/test_worktree.py says 'calendar'",
-    # Scenarios of other apps, and the perf smoke, drive the todo demo to have something to act on.
+    # Other apps' scenarios and the perf smoke act on todos.
     "apps/api_keys/tests/e2e/driver_mixin_api.py says 'todos'",
     "apps/api_keys/tests/e2e/driver_mixin_browser.py says 'todos'",
     "apps/api_keys/tests/e2e/steps.py says 'todos'",
     "apps/profile/tests/e2e/driver_mixin_api.py says 'todos'",
     "apps/profile/tests/e2e/driver_mixin_browser.py says 'todos'",
     "scripts/smoke.py says 'todos'",
-    # Unit tests borrowing a demo's name as a sample app or route — the cheapest to repoint.
+    # Unit tests borrowing a demo as a sample.
     "apps/issues/tests/test_capture.py says 'apps.todo'",
     "apps/shared/tests/test_capture.py says 'apps.todo'",
     "apps/shared/tests/test_log_chain.py says 'apps.todo'",
@@ -141,7 +125,6 @@ _NAMES_A_DEMO = {
 
 
 def _contexts() -> set[str]:
-    """Every bounded context — the packages under ``apps/`` except the shared foundation."""
     return {
         path.name
         for path in _APPS.iterdir()
@@ -150,7 +133,6 @@ def _contexts() -> set[str]:
 
 
 def _module_names(path: Path) -> set[str]:
-    """The names a module binds at its top level — functions, classes and plain assignments."""
     tree = ast.parse(path.read_text())
     names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
     return names | {
@@ -172,8 +154,7 @@ def _contract_named(name: str) -> dict:
 
 
 def test_every_context_declares_one_mount_entry_point():
-    """`contract/integration.py`, a `mount` and a `PHASE`: the composition root calls nothing else,
-    so a context missing one of the three is a context that cannot be mounted at all."""
+    """``contract/integration.py`` with ``mount`` and ``PHASE``, all the composition root uses."""
     incomplete = {
         name
         for name in _contexts()
@@ -185,12 +166,8 @@ def test_every_context_declares_one_mount_entry_point():
 
 
 def test_the_composition_root_mounts_every_context():
-    """An app nobody mounts is an app that ships dead: no routes, no tile, no seeds — and no
-    failure either, which is why this is worth a test rather than a code review.
-
-    The listed aliases are resolved to the modules they import, so an alias borrowed from another
-    context still counts the module it really names; and the loop is asserted to be the *only*
-    ``mount`` call site, so a stray mount outside it cannot stand in for a missing listing."""
+    """An unmounted app ships dead, silently. Aliases are resolved to their modules, and the loop
+    is the only ``mount`` call."""
     root = ast.parse((_APPS / "main.py").read_text())
     integration_of = {
         alias.asname or alias.name: (node.module or "")
@@ -208,8 +185,7 @@ def test_the_composition_root_mounts_every_context():
         and any(isinstance(target, ast.Name) and target.id == "_apps" for target in node.targets)
     )
 
-    # `_apps = sorted((…), key=…)`: the mounted contexts are the sorted call's first argument,
-    # not its key function.
+    # `_apps = sorted((…), key=…)`: the first argument.
     listed = mounted_tuple.args[0] if isinstance(mounted_tuple, ast.Call) else mounted_tuple
 
     mounted = {
@@ -230,10 +206,8 @@ def test_the_composition_root_mounts_every_context():
 
 
 def test_the_shared_foundation_is_forbidden_from_every_context():
-    """Two contracts carry the README's sentence, and both are asserted by content rather than by
-    name: an emptied forbidden list, a narrowed source or a quiet `ignore_imports` entry would
-    leave the contract's name standing while the boundary is gone. The context list is also what
-    keeps a new app inside the boundary — the one place it is opt-in."""
+    """Checked by content, not name: an emptied list or an `ignore_imports` entry would keep the
+    name and lose the boundary."""
     shared = _contract_named("shared imports no bounded context")
     domain = _contract_named("domain never imports infra")
 
@@ -250,8 +224,7 @@ def test_the_shared_foundation_is_forbidden_from_every_context():
 
 
 def _internal_modules(context: str) -> set[str]:
-    """Everything importable in a context except its public contract — and its tests, which the
-    allowed-importers clause scopes on its own."""
+    """A context's modules but its contract and tests."""
     return {
         f"apps.{context}.{child.stem}"
         for child in (_APPS / context).iterdir()
@@ -262,10 +235,8 @@ def _internal_modules(context: str) -> set[str]:
 
 
 def test_every_context_keeps_its_internals_private():
-    """One `protected` contract per context, and not an emptied one: what each protects is derived
-    from the context's own tree — every python child but `contract/` — and the only importers
-    allowed are the context itself and test code. A contract drifting from the tree (a new package
-    nobody protected, an `allowed_importers` widened to everyone) fails here, not in review."""
+    """One `protected` contract per context, matching its tree (everything but `contract/`), with
+    only itself and tests as importers."""
     protections = {
         contract["name"].removesuffix(" internals are private"): (
             set(contract["protected_modules"]),
@@ -284,9 +255,8 @@ def test_every_context_keeps_its_internals_private():
 
 
 def test_the_one_way_edge_out_of_auth_is_contracted():
-    """The README names this edge specifically as the example of import-downward-event-upward —
-    and an `ignore_imports` entry is how a real import gets waved through while the linter still
-    reports the contract KEPT, so its absence is part of what is asserted."""
+    """(AGENTS: import downward, event upward) No `ignore_imports` entry either, which would
+    keep the contract KEPT."""
     contract = _contract_named("auth is a foundation: it never imports the organizations context")
 
     assert (
@@ -298,8 +268,7 @@ def test_the_one_way_edge_out_of_auth_is_contracted():
 
 
 def _context_tables() -> set[str]:
-    """Every table owned by a bounded context — a shared SQL literal naming one is an import the
-    linter cannot see."""
+    """Tables owned by a context: SQL naming one is an import the linter cannot see."""
     tables = set()
     for mapper in Base.registry.mappers:
         if not mapper.class_.__module__.startswith("apps.shared"):
@@ -308,9 +277,8 @@ def _context_tables() -> set[str]:
 
 
 def _naming_tokens(text: str, contexts: set[str], tables: set[str]) -> set[str]:
-    """How one string can name a context: its bare name, a path whose segment is one (`/auth/…`),
-    a dotted module path into it (`apps.auth…`, a plugin list or a patch target), or a
-    context-owned table spelled into SQL."""
+    """By its name, a path segment (`/auth/…`), a module path (`apps.auth…`) or one of its
+    tables."""
     names = "|".join(sorted(contexts))
     tokens = {text} if text in contexts else set()
     tokens |= {f"/{hit}" for hit in re.findall(rf"/({names})(?=[/?\"' ]|$)", text)}
@@ -320,14 +288,11 @@ def _naming_tokens(text: str, contexts: set[str], tables: set[str]) -> set[str]:
 
 
 def _strings_naming(contexts: set[str], tables: set[str], paths) -> set[str]:
-    """Every non-docstring string literal in ``paths`` that names one of ``contexts`` — by its bare
-    name, by a URL pointing into it, or by one of ``tables``."""
+    """Non-docstring strings in ``paths`` naming one of ``contexts``."""
     found = set()
     for path in paths:
         tree = ast.parse(path.read_text())
-        # A docstring is the first statement of its module, class or function — an expression
-        # holding the constant. Matched by identity, so a prose mention of a context's name costs
-        # nothing while the same string in code counts.
+        # Docstrings, by identity: prose may name a context.
         docstrings = {
             id(node.body[0].value)
             for node in ast.walk(tree)
@@ -350,7 +315,6 @@ def _strings_naming(contexts: set[str], tables: set[str], paths) -> set[str]:
 
 
 def _shared_strings_naming_a_context() -> set[str]:
-    """Every non-docstring string literal under `apps/shared` that names a context."""
     return _strings_naming(
         _contexts(),
         _context_tables(),
@@ -363,8 +327,7 @@ def _shared_strings_naming_a_context() -> set[str]:
 
 
 def _shared_templates_naming_a_context() -> set[str]:
-    """The same walk over the shared layout: a template is an inter-app surface import-linter
-    cannot see, so a context named in one survives that context's deletion as a dead link."""
+    """Shared templates: a context named there survives as a dead link."""
     contexts = sorted(_contexts())
     reference = re.compile(rf"/({'|'.join(contexts)})(?=[/?\"' ]|$)|[\"']({'|'.join(contexts)})/")
     found = set()
@@ -379,23 +342,15 @@ def _shared_templates_naming_a_context() -> set[str]:
 
 
 def test_no_shared_module_names_a_bounded_context():
-    """The whole "delete an app and nothing is left behind" promise rests here.
-
-    import-linter already forbids shared *importing* a context; a string is how the rule gets
-    broken without one — a settings key, a nav slug, a URL, a table spelled into SQL, a template
-    path. Each one survives the app's deletion as a dangling reference to something that no
-    longer exists, which is exactly the trace the README says cannot remain. What shared does
-    name is frozen above, each with the reason it may.
-    """
+    """A string (settings key, slug, URL, SQL table, template path) breaks the boundary
+    import-linter guards, and survives the app as a dangling reference."""
     named = _shared_strings_naming_a_context() | _shared_templates_naming_a_context()
 
     assert named == _NAMED_ON_PURPOSE
 
 
 def _outside_the_demos() -> list[Path]:
-    """Every Python module a demo's deletion leaves standing: the other apps with their tests, the
-    harness, the scripts. The composition root, whose job is to mount every app, and this package,
-    which reads the demos to hold the README's word on them, are left out."""
+    """Modules a demo's deletion leaves, but the composition root and this package."""
     demos = _demos()
     return [
         path
@@ -419,18 +374,14 @@ def _demo_tables() -> set[str]:
 
 
 def test_nothing_outside_a_demo_names_it():
-    """`apps/shared` naming a context is one trace; a demo named by another app, by the harness or
-    by a script is the same trace one directory over — and deleting the demo turns each into a dead
-    route, a missing table or a suite that no longer loads. What still names one is frozen here, by
-    the string it spells; the list only shrinks, and at zero a demo is deleted without a trace."""
+    """Another app, the harness or a script naming a demo: frozen above."""
     named = _strings_naming(_demos(), _demo_tables(), _outside_the_demos())
 
     assert named == _NAMES_A_DEMO
 
 
 def _contexts_providing(query_type: type) -> set[str]:
-    """The contexts behind the mounted providers of one query type — the registry the request
-    path reads, not the source that once registered them."""
+    """The contexts of the mounted providers of ``query_type``."""
     return {
         provider.__module__.split(".")[1]
         for provider in apps.main.host.contribs.providers(query_type)
@@ -438,20 +389,14 @@ def _contexts_providing(query_type: type) -> set[str]:
 
 
 def test_every_context_declares_its_console_tile():
-    """The tile is what makes an app visible to an admin — and what lets a *disabled* one be
-    switched back on, since it registers before the enabled gate. Read off the mounted registry:
-    a registration deleted from the manifest keeps the query's name in its dead provider, which
-    is exactly what a source grep kept counting."""
+    """The tile lets an admin switch a disabled app back on. Read from the mounted registry, not
+    the source."""
     assert _contexts_providing(ConsoleOverviewQuery) == _contexts()
 
 
 def _writes_under(package: str) -> set[str]:
-    """Every site under ``apps/<package>`` that could change stored state.
-
-    Three shapes, and no more: a fact emitted, a row handed to a session, or SQLAlchemy's own DML
-    imported. Naming the receiver is what keeps ``values.add(selected)`` — a set, in a facet
-    builder — from reading as a database write.
-    """
+    """Sites that could write: a fact emitted, a row given to a session (not a set's ``add``), a
+    DML import."""
     session_writes = {"add", "add_all", "merge"}
     dml = {"insert", "update", "delete"}
     found = set()
@@ -479,12 +424,10 @@ def _writes_under(package: str) -> set[str]:
 
 
 def test_the_timeline_writes_nothing():
-    """A read view that starts writing is a fourth source to correlate against the other three."""
     assert _writes_under("timeline") == set()
 
 
 def _keywords_passed_to(class_name: str) -> set[str]:
-    """Every keyword argument any construction of ``class_name`` passes, across ``apps/``."""
     return {
         keyword.arg or ""
         for path in _APPS.rglob("*.py")
@@ -498,9 +441,7 @@ def _keywords_passed_to(class_name: str) -> set[str]:
 
 
 def test_an_issue_fact_never_names_the_user_who_tripped_it():
-    """The journal is readable by whoever it names. An internal issue named after the user who
-    happened to hit it would surface, in that person's own activity feed, a bug that is not
-    theirs — and would do it through RLS, correctly, which is what makes it hard to notice."""
+    """The journal is readable by whom it names: the issue would show in their feed."""
     named = {
         f"{cls.__name__}(user_id=…)"
         for cls in (IssueOpened, IssueRegressed)
@@ -511,9 +452,7 @@ def test_an_issue_fact_never_names_the_user_who_tripped_it():
 
 
 def test_the_capture_seam_is_not_a_business_fact():
-    """`ExceptionCaptured` travels from the logs context to the issues context directly, so a
-    tracker that fails cannot worsen the exception it tracks. Making it a fact would put it on the
-    journal, on a transaction, in the timeline's `business` source — three wrong answers."""
+    """`ExceptionCaptured` goes straight to the trackers, never on the journal."""
     assert (
         issubclass(ExceptionCaptured, BusinessEvent),
         ExceptionCaptured in catalog.kinds().values(),
@@ -530,10 +469,8 @@ def _todo_surfaces(host: Host) -> dict[str, bool]:
 
 
 def test_a_disabled_app_drops_everything_but_its_console_tile(monkeypatch: pytest.MonkeyPatch):
-    """The reference app mounted twice, on and off, and the two hosts compared surface by
-    surface — the README's whole sentence in one table. The settings store is doubled (our own
-    module) because the off state is a console decision this test has no console to make; both
-    mounts run on the same code path the composition root uses."""
+    """The reference app mounted on and off, surface by surface. The settings store is doubled
+    to switch it off."""
     monkeypatch.setattr("apps.shared.settings.store.seed_values", lambda app, defaults: None)
     saved = live.get_settings("todo").snapshot()
     monkeypatch.setattr("apps.shared.settings.live.seed_values", lambda app, defaults: None)
@@ -557,11 +494,8 @@ def test_a_disabled_app_drops_everything_but_its_console_tile(monkeypatch: pytes
 
 
 def test_no_contract_exports_a_settings_handle():
-    """Handlers take the app's settings *dependency* and get the request's effective values; a
-    contract that exported the live handle instead would hand every consumer server-wide values
-    with the org overrides silently dropped. So the handle never crosses a contract: calling
-    ``get_settings`` inside a function is non-request code doing its job, but a module-level
-    binding — or ``AppSettings`` in a contract's imports — is a handle exported."""
+    """An exported handle would drop org overrides. A module-level binding or an ``AppSettings``
+    import in a contract exports one; a call inside a function does not."""
     exported = set()
     for path in sorted(_APPS.glob("*/contract/**/*.py")):
         relative = str(path.relative_to(_ROOT))
@@ -590,10 +524,7 @@ def test_the_contract_walk_actually_finds_the_modules():
 
 
 def test_the_reference_app_fills_every_surface():
-    """`todo/` is what a new app is copied from, so a surface it stops demonstrating is a surface
-    the next app will not have. The README lists them by name; this asks the *mounted* app for
-    each one — a registration deleted from the manifest used to keep its spelling in the file,
-    and a text grep counted it forever."""
+    """`todo/` is copied by new apps: each surface the README lists, asked of the mounted app."""
     from apps.organizations.contract.events import OrganizationCreated
     from apps.shared.events.wiring import wiring
 
@@ -617,10 +548,7 @@ def test_the_reference_app_fills_every_surface():
     assert missing == set()
 
 
-# The icon font shipped in `static/fonts/` is Phosphor's full regular set, but the CSS that names
-# its glyphs is curated by hand — a surface may therefore declare an icon the stylesheet has no
-# rule for, and the tile renders a blank square. Nothing fails, nothing logs; the tile is simply
-# mute, which is precisely the kind of decay a declaration-level walk exists to catch.
+# The icon CSS is curated by hand: an icon without a rule renders an empty square, silently.
 _ICON_CSS = _ROOT / "static" / "css" / "input.css"
 
 
@@ -629,13 +557,12 @@ def _icons_with_a_rule() -> set[str]:
 
 
 _ICON_DECLARED_RE = re.compile(
-    r'icon(?::[^=\n]+)?\s*=\s*"([a-z0-9-]+)"'  # a call site, or a typed default: icon: ClassVar[…]
+    r'icon(?::[^=\n]+)?\s*=\s*"([a-z0-9-]+)"'  # a call, or a typed default
 )
 
 
 def _icons_declared() -> dict[str, str]:
-    """Every ``icon="…"`` a surface passes, or declares as a typed default, mapped to where it
-    says it. Tests aside: a fixture may name an icon nothing renders."""
+    """Each ``icon="…"`` or typed default outside tests, with where it is."""
     found = {}
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
@@ -646,8 +573,6 @@ def _icons_declared() -> dict[str, str]:
 
 
 def test_every_icon_a_surface_declares_has_a_glyph_to_render():
-    """A tile whose icon has no CSS rule shows an empty box — and only a human looking at the
-    page ever finds out."""
     declared = _icons_declared()
 
     with_rule = _icons_with_a_rule()
@@ -663,22 +588,18 @@ def test_the_icon_walk_actually_finds_the_declarations():
 
 
 def test_the_icon_walk_finds_a_classvar_default():
-    # `icon: ClassVar[PhosphorIcon] = "shield-check"` — the annotated form every event class
-    # uses, with no `icon="…"` call for the plain walk above to see.
+    # `icon: ClassVar[PhosphorIcon] = "shield-check"`, as event classes declare it.
     assert "shield-check" in _icons_declared()
 
 
 def test_icon_declared_re_matches_a_plain_annotated_default():
-    # `icon: str = "file-text"` — `OrgNavItem`'s shape: a typed default with no `ClassVar[…]`
-    # wrapper, and no `icon="…"` call site of its own for the plain walk to see either.
+    # `icon: str = "file-text"`, as `OrgNavItem` declares it.
     assert _ICON_DECLARED_RE.findall('icon: str = "file-text"') == ["file-text"]
 
 
 def _icons_spelled_in_templates() -> dict[str, str]:
-    """Every ``ph-<name>`` a template spells directly in its own markup, plus every quoted name a
-    Jinja ternary in that slot picks between (``ph-{{ 'a' if … else 'b' }}``), mapped to where. A
-    slot naming a bare variable (``ph-{{ icon }}``) contributes no name — there is nothing to
-    read."""
+    """Each ``ph-<name>`` in templates, and both names of a ``ph-{{ 'a' if … else 'b' }}``; a
+    bare variable gives none."""
     found = {}
     for path in sorted(_APPS.glob("*/templates/**/*.html")):
         text = path.read_text()
@@ -686,9 +607,7 @@ def _icons_spelled_in_templates() -> dict[str, str]:
         for icon in re.findall(r"\bph ph-([a-z0-9-]+)", text):
             found[icon] = site
         for expr in re.findall(r"\bph ph-\{\{(.*?)\}\}", text):
-            # `'google-logo' if provider == 'google' else 'github-logo'` — only the ternary's two
-            # branches name an icon; a quoted string inside its condition (``'google'`` above)
-            # is a value being compared, not a glyph. Either quote style, matching Jinja itself.
+            # The branches, not the condition's ``'google'``; either quote style.
             ternary = re.match(
                 r"""\s*['"]([a-z0-9-]+)['"]\s+if\b.*\belse\s+['"]([a-z0-9-]+)['"]\s*$""", expr
             )
@@ -699,8 +618,6 @@ def _icons_spelled_in_templates() -> dict[str, str]:
 
 
 def test_every_icon_a_template_spells_has_a_glyph_to_render():
-    """A template that spells its own icon name never passes through `icon="…"`, so the walk
-    above never sees it — the tile still goes mute the same way."""
     spelled = _icons_spelled_in_templates()
 
     with_rule = _icons_with_a_rule()
@@ -711,7 +628,7 @@ def test_every_icon_a_template_spells_has_a_glyph_to_render():
 
 
 def test_the_template_icon_walk_finds_a_name_that_is_not_the_first_class():
-    # `class="drag-handle ph ph-dots-six-vertical …"` — the icon class sits second, not first.
+    # `class="drag-handle ph ph-dots-six-vertical …"`: not the first class.
     assert "dots-six-vertical" in _icons_spelled_in_templates()
 
 
@@ -721,20 +638,13 @@ def test_the_template_icon_walk_actually_finds_the_names():
 
 
 def test_the_template_icon_walk_finds_a_jinja_ternary_name():
-    # `class="ph ph-{{ 'google-logo' if provider == 'google' else 'github-logo' }}"` — a name
-    # picked at render time, not a bareword the plain walk above can read.
+    # `class="ph ph-{{ 'google-logo' if provider == 'google' else 'github-logo' }}"`.
     assert {"google-logo", "github-logo"} <= _icons_spelled_in_templates().keys()
 
 
-# A surface can also spell an icon as a literal character — ``▼``, ``▲``, ``✕``, ``↑``, ``✓``,
-# a back arrow, a "goes to" arrow, or a caret pair — instead of reaching for the icon font. It
-# renders the same to a sighted mouse user, but it is not `aria-hidden`-able the way an icon is,
-# and it is not Phosphor. Jinja comments are stripped first, so prose that names the glyph —
-# describing the affordance it used to be, as this file's own templates once did — is not
-# mistaken for markup. A maintained set, grown as a violation turns up (issue #131 reported the
-# first three, #148 the next two, #181 the last four) never frozen to one report. The last two,
-# U+2039/U+203A, are spelled by code point rather than by character, so the source stays clear of
-# the pair ruff's homoglyph check (RUF001) exists to flag.
+# Glyphs written as characters instead of Phosphor icons, which can be `aria-hidden`. Jinja
+# comments are stripped first. The set grows with each case found; U+2039/U+203A are code points,
+# clear of ruff's homoglyph check (RUF001).
 _ICON_LOOKALIKE_GLYPHS = {"▲", "▼", "✕", "↑", "✓", "←", "→", chr(0x2039), chr(0x203A)}
 
 
@@ -758,10 +668,7 @@ def test_no_template_spells_an_icon_as_a_literal_glyph():
     assert spelled == set()
 
 
-# ``data-hash-tabs`` is an opt-in: the markup asks for the behaviour, and the page has to load the
-# script that provides it. Forget the script and nothing breaks loudly — the tabs still switch,
-# they just stop surviving a reload and stop being linkable, which is exactly the kind of silence
-# a declaration-level walk is for.
+# ``data-hash-tabs`` needs its script; without it, tabs still switch but lose reloads and links.
 _TEMPLATES = sorted(_APPS.glob("*/templates/**/*.html"))
 _HASH_TABS_SCRIPT = "js/hash-tabs.js"
 
@@ -787,23 +694,17 @@ def test_the_hash_tabs_walk_actually_finds_the_pages():
     assert len(_pages_opting_into_hash_tabs()) > 1
 
 
-# The strip paints a block by class: `bucket_blocks` emits a `kind`, the template renders it as
-# `strip-<kind>`, and the stylesheet is what turns that into a colour. A kind the stylesheet never
-# heard of draws a transparent block — a run that happened, on a lane that says it happened, with
-# nothing on the film strip where it happened.
+# Each band is coloured by a `strip-<kind>` CSS rule; without one, the block is invisible.
 
 
 def test_every_band_the_strip_can_draw_has_a_colour():
-    """The vocabulary is in one tuple (`_BAND_ORDER`); the colours are hand-written. Adding a state
-    to the first without the second loses runs off the picture, silently."""
     painted = set(re.findall(r"\.strip-([a-z]+)\s*[,{]", _ICON_CSS.read_text()))
 
     assert {kind for kind, _ in BANDS} - painted == set()
 
 
 def _mount_surfaces_imported_by(path: Path) -> set[str]:
-    """The contexts whose ``contract/integration.py`` — the mount surface — this module imports,
-    whether as a module (``from apps.todo.contract import integration``) or from inside it."""
+    """Contexts whose ``contract/integration.py`` this module imports, either way."""
     imported = set()
     for node in ast.walk(ast.parse(path.read_text())):
         if isinstance(node, ast.ImportFrom):
@@ -820,11 +721,7 @@ def _mount_surfaces_imported_by(path: Path) -> set[str]:
 
 
 def test_the_composition_root_is_the_only_module_that_mounts():
-    """ "The only place allowed to know several contexts at once: `main.py`" — a module knows a
-    context by importing it, and a feature importing a foundation's *contract* is the healthy
-    edge the README names two sections later. So the line is drawn at the mount surface: a second
-    module importing a `contract/integration.py` is a second composition root, and the one there
-    is imports every context's."""
+    """A module importing a ``contract/integration.py`` is a second composition root."""
     importers = {
         str(path.relative_to(_ROOT)): mounts
         for path in sorted(_APPS.rglob("*.py"))
@@ -834,9 +731,7 @@ def test_the_composition_root_is_the_only_module_that_mounts():
     assert importers == {"apps/main.py": _contexts() | {"shared"}}
 
 
-# The two collaboration objects and the methods that key a handler on them. ``collect`` takes an
-# instance and dispatches on its type, so it has nothing to annotate — it is walked for literals
-# with the others.
+# The methods keying handlers by type; ``collect`` takes an instance, walked for literals only.
 _KEYED_REGISTRATIONS = {Contribs: ("provide",), EventBus: ("declare", "on", "spread")}
 _COLLABORATION_METHODS = {"provide", "declare", "on", "spread", "collect"}
 
@@ -846,10 +741,8 @@ def _is_a_registry(receiver: ast.expr) -> bool:
 
 
 def test_the_collaboration_registries_are_keyed_by_type_alone():
-    """ "Both key handlers by the Python type they carry, so there are no magic strings" — held
-    at both ends. The host carries exactly the two objects; each registration parameter is
-    annotated as a type, so a string is a type error; and no call site under `apps/` passes a
-    literal where the type goes, which is the shape a string-keyed sibling would need."""
+    """(AGENTS: two collaboration objects, two shapes) Parameters typed as types, and no call
+    passing a literal there."""
     collaborators = {
         name: hint
         for name, hint in typing.get_type_hints(Host).items()

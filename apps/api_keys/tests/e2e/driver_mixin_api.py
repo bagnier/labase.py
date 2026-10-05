@@ -6,7 +6,7 @@ from tests.e2e.drivers.api_base import ApiBase
 class ApiKeysApiMixin(ApiBase):
     _api_key_secret: str | None = None
     _api_key_org_handle: str = ""
-    _key_response: httpx.Response  # what the key got back from its last write
+    _key_response: httpx.Response  # the key's last write
 
     def reset_session(self) -> None:
         self._api_key_secret = None
@@ -30,7 +30,7 @@ class ApiKeysApiMixin(ApiBase):
         assert all("secret" not in k for k in keys), "the secret must never be listed again"
 
     def _sessionless_get(self, path: str) -> httpx.Response:
-        """A fresh client with no cookie jar — only the Authorization header speaks."""
+        """No cookies: only the Authorization header."""
         assert self._api_key_secret is not None, "no API key created"
         client = self._make_client()
         try:

@@ -1,4 +1,4 @@
-"""Contribs — the pull/collect contribution registry, split out of the event bus."""
+"""The contribution registry."""
 
 import asyncio
 from dataclasses import dataclass
@@ -49,7 +49,6 @@ async def test_collect_dispatches_by_exact_type_only():
         return "base"
 
     contribs.provide(_Query, base_provider)
-    # A subclass query is a different key — the base provider must not answer it.
     assert await contribs.collect(_Sub("x")) == []
 
 
@@ -66,15 +65,13 @@ async def test_collect_isolates_a_failing_provider_and_keeps_the_rest():
     contribs.provide(_Query, boom)
     contribs.provide(_Query, ok)
 
-    # log-and-skip: the failure never propagates, the healthy provider still contributes.
     assert await contribs.collect(_Query("boom")) == ["ok"]
 
 
 @pytest.mark.asyncio
 async def test_collect_isolates_a_provider_that_hangs_past_its_timeout(monkeypatch):
-    """A down app can't break the page (README: host.contribs — pull) — including one that
-    hangs rather than raises. The bound is the registry's own setting, pinned small here; the
-    outer guard is what fails the test when nothing bounds the hang."""
+    """The registry's timeout is pinned small; the outer guard fails the test if nothing bounds
+    the hang."""
     monkeypatch.setattr(get_technical_settings(), "contribs_provider_timeout_seconds", 0.05)
     contribs = Contribs()
 
@@ -103,8 +100,7 @@ async def test_collect_of_an_unknown_query_type_is_empty():
 async def test_collect_isolates_a_failing_sql_provider_so_the_session_stays_usable(
     db_session: AsyncSession,
 ):
-    """A provider's SQL error aborts the caller's transaction: every later provider and the
-    caller's own queries must still work — a down app can't break the page (README)."""
+    """Its SQL error must not abort the transaction later providers and the caller use."""
     contribs = Contribs()
 
     async def boom(q: _SessionQuery) -> None:

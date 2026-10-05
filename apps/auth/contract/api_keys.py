@@ -1,8 +1,5 @@
-"""The seam between auth and the api_keys context — a typed query, no import.
-
-Auth routes `Authorization: Bearer lbk_...` tokens to whoever contributes an answer
-to `ApiKeyQuery` (the api_keys context registers a provider at mount); deleting that
-context simply makes API keys stop authenticating.
+"""How auth resolves an ``lbk_...`` bearer token without importing api_keys
+(AGENTS: import downward, event upward). Without that app, API keys stop authenticating.
 """
 
 from dataclasses import dataclass
@@ -14,12 +11,8 @@ API_KEY_PREFIX = "lbk_"
 
 @dataclass(frozen=True)
 class ApiKeyQuery:
-    """Resolve a raw bearer token to an AuthenticatedUser (or None).
-
-    Carries the request's admin session (SQLAlchemy sessions are lazy, so the
-    cookie path never pays for it): resolution happens pre-auth, where no JWT
-    exists yet — the hash lookup is the explicit check.
-    """
+    """A raw bearer token to resolve to an ``AuthenticatedUser``, or ``None``. ``session`` is
+    lazy, so the cookie path never opens it."""
 
     token: str
     session: AsyncSession

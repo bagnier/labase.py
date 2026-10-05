@@ -54,7 +54,7 @@ async def seed(email: str, password: str, org_name: str, *, reset: bool) -> None
     user_id = uuid.UUID(uid_str)
     print(f"  → user_id={user_id}")
 
-    # First seeded user is the server admin (matches the bootstrap rule for the first registrant).
+    # The first user is admin, like the bootstrap.
     set_admin_role(uid_str)
     print("  → promoted to server admin")
 

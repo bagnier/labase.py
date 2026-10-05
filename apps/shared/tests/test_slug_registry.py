@@ -1,4 +1,4 @@
-"""Unit tests for the global handle namespace (cross-table uniqueness + reserved names)."""
+"""The handle namespace: validation, reserved names, uniqueness across contexts."""
 
 import contextlib
 import uuid
@@ -11,12 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.integration import slugs as _svc
 from apps.shared.integration.slugs import is_reserved, is_valid_handle, slugify
 
-_SESSION: AsyncSession = cast(AsyncSession, object())  # fake session; checkers never use it
+_SESSION: AsyncSession = cast(AsyncSession, object())  # the fake checkers never use it
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _wire_reserved_slugs():
-    """Reserved slugs are claimed at composition: importing apps.main wires every context."""
+    """Importing apps.main reserves every context's slugs."""
     import apps.main
 
     assert apps.main.host.app is not None
@@ -81,14 +81,10 @@ def test_non_reserved_names_are_not_reserved():
 
 
 # ── handle_is_available / unique_handle ──────────────────────────────────────
-#
-# The service uses a module-level registry (_open_lists). Tests inject fake
-# checkers directly into that dict and restore it after each test.
 
 
 @contextlib.contextmanager
 def _fake_registry(**namespaces):
-    """Temporarily replace _open_lists with the given fake checkers."""
     original = _svc._open_lists.copy()
     _svc._open_lists.clear()
     _svc._open_lists.update(namespaces)
@@ -146,7 +142,7 @@ async def test_unique_handle_increments_when_taken():
 
     async def _counting(sess, handle, exclude_id=None):
         calls["n"] += 1
-        return calls["n"] <= 2  # "alice" and "alice-2" are taken; "alice-3" is free
+        return calls["n"] <= 2  # "alice" and "alice-2" taken
 
     with _fake_registry(profiles=_counting, organizations=_checker(taken=False)):
         assert await _svc.unique_handle("alice", session) == "alice-3"
@@ -161,7 +157,6 @@ async def test_unique_handle_skips_reserved_base():
 
 @pytest.mark.asyncio
 async def test_exclude_from_skips_own_namespace():
-    """exclude_from passes exclude_id only to the named namespace, not others."""
     session = _SESSION
     own_id = uuid.uuid7()
     received: dict = {}

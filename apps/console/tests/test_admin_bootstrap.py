@@ -1,9 +1,5 @@
-"""The first-admin bootstrap — the console's reaction to ``UserCreated``.
-
-The policy: the first registered user becomes server admin. The fact is delivered off the journal,
-minutes to days later, so the actor may no longer be a live account — and the admin count only
-looks at live accounts. Whoever the bootstrap promotes must therefore be countable, or the count
-stays at zero and every following ``UserCreated`` promotes someone else forever.
+"""The first-admin bootstrap. Delivered later, the fact may name a deleted account: only one the
+admin count sees may be promoted, or every next signup is.
 """
 
 import uuid
@@ -17,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.auth.contract.events import UserCreated
 from apps.console.contract.integration import _bootstrap_first_admin
 
-_NO_SESSION = cast(AsyncSession, None)  # the handler runs on the GoTrue admin API, not the session
+_NO_SESSION = cast(AsyncSession, None)  # the handler uses the GoTrue admin API
 
 
 def _user(
@@ -33,8 +29,7 @@ def _user(
 
 
 def _gotrue(users: list[SimpleNamespace]) -> tuple[MagicMock, list[tuple[str, dict]]]:
-    """A stubbed GoTrue admin API (a service we own): the accounts the directory lists, and a
-    record of every role update handed to it — the observable outcome of the bootstrap."""
+    """The accounts it lists, and a record of each role update."""
     updates: list[tuple[str, dict]] = []
     client = MagicMock()
     client.auth.admin.list_users = lambda **_: users
@@ -70,9 +65,7 @@ async def test_an_existing_admin_ends_the_bootstrap():
 
 @pytest.mark.asyncio
 async def test_a_banned_admin_does_not_cover_the_bootstrap():
-    """A banned admin still carries ``app_metadata.role == "admin"`` in GoTrue but cannot sign
-    in — so a server left with only a banned admin must still promote the next registrant
-    (issue #158), the same way it would if the role claim were absent entirely."""
+    """A banned admin cannot sign in, so the next registrant is promoted."""
     actor = uuid.uuid7()
     client, updates = _gotrue([_user(uuid.uuid7(), role="admin", banned=True), _user(actor)])
 
@@ -84,9 +77,7 @@ async def test_a_banned_admin_does_not_cover_the_bootstrap():
 
 @pytest.mark.asyncio
 async def test_an_anonymized_actor_is_never_promoted():
-    """Regression: a dev database full of soft-deleted test accounts. The count skips tombstones,
-    so promoting one leaves it at zero — 170 tombstones ended up wearing ``role=admin`` and the
-    bootstrap never converged."""
+    """A soft-deleted account is never promoted: the count skips it."""
     actor = uuid.uuid7()
     client, updates = _gotrue([_user(actor, deleted=True)])
 

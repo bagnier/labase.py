@@ -1,5 +1,4 @@
-{# Members management UI — shared by the standalone /members page and the
-   settings "Members" tab. Expects: org, org_handle, members, caller_role,
+{# For /members and the settings Members tab. Expects: org, org_handle, members, caller_role,
    invitations, leave_error (optional). #}
 <div class="space-y-6">
   <div id="leave-error" aria-live="polite">
@@ -22,7 +21,7 @@
                 class="btn btn-primary btn-sm">Invite a member</button>
       {% endif %}
     </div>
-    {# overflow-visible (not the panel's default hidden) so a row's Manage dropdown isn't clipped. #}
+    {# overflow-visible, so a row's dropdown is not clipped. #}
     <ul id="member-list" class="list-panel overflow-visible">
       {% for m in members %}
         {% include "organizations/_member_row.html" %}

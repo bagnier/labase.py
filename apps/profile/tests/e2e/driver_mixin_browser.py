@@ -16,17 +16,13 @@ class ProfileBrowserMixin(BrowserBase):
         return f"{self.base_url}/profile"
 
     def _look_at_own_profile(self, email: str) -> None:
-        """A switch flipped by an admin is checked on the account it concerns, not on the admin's:
-        step onto that actor's browser and follow their own account link to their profile.
-
-        Read from the server every time: the switch was flipped after this actor's page rendered,
-        and the whole question is whether their profile still offers what it withdrew."""
+        """The concerned account's profile, freshly loaded through its own link: the switch
+        flipped after it rendered."""
         self.set_acting_email(email)
         self.reach_profile(fresh=True)
 
     def _open_profile_tab(self, label: str) -> None:
-        """Profile sections live in client-side daisyUI tabs; check the tab radio so
-        its panel is visible before interacting with the controls inside it."""
+        """Open a client-side profile tab."""
         self.page.get_by_role("tab", name=label, exact=True).check()
 
     def view_profile(self) -> None:
@@ -34,8 +30,7 @@ class ProfileBrowserMixin(BrowserBase):
 
     # ── email change ──────────────────────────────────────────────────────────
     def request_email_change(self, new_email: str, password: str) -> None:
-        # Self-healing (register_disposable pattern): a previous run's confirmed
-        # change leaves the new address registered; GoTrue refuses reusing it.
+        # A previous run's change may hold the address.
         delete_user_if_exists(new_email)
         self._email_change_requested_at = datetime.now(UTC)
         self.reach_profile()
@@ -57,8 +52,7 @@ class ProfileBrowserMixin(BrowserBase):
         )
 
     def confirm_email_change(self, new_email: str) -> None:
-        # The mail is really fetched from the catcher; following its link is the
-        # one legitimate goto (a user clicks it from their mailbox).
+        # The one legitimate goto: a user clicks the link from their mailbox.
         assert self._email_change_requested_at is not None, "no email change requested"
         token_hash = mailbox.token_hash_from_mail(new_email, since=self._email_change_requested_at)
         self.page.goto(
@@ -93,8 +87,7 @@ class ProfileBrowserMixin(BrowserBase):
         self.page.wait_for_selector("[data-avatar]", timeout=5000)
 
     def assert_avatar_rejected(self) -> None:
-        # A rejected upload full-reloads /profile; the server opens the Profile tab (avatar_error),
-        # but open it explicitly so the assertion never races the server-rendered default tab.
+        # Opened explicitly, not raced against the reload's default tab.
         self._open_profile_tab("Profile")
         alert = self.page.locator("[data-avatar-upload] .alert-error")
         alert.wait_for(timeout=5000)
@@ -115,11 +108,10 @@ class ProfileBrowserMixin(BrowserBase):
         section.get_by_label("Your password").fill(password)
         section.get_by_role("button", name="Delete my account").click()
         self.page.wait_for_load_state("load")
-        self.drain_task_queue()  # run UserDeleted's reactions (reap the orgs, forget the profile)
+        self.drain_task_queue()  # UserDeleted's reactions
 
     def assert_account_deletion_rejected(self) -> None:
-        # Generic on purpose: the rejection reads different messages (wrong password, the
-        # last-admin guard), and this step only claims that one showed up.
+        # Any rejection message (wrong password, last admin).
         alert = self.page.locator("[data-account-deletion] .alert-error")
         alert.wait_for(timeout=5000)
 
@@ -139,8 +131,7 @@ class ProfileBrowserMixin(BrowserBase):
         )
 
     def assert_handle(self, name: str | None) -> None:
-        # What the *stored* handle is: a refused update leaves the typed value in the field, so
-        # reading it back means reloading the page they are on, as a person would.
+        # Reloaded: a refused update leaves the typed value in the field.
         self.page.reload(wait_until="load")
         self._open_profile_tab("Profile")
         value = self.page.get_by_label("Handle").input_value()

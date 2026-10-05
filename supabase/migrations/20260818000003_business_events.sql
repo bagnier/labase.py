@@ -1,40 +1,31 @@
 -- The business journal: an append-only log of typed, immutable facts, written transactionally
 -- with the action it records.
 --
--- Comes before `profiles` because the signup trigger that seeds a profile also writes this
--- table's first fact (`auth.user_created`), on GoTrue's own transaction.
+-- Before `profiles`: its signup trigger writes `auth.user_created`.
 
 create table public.business_events (
   id            uuid        primary key default public.uuidv7(),
   created_at    timestamptz not null default now(),
-  -- An event names itself in two halves — the app it belongs to and the verb it performs — and
-  -- those halves are the stored truth; `kind` is their view. A generated column cannot be
-  -- written, so no writer can make the whole disagree with its parts, and a PostgREST client
-  -- cannot invent a kind whose prefix claims an app it isn't.
+  -- `kind` is generated from app and verb, so no writer can make it disagree with them.
   app_name      text        not null,
   verb          text        not null,
   kind          text        generated always as (app_name || '.' || verb) stored not null,
-  -- The emitting app OWNS its phosphor icon and carries it on the fact, so the timeline renders
-  -- without `shared` having to map app → icon (a foundation must not name features).
+  -- The emitting app's icon, so `shared` never maps app → icon.
   icon          text        not null default 'circle',
-  -- Each correlation key is paired with the readable name it had *then*: the journal outlives its
-  -- subjects (a closed account, a deleted or renamed org) and RLS hides a co-member's handle at
-  -- read time. Every name is nullable — a system fact has no actor, a server-wide one no org, a
-  -- pure-id subject no name, and work outside a request no request.
+  -- Each key with its name *then*: the journal outlives its subjects, and RLS hides co-members.
+  -- Nullable: a system fact has no actor, a server-wide one no org, a background one no request.
   user_id       uuid,
   user_name     text,
   org_id        uuid,
   org_name      text,
-  -- A weak, table-agnostic reference to the concerned entity: no FK, because it points at
-  -- whatever table the fact is about. Every primary key here is a uuid, so it is always one.
+  -- Any table's row, hence no FK.
   entity_id     uuid,
   entity_name   text,
   request_id    uuid,
   request_name  text,  -- "GET /profile", bound at request time
   ip_address    text,
   payload       jsonb       not null default '{}',
-  -- Delivery plumbing, not part of the fact: the cursor the event listener claims on. Left
-  -- unmapped by the ORM on purpose (see apps/shared/events/models.py).
+  -- The listener's cursor, not part of the fact: unmapped by the ORM.
   dispatched_at timestamptz
 );
 
@@ -59,36 +50,22 @@ create index business_events_undispatched_idx on public.business_events (id)
 
 alter table public.business_events enable row level security;
 
--- A member READS their own actions and every fact of any org they belong to; the console keeps
--- full access through the BYPASSRLS admin session. There is no INSERT grant: the journal is
--- written only through the SECURITY DEFINER function below.
+-- A member reads their own facts and their orgs'. No INSERT grant: the writer is below.
 create policy "business_events: self or org member read"
   on public.business_events for select
   using (user_id = auth.uid() or org_id in (select public.user_org_ids()));
 
 grant select on public.business_events to authenticated;
--- The secret key reads the journal and never writes it: Supabase's default privileges hand
--- service_role everything, TRUNCATE included, so they are revoked before the one grant.
+-- The secret key only reads it.
 revoke all on public.business_events from service_role;
 grant select on public.business_events to service_role;
 
 
 -- ── The one writer ──────────────────────────────────────────────────────────────────────────
 --
--- The request path records a fact inside its OWN transaction, so the fact commits iff the
--- mutation does. Routing that write through a SECURITY DEFINER function — rather than a raw
--- INSERT grant — and granting it to `app_rls` rather than `authenticated` is what stops a
--- PostgREST client from forging a `todo.created` that the listener would then deliver to the real
--- consumers.
---
--- The function does NOT re-check `user_id = auth.uid()`. That invariant cannot live here: a
--- durable consumer legitimately re-emits on behalf of the original actor, a detached emit runs
--- with no session at all, and seeders attribute to an org's members. Session identity and the
--- fact's actor are decoupled by design; attribution is the emitter's to get right, and the
--- database's job is to be the single writer.
---
--- `kind` stays generated and `id` / `created_at` keep their column defaults — the function passes
--- none of them, so the journal composes its identity and stamps its clock itself.
+-- Granted to `app_rls`, not `authenticated`, so a PostgREST client cannot forge a fact for the
+-- listener to deliver. No `user_id = auth.uid()` check: consumers emit for the original actor,
+-- seeders for members, some emits have no session. Attribution is the emitter's.
 create or replace function public.record_business_event(
   p_app_name text,
   p_verb text,
@@ -123,8 +100,7 @@ begin
 end;
 $$;
 
--- Only the app's RLS session may call it (the request path); a PostgREST client, on
--- `authenticated`, may not. The admin path reaches it through ownership.
+-- The admin path reaches it through ownership.
 revoke all on function public.record_business_event(
   text, text, text, uuid, text, uuid, text, uuid, text, uuid, text, text, jsonb
 ) from public;
@@ -134,8 +110,7 @@ grant execute on function public.record_business_event(
 
 
 -- ── Waking the listener ─────────────────────────────────────────────────────────────────────
--- NOTIFY makes delivery ~immediate; the listener still polls as a durability net, since NOTIFY is
--- fire-and-forget (lost when nobody is listening).
+-- NOTIFY is lost when nobody listens, so the listener also polls.
 create or replace function public.notify_business_event() returns trigger
   language plpgsql as $$
 begin

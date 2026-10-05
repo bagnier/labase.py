@@ -1,12 +1,7 @@
-"""Back up every object in the Supabase Storage bucket to a local directory.
-
-Storage bytes are NOT part of a Postgres dump (see docs/backups.md), so they need
-their own backup. Run on a schedule against production:
+"""Mirror the Storage bucket into ``DEST/<bucket>/<path>``: a Postgres dump does not hold the
+bytes (docs/backups.md). Re-runs overwrite. On a schedule, against production:
 
     make backup-storage DEST=/backups/storage ENV_FILE=.env.production
-
-Mirrors the whole bucket into ``DEST/<bucket>/<object-path>``, recursing into
-folders. Idempotent: re-runs overwrite, so the destination stays a full mirror.
 """
 
 import argparse
@@ -21,7 +16,7 @@ from scripts.envfile import apply_host_overrides
 
 
 async def _list_all(store: Any, prefix: str) -> list[dict[str, Any]]:
-    """Every entry of a single folder, paging past the API's own default page size."""
+    """Every entry of one folder, page after page."""
     page_size = get_technical_settings().backup_storage_page_size
     entries: list[dict[str, Any]] = []
     offset = 0
@@ -34,15 +29,12 @@ async def _list_all(store: Any, prefix: str) -> list[dict[str, Any]]:
 
 
 async def walk(store: Any, prefix: str) -> list[str]:
-    """Return every object path under ``prefix`` (recursing into folders).
-
-    Supabase Storage lists a single level; folder entries carry a null ``id``.
-    """
+    """Every object path under ``prefix``, recursing: Storage lists one level at a time."""
     paths: list[str] = []
     for entry in await _list_all(store, prefix):
         name = entry["name"]
         path = f"{prefix}/{name}" if prefix else name
-        if entry.get("id") is None:  # a folder, not an object
+        if entry.get("id") is None:  # a folder
             paths.extend(await walk(store, path))
         else:
             paths.append(path)

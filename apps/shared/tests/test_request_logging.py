@@ -1,9 +1,5 @@
-"""The request-logging policy: one line per request, and only when it's a failure worth an
-admin's eyes — every 5xx, plus a 4xx that is a *dead link from ourselves* (same-host Referer to a
-non-asset path). Successful requests, bot scans and the browser's favicon probe stay silent.
-
-Pure middleware logic — no DB, no running app: the decision is exercised through fake requests.
-"""
+"""``RequestLogger``: which exchanges leave a ``request.finished`` line, at which level, and what
+reaches the load metrics. No database."""
 
 import asyncio
 import uuid
@@ -38,8 +34,7 @@ def _req(path: str, *, referer: str | None = None, host: str = "example.com") ->
 
 
 def _levels_for(log_chain, path: str, status: int, referer: str | None = None) -> list[str]:
-    """The levels of the lines a served exchange leaves behind — driven through the real
-    middleware and read back out of the real log sink, so the policy is observed, not mocked."""
+    """The levels of the lines one exchange leaves, through the real middleware and sink."""
     app = FastAPI()
     app.get("/{whole_path:path}")(lambda: Response(status_code=status))
     app.add_middleware(request.RequestLogger)
@@ -64,18 +59,12 @@ def test_internal_referer_is_same_host_only():
 
 # ── One line, whatever refused the exchange ──────────────────────────────────────────────────
 #
-# A refusal used to leave two lines: ``request.rejected`` from the exception handler and
-# ``request.finished`` from the middleware, both about the same exchange — and the noisier of the
-# two also traced the asset 404s the quieter one deliberately skips. ``detail`` was the only thing
-# the second line held that the first did not, so it moved onto the first, and the level moved with
-# it: what the code could not carry through and answered with a 4xx is a warning.
-#
-# A 404 is the exception to that: "there is nothing here" is not a refusal, and a stray URL is not
-# ours to fix — so it stays at ``info`` unless it is a dead link from one of our own pages.
+# A refusal is one ``request.finished`` warning carrying its ``detail``. A 404 stays ``info``
+# unless it is a dead link from one of our pages.
 
 
 def _refused(log_chain, path: str, raiser, *, referer: str | None = None):
-    """Serve one exchange whose handler raises, through the *real* exception handlers."""
+    """Serve one exchange whose handler raises, through the real exception handlers."""
     app = FastAPI()
     app.get("/{whole_path:path}")(raiser)
     app.exception_handler(HTTPException)(handle_http_error)
@@ -95,29 +84,24 @@ def _raise_http(status: int, detail: str):
 
 
 def test_a_refusal_leaves_one_line_carrying_what_it_refused(log_chain):
-    """Two lines said the same exchange twice; the second only ever added its ``detail``."""
     lines = _refused(log_chain, "/acme/settings", _raise_http(403, "Owners only"))
 
     assert lines == [("request.finished", "warning", "Owners only")]
 
 
 def test_a_stray_url_is_not_something_we_refused(log_chain):
-    """A 404 nobody linked to is a scan, not a failure of ours — the level says so."""
     lines = _refused(log_chain, "/wp-login.php", _raise_http(404, "Not Found"))
 
     assert lines == [("request.finished", "info", "Not Found")]
 
 
 def test_an_asset_the_browser_fetched_itself_still_leaves_nothing_when_refused(log_chain):
-    """What the rejected line used to trace and the finished line never did: a row per missing
-    image would bury the traffic it sits between."""
     lines = _refused(log_chain, "/static/gone.css", _raise_http(404, "Not Found"))
 
     assert lines == []
 
 
 def test_a_conflict_leaves_one_line_too(log_chain):
-    """``request.conflict`` was the same double, on the 409 an optimistic lock answers with."""
 
     def stale():
         raise StaleDataError("row changed under us")
@@ -138,8 +122,6 @@ def test_an_internal_dead_link_404_is_traced_at_warning(log_chain):
 
 
 def test_a_bot_scan_404_is_still_traffic_and_traced_at_info(log_chain):
-    """A scan is a served exchange like any other — the level says it was nothing to fix.
-    It stays out of the load metrics, which is where flooding would actually hurt."""
     assert _levels_for(log_chain, "/wp-login.php", 404) == ["info"]
 
 
@@ -148,8 +130,6 @@ def test_a_5xx_is_traced_at_error(log_chain):
 
 
 def test_a_5xx_on_an_asset_is_traced_too(log_chain):
-    """The only thing that brings an asset back into the timeline: a 5xx is ours to fix,
-    whoever asked for the file."""
     assert _levels_for(log_chain, "/static/x.js", 503) == ["error"]
 
 
@@ -157,12 +137,8 @@ def test_an_asset_the_browser_fetched_itself_leaves_no_line(log_chain):
     assert _levels_for(log_chain, "/favicon.ico", 404, "https://example.com/home") == []
 
 
-# A liveness/readiness probe is silent while healthy — it is not traffic an admin needs to see on
-# every tick — but a 503 answer is the database going down at the exact moment the Timeline is read
-# for it, and that is not ours to swallow. These four hold only the health-probe half of the
-# claims.py entry "health-probe-exemption" (quoting AGENTS.md's "what the browser fetched by
-# itself leaves nothing unless it 5xx'd"): the browser-fetched-asset half is a separate,
-# code-only reading of the same sentence, not bound here.
+# A health probe is silent while healthy and traced when it fails. These four hold the probe half
+# of the claim "health-probe-exemption" (tests/meta/claims.py).
 
 
 def test_a_healthy_readiness_probe_leaves_no_line(log_chain):
@@ -181,8 +157,8 @@ def test_a_failing_liveness_probe_is_traced_at_error(log_chain):
     assert _levels_for(log_chain, "/health/live", 503) == ["error"]
 
 
-# The load metrics count the same universe the timeline shows: our own traffic and our own
-# failures, never the bot-scan / favicon noise that would otherwise flood ``GET unmatched``.
+# The load metrics count our traffic and our failures, not scans that would flood
+# ``GET unmatched``.
 
 
 def test_load_metrics_count_success_and_server_errors():
@@ -192,8 +168,8 @@ def test_load_metrics_count_success_and_server_errors():
 
 
 def test_load_metrics_drop_bot_and_favicon_4xx():
-    assert not request._feeds_load_metrics(_req("/wp-login.php"), 404)  # no referer — a scan
-    assert not request._feeds_load_metrics(_req("/x", referer="https://evil.com/"), 404)  # external
+    assert not request._feeds_load_metrics(_req("/wp-login.php"), 404)
+    assert not request._feeds_load_metrics(_req("/x", referer="https://evil.com/"), 404)
     favicon = _req("/favicon.ico", referer="https://example.com/")
     assert not request._feeds_load_metrics(favicon, 404)
 
@@ -203,8 +179,7 @@ def test_load_metrics_count_internal_dead_links():
     assert request._feeds_load_metrics(dead_link, 404)
 
 
-# ``/.well-known/*`` is fetched by the browser/infra itself (Chrome's devtools probe), so even
-# with a same-host referer it is noise, not a dead link — dropped from both logs and metrics.
+# ``/.well-known/*`` is fetched by the browser itself: never a dead link, even from our page.
 
 
 def test_well_known_probe_is_an_infra_probe():
@@ -223,32 +198,19 @@ def test_well_known_probe_stays_out_of_the_load_metrics():
 
 
 def test_the_request_id_is_a_whole_uuid_not_a_prefix():
-    """The correlation key is stored whole; only the screen shortens it.
-
-    Truncated to 8 hex chars at the source it would be 32 bits — a birthday collision around 77k
-    requests, merging two unrelated requests under one filter in the Logs viewer. The journal keeps
-    the full uuid (its column is typed for it) and `_short` shortens it for display, which is where
-    a shortened id is actually useful.
-    """
+    """8 hex chars would collide around 77k requests; only the display shortens it."""
     rid = request.new_request_id()
-    assert uuid.UUID(rid)  # parses whole — not a prefix
+    assert uuid.UUID(rid)
     assert len(rid) == 36
 
 
-# What the middleware measures is handed to whoever registered for it. The load-metrics
-# accumulator lives in ``apps/metrics``, a bounded context shared may not name, so the exchange is
-# offered rather than pushed — and an app that is switched off, or deleted, simply never registers.
+# The exchange is offered to registered observers (``apps/metrics``), which shared cannot name.
 
 
 @pytest.fixture
 def measured(monkeypatch):
-    """Records what the middleware handed its observers.
-
-    A fake, not a mock: the seam *is* a callback, so the arguments it received are the observable
-    behaviour, compared with ``==`` after the act like any other value. Swapped in with
-    ``monkeypatch`` — as ``test_capture`` does for the twin seam — so the real subscription that
-    ``apps/metrics`` installs at mount is restored at teardown rather than lost for the run.
-    """
+    """What the middleware handed its observers. Through ``monkeypatch``, so ``apps/metrics``'s
+    real subscription comes back at teardown."""
     calls: list[tuple] = []
 
     def _record(method, label, status_code, duration_ms, *, unmatched=False):
@@ -259,10 +221,9 @@ def measured(monkeypatch):
 
 
 def _serve(path: str, *, status: int = 200, referer: str | None = None) -> None:
-    """Drive one exchange through the real middleware, on a router mounted under a prefix.
+    """One exchange through the real middleware, on a router under a prefix.
 
-    ``lambda: {}`` and not ``dict`` (what PIE807 proposes): FastAPI introspects the endpoint
-    signature, and ``inspect.signature`` has none to give for a builtin type.
+    ``lambda: {}``, not ``dict`` (PIE807): FastAPI cannot read a builtin's signature.
     """
     app = FastAPI()
     router = APIRouter()
@@ -281,9 +242,7 @@ def test_a_served_request_reaches_the_observer_under_its_route_template(measured
 
 
 def test_an_exchange_is_served_when_nothing_is_measuring_it(log_chain, monkeypatch):
-    """The load-metrics app can be switched off, or deleted outright — then nobody registers, and
-    the request must not notice. This is the whole point of offering the measurement rather than
-    calling a counter shared would otherwise have to name."""
+    """With the metrics app off or deleted, nobody registers and the request does not notice."""
     monkeypatch.setattr(request, "_observers", [])
     app = FastAPI()
     app.get("/console/admins/{email}")(lambda email: Response(status_code=200))
@@ -294,18 +253,13 @@ def test_an_exchange_is_served_when_nothing_is_measuring_it(log_chain, monkeypat
 
 
 def test_a_dead_link_of_ours_reaches_the_observer_as_an_unmatched_real_path(measured):
-    """No route matched, so there is no template to label it with. The real path travels instead,
-    flagged — the counter is what decides how many such labels it will keep."""
     _serve("/console/gone", referer="http://testserver/console")
     assert [(m, label, s, u) for m, label, s, _ms, u in measured] == [
         ("GET", "/console/gone", 404, True)
     ]
 
 
-# The metrics label is the *matched template*, prefix included — `/console/admins/{email}`, never
-# the router-relative `/admins/{email}`. Since FastAPI 0.137 `include_router` keeps the child
-# router instead of cloning its routes under the prefix, so `scope["route"].path` is the path as
-# the child declared it; the full template lives on the effective route context.
+# The label is the full template, prefix included (see ``request._route_template``).
 
 
 def test_the_metric_label_carries_the_router_prefix(measured):
@@ -319,8 +273,6 @@ def test_the_metric_label_of_a_prefix_only_route_is_the_prefix(measured):
 
 
 def test_an_observer_that_raises_is_isolated_from_the_others(measured):
-    """Log-and-skip, the same isolation the capture drain gives its trackers: the second
-    observer still runs the exchange the first one blew up on."""
 
     def boom(*args, **kwargs):
         raise RuntimeError("observer broke")
@@ -334,8 +286,7 @@ def test_an_observer_that_raises_is_isolated_from_the_others(measured):
     ]
 
 
-# One line per served request, under one name: ``request.finished``, whose *level* carries the
-# outcome. That is the name the timeline feature, its mockup and both e2e drivers already read.
+# One ``request.finished`` line per served request, its level carrying the outcome.
 
 
 def _explode() -> None:
@@ -357,10 +308,8 @@ def test_a_served_request_leaves_one_finished_line(log_chain):
 
 
 def test_a_handler_that_raises_still_leaves_its_finished_line(log_chain):
-    """The 5xx an admin most wants to find is the one nobody handled. The exception travels back
-    *through* this middleware, so the line has to be written on the way out and the exception
-    re-raised — Starlette's own 500 handler is what turns it into an issue, one layer further up.
-    """
+    """The line is written on the exception's way out; Starlette's 500 handler, above, opens
+    the issue."""
     TestClient(_serving_app(), raise_server_exceptions=False).get("/boom")
 
     lines = log_chain()
@@ -383,10 +332,8 @@ async def _discard(message: Message) -> None:
 
 
 def test_a_client_disconnect_still_leaves_its_finished_line(log_chain):
-    """A ``CancelledError`` — a client disconnect mid-handler, or a shutdown drain — used to leave
-    the task with no line, no duration and no metric: the middleware only caught ``Exception``,
-    and cancellation is a ``BaseException``. The line is written on the way out, same as any other
-    failure, and the cancellation still carries on."""
+    """``CancelledError`` is a ``BaseException``: the line is still written, and the cancellation
+    goes on."""
     middleware = request.RequestLogger(_cancelling_app)
     scope = {
         "type": "http",
@@ -409,10 +356,7 @@ def test_a_client_disconnect_still_leaves_its_finished_line(log_chain):
 
 
 def test_a_raising_observer_never_replaces_the_handlers_own_exception(log_chain, monkeypatch):
-    """The capture drain isolates each tracker (AGENTS: so a failing tracker never worsens the
-    exception it tracks); an observer must be isolated the same way, or
-    its own failure fingerprints instead of the 500 it was only supposed to count — and the
-    finished line is lost with it."""
+    """Else the observer's failure would be captured instead of the 500, and the line lost."""
 
     def _boom_observer(*args, **kwargs):
         raise RuntimeError("observer broke")
@@ -431,9 +375,7 @@ def test_a_raising_observer_never_replaces_the_handlers_own_exception(log_chain,
     assert next(line for line in lines if line.name == "request.finished").payload["status"] == 500
 
 
-# The four correlation keys are the timeline's whole point, and three of them are bound *below*
-# this middleware — by auth's ``get_current_user`` and organizations' ``get_current_org``, as the
-# request is served. The finished line is written after that, so it must see them.
+# ``user_id`` and ``org_id`` are bound below this middleware, by auth and organizations.
 
 
 def _correlated_app() -> FastAPI:
@@ -456,9 +398,7 @@ def test_the_finished_line_carries_what_the_request_bound_below_it(log_chain):
     ]
 
 
-# The two queues between a request and its observers, both bounded and both able to fill — a storm
-# of exceptions, a drain that stopped. What happens to the request when they do is the whole of
-# "the rest never blocks, slows or fails the action it observes".
+# Full log and capture queues never block, slow or fail the request.
 
 
 def _logging_app() -> FastAPI:
@@ -478,9 +418,8 @@ def _logging_app() -> FastAPI:
 
 
 def test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched(log_chain, monkeypatch):
-    """Both queues already full, one slot each: the exception line and the finished line each
-    displace the sink's one, the capture displaces the capture queue's one, and the request
-    answers as if nothing were watching. Only the tallies move."""
+    """Two lines displace the sink's one slot, one capture the capture queue's; only the tallies
+    move."""
     monkeypatch.setattr(sink, "_QUEUE", deque([{"event": "older"}], maxlen=1))
     monkeypatch.setattr(
         capture, "_QUEUE", deque([ExceptionCaptured(exc=RuntimeError("older"))], maxlen=1)

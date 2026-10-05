@@ -1,14 +1,8 @@
-"""Provision an isolated app schema (+ Storage bucket) inside the shared local Supabase.
+"""Provision an app schema and Storage bucket in the shared local Supabase; auth stays shared
+(emails namespaced, a signup trigger per schema).
 
-A worktree gets its own Postgres *schema* (cloned from the finished ``public`` schema)
-and its own Storage *bucket*, so its DB/files are isolated without spinning a second
-Supabase stack. Auth (GoTrue / ``auth.users``) stays shared — isolation there is logical
-(per-worktree email namespacing + a per-schema signup trigger).
-
-Mechanism: ``pg_dump`` the live ``public`` schema (structure only — it already reflects
-every migration), rewrite ``public.`` → ``<schema>.``, restore into the target schema,
-then recreate the three cross-schema bits a public-only dump can't carry:
-the ``auth.users`` signup trigger, the Storage bucket row, and its RLS policies.
+``pg_dump`` of ``public``'s structure, renamed to ``<schema>``, restored, then the three things
+a ``public`` dump cannot carry: the signup trigger, the bucket row, its policies.
 
 Usage:
     uv run python scripts/provision_schema.py --schema wt_demo --bucket org-files-demo
@@ -25,9 +19,8 @@ from sqlalchemy.engine import make_url
 
 from apps.shared.settings.env import get_technical_settings
 
-# A per-`make`-invocation test schema (test_<pid>, see Makefile) outlives its own run on
-# purpose — so a failed run stays inspectable until the next one starts — but nothing else
-# ever drops one whose pid has since exited. provision() sweeps those on every call.
+# A run's schema (test_<pid>) outlives it, for inspection; provision() sweeps those whose pid
+# has exited.
 _RUN_SCHEMA_RE = re.compile(r"^test_(\d+)$")
 
 
@@ -39,8 +32,7 @@ def db_port(database_url: str) -> int:
 
 
 def _db_container() -> str:
-    """The Postgres container of the stack the env file points to — a checkout's test stack and
-    the dev stack run side by side, so it is found by the host port it publishes."""
+    """The env file's Postgres container, by its published port: several stacks run at once."""
     settings = get_technical_settings()
     port = db_port(settings.supabase_database_admin_url or settings.supabase_database_user_url)
     out = subprocess.run(
@@ -81,7 +73,7 @@ def _psql(container: str, sql: str, *, database: str = "postgres") -> None:
         input=sql,
         capture_output=True,
         text=True,
-        check=False,  # the returncode is read right below, to surface psql's stderr
+        check=False,  # checked below, with psql's stderr
     )
     if proc.returncode != 0:
         sys.exit(f"psql failed:\n{proc.stderr}")
@@ -131,10 +123,9 @@ def _dump_public(container: str) -> str:
 
 
 def _rewrite(dump: str, schema: str) -> str:
-    """Rewrite a public-schema dump to target ``schema``. Everything is schema-qualified,
-    so two substitutions suffice; ``auth.`` / ``storage.`` / ``test.`` refs stay untouched."""
-    # Drop ALTER DEFAULT PRIVILEGES (only affect future objects; some target roles
-    # postgres can't act for, e.g. supabase_admin) and the standard-schema comment.
+    """Retarget a qualified ``public`` dump to ``schema``; other schemas stay."""
+    # Without ALTER DEFAULT PRIVILEGES (some name roles postgres cannot act for) and the schema
+    # comment.
     lines = [
         ln
         for ln in dump.splitlines()
@@ -142,7 +133,7 @@ def _rewrite(dump: str, schema: str) -> str:
     ]
     dump = "\n".join(lines)
     dump = dump.replace("public.", f"{schema}.")
-    return dump.replace("SCHEMA public", f"SCHEMA {schema}")  # CREATE / GRANT ... ON SCHEMA
+    return dump.replace("SCHEMA public", f"SCHEMA {schema}")
 
 
 def _storage_and_trigger_sql(schema: str, bucket: str) -> str:
@@ -195,14 +186,13 @@ def _pid_alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True  # exists, just owned by someone else
+        return True  # exists, owned by another role
     return True
 
 
 def _sweep_stale_run_schemas(container: str, *, keep: str) -> None:
-    """Drop every other ``test_<pid>`` schema (+ bucket + trigger) whose pid has exited — a
-    run that crashed before reaching its own teardown, or an earlier lifetime of this
-    checkout. A schema whose pid is still alive may be another run using it right now."""
+    """Drop each other ``test_<pid>`` schema, bucket and trigger whose pid has exited; a live
+    pid may be another run."""
     names = _query(
         container,
         "select schema_name from information_schema.schemata where schema_name ~ '^test_[0-9]+$'",
@@ -246,7 +236,7 @@ def deprovision(schema: str, bucket: str) -> None:
         container,
         f"drop trigger if exists on_auth_user_created__{schema} on auth.users;\n"
         f"drop schema if exists {schema} cascade;\n"
-        # Bypass storage.protect_delete() guard (superuser only) to remove the bucket.
+        # Past storage.protect_delete(), as superuser.
         "set session_replication_role = replica;\n"
         f"delete from storage.objects where bucket_id = '{bucket}';\n"
         f"delete from storage.buckets where id = '{bucket}';\n"
