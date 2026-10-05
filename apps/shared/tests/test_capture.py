@@ -5,12 +5,15 @@ drain at shutdown, failing trackers. The round trip to the issues tables is in
 import asyncio
 import logging
 from collections import deque
+from datetime import UTC, datetime, timedelta
 from weakref import WeakKeyDictionary
 
 import pytest
 import structlog
 
+from apps.shared import clock
 from apps.shared.logs import capture
+from apps.shared.settings.env import get_technical_settings
 
 _PROBE_LOGGER = "apps.todo.infra.router"
 
@@ -18,10 +21,14 @@ _PROBE_LOGGER = "apps.todo.infra.router"
 @pytest.fixture(autouse=True)
 def _reset_overflow_counter():
     """A leftover count from another test would otherwise ride into this one's own ``tick()`` —
-    now delivered straight to whatever tracker is wired up, not just a log line to skim past."""
+    now delivered straight to whatever tracker is wired up, not just a log line to skim past. The
+    retry state must go with it: a stale ``owed_to`` naming a previous test's tracker object would
+    read as "already taken" for a tracker this test never registered."""
     capture._overflow.dropped = 0
+    capture._overflow.retry = capture._Retry()
     yield
     capture._overflow.dropped = 0
+    capture._overflow.retry = capture._Retry()
 
 
 def _log_exceptions(count: int) -> None:
@@ -149,6 +156,65 @@ async def test_a_shortfall_kept_through_an_outage_is_said_once(log_chain, monkey
         if line.logger == capture.__name__ and line.name == "capture.overflowed"
     ]
     assert said == [3]
+
+
+@pytest.mark.asyncio
+async def test_the_dropped_shortfall_is_never_replayed_into_a_tracker_that_already_took_it(
+    monkeypatch,
+):
+    """The overflow report's own retry state persists across ticks, the same ownership a queued
+    capture carries: a healthy tracker that already took today's shortfall must not be handed the
+    same report again merely because a different tracker is still down."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    capture._overflow.dropped = 3
+    capture._overflow.retry = capture._Retry()
+    capture._overflow.offered_as = 3
+    overflow_reports_seen_by_healthy = 0
+
+    async def healthy(captured: capture.ExceptionCaptured) -> None:
+        nonlocal overflow_reports_seen_by_healthy
+        if isinstance(captured.exc, capture.CaptureQueueOverflowed):
+            overflow_reports_seen_by_healthy += 1
+
+    async def always_down(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [healthy, always_down])
+
+    for _ in range(3):
+        await capture.CaptureDrain(0).tick()
+
+    assert overflow_reports_seen_by_healthy == 1
+
+
+@pytest.mark.asyncio
+async def test_a_shortfall_that_grows_while_a_tracker_stays_down_is_not_undercounted(monkeypatch):
+    """Persisting the report's ownership so it is not replayed must not freeze a healthy tracker's
+    view of the count either: more dropped while a different tracker still owes the earlier
+    figure is a bigger fact, offered to everyone again rather than the increment going to
+    nobody."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    capture._overflow.dropped = 3
+    capture._overflow.retry = capture._Retry()
+    capture._overflow.offered_as = 0
+    seen_by_healthy: list[int] = []
+
+    async def healthy(captured: capture.ExceptionCaptured) -> None:
+        seen_by_healthy.append(captured.context["dropped"])
+
+    async def down_until_it_sees_the_full_count(captured: capture.ExceptionCaptured) -> None:
+        if captured.context["dropped"] < 8:
+            raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [healthy, down_until_it_sees_the_full_count])
+
+    await capture.CaptureDrain(0).tick()
+    capture._overflow.dropped += 5  # more shed while the tracker above stays down
+    await capture.CaptureDrain(0).tick()
+
+    assert seen_by_healthy[-1] == 8
 
 
 # An unhandled 500 is logged by Starlette's 500 handler, then again by the ASGI server.
@@ -323,6 +389,9 @@ async def test_a_tracker_that_took_nothing_is_probed_with_one_capture_per_tick(m
 async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(
     failure, log_chain, monkeypatch
 ):
+    """``flaky`` staying down means ``first`` is still owed to it after the first tick, so it
+    rejoins the queue behind ``second`` rather than being dropped — the second tick is what lets
+    ``fine`` see ``second`` too, with the drain still standing after ``flaky``'s exception."""
     tracked: list[capture.ExceptionCaptured] = []
 
     async def flaky(_captured: capture.ExceptionCaptured) -> None:
@@ -343,6 +412,7 @@ async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(
         ),
     )
 
+    await capture.CaptureDrain(0).tick()
     await capture.CaptureDrain(0).tick()
 
     assert [str(c.exc) for c in tracked] == ["first", "second"]
@@ -493,6 +563,156 @@ async def test_a_permanently_broken_tracker_does_not_keep_the_queue_growing(log_
         ["the original failure", "tracker itself is down"],
         ["error", "warning", "warning", "warning", "warning"],
     )
+
+
+@pytest.mark.asyncio
+async def test_a_capture_a_healthy_tracker_took_stays_owed_to_the_one_still_down(monkeypatch):
+    """Retry is tracked per tracker: the healthy one is asked for each distinct capture exactly
+    once, never replayed, while the down one keeps being offered the very capture it still owes,
+    until it takes it."""
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    seen_by_healthy: list[str] = []
+    down_calls = 0
+
+    async def healthy(captured: capture.ExceptionCaptured) -> None:
+        seen_by_healthy.append(str(captured.exc))
+
+    async def down_for_its_first_call(_captured: capture.ExceptionCaptured) -> None:
+        nonlocal down_calls
+        down_calls += 1
+        if down_calls == 1:
+            raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [healthy, down_for_its_first_call])
+    capture._QUEUE.clear()
+    capture._QUEUE.append(capture.ExceptionCaptured(exc=RuntimeError("outage")))
+
+    await capture.CaptureDrain(0).tick()
+    await capture.CaptureDrain(0).tick()
+
+    # "outage" fails down_for_its_first_call's first call and is offered to it again once the
+    # tracker's own failure capture has cleared; that second offer is the one a bool verdict
+    # would have skipped by reading "outage" as already done.
+    assert (seen_by_healthy, down_calls, list(capture._QUEUE)) == (
+        ["outage", "Postgres is down"],
+        3,
+        [],
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_down_tracker_throttles_every_tracker_to_one_capture_per_tick(monkeypatch):
+    """Ending the tick on the first capture still owed to someone protects the down tracker from a
+    second failing call the same tick — the price, with more than one tracker registered, is that
+    a healthy tracker also waits a tick per capture rather than draining the queue at once. Only
+    one tracker is registered today (``apps/issues``), which never pays it."""
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    seen_by_healthy: list[str] = []
+
+    async def healthy(captured: capture.ExceptionCaptured) -> None:
+        seen_by_healthy.append(str(captured.exc))
+
+    async def always_down(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [healthy, always_down])
+    capture._QUEUE.clear()
+    capture._QUEUE.extend(
+        capture.ExceptionCaptured(exc=RuntimeError(name)) for name in ("first", "second", "third")
+    )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert seen_by_healthy == ["first"]
+
+
+@pytest.mark.asyncio
+async def test_a_capture_no_tracker_can_ever_take_is_parked_past_its_retry_window(
+    log_chain, monkeypatch
+):
+    """A capture whose tracker fails for a reason that never clears — a value Postgres' JSON type
+    rejects, reachable through ``_track``'s ``json.dumps`` — is parked past a bounded retry
+    window, the way ``TaskWorker`` parks a task that keeps failing, with one line marking the
+    drop rather than a fresh traceback forever. The window is real elapsed time, not a tick
+    count: an ordinary outage must survive it, so the clock — not the tick loop — is what the
+    budget is spent against."""
+    monkeypatch.setattr(get_technical_settings(), "capture_retry_seconds", 120, raising=False)
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(clock, "now", lambda: moment)
+
+    async def never_takes_it(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("Postgres' JSON type rejects this capture's context")
+
+    monkeypatch.setattr(capture, "_trackers", [never_takes_it])
+    capture._QUEUE.append(capture.ExceptionCaptured(exc=RuntimeError("unstorable")))
+
+    await capture.CaptureDrain(0).tick()  # t=0: opens the window for "unstorable"
+    moment += timedelta(seconds=60)
+    await capture.CaptureDrain(0).tick()  # t=60: still inside the window
+    moment += timedelta(seconds=61)
+    await capture.CaptureDrain(0).tick()  # t=121: past it -> "unstorable" is parked
+    moment += timedelta(seconds=61)
+    await capture.CaptureDrain(0).tick()  # t=182: the tracker's own failure parks too
+
+    parked = [
+        line.payload["attempts"]
+        for line in reversed(log_chain())  # oldest first
+        if line.logger == capture.__name__ and line.name == "capture.parked"
+    ]
+    assert (list(capture._QUEUE), parked) == ([], [2, 2])
+
+
+@pytest.mark.asyncio
+async def test_parking_is_never_a_count_of_tries_short_of_the_retry_window(monkeypatch):
+    """The budget is real elapsed time, never a count of tries: many fast ticks while the clock
+    barely moves must not burn through it the way an attempt-count ceiling would — only elapsed
+    time past the window parks a capture."""
+    monkeypatch.setattr(get_technical_settings(), "capture_retry_seconds", 120, raising=False)
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(clock, "now", lambda: moment)
+
+    async def always_down(_captured: capture.ExceptionCaptured) -> None:
+        raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [always_down])
+    capture._QUEUE.append(capture.ExceptionCaptured(exc=RuntimeError("outage")))
+
+    for _ in range(10):
+        await capture.CaptureDrain(0).tick()
+        moment += timedelta(seconds=1)
+
+    assert sorted(str(c.exc) for c in capture._QUEUE) == ["Postgres is down", "outage"]
+
+
+@pytest.mark.asyncio
+async def test_a_capture_outlives_an_ordinary_outage_inside_its_retry_window(monkeypatch):
+    """The retry window bounds a capture nothing can ever store, not an outage that will end: a
+    tracker down for a while and then back must still take the capture it owed, never parked
+    merely for having waited."""
+    monkeypatch.setattr(get_technical_settings(), "capture_retry_seconds", 120, raising=False)
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    moment = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(clock, "now", lambda: moment)
+    taken: list[str] = []
+
+    async def recovers_at_two_minutes(captured: capture.ExceptionCaptured) -> None:
+        if moment < datetime(2026, 1, 1, 0, 2, tzinfo=UTC):
+            raise RuntimeError("Postgres is down")
+        taken.append(str(captured.exc))
+
+    monkeypatch.setattr(capture, "_trackers", [recovers_at_two_minutes])
+    capture._QUEUE.append(capture.ExceptionCaptured(exc=RuntimeError("outage")))
+
+    for _ in range(3):
+        await capture.CaptureDrain(0).tick()
+        moment += timedelta(seconds=60)
+
+    assert (sorted(taken), list(capture._QUEUE)) == (["Postgres is down", "outage"], [])
 
 
 @pytest.mark.asyncio

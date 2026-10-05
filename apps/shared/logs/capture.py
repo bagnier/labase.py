@@ -11,8 +11,15 @@ never touches the loop or the DB. :class:`CaptureDrain` hands each exception to 
 registered with :func:`on_captured` (``apps/issues``). Off the event bus: an exception is not a
 business fact.
 
-A capture no tracker took rejoins the back of the queue and ends the tick: a tracker that is
-down is probed with one capture per tick, and the outage adds only the tracker's one failure.
+A capture still owed to some tracker rejoins the back of the queue and ends the tick: a tracker
+that is down is probed with one capture per tick, and the outage adds only the tracker's one
+failure — at the cost, with more than one tracker registered, of throttling every tracker to one
+capture per tick while any one of them is down, rather than only the one that is (today's single
+registered tracker, ``apps/issues``, never pays this). Ownership is tracked per tracker, not as
+one bool for the whole capture, so a capture one tracker already took is never replayed into it
+while another stays down. A capture still owed to someone past a bounded retry window — long
+enough that it is no longer an ordinary outage waiting out — is parked instead of requeued
+forever (``capture_retry_seconds``).
 
 Full, the queue sheds by fingerprint: a storm's own duplicates are evicted before any distinct
 capture. Shedding takes more than one step, so the queue is guarded by a :class:`threading.Lock`.
@@ -27,12 +34,50 @@ from collections import Counter, deque
 from collections.abc import Awaitable, Callable, MutableMapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from weakref import WeakKeyDictionary
 
 import structlog
 
+from apps.shared import clock
+from apps.shared.settings.env import get_technical_settings
+
 log = structlog.get_logger(__name__)
+
+ExceptionTracker = Callable[["ExceptionCaptured"], Awaitable[None]]
+
+
+@dataclass
+class _Retry:
+    """Mutable per-capture bookkeeping, held by the otherwise-frozen ``ExceptionCaptured``:
+    mutating it is not reassigning one of the capture's own fields.
+
+    ``_state`` starts ``None`` — not yet attempted is a real state here, since
+    :func:`capture_processor` can run before every app has mounted and registered its tracker —
+    and :meth:`_ensure` is the one place that narrows it, so ``owed()`` and ``seconds_owed()``
+    never carry a lifecycle of their own (AGENTS: a lifecycle belongs in the constructor, or
+    behind one accessor that narrows it)."""
+
+    _state: tuple[set[ExceptionTracker], datetime] | None = None
+    attempts: int = 0
+
+    def _ensure(self) -> tuple[set[ExceptionTracker], datetime]:
+        if self._state is None:
+            self._state = (set(_trackers), clock.now())
+        return self._state
+
+    def owed(self) -> set[ExceptionTracker]:
+        """The trackers still owed this capture: filled from the live registry on first call,
+        then shrinking as each one takes it, so a tracker that already took this exact capture is
+        never asked for it again while another stays down."""
+        return self._ensure()[0]
+
+    def seconds_owed(self) -> float:
+        """How long this capture has been waiting on someone, from its first delivery attempt,
+        bounding how long a capture no tracker can ever take is retried before it is parked."""
+        _, first_attempt_at = self._ensure()
+        return (clock.now() - first_attempt_at).total_seconds()
 
 
 @dataclass(frozen=True)
@@ -41,6 +86,7 @@ class ExceptionCaptured:
 
     exc: BaseException
     context: dict[str, Any] = field(default_factory=dict)
+    retry: _Retry = field(default_factory=_Retry, compare=False)
 
 
 class CaptureQueueOverflowed(Exception):
@@ -57,9 +103,15 @@ _lock = threading.Lock()
 @dataclass
 class _Overflow:
     """Exceptions the full queue dropped. Reported by the drain: a line written from the
-    processor would re-enter the chain."""
+    processor would re-enter the chain. ``retry`` persists across ticks, the same ownership a
+    queued capture gets, so a tracker that already took today's count is not handed it again on
+    every tick a different tracker stays down. ``offered_as`` is the count ``retry`` was last
+    built for: more dropped while a tracker still owes the earlier count is a bigger fact, so
+    everyone is offered it again rather than the increment going to nobody."""
 
     dropped: int = 0
+    retry: _Retry = field(default_factory=_Retry)
+    offered_as: int = 0
 
 
 _overflow = _Overflow()
@@ -79,7 +131,6 @@ def _append(captured: ExceptionCaptured) -> None:
 # Set while the drain delivers, so a tracker's own logging is not captured again.
 _capturing: ContextVar[bool] = ContextVar("labase_capturing", default=False)
 
-ExceptionTracker = Callable[[ExceptionCaptured], Awaitable[None]]
 _trackers: list[ExceptionTracker] = []
 
 # Consecutive failures per tracker (AGENTS: a failure that repeats is one bug).
@@ -210,6 +261,21 @@ def _report_tracker_recovery(tracker: ExceptionTracker) -> None:
         )
 
 
+def _report_capture_parked(captured: ExceptionCaptured) -> None:
+    """Giving up on one capture past its retry window, still owed to whichever tracker never
+    took it, is exactly (AGENTS: what the code could not carry through and absorbed) — a
+    ``warning``, not ``log.exception``: the tracker's own failure already opened an issue on its
+    first attempt, so this only says the capture itself was dropped."""
+    log.warning(
+        "capture.parked",
+        exc_info=captured.exc,
+        error=str(captured.exc),
+        attempts=captured.retry.attempts,
+        seconds_owed=round(captured.retry.seconds_owed()),
+        pending_trackers=sorted(repr(tracker) for tracker in captured.retry.owed()),
+    )
+
+
 async def drain_once() -> None:
     """Deliver the queue now, on the caller's task: for a lifespan startup that raised, before
     any drain started. A dying interpreter has no loop; :mod:`apps.shared.logs.chain` handles it.
@@ -250,26 +316,40 @@ class CaptureDrain:
                     break
                 captured = _QUEUE.popleft()
             if not await self._deliver(captured):
-                # Postgres down is a tracker raising, not a capture that stops mattering: kept
-                # for the next tick's retry rather than lost with the outage it would explain.
-                # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
-                # already, so the marking path would read the retry as a duplicate and drop it.
-                # Bound and shed like any other append: a concurrent request can fill the freed slot
-                # while the tracker awaits, and the eviction that follows counts the same way.
-                _append(captured)
-                # And it ends the tick: what is still queued behind it would only cost the
-                # tracker that is down one more failing call each, every tick of the outage.
+                captured.retry.attempts += 1
+                if captured.retry.seconds_owed() >= get_technical_settings().capture_retry_seconds:
+                    # Nothing here tells an outage that has outlasted the window from a value no
+                    # tracker can ever store — both are "still owed past the budget". Giving up
+                    # either way is the same trade ``TaskWorker`` already makes: short of that
+                    # budget, kept; past it, parked rather than spamming a fresh traceback for
+                    # the rest of the process's life.
+                    _report_capture_parked(captured)
+                else:
+                    # Postgres down is a tracker raising, not a capture that stops mattering: kept
+                    # for the next tick's retry rather than lost with the outage it would explain.
+                    # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
+                    # already, so the marking path would read the retry as a duplicate and drop it.
+                    # Bound and shed like any other append: a concurrent request can fill the
+                    # freed slot while the tracker awaits, and the eviction that follows counts
+                    # the same way.
+                    _append(captured)
+                # And it ends the tick either way: what is still queued behind it would only cost
+                # the tracker that is down one more failing call each, every tick of the outage.
                 break
         if dropped:
             await self._report_overflow(dropped)
 
     async def _deliver(self, captured: ExceptionCaptured) -> bool:
-        """Hand ``captured`` to every tracker, isolated; whether it is done with — taken by a
-        tracker, or with no tracker subscribed to take it."""
-        taken = False
+        """Hand ``captured`` to every tracker still owed it, isolated; whether it is done with —
+        taken by every tracker that owed it, or with no tracker subscribed to take it. A tracker
+        that already took this exact capture is not asked again: ownership is per tracker, not
+        one bool for the whole capture."""
+        owed_to = captured.retry.owed()
         token = _capturing.set(True)
         try:
             for tracker in _trackers:
+                if tracker not in owed_to:
+                    continue
                 try:
                     await tracker(captured)
                 except BaseException as tracker_exc:
@@ -284,11 +364,11 @@ class CaptureDrain:
                         raise
                     _report_tracker_failure(tracker, tracker_exc, captured.context)
                 else:
-                    taken = True
+                    owed_to.discard(tracker)
                     _report_tracker_recovery(tracker)
         finally:
             _capturing.reset(token)
-        return taken or not _trackers
+        return not owed_to
 
     async def _report_overflow(self, dropped: int) -> None:
         """Deliver the shortfall straight to the trackers, in this same tick, rather than
@@ -297,16 +377,31 @@ class CaptureDrain:
 
         One no tracker took is kept like any such capture, but as its count rather than as a
         capture, and said only once taken: the report a tracker finally takes carries the whole
-        shortfall, and the line says it once rather than on every tick of the outage."""
+        shortfall, and the line says it once rather than on every tick of the outage. ``retry``
+        persists on ``_overflow`` itself, across calls, the same ownership a queued capture gets,
+        so a tracker that already took today's count is not handed it again on every tick a
+        different tracker stays down — unless the count grew while it waited, which is a bigger
+        fact than the one it already took, so it is offered to everyone again rather than the
+        increment going to nobody."""
+        with _lock:
+            if dropped != _overflow.offered_as:
+                _overflow.retry = _Retry()
+                _overflow.offered_as = dropped
         try:
             raise CaptureQueueOverflowed(
                 f"the capture queue shed {dropped} capture(s) it had no room for"
             )
         except CaptureQueueOverflowed as exc:
-            if not await self._deliver(ExceptionCaptured(exc=exc, context={"dropped": dropped})):
+            captured = ExceptionCaptured(
+                exc=exc, context={"dropped": dropped}, retry=_overflow.retry
+            )
+            if not await self._deliver(captured):
                 with _lock:
                     _overflow.dropped += dropped
                 return
+            with _lock:
+                _overflow.retry = _Retry()
+                _overflow.offered_as = 0
             token = _capturing.set(True)
             try:
                 log.exception("capture.overflowed", exc_info=exc, dropped=dropped)

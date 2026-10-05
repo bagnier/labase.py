@@ -56,6 +56,13 @@ class TechnicalSettings(BaseSettings):
     # Past this wait on a lock (a concurrent TRUNCATE), the batch goes to the day files. Above
     # zero: to Postgres a ``lock_timeout`` of 0 means no timeout at all.
     log_drain_lock_timeout_seconds: float = Field(default=2.0, ge=0.001)
+    # How long a capture is retried, still owed to some tracker, before it is parked rather than
+    # requeued — mirroring ``apps/shared/queue.py``'s ``TaskWorker`` (retry, then park), so a
+    # value no tracker can ever store stops spamming a fresh traceback for the life of the
+    # process. Generous on purpose: short enough that a permanently unstorable value does not
+    # haunt the queue forever, long enough that an ordinary outage (minutes, not seconds) still
+    # gets its capture delivered once the tracker recovers.
+    capture_retry_seconds: PositiveInt = 3600
     # Git SHA in Docker; an issue seen again on a newer version regresses.
     app_version: str = "dev"
     # Defaults target the local mail catcher (Mailpit). 127.0.0.1, not localhost, keeps DNS out
