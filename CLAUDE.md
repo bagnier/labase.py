@@ -1,12 +1,3 @@
-<!-- charm:readme-first -->
-## Before you start
-
-Read `AGENTS.md` first: the principles every change is held to.
-
-@AGENTS.md
-
-<!-- /charm:readme-first -->
-
 <!-- charm:general-guidance -->
 ## General guidance
 
@@ -33,14 +24,15 @@ Read `AGENTS.md` first: the principles every change is held to.
 ## Interactive session
 
 - Command slower than 10s: never `timeout `, always run in background.
-- Never wait on background task — no `until`/`sleep`, the completion notification brings you 
+- Never wait on background task — no `until`/`sleep`, the completion notification brings you
   back.
+<!-- /charm:general-guidance -->
 
-
+<!-- charm:non-interactive-guidance -->
 ## Non Interactive session
 
-When you run on Github (`GITHUB_ACTIONS` is `true`), the user is away for the whole run, 
-and nobody will answer during it. Run every step to the end without waiting for a confirmation. 
+When you run on Github (`GITHUB_ACTIONS` is `true`), the user is away for the whole run,
+and nobody will answer during it. Run every step to the end without waiting for a confirmation.
 
 On the runner, three more rules flip, and only there:
 
@@ -64,8 +56,7 @@ On the runner, three more rules flip, and only there:
   started on the runner.
 
 - **Asking.** Nobody answers. A question ends the run as a comment on the issue, never a wait.
-  
-<!-- /charm:general-guidance -->
+<!-- /charm:non-interactive-guidance -->
 
 ## labase
 
@@ -85,5 +76,12 @@ On the runner, three more rules flip, and only there:
 ## `main` git branch is mine
 
 In an interactive session, without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command. In any session, `main` is mine: no commit, push or merge on it.
-
 <!-- /charm:no-autocommit -->
+
+<!-- charm:read-agents-first -->
+## Before you start
+
+Read `AGENTS.md` first: the principles every change is held to.
+
+@AGENTS.md
+<!-- /charm:read-agents-first -->
