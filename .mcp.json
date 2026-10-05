@@ -28,6 +28,18 @@
         "--output-dir",
         ".cache/playwright-mcp"
       ]
+    },
+    "infomaniak": {
+      "_ref": "https://github.com/Mogacode-ma/infomaniak-mcp-agent",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "infomaniak-mcp-agent@0.15.1"],
+      "env": {
+        "INFOMANIAK_AUTH_MODE": "manual",
+        "INFOMANIAK_API_TOKEN": "${INFOMANIAK_API_TOKEN}",
+        "INFOMANIAK_SASESSION": "${INFOMANIAK_SASESSION}",
+        "INFOMANIAK_XSRF_TOKEN": "${INFOMANIAK_XSRF_TOKEN}"
+      }
     }
   }
 }

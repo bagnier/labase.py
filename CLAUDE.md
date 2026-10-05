@@ -1,3 +1,12 @@
+<!-- charm:readme-first -->
+## Before you start
+
+Read `AGENTS.md` first: the principles every change is held to.
+
+@AGENTS.md
+
+<!-- /charm:readme-first -->
+
 <!-- charm:general-guidance -->
 ## General guidance
 
@@ -78,12 +87,3 @@ On the runner, three more rules flip, and only there:
 In an interactive session, without an explicit go-ahead in that same message, only two things are allowed: reading (`status`, `log`, `diff`, `show`) and `stash`. Nothing that touches the index, the history or the remote — no `add`, no `commit`, no `push`, no `reset`, no `rebase`. Finishing a task is never permission to commit it, and one go-ahead covers one command. In any session, `main` is mine: no commit, push or merge on it.
 
 <!-- /charm:no-autocommit -->
-
-<!-- charm:readme-first -->
-## Before you start
-
-Read `AGENTS.md` first: the principles every change is held to.
-
-@AGENTS.md
-
-<!-- /charm:readme-first -->
