@@ -71,6 +71,7 @@ from apps.shared.tests.test_limiter import (
 )
 from apps.shared.tests.test_listener import (
     test_a_second_tick_does_not_refan_a_dispatched_fact,
+    test_a_wiring_without_the_consumer_does_not_foreclose_it_for_one_that_has_it,
     test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
     test_tick_runs_spread_handlers_per_instance_off_the_trail,
 )
@@ -118,6 +119,7 @@ from tests.meta.test_capture_sites import test_a_broad_except_never_logs_without
 from tests.meta.test_conventions import (
     test_every_mapped_primary_key_is_a_time_ordered_uuid7,
     test_no_fragment_response_starts_inside_a_table,
+    test_no_router_reads_the_negotiation_headers_by_hand,
     test_templates_tests_and_steps_live_with_their_context,
     test_the_session_dependencies_are_exactly_the_three_named,
     test_the_uuid4_exception_is_exactly_the_token_columns,
@@ -892,10 +894,10 @@ CLAIMS = [
         "Durable async event delivery rides the same queue",
         test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
     ),
-    waived(
+    held(
         "negotiation-goes-through-the-helpers",
         "centralize the JSON / fragment / page branching",
-        "nothing checks a router branches only through these helpers",
+        test_no_router_reads_the_negotiation_headers_by_hand,
     ),
     waived(
         "a-page-is-assembled-from-slices",
@@ -939,8 +941,9 @@ CLAIMS = [
     waived(
         "reuse-components",
         "Reuse components instead of re-spelling utility chains",
-        "a ratchet holds the two named chains (card-panel, the tab shell) at zero; nothing "
-        "yet detects an arbitrary re-spelled chain",
+        "a ratchet holds card-panel's chain at zero; the tab shell is spelled as utilities, a "
+        "@layer components class losing to daisyUI's tab-content; nothing yet detects an "
+        "arbitrary re-spelled chain",
     ),
     held(
         "icons-are-phosphor",
@@ -1175,9 +1178,16 @@ CLAIMS = [
     ),
     held(
         "a-fact-is-fanned-out-once",
-        "It claims what it dispatches in the transaction that stamps it",
+        "N instances still never fan one fact out twice to the same consumer",
         test_tick_enqueues_one_task_per_subscriber_and_marks_the_fact_dispatched,
         test_a_second_tick_does_not_refan_a_dispatched_fact,
+    ),
+    held(
+        "dispatch-per-declared-consumer",
+        "Delivery is dispatched per declared consumer, off that consumer's own durable cursor — "
+        "never off a flag on the fact itself, which would let whichever instance saw it first "
+        "foreclose it for a consumer that instance's wiring does not carry",
+        test_a_wiring_without_the_consumer_does_not_foreclose_it_for_one_that_has_it,
     ),
     held(
         "csrf-without-tokens",

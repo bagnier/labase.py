@@ -1,9 +1,9 @@
 """One verdict for a failed call out of the process: a refusal or a breakage
 (AGENTS: a broken dependency is a bug, a refusal is not).
 
-GoTrue and Storage answer with an HTTP status, Postgres with a SQLSTATE; both mean the server
-answered, and most answers are ordinary (a 4xx, an unmigrated table, a missing grant). The verdict
-reads the shape of the answer, not the client class, which ``apps.shared`` could not import anyway.
+Only a 4xx is a refusal. GoTrue and Storage answer with an HTTP status; a SQLSTATE never is one,
+since every SQL the verdict sees is ours and a wrong one is our bug. The verdict reads the shape
+of the answer, not the client class, which ``apps.shared`` could not import anyway.
 
 Call :func:`log_dependency_failure` from the ``except`` block with the module's own logger: the
 Timeline reads a line's app off its logger.
@@ -38,31 +38,10 @@ def refused_status(exc: BaseException) -> int | None:
     return None
 
 
-def refused_sqlstate(exc: BaseException) -> str | None:
-    """The SQLSTATE Postgres answered with, on asyncpg's exception or SQLAlchemy's ``.orig``; or
-    ``None`` if it never answered. Having one does not mean healthy: a lost connection is
-    ``08003``, see :func:`is_refusal`.
-    """
-    for holder in (exc, getattr(exc, "orig", None)):
-        sqlstate = getattr(holder, "sqlstate", None)
-        if isinstance(sqlstate, str):
-            return sqlstate
-    return None
-
-
-# SQLSTATE classes that are Postgres's 5xx: 08 connection_exception, 53 insufficient_resources,
-# 57 operator_intervention, 58 system error, XX internal_error.
-# https://www.postgresql.org/docs/current/errcodes-appendix.html
-_BROKEN_SQLSTATE_CLASSES = frozenset({"08", "53", "57", "58", "XX"})
-
-
 def is_refusal(exc: BaseException) -> bool:
-    """A 4xx, or a SQLSTATE outside the broken classes."""
+    """Whether the dependency answered *no* — a 4xx, which is an outcome and not a defect."""
     status = refused_status(exc)
-    if status is not None:
-        return 400 <= status < 500
-    sqlstate = refused_sqlstate(exc)
-    return sqlstate is not None and sqlstate[:2] not in _BROKEN_SQLSTATE_CLASSES
+    return status is not None and 400 <= status < 500
 
 
 def log_dependency_failure(log: Any, event: str, exc: BaseException, **context: object) -> None:

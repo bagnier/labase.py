@@ -974,23 +974,38 @@ def test_the_classes_outside_the_component_layer_are_the_named_ones():
     assert outside == _OUTSIDE_THE_COMPONENT_LAYER
 
 
-def test_no_template_re_spells_card_panel_or_the_tab_shell():
-    """No template spells out `card-panel`'s chain or the `tabs-lift` panel shell by hand."""
+def test_no_template_re_spells_card_panel():
+    """The `reuse-components` waiver's own example: `card-panel` is `card bg-base-100 border
+    border-base-300 shadow-sm`, yet a template still spelled the shorter chain by hand. At zero."""
     spelled_out = {
+        str(path.relative_to(_ROOT)): count
+        for path in sorted(_APPS.rglob("*.html"))
+        if (count := len(re.findall(r"card bg-base-100 border border-base-300", path.read_text())))
+    }
+
+    assert spelled_out == {}
+
+
+def test_every_tab_panel_colours_its_frame_with_a_utility():
+    """daisyUI's `.tab-content` sets `border-color: transparent` from the utilities layer, which
+    outranks any class of our `@layer components`: a component class carrying the panel's border
+    colour loses to it, and every `tabs-lift` panel renders frameless. Each panel's `class` names
+    the bare `border-base-300` utility instead — a variant (`hover:`) colours nothing at rest."""
+    frameless = {
         str(path.relative_to(_ROOT)): count
         for path in sorted(_APPS.rglob("*.html"))
         if (
             count := len(
                 re.findall(
-                    r"card bg-base-100 border border-base-300"
-                    r"|tab-content border-base-300 bg-base-100 p-4 sm:p-6",
+                    r'class="(?=[^"]*(?<![\w:-])tab-content\b)'
+                    r'(?![^"]*(?<![\w:-])border-base-300\b)[^"]*"',
                     path.read_text(),
                 )
             )
         )
     }
 
-    assert spelled_out == {}
+    assert frameless == {}
 
 
 def test_nothing_reruns_a_failing_test():
@@ -1117,7 +1132,7 @@ _KNOBS_AWAITING_PROMOTION = {
     "apps/profile/infra/router.py::_ACTIVITY_MAX = 250",
     "apps/profile/infra/router.py::_ACTIVITY_PAGE = 25",
     "apps/profile/infra/router.py::_ENROLLMENT_MAX_SECONDS = 300",
-    "apps/shared/events/listener.py::SPREAD_SETTLE_SECONDS = 60.0",
+    "apps/shared/events/listener.py::SETTLE_SECONDS = 60.0",
     "apps/shared/events/listener.py::__init__(batch_size=50)",
     "apps/shared/events/repository.py::daily_counts(days=366)",
     "apps/shared/events/repository.py::search(limit=100)",

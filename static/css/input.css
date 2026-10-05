@@ -402,12 +402,6 @@
     @apply card bg-base-100 border border-base-300 shadow-sm;
   }
 
-  /* The `tabs-lift` panel's look, next to `tab-content` in markup: `@apply` cannot reach the
-     sibling-selector rule that toggles it. */
-  .tab-panel {
-    @apply border-base-300 bg-base-100 p-4 sm:p-6;
-  }
-
   /* Type scale, used instead of hand-spelled text sizes. */
   .page-title {
     @apply text-2xl font-semibold tracking-tight text-base-content;

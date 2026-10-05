@@ -191,6 +191,9 @@ allowed-confusables = ["×", "–"]
 "tests/test_makefile.py" = ["S603", "S607"]
 # `ty check` on a script the test writes itself.
 "apps/timeline/tests/test_grain_type.py" = ["S603"]
+# Runs `git` by name against a throwaway repo this test creates itself — the command and its
+# arguments are all hardcoded in the test, not outside input.
+"tests/meta/test_gitignore.py" = ["S603"]
 # A handler's parameters are its HTTP contract, read by FastAPI off the signature.
 "**/*router.py" = [
     # A `Depends` guard is there for its effect.
