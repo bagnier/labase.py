@@ -1,14 +1,4 @@
-"""One verdict for "the call outside this process failed": did it refuse, or is it broken.
-
-The base had three answers to the same situation. Auth wrote the 4xx-or-not predicate twice
-(``_log_gotrue_failure``, ``_report_refresh_failure``), and the settings store decided the
-opposite — a database it could not reach was logged and left untracked. Whichever module a failing
-provider was reached through then decided whether an admin ever heard about the outage.
-
-The rule these pin: a dependency that *answers* — a 4xx — said no, and saying no is a normal
-outcome. A dependency that is *broken* — unreachable, a 5xx, a client library raising something
-of its own — is a bug, and the capture seam turns it into an issue.
-"""
+"""The dependency verdict (AGENTS: a broken dependency is a bug, a refusal is not)."""
 
 from types import SimpleNamespace
 
@@ -22,7 +12,7 @@ _CALLER = "apps.auth.infra.router"
 
 
 class _Answered(Exception):
-    """A client that hangs the status off the exception — gotrue's ``AuthApiError``."""
+    """Like gotrue's ``AuthApiError``."""
 
     def __init__(self, status: int) -> None:
         super().__init__(f"the dependency answered {status}")
@@ -30,7 +20,7 @@ class _Answered(Exception):
 
 
 class _AnsweredOnItsResponse(Exception):
-    """A client that hangs it off the response it wrapped — ``httpx.HTTPStatusError``."""
+    """Like ``httpx.HTTPStatusError``."""
 
     def __init__(self, status_code: int) -> None:
         super().__init__(f"the dependency answered {status_code}")
@@ -38,9 +28,7 @@ class _AnsweredOnItsResponse(Exception):
 
 
 class _AnsweredInText(Exception):
-    """A client that keeps the status as the *string* its dependency sent — storage3, which
-    builds ``StorageApiError`` straight from Supabase Storage's JSON body, where ``statusCode``
-    is text. Read as "never answered", every ordinary 404 from Storage becomes a bug."""
+    """Like storage3's ``StorageApiError``, whose ``statusCode`` is text."""
 
     def __init__(self, status: str) -> None:
         super().__init__(f"the dependency answered {status}")
@@ -48,7 +36,7 @@ class _AnsweredInText(Exception):
 
 
 class _PostgresAnswered(Exception):
-    """asyncpg's own error classes hang the SQLSTATE off the exception itself."""
+    """Like asyncpg's error classes."""
 
     def __init__(self, sqlstate: str) -> None:
         super().__init__(f"the server answered {sqlstate}")
@@ -56,7 +44,7 @@ class _PostgresAnswered(Exception):
 
 
 class _PostgresAnsweredThroughSqlalchemy(Exception):
-    """SQLAlchemy's ``DBAPIError``, which hangs the driver's own exception off ``.orig``."""
+    """Like SQLAlchemy's ``DBAPIError``."""
 
     def __init__(self, sqlstate: str) -> None:
         super().__init__(f"the server answered {sqlstate}")
@@ -64,8 +52,7 @@ class _PostgresAnsweredThroughSqlalchemy(Exception):
 
 
 class _PostgresUnreachable(Exception):
-    """SQLAlchemy's ``DBAPIError`` wrapping a connection failure — the server never got the
-    chance to answer, so its driver exception (a bare ``OSError``) carries no ``sqlstate``."""
+    """A ``DBAPIError`` wrapping a connection failure: no ``sqlstate``."""
 
     def __init__(self) -> None:
         super().__init__("connection refused")
@@ -85,7 +72,7 @@ def _empty_capture_queue():
         _Answered(400),
         _Answered(429),
         _AnsweredOnItsResponse(404),
-        _AnsweredInText("404"),  # a status is what it says, not what type it arrived as
+        _AnsweredInText("404"),
     ],
 )
 def test_a_dependency_that_answers_4xx_is_refusing(exc):
@@ -95,26 +82,25 @@ def test_a_dependency_that_answers_4xx_is_refusing(exc):
 @pytest.mark.parametrize(
     "exc",
     [
-        _Answered(500),  # the dependency broke while answering
+        _Answered(500),
         _AnsweredOnItsResponse(503),
         _AnsweredInText("503"),
-        _AnsweredInText("not a status at all"),  # unparseable is not an answer
-        ConnectionError("no route to host"),  # it never answered at all
+        _AnsweredInText("not a status at all"),
+        ConnectionError("no route to host"),
         ValueError("our own mistake, on the way to calling it"),
-        _PostgresUnreachable(),  # connection refused — postgres never got to answer
-        _PostgresAnswered("08006"),  # connection_failure — lost mid-operation, still broken
-        _PostgresAnswered("53300"),  # too_many_connections — the server is out of room
-        _PostgresAnswered("57P03"),  # cannot_connect_now — admin shutdown in progress
-        _PostgresAnswered("58030"),  # io_error — the server's own disk failed
-        _PostgresAnswered("XX000"),  # internal_error — a bug in Postgres itself
-        # Every SQL the verdict sees is ours (the settings store, the rate-limit store): an
-        # answer naming our own schema or statement wrong is our bug, and read as a refusal it
-        # would leave the limiter failing open with no issue — off for good (AGENTS: CSRF needs
-        # no token, and the rate limiter fails open).
-        _PostgresAnswered("42P01"),  # undefined_table — an unmigrated table
+        _PostgresUnreachable(),
+        _PostgresAnswered("08006"),  # connection_failure
+        _PostgresAnswered("53300"),  # too_many_connections
+        _PostgresAnswered("57P03"),  # cannot_connect_now
+        _PostgresAnswered("58030"),  # io_error
+        _PostgresAnswered("XX000"),  # internal_error
+        # Every SQL the verdict sees is ours (the settings store, the rate-limit store): an answer
+        # naming our own schema or statement wrong is our bug, and read as a refusal it would leave
+        # the limiter failing open with no issue.
+        _PostgresAnswered("42P01"),  # undefined_table
         _PostgresAnswered("42703"),  # undefined_column
         _PostgresAnswered("42601"),  # syntax_error
-        _PostgresAnswered("42501"),  # insufficient_privilege — a missing grant
+        _PostgresAnswered("42501"),  # insufficient_privilege
         _PostgresAnsweredThroughSqlalchemy("42P01"),
     ],
 )
@@ -123,7 +109,6 @@ def test_anything_else_is_the_dependency_breaking(exc):
 
 
 def test_a_refusal_is_recorded_without_opening_an_issue(log_chain):
-    """A wrong password, an expired link, a rate limit: the dependency did its job."""
     log = structlog.get_logger(_CALLER)
 
     log_dependency_failure(log, "auth.confirm_failed", _Answered(400), token="ab")
@@ -135,8 +120,6 @@ def test_a_refusal_is_recorded_without_opening_an_issue(log_chain):
 
 
 def test_a_breakage_is_recorded_as_an_issue(log_chain):
-    """``exc_info`` is passed explicitly rather than resolved from the frame: the seam then holds
-    wherever the helper is called from, not only from inside a live ``except`` block."""
     broken = _Answered(503)
     log = structlog.get_logger(_CALLER)
 
@@ -147,8 +130,7 @@ def test_a_breakage_is_recorded_as_an_issue(log_chain):
 
 
 def test_the_line_is_filed_under_the_caller_not_under_shared(log_chain):
-    """Why the helper takes a logger instead of holding one: the timeline reads a line's app off
-    the logger that wrote it, so a failure reached through here must still read as auth's."""
+    """The Timeline reads a line's app off its logger."""
     log = structlog.get_logger(_CALLER)
 
     log_dependency_failure(log, "auth.confirm_failed", _Answered(500))

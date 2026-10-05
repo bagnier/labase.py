@@ -1,8 +1,6 @@
 -- Per-organization API keys: the machine face of the JSON API.
 --
--- The secret is shown once and stored hashed (sha256); requests authenticate with
--- `Authorization: Bearer lbk_...` and run under the creator's RLS context, pinned to the key's
--- organization at the HTTP layer.
+-- Stored hashed (sha256); a `Bearer lbk_...` request runs as its creator, pinned to its org.
 
 create table public.api_keys (
   id           uuid        primary key default public.uuidv7(),
@@ -25,8 +23,7 @@ create trigger api_keys_updated_at
 
 alter table public.api_keys enable row level security;
 
--- Owner-managed: members neither see nor manage keys. Resolving a bearer token happens on the
--- admin connection (no JWT exists yet at that point — the check there is explicit).
+-- Owners only.
 create policy "api_keys: owner all"
   on public.api_keys for all
   using (public.user_is_org_owner(org_id))
@@ -38,10 +35,8 @@ grant select, insert, update, delete on public.api_keys to service_role;
 
 -- ── Resolving a bearer token ────────────────────────────────────────────────────────────────────
 --
--- A key is resolved before any identity exists, so no policy can answer for it: this function
--- does, for a live key's hash and nothing else, on the app's own connection rather than a
--- BYPASSRLS one. It stamps `last_used_at` when older than `p_stale_before` (the app owns that
--- granularity). Executable by `app_rls` alone — PostgREST never resolves an `lbk_` token.
+-- Resolved before any identity exists, so no policy can answer: this function does, for a live
+-- key's hash only. Stamps `last_used_at` when older than `p_stale_before`. `app_rls` alone.
 
 create function public.api_key_principal(
   p_key_hash text, p_now timestamptz, p_stale_before timestamptz

@@ -1,15 +1,5 @@
-"""The mounted route table, read as the app actually assembled it.
-
-Everything else in this package reads source; this reads the FastAPI application that
-``apps/main.py`` built — the only place where the composition root's ordering, every app's
-prefixes and the reserved-slug registry meet. Two questions are asked of it: can a fixed route be
-shadowed by an org handle, and does the schema describe both faces of a page.
-
-The second one is a measurement, not a proof. OpenAPI records what a route *declares*, and a
-handler that negotiates at runtime without declaring an HTML response looks single-faced here
-while serving both. That is exactly what makes the number worth freezing: the generated client in
-``client/`` is built from this schema, so a face the schema does not mention is a face no external
-consumer can reach — which is the half of "two faces" that has a mechanical meaning.
+"""The route table ``apps/main.py`` assembled: no fixed route can be shadowed by an org handle,
+and the schema, from which ``client/`` is generated, declares each route's faces.
 """
 
 import re
@@ -21,17 +11,10 @@ import apps.main
 from apps.metrics.domain.accumulator import KNOWN_METHODS
 from apps.shared.integration import slugs
 
-# The routes that answer one audience, split by which one — because "one face" says nothing about
-# which face is missing, and the two lists fail for opposite reasons. Every method: a mutation
-# that negotiates and declares one face is a mutation the generated client cannot send as JSON.
+# Routes with one face, split by which.
 
-# JSON only: nothing here is a document. Every mutation whose HTML answer is a redirect to the
-# page it changed (sign-in and its second factor, registration, impersonation, the account
-# deletions, an accepted invitation, the org and page edits), a machine surface (the probes,
-# the dashboard's own `.json` fetch, the WebAuthn ceremonies, the nav reorder PUT), a JSON list
-# with no page of its own, or a JSON mutation the page reaches by script (the pages CRUD, the
-# calendar writes). `/{org_handle}/api-keys` does branch on the request, but answers HTML with a
-# redirect to the settings page — a destination, not a document.
+# JSON only: mutations whose HTML answer is a redirect, machine surfaces (probes, `.json` fetches,
+# WebAuthn, the nav reorder), lists without a page, mutations a page's script calls.
 _JSON_ONLY = {
     "GET /health/live",
     "GET /health/ready",
@@ -71,12 +54,7 @@ _JSON_ONLY = {
     "POST /{org_handle}/pages/{slug}/visibility",
 }
 
-# HTML only: pages with no JSON caller. The unauthenticated forms (sign in, register, the two
-# password flows, a mailed link's confirmation, the second-factor code), the editor forms, and the
-# landing page — a form has no JSON meaning, and the data behind each editor is its own route,
-# which does have both faces. The dashboard and the settings page are composed documents on the
-# same argument: their data is its own routes (`overviews.json`, the activity feed, `/members`),
-# each of which answers JSON.
+# HTML only: forms, the landing page, and composed pages whose data has JSON routes of its own.
 _HTML_ONLY = {
     "GET /",
     "GET /auth/confirm",
@@ -100,8 +78,7 @@ def _paths() -> dict[str, dict]:
 
 
 def _fixed_top_level_segments() -> set[str]:
-    """The first segment of every route that starts with a literal — the segments an org handle
-    would have to be forbidden from taking."""
+    """First segments of routes starting with a literal."""
     return {
         segment
         for path in _paths()
@@ -110,14 +87,8 @@ def _fixed_top_level_segments() -> set[str]:
 
 
 def _declared_content(operation: dict) -> set[str]:
-    """The two faces the *success* responses describe — bytes, text and a redirect are no face.
-
-    Only the 2xx entries count. FastAPI adds a `422` carrying `application/json` to any route with
-    something to validate, so reading every status code makes almost everything look two-faced —
-    the failure this walk was written with, and the reason it says `2` out loud. A `204` carries
-    no content by definition and is what a JSON caller gets from a deletion: it counts as the
-    JSON face.
-    """
+    """Faces of the 2xx responses only (FastAPI adds a JSON 422 everywhere); a 204 counts as
+    JSON."""
     faces = {
         media
         for code, response in (operation.get("responses") or {}).items()
@@ -131,9 +102,7 @@ def _declared_content(operation: dict) -> set[str]:
 
 
 def test_no_org_handle_can_shadow_a_fixed_route():
-    """What `host.reserve(...)` is for, checked against the routes actually mounted rather than
-    against the list someone remembered to write. A fixed segment nobody reserved is a handle
-    someone can register, and then one of the two is unreachable for good."""
+    """Each fixed first segment of the mounted routes is reserved."""
     unclaimed = {
         segment for segment in _fixed_top_level_segments() if not slugs.is_reserved(segment)
     }
@@ -142,10 +111,7 @@ def test_no_org_handle_can_shadow_a_fixed_route():
 
 
 def test_every_fixed_route_wins_its_first_match():
-    """Registration order is the whole mechanism behind "catch-alls sort last", so this walks it
-    the way Starlette will: for every fixed route, the first mounted route that matches must be
-    that route itself — not `/{slug}` or `/{org_handle}` arriving too early in the table. The
-    reserved-slug test above guards handles; this one guards the ordering."""
+    """For each fixed route, the first match in registration order is itself."""
     swallowed = set()
     for path, operations in _paths().items():
         if path.split("/")[1].startswith("{"):
@@ -174,9 +140,7 @@ def test_every_fixed_route_wins_its_first_match():
 
 
 def _served_paths(route) -> set[str]:
-    """The declared paths behind one top-level router entry. FastAPI defers `include_router`
-    into a lazy entry carrying the included router and its prefix — reading it is what lets the
-    walk say *which* app's routes the first match belongs to."""
+    """Paths behind a lazy `include_router` entry, to name the app of a match."""
     if route is None:
         return set()
     context = getattr(route, "include_context", None)
@@ -186,11 +150,7 @@ def _served_paths(route) -> set[str]:
 
 
 def test_the_schema_describes_both_faces_of_every_page_but_the_named_ones():
-    """ "Because every business endpoint also speaks JSON, the OpenAPI schema is a full description
-    of the app" — and `client/` is generated from exactly this. Every route that serves a document,
-    reads or writes, describes both faces; the two sets above are the routes that are not one,
-    each named. A mutation is where the gap costs most: it negotiates at runtime, so a
-    `response_class` naming one face documents the other out of the client's reach."""
+    """Every route but those listed declares both faces."""
     by_face = {"application/json": set(), "text/html": set(), "none": set()}
     for path, operations in _paths().items():
         for method, operation in operations.items():
@@ -207,9 +167,8 @@ def test_the_schema_describes_both_faces_of_every_page_but_the_named_ones():
     )
 
 
-# Mutations that carry no body: a verb on a resource the path already names — a deletion, a
-# toggle, a sign-out, a ceremony's opening request, a share link minted for the file in the URL.
-# Not `DELETE /profile`: deleting an account re-authenticates, so it reads a password.
+# Mutations without a body: the path names the resource. Not `DELETE /profile`: it reads a
+# password.
 _BODYLESS_MUTATIONS = {
     "DELETE /console/{app}/org-settings/{key}/{org_id}",
     "DELETE /{org_handle}/api-keys/{key_id}",
@@ -234,10 +193,7 @@ _BODYLESS_MUTATIONS = {
     "POST /{org_handle}/files/{file_id}/share",
 }
 
-# No face at all: a redirect (the OAuth round-trip, the mailed confirmations, sign-out, a
-# permalink resolver, a download through a signed URL), bytes (an avatar), text (the Prometheus
-# exposition, the timeline's CSV and NDJSON export). Declared as what they are, so the schema
-# stops promising a JSON document nobody serves.
+# No face: redirects, bytes (an avatar), text (Prometheus, the timeline exports).
 _NO_FACE = {
     "GET /auth/callback",
     "POST /auth/confirm",
@@ -254,10 +210,7 @@ _NO_FACE = {
 
 
 def test_every_mutation_declares_the_body_it_reads():
-    """ "One implementation buys a documented REST API": a mutation is documented when the schema
-    says what it takes. A form is JSON at the door (`apps/shared/http/form.py`), so every handler
-    can declare its body as a Pydantic model and FastAPI writes the `requestBody` — a handler
-    still reading the request by hand is a mutation the client cannot call."""
+    """(AGENTS: a form is JSON at the door) Every mutation with a body declares it."""
     undeclared = {
         f"{method.upper()} {path}"
         for path, operations in _paths().items()
@@ -269,23 +222,16 @@ def test_every_mutation_declares_the_body_it_reads():
 
 
 def test_every_declared_method_is_one_the_load_metrics_know():
-    """`KNOWN_METHODS` (apps/metrics) claims to be every verb our own routes ever declare, plus
-    the two Starlette answers on their behalf — the premise that lets a made-up verb collapse
-    into ``OTHER_METHOD`` without losing real traffic. Read against the mounted route table
-    rather than trusted on the comment alone, so a route declaring an uncommon verb (e.g.
-    `methods=["PURGE"]`) is caught here instead of silently merging into scanner noise."""
+    """`KNOWN_METHODS` (apps/metrics) holds every mounted verb, or real traffic would count as
+    ``OTHER_METHOD``."""
     declared = {method.upper() for operations in _paths().values() for method in operations}
 
     assert declared <= KNOWN_METHODS
 
 
 def test_every_operation_has_its_own_id():
-    """The generated client (`client/`) names one module per `operationId`: two operations
-    sharing an id collapse into one module, and the survivor answers for both — a form posting
-    to the collapsed method calls the wrong one. FastAPI's default id is one per *route*, not
-    per operation — suffixed with one arbitrary member of the route's own method set — so a
-    single `api_route(methods=[...])` decorator carrying more than one method gives every
-    operation on it the same id."""
+    """`client/` has one module per `operationId`; FastAPI gives a multi-method route one id for
+    all its operations."""
     ids = [
         operation["operationId"]
         for operations in _paths().values()
@@ -297,10 +243,7 @@ def test_every_operation_has_its_own_id():
 
 
 def test_every_json_face_declares_its_schema():
-    """The other half of "documented": what a JSON answer contains. `json_and_html(Model)` and
-    `response_model=` name it, the API lane checks every answer against it (see
-    `tests/e2e/drivers/conformance.py`), and this is what forbids the `{}` a face
-    declared without its model leaves behind."""
+    """A JSON face declares its model, which `tests/e2e/drivers/conformance.py` checks."""
     blank = {
         f"{method.upper()} {path} {code}"
         for path, operations in _paths().items()

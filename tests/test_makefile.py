@@ -1,8 +1,5 @@
-"""Two `make test`/`test-e2e`/`meta`/`perf-smoke` runs started together in the same checkout
-must not share a schema: each derives its own from that `make` invocation's own pid, so a
-second run's `provision-test` (drop schema cascade + rebuild, scripts/provision_schema.py)
-or scenario teardown (TRUNCATE, tests/e2e/cleanup.py) never touches the first run's rows
-(issue #30)."""
+"""Concurrent `make` test runs in one checkout each get a schema from their own pid, so one's
+rebuild or truncation never touches the other's rows."""
 
 import re
 import subprocess

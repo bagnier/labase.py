@@ -1,10 +1,5 @@
-"""Drift guard for scripts/provision_schema.py.
-
-The provisioner clones ``public`` via pg_dump, then re-adds three cross-schema bits by
-hand (the Storage bucket, its RLS policies, the signup trigger) because a public-only dump
-cannot carry them. That hand-written block can silently drift from the migrations — e.g. a
-new Storage policy or a second bucket would land in ``public`` but not in a clone. This test
-provisions a throwaway schema and asserts the clone is faithful, so drift fails CI loudly.
+"""A schema cloned by scripts/provision_schema.py matches ``public``, including what it adds by
+hand outside the dump (the bucket, its policies, the signup trigger).
 """
 
 import os
@@ -17,12 +12,10 @@ from scripts import provision_schema as ps
 GUARD_SCHEMA = "wt_guard"
 GUARD_BUCKET = "org-files-guard"
 
-# A per-run schema (test_<pid>) outlives its own `make` invocation on purpose, so a failed
-# run stays inspectable — but nothing ever drops one whose pid has since exited, and it is
-# recreated with this test's own pid, guaranteed alive for the test's duration.
+# Run schemas outlive their run for inspection; this test uses its own, live pid.
 LIVE_SCHEMA = f"test_{os.getpid()}"
 LIVE_BUCKET = f"org-files-test-{os.getpid()}"
-# No Linux pid reaches this value (max_pid_max tops out at 2^22), so it can never be alive.
+# Above any Linux pid (2^22 at most): never alive.
 DEAD_PID = 4_194_304 + 1
 DEAD_SCHEMA = f"test_{DEAD_PID}"
 DEAD_BUCKET = f"org-files-test-{DEAD_PID}"
@@ -59,7 +52,6 @@ def _schema_count(container: str, schema: str) -> str:
 def test_clone_matches_public(guard_schema: str) -> None:
     c = ps._db_container()
 
-    # Tables: the dump must reproduce every public table in the clone.
     public_tables = _count(
         c, "select count(*) from information_schema.tables where table_schema = 'public'"
     )
@@ -68,7 +60,7 @@ def test_clone_matches_public(guard_schema: str) -> None:
     )
     assert clone_tables == public_tables != "0"
 
-    # SECURITY DEFINER helper the Storage RLS depends on must be cloned.
+    # The SECURITY DEFINER helper Storage RLS needs.
     assert (
         _count(
             c,
@@ -78,7 +70,7 @@ def test_clone_matches_public(guard_schema: str) -> None:
         == "1"
     )
 
-    # Cross-schema block (hand-written) — the actual drift surface:
+    # The hand-written part, where drift happens:
     assert _count(c, f"select count(*) from storage.buckets where id = '{GUARD_BUCKET}'") == "1"
     assert (
         _count(
@@ -88,9 +80,7 @@ def test_clone_matches_public(guard_schema: str) -> None:
         )
         == "1"
     )
-    # Storage policy parity: the clone's bucket must carry the same number of policies as
-    # the canonical ``org-files`` bucket. A migration adding a policy without updating
-    # provision_schema._storage_and_trigger_sql() trips this.
+    # As many policies as ``org-files``.
     public_policies = _count(
         c, "select count(*) from pg_policies where policyname like 'org-files: %'"
     )
@@ -113,7 +103,7 @@ def test_provision_keeps_a_run_schema_whose_pid_is_alive(live_run_schema: str) -
     ps.provision(live_run_schema, LIVE_BUCKET, reset=True)
     other_schema, other_bucket = "test_4194306", "org-files-test-4194306"
 
-    ps.provision(other_schema, other_bucket, reset=True)  # its own sweep must skip LIVE_SCHEMA
+    ps.provision(other_schema, other_bucket, reset=True)  # its sweep must skip LIVE_SCHEMA
     ps.deprovision(other_schema, other_bucket)
 
     c = ps._db_container()

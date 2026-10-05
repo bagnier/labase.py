@@ -1,9 +1,5 @@
-"""How the issues context plugs into the running app.
-
-Registers a tracker with the capture module — which hands it every ``log.exception``, whatever
-raised it — folds each one into an issue by stack fingerprint, and serves the console screen.
-The drain fans out with log-and-skip isolation, so a failing tracker never worsens the failure
-it is tracking.
+"""The issues mount: a capture tracker folding each ``log.exception`` into an issue by stack
+fingerprint (AGENTS: a bug is an issue with a lifecycle), and the console screen.
 """
 
 import uuid
@@ -43,7 +39,6 @@ log = structlog.get_logger(__name__)
 
 PURGE_TOPIC = "issues.purge"
 PURGE_EVERY_SECONDS = 86400
-# How often the capture queue is drained into issues — near-real-time, and cheap.
 CAPTURE_DRAIN_SECONDS = 1.0
 
 
@@ -53,12 +48,9 @@ def mount(host: Host) -> None:
     if not settings.enabled:
         return
     host.app.include_router(router, prefix="/console/issues")
-    on_captured(_track)  # exception capture is delivered off the bus, observability → issues
+    on_captured(_track)
     host.events.declare(IssueOpened, IssueRegressed, IssueStatusChanged)
-    # Issues reacts to its own facts, and the bus is what makes that sound: ``_track`` emits inside
-    # the transaction that records the occurrence, so alerting from there could roll back the
-    # tracking of the very failure it announces. Off the journal it cannot (see README, "The bus
-    # decouples in space *and* in time").
+    # (AGENTS: an app may subscribe to its own business event)
     host.events.on(IssueOpened, _alert_opened, name="alert_opened", app="issues")
     host.events.on(IssueRegressed, _alert_regressed, name="alert_regressed", app="issues")
     register_task_handler(PURGE_TOPIC, _purge)
@@ -80,24 +72,14 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 def _originating_request(context: dict[str, Any]) -> dict[str, str]:
-    """The request the exception escaped, read back off the captured context.
-
-    The journal's write path takes these from contextvars, and ``_track`` runs on the drain's own
-    task — no request, no contextvars — so a fact recorded here named no request at all, and
-    correlating a timeline by request showed the log line and the occurrence but never the
-    "this issue just opened" that explains them. The capture processor snapshotted them at the
-    moment of the failure; this hands them back.
-
-    Only the request, never the actor: ``business_events`` is RLS-readable by the user it names
-    and the profile feed renders it, so attributing an internal issue to whoever happened to trip
-    it would file it in *their* activity. These facts stay server-wide (see ``contract.events``).
+    """The failing request's ids from the captured context, to bind for the fact: the drain's
+    task has no request of its own. Never the actor, or the issue would show in their feed.
     """
     return {k: str(v) for k in ("request_id", "request_name") if (v := context.get(k)) is not None}
 
 
 async def _track(captured: ExceptionCaptured) -> None:
-    """Fold a captured exception into its issue, and record the fact that opens or reopens it on
-    the very same transaction — so the fact lands iff the occurrence does."""
+    """Fold the exception into its issue; its opening or regression fact shares the transaction."""
     version = get_technical_settings().app_version
     context = {**captured.context, "stack": service.formatted_stack(captured.exc)}
     async with admin_session_factory()() as session:
@@ -109,8 +91,6 @@ async def _track(captured: ExceptionCaptured) -> None:
             context=context,
         )
         issue_id, title = seen.issue.id, seen.issue.title
-        # ``_track`` is only subscribed when the app is enabled (see ``mount``), so reaching the
-        # bus here is unconditional — no mount-state guard needed.
         with bound_contextvars(**_originating_request(captured.context)):
             if seen.opened:
                 await events.emit(IssueOpened(entity_id=issue_id, entity_name=title), session)
@@ -136,13 +116,12 @@ async def _alert_regressed(session: AsyncSession, event: IssueRegressed) -> None
 
 
 async def _send_alert(session: AsyncSession, subject: str, issue_id: uuid.UUID) -> None:
-    # Durable consumer: the alert email is enqueued on the worker's session (it commits).
     settings = get_settings("issues")
     if not settings.alerting_enabled or not settings.alert_email:
         return
     text = f"{subject}\n\nSee /console/issues/{issue_id} for the stack and context."
     email = Email(to=str(settings.alert_email), subject=subject, text=text)
-    try:  # alerting is best-effort: a failing enqueue never worsens the tracked failure
+    try:  # best effort: must not worsen the failure it reports
         await enqueue_email(session, email)
     except Exception as exc:
         log.warning("issues.alert_enqueue_failed", issue_id=str(issue_id), exc_info=exc)

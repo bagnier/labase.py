@@ -1,10 +1,5 @@
-"""The log sink: the runtime log path enqueues, the background drain writes to the store.
-
-Proves the non-blocking doctrine — the structlog processor touches neither disk nor database, only
-the queue grows — and the fallback that makes moving the log stream into Postgres safe: when the
-store is the thing that is down, the batch still lands in its day file, and the outage is
-announced once rather than once per line.
-"""
+"""The log sink: the processor only enqueues, the drain writes to the store, and a refused batch
+lands in its day file with the outage said once."""
 
 import asyncio
 import json
@@ -37,7 +32,6 @@ _NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
 
 @pytest.fixture(autouse=True)
 def _isolate_sink(tmp_path, monkeypatch):
-    """A scratch fallback dir and an empty queue, so one test's lines never bleed into another's."""
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
     monkeypatch.setattr(sink, "get_technical_settings", lambda: settings)
@@ -49,7 +43,7 @@ def _isolate_sink(tmp_path, monkeypatch):
 
 @pytest_asyncio.fixture
 async def store():
-    """A reader on the store, with the engine-cache hygiene a driver-based neighbour would break."""
+    """A reader on the store, with fresh engine caches."""
     db._admin_engine.cache_clear()
     db.admin_session_factory.cache_clear()
     async with db.admin_session_factory()() as session:
@@ -64,18 +58,16 @@ def _enqueue(event: str) -> None:
 
 
 def test_processor_enqueues_without_writing():
-    """The critical-path guarantee: the processor only appends to the queue."""
     log_processor(None, "info", {"event": "todo.created", "timestamp": _NOW.isoformat()})
 
     assert (len(sink._QUEUE), list(fallback_dir().glob("firehose-*.jsonl"))) == (1, [])
 
 
 def test_processor_snapshots_the_event_dict():
-    """A snapshot is queued, so a later processor mutating the live mapping cannot corrupt it."""
     live = {"event": "e", "timestamp": _NOW.isoformat()}
 
     log_processor(None, "info", live)
-    live["event"] = "mutated"  # a downstream processor rewrites the shared dict
+    live["event"] = "mutated"
 
     assert sink._QUEUE[0]["event"] == "e"
 
@@ -93,27 +85,21 @@ async def test_a_tick_drains_the_queue_into_the_store(store):
 
 @pytest.mark.asyncio
 async def test_stop_drains_what_the_loop_left_behind(store):
-    """SIGTERM is how every deploy ends a process: what the writer is holding at that moment is
-    the normal amount to lose, not an edge case."""
     marker = f"tail.{uuid.uuid4().hex}"
     writer = LogDrain(interval_seconds=0)
     _enqueue(marker)
 
-    await writer.stop()  # never started, but stop must still drain
+    await writer.stop()  # never started
 
     assert [line.name for line in await LogRepository(store).search(text=marker)] == [marker]
 
 
-# The queue is bounded, so under a burst it sheds — and a shed line is one the Timeline will never
-# show. Silence there reads exactly like a quiet server, which is the failure mode the whole sink
-# exists to avoid; the capture queue has said its shortfall since the day it was written.
+# Under a burst the bounded queue drops lines; silence would read like a quiet server.
 
 
 @pytest.mark.asyncio
 async def test_the_drain_reports_the_lines_the_queue_had_to_shed(log_chain, store, monkeypatch):
-    """Dropping the oldest in silence loses the very lines a reader is looking for, and the count
-    has to come from the drain: it is the only side of the sink that still has a voice once the
-    queue is full."""
+    """Reported by the drain: a line from the full queue's side would only feed it."""
     monkeypatch.setattr(sink, "_QUEUE", deque(maxlen=2))
 
     for i in range(5):
@@ -127,19 +113,14 @@ async def test_the_drain_reports_the_lines_the_queue_had_to_shed(log_chain, stor
     ] == [("log_sink.overflowed", 3)]
 
 
-# The store can refuse — Postgres down, a pool exhausted, a migration mid-flight. Swallowed, that
-# turns the log sink off in silence: the Timeline simply shows nothing, which reads as a quiet
-# server. So the batch goes to the day file instead, and the outage is said once.
+# When the store refuses (Postgres down, pool exhausted), the batch goes to the day file and the
+# outage is said once.
 
 
 @contextmanager
 def _a_store_that_refuses():
-    """Take the database away from the drain, the way an outage does — and give it back on exit.
-
-    Saved and restored by hand rather than with ``monkeypatch``: monkeypatch undoes at the end of
-    the *test*, not at the end of the ``with``, so the recovery half of an outage would never
-    happen.
-    """
+    """An outage for the drain, lifted on exit. Not ``monkeypatch``, which undoes only at the end
+    of the test: the recovery would never happen."""
 
     def refuse():
         raise ConnectionError("the store is gone")
@@ -154,7 +135,6 @@ def _a_store_that_refuses():
 
 @pytest.mark.asyncio
 async def test_a_batch_the_store_refuses_lands_in_the_day_file():
-    """A database outage is precisely when an operator still wants to read the log."""
     with _a_store_that_refuses():
         _enqueue("lost.line")
         await LogDrain(interval_seconds=0).tick()
@@ -169,11 +149,8 @@ async def test_a_batch_the_store_refuses_lands_in_the_day_file():
 
 @pytest.mark.asyncio
 async def test_a_lock_the_drain_cannot_get_falls_back_like_a_refusal(monkeypatch, store):
-    """``log_lines`` is a table another session can hold exclusively — the e2e browser driver's
-    cross-scenario TRUNCATE (tests/e2e/cleanup.py) does exactly that. The drain must give up on a
-    lock it cannot get, the same as it gives up on a store that is down, rather than sit blocked
-    behind the holder (issue #119). The bound is the drain's own setting, pinned small here; the
-    outer guard is what fails the test when nothing bounds the wait."""
+    """The e2e driver's TRUNCATE (tests/e2e/cleanup.py) holds the table: the drain gives up after
+    its own timeout, pinned small here; the outer guard fails the test if nothing bounds it."""
     monkeypatch.setattr(get_technical_settings(), "log_drain_lock_timeout_seconds", 0.05)
     _enqueue("locked.line")
     await store.execute(text("LOCK TABLE log_lines IN ACCESS EXCLUSIVE MODE"))
@@ -191,11 +168,8 @@ async def test_a_lock_the_drain_cannot_get_falls_back_like_a_refusal(monkeypatch
 
 @pytest.mark.asyncio
 async def test_a_refused_batch_is_written_while_the_loop_keeps_serving(monkeypatch):
-    """The file fallback never blocks the request loop (README: the log sink).
-
-    The day-file writer is doubled: a disk slow enough to show whether the loop waits on it cannot
-    be staged for real. The double holds the write until the loop, still serving, releases it —
-    written on the loop itself, nobody is left to release it, and it gives up at its bound."""
+    """The day-file write is off the event loop. The double holds the write until the loop,
+    still serving, releases it; written on the loop, it would wait out its bound."""
     released = threading.Event()
     releases_seen: list[bool] = []
     monkeypatch.setattr(
@@ -214,13 +188,7 @@ async def test_a_refused_batch_is_written_while_the_loop_keeps_serving(monkeypat
 
 @pytest.mark.asyncio
 async def test_a_store_that_refuses_is_announced_once(log_chain, caplog):
-    """Once per outage, not per refused line: the announcement is itself a log line, so one per
-    failed write would feed the very queue that cannot be drained.
-
-    Read off the stream rather than the store, on purpose — the announcement cannot survive its
-    own outage, which is why it is also written to stdout, where an aggregator sees it while it is
-    happening.
-    """
+    """Read off stdout: during the outage, the store cannot hold it."""
     writer = LogDrain(interval_seconds=0)
     with _a_store_that_refuses():
         for _ in range(3):
@@ -233,12 +201,7 @@ async def test_a_store_that_refuses_is_announced_once(log_chain, caplog):
 
 @pytest.mark.asyncio
 async def test_a_store_that_comes_back_says_what_the_outage_cost(log_chain, store):
-    """The recovery line is the only one that can carry the toll: during the outage the count is
-    still climbing, and nothing written then reaches the store to be read back.
-
-    Three, for two lost lines: the ``write_failed`` announcement is itself a log line, and it was
-    written while the store was refusing — so it was refused too, and counting it is the truth.
-    """
+    """Three for two lost lines: the ``write_failed`` announcement was refused too."""
     writer = LogDrain(interval_seconds=0)
     with _a_store_that_refuses():
         for _ in range(2):
@@ -258,9 +221,7 @@ async def test_a_store_that_comes_back_says_what_the_outage_cost(log_chain, stor
 @pytest.mark.asyncio
 @pytest.mark.parametrize("level", ["INFO", "WARNING", "ERROR"])
 async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog, store, level):
-    """``timeline.log_level`` quiets the sink's ordinary lines, never its own outage and
-    recovery (AGENTS: the log sink — the outage said once on each transition, whatever the
-    level)."""
+    """``timeline.log_level`` never quiets them."""
     apply_log_level(level)
     writer = LogDrain(interval_seconds=0)
     with _a_store_that_refuses():
@@ -274,10 +235,8 @@ async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog
         for r in caplog.records
         if r.msg.get("event", "").startswith("log_sink.write_")
     )
-    # The recovery announcement is enqueued *after* the successful write it reports, so — unlike
-    # the outage announcement, drained by that same write — it is still what the queue holds: the
-    # direct proof that it reached the sink's own pipeline (``log_processor``), not just a caplog
-    # record that never made it past the console.
+    # Enqueued after the write it reports, the recovery line is still queued: proof it went
+    # through ``log_processor``, not only to the console.
     queued = [line.name for line in log_chain()]
     assert (transitions, queued) == (
         ["log_sink.write_failed", "log_sink.write_recovered"],
@@ -288,10 +247,7 @@ async def test_outage_and_recovery_are_said_at_every_log_level(log_chain, caplog
 @pytest.mark.asyncio
 @pytest.mark.parametrize("level", ["INFO", "WARNING", "ERROR"])
 async def test_overflow_is_said_at_every_log_level(log_chain, store, monkeypatch, level):
-    """``timeline.log_level`` quiets the sink's ordinary lines, never the count of lines the
-    queue shed — the sink's own docstring: "a dropped line is one the Timeline will never
-    show, and silence there reads exactly like a quiet server" (``_Overflow``), the same
-    reason the outage/recovery pair is level-immune."""
+    """``timeline.log_level`` never quiets it."""
     monkeypatch.setattr(sink, "_QUEUE", deque(maxlen=2))
     apply_log_level(level)
 

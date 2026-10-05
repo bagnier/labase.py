@@ -1,6 +1,4 @@
-"""Files' settings dependency — the request's effective values (server ⊕ current-org
-overrides), resolved fresh per request; see
-:func:`apps.organizations.contract.current.app_settings`."""
+"""Files' settings for the request; see :func:`apps.organizations.contract.current.app_settings`."""
 
 from typing import Annotated
 

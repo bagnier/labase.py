@@ -3,10 +3,8 @@
 Usage:
     uv run python scripts/promote_admin.py <email> [<password>]
 
-Idempotent: an existing user is left as-is and simply (re-)promoted; a missing
-user is created (confirmed) with the given password, or a generated one that is
-printed to stdout. Promotion sets the admin-only ``app_metadata.role`` claim,
-which lands in the JWT on the user's next sign-in.
+Idempotent. A missing user is created, confirmed, with the given password or a printed generated
+one. The role reaches the JWT at the next sign-in.
 """
 
 import argparse
@@ -40,19 +38,12 @@ def promote_admin(email: str, password: str | None) -> None:
 
     set_admin_role(uid)
     print(f"  → promoted {email} to server admin")
-    # The claim lives in ``app_metadata``, which GoTrue embeds in the *access token* — a session
-    # opened before this call carries none of it. Said here because "promoted" with no admin
-    # button in the app looks exactly like a promotion that failed.
+    # Said, because an open session lacks the role and would look like a failed promotion.
     print("  → sign out and back in: the claim only reaches the session on the next sign-in")
 
 
 def _unreachable(exc: httpx.ConnectError) -> None:
-    """Answer an unreachable GoTrue with the URL that was tried, not forty lines of traceback.
-
-    ``apply_host_overrides`` already rewrites a Docker-only ``host.docker.internal`` to the host
-    before this runs, so reaching here means the service at that URL is down or misconfigured for
-    another reason — the override below points this run at a different one instead.
-    """
+    """An unreachable GoTrue: the URL tried and an override, not a traceback."""
     url = get_technical_settings().supabase_api_url
     print(f"Cannot reach GoTrue at {url} ({exc}).", file=sys.stderr)
     print(

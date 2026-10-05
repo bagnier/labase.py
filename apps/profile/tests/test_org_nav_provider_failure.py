@@ -1,7 +1,4 @@
-"""The profile page and its activity fragment must survive a failing fullpage provider —
-fullpage_context isolates a provider that raises (logs, skips), so its slice can simply be
-absent from the context; a route reading that slice by key turns the isolation back into a
-KeyError 500 unless it reads it defensively."""
+"""A failing full-page provider leaves its slice absent: the profile must not read it by key."""
 
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -18,10 +15,7 @@ async def _broken_org_nav(query: FullpageQuery) -> dict:
 
 @contextmanager
 def _org_nav_provider_broken():
-    """Swaps the mounted ``org`` fullpage provider for one that always raises — the same
-    seam :func:`~apps.shared.integration.fullpage.fullpage_context` reads, so the isolation
-    it promises is exercised for real rather than staged by patching an organizations
-    internal."""
+    """The mounted ``org`` provider, replaced by one that raises."""
     broken = [
         FullpageProvider(p.name, p.keys, _broken_org_nav) if p.name == "org" else p
         for p in host.fullpage_providers

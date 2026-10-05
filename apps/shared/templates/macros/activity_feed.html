@@ -1,13 +1,8 @@
-{# The day-grouped activity feed as a centered vertical timeline — content · node · time
-   (e.g. "Ticked Write the changelog   ●   14:32"). Takes the day sections
-   `group_activity_by_day()` returns; each entry is an `ActivityEntry`, read by attribute
-   (who, label, detail, app, icon, ts, href). An entry with an `href` links the whole
-   content block to the entity it concerns (todo, file, page, calendar event). The rail
-   (`.activity-timeline`) is a single centered spine. The day header carries the date, so each
-   entry shows the clock time. #}
+{# The activity feed as a vertical timeline: content · node · time. Takes the sections of
+   `group_activity_by_day()`; an entry's `href` links its content to the entity. #}
 {% from "macros/empty_state.html" import empty_state %}
 {% macro _entry(e) %}
-  {# One tone for every fact: a business event has no severity — that is a logging notion. #}
+  {# One tone: a fact has no severity. #}
   {% set tone = "bg-primary/10 text-primary" %}
   {% set content %}
     <span class="text-sm leading-snug">
@@ -24,20 +19,17 @@
     {% if e.app %}<span class="block text-xs text-base-content/40 mt-0.5">{{ e.app }}</span>{% endif %}
   {% endset %}
   <li class="grid grid-cols-[1fr_2.25rem_1fr] items-center">
-    {# content — right-aligned toward the central rail #}
     {% if e.href %}
       <a href="{{ e.href }}"
          class="group block text-right px-4 py-2 min-w-0 rounded-box hover:bg-base-200 transition-colors">{{ content }}</a>
     {% else %}
       <div class="block text-right px-4 py-2 min-w-0">{{ content }}</div>
     {% endif %}
-    {# node — on the rail #}
     <span class="flex justify-center">
       <span class="relative z-10 grid place-items-center size-8 rounded-full ring-4 ring-base-100 {{ tone }}">
         <i class="ph ph-{{ e.icon }} text-sm" aria-hidden="true"></i>
       </span>
     </span>
-    {# time — left-aligned from the rail #}
     <span class="text-left px-4 py-2 text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ e.ts.strftime("%H:%M") }}</span>
   </li>
 {% endmacro %}

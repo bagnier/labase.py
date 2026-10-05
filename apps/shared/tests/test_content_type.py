@@ -1,4 +1,4 @@
-"""Content negotiation: which face a request gets — JSON, an HTMX fragment, or a full page."""
+"""Which face a request gets: JSON, an HTMX fragment, or a full page."""
 
 from fastapi import Request
 

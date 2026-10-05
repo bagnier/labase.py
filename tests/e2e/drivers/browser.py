@@ -30,4 +30,4 @@ class BrowserDriver(
     OrgBrowserMixin,
     BrowserBase,
 ):
-    """Playwright e2e driver: feature mixins over the BrowserBase substrate."""
+    """Feature mixins over ``BrowserBase``."""

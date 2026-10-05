@@ -25,7 +25,7 @@ create trigger calendar_events_updated_at
 
 alter table public.calendar_events enable row level security;
 
--- Any member reads and writes: the calendar is collaborative, with no owner-only rule in v1.
+-- Any member reads and writes.
 create policy "calendar_events: member all"
   on public.calendar_events for all
   using  (org_id in (select public.user_org_ids()))

@@ -1,11 +1,4 @@
-"""Meta-tests for the API driver's per-user session isolation.
-
-Asserts that ``client_for(email)`` hands each email its own cookie jar, that the
-acting-email switching keeps clients straight, and that ``reset_session`` wipes
-per-scenario state. Runs only under the API driver (skipped otherwise); relies on
-the session-scoped ``driver`` fixture and the autouse ``db_rollback`` isolation
-from ``tests/e2e/plugin.py``.
-"""
+"""The API driver's per-user clients, acting-user switch and ``reset_session``."""
 
 import httpx
 import pytest
@@ -61,7 +54,7 @@ def test_client_follows_acting_email(api: ApiDriver) -> None:
 
 
 def test_set_acting_email_promotes_the_visitor_client(api: ApiDriver) -> None:
-    visitor = api.client_for(VISITOR)  # unauthenticated session in flight
+    visitor = api.client_for(VISITOR)
 
     api.set_acting_email(_ALICE)
 
@@ -71,14 +64,12 @@ def test_set_acting_email_promotes_the_visitor_client(api: ApiDriver) -> None:
 
 
 def test_sign_in_syncs_acting_email_with_the_authenticated_session(api: ApiDriver) -> None:
-    """Symmetric guard to the browser driver: sign_in promotes the acting user so
-    the acting client is the one actually logged in."""
     email = "carol@example.com"
     api.ensure_registered(email, "Secret1!")
     api.sign_in(email, "Secret1!")
 
     assert api._acting_email == email
-    assert VISITOR not in api._clients  # promoted, not duplicated
+    assert VISITOR not in api._clients
     assert _whoami(api.client()).json()["email"] == email
 
 

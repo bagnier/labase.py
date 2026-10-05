@@ -1,4 +1,4 @@
-"""Contribs — the pull/collect contribution registry, split out of the event bus."""
+"""The contribution registry."""
 
 from dataclasses import dataclass
 
@@ -47,7 +47,6 @@ async def test_collect_dispatches_by_exact_type_only():
         return "base"
 
     contribs.provide(_Query, base_provider)
-    # A subclass query is a different key — the base provider must not answer it.
     assert await contribs.collect(_Sub("x")) == []
 
 
@@ -64,7 +63,6 @@ async def test_collect_isolates_a_failing_provider_and_keeps_the_rest():
     contribs.provide(_Query, boom)
     contribs.provide(_Query, ok)
 
-    # log-and-skip: the failure never propagates, the healthy provider still contributes.
     assert await contribs.collect(_Query("boom")) == ["ok"]
 
 
@@ -77,8 +75,7 @@ async def test_collect_of_an_unknown_query_type_is_empty():
 async def test_collect_isolates_a_failing_sql_provider_so_the_session_stays_usable(
     db_session: AsyncSession,
 ):
-    """A provider's SQL error aborts the caller's transaction: every later provider and the
-    caller's own queries must still work — a down app can't break the page (README)."""
+    """Its SQL error must not abort the transaction later providers and the caller use."""
     contribs = Contribs()
 
     async def boom(q: _SessionQuery) -> None:
@@ -86,7 +83,7 @@ async def test_collect_isolates_a_failing_sql_provider_so_the_session_stays_usab
 
     async def ok(q: _SessionQuery) -> int:
         result = await q.session.execute(text("select 2"))
-        return result.scalar()
+        return result.scalar_one()
 
     contribs.provide(_SessionQuery, boom)
     contribs.provide(_SessionQuery, ok)

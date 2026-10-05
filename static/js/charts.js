@@ -9,16 +9,12 @@
 //     <div data-chart></div>
 //   </div>
 //
-// `[data-chart]` is the render target; its sibling `[data-chart-config]` holds the
-// series + any ApexCharts option overrides. We merge those over a theme baseline read
-// from the daisyUI CSS variables on <html>, and re-read + re-render every chart when
-// the admin switches the theme (the console mutates <html data-theme>).
+// `[data-chart]` is the target; its sibling `[data-chart-config]` holds the series and option
+// overrides, merged over a baseline from the theme's CSS variables, re-read on a theme switch.
 
 const root = document.documentElement;
 
-// Resolve a CSS color expression to a serialized `rgb(...)` string. daisyUI 5 emits
-// colors in oklch; painting them onto a probe and reading back `color` yields rgb in
-// every browser, which sidesteps any oklch-in-SVG rendering quirk.
+// A CSS colour as `rgb(...)`, read back off a probe: daisyUI's oklch may render oddly in SVG.
 function resolveColor(expr) {
   const probe = document.createElement('span');
   probe.style.color = expr;
@@ -33,7 +29,6 @@ function cssVar(name) {
   return getComputedStyle(root).getPropertyValue(name).trim();
 }
 
-// A CSS var painted through resolveColor, so callers get rgb regardless of source space.
 function themeColor(name) {
   return resolveColor(`var(${name})`);
 }
@@ -72,12 +67,10 @@ function readTheme() {
   };
 }
 
-// pie/donut/polarArea/radialBar draw a separator stroke between slices; ApexCharts
-// defaults it to white, which clashes on dark themes. Match the card background instead.
+// Slice separators default to white, wrong on dark themes: use the card background.
 const RADIAL_TYPES = new Set(['pie', 'donut', 'polarArea', 'radialBar']);
 
-// Baseline options harmonised with daisyUI. Caller overrides (config.options) win via
-// deepMerge, but color/typography defaults come from the live theme.
+// The theme baseline; config.options win.
 function daisyDefaults(theme, type) {
   const mode = theme.isDark ? 'dark' : 'light';
   return {
@@ -93,10 +86,7 @@ function daisyDefaults(theme, type) {
     colors: theme.palette,
     grid: { borderColor: theme.gridBorder, strokeDashArray: 4 },
     dataLabels: { enabled: false },
-    // A bar takes no stroke: a non-zero width paints every zero-height stacked
-    // segment as a thin line in the series colour — e.g. an always-present but
-    // empty "issue" series would cap each logs-activity bar in phantom red.
-    // (curve:'smooth' only means something for line/area anyway.)
+    // No stroke on bars: it draws empty stacked segments as coloured lines.
     stroke: RADIAL_TYPES.has(type)
       ? { width: 2, colors: [theme.base100] }
       : type === 'bar'
@@ -109,8 +99,7 @@ function daisyDefaults(theme, type) {
   };
 }
 
-// daisyUI color names a config may reference by token, e.g. "colors": ["primary", "error"].
-// Resolved against the live theme so overrides recolor on theme switch like defaults do.
+// Theme colour names a config may use ("primary"), resolved live.
 const TOKENS = new Set([
   'primary',
   'secondary',
@@ -142,13 +131,10 @@ function deepMerge(base, override) {
   return out;
 }
 
-// Every live chart, so a theme switch can re-apply the baseline to all of them.
 const charts = [];
 
-// A `drilldown: { url, target }` config makes the chart a navigation surface: drag to
-// zoom the x-range and the server reloads `target` scoped to the brushed [from, to]
-// (epoch ms) so the totals + table follow the zoom; the built-in reset button (min/max
-// come back undefined) restores the full view and reloads `target` whole.
+// `drilldown: { url, target }`: zooming reloads `target` for the brushed [from, to] (epoch ms);
+// reset reloads it whole.
 function wireDrilldown(options, drill) {
   options.chart.toolbar = {
     show: true,
@@ -204,10 +190,7 @@ function initChart(target) {
   charts.push({ chart, config });
 }
 
-// Charts can live in a hidden tab (display:none → zero size), where ApexCharts would
-// render empty. A ResizeObserver fires as soon as a target has a real size — on first
-// layout for visible charts, or when a hidden tab is switched on — so each renders at
-// its true width regardless of scroll position.
+// A chart in a hidden tab has no size and would render empty: render on its first real size.
 const sizing = new ResizeObserver((entries) => {
   for (const entry of entries) {
     const target = entry.target;
@@ -231,13 +214,12 @@ function retheme() {
   }
 }
 
-// The console theme selector mutates <html data-theme>; recolor every chart in place.
 new MutationObserver(retheme).observe(root, {
   attributes: true,
   attributeFilter: ['data-theme'],
 });
 
-// Charts can arrive with an HTMX swap; init only the freshly inserted subtree.
+// Charts arriving in an HTMX swap.
 document.body.addEventListener('htmx:load', (e) => initAll(e.detail.elt));
 
 if (document.readyState === 'loading') {

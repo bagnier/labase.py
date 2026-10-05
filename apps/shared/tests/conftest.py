@@ -1,9 +1,5 @@
-"""Shared arrangement for the tests that exercise the live logging chain.
-
-``setup_logging`` reconfigures structlog, the root logger and Python's exception hooks
-process-wide, so a test that wants a real log line must both isolate its log sink and put
-everything back afterwards — otherwise every later test inherits the reconfiguration.
-"""
+"""The live logging chain for a test: ``setup_logging`` reconfigures the process, so it is put
+back afterwards."""
 
 import logging
 import sys
@@ -23,21 +19,14 @@ from apps.shared.logs.repository import _columns
 from apps.shared.logs.sink import clear_log_sink
 from apps.shared.settings.env import get_technical_settings
 
-# Pinned so a test that reasons about the window has fixed ends. These tests are about the chain,
-# not about retention.
+# Fixed window ends; retention is not under test here.
 _ANCHOR = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
 def log_chain(tmp_path, monkeypatch) -> Iterator[Callable[[], list[LogLine]]]:
-    """A pristine chain; yields what it produced, in the shape a reader receives.
-
-    Reads the *queue* rather than the store: these tests ask what the chain wrote — a level, a
-    name, a traceback that survived — and the trip through Postgres is neither what they are about
-    nor available to them (no loop, no session). ``apps/shared/tests/test_log_repository`` owns
-    that trip. The fallback dir is still redirected because the file writer and
-    ``clear_log_sink`` touch it.
-    """
+    """A pristine chain; yields a reader of what it wrote, from the queue, not the store
+    (``test_log_repository`` covers the store)."""
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
     monkeypatch.setattr(sink, "get_technical_settings", lambda: settings)
@@ -51,7 +40,7 @@ def log_chain(tmp_path, monkeypatch) -> Iterator[Callable[[], list[LogLine]]]:
     setup_logging()
 
     def written() -> list[LogLine]:
-        """Newest first, like every read of the store — the queue fills oldest first."""
+        """Newest first, like the store."""
         lines = [LogLine(**_columns(one, "test")) for one in sink._drain_queue()]
         return list(reversed(lines))
 

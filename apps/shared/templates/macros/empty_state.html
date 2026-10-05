@@ -1,11 +1,6 @@
-{# The one "nothing here yet" idiom. Three shapes, one voice:
-   - default: a quiet paragraph (`tag='p'`), for cards and sections;
-   - `tag='li'` / `tag='td'`: the same line placed inside a list panel or a table
-     (pass `colspan` for td);
-   - `icon='…'`: the tall centered variant with a phosphor icon and an optional hint,
-     for full-page empties.
-   `attr` takes one extra attribute name (e.g. a test hook like `data-logs-empty`);
-   `data-empty` is always present. #}
+{# "Nothing here yet": a paragraph by default; `tag='li'`/`'td'` (with `colspan`) inside a list
+   or table; with `icon`, the tall full-page variant. `attr` adds one attribute name (a test
+   hook); `data-empty` is always set. #}
 {% macro empty_state(message, hint='', icon='', tag='p', colspan=4, attr='') %}
   {% if icon %}
     <div class="text-center py-12 px-3" data-empty {{ attr }}>

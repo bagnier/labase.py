@@ -1,19 +1,6 @@
-"""One invariant over the *lifespan loops*: a loop that falls over is not a warning.
-
-The five background workers all wrap their tick in ``except Exception`` — they have to, since one
-bad tick must never end the loop. What that bought was silence: a task worker that stopped
-claiming, or an event listener that stopped delivering, left nothing but a ``warning`` inside a
-log window that rolls over in two days, so the console showed a healthy server while the
-durable half of the event system was dead.
-
-Three of the five now put that failure through the verdict in
-``apps.shared.logs.loop`` — the transition into failure is a bug, the ticks after it are
-the same outage, the recovery carries the toll. The other two are excluded *on purpose* and stay
-at ``warning``: the log writer and the capture drain are the machinery the seam itself runs
-on, so an ``exception`` from either would re-enter the queue it just failed to drain.
-
-This lives in ``tests/meta`` for the reason ``test_event_vocabulary`` does: shared may not
-import a bounded context, and one of the three loops is ``apps.metrics``'.
+"""The lifespan loops report through the loop verdict (AGENTS: a failure that repeats is one
+bug), but the log drain and the capture drain, which warn: an exception would re-enter their own
+queues. Here because one loop is ``apps.metrics``'.
 """
 
 from collections.abc import Callable
@@ -34,10 +21,7 @@ from apps.shared.persistence import database as db
 from apps.shared.queue import TaskWorker
 from tests.e2e.drivers.api_transaction import begin_test_transaction, end_test_transaction
 
-# ``(the loop's name, how to build one)`` — the name is what the verdict derives both of its
-# event names from, so asserting it is asserting that each loop kept the line it always wrote.
-# A factory rather than an instance: the health state *is* "has this loop been failing", so a
-# worker shared between two tests would carry the first one's outage into the second.
+# ``(loop name, factory)``: a fresh worker per test, since it carries its outage state.
 _LOOPS = [
     ("queue.worker", lambda: TaskWorker(interval_seconds=0)),
     ("listener.tick", lambda: EventListener(interval_seconds=0)),
@@ -48,8 +32,6 @@ _LOOPS = [
 @pytest.mark.parametrize(("name", "build"), _LOOPS, ids=[name for name, _ in _LOOPS])
 @pytest.mark.asyncio
 async def test_a_lifespan_loop_that_falls_over_opens_an_issue(name, build, monkeypatch):
-    """``error`` carrying a live exception *is* the capture seam — the one level that reaches the
-    console. A worker nobody is retrying has no other way to be seen."""
 
     async def broken(*_args, **_kwargs):
         raise RuntimeError("the loop's own query blew up")
@@ -66,10 +48,7 @@ async def test_a_lifespan_loop_that_falls_over_opens_an_issue(name, build, monke
 @pytest.mark.parametrize(("name", "build"), _LOOPS, ids=[name for name, _ in _LOOPS])
 @pytest.mark.asyncio
 async def test_a_loop_that_comes_back_says_what_the_outage_cost(name, build, monkeypatch):
-    """The whole transition, on the worker rather than on ``LoopHealth`` alone: the first failing
-    tick is the bug, the second is the same outage counted, and the tick that returns is what
-    ends it — a worker that forgot to report its success would never recover, and its *next*
-    outage would only warn."""
+    """On the worker itself: one forgetting to report success would never recover."""
     outcomes = iter([RuntimeError("down"), RuntimeError("still down"), None])
 
     async def flapping(*_args, **_kwargs):
@@ -92,8 +71,7 @@ async def test_a_loop_that_comes_back_says_what_the_outage_cost(name, build, mon
     ]
 
 
-# All five loops this time, built on the session factory a test hands them — the two excluded
-# from the verdict have no ``guarded_tick`` and are driven by their bare ``tick``.
+# All five loops; the two without ``guarded_tick`` run their ``tick``.
 _EVERY_LOOP: list[tuple[str, Callable[[Callable[[], AsyncSession]], object]]] = [
     ("queue.worker", lambda factory: TaskWorker(interval_seconds=0, session_factory=factory)),
     ("listener.tick", lambda factory: EventListener(interval_seconds=0, session_factory=factory)),
@@ -105,10 +83,8 @@ _EVERY_LOOP: list[tuple[str, Callable[[Callable[[], AsyncSession]], object]]] = 
 
 @pytest_asyncio.fixture
 async def at_rest(monkeypatch):
-    """A server with nothing to do: a transaction on which no task is owed and no fact awaits
-    dispatch, both in-process queues emptied, and every loop's session bound to that transaction
-    — rolled back afterwards, so what a real tick does to an idle store is discarded, and what it
-    would have found in a shared test database is not what this measures."""
+    """An idle server: nothing owed or undispatched, queues empty, all in one rolled-back
+    transaction."""
     db._admin_engine.cache_clear()
     db.admin_session_factory.cache_clear()
     conn = await begin_test_transaction(db._admin_engine())
@@ -140,9 +116,7 @@ async def at_rest(monkeypatch):
 @pytest.mark.parametrize(("name", "build"), _EVERY_LOOP, ids=[name for name, _ in _EVERY_LOOP])
 @pytest.mark.asyncio
 async def test_a_healthy_lifespan_loop_writes_nothing(name, build, at_rest):
-    """A line per successful tick is a line per second, per worker, forever — so the *real* tick
-    runs here, on a store with nothing owed, and every loop takes its turn. Pinning the verdict
-    wrapper alone would leave a ``log.warning`` inside the tick itself unseen."""
+    """The real ticks, so a line inside a tick is seen too."""
     worker = build(at_rest)
     tick = getattr(worker, "guarded_tick", worker.tick)
 

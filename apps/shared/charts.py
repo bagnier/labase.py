@@ -1,10 +1,5 @@
-"""Series shaping for the declarative charts.js contract (see the `chart` macro).
-
-Routers hand these dicts to templates; the `chart` macro serialises them next to a
-``[data-chart]`` target and static/js/charts.js does the rendering, themed by daisyUI.
-Keeping the shaping here (not in each router) gives every graph the same grammar:
-``chart_config`` assembles, ``day_buckets_series`` turns per-day dict counts into a
-stacked column chart, ``sparkline`` shrinks a single series to an inline trend.
+"""Chart configs for the ``chart`` template macro, which static/js/charts.js renders. Shaped here
+so every graph shares one grammar.
 """
 
 from datetime import date, timedelta
@@ -12,7 +7,6 @@ from typing import Any
 
 
 def chart_config(type: str, series: list[dict[str, Any]], **options: Any) -> dict[str, Any]:
-    """The {"type", "series", "options"} envelope charts.js consumes."""
     return {"type": type, "series": series, "options": options}
 
 
@@ -29,9 +23,8 @@ def day_buckets_series(
     names: dict[str, str] | None = None,
     height: int = 240,
 ) -> dict[str, Any]:
-    """A stacked per-day column chart from ``{iso_day: {key: count}}`` buckets
-    (the shape :meth:`TimelineReader.activity` returns) over a fixed trailing window —
-    missing days render as gaps of zero, so a quiet week still shows its width."""
+    """A stacked column per day from ``{iso_day: {key: count}}`` (as
+    :meth:`TimelineReader.activity` returns), missing days at zero."""
     window = last_days(days, end=end)
     keys = sorted({k for day in buckets.values() for k in day})
     series = [
@@ -52,7 +45,7 @@ def day_buckets_series(
 
 
 def sparkline(data: list[int], *, color: str = "primary", height: int = 48) -> dict[str, Any]:
-    """An inline, axis-less trend line for a single series (issue occurrences, growth)."""
+    """An inline trend line, no axes."""
     return chart_config(
         "area",
         [{"name": "", "data": data}],

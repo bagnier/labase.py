@@ -1,10 +1,5 @@
-"""Synchronous SQL helpers for test setup, run against the *active* DB schema.
-
-Test ``given`` helpers must write to the same schema the app reads (``SUPABASE_DATABASE_SCHEMA`` —
-``test`` for the main repo, ``wt_<name>_test`` for a worktree). PostgREST is pinned to
-``public`` and cannot target those schemas, so setup goes through SQLAlchemy instead,
-whose engine sets ``search_path = <schema>,public``. Writes are committed (outside any
-test transaction) so Supabase Storage RLS — which reads the committed DB — can see them.
+"""Committed SQL setup in the app's schema (``test``, or ``wt_<name>_test`` in a worktree),
+through SQLAlchemy: PostgREST is pinned to ``public``. Committed, so Storage RLS sees it.
 """
 
 import asyncio
@@ -33,12 +28,8 @@ def run_sql(
     fetch: bool = False,
     bypass_triggers: bool = False,
 ):
-    """Execute a committed statement against the active schema; optionally return rows as dicts.
-
-    ``bypass_triggers`` runs it with ``session_replication_role = replica`` so table triggers
-    stay dormant — for setup helpers that must force states the app's own guards forbid (e.g.
-    demoting a sole owner), mirroring how these helpers already run as admin to bypass RLS.
-    """
+    """Run and commit a statement, rows returned as dicts. ``bypass_triggers`` silences triggers,
+    to force states the app forbids (a sole owner demoted)."""
 
     async def _exec() -> list[dict]:
         engine = _engine()

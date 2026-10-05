@@ -1,15 +1,12 @@
-"""Membership helpers for test setup, via SQLAlchemy against the active schema.
-
-These writes go through SQLAlchemy (not PostgREST, which is pinned to ``public``) so they
-land in ``SUPABASE_DATABASE_SCHEMA`` — the schema the app reads. They are committed outside the test
-transaction — the affected orgs must be tracked via track_org_id().
+"""Membership setup through SQLAlchemy, not PostgREST (pinned to ``public``), so it lands in the
+app's schema. Committed outside the test transaction: track the orgs with track_org_id().
 """
 
 from tests.e2e.sql_setup import run_sql
 
 
 def orgs_for_user(user_id: str) -> list[dict]:
-    """Returns org rows (id, name, handle, role) for a user, ordered by membership creation."""
+    """``(id, name, handle, role)`` per org, by membership age."""
     return run_sql(
         """
         select o.id::text as id, o.name, o.handle, m.role
@@ -30,8 +27,7 @@ def add_membership(org_id: str, user_id: str, role: str = "member") -> None:
 
 
 def set_membership_role(org_id: str, user_id: str, role: str) -> None:
-    # Setup escape hatch: forces role states the app forbids (e.g. demoting a sole owner),
-    # so it must bypass the last-owner DB trigger just as it bypasses RLS by running as admin.
+    # Forces states the app forbids (a sole owner demoted): bypasses the last-owner trigger.
     run_sql(
         "update memberships set role = :role where org_id = :org and user_id = :uid",
         {"role": role, "org": org_id, "uid": user_id},
@@ -40,17 +36,11 @@ def set_membership_role(org_id: str, user_id: str, role: str) -> None:
 
 
 def create_org_for_user(name: str, user_id: str) -> dict:
-    """Create an org + owner membership.
+    """Create a committed org and its owner (Storage RLS reads committed rows); returns
+    ``{"id", "handle"}``.
 
-    Committed outside any transaction — Supabase Storage RLS needs the org in the committed DB.
-    Returns {"id": str, "handle": str}.
-
-    Marked ``is_personal``: this stands in for the org every account gets at sign-up, for a user
-    created straight through the admin API rather than ``/auth/register``. Left unmarked, a later
-    ``drain_task_queue()`` (any scenario's, not just this one's — the listener fans out whatever
-    is pending) would deliver this user's own ``UserCreated`` and seed a second org for them, live
-    only on the draining scenario's rolled-back connection — invisible to `run_sql`'s separate,
-    committed one, so the next raw-SQL write naming it fails its foreign key.
+    Marked ``is_personal``, standing in for the sign-up org: else a later drain would create one
+    for the user's ``UserCreated``, on a rolled-back connection other writes cannot see.
     """
     from apps.shared.integration.slugs import slugify
 

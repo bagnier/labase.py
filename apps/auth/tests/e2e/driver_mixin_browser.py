@@ -30,9 +30,8 @@ class AuthBrowserMixin(BrowserBase):
     def visit(self, path: str) -> None:
         self.last_response = self.page.goto(f"{self.base_url}{path}", wait_until="load")
 
-    # The front door: a visitor arriving at sign-in or registration is the entry point the base
-    # blesses, not a deep link — and it is a `when`, so the assertions that follow read the page
-    # it opened rather than fetching one of their own.
+    # Sign-in and registration are entry points, not deep links; the assertions after read the
+    # page this opened.
     def start_to_sign_in(self) -> None:
         self.page_for(VISITOR).goto(f"{self.base_url}/auth/login", wait_until="load")
 
@@ -48,7 +47,7 @@ class AuthBrowserMixin(BrowserBase):
         assert self.last_response.status == 200, f"Expected 200, got {self.last_response.status}"
 
     def registered_email(self) -> str:
-        """The user the scenario last registered — the one a bare "they" names."""
+        """The user the scenario last registered, the one "they" names."""
         if self.last_registered_email is None:
             raise AssertionError("no user registered in this scenario")
         return self.last_registered_email
@@ -56,8 +55,7 @@ class AuthBrowserMixin(BrowserBase):
     def sign_in(self, email: str, password: str) -> None:
         self.page.goto(f"{self.base_url}/auth/login")
         if "/auth/login" not in self.page.url:
-            # The acting context is already signed in (login redirects away):
-            # "a visitor signs in" happens on a fresh visitor context instead.
+            # Signed in already (login would redirect): sign in on a fresh visitor context.
             self.clear_acting_email()
             self.page.goto(f"{self.base_url}/auth/login")
         resp = self.submit_labelled_form(
@@ -72,8 +70,7 @@ class AuthBrowserMixin(BrowserBase):
         if resp.status == 303 or resp.headers.get("hx-redirect"):
             self.page.wait_for_url(f"{self.base_url}/profile", timeout=5000)
             self.adopt_current_context(email)
-            # Same as the api driver does on sign-in: whoever just authenticated brings their own
-            # org, and a stale handle from the previous actor would send every later step to it.
+            # Like the api driver: the new actor's own org, not the previous actor's.
             self._store_active_org_handle()
         else:
             self.page.wait_for_load_state("domcontentloaded")
@@ -86,7 +83,7 @@ class AuthBrowserMixin(BrowserBase):
         page.get_by_role("button", name="Create my account").click()
         page.wait_for_load_state("domcontentloaded")
         page.close()
-        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
+        self.drain_task_queue()  # UserCreated's reactions: personal org, admin bootstrap
 
     def register(self, email: str, password: str) -> None:
         self.last_registered_email = email
@@ -99,7 +96,7 @@ class AuthBrowserMixin(BrowserBase):
             path_token="/auth/register",
         )
         self.page.wait_for_load_state("domcontentloaded")
-        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
+        self.drain_task_queue()  # UserCreated's reactions: personal org, admin bootstrap
 
     def register_fresh(self, password: str) -> None:
         self.register(f"{uuid4()}@test.local", password)
@@ -109,14 +106,10 @@ class AuthBrowserMixin(BrowserBase):
         self.register(email, password)
 
     def _store_active_org_handle(self) -> None:
-        """Read the handle off the org card link — the caller leaves the page on /profile.
+        """Read the handle off the org card on /profile, if any.
 
-        Not every signed-in user has one: an account whose personal org does not exist yet renders
-        the organisations panel with no card in it. So anchor on the panel's own create form —
-        same server-rendered response as the cards, present either way — and read the cards only
-        once it is attached. Absence is then a settled fact rather than a race, which is what a
-        bounded timeout here could never tell apart: it would leave the previous actor's handle in
-        place and send the rest of the scenario to the wrong organisation, silently.
+        Waits for the panel's create form, rendered with the cards, so "no card" is settled rather
+        than a race a timeout would lose silently, keeping the previous actor's handle.
         """
         self.page.get_by_label("Organisation name").wait_for(state="attached")
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
@@ -134,9 +127,7 @@ class AuthBrowserMixin(BrowserBase):
         self._store_active_org_handle()
 
     def logout_action(self) -> None:
-        # Sign out the way a human does — no fetch(): from the profile's Account tab, submit
-        # the Sign out form. If the session is already gone, the page holds no account link, or
-        # following it bounces to the sign-in page: either way there is nothing left to click.
+        # Through the profile's Account tab. Without a session there is no form to submit.
         if self.page.locator("aside a[href='/profile']").count() == 0:
             return
         self.follow_to_profile()
@@ -159,8 +150,7 @@ class AuthBrowserMixin(BrowserBase):
     def reset_password_via_email(self, new_password: str) -> None:
         assert self._reset_email, "no reset requested"
         assert self._reset_requested_at, "no reset requested"
-        # The recovery mail is really fetched from the catcher; the link targets the
-        # dev SITE_URL, so we carry its token to this driver's own server port.
+        # The mailed link targets the dev SITE_URL: its token is carried to this driver's port.
         token_hash = mailbox.recovery_token(self._reset_email, since=self._reset_requested_at)
         self.page.goto(
             f"{self.base_url}/auth/reset-password?token_hash={token_hash}&type=recovery",
@@ -171,8 +161,7 @@ class AuthBrowserMixin(BrowserBase):
         self.page.wait_for_url(f"{self.base_url}/auth/login*", timeout=5000)
 
     def _open_profile_auth_tab(self) -> None:
-        """Password/2FA/passkeys live in the profile page's "Authentication" tab
-        (client-side daisyUI tabs); check its radio so the panel is visible."""
+        """Open the profile's client-side "Authentication" tab."""
         self.page.get_by_role("tab", name="Authentication", exact=True).check()
 
     def change_password(self, current_password: str, new_password: str) -> None:
@@ -189,8 +178,7 @@ class AuthBrowserMixin(BrowserBase):
         )
 
     def assert_login_rejected(self) -> None:
-        # HTMX 2.x drops 4xx responses without swapping — verify by checking
-        # we were not redirected to the dashboard (i.e., sign-in was refused)
+        # HTMX drops a 4xx without swapping: refused means not redirected.
         assert "/profile" not in self.page.url, (
             f"Expected sign-in to fail but ended up at {self.page.url}"
         )
@@ -206,7 +194,6 @@ class AuthBrowserMixin(BrowserBase):
         alert.wait_for(timeout=5000)
 
     def resend_confirmation_to(self, email: str) -> None:
-        # The button sits in the failed sign-in's error state, email carried along.
         self._confirmation_requested_at = datetime.now(UTC)
         form = self.page.locator("[data-resend-confirmation]")
         assert form.locator("input[name=email]").get_attribute("value") == email
@@ -220,8 +207,7 @@ class AuthBrowserMixin(BrowserBase):
         )
 
     def confirm_address_via_link(self, email: str) -> None:
-        # The mail is really fetched from the catcher; following its link is the
-        # one legitimate goto (a user clicks it from their mailbox).
+        # The one legitimate goto: a user clicks the link from their mailbox.
         assert self._confirmation_requested_at is not None, "no resend requested"
         token_hash = mailbox.token_hash_from_mail(email, since=self._confirmation_requested_at)
         self.page.goto(
@@ -272,8 +258,8 @@ class AuthBrowserMixin(BrowserBase):
         self.page.wait_for_load_state("load")
 
     def open_profile_with_pending_sign_in(self, *, as_impersonator: bool = False) -> None:
-        # The attacker's move: the challenge's relay cookie, presented as a bearer — and, dressed
-        # up, as the stashed admin session an impersonation carries.
+        # The attacker presents the challenge's relay cookie as a bearer, and as an impersonator
+        # stash.
         self.page.wait_for_selector("[data-mfa-form]", timeout=5000)
         pending = next(
             (
@@ -299,14 +285,12 @@ class AuthBrowserMixin(BrowserBase):
         alert.wait_for(timeout=5000)
 
     def assert_twofa_not_offered(self, email: str) -> None:
-        # Their own page, read from the server: the option was turned off after it rendered.
         self.set_acting_email(email)
         self.reach_profile(fresh=True)
         expect(self.page.locator("[data-twofa]")).to_have_count(0)
 
     # ── OAuth social sign-in ───────────────────────────────────────────────────
-    # The sign-in page is a visitor's view — the acting context may be a
-    # signed-in admin (who just flipped the switch), whom /auth/login redirects.
+    # On a visitor context: the acting admin who flipped the switch would be redirected.
     def _oauth_button(self, provider: str):
         return self.page_for(VISITOR).locator(f"[data-oauth-provider='{provider}']")
 
@@ -317,11 +301,7 @@ class AuthBrowserMixin(BrowserBase):
         expect(self._oauth_button(provider)).to_have_count(0)
 
     def start_oauth(self, provider: str) -> None:
-        """Click the provider button; the app answers 303 to GoTrue's authorize URL.
-
-        The navigation then leaves the app (GoTrue errors without real provider
-        credentials locally) — the scenario only asserts the captured hand-off.
-        """
+        """Click the provider button and capture the 303 to GoTrue; no real provider runs."""
         page = self.page_for(VISITOR)
         page.goto(f"{self.base_url}/auth/login", wait_until="load")
         with page.expect_response(
@@ -339,9 +319,8 @@ class AuthBrowserMixin(BrowserBase):
         assert f"provider={provider}" in location, f"unexpected provider in: {location}"
 
     # ── Passkeys ───────────────────────────────────────────────────────────────
-    # The real thing: static/js/passkeys.js drives navigator.credentials against a
-    # CDP virtual authenticator, and GoTrue verifies the signed origin — possible
-    # because the e2e server's origin is pinned into rp_origins (see browser_base).
+    # Real ceremonies on a CDP virtual authenticator; the e2e origin is in rp_origins
+    # (see browser_base).
     def _attach_virtual_authenticator(self, page):
         client = page.context.new_cdp_session(page)
         client.send("WebAuthn.enable")
@@ -372,8 +351,7 @@ class AuthBrowserMixin(BrowserBase):
         self.reach_profile()
         self._open_profile_auth_tab()
         page.locator("[data-passkey-register]").click()
-        # passkeys.js reloads the page once GoTrue accepted the attestation; the
-        # fresh page opens on the default tab, so re-open Authentication to see it.
+        # passkeys.js reloads the page on the default tab.
         page.locator("[data-passkey-name]").first.wait_for(state="attached", timeout=10000)
         self._open_profile_auth_tab()
         page.locator("[data-passkey-name]").first.wait_for(timeout=5000)
@@ -391,7 +369,7 @@ class AuthBrowserMixin(BrowserBase):
     def sign_in_with_passkey(self) -> None:
         credential = getattr(self, "_passkey_credential", None)
         assert credential is not None, "add_passkey was not called"
-        self.clear_acting_email()  # the visitor doing the ceremony becomes the acting context
+        self.clear_acting_email()
         page = self.page_for(VISITOR)
         client, authenticator_id = self._attach_virtual_authenticator(page)
         client.send(
@@ -400,8 +378,7 @@ class AuthBrowserMixin(BrowserBase):
         )
         page.goto(f"{self.base_url}/auth/login", wait_until="load")
         page.locator("[data-passkey-signin]").click()
-        # passkeys.js follows the server's redirect once the assertion verified: the session, or
-        # the authenticator-code step when the account enrolled one.
+        # passkeys.js follows the redirect: the session, or the authenticator-code step.
         page.wait_for_url(
             lambda url: url.startswith((f"{self.base_url}/profile", f"{self.base_url}/auth/mfa")),
             timeout=10000,
@@ -414,7 +391,7 @@ class AuthBrowserMixin(BrowserBase):
         as_admin()
 
     def open_accounts_screen(self) -> None:
-        """Console → the Users tile → its “Accounts” link, the path the console lays out."""
+        """Console → Users tile → “Accounts”."""
         open_settings = getattr(self, "open_console_settings", None)  # console mixin
         assert open_settings is not None
         open_settings("users")
@@ -433,7 +410,7 @@ class AuthBrowserMixin(BrowserBase):
     def filter_accounts(self, query: str) -> None:
         search = self.page.get_by_label("Filter accounts by email")
         search.click()
-        # press_sequentially fires the keyup events the HTMX debounce listens for.
+        # press_sequentially fires the keyups the HTMX debounce waits for.
         search.press_sequentially(query)
 
     def assert_account_in_filtered_list(self, email: str) -> None:
@@ -454,9 +431,7 @@ class AuthBrowserMixin(BrowserBase):
         self.last_response = self.click_and_capture(self.page, button, "POST", "/disable")
 
     def assert_account_not_disabled(self, email: str) -> None:
-        # The forbidden POST navigated the plain (non-HTMX) form to the rendered error page — a
-        # public layout with no console nav — so follow its own way back before walking to the
-        # accounts screen again to read the row's live state.
+        # The refused form landed on the error page, which has no console nav: go back from it.
         with self.page.expect_navigation(wait_until="load"):
             self.page.get_by_role("link", name="Back to home").click()
         self.open_accounts_screen()

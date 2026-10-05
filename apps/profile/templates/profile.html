@@ -12,8 +12,7 @@
 {% block content %}
   <div class="space-y-6 max-w-2xl">
     {{ page_header('Profile', 'Your activity, and your account settings.') }}
-    {# Activity is the primary tab; a form POST re-renders the whole page, so keep the tab that
-       owns a just-shown alert/enrolment open across that reload. #}
+    {# A form POST re-renders the page: reopen the tab holding its alert. #}
     {% set active_tab = "activity" %}
     {% if error or success or avatar_error or avatar_info %}
       {% set active_tab = "profile" %}
@@ -259,8 +258,7 @@
       <div role="tabpanel"
            class="tab-content border-base-300 bg-base-100 p-4 sm:p-6">
         <div class="space-y-6">
-          {# Current sign-in email, always shown read-only: the address itself is never edited in
-             place — a change goes through the confirm-by-link flow below (when enabled). #}
+          {# Read-only: a change goes through the confirmation flow below. #}
           <section class="card-panel">
             <div class="card-body">
               <h2 class="card-title text-sm font-semibold mb-3">Email</h2>

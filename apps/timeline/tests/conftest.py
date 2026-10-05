@@ -1,11 +1,5 @@
-"""The reader the unit tests drive, and the engine hygiene it owes the tests after it.
-
-``TimelineReader`` needs an admin session, and ``admin_session_factory`` is lru_cached: a session
-opened here binds an asyncpg pool to *this* test's loop, and the next test to ask for one — the
-e2e driver, on its own loop — gets that dead pool back and fails at setup with "Event loop is
-closed". Disposing and clearing the caches on the way out is what keeps the two kinds of test
-independent, the same shape ``apps/issues`` and ``apps/metrics`` use around their own DB fixtures.
-"""
+"""The reader the unit tests drive. Engine caches are cleared around it: a pool bound to this
+test's loop would fail the next test with "Event loop is closed"."""
 
 import pytest_asyncio
 
@@ -20,9 +14,7 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture
 async def reader():
-    # Cleared on the way *in* as well as out. Out alone was enough while the reader only touched
-    # the two DB sources; now the ``logs`` source is a table too, so a driver-based test running
-    # before this one leaves a pool bound to its dead loop and the read fails at teardown.
+    # On the way in too: an earlier driver-based test may have left a dead pool.
     _clear_engine_caches()
     async with db.admin_session_factory()() as session:
         yield TimelineReader(session)

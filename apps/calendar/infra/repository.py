@@ -12,14 +12,8 @@ class CalendarEventRepository(OrgScopedRepository[CalendarEvent]):
     default_order = CalendarEvent.starts_at.asc()
 
     async def upcoming(self, now: datetime, limit: int) -> list[CalendarEvent]:
-        """This org's `limit` soonest events starting at or after `now`, a bounded query never
-        a full fetch sliced after the fact, so a large org's overview card costs `limit` rows,
-        not every future event it has.
-
-        `now` is the caller's own read of the clock, not this method's: the overview also counts
-        every upcoming event by the same instant, and two separate `clock.now()` reads could
-        disagree about which event is still upcoming — tiebroken on `id` (UUIDv7, minted in
-        creation order), for the same reason `OrgScopedRepository.recent` is."""
+        """The `limit` soonest events from `now`, ties broken on `id`. `now` is the caller's, who
+        counts upcoming events by the same instant."""
         query = (
             select(CalendarEvent)
             .where(CalendarEvent.org_id == self.org_id, CalendarEvent.starts_at >= now)

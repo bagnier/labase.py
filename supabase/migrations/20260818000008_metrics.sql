@@ -1,15 +1,11 @@
--- Load metrics (Metrics-as-Postgres): each process flushes aggregated per-minute deltas — one row
--- per (bucket, instance, method, route), NEVER one per request; that ratio is what makes a time
--- series in Postgres viable. A daily rollup downsamples minute → hour and applies retention.
---
--- Server-level admin data: RLS on with no policy, same posture as `issues`.
+-- One row per (minute, instance, method, route), never per request; a daily rollup downsamples
+-- to hours and applies retention. Admin only: RLS on with no policy.
 
 create type public.metric_resolution as enum ('minute', 'hour');
 
 create table public.request_metrics (
   id               uuid                     primary key default public.uuidv7(),
-  -- The instant the bucket opens. Not just `bucket`: this schema already spends that word on
-  -- `duration_buckets` (a histogram) and on Storage buckets.
+  -- When the bucket opens; `bucket` already names histograms and Storage.
   bucket_start     timestamptz              not null,
   resolution       public.metric_resolution not null default 'minute',
   instance         text                     not null,
@@ -18,8 +14,7 @@ create table public.request_metrics (
   requests         bigint                   not null default 0,
   errors           bigint                   not null default 0,
   duration_sum_ms  double precision         not null default 0,
-  -- Positionally aligned with BUCKET_BOUNDS_MS in apps/shared/observability/metrics.py — the shape
-  -- Prometheus derives percentiles from, so p95 survives aggregation across rows.
+  -- Aligned with BUCKET_BOUNDS_MS (apps/metrics/domain/accumulator.py): p95 survives summing rows.
   duration_buckets integer[]                not null,
   created_at       timestamptz              not null default now()
 );

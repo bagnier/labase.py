@@ -67,9 +67,6 @@ async def get_invitation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=_NOT_FOUND_DETAIL,
             )
-        # Serialized here rather than handed back as a model: every negotiating handler in the
-        # base returns its own Response, which is what lets the annotation say `-> Response` and
-        # FastAPI skip building a response model it would only use on one of the two branches.
         return JSONResponse(invitation.model_dump(mode="json"))
 
     if invitation is None:
@@ -110,14 +107,13 @@ async def accept_invitation(
     rls_session: RlsSession,
     rls_repo: RlsOrgRepo,
 ):
-    # Accepting is exactly what the caller has no membership for yet: the token reads it, through
-    # ``get_invitation_by_token``, on the caller's own session.
+    # Not a member yet: the token reads the invitation through a SECURITY DEFINER function.
     invitation = await rls_repo.get_invitation_by_token(token)
     if invitation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
     if invitation.status == InvitationStatus.accepted:
-        return await _dashboard_redirect(request, rls_repo, invitation.org_id)  # idempotent
+        return await _dashboard_redirect(request, rls_repo, invitation.org_id)
 
     if invitation.status != InvitationStatus.pending:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
@@ -148,7 +144,7 @@ async def accept_invitation(
             status_code=403,
         )
 
-    # Call SECURITY DEFINER function via RLS session so auth.uid() is set from the JWT
+    # On the RLS session, so the function's auth.uid() is the caller.
     try:
         await rls_repo.accept_org_invitation(token)
     except DBAPIError as exc:
@@ -164,8 +160,7 @@ async def accept_invitation(
                 {"state": "invalid", "token": str(token), "org_name": "", "email": ""},
                 status_code=404,
             )
-        # Re-raised, so the 500 handler captures it — and it is the only one that should: a
-        # ``log.exception`` here would fold a second occurrence into the same issue per failure.
+        # Re-raised for the 500 handler to capture; logging here too would add an occurrence.
         raise
 
     await events.emit(MemberJoined(user_id=current_user.id, org_id=invitation.org_id), rls_session)

@@ -39,13 +39,8 @@ def _bearer_token(authorization: str | None) -> str | None:
 
 
 async def _resolve_api_key(token: str, session: AsyncSession) -> AuthenticatedUser:
-    """Route an `lbk_...` bearer token to whoever contributes an answer to ApiKeyQuery.
-
-    Unlike ``contribs.collect``'s general log-and-skip policy (right for a dashboard card, whose
-    absence hurts nobody), a raising provider here must not be read as "no key matched": that
-    would answer a valid key with a wrong-password 401 instead of the 503 a broken dependency
-    earns.
-    """
+    """Resolve an `lbk_...` bearer token through the ``ApiKeyQuery`` providers. Not
+    ``contribs.collect``: a raising provider must give a 503, not a 401 for a valid key."""
     query = ApiKeyQuery(token, session)
     for provider in contribs.providers(ApiKeyQuery):
         try:
@@ -79,9 +74,8 @@ def decode_jwt(token: str) -> dict:
 
 @asynccontextmanager
 async def _before_identity(session: AsyncSession) -> AsyncIterator[None]:
-    """Reads made while who is asking is not known yet: the app's role with claims naming nobody,
-    never a BYPASSRLS connection — what they need goes through functions made for it. Undone
-    after, so the session carries no borrowed identity into the request's own context."""
+    """Reads before the caller is known: the app's role with claims naming nobody, not BYPASSRLS
+    (AGENTS: three sessions, and RLS by default). Undone after."""
     await set_rls_context(session, {"role": "anon"})
     try:
         yield
@@ -90,17 +84,14 @@ async def _before_identity(session: AsyncSession) -> AsyncIterator[None]:
 
 
 def _short_of_aal2(payload: dict) -> bool:
-    """Whether the token could owe a second factor at all — free to answer, so the database is
-    asked only then."""
+    """A cheap check, so the database is asked only when it is true."""
     return payload.get("aal") != "aal2" and bool(get_settings("users").view().two_factor_enabled)
 
 
 async def _second_factor_owed(payload: dict, session: AsyncSession) -> bool:
-    """Whether this token stopped short of the second factor its account has enrolled.
-
-    GoTrue mints a working ``aal1`` token before the TOTP step-up — the one the challenge relays.
-    Accepting it here would make the password alone a session; with 2FA switched off server-wide,
-    sign-in skips the step-up, so ``aal1`` is the only level there is."""
+    """Whether the token is ``aal1`` for an account with an authenticator enrolled: the token the
+    challenge relays, which would make the password alone a session. Not when 2FA is off
+    server-wide, where ``aal1`` is the only level."""
     if not _short_of_aal2(payload):
         return False
     enrolled = await session.scalar(
@@ -110,11 +101,9 @@ async def _second_factor_owed(payload: dict, session: AsyncSession) -> bool:
 
 
 async def _impersonated_by_an_admin(stash: str | None, session: AsyncSession) -> bool:
-    """Whether the stashed impersonator token is a live admin session that owes no second factor.
-
-    Impersonation mints the target's session through a magic link — ``aal1`` by construction — so
-    a disguise over an enrolled account holds only on the admin's word, read from their own token:
-    the cookie alone is a value anyone can set."""
+    """Whether the stashed impersonator token is a live admin session owing no second factor.
+    Impersonation mints an ``aal1`` session, so it is vouched for by the admin's own token, not
+    by a cookie anyone can set."""
     if not stash:
         return False
     try:
@@ -127,10 +116,8 @@ async def _impersonated_by_an_admin(stash: str | None, session: AsyncSession) ->
 
 
 def _impersonation_remaining(deadline: str | None) -> int | None:
-    """Seconds left in the impersonation window, or ``None`` when not impersonating.
-
-    The value can be ``<= 0`` (window elapsed); callers refuse the refresh in that case. A
-    malformed cookie is treated as no window rather than trusting an unbounded session."""
+    """Seconds left in the impersonation window, ``<= 0`` once elapsed, ``None`` when not
+    impersonating. A malformed cookie also reads as ``None``."""
     if not deadline:
         return None
     try:
@@ -154,7 +141,7 @@ async def get_current_user(
             principal = await _resolve_api_key(bearer, session)
         structlog.contextvars.bind_contextvars(user_id=str(principal.id))
         return principal
-    # A bearer GoTrue JWT is the machine twin of the cookie session (no refresh flow).
+    # A bearer GoTrue JWT works like the cookie, without refresh.
     access_token = access_token or bearer
     if not access_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
@@ -165,10 +152,8 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
             ) from None
-        # A refresh while impersonating must not outlive the impersonation window: re-emitting
-        # the default long-lived login cookies here would silently extend the disguise past
-        # IMPERSONATION_MAX_SECONDS. Cap the re-emitted session to the box's remaining time, and
-        # refuse once the box has closed so the target session dies with the banner.
+        # While impersonating, the refreshed session is capped to the window's remaining time,
+        # and refused once it closed: a refresh must not extend the disguise.
         impersonation_ttl = _impersonation_remaining(impersonator_deadline)
         if impersonation_ttl is not None and impersonation_ttl <= 0:
             raise HTTPException(
@@ -201,8 +186,6 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Second factor required"
         )
     is_admin = payload.get("app_metadata", {}).get("role") == "admin"
-    # Correlate every log line of this request with who made it — the unified logs viewer
-    # filters the log sink by user_id (request_id is already bound by RequestLogger).
     structlog.contextvars.bind_contextvars(user_id=payload["sub"])
     return AuthenticatedUser(
         id=uuid.UUID(payload["sub"]),
@@ -214,15 +197,8 @@ async def get_current_user(
 
 
 def _report_refresh_failure(exc: Exception) -> None:
-    """Log the lapse at the level its nature warrants, sparing the one refusal that is routine.
-
-    A stale, rotated or absent refresh token is GoTrue answering with a 4xx that is not a rate
-    limit: the everyday end of a session for every returning user whose token turned over, not a
-    surprise — so it earns no line at all. A 429 is still the base's ordinary "dependency
-    answered no" at ``info``, since it can sign out every returning user on the instance at
-    once and is worth seeing. Everything else — GoTrue unreachable, a 5xx, a network error, our
-    own ``ValueError`` — is a broken dependency, which the capture seam tracks as an issue.
-    """
+    """A stale refresh token (a 4xx other than 429) is the everyday end of a session: no line.
+    A 429 can sign out every user at once, so it gets the dependency verdict like any failure."""
     status = refused_status(exc)
     if status is not None and status != 429 and 400 <= status < 500:
         return
@@ -233,14 +209,9 @@ async def get_current_admin(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> AuthenticatedUser:
-    """Gate for server-admin-only surfaces (the console).
-
-    Anonymous callers already get 401 from ``get_current_user``. A signed-in non-admin gets a
-    plain 404 — a 403 would confirm the protected surface exists.
-    """
+    """Server admins only. A non-admin gets a 404: a 403 would confirm the surface exists."""
     if not user.is_admin:
-        # A refusal, not a fact: nothing changed, and a log line outlives the raise below without
-        # needing a transaction of its own.
+        # A refusal: a log line, not a fact.
         log.warning("auth.forbidden_admin_access", user_id=str(user.id), path=request.url.path)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return user

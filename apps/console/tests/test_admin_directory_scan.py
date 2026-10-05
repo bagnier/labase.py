@@ -1,9 +1,5 @@
-"""`grant_admin` / `set_admin` read the GoTrue directory once — the lookup, the last-admin
-guard and the returned list all come from that one scan, not a fresh one each.
-
-GoTrue is a service we own the boundary of, not our own domain code — stubbed the way
-`test_admin_bootstrap.py` stubs it, never with `AsyncMock`/`MagicMock` standing in for our
-own functions."""
+"""`grant_admin` and `set_admin` scan the GoTrue directory once for lookup, guard and listing.
+GoTrue is stubbed at its boundary, like in `test_admin_bootstrap.py`."""
 
 import uuid
 from types import SimpleNamespace
@@ -27,8 +23,7 @@ def _user(
 
 
 def _gotrue(users: list[SimpleNamespace]) -> tuple[MagicMock, list[str]]:
-    """A stubbed GoTrue admin API: the accounts it lists, and a record of every ``list_users``
-    call — the observable count a directory scan costs."""
+    """The accounts it lists, and a record of each ``list_users`` call."""
     calls: list[str] = []
     client = MagicMock()
 
@@ -67,8 +62,7 @@ async def test_setting_admin_status_scans_the_directory_once():
 
 @pytest.mark.asyncio
 async def test_revoking_the_last_unbanned_admin_is_blocked_by_a_banned_peer():
-    """Issue #79: a banned admin has an admin's role but cannot sign in — it must not count as
-    the safety net that lets the server's last acting admin give up their role."""
+    """A banned admin cannot sign in, so it does not count."""
     active = uuid.uuid7()
     client, _ = _gotrue(
         [

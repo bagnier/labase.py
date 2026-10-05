@@ -13,8 +13,7 @@ class Profile(Base, UUIDPk, Versioned, Timestamped):
     __table_args__ = (
         UniqueConstraint("user_id"),
         Index("profiles_email_idx", "email"),
-        # Partial: the handle is set lazily on first profile access, so several rows may sit at
-        # null at once — which a unique *constraint* would forbid.
+        # Partial: handles are set lazily, so many rows hold null.
         Index(
             "profiles_handle_idx",
             "handle",
@@ -40,7 +39,7 @@ class ProfileUpdate(BaseModel):
 
 
 class HandleUpdate(BaseModel):
-    """The profile form's one field; blank is refused by the handler on the form."""
+    """Blank is refused by the handler, on the form."""
 
     handle: str = ""
 
@@ -56,8 +55,6 @@ class EmailChange(BaseModel):
 
 
 class PasskeyRegistration(BaseModel):
-    """The WebAuthn answer to a registration challenge, as the browser's script posts it."""
-
     challenge_id: str = ""
     credential: dict[str, Any] = {}
 
@@ -68,8 +65,6 @@ class TotpEnrolmentCheck(BaseModel):
 
 
 class AccountDeletion(BaseModel):
-    """Re-authentication before the one irreversible action."""
-
     current_password: str = ""
 
 
@@ -87,23 +82,17 @@ class ProfileRead(BaseModel):
 
 
 class ProfileStub(BaseModel):
-    """An account with no profile row yet: only what the token says."""
-
     id: None = None
     handle: None = None
     email: str
 
 
 class TotpEnrolmentRead(BaseModel):
-    """What the authenticator app needs: the factor to confirm, its secret, the otpauth URI."""
-
     factor_id: str
     secret: str
     uri: str
 
 
 class PasskeyRegistered(BaseModel):
-    """A passkey now on the account, as GoTrue describes it."""
-
     message: str
     passkey: dict[str, Any]

@@ -29,7 +29,7 @@ def test_bucket_index_covers_bounds_and_overflow():
     assert bucket_index(0) == 0
     assert bucket_index(5) == 0
     assert bucket_index(5.1) == 1
-    assert bucket_index(10001) == len(BUCKET_BOUNDS_MS)  # +Inf slot
+    assert bucket_index(10001) == len(BUCKET_BOUNDS_MS)  # +Inf
 
 
 def test_snapshot_is_isolated_from_later_observations():
@@ -71,7 +71,7 @@ def test_render_prometheus_exposes_cumulative_histogram():
     text = acc.render_prometheus()
     assert 'http_requests_total{method="GET",route="/console",status="2xx"} 2' in text
     assert 'http_requests_total{method="GET",route="/console",status="5xx"} 1' in text
-    # buckets are cumulative: the 30ms hit shows up from le=0.05 onwards
+    # cumulative: the 30ms hit counts from le=0.05 on
     assert 'le="0.05"} 1' in text
     assert 'le="0.1"} 3' in text
     assert 'le="+Inf"} 3' in text
@@ -96,12 +96,12 @@ def test_unmatched_paths_overflow_collapses_into_the_bucket():
     snap = acc.snapshot()
     assert ("GET", "/one-too-many") not in snap
     assert ("GET", "/another") not in snap
-    assert snap[("GET", UNMATCHED_ROUTE)].requests == 2  # both overflowed here
+    assert snap[("GET", UNMATCHED_ROUTE)].requests == 2
 
 
 def test_matched_route_is_never_capped():
     acc = MetricsAccumulator()
-    acc.observe("GET", "/todo", 200, 10)  # default: unmatched=False
+    acc.observe("GET", "/todo", 200, 10)
     assert ("GET", "/todo") in acc.snapshot()
 
 

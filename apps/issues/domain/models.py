@@ -33,17 +33,14 @@ class Issue(Base, UUIDPk, Versioned, Timestamped):
     occurrence_count: Mapped[int] = mapped_column(BigInteger, default=0)
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    # The app release, not the optimistic-lock `version` this table also carries.
+    # The app release, not the optimistic-lock `version`.
     first_release: Mapped[str] = mapped_column(default="dev")
     last_release: Mapped[str] = mapped_column(default="dev")
     resolved_in_release: Mapped[str | None] = mapped_column(default=None)
 
 
 class Occurrence(Base, UUIDPk, Created):
-    """One sighting of an issue, with the JSONB context that pivots to the log sink.
-
-    ``id`` is a UUIDv7 (via ``UUIDPk``): time-ordered, so the newest-first cursor page
-    (``order_by(id.desc())`` + ``id < before_id``) keeps working without a bigint sequence."""
+    """One sighting, with the captured context; its time-ordered id is the page cursor."""
 
     __tablename__ = "issue_occurrences"
 
@@ -52,7 +49,7 @@ class Occurrence(Base, UUIDPk, Created):
 
 
 class IssueStatusUpdate(BaseModel):
-    """A triage verdict; the tracker's own statuses (``new``, ``regressed``) are refused."""
+    """A triage verdict; not ``new`` nor ``regressed``."""
 
     status: str = ""
 

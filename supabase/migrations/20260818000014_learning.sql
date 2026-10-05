@@ -75,8 +75,6 @@ create table public.card_states (
 create index card_states_user_next_review_idx on public.card_states (user_id, next_review_on);
 
 
--- RLS: catalog readable by org members and writable by org owners; progress private to the
--- acting user.
 alter table public.decks              enable row level security;
 alter table public.cards              enable row level security;
 alter table public.deck_subscriptions enable row level security;

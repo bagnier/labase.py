@@ -1,36 +1,24 @@
-"""One verdict for a failed call to something outside this process: refusal, or breakage.
+"""One verdict for a failed call out of the process: a refusal or a breakage
+(AGENTS: a broken dependency is a bug, a refusal is not).
 
-Which of the two a failure is, and what each earns, is settled once (AGENTS: A broken
-dependency is a bug, a refusal is not): one
-verdict for GoTrue, Postgres and Storage alike, so an outage does not fill the issues screen or
-stay silent depending on the module it was reached through.
+Only a 4xx is a refusal. GoTrue and Storage answer with an HTTP status; a SQLSTATE never is one,
+since every SQL the verdict sees is ours and a wrong one is our bug. The verdict reads the shape
+of the answer, not the client class, which ``apps.shared`` could not import anyway.
 
-An HTTP status is what tells the two apart, and each client library keeps it in a place of its
-own — hence :func:`refused_status` rather than a table of exception classes to maintain. Shared
-cannot import a bounded context's client anyway, and would not want to: the rule is about the
-*shape* of the answer, not about who answered.
-
-Call :func:`log_dependency_failure` from the ``except`` block, passing the module's own logger —
-the timeline reads a line's app off the logger that wrote it, so a failure funnelled through here
-must still read as the caller's, never as ``shared``.
+Call :func:`log_dependency_failure` from the ``except`` block with the module's own logger: the
+Timeline reads a line's app off its logger.
 """
 
 from typing import Any
 
-# Where the client libraries keep the status they were answered with: on the exception itself
-# (gotrue's ``AuthApiError``, storage3's ``StorageException``), or on the response it wrapped
-# (``httpx.HTTPStatusError``).
+# On the exception (gotrue's ``AuthApiError``, storage3's ``StorageException``) or on its
+# ``response`` (``httpx.HTTPStatusError``).
 _STATUS_ATTRS = ("status", "status_code")
 
 
 def _as_status(value: object) -> int | None:
-    """One status out of whatever shape the client kept it in.
-
-    A digit *string* counts: storage3 builds ``StorageApiError`` straight from Supabase Storage's
-    JSON error body, where ``statusCode`` is text. Requiring an ``int`` read every one of those as
-    "never answered", which would file each ordinary 404 — a file that isn't there — as a bug.
-    ``bool`` is excluded on purpose: it is an ``int`` in Python, and ``True`` is not a status.
-    """
+    """A digit string counts: storage3 keeps Storage's ``statusCode`` as text, and a missing
+    file's 404 must not read as a bug. A ``bool`` is an ``int`` but not a status."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -57,15 +45,9 @@ def is_refusal(exc: BaseException) -> bool:
 
 
 def log_dependency_failure(log: Any, event: str, exc: BaseException, **context: object) -> None:
-    """Record a failed call to a dependency at the level its nature warrants.
-
-    ``exc`` is passed to the line explicitly rather than resolved from the frame, so the capture
-    seam holds wherever this is called from and not only from inside a live ``except`` block —
-    the same lesson the 500 handler learned.
-    """
+    """Log a refusal at ``info``, a breakage as an exception (an issue). ``exc`` is explicit, so
+    capture works outside a live ``except`` block too."""
     if is_refusal(exc):
-        # At ``info`` the seam never fires, so the stack reaches the log sink and opens nothing —
-        # a refusal is an ordinary outcome, and still the only description of which one it was.
         log.info(event, exc_info=exc, **context)
         return
     log.exception(event, exc_info=exc, **context)

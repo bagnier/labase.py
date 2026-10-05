@@ -1,14 +1,5 @@
-"""HTTP security middleware: response hardening headers + tokenless CSRF.
-
-Cross-site cookie-authenticated mutations are rejected from the ``Sec-Fetch-Site``
-header, so there are no CSRF tokens to plumb through forms (AGENTS: CSRF needs no token,
-and the rate limiter fails open).
-
-Both are plain ASGI middleware rather than ``BaseHTTPMiddleware`` dispatch functions. Nothing
-here needs the difference, but they sit *under* ``RequestLogger``, and that base runs what it
-wraps in a child task whose context never rejoins the parent's — one of these in the stack is
-enough to strip the request's ``user_id``/``org_id`` off the finished line
-(see :class:`~apps.shared.logs.request.RequestLogger`).
+"""Hardening headers and tokenless CSRF (AGENTS: CSRF needs no token, and the rate limiter fails
+open). Plain ASGI, as everything under ``RequestLogger`` must be (see its docstring).
 """
 
 from typing import Any
@@ -24,20 +15,12 @@ log = structlog.get_logger(__name__)
 
 
 def cors_config(origins: list[str]) -> dict[str, Any]:
-    """Build the CORS middleware kwargs, refusing the wildcard-plus-credentials footgun.
-
-    Starlette does not neutralise ``allow_origins=["*"]`` when credentials are on — it reflects
-    the caller's ``Origin`` back with ``Allow-Credentials: true``, i.e. *any* site can read
-    authenticated responses. So credentials are only granted to an explicit allowlist; a ``*``
-    (or empty) origin list serves cross-origin reads without credentials. Production should set
-    ``CORS_ORIGINS`` to the exact front-end origins that need cookie-authenticated access.
-    """
+    """CORS middleware kwargs: credentials only for an explicit allowlist. With ``"*"`` and
+    credentials, Starlette reflects any ``Origin``, letting any site read authenticated
+    responses."""
     if not origins:
-        # Closed default: no cross-origin access until an allowlist is configured.
         return {"allow_origins": [], "allow_credentials": False}
     if "*" in origins:
-        # Wildcard grants public, credential-less reads only. Pairing "*" with credentials would
-        # let any site read cookie-authenticated responses, so credentials are dropped here.
         log.warning("cors.wildcard_without_credentials")
         return {
             "allow_origins": ["*"],
@@ -72,8 +55,6 @@ _HARDENING = {
 
 
 class SecurityHeaders:
-    """Stamp the hardening headers on every response, whatever produced it."""
-
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
@@ -97,14 +78,9 @@ _SAME_SITE_VALUES = frozenset({"same-origin", "none"})
 
 
 def _is_cross_site(request: Request) -> bool:
-    """CSRF check for cookie-authenticated mutations, no token plumbing.
-
-    Browsers send `Sec-Fetch-Site` on every request; anything but
-    `same-origin`/`none` (direct navigation) is a cross-site mutation. Older
-    agents fall back to comparing `Origin` against the request host. Requests
-    with neither header come from non-browser clients, which cookies don't
-    auto-authenticate — allowed.
-    """
+    """``Sec-Fetch-Site`` other than ``same-origin`` or ``none`` (direct navigation); older
+    browsers fall back to ``Origin`` against the host. With neither header the caller is not a
+    browser, and no cookie authenticates it on its own."""
     site = request.headers.get("sec-fetch-site")
     if site is not None:
         return site not in _SAME_SITE_VALUES
@@ -115,7 +91,7 @@ def _is_cross_site(request: Request) -> bool:
 
 
 class CsrfProtect:
-    """Reject unsafe cross-site requests (see :func:`_is_cross_site`)."""
+    """Reject unsafe cross-site requests with a 403."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
