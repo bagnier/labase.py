@@ -19,7 +19,7 @@ class ProfileRepository(BaseRepository[Profile]):
     async def get_with_auto_handle(
         self, user_id: uuid.UUID, email: str, *, handle_enabled: bool
     ) -> Profile | None:
-        """Load the profile and, if it still lacks a handle, mint one when handles are on."""
+        """The profile, minting a handle if it has none and handles are on."""
         profile = await self.get_by_user_id(user_id)
         if profile is not None and profile.handle is None and handle_enabled:
             profile = await self.auto_handle(profile, email)
@@ -38,7 +38,7 @@ class ProfileRepository(BaseRepository[Profile]):
         return profile
 
     async def auto_handle(self, profile: Profile, email: str) -> Profile:
-        """Derive a unique URL-safe handle from the email prefix and persist it."""
+        """A unique handle from the email prefix, persisted."""
         base = slugify(email.split("@", maxsplit=1)[0]) or "user"
         handle = await unique_handle(
             base, self.session, exclude_from="profiles", exclude_id=profile.id
@@ -48,8 +48,7 @@ class ProfileRepository(BaseRepository[Profile]):
         return profile
 
     async def set_avatar_path(self, profile: Profile, path: str) -> None:
-        """Persist the freshly uploaded avatar's storage path, flushed so the emitting route's
-        fact rides the same transaction as a visible row."""
+        """Store the avatar path, flushed so the route's fact follows a visible row."""
         profile.avatar_path = path
         await self.session.flush()
 

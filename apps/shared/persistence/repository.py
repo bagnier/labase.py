@@ -1,12 +1,8 @@
-"""The repository bases every context inherits, and the counting helpers its cards ask for.
+"""Repository bases (one table's queries live in its repository, nowhere else) and the counting
+helpers overview cards use.
 
-A repository is where one table's queries live — the house rule being that no SQL against that
-table exists anywhere else. These bases hold what all of them would otherwise repeat: the CRUD,
-the org filter, and the ordering of a hand-sortable list.
-
-:class:`OrgScopedRepository` filters on ``org_id`` for ergonomics, never for safety. RLS decides
-who sees what; a Python filter that looked like the boundary would invite the next reader to trust
-it, and it would hold right up until someone wrote a query without it.
+:class:`OrgScopedRepository` filters on ``org_id`` for convenience, not safety: RLS isolates
+(AGENTS: the database enforces isolation and authorization).
 """
 
 import uuid
@@ -47,8 +43,7 @@ class BaseRepository[T: Base]:
 
 
 class OrgScopedRepository[T: Base](BaseRepository[T]):
-    """Every query filtered by ``org_id`` — ergonomic scoping, not the isolation boundary.
-    RLS remains the single source of truth for who sees what (README)."""
+    """Every query filtered by ``org_id``; see the module docstring."""
 
     default_order: ClassVar[Any | None] = None
 
@@ -77,15 +72,8 @@ class OrgScopedRepository[T: Base](BaseRepository[T]):
         return await count_where(self.session, self.model, self.model.org_id == self.org_id)
 
     async def recent(self, limit: int) -> list[T]:
-        """This org's `limit` newest rows in `default_order` — a bounded query, never `all()`
-        sliced after the fact, so a large org's overview card costs `limit` rows, not every one
-        it has.
-
-        Tiebroken on `id` (UUIDv7, minted in creation order): `default_order` alone is not a
-        total order when it is a timestamp — two rows created in the same request, or under a
-        pinned test clock, share an exact instant, and `ORDER BY … LIMIT` over a tie is free to
-        return either one, chosen by whichever plan Postgres picks rather than by the query.
-        """
+        """The first `limit` rows in `default_order`, then newest `id`: rows sharing a
+        timestamp (one request, a pinned test clock) would otherwise come in any order."""
         order = [self.default_order] if self.default_order is not None else []
         query = (
             select(self.model)
@@ -97,21 +85,18 @@ class OrgScopedRepository[T: Base](BaseRepository[T]):
 
 
 class PositionedRepository[T: Base](OrgScopedRepository[T]):
-    """Org-scoped rows kept in a dense, 0-based `position` order.
+    """Org-scoped rows in a dense, 0-based `position` order.
 
-    `move_above` re-derives every position by load-then-mutate-then-flush so the
-    optimistic lock (`version_id_col`) engages — never bulk `update()`, which
-    would bypass it. `position_key` names the attribute callers identify rows
-    by: the primary key by default, `page_id` for pages' nav items.
+    Positions are rewritten row by row, never with a bulk `update()`, which would bypass the
+    optimistic lock. `position_key` is how callers name a row: `id`, or `page_id` for nav items.
     """
 
     position_key: ClassVar[str] = "id"
 
     @classmethod
     def _reorder(cls, items: list[T], item_key: Any, above_key: Any | None) -> list[T] | None:
-        """Pure reordering: `items` (position order) with `item_key` moved above
-        `above_key`, or to the end when `above_key` is None. None if either key
-        is unknown (concurrent deletion) — callers treat that as a no-op."""
+        """`items` with `item_key` moved above `above_key`, or last when it is None. None if
+        either key is gone (a concurrent deletion): a no-op."""
         key = attrgetter(cls.position_key)
         item = next((i for i in items if key(i) == item_key), None)
         if item is None:
@@ -140,25 +125,21 @@ class PositionedRepository[T: Base](OrgScopedRepository[T]):
 async def count_where(
     session: AsyncSession, model: type[Any], *criteria: ColumnExpressionArgument[bool]
 ) -> int:
-    """How many `model` rows match `criteria` — all of them when none is given.
-
-    The one place `count(*)`'s result is coalesced. An aggregate always returns exactly one row,
-    so `scalar()`'s `int | None` is SQLAlchemy's stub not knowing that, never a real absence:
-    the `or 0` is the adapter for that imprecision and belongs here alone, not at each call site.
-    """
+    """Rows of `model` matching `criteria`. The `or 0` only satisfies SQLAlchemy's `int | None`
+    stub: `count(*)` always returns a row."""
     return int(await session.scalar(select(func.count()).select_from(model).where(*criteria)) or 0)
 
 
 async def count_all(session: AsyncSession, model: type[Any]) -> int:
-    """Server-wide count for `model`, across every organisation (console overview)."""
+    """Across every organization, for the console."""
     return await count_where(session, model)
 
 
 async def count_created_per_day(
     session: AsyncSession, model: type[Any], *, days: int
 ) -> dict[str, int]:
-    """Server-wide rows per creation day over the trailing window, as ``{iso_day: n}`` —
-    the ``growth`` slice a console tile may carry for the landing growth chart."""
+    """``{iso_day: n}`` created across the server over the last ``days``, for console growth
+    charts."""
     since = clock.now() - timedelta(days=days - 1)
     day = func.date(model.created_at)
     rows = await session.execute(

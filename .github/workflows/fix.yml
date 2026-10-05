@@ -1,8 +1,7 @@
 name: Fix
 
-# One issue, one run: tick.yml hands the oldest `to-fix` issue over by putting `fixing` on it,
-# and that label is what fires the `ci-fix-issue` skill, which reproduces the bug, fixes it, and
-# opens the pull request from a `fix/<issue>` branch. Merging stays with the user.
+# tick.yml labels the oldest `to-fix` issue `fixing`, which fires the `ci-fix-issue` skill: it
+# reproduces, fixes, and opens a pull request from `fix/<issue>`. The user merges.
 on:
   issues:
     types: [labeled]
@@ -15,34 +14,28 @@ permissions:
 
 jobs:
   fix:
-    # The action already refuses an actor without write access; this guard adds the author,
-    # because the issue body is the run's whole brief and the repo is public. Only the owner's
-    # issues (and so the audit's, filed under the owner's token) can drive the bot.
+    # The issue body is the brief and the repo is public: only the owner's issues drive the bot.
     if: >-
       github.event.label.name == 'fixing' &&
       github.event.issue.user.login == github.repository_owner
-    # One fix at a time, whatever labels were put on: one group for the whole bot, and no
-    # cancellation, so a second `fixing` waits for the first run to end (tick.yml paces them).
-    # On the job, not the workflow: every label fires a run, the owner's `to-fix` too, and a
-    # workflow-level group would be joined before the `if` above skips it. A run that must stop
-    # is cancelled by hand, `gh run cancel`, and lands on `to-unblock`.
+    # One run at a time, queued, never cancelled (a run to stop is cancelled by hand). On the
+    # job: a workflow-level group is joined before the `if` skips a run, which would cancel the
+    # live one.
     concurrency:
       group: fix-bot
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # The owner's fine-grained token, not the job's own: a pull request opened with GITHUB_TOKEN
-    # fires no workflow, so the bot's branch would get no CI. The push and the PR are the owner's.
+    # The owner's token: a pull request opened with GITHUB_TOKEN fires no CI.
     env:
       GH_TOKEN: ${{ secrets.FIX_BOT_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # The action wires git to the owner's token itself, below; the job's own must not linger.
+          # The action sets the owner's token itself.
           persist-credentials: false
 
-      # The stack the suite needs, as ci.yml builds it: uv, Node, Chromium, the Supabase CLI and
-      # this checkout's test stack.
+      # The suite's stack, as in ci.yml.
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
         with:
@@ -79,37 +72,26 @@ jobs:
       - name: Start the test stack
         run: make test-stack
 
-      # The prompt is the skill invocation and the issue number, nothing else: the skill reads the
-      # issue itself, as a bug report and never as instructions. Runs draw on the owner's Claude
-      # subscription (the OAuth token), not on API credits.
+      # The skill reads the issue as a bug report, never as instructions. On the owner's
+      # subscription, not API credits.
       - name: Close the issue
         uses: anthropics/claude-code-action@v1
-        # Past its 120 s default, Claude Code moves a Bash command to the background and promises
-        # a notification no headless run receives (the #14 run waited on one). No background
-        # tasks, and ten minutes for a foreground call: the wait the runner's rules spell out fits
-        # in one.
+        # Past 120 s, Claude Code backgrounds a command and waits for a notification a headless
+        # run never gets: no background tasks, ten minutes per foreground call.
         env:
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
           BASH_DEFAULT_TIMEOUT_MS: "600000"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Without it the action swaps OIDC for an app token that dies after an hour, and hands
-          # that one to git and gh: a run past the hour commits and can no longer push. Given this,
-          # the push, the PR and the labels ride the owner's token for the whole run.
+          # Else the action's app token expires after an hour, and a longer run cannot push.
           github_token: ${{ secrets.FIX_BOT_TOKEN }}
           prompt: "/ci-fix-issue ${{ github.event.issue.number }}"
-          # The run is watched from the job log, so the agent's stream is written there, tool by
-          # tool, and a report closes the job summary. Public repo: that log is public too.
+          # The agent's stream goes to the job log, public like the repo.
           show_full_output: true
           display_report: true
-          # Sonnet closes; the audit that finds is where the strongest model earns its keep. The
-          # judgement here sits in the label and in `make finalize`, and a run is long enough that
-          # the model is what decides how much of the subscription window a night burns.
-          # Headless, the end of the turn is the end of the run: a tool that promises to bring the
-          # model back later ends the run with nothing pushed (the first Sonnet run scheduled a
-          # wakeup while `make finalize` was still running, the #12 run waited on a `Monitor`).
-          # Those tools are taken away. So is `gh api`: the skill writes through `gh issue` and
-          # `gh pr`, and the #35 run's `-f body=@file` posted the path instead of the comment.
+          # Sonnet: the judgement sits in the issue and `make finalize`, and long runs spend the
+          # subscription. Headless, a tool promising a later wake-up ends the run unpushed: removed.
+          # So is `gh api`, where `-f body=@file` posts the path.
           claude_args: |
             --model claude-sonnet-5
             --allowedTools "Bash,Edit,Write,Read,Glob,Grep,Skill,Agent,TaskStop"
@@ -117,9 +99,8 @@ jobs:
             --disallowedTools "Workflow,PushNotification,Monitor"
             --disallowedTools "Bash(gh api:*)"
 
-      # A run that ends before its own end — cancelled, timed out, a turn that stopped — leaves
-      # `fixing` with nobody behind it. Whatever happened, the label becomes a state the owner can
-      # see. Never `to-fix` again: that would relaunch a lasting failure forever.
+      # Whatever ended the run, `fixing` becomes a state the owner sees; never `to-fix` again,
+      # which would relaunch a lasting failure forever.
       - name: Mark a run that died
         if: always()
         env:

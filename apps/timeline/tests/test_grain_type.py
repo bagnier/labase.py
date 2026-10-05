@@ -1,15 +1,5 @@
-"""The grain is a type the checker holds, not a runtime-only check.
-
-The router narrows the requested bucket to ``_GRAINS`` once, then passes it on. Below that
-narrowing, nothing stopped a wrong literal from reaching ``bucket_key`` or ``_axis_keys`` — a
-call the type checker waved through, and the domain silently mis-bucketed or raised past the
-router's one runtime check. Held here at the boundary ``ty`` actually checks: a value outside the
-four grains is a type error, at both call sites, not a value either falls back or crashes on.
-
-The assertion pins the diagnostic ``ty`` gives, not just a non-zero exit: a bare ``!= 0`` would
-stay green if the grain parameter were ever mistyped back to ``str`` and the call broke for an
-unrelated reason (an unresolved import, say), which would prove nothing about the grain at all.
-"""
+"""``ty`` rejects a grain outside the four, at both call sites. The assertion pins the
+diagnostic, not just a non-zero exit, which an unrelated error would also give."""
 
 import subprocess
 import sys

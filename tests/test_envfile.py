@@ -1,8 +1,5 @@
-"""A host-side script (`make db-seed`, `make preflight`, `make backup-storage`) reads the same
-`.env` `docker compose` writes for the app container, whose `host.docker.internal` host only
-resolves inside Docker (see README's `.env` vs `.env.test`) — it needs the same service reached
-at `127.0.0.1` instead.
-"""
+"""Host-side scripts read the container's `.env`, whose `host.docker.internal` resolves only in
+Docker: they reach `127.0.0.1` instead."""
 
 import os
 

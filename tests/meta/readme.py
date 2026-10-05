@@ -1,8 +1,4 @@
-"""The README and AGENTS.md, read as data — the documents the rest of this package asserts against.
-
-Kept apart from :mod:`tests.meta.claims` so a test module can quote them without importing the
-registry that points back at it.
-"""
+"""The README and AGENTS.md as data, apart from :mod:`tests.meta.claims`, which imports tests."""
 
 import re
 from pathlib import Path
@@ -18,22 +14,19 @@ def text() -> str:
 
 
 def stated(document: Path) -> str:
-    """What ``document`` states in its own words: the README's links into AGENTS.md are a mirror of
-    its headings, held to them by ``test_docs``, not a second statement of them."""
+    """``document`` without the README's links to AGENTS.md headings, which state nothing."""
     return "\n".join(
         line for line in document.read_text().splitlines() if "](AGENTS.md#" not in line
     )
 
 
 def normalised(source: str) -> str:
-    """Collapse every run of whitespace, so a quote may span the README's wrapped lines."""
+    """Whitespace collapsed, so a quote may span wrapped lines."""
     return " ".join(source.split())
 
 
 def diagram_containing(needle: str) -> str:
-    """The fenced block holding ``needle`` — the documents draw their chains as ASCII, and a
-    drawing is a claim like any other. Raises if no single block matches, so a reworded diagram
-    fails here rather than silently matching nothing."""
+    """The one fenced block holding ``needle``; raises unless exactly one does."""
     blocks = [
         block
         for document in DOCUMENTS

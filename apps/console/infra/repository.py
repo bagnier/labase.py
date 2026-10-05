@@ -8,20 +8,17 @@ from apps.shared.settings.store import AppSetting, OrgAppSetting, disabled_apps_
 
 
 class AppSettingRepository:
-    """The only writer of ``app_settings`` — driven by the BYPASSRLS admin session."""
+    """The only writer of ``app_settings``, on the admin session."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def table_oid(self, table: str) -> int | None:
-        """Postgres OID of ``table`` (resolved via the search_path), or ``None`` if absent.
-
-        Studio's table editor deep link is OID-keyed, so the console resolves the name here.
-        """
+        """``table``'s OID, for Studio's table editor link, or ``None``."""
         return await self.session.scalar(text("SELECT (to_regclass(:t))::oid"), {"t": table})
 
     async def disabled_apps(self) -> frozenset[str]:
-        """Apps whose persisted ``enabled`` value is ``false`` (the admin's standing intent)."""
+        """Apps switched off."""
         return frozenset(await self.session.scalars(disabled_apps_select()))
 
     async def values(self, app: str) -> dict[str, str]:
@@ -29,8 +26,7 @@ class AppSettingRepository:
         return {row.key: row.value for row in rows}
 
     async def set(self, app: str, key: str, value: str) -> None:
-        # ORM read-modify-write so version_id_col (optimistic lock) and the updated_at
-        # trigger engage; a raw upsert would bypass both.
+        # Through the ORM: a raw upsert would bypass the optimistic lock.
         row = await self.session.get(AppSetting, (app, key))
         if row is None:
             self.session.add(AppSetting(app_name=app, key=key, value=value))
@@ -40,11 +36,8 @@ class AppSettingRepository:
     # ── per-org overrides (console-managed; apps read them via the RLS session) ──
 
     async def org_overrides(self, app: str) -> list[dict]:
-        """Every override of `app` with its org handle, for the console screen.
-
-        Reads its own ``org_app_settings`` rows, then resolves handles through the
-        organizations contract — the console never JOINs that app's table itself.
-        """
+        """Every override of `app` with its org handle, resolved through the organizations
+        contract rather than a JOIN."""
         rows = await self.session.scalars(
             select(OrgAppSetting).where(OrgAppSetting.app_name == app)
         )

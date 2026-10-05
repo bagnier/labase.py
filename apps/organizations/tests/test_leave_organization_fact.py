@@ -1,14 +1,7 @@
-"""Leaving records `MemberLeft` once; a racing second leave finds the membership already
-gone (`remove_member` deletes 0 rows) and must record nothing more. Only what happened is a
-fact.
+"""A racing second leave deletes nothing and records no second `MemberLeft`.
 
-The race itself — two concurrent DELETEs — cannot be reproduced through the API driver: every
-request in a test runs on one serialized connection (see ``tests/e2e/drivers/api_transaction.py``),
-and ``CurrentMembership`` re-reads the membership before the handler runs, so a *sequential*
-second HTTP call is refused with 403 before ever reaching ``remove_member`` — never exercising
-the line the fix touches. As in ``test_last_owner_db_guard.py``, the database is real and
-nothing is mocked; only the HTTP layer that cannot reproduce the race is bypassed, calling the
-handler directly with a real repository and a real session bound to the same test transaction.
+The API driver serializes requests, so a second call would be refused by ``CurrentMembership``
+first: the handler is called directly, on a real session and database.
 """
 
 import uuid
@@ -81,7 +74,6 @@ def test_leaving_an_already_gone_membership_records_no_second_fact(driver):
             current_user = AuthenticatedUser(id=user_id, email=email)
             await leave_organization(_request(), current_user, repo, org_id, membership)
             await session.commit()
-            # membership is real-gone now — a genuine second, concurrent leave finds nothing.
             await leave_organization(_request(), current_user, repo, org_id, membership)
             await session.commit()
 

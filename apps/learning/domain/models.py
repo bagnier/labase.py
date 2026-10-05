@@ -52,7 +52,7 @@ class DeckSubscription(Base, UUIDPk, OrgScoped, Versioned, Created):
 
 
 class CardState(Base, UUIDPk, OrgScoped, Versioned, Created):
-    """Per-user learning progress for a card. Absence ⇒ level 0 (never studied)."""
+    """A user's progress on a card; no row means level 0."""
 
     __tablename__ = "card_states"
     __table_args__ = (UniqueConstraint("user_id", "card_id"),)
@@ -65,8 +65,6 @@ class CardState(Base, UUIDPk, OrgScoped, Versioned, Created):
 
 
 class SubscriptionCreate(BaseModel):
-    """The deck to learn, by name."""
-
     deck: str = ""
 
 
@@ -104,7 +102,7 @@ class DueCard:
     level: int
     deck_position: int
     card_position: int
-    next_review_on: date | None  # None ⇒ never studied (level 0)
+    next_review_on: date | None  # None: never studied
 
 
 @dataclass(frozen=True)
@@ -117,14 +115,12 @@ class CardResource:
 
 
 class SessionRead(BaseModel):
-    """Today's review session: the cards due, and how many."""
-
     count: int
     cards: list[ReviewCardRead]
 
 
 class CardStateRead(BaseModel):
-    """One card with the learner's progress on it — dates absent until it was ever studied."""
+    """Dates are absent until first studied."""
 
     external_id: str
     question: str

@@ -1,14 +1,5 @@
-"""A fullpage provider's keys are claimed once, by name and by the namespaced key itself.
-
-Two apps registering under the same name used to boot fine and collide on every render —
-the second provider's keys silently overwriting the first's in ``fullpage_context`` (a
-``page.overwrite`` line, last writer wins). Two different names can still collide on the
-namespaced key they produce (``org_nav`` returning ``extra`` and ``org`` returning
-``nav_extra`` both land on ``org_nav_extra``), and a provider can collide with the keys
-``fullpage_context`` seeds itself (``user``, ``nav_items``). Every one of these belongs at
-startup, next to ``events.on``'s duplicate-topic check, not found as a ``page.overwrite`` log
-line in production.
-"""
+"""Full-page provider collisions are refused at mount: same name, same namespaced key
+(``org_nav``+``extra`` and ``org``+``nav_extra``), or a key the context seeds itself."""
 
 import pytest
 

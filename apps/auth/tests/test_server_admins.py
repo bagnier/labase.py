@@ -1,10 +1,5 @@
-"""Writing the admin claim — setting ``app_metadata.role`` through the GoTrue admin API.
-
-The SDK parses the response *after* the server applied the update: a non-2xx raises
-``AuthApiError`` before any parsing, so a ``ValidationError`` can only mean the write landed and
-the returned record is unreadable (an anonymized identity missing ``identity_data``). That must
-not fail the caller — the action succeeded, only the echo is malformed.
-"""
+"""Setting ``app_metadata.role``: an unreadable echo of a write that landed is not a failure
+(see ``user_repository``)."""
 
 import uuid
 from unittest.mock import MagicMock, patch
@@ -17,14 +12,12 @@ from apps.auth.tests.test_user_directory import _unparseable_record
 
 @pytest.mark.asyncio
 async def test_set_server_admin_survives_a_record_the_sdk_cannot_parse():
-    """Regression: promoting a user whose identity GoTrue anonymized raised out of the handler
-    and sent the queue task into retry, although the role was already written."""
+    """A user with an anonymized identity: the role is written, nothing raises."""
     user_id = uuid.uuid7()
     calls: list[tuple[str, dict]] = []
 
     def update_user_by_id(uid: str, attributes: dict) -> None:
-        # Fake of a service we own (the GoTrue admin wrapper): the failure path cannot be staged
-        # on a healthy client — the SDK only raises this after the server took the write.
+        # A fake: a healthy GoTrue cannot produce this failure.
         calls.append((uid, attributes))
         raise _unparseable_record()
 

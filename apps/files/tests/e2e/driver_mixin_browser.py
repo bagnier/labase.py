@@ -2,7 +2,7 @@ import contextlib
 import tempfile
 from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
 
 from apps.auth.tests.given_helpers import (
     create_user,
@@ -20,8 +20,7 @@ from tests.e2e.drivers.browser_base import _PASSWORD, BrowserBase
 
 class OrgFileBrowserMixin(BrowserBase):
     if TYPE_CHECKING:
-        # Brought to the composed driver by the organizations mixin — declared alongside the
-        # attributes below, which state the same borrowing.
+        # Provided by the organizations mixin.
         def _read_org_cards_from_profile(self, page: Page) -> list[dict]: ...
 
     primary_email: str
@@ -43,13 +42,11 @@ class OrgFileBrowserMixin(BrowserBase):
         return f"{self.base_url}/{s}/files"
 
     def _goto_files(self) -> None:
-        """Into the file list by the sidebar entry — the only way in that a person has."""
+        """Through the sidebar."""
         self.follow_org_nav(self.active_org_handle, "files")
 
     def _on_files(self, *, fresh: bool = False) -> None:
-        """On the file list, without walking back to it when it is already the page shown.
-        ``fresh`` for what is read as evidence: uploads and renames swap rows in place, and the
-        swap is the app's word, not the server's."""
+        """On the file list; ``fresh`` reloads it, since rows are swapped in place."""
         self.reach_org_nav(self.active_org_handle, "files", fresh=fresh)
 
     def _dom_file_rows(self) -> list:
@@ -86,7 +83,7 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def upload_oversized_file(self, size_mb: int) -> None:
         slug = self.active_org_handle
-        # Playwright caps in-memory buffers at 50 MB; write to a tempfile instead.
+        # Playwright caps in-memory buffers at 50 MB.
         with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
             tmp.write(b"\x00" * (size_mb * 1024 * 1024))
             tmp_path = tmp.name
@@ -102,8 +99,7 @@ class OrgFileBrowserMixin(BrowserBase):
         self._on_files()
         file_id = self._dom_file_id_by_name(filename)
         url = f"{self._files_url()}/{file_id}/download"
-        # The endpoint returns 302 → Supabase signed URL → browser starts a file download.
-        # Capture the 302 via expect_response; suppress the navigation error that follows.
+        # A 302 to a signed URL: capture it, ignoring the download's navigation error.
         with (
             self.page.expect_response(
                 lambda r: f"/files/{file_id}/download" in r.url and r.request.method == "GET",
@@ -131,7 +127,7 @@ class OrgFileBrowserMixin(BrowserBase):
         file_id = self._dom_find_file_id(old_filename)
         assert file_id is not None, f"File '{old_filename}' not found in DOM"
         row = self.page.locator(f"[data-file-id='{file_id}']")
-        self.page.get_by_role("button", name=f"Rename {old_filename}").click()  # reveal the form
+        self.page.get_by_role("button", name=f"Rename {old_filename}").click()
         self.last_response = self.submit_labelled_form(
             self.page,
             {"Filename": new_filename},
@@ -145,8 +141,8 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
         delete_user_if_exists(email)
-        self.context_for(email)  # isolated context: registers + logs in via _setup_context
-        self.set_acting_email(email)  # self.page → email's isolated context
+        self.context_for(email)
+        self.set_acting_email(email)
         self.follow_to_profile()
         link = self.page.locator("[data-organisation-card] a[href*='/dashboard']").first
         href = link.get_attribute("href") or ""
@@ -164,9 +160,7 @@ class OrgFileBrowserMixin(BrowserBase):
             page.click("form:has(input[name=name]) button[type=submit]")
 
     def sign_in_as_member_of_org(self, email: str, org_name: str) -> None:
-        # Non-owner member: seed the org under a synthetic owner (committed, for the
-        # same RLS reason as sign_in_within_org), register `email` on their own
-        # context, then join them as a plain member. Truncate teardown reaps both.
+        # A plain member of a committed org owned by someone else.
         owner_email = f"owner-{org_name.lower().replace(' ', '-')}@example.com"
         delete_user_if_exists(email)
         delete_user_if_exists(owner_email)
@@ -175,24 +169,22 @@ class OrgFileBrowserMixin(BrowserBase):
         self.active_org_handle = org["handle"]
         self.primary_email = email
         self.last_registered_email = email
-        self.context_for(email)  # registers + logs in the member on their own context
+        self.context_for(email)
         add_membership(org["id"], user_id_for_email(email), role="member")
         self.set_acting_email(email)
 
     # ── multi-user operations ─────────────────────────────────────────────────
 
     def add_member_to_org(self, email: str) -> None:
-        # Precondition, not behaviour under test: add the member with the admin helper
-        # (mirrors the API driver). The invite/accept UI needs the actor to be an owner,
-        # which scenarios demoting the actor to member have already given up.
-        self.context_for(email)  # ensures member user exists
+        # A precondition, through the admin helper: the actor may no longer own the org.
+        self.context_for(email)
         add_membership(self._primary_org_id(), user_id_for_email(email), role="member")
         self.secondary_handles[email] = self.active_org_handle
 
     def upload_file_as(self, email: str, filename: str, size_kb: int | None = None) -> None:
         slug = self.secondary_handles.get(email, self.active_org_handle)
         content = b"x" * (size_kb * 1024) if size_kb else b"dummy content"
-        page = self.page_for(email)  # that actor's own browser, where their sign-in left it
+        page = self.page_for(email)
         self.follow_org_nav(slug, "files", page)
         page.set_input_files(
             "input[type=file][name=file]",
@@ -206,7 +198,7 @@ class OrgFileBrowserMixin(BrowserBase):
 
     def create_user_in_org(self, email: str, org_name: str) -> None:
         self.context_for(email)
-        page = self.page_for(email)  # their own browser, signed in and on their landing page
+        page = self.page_for(email)
         orgs = self._read_org_cards_from_profile(page)
         assert orgs, f"No org for {email}"
         handle = orgs[0]["handle"]
@@ -219,10 +211,7 @@ class OrgFileBrowserMixin(BrowserBase):
         return next((o["id"] for o in orgs if o["handle"] == self.active_org_handle), orgs[0]["id"])
 
     def promote_to_owner(self) -> None:
-        # Role is a precondition here, not the behaviour under test: bypass the last-owner
-        # constraint with the admin helper (mirrors the API driver) instead of driving the
-        # real /members UI, which correctly refuses to demote the sole owner — which would
-        # leave the acting user an owner and silently invalidate the scenario.
+        # A precondition, bypassing the last-owner guard the UI rightly enforces.
         set_membership_role(self._primary_org_id(), user_id_for_email(self.primary_email), "owner")
 
     def demote_to_member(self) -> None:
@@ -245,13 +234,13 @@ class OrgFileBrowserMixin(BrowserBase):
     def view_file_list_as(self, email: str) -> None:
         self.context_for(email)
         slug = self.secondary_handles.get(email, self.active_org_handle)
-        page = self.page_for(email)  # their own browser, following their own sidebar
+        page = self.page_for(email)
         self.last_response = self.follow_org_nav(slug, "files", page)
         rows = page.locator("#file-list > li[data-file-id]").all()
         self._last_file_names = [row.get_by_role("link").inner_text().strip() for row in rows]
 
     def _goto_and_capture_download(self, page, url: str) -> None:
-        """Navigate to a URL that redirects to a storage download; capture the redirect response."""
+        """Capture the redirect to a storage download."""
         with (
             page.expect_response(
                 lambda r: r.request.method == "GET" and r.status in (200, 302),
@@ -288,8 +277,7 @@ class OrgFileBrowserMixin(BrowserBase):
     # ── assertions ────────────────────────────────────────────────────────────
 
     def _current_file_names(self) -> list[str]:
-        # Names captured from another user's rendered page (view_file_list_as), read from the
-        # DOM — never via the JSON API.
+        # From another user's rendered page (view_file_list_as).
         last_names = getattr(self, "_last_file_names", None)
         if last_names is not None:
             self._last_file_names = None
@@ -351,3 +339,19 @@ class OrgFileBrowserMixin(BrowserBase):
         expect(self.page.get_by_label(f"Share link for {filename}")).to_have_value(
             self._share_link_url or ""
         )
+
+    def assert_row_controls_visible_when_focused(self, filename: str) -> None:
+        self._on_files()
+        for label in (f"Rename {filename}", f"Share {filename}", f"Delete {filename}"):
+            control = self._focus_by_tab(label)
+            expect(control).to_have_css("opacity", "1")
+
+    def _focus_by_tab(self, label: str) -> Locator:
+        """Tab to `label`: a programmatic .focus() does not trigger :focus-visible."""
+        page = self.page
+        page.evaluate("document.activeElement && document.activeElement.blur()")
+        for _ in range(60):
+            page.keyboard.press("Tab")
+            if page.evaluate("document.activeElement.getAttribute('aria-label')") == label:
+                return page.locator(f'[aria-label="{label}"]')
+        raise AssertionError(f"Could not reach {label!r} by Tab")

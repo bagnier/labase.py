@@ -6,7 +6,7 @@ from apps.learning.domain.models import CardState, Schedule
 
 
 class ReviewRepositoryProtocol(Protocol):
-    """The persistence surface the review use-case needs — nothing more."""
+    """What the review needs from persistence."""
 
     async def get_state(self, card_id: uuid.UUID) -> CardState | None: ...
 

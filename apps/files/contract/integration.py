@@ -1,9 +1,4 @@
-"""How the files context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the public
-share router and the org-scoped router, claims the ``files`` slug, answers the dashboard
-``OverviewQuery``, and drops a welcome file on ``OrganizationCreated``.
-"""
+"""The files mount, and the welcome file each new org gets."""
 
 import uuid
 
@@ -57,7 +52,7 @@ def mount(host: Host) -> None:
             ],
             consumes_when_enabled=[(OrganizationCreated, "files_welcome", _seed)],
             provides_when_enabled=[(OverviewQuery, _overview)],
-            reserve=("files",),  # even when disabled, to keep the slug from being squatted
+            reserve=("files",),  # even disabled, so no org takes the slug
         )
     )
 
@@ -128,20 +123,16 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-    # Re-checked here, past ``seed_org_welcome``'s own check, because that upload is this
-    # seeder's alone to avoid: a subject already gone is a clean no-op, never a reason to reach
-    # back into Storage for an object it never had cause to place. The org gets the same
-    # question — the upload lands before the row that would fail on its FK, so a check this
-    # close to the write is what keeps the org-vanishes race (#75) from stranding the object.
+    # Checked again just before the upload, which lands before the row: a vanished owner or org
+    # must not leave a stray object in Storage.
     if not await user_exists(session, owner_id):
         return
     if not await org_exists(session, org_id):
         return
     file_id = uuid.uuid7()
     path = storage_path(org_id, file_id, _WELCOME_FILENAME)
-    # Server-side seeding runs without a caller JWT (e.g. an org created via an API key), so the
-    # upload goes through the service-role client rather than a user token. Fire-and-forget (off
-    # the request path), so holding the session across the small upload is fine.
+    # No caller JWT here: the service-role client. Off the request path, so holding the session
+    # across this small upload is fine.
     await (
         admin_storage().from_(bucket()).upload(path, _WELCOME_BODY, {"content-type": "text/plain"})
     )

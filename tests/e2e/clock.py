@@ -1,10 +1,5 @@
-"""Programmatic test clock.
-
-Holds a frozen instant (``_frozen``) and exposes its ``now()`` to be monkeypatched
-over ``apps.shared.clock.now`` for the duration of a test (see tests.plugin). Both
-drivers run the app in-process, so that single patch reaches every clock.now()
-call — no file, no cross-process mechanism, no test seam in production code. Steps
-drive the frozen instant through set_current_date / advance_days / ensure / reset.
+"""The test clock: a frozen instant patched over ``apps.shared.clock.now`` (see tests.plugin),
+which reaches the app since both drivers run it in-process.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -13,7 +8,6 @@ _frozen: datetime | None = None
 
 
 def now() -> datetime:
-    """Patched over apps.shared.clock.now during tests (see tests.plugin)."""
     return _frozen if _frozen is not None else datetime.now(UTC)
 
 
@@ -28,7 +22,7 @@ def advance_days(days: int) -> None:
 
 
 def ensure(default_iso: str) -> None:
-    """Pin a deterministic instant if no scenario step has set one yet."""
+    """Pin an instant unless a step already did."""
     if _frozen is None:
         set_current_date(default_iso)
 

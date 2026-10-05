@@ -53,7 +53,7 @@ def step_delete_file(driver, filename):
 
 @given("the org has a file size limit of 50 MB")
 def step_file_size_limit():
-    pass  # no-op — limit is always enforced
+    pass  # the limit is always on
 
 
 @given(parsers.parse("the organisation storage quota is {mb:d} MB"))
@@ -150,3 +150,13 @@ def step_assert_upload_control_labelled(driver):
 @then(parsers.parse('the share link field for "{filename}" is reachable by screen readers'))
 def step_assert_share_link_field_labelled(driver, filename):
     driver.assert_share_link_field_labelled(filename)
+
+
+@then(
+    parsers.parse(
+        'the rename, share and delete controls for "{filename}"'
+        " are visible once focused by keyboard"
+    )
+)
+def step_assert_row_controls_focus_visible(driver, filename):
+    driver.assert_row_controls_visible_when_focused(filename)

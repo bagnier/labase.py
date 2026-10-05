@@ -1,10 +1,7 @@
-"""Pure aggregation: flushed rows → per-route loads and screen totals.
+"""Flushed rows to per-route loads and screen totals.
 
-Percentiles come from the histogram buckets, linearly interpolated inside the
-bucket where the cumulative count crosses the quantile — exactly how Prometheus'
-``histogram_quantile`` computes them. That is what makes sums across rows/instances
-legitimate, and it keeps p95 off the bucket bounds (a raw upper bound would report
-every latency as one of 5/10/25/50/100/250/500…, and always the bucket ceiling).
+Percentiles interpolate inside the histogram bucket where the quantile falls, like Prometheus's
+``histogram_quantile``: buckets sum across rows and instances, and p95 is not stuck on a bound.
 """
 
 from datetime import datetime
@@ -19,15 +16,14 @@ def percentile_ms(bucket_counts: list[int], quantile: float = 0.95) -> float | N
         return None
     rank = quantile * total
     cumulative = 0
-    lower = 0.0  # lower edge of the current bucket (previous bound, 0 for the first)
+    lower = 0.0
     for bound, count in zip(BUCKET_BOUNDS_MS, bucket_counts, strict=False):
         if cumulative + count >= rank:
-            # The rank lands in this finite bucket (lower, bound]. Assume the
-            # observations are spread uniformly across it and interpolate.
+            # Assumes the bucket's observations are spread uniformly.
             return lower + (bound - lower) * (rank - cumulative) / count
         cumulative += count
         lower = bound
-    return None  # rank lands in the +Inf bucket — slower than the largest bound
+    return None  # in the +Inf bucket
 
 
 def _error_rate(errors: int, requests: int) -> float:
@@ -35,7 +31,7 @@ def _error_rate(errors: int, requests: int) -> float:
 
 
 def _mean_ms(duration_sum_ms: float, requests: int) -> float | None:
-    """The true, unbucketed average — a sanity check next to the interpolated p95."""
+    """The exact average, beside the interpolated p95."""
     return duration_sum_ms / requests if requests else None
 
 
@@ -48,7 +44,7 @@ def _merged_buckets(rows: list[RequestMetric]) -> list[int]:
 
 
 def timeseries(rows: list[RequestMetric]) -> list[LoadPoint]:
-    """Collapse rows to one point per time bucket, chronological — for the load chart."""
+    """One point per time bucket, chronological."""
     by_bucket: dict[datetime, LoadPoint] = {}
     for row in rows:
         point = by_bucket.get(row.bucket_start)
@@ -63,7 +59,7 @@ def timeseries(rows: list[RequestMetric]) -> list[LoadPoint]:
 
 
 def aggregate(rows: list[RequestMetric]) -> tuple[list[RouteLoad], LoadTotals]:
-    """Sum rows (any resolution, any instance) per route; busiest routes first."""
+    """Rows summed per route, busiest first."""
     by_route: dict[tuple[str, str], list[RequestMetric]] = {}
     for row in rows:
         by_route.setdefault((row.method, row.route), []).append(row)

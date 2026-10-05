@@ -28,8 +28,7 @@ class TimelineApiMixin(ApiBase):
         self._add_event(seed_data.event_model(event, org=timeline_org_id(org), when=when))
 
     def seed_many_events(self, count: int, org: str) -> None:
-        """A run of facts long enough to overflow one page — added in a single transaction, since
-        a hundred round trips would be the slowest arrangement in the suite."""
+        """More facts than one page, in one transaction."""
         models = seed_data.event_run(count, timeline_org_id(org), now=clock.now())
 
         async def _do(s):
@@ -41,8 +40,6 @@ class TimelineApiMixin(ApiBase):
         self._add_event(seed_data.event_model(event, user=timeline_user_id(email)))
 
     def seed_event_about(self, event: str, org: str, subject: str) -> None:
-        """A fact whose subject has a readable name — a todo's title, an org's. What the journal
-        pins at write time and the timeline has to be searchable by."""
         self._add_event(seed_data.event_model(event, org=timeline_org_id(org), entity_name=subject))
 
     def _append_request(
@@ -54,8 +51,7 @@ class TimelineApiMixin(ApiBase):
         when: datetime | None = None,
         request_id: str | None = None,
     ) -> None:
-        # Straight into the store, bypassing the live level gate the runtime path is subject to
-        # (a seeded 'info' line must survive a WARNING process level).
+        # Straight into the store, so an 'info' line survives a WARNING level.
         line = seed_data.log_line(event, org=org, level=level, when=when, request_id=request_id)
 
         async def _do(s):
@@ -87,13 +83,12 @@ class TimelineApiMixin(ApiBase):
         self._insert_error(title, org=timeline_org_id(org), when=when)
 
     def set_process_log_level(self, level: str) -> None:
-        # In-process: the API driver shares the running app, so this is the live log level.
+        # In-process: this is the app's live level.
         apply_log_level(level)
 
     def seed_correlated_request(
         self, request_id: str, org: str, event: str, error: str, *, when: datetime | None = None
     ) -> None:
-        # All three sources must key on the same value for the timeline to correlate them.
         oid, request_id = timeline_org_id(org), timeline_request_id(request_id)
         self._append_request("request.finished", org=oid, request_id=request_id, when=when)
         self._add_event(seed_data.event_model(event, org=oid, request_id=request_id, when=when))
@@ -102,7 +97,7 @@ class TimelineApiMixin(ApiBase):
     # ── reads ────────────────────────────────────────────────────────────────
     def _open_timeline(self, **params) -> None:
         self._timeline_as_admin()
-        # Remember the active filter so a following export carries the same params (WYSIWYG).
+        # Kept, so a following export carries the same filter.
         self._timeline_filter = {k: v for k, v in params.items() if v is not None}
         self.response = self.client().get(
             "/console/timeline",
@@ -118,12 +113,11 @@ class TimelineApiMixin(ApiBase):
 
     # ── paging ───────────────────────────────────────────────────────────────
     def _subjects(self) -> list[str]:
-        """What each entry is *about*. A run of facts shares one kind, so the name cannot tell
-        one page's rows from the next one's — the subject can."""
+        """Each entry's subject: the seeded facts share one kind."""
         return [e["entity_name"] for e in self._entries() if e["entity_name"]]
 
     def load_older_entries(self) -> None:
-        """Follow the cursor the screen just handed back — the API twin of clicking the button."""
+        """Follow the cursor the screen handed back."""
         self._first_page = self._subjects()
         cursor = self.response.json()["next_before"]
         assert cursor, "the timeline offered no next page to load"
@@ -209,12 +203,8 @@ class TimelineApiMixin(ApiBase):
         )
 
     def assert_source_count(self, source: str, expected: int, org: str) -> None:
-        """How many of *this org's* rows one source contributed.
-
-        Scoped, and not optionally: the store is shared with the running app, which writes its own
-        ``request.finished`` for every page the driver loads. An exhaustive count therefore raced
-        the log drain — the same assertion saw 1, 2 or 4 depending on when the batch landed.
-        """
+        """This org's rows from one source. Scoped: the running app logs a ``request.finished``
+        per page the driver loads, so a global count would race."""
         oid = timeline_org_id(org)
         n = sum(1 for e in self._entries() if e["source"] == source and e["org_id"] == oid)
         assert n == expected, f"expected {expected} {source!r} entries, got {n}: {self._entries()}"

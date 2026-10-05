@@ -1,8 +1,4 @@
-"""Read-only inter-app surface: issue occurrences flattened for the unified logs timeline.
-
-``apps/timeline`` merges these with the business-events journal and the log sink; it must not reach
-into the issues tables directly (they're private to this context), so it calls this contract query.
-"""
+"""Issue occurrences flattened for ``apps/timeline``, which may not read the issues tables."""
 
 import uuid
 from dataclasses import dataclass
@@ -17,11 +13,7 @@ from apps.issues.domain.models import Issue, Occurrence
 
 @dataclass(frozen=True)
 class IssueOccurrence:
-    """One sighting, flattened for the timeline — with the issue it belongs to.
-
-    ``issue_id`` is what makes the timeline row a link: the row names the exception, while the
-    stack, the triage state and the other occurrences live on the issue's own screen. Without it
-    a reader had to go find that issue again by its title."""
+    """One sighting; ``issue_id`` links the Timeline row to its issue."""
 
     ts: datetime
     title: str
@@ -40,8 +32,7 @@ async def search_issue_occurrences(
     to_dt: datetime | None = None,
     limit: int = 100,
 ) -> list[IssueOccurrence]:
-    """Newest-first, bounded read of issue occurrences. Org/user/request are matched inside the
-    JSONB ``context`` (issues has no dedicated columns); the issue supplies the title."""
+    """Newest first. Org, user and request are matched inside the JSONB ``context``."""
     query = (
         select(Occurrence, Issue.title, Issue.id)
         .join(Issue, Issue.id == Occurrence.issue_id)

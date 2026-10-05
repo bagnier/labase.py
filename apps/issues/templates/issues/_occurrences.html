@@ -2,8 +2,7 @@
   <details class="card-panel" data-issue-occurrence="{{ o.id }}">
     <summary class="cursor-pointer p-4 text-sm flex items-center gap-3">
       <time datetime="{{ o.created_at.isoformat() }}">{{ o.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</time>
-      {# The way back out: this failure, the lines around it and the fact that it opened, gathered
-         in the timeline. Printing the id was the end of the trail. #}
+      {# To the timeline filtered on this request. #}
       {% if o.context.request_id %}
         <a class="link link-hover font-mono text-xs text-base-content/70"
            href="/console/timeline?request_id={{ o.context.request_id | urlencode }}"

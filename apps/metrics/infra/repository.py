@@ -1,6 +1,5 @@
-"""Writes are single-writer by construction (one flusher per process, keyed by
-its instance id; rollup runs on the task queue's claimed row), so merge-on-write
-is a plain read-modify-write — no upsert gymnastics over int[] columns.
+"""Each row has one writer (a process's flusher, keyed by instance; the rollup on its claimed
+task), so merging is a plain read-modify-write, no upsert over ``int[]`` columns.
 """
 
 from datetime import datetime, timedelta
@@ -100,11 +99,8 @@ async def total_requests(session: AsyncSession, since: datetime) -> int:
 
 
 async def rollup(session: AsyncSession, *, minute_retention_days: int) -> tuple[int, int]:
-    """Downsample: minute rows past the window collapse into hour rows.
-
-    Instances collapse too — per-instance detail only matters while recent.
-    Returns (minute rows removed, hour rows touched).
-    """
+    """Collapse minute rows past the window into hour rows, instances merged. Returns
+    ``(minute rows removed, hour rows touched)``."""
     cutoff = clock.now() - timedelta(days=minute_retention_days)
     stale = list(
         await session.scalars(
@@ -142,7 +138,7 @@ async def rollup(session: AsyncSession, *, minute_retention_days: int) -> tuple[
 
 
 async def purge(session: AsyncSession, retention_days: int) -> int:
-    """Drop hour rows past the admin-tunable retention window."""
+    """Delete hour rows past retention."""
     deleted = await session.scalar(
         text(
             "WITH purged AS ("

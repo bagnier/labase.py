@@ -1,7 +1,4 @@
--- Wipe auth users before migrations so every db-reset starts with a clean slate.
--- GoTrue (auth.users) is not touched by `supabase db reset` alone: old JWT tokens
--- would remain valid and old admins would prevent the first-registrant-becomes-admin
--- bootstrap. Running here (before migrations) limits CASCADE to auth.* tables only —
--- public schema tables don't exist yet, so no noisy NOTICE cascade.
--- Run `make db-seed` afterwards to create the dev user + org.
+-- `supabase db reset` keeps auth.users: their tokens would stay valid and an old admin would
+-- block the first-sign-up-is-admin bootstrap. Before migrations, the CASCADE reaches auth.* only.
+-- `make db-seed` then creates the dev user and org.
 TRUNCATE auth.users CASCADE;

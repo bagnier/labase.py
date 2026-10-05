@@ -1,5 +1,4 @@
-{# The one table shell: card panel + horizontal scroll + daisyUI table. The caller
-   brings thead/tbody through the call block; column semantics stay in the page.
+{# The table shell; the caller brings thead and tbody.
 
      {% call data_table('Accounts') %}
        <thead>…</thead>
@@ -14,9 +13,7 @@
     </table>
   </div>
 {% endmacro %}
-{# The one filter toolbar above a table: a live GET form, controls in a wrapping
-   flex row. Extra classes (e.g. logs' p-3 border-b when embedded in the panel)
-   through `class_`. #}
+{# The filter toolbar above a table, a GET form. #}
 {% macro filter_bar(action, label, class_='') %}
   <form method="get"
         action="{{ action }}"

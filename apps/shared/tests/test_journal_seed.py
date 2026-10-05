@@ -1,10 +1,4 @@
-"""``seed_fact`` fills in whichever pinned name the caller left unset — not both or neither.
-
-An arrangement that pins one name by hand (a test standing up a closed account, still inside a
-live org) needs the *other* name resolved the ordinary way, exactly as the write path would have
-left it. The all-or-nothing guard treated the two names as one unit: setting either one skipped
-resolving both, so the org name a real org fixture set up went missing too.
-"""
+"""``seed_fact`` resolves each pinned name the caller left unset, independently of the other."""
 
 import uuid
 
@@ -22,10 +16,8 @@ _ORG_NAME = "Acme Corp"
 
 @pytest_asyncio.fixture(autouse=True)
 async def _isolated_engine():
-    # This module opens its own sessions outside any driver fixture, on this test's event loop —
-    # cleared going in and disposed going out so a driver-based test on another loop never inherits
-    # a dead pool (the "Event loop is closed" failure apps/timeline/tests/conftest.py guards against
-    # the same way).
+    # Own sessions on this loop: caches cleared and disposed, so no later test inherits a dead
+    # pool.
     db._admin_engine.cache_clear()
     db.admin_session_factory.cache_clear()
     yield

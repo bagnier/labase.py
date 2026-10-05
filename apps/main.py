@@ -1,7 +1,5 @@
-"""The composition root: each context's ``mount()`` wires its routers, events and claimed slugs.
-
-FastAPI matches routes in registration order, so registration follows each module's declared
-``PHASE`` (:class:`apps.shared.integration.host.MountPhase`); ties keep the listing order below.
+"""The composition root: mounts every context in ``PHASE`` order (see
+:class:`apps.shared.integration.host.MountPhase`), ties in the listing order below.
 """
 
 from apps.api_keys.contract import integration as api_keys
@@ -49,9 +47,7 @@ _apps = sorted(
 for _app in _apps:
     _app.mount(host)
 
-# Last hook registered, so last to run: Starlette fires shutdown handlers in registration order,
-# and every context's own hook (task worker, event listener, metrics flusher, issue drain) still
-# needs the pools while it stops.
+# Registered last, so it runs last: the other shutdown hooks still need the pools.
 host.on_shutdown(dispose_engines)
 
 app = host.app

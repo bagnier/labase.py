@@ -1,4 +1,4 @@
-"""Correlating the unified timeline by the concerned entity — every event of one todo/page/file."""
+"""Filtering the Timeline by entity: every fact of one todo, page or file."""
 
 import uuid
 
@@ -14,7 +14,7 @@ def _seed(app_name: str, verb: str, entity_id: uuid.UUID):
 
 def test_timeline_filter_by_entity_keeps_only_that_entitys_events(driver):
     driver.sign_in_as_admin(_ADMIN)
-    todo, other = uuid.uuid7(), uuid.uuid7()  # entity_id is a uuid pk (weak, table-agnostic FK)
+    todo, other = uuid.uuid7(), uuid.uuid7()
     driver.run(_seed("todo", "created", todo))
     driver.run(_seed("todo", "ticked", todo))
     driver.run(_seed("calendar", "event_created", other))
@@ -25,8 +25,7 @@ def test_timeline_filter_by_entity_keeps_only_that_entitys_events(driver):
         .text
     )
 
-    assert "todo.created" in body  # the concerned entity's events…
+    assert "todo.created" in body
     assert "todo.ticked" in body
-    assert "calendar.event_created" not in body  # …and nothing from another entity
-    # The log/issue sources carry no entity, so an entity filter excludes them wholesale.
+    assert "calendar.event_created" not in body
     assert "request.finished" not in body

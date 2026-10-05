@@ -1,5 +1,4 @@
-"""What a signed-in user outside the org reads of its pages — ``public_pages`` decides, on the RLS
-connection, not a Python filter over a BYPASSRLS one."""
+"""An outsider reads only what ``public_pages`` gives, on the RLS connection."""
 
 _OWNER = "pages-owner@example.com"
 _OUTSIDER = "pages-outsider@example.com"

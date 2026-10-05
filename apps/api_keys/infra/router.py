@@ -36,8 +36,7 @@ async def _render(
     *,
     new_key: ApiKeyCreated | None = None,
 ) -> Response:
-    """The keys panel fragment (``_keys.html``), swapped into ``#api-keys`` on the settings
-    page after create/revoke. The panel's home is the org settings page — see integration."""
+    """The keys panel, swapped into ``#api-keys`` on the settings page after a change."""
     keys = [ApiKeyRead.model_validate(k) for k in await repo.all()]
     ctx = {
         "keys": keys,
@@ -56,7 +55,7 @@ async def list_keys(
     if wants_json(request):
         keys = [ApiKeyRead.model_validate(k) for k in await repo.all()]
         return JSONResponse([k.model_dump(mode="json") for k in keys])
-    # The panel lives on the org settings page; a browser hitting this URL is sent there.
+    # A browser is sent to the settings page.
     org_handle = request.path_params.get("org_handle", "")
     return RedirectResponse(f"/{org_handle}/settings", status_code=status.HTTP_303_SEE_OTHER)
 

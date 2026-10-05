@@ -1,9 +1,5 @@
-"""Guard for scripts/upgrade.py's re-pinning step.
-
-`make upgrade` strips every `==` pin, lets uv resolve, then writes the resolved versions
-back into pyproject.toml. If the write-back misses a dependency, the lock advances while
-pyproject keeps the old pin — the two disagree silently and the next `uv sync` walks the
-upgrade back. Dependencies carrying extras (`sqlalchemy[asyncio]`) are the easy miss.
+"""scripts/upgrade.py re-pins every dependency, extras included (`sqlalchemy[asyncio]`): a missed
+one would leave pyproject behind the lock.
 """
 
 from scripts.upgrade import repin

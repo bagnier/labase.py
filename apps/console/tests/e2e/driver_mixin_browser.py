@@ -15,14 +15,11 @@ _USER_PASSWORD = "Secret1!"
 
 class ConsoleBrowserMixin(BrowserBase):
     def sign_in_as_admin(self, email: str) -> None:
-        # Admin role must be set *before* login so the issued JWT carries app_metadata.role.
-        # Use an isolated browser context for the admin so the current acting user's session
-        # is never polluted.
+        # Role set before login, so the JWT carries it; the admin gets its own context.
         delete_user_if_exists(email)
         set_admin_role(create_user(email, _ADMIN_PASSWORD))
         self._admin_email = email
-        self._admin_acting = email  # admin lives in their own isolated context
-        # Tear down any stale context from a previous call with this email
+        self._admin_acting = email
         if email in self._contexts:
             self._contexts.pop(email).close()
             self._pages.pop(email, None)
@@ -34,20 +31,15 @@ class ConsoleBrowserMixin(BrowserBase):
         setup_page.get_by_label("Password").fill(_ADMIN_PASSWORD)
         setup_page.get_by_role("button", name="Sign in").click()
         setup_page.wait_for_url("**/profile", timeout=10000)
-        # The page that signed in stays the admin's page: a real sign-in leaves them on their
-        # landing page, which is where every later click starts from.
         self._pages[email] = setup_page
         self.set_acting_email(email)
 
     def _as_admin(self) -> None:
-        # Multi-user scenarios sign in other users (own contexts) after the admin; switch back
-        # to the context that holds the admin session.
         assert self._admin_acting is not None
         self.set_acting_email(self._admin_acting)
 
     def _open_console(self, page: Page | None = None) -> Response | None:
-        """The console button in the top bar, shown on every page to whoever may enter — the way
-        an admin gets there, and the only one this driver takes."""
+        """Through the top bar's console button."""
         target = page if page is not None else self.page
         with target.expect_navigation(wait_until="load") as nav:
             target.locator("a[href='/console']").first.click()
@@ -80,8 +72,7 @@ class ConsoleBrowserMixin(BrowserBase):
 
     # ── settings ───────────────────────────────────────────────────────────────
     def open_console_link(self, href: str) -> Response | None:
-        """Console, then whatever it offers pointing at ``href`` — the tile of an app, or one of
-        the operational screens. 'Click an app to configure it', as the page says."""
+        """Console, then its link to ``href``."""
         self._as_admin()
         self._open_console()
         with self.page.expect_navigation(wait_until="load") as nav:
@@ -92,9 +83,7 @@ class ConsoleBrowserMixin(BrowserBase):
         self.open_console_link(f"/console/{app}")
 
     def _on_console_settings(self, app: str, *, fresh: bool = False) -> None:
-        """On an app's settings screen, two loads away from anywhere else and none away from
-        itself. ``fresh`` for reading a setting back: the fields auto-save through HTMX, so what
-        stands in one is what was typed until the server says otherwise."""
+        """On an app's settings screen; ``fresh`` reloads it to read what the server saved."""
         self._as_admin()
         self.be_on(f"/console/{app}", lambda: self.open_console_settings(app), fresh=fresh)
 
@@ -102,9 +91,7 @@ class ConsoleBrowserMixin(BrowserBase):
         return self.page.locator(f"[data-setting-key='{key}']")
 
     def _field(self, row, key: str):
-        # Boolean + text settings expose the setting key as their accessible name
-        # (aria-label). Boolean rows also carry a hidden mirror named "value"; the
-        # accessible name resolves unambiguously to the visible checkbox/switch.
+        # The setting key is the field's accessible name.
         return row.get_by_label(key)
 
     def set_org_override(self, app: str, key: str, value: str) -> None:
@@ -112,8 +99,7 @@ class ConsoleBrowserMixin(BrowserBase):
         handle = getattr(self, "active_org_handle", "")
         self.page.get_by_label("Organisation handle").fill(handle)
         self.page.get_by_label("Setting key").select_option(key)
-        # One value widget per setting shares the "Override value for …" label; target the
-        # selected key's (the only enabled one) so the locator isn't ambiguous.
+        # Only the selected key's widget is enabled.
         self.page.get_by_label(f"Override value for {key}").fill(value)
 
         def posted(r):
@@ -130,7 +116,7 @@ class ConsoleBrowserMixin(BrowserBase):
         assert value in row_text, f"expected {value!r} in override row: {row_text!r}"
 
     def set_console_setting(self, app: str, key: str, value: str) -> None:
-        # Settings auto-save: changing a field fires hx-trigger="change" — no Save button.
+        # Fields save on change.
         self._on_console_settings(app)
         row = self._setting_locator(key)
         kind = row.get_attribute("data-setting-type")
@@ -141,26 +127,21 @@ class ConsoleBrowserMixin(BrowserBase):
 
         with self.page.expect_response(posted):
             if kind == "boolean":
-                # Toggling the checkbox emits change directly. The input is
-                # sr-only behind a styled track, so force past actionability.
+                # sr-only behind a styled track: forced.
                 if (value == "true") != field.is_checked():
                     field.click(force=True)
                 else:
                     field.dispatch_event("change")
             elif field.evaluate("el => el.tagName") == "SELECT":
-                # A constrained string setting (e.g. the log level) is a <select>: pick the
-                # option, which emits change directly — no blur needed.
                 field.select_option(value)
             else:
-                # Text/number save on blur — fill then move focus to emit change.
+                # Text saves on blur.
                 field.fill(value)
                 field.blur()
         self.drive_spread()
 
     def drive_spread(self) -> None:
-        """Apply the settings change deterministically. The in-process server runs a real event
-        listener that a NOTIFY would wake, but driving one tick here removes the race between the
-        persist and the next assertion."""
+        """One listener tick now, rather than racing the server's own."""
         if self._server is None:
             return
         self._server.run(EventListener(0).tick())
@@ -190,7 +171,6 @@ class ConsoleBrowserMixin(BrowserBase):
         assert actual == value, f"setting {key!r}: expected {value!r}, got {actual!r}"
 
     def assert_console_supabase_link(self, app: str, fragment: str) -> None:
-        # Nothing under test moves this link, so the screen already open is answer enough.
         self._on_console_settings(app)
         link = self.page.locator(f"[data-supabase-app='{app}']")
         href = link.get_attribute("href")
@@ -202,15 +182,12 @@ class ConsoleBrowserMixin(BrowserBase):
         clear_all_admin_roles()
 
     def seed_existing_admin(self) -> None:
-        # An admin must exist so a later registrant is *not* auto-promoted by the bootstrap.
-        # Seeded straight into GoTrue (no browser context) to leave the acting user untouched.
+        # An admin exists, so the bootstrap promotes nobody; seeded in GoTrue directly.
         email = "seed-admin@example.com"
         delete_user_if_exists(email)
         set_admin_role(create_user(email, _ADMIN_PASSWORD))
 
     def register_and_sign_in(self, email: str) -> None:
-        # context_for registers (firing the bootstrap) then logs in — the issued token
-        # already carries the admin claim where the user was promoted.
         self.context_for(email)
         self.set_acting_email(email)
 
@@ -218,8 +195,7 @@ class ConsoleBrowserMixin(BrowserBase):
         self.context_for(email)
 
     def _login(self, email: str) -> None:
-        # Drop the stale session first; otherwise /auth/login redirects to /profile (already
-        # signed in) and the email field is disabled.
+        # Signed in, /auth/login would redirect away.
         self.context_for(email).clear_cookies()
         page = self.page_for(email)
         page.goto(f"{self.base_url}/auth/login")
@@ -229,12 +205,11 @@ class ConsoleBrowserMixin(BrowserBase):
         page.wait_for_url("**/profile", timeout=10000)
 
     def sign_in_again(self, email: str) -> None:
-        # Refresh the cookie so the freshly-granted admin claim lands in the token.
+        # A fresh token carries the new role.
         self._login(email)
         self.set_acting_email(email)
 
     def assert_can_open_console(self, email: str) -> None:
-        """Can open it: their own pages offer the way in, and following it lands on the console."""
         page = self.page_for(email)
         expect(page.locator("a[href='/console']").first).to_be_visible()
         resp = self._open_console(page)
@@ -242,22 +217,20 @@ class ConsoleBrowserMixin(BrowserBase):
         assert resp.status == 200, f"Expected 200, got {resp.status}"
 
     def assert_refused_console(self, email: str) -> None:
-        """Refused says two things, and hiding the button is only the first: the server itself
-        must answer no to the request the button would have sent."""
+        """No button, and the server refuses the request anyway."""
         page = self.page_for(email)
         expect(page.locator("a[href='/console']")).to_have_count(0)
         resp = page.request.fetch(f"{self.base_url}/console", method="GET")
         assert resp.status == 404, f"Expected 404, got {resp.status}"
 
     def _walk_to_admins(self) -> None:
-        """Console → the Users tile → its “Manage admins” link, the path the console lays out."""
+        """Console → Users tile → “Manage admins”."""
         self.open_console_settings("users")
         with self.page.expect_navigation(wait_until="load"):
             self.page.locator("a[href='/console/admins']").first.click()
 
     def _goto_admins(self, *, fresh: bool = False) -> Page:
-        """On the admins screen — three loads in from elsewhere, none from itself. ``fresh`` says
-        the list has to come from the server, the promotion under test included."""
+        """On the admins screen; ``fresh`` reloads it from the server."""
         self._as_admin()
         self.be_on("/console/admins", self._walk_to_admins, fresh=fresh)
         return self.page
@@ -293,20 +266,18 @@ class ConsoleBrowserMixin(BrowserBase):
         assert el is not None, f"no add-error shown for {email!r}"
 
     def designate_server_admin(self, email: str) -> None:
-        # Designation now flows through the add-by-email form (regular users aren't listed).
+        # Through the add-by-email form.
         self.add_server_admin_by_email(email)
         self.page.locator(f"[data-admin-email='{email}']").wait_for(state="attached")
 
     def revoke_server_admin(self, email: str) -> None:
-        # Force the request server-side: the UI disables the button for the last admin, so a
-        # click can't be issued — require the server itself to enforce the guard.
+        # The button is disabled for the last admin: the request is sent directly.
         self._as_admin()
         self.last_response = self.context.request.put(
             f"{self.base_url}/console/admins/{email}", form={"is_admin": "false"}
         )
 
     def try_designate_server_admin(self, email: str) -> None:
-        # Acts as the current (non-admin) user's context — no admin re-targeting.
         resp = self.context.request.put(
             f"{self.base_url}/console/admins/{email}", form={"is_admin": "true"}
         )

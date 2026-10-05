@@ -1,11 +1,4 @@
-"""The tasks screen — the work the async substrate still owes, and what it ran.
-
-A parked task already opens an issue (``queue.task_failed`` is a ``log.exception``), so this
-screen is not a second bug tracker: the two objects differ where it counts. A hundred tasks
-failing the same way fold into *one* issue and stay *a hundred* rows of work nobody did, and
-marking the issue resolved executes none of them. The issue answers "is there a bug"; this
-answers "what did not run".
-"""
+"""The Tasks screen: what the queue still owes, and what it ran."""
 
 import json
 import re
@@ -17,7 +10,7 @@ from apps.tasks.domain.strip import BANDS
 
 
 def _park(driver, topic: str, error: str) -> None:
-    """A task that exhausted its retries — what the worker leaves behind on ``_fail``."""
+    """A task out of retries, as ``_fail`` leaves it."""
     _insert(driver, topic, attempts=5, failed_at="now()", last_error=error)
 
 
@@ -102,8 +95,7 @@ def test_the_screen_filters_by_state(driver):
 
 
 def test_the_screen_counts_each_state_for_the_console_tile(driver):
-    """The tile is the only place an admin learns the screen exists, so its numbers are the
-    screen's own — read from the same query rather than a second count that can disagree."""
+    """The same query as the screen, so they cannot disagree."""
     driver.sign_in_as_admin("tasks-admin-counts@example.com")
     _park(driver, f"test.parked_{uuid.uuid4().hex}", "boom")
     payload = driver.client().get("/console/tasks", headers={"accept": "application/json"}).json()
@@ -122,8 +114,6 @@ def test_the_screen_renders_the_parked_task_as_html(driver):
 
 
 def test_the_console_index_carries_a_queue_tile_naming_what_is_parked(driver):
-    """The tile is how an admin learns the screen exists — a screen nothing links to is a screen
-    nobody opens, and the browser lane reaches pages by following links rather than typing URLs."""
     driver.sign_in_as_admin("tasks-admin-tile@example.com")
     _park(driver, f"test.parked_{uuid.uuid4().hex}", "boom")
 
@@ -134,9 +124,7 @@ def test_the_console_index_carries_a_queue_tile_naming_what_is_parked(driver):
 
 
 def test_the_tile_names_pending_work_rather_than_calling_the_queue_clear(driver):
-    """ "Nothing owed" with rows in the table is the tile contradicting the screen it links to —
-    and a healthy server always holds the recurring singletons, which are owed like anything else.
-    """
+    """Recurring rows are owed too."""
     driver.sign_in_as_admin("tasks-admin-tile-pending@example.com")
     _insert(
         driver, f"test.pending_{uuid.uuid4().hex}", attempts=0, failed_at="NULL", last_error=None
@@ -149,8 +137,7 @@ def test_the_tile_names_pending_work_rather_than_calling_the_queue_clear(driver)
 
 
 def test_an_empty_filter_result_does_not_claim_the_queue_is_clear(driver):
-    """ "Nothing owed" is a claim about the whole queue, and a filter that matches nothing is not
-    that: an admin narrowing to parked would read the reassurance as an answer about everything."""
+    """ "Nothing owed" is about the whole queue, not a filter that matched nothing."""
     driver.sign_in_as_admin("tasks-admin-empty@example.com")
     _insert(
         driver, f"test.pending_{uuid.uuid4().hex}", attempts=0, failed_at="NULL", last_error=None
@@ -166,8 +153,7 @@ def test_an_empty_filter_result_does_not_claim_the_queue_is_clear(driver):
 
 
 def test_a_row_carries_the_payload_and_the_seat_the_task_runs_under(driver):
-    """What the task was *for*, without a second screen: the payload names the event or entity it
-    carries, and ``user_id`` is the RLS seat the worker synthesizes to run it."""
+    """The payload, and ``user_id``: whose RLS claims the worker runs it under."""
     driver.sign_in_as_admin("tasks-admin-payload@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     seat = uuid.uuid7()
@@ -187,8 +173,7 @@ def test_a_row_carries_the_payload_and_the_seat_the_task_runs_under(driver):
 
 
 def test_the_filter_swaps_the_rows_alone_not_the_whole_page(driver):
-    """The form filters live, so what comes back is the fragment HTMX puts in place of the table —
-    not a document. A full page here would nest ``<html>`` inside the one already on screen."""
+    """A fragment, or the page would nest ``<html>`` in itself."""
     driver.sign_in_as_admin("tasks-admin-htmx@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -203,8 +188,6 @@ def test_the_filter_swaps_the_rows_alone_not_the_whole_page(driver):
 
 
 def test_the_task_filter_offers_the_topics_actually_queued(driver):
-    """A placeholder is a guess the admin must already know the answer to; the datalist is what is
-    there. Same trade as the org-handle autocomplete on the settings screen."""
     driver.sign_in_as_admin("tasks-admin-datalist@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -216,8 +199,7 @@ def test_the_task_filter_offers_the_topics_actually_queued(driver):
 
 
 def _log_attempt(driver, topic: str, at_minutes_ago: int, name: str = "queue.task_retrying"):
-    """One line as the worker writes it on a failed try — the only record of *when* a try
-    happened, since the queue row keeps a counter and the last claim, nothing else."""
+    """A failed try's line, as the worker writes it."""
 
     async def write() -> None:
         async with driver.test_session_factory()() as session:
@@ -239,9 +221,7 @@ def _log_attempt(driver, topic: str, at_minutes_ago: int, name: str = "queue.tas
 
 
 def test_the_history_tab_draws_a_block_per_logged_attempt(driver):
-    """The queue keeps one row per task, so the retries live only in the log. The history counts
-    them per topic and slot and gives them a band of their own beside the run that ended, so a lane
-    can say "it failed three times here and parked there" without one hiding the other."""
+    """Failed tries come from the log and get their own band beside the run's outcome."""
     driver.sign_in_as_admin("tasks-admin-history@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -255,7 +235,6 @@ def test_the_history_tab_draws_a_block_per_logged_attempt(driver):
 
 
 def test_the_history_tab_is_rendered_beside_the_list(driver):
-    """Two readings of the same queue, one screen: what is owed now, and what happened."""
     driver.sign_in_as_admin("tasks-admin-tabs@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -266,8 +245,7 @@ def test_the_history_tab_is_rendered_beside_the_list(driver):
 
 
 def test_a_recurring_topic_keeps_one_lane_for_all_its_passes(driver):
-    """Every cycle enqueues a fresh row, so an hourly topic is several rows over a window. Folded
-    into one lane they read as a heartbeat, and the cycle that went missing is what shows."""
+    """A recurring topic's rows share one lane, where a missed cycle shows."""
     driver.sign_in_as_admin("tasks-admin-recurring@example.com")
     topic = f"test.recurring_{uuid.uuid4().hex}"
     for _ in range(3):
@@ -288,8 +266,7 @@ def test_a_recurring_topic_keeps_one_lane_for_all_its_passes(driver):
 
 
 def test_one_shots_of_the_same_topic_share_one_lane(driver):
-    """A morning of sign-ups is one lane per *kind of work*, not one per task: forty lanes of a
-    single green tick bury the one that parked, which is the only row worth finding."""
+    """One lane per topic, not per task: forty lanes of one tick would bury the park."""
     driver.sign_in_as_admin("tasks-admin-folding@example.com")
     topic = f"test.oneshot_{uuid.uuid4().hex}"
     for _ in range(4):
@@ -302,7 +279,6 @@ def test_one_shots_of_the_same_topic_share_one_lane(driver):
 
 
 def test_the_history_says_how_many_one_shot_lanes_it_left_out(driver):
-    """A view that silently shows the newest N reads exactly like one showing everything."""
     driver.sign_in_as_admin("tasks-admin-capped@example.com")
     _park(driver, f"test.parked_{uuid.uuid4().hex}", "boom")
 
@@ -312,8 +288,7 @@ def test_the_history_says_how_many_one_shot_lanes_it_left_out(driver):
 
 
 def test_the_cap_never_drops_a_park_to_keep_a_success(driver):
-    """A busy morning is thousands of clean runs and one park. Capping on recency alone throws the
-    park away and leaves a screen that says everything went fine — the one lie it must not tell."""
+    """Thousands of clean runs and one park: no cap may drop the park."""
     driver.sign_in_as_admin("tasks-admin-priority@example.com")
     topic = f"test.oneshot_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -327,10 +302,7 @@ def test_the_cap_never_drops_a_park_to_keep_a_success(driver):
 
 
 def test_only_an_upper_bound_pauses_the_window(driver):
-    """Same affordance, same words, same markup as ``/console/timeline``. What pauses is naming the
-    *end*: with no ``to_dt`` the window closes on ``now`` and keeps moving, so a start alone is a
-    longer live window, not a period being browsed — and offering "Back to live" there says the
-    reader left something they never left."""
+    """As on the Timeline: only an end bound pauses the view."""
     driver.sign_in_as_admin("tasks-admin-live@example.com")
 
     def state(**params) -> str:
@@ -350,8 +322,7 @@ def test_only_an_upper_bound_pauses_the_window(driver):
 
 
 def test_a_block_carries_its_details_where_a_pointer_can_reach_them(driver):
-    """A block is a few pixels wide, so what it knows has to be reachable by pointing at it — and
-    by a screen reader, which is why the same text is the accessible name."""
+    """The block's caption is both its tooltip and its accessible name."""
     driver.sign_in_as_admin("tasks-admin-hover@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "IntegrityError: memberships_user_id_fkey")
@@ -362,9 +333,7 @@ def test_a_block_carries_its_details_where_a_pointer_can_reach_them(driver):
 
 
 def test_changing_the_window_swaps_the_strip_without_leaving_the_tab(driver):
-    """A full GET reloads the page, and the server-rendered default tab is the backlog — so naming
-    a date threw the reader back to the list they had just left. The window filters in place, the
-    way the backlog's own filter beside it already does."""
+    """In place: a full reload would land on the backlog tab."""
     driver.sign_in_as_admin("tasks-admin-swap@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -383,9 +352,7 @@ def test_changing_the_window_swaps_the_strip_without_leaving_the_tab(driver):
 
 
 def test_a_history_restore_of_the_history_tab_gets_the_full_page_not_the_strip(driver):
-    """htmx sends ``HX-Request`` on a back-navigation too, but swaps the whole document rather
-    than the strip alone — so a restore of a pushed history-tab URL needs the shell, not the
-    fragment the same headers would otherwise pick."""
+    """A history restore sends ``HX-Request`` but replaces the whole document."""
     driver.sign_in_as_admin("tasks-admin-restore@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -408,8 +375,6 @@ def test_a_history_restore_of_the_history_tab_gets_the_full_page_not_the_strip(d
 
 
 def test_a_block_is_a_link_into_the_timeline_at_that_moment(driver):
-    """Spotting a bad minute and having to retype it into another screen is the step this removes:
-    the block already knows its slot and its topic, which is the pair the Timeline asks for."""
     driver.sign_in_as_admin("tasks-admin-link@example.com")
     topic = f"test.parked_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -420,9 +385,8 @@ def test_a_block_is_a_link_into_the_timeline_at_that_moment(driver):
 
 
 def test_a_window_ahead_of_the_clock_says_so_rather_than_drawing_nothing(driver):
-    """The bounds are UTC and the picker shows the reader's own clock, so a window typed off a
-    wristwatch lands in the future wherever that reader is not on UTC. Blank lanes then read as a
-    broken screen; the honest answer names the reason."""
+    """Bounds are UTC: a local time can land in the future, and the screen says why it is
+    empty."""
     driver.sign_in_as_admin("tasks-admin-future@example.com")
 
     body = (
@@ -439,8 +403,7 @@ def test_a_window_ahead_of_the_clock_says_so_rather_than_drawing_nothing(driver)
 
 
 def test_an_empty_past_window_says_nothing_ran_rather_than_showing_blank_lanes(driver):
-    """Recurring topics keep their lane whatever the window holds, so "no data" and "no runs" look
-    identical unless one of them is said out loud."""
+    """Recurring lanes show even then, so the emptiness must be said."""
     driver.sign_in_as_admin("tasks-admin-empty-window@example.com")
 
     body = (
@@ -457,10 +420,7 @@ def test_an_empty_past_window_says_nothing_ran_rather_than_showing_blank_lanes(d
 
 
 def test_the_screen_names_the_consumer_and_keeps_the_event_under_it(driver):
-    """``evt:organizations.created:todo_welcome`` is how the worker addresses a handler, not how a
-    reader tells two lines apart: every reaction opens with the same six characters, and the name
-    that differs is last. The screen gives that name the line and the event it reacts to the dim
-    one below — nothing is lost, only unstacked, and nothing has to be hovered to be read."""
+    """``evt:organizations.created:todo_welcome`` reads as the consumer, its event below."""
     driver.sign_in_as_admin("tasks-admin-topic-label@example.com")
     kind, consumer = f"test.made_{uuid.uuid4().hex}", f"welcome_{uuid.uuid4().hex}"
     _park(driver, f"evt:{kind}:{consumer}", "boom")
@@ -475,8 +435,6 @@ def test_the_screen_names_the_consumer_and_keeps_the_event_under_it(driver):
 
 
 def test_the_json_face_keeps_the_topic_the_worker_actually_matches_on(driver):
-    """The shortened name is for eyes. A machine reading this — or an admin pivoting off an issue,
-    which carries the topic whole — needs the string the queue is keyed by."""
     driver.sign_in_as_admin("tasks-admin-topic-json@example.com")
     topic = f"evt:test.made_{uuid.uuid4().hex}:welcome_{uuid.uuid4().hex}"
     _park(driver, topic, "boom")
@@ -487,8 +445,7 @@ def test_the_json_face_keeps_the_topic_the_worker_actually_matches_on(driver):
 
 
 def test_the_legend_names_every_band_the_strip_can_draw(driver):
-    """A colour on the strip with no entry under it is a colour a reader has to guess. The legend
-    is rendered from the same tuple the blocks are, so neither can drift from the other."""
+    """Rendered from ``BANDS``, like the blocks."""
     driver.sign_in_as_admin("tasks-admin-legend@example.com")
 
     body = driver.client().get("/console/tasks", headers={"accept": "text/html"}).text
@@ -497,9 +454,7 @@ def test_the_legend_names_every_band_the_strip_can_draw(driver):
 
 
 def test_the_filtered_rows_still_spell_a_cadence(driver):
-    """The fragment is rendered from its own context, not the page's. A recurring row is the only
-    one that asks for the cadence, so a helper left behind on the page breaks nothing until an
-    admin filters — and then only for the rows that have one."""
+    """The fragment has its own context: a helper only the page had would break on filtering."""
     driver.sign_in_as_admin("tasks-admin-fragment-cadence@example.com")
     topic = f"test.pending_{uuid.uuid4().hex}"
     _insert(driver, topic, attempts=0, failed_at="NULL", last_error=None, recurring_seconds=7200)
@@ -518,9 +473,7 @@ def test_the_filtered_rows_still_spell_a_cadence(driver):
 
 
 def test_a_shared_history_url_opens_on_the_history_tab(driver):
-    """The window form pushes its bounds into the URL, which is what makes "Back to live" a real
-    navigation rather than a jump to the address already showing. That URL then has to reopen where
-    it was taken — the tab is named in the query, so the server picks it and no script has to."""
+    """The pushed URL names the tab, so the server reopens it."""
     driver.sign_in_as_admin("tasks-admin-panel-tab@example.com")
 
     body = (
@@ -537,10 +490,7 @@ def test_a_shared_history_url_opens_on_the_history_tab(driver):
 
 
 def test_a_live_window_refetches_itself_and_a_paused_one_does_not(driver):
-    """ "Live" is a claim about the window closing on ``now``, which stops being true the second the
-    page is rendered unless something refetches it. A pinned window cannot go stale, so polling it
-    would be pure churn — and the poll carries the reader's own start, or it would snap the window
-    back to the default six hours every half minute."""
+    """Live polls, a pinned window does not; the poll keeps the reader's start."""
     driver.sign_in_as_admin("tasks-admin-poll@example.com")
 
     def panel(**params) -> str:

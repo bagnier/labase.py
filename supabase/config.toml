@@ -1,13 +1,11 @@
-# The app serves auth pages itself (SSR): recovery links point at our
-# /auth/reset-password route carrying GoTrue's token_hash.
+# Recovery links reach the app's /auth/reset-password with GoTrue's token_hash.
 [auth]
 site_url = "http://localhost:8000"
-# OAuth callbacks land on the app's SSR route (PKCE code exchange happens there).
+# The app exchanges the PKCE code.
 additional_redirect_urls = ["http://localhost:8000/auth/callback"]
 
-# OAuth providers — see docs/oauth.md. Blocks stay commented so `supabase start`
-# never requires the env vars; uncomment (and restart Supabase) to test locally.
-# The callback to register at the provider is http://localhost:54321/auth/v1/callback
+# OAuth providers (docs/oauth.md), commented so `supabase start` needs no env var. Provider
+# callback: http://localhost:54321/auth/v1/callback
 # [auth.external.github]
 # enabled = true
 # client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
@@ -20,12 +18,10 @@ additional_redirect_urls = ["http://localhost:8000/auth/callback"]
 
 [auth.email]
 enable_confirmations = false
-# Email change: single confirmation from the NEW address (light path for a
-# starting product); the template carries token_hash to our SSR route.
+# Email change: one confirmation, from the new address.
 double_confirm_changes = false
 
-# GoTrue's default is 2 emails/hour — unusable for the E2E password-reset
-# scenarios that really send recovery mail through the local catcher.
+# GoTrue's default (2 emails/hour) would starve the E2E password-reset scenarios.
 [auth.rate_limit]
 email_sent = 1000
 
@@ -41,22 +37,19 @@ content_path = "./supabase/templates/email_change.html"
 subject = "Confirm your email address"
 content_path = "./supabase/templates/confirmation.html"
 
-# Two-factor: the app wires GoTrue's native TOTP factors (enroll/challenge/verify).
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true
 
-# Passkeys (WebAuthn) — GoTrue beta; the app additionally gates every surface
-# behind the users.passkeys_enabled console switch (default off).
+# GoTrue beta; the app also gates it behind `users.passkeys_enabled` (off).
 [auth.passkey]
 enabled = true
 
 [auth.webauthn]
 rp_display_name = "labase"
 rp_id = "localhost"
-# 8000 = dev server; 8801-8808 = the browser-e2e servers (tests/e2e/drivers/browser_base.py).
-# Serial runs use 8801; under pytest-xdist each worker binds 8801+worker-index, so
-# navigator.credentials ceremonies verify against real GoTrue on whichever worker runs them.
+# 8000: dev server; 8801-8808: one browser-e2e server per xdist worker
+# (tests/e2e/drivers/browser_base.py).
 rp_origins = [
   "http://localhost:8000",
   "http://localhost:8801",
@@ -69,8 +62,7 @@ rp_origins = [
   "http://localhost:8808",
 ]
 
-# Local mail catcher (Mailpit): web UI/API on 54324, SMTP exposed to the host on
-# 54325 so the app's SmtpMailer reaches the same inbox as GoTrue auth mail.
+# Mailpit: UI on 54324; SMTP on 54325, so the app's mail joins GoTrue's.
 [local_smtp]
 enabled = true
 port = 54324

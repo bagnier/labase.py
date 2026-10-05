@@ -1,8 +1,4 @@
-"""How the learning context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the router,
-answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrganizationCreated``.
-"""
+"""The learning mount, and the welcome deck each new org gets."""
 
 import uuid
 
@@ -101,7 +97,7 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, _owner_id: uuid.UUID) -> None:
-    # Decks and cards are org-scoped, not owner-scoped, so the owner isn't needed here.
+    # Decks belong to the org, not the owner.
     deck = Deck(org_id=org_id, name=_WELCOME_DECK, position=0)
     session.add(deck)
     await session.flush()

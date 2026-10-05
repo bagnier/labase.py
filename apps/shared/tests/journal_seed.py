@@ -1,17 +1,6 @@
-"""Seeding the journal directly — for tests that need facts without emitting the events.
-
-Production records a fact exactly one way: ``bus.emit(event, session)``, which takes the caller's
-transaction so the fact commits iff the action does. A test often needs the opposite: a fact of
-some app's kind, without declaring that app's event class, and without a request to hang it on —
-the timeline, the logs viewer and the listener all need history that no test action produced.
-
-So this writes the columns directly, through the same ``record_business_event`` SECURITY DEFINER
-function the real write path uses. It lives **in tests** on purpose: a way to record a fact on no
-transaction at all is exactly what ``tests/meta/test_emit_sites`` keeps out of ``apps/``, and
-it stays out by not being importable from there.
-
-The record *is* the argument: :class:`BusinessEventRecord` already names every column, so the
-seeder never re-lists them.
+"""Facts written straight to the journal, through the real writer function, for tests that need
+history without declaring an app's events. Test-only: ``tests/meta/test_emit_sites`` keeps any
+other way of recording a fact out of ``apps/``.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,17 +11,10 @@ from apps.shared.persistence.database import admin_session_factory
 
 
 async def seed_fact_on(session: AsyncSession, record: BusinessEventRecord) -> None:
-    """Append ``record`` on ``session``'s transaction, leaving the commit to the caller — for the
-    arrangement that needs a fact *in flight*: minted, holding its key, not yet visible elsewhere.
+    """Append ``record`` without committing: a fact in flight, holding its key.
 
-    Fills what the real write path fills before writing: the readable names pinned as of now, and
-    the ``icon`` and ``payload`` column defaults, which SQLAlchemy applies at flush and nothing here
-    ever flushes. A name the caller already set on the record is left alone — the write path never
-    overwrites a pin either, and a test arranging a fact whose actor or org resolves to nothing
-    (a closed account, a deleted org) needs to set it itself; the other name, if not also given, is
-    still resolved live, same as the write path would.
-    The record is a throwaway carrier the caller built for this one write (the same thing
-    ``event_to_record`` returns), so it is completed in place."""
+    Completes ``record`` in place as the write path would: pinned names the caller left unset,
+    and the ``icon`` and ``payload`` defaults (nothing here flushes)."""
     repo = EventRepository(session)
     if record.user_name is None or record.org_name is None:
         user_name, org_name = await repo.pinned_names(record.user_id, record.org_id)
@@ -45,11 +27,8 @@ async def seed_fact_on(session: AsyncSession, record: BusinessEventRecord) -> No
 
 
 async def seed_fact(record: BusinessEventRecord) -> None:
-    """Append ``record`` to the journal on its own admin session, and commit — the arrangement has
-    to outlive the request under test, and be visible to a listener on another connection.
-
-    A failed write raises: seeding is arranging, and an arrangement that silently did nothing
-    surfaces later as an assertion about a page, pointing anywhere but here."""
+    """Append ``record`` and commit, so a listener on another connection sees it. Raises on
+    failure: a silent miss would surface far from here."""
     async with admin_session_factory()() as session:
         await seed_fact_on(session, record)
         await session.commit()

@@ -23,9 +23,7 @@
       {% endif %}
       {{ metric_card('This week', 'pulse', value=activity_stats.this_week, desc=week_desc) }}
     </div>
-    {# ── Activity ─ the org's pulse: contribution calendar + day-grouped feed. Moved up (above the
-       app cards) and built from the org's own business events — no raw request/technical counts,
-       which mean nothing to a member. #}
+    {# ── Activity: calendar and feed of the org's facts, above the app cards. #}
     <section class="space-y-6" data-org-activity>
       <section class="card-panel">
         <div class="card-body">

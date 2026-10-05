@@ -1,10 +1,4 @@
-"""How a log line lands in the timeline.
-
-The timeline merges three sources — the business-events journal, the logs, and issue
-occurrences. The logs are *one* source: a request trace and a background failure differ by
-their name and their level, not by where they come from. What the line does carry is its
-app, read off the logger that wrote it.
-"""
+"""How a log line lands in the Timeline: one ``logs`` source, its app read off the logger."""
 
 from datetime import UTC, datetime
 
@@ -18,7 +12,7 @@ from apps.shared.tests.log_seed import clear_log_lines, seed_log_line
 from apps.timeline.domain.models import TimelineSource
 from apps.timeline.infra.repository import TimelineFilter
 
-# The sink reads a window around ``clock.now()``; pinning both ends keeps it deterministic.
+# The sink reads a window around ``clock.now()``.
 _NOW = datetime(2026, 7, 12, 12, 0, tzinfo=UTC)
 _THEN = datetime(2026, 7, 12, 10, 0, tzinfo=UTC)
 
@@ -33,8 +27,7 @@ def _pin_the_clock(tmp_path, monkeypatch):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _only_my_lines(reader):
-    """The store is shared and committed — the day files this replaced gave each test a scratch
-    directory. These tests assert over *every* ``logs`` entry, so they start from empty."""
+    """These tests assert over every ``logs`` entry of the shared store: start empty."""
     await clear_log_lines(reader.session)
     yield
     await clear_log_lines(reader.session)
@@ -64,7 +57,6 @@ async def test_a_background_failure_is_a_log_like_any_other(reader):
 
 @pytest.mark.asyncio
 async def test_a_library_line_names_its_app_after_the_library(reader):
-    """A third-party logger has no package under ``apps/``: it names itself."""
     await _seed(reader, "sqlalchemy.pool", "connection invalidated")
     entries = await reader.search(TimelineFilter(source="logs"))
     assert _shown(entries) == [(TimelineSource.logs, "sqlalchemy", "connection invalidated")]

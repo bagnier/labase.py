@@ -1,15 +1,12 @@
-"""Shapes shared by the DTOs of every context — what a request carries, said once."""
+"""DTO shapes shared by every context."""
 
 from pydantic import BaseModel
 
 
 class Partial(BaseModel):
-    """A PATCH body: every field typed as what it is, presence asked separately.
-
-    A partial update reads only the fields the caller sent. Typing each as ``| None`` would make
-    "absent" a value of the field — and read ``{"title": null}`` as "not sent". Pydantic already
-    keeps the set of fields the message carried; :meth:`sent` is that set, and a field's type
-    stays what a sent value is (AGENTS: `| None` means optional).
+    """A PATCH body: ask :meth:`sent` whether a field was sent, rather than typing every field
+    ``| None``, which would read ``{"title": null}`` as "not sent" (AGENTS: `| None` means
+    optional).
     """
 
     def sent(self, field: str) -> bool:
@@ -17,12 +14,12 @@ class Partial(BaseModel):
 
 
 class Message(BaseModel):
-    """A mutation's whole JSON answer when there is nothing to return but that it happened."""
+    """The JSON answer of a mutation with nothing else to return."""
 
     message: str
 
 
 class Redirect(BaseModel):
-    """Where a JSON caller should go next — what the browser gets as a 303."""
+    """Where a JSON caller goes next; a browser gets a 303."""
 
     redirect: str

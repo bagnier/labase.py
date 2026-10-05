@@ -17,9 +17,7 @@ class TodoRepository(PositionedRepository[Todo]):
         return await self.save(todo)
 
     async def recent_open(self, limit: int) -> list[Todo]:
-        """This org's `limit` topmost open items — a bounded query, never `all()` filtered and
-        sliced after the fact, so a large org's overview card costs `limit` rows, not every
-        task it has, done included."""
+        """The `limit` topmost open tasks."""
         query = (
             select(Todo)
             .where(Todo.org_id == self.org_id, Todo.done.is_(False))

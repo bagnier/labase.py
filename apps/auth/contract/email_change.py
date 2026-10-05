@@ -1,9 +1,5 @@
-"""Email change — the auth surface the profile form calls.
-
-GoTrue owns the flow (like forgot/reset password): the request mails a
-confirmation to the NEW address, ``/auth/confirm-email`` finalizes it with
-``verify_otp(type="email_change")``. A SQL trigger keeps ``profiles.email``
-in sync whatever the change path.
+"""Email change, called by the profile form. GoTrue mails the new address;
+``/auth/confirm-email`` finishes it. A trigger keeps ``profiles.email`` in sync.
 """
 
 from apps.auth.contract.passwords import verify_password
@@ -14,14 +10,10 @@ from apps.auth.domain.service import request_email_change
 async def change_email(
     email: str, current_password: str, new_email: str, session_access_token: str
 ) -> None:
-    """Re-authenticate, then ask GoTrue to send the confirmation to the new address.
+    """Check the password, then have GoTrue mail the new address.
 
-    The request itself runs on the caller's own session token — a fresh
-    password-only login is AAL1 and GoTrue rejects the update when the
-    account has MFA enabled, requiring the session's already-verified AAL2.
-
-    Raises `WrongPassword` when the current password is wrong and
-    `EmailChangeError` (user-safe message) when GoTrue refuses the address.
+    The request uses the caller's session token: a fresh password login is AAL1, which GoTrue
+    refuses for an account with MFA. Raises `WrongPassword` or `EmailChangeError`.
     """
     await verify_password(email, current_password)
     await request_email_change(session_access_token, new_email)

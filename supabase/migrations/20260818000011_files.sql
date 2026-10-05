@@ -6,8 +6,7 @@ create table public.org_files (
   org_id         uuid        not null references public.organizations(id) on delete cascade,
   uploaded_by    uuid        not null references auth.users(id) on delete cascade
                              deferrable initially immediate,
-  -- The uploader's email as it read *then*, so the list survives RLS hiding a co-member's
-  -- identity and an account being closed.
+  -- As it read *then*: RLS hides co-members, accounts close.
   uploader_email text        not null default '',
   filename       text        not null,
   storage_path   text        not null,
@@ -16,9 +15,8 @@ create table public.org_files (
   version        integer     not null default 1,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
-  -- The share link and the download sign this path with the service key, so a row pointing at
-  -- another org's object would serve its bytes. The path is the row's own: its org's folder, and
-  -- its own id. The filename after it is free — a rename keeps the object where it is.
+  -- Signed with the service key, so it must be the row's own: its org's folder, its id. The
+  -- filename after it is free.
   constraint org_files_own_object_check
     check (starts_with(storage_path, org_id::text || '/' || id::text || '_'))
 );
@@ -53,8 +51,7 @@ grant select, insert, update, delete on public.org_files to authenticated;
 grant select, insert, update, delete on public.org_files to service_role;
 
 
--- Immutable, and the token *is* the download gate — hence uuid4 (unguessable, no embedded
--- timestamp), no version, no updated_at. The anonymous download reads it on the admin session.
+-- Immutable; the uuid4 token is the download gate, read on the admin session.
 create table public.org_file_share_tokens (
   token      uuid        primary key default gen_random_uuid(),
   file_id    uuid        not null references public.org_files(id) on delete cascade,
@@ -65,8 +62,7 @@ create index org_file_share_tokens_file_id_idx on public.org_file_share_tokens (
 
 alter table public.org_file_share_tokens enable row level security;
 
--- Scoped through `org_files` under the caller's RLS: the foreign key alone is checked without it,
--- so it would let anyone mint a token for a file they cannot see.
+-- Through `org_files` under RLS: the FK alone is checked without it.
 create policy "org_file_share_tokens: member all"
   on public.org_file_share_tokens for all
   to authenticated

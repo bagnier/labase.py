@@ -1,9 +1,6 @@
--- Avatars share the org-files bucket, under avatars/{user_id}.{ext} — a first path segment that
--- is never an org id. Every storage policy casts that segment to uuid to scope the row by org, so
--- once an avatar exists, any user-scoped query over the bucket that has to evaluate its row (not
--- only an exact-match listing) raises. A helper guards the cast with a CASE — never an AND, since
--- Postgres may reorder an AND's operands but always evaluates a CASE branch by branch — so a
--- non-org segment reads as "no org", excluding the row instead of raising.
+-- Avatars share the org-files bucket under `avatars/`, a first segment the policies' uuid cast
+-- would raise on. The helper guards the cast with a CASE (an AND may be reordered), so a non-org
+-- segment reads as no org.
 
 create or replace function public.storage_path_org_id(path text)
 returns uuid

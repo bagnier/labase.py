@@ -1,8 +1,6 @@
 -- Admin-tunable app settings: a server-wide value per (app, key), optionally overridden per org.
 --
--- An app declares its settings at mount and the declared value is seeded here as the initial one;
--- the console edits them afterwards. Both tables name their first column `app_name`, like the
--- journal does — one word for one thing.
+-- Seeded from each app's declared values, edited from the console.
 
 create table public.app_settings (
   app_name   text        not null,
@@ -18,17 +16,14 @@ create trigger app_settings_updated_at
   before update on public.app_settings
   for each row execute procedure public.set_updated_at();
 
--- Written and read only through the BYPASSRLS admin session (the console is admin-gated at the
--- HTTP layer): RLS on with no policy, and never exposed to `authenticated`.
+-- Admin session only: RLS on with no policy.
 alter table public.app_settings enable row level security;
 
 grant select, insert, update, delete on public.app_settings to service_role;
 
 
 -- ── Per-organization overrides ──────────────────────────────────────────────────────────────
--- "Beta for this customer". The console (service_role) writes; org members may read their own
--- org's rows, so an app resolves an org-scoped flag on the regular RLS session. Becomes
--- plan-tier gating for free once billing exists.
+-- The console writes; members read their org's rows, so the RLS session resolves them.
 
 create table public.org_app_settings (
   app_name   text        not null,

@@ -98,6 +98,11 @@ from apps.shared.tests.test_request_logging import (
 )
 from apps.shared.tests.test_uuid7 import test_uuid7_is_time_ordered_and_versioned
 from apps.timeline.tests.test_pivots import test_a_row_correlates_by_the_request_it_names
+from apps.timeline.tests.test_sort_honesty import (
+    test_a_column_sort_says_it_only_orders_the_page,
+    test_ascending_time_says_it_only_orders_the_page,
+    test_the_default_sort_claims_nothing,
+)
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_api_rls import (
     test_the_rls_session_runs_as_the_app_role_and_the_admin_one_does_not,
@@ -803,6 +808,13 @@ CLAIMS = [
         "the-timeline-says-its-sort-is-partial",
         "the screen says so rather than pass a sample off as an ordering",
         "no scenario sorts by another column and reads the notice",
+    ),
+    held(
+        "the-timeline-sort-boundary-covers-reversed-time",
+        "any sort other than newest-first orders the loaded page only",
+        test_the_default_sort_claims_nothing,
+        test_a_column_sort_says_it_only_orders_the_page,
+        test_ascending_time_says_it_only_orders_the_page,
     ),
     held(
         "metrics-owns-the-counter-outright",

@@ -1,19 +1,5 @@
-"""Org settings sections — the settings page's *pull* collaboration surface.
-
-Org-scoped apps contribute one :class:`OrgSettingsSection` each to the org settings page by
-answering the :class:`OrgSettingsSectionQuery` (``host.contribs.provide(
-OrgSettingsSectionQuery, provider)`` at mount). The settings page gathers them at runtime
-with ``contribs.collect(OrgSettingsSectionQuery(...))`` — a failing provider is isolated, not
-fatal. Providers stay ignorant of one another and of the settings page.
-
-Each section carries its own Jinja partial (``template``, embedded on the settings page via
-``{% include %}``) plus the ``data`` that partial reads. This mirrors the dashboard's
-:class:`~apps.organizations.contract.overviews.Overview` seam, scoped to the owner-only
-settings page instead of the dashboard.
-
-This is the home for owner-scoped administration of an app (e.g. managing API keys): it is
-*not* a menu destination, so it earns no sidebar ``NavItem``; and it is *not* an at-a-glance
-metric, so it is *not* a dashboard ``Overview``. It is a setting of the org — hence here.
+"""Sections apps add to the owner-only org settings page, like dashboard cards: an app's owner
+administration (API keys), neither a menu entry nor a metric.
 """
 
 from dataclasses import dataclass, field
@@ -26,13 +12,11 @@ from apps.shared.vocabulary import AppName
 class OrgSettingsSection:
     key: AppName
     title: str
-    template: str  # the app's own Jinja partial, embedded on the settings page
+    template: str
     order: int = 50  # lower comes first
-    data: dict = field(default_factory=dict)  # vars the partial reads
+    data: dict = field(default_factory=dict)  # read by the partial
 
 
 @dataclass(frozen=True)
 class OrgSettingsSectionQuery(OrgMemberQuery):
-    """Asked by the org settings page; each app answers with its
-    :class:`OrgSettingsSection` (one collect grammar — see
-    :mod:`apps.organizations.contract.collect`)."""
+    """Answered with an :class:`OrgSettingsSection`."""

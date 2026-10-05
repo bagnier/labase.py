@@ -1,11 +1,4 @@
-"""Reading past the first page.
-
-The timeline answers one page and stops. Below the hundredth row there was nothing — no cursor,
-no button, no hint — so the only way further back was to guess a filter narrow enough to fit.
-
-The cursor cannot be an id: three sources, three id spaces, no common order. It is the timestamp
-of the oldest row on the page, and the next read is everything strictly older than it.
-"""
+"""Paging: the cursor is the oldest row's timestamp, the only order the sources share."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -27,17 +20,8 @@ def _pin_the_clock(monkeypatch):
 
 @pytest_asyncio.fixture
 async def org_with_three_facts(reader):
-    """Three facts an hour apart, so "older than" has an unambiguous answer. Returns their org.
-
-    Added through the ORM rather than ``journal_seed``: the journal's writer function leaves
-    ``created_at`` to the column default on purpose — the fact's clock is the journal's, not the
-    emitter's — so a seeder that goes through it cannot backdate. The e2e drivers add the model
-    for the same reason.
-
-    The org is fresh per test because the store is shared and committed: reusing one would let
-    each test read its predecessors' rows, which is exactly the kind of leak a paging assertion
-    cannot survive.
-    """
+    """Three facts an hour apart in a fresh org, returned. Through the ORM: the writer function
+    cannot backdate."""
     org = uuid.uuid7()
     for hours, verb in enumerate(("created", "edited", "deleted")):
         reader.session.add(
@@ -63,8 +47,7 @@ async def test_without_a_cursor_the_page_starts_at_the_newest(reader, org_with_t
 
 @pytest.mark.asyncio
 async def test_a_cursor_returns_only_what_is_strictly_older(reader, org_with_three_facts):
-    """Strictly: the row the cursor was read off is the last one already shown, so including it
-    would repeat it at the top of every page."""
+    """Strictly: the cursor's row is already shown."""
     flt = TimelineFilter(org_id=str(org_with_three_facts), before_ts=_NOW - timedelta(hours=1))
 
     entries = await reader.search(flt)
@@ -74,7 +57,6 @@ async def test_a_cursor_returns_only_what_is_strictly_older(reader, org_with_thr
 
 @pytest.mark.asyncio
 async def test_a_cursor_past_the_oldest_row_returns_nothing(reader, org_with_three_facts):
-    """What the end of the timeline looks like — no next page to offer."""
     flt = TimelineFilter(org_id=str(org_with_three_facts), before_ts=_NOW - timedelta(days=1))
 
     entries = await reader.search(flt)
