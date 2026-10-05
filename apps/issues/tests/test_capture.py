@@ -116,7 +116,9 @@ async def test_a_failing_contribution_provider_is_tracked_as_an_issue():
 
 @pytest.mark.asyncio
 async def test_a_failing_tracker_becomes_an_issue_of_its_own():
-    """Its exception is queued for the next tick, past the reentrancy guard."""
+    """Its exception is queued for the next tick, past the reentrancy guard. The original
+    exception rejoins the queue too, still owed to ``failing_tracker`` alone: the real ``_track``
+    already took it, and ownership is tracked per tracker, so it is never asked again for it."""
     marker = f"capture-test-{uuid.uuid4().hex}"
     tracker_failure = f"tracker itself is down {marker}"
 
@@ -131,7 +133,7 @@ async def test_a_failing_tracker_becomes_an_issue_of_its_own():
         except ValueError:
             log.exception("test.capture_probe")
         await CaptureDrain(0).tick()
-        assert len(capture._QUEUE) == 1, "the tracker's own failure waits for the next tick"
+        assert sorted(str(c.exc) for c in capture._QUEUE) == sorted([marker, tracker_failure])
     finally:
         capture._trackers.remove(failing_tracker)
 
