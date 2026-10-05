@@ -1,4 +1,4 @@
-"""What the Tasks screen answers a JSON caller — the backlog, its counts, and the strip's data."""
+"""The Tasks screen's JSON answers."""
 
 from pydantic import BaseModel, ConfigDict, Field
 

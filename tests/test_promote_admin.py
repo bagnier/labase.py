@@ -1,17 +1,5 @@
-"""What ``scripts/promote_admin.py`` says, beyond what it does.
-
-The script is the documented way in — the Makefile names it as *the* way to become a server admin —
-and it is run by someone who has just cloned the base, or who has locked themselves out. Both of
-its silences cost a round trip:
-
-- the claim lands in ``app_metadata``, which GoTrue embeds in the *access token*, so a session
-  opened before the promotion carries none of it. "Promoted" with no admin button looks like a
-  failure, and the fix is to sign in again;
-- reached from the host over a GoTrue that is truly down or misconfigured, it dies in forty
-  lines of httpx traceback that name neither the host nor the way round it (a Docker-shaped
-  ``.env``'s ``host.docker.internal`` is rewritten to the host before this can happen).
-
-Both are things the script knows and does not say, which is the only reason they are bugs.
+"""What ``scripts/promote_admin.py`` tells its user: to sign in again (the token carries the
+role), and, when GoTrue is unreachable, the URL tried rather than a traceback.
 """
 
 import os
@@ -24,9 +12,7 @@ from scripts import promote_admin as pa
 
 
 def test_promoting_rewrites_a_docker_only_env_file_to_the_host(tmp_path, monkeypatch):
-    """Run from the host against a Docker-shaped ``.env``, the same rewrite `db-seed`,
-    `preflight` and `backup-storage` apply — SUPABASE_API_URL reachable at 127.0.0.1 —
-    instead of dying on `host.docker.internal`, which resolves only inside the app container."""
+    """From the host, a Docker-shaped ``.env`` is rewritten to 127.0.0.1, like other scripts."""
     env_file = tmp_path / ".env"
     env_file.write_text("SUPABASE_API_URL=http://host.docker.internal:54321\n")
     monkeypatch.setenv("ENV_FILE", str(env_file))
@@ -39,7 +25,7 @@ def test_promoting_rewrites_a_docker_only_env_file_to_the_host(tmp_path, monkeyp
         pa.promote_admin("az@az", None)
 
     assert os.environ["SUPABASE_API_URL"] == "http://127.0.0.1:54321"
-    del os.environ["SUPABASE_API_URL"]  # apply_host_overrides writes it outside monkeypatch's reach
+    del os.environ["SUPABASE_API_URL"]  # set by apply_host_overrides, past monkeypatch
 
 
 def test_promoting_says_the_claim_only_lands_on_the_next_sign_in(capsys):
@@ -53,9 +39,7 @@ def test_promoting_says_the_claim_only_lands_on_the_next_sign_in(capsys):
 
 
 def test_an_unreachable_gotrue_names_the_host_and_the_way_round_it(capsys):
-    """A GoTrue that is down or misconfigured for a reason `apply_host_overrides` cannot fix,
-    answered in one line instead of a traceback: the URL that was tried, and an override to
-    point at a different one."""
+    """One line naming the URL tried and the override to use."""
     with (
         patch.object(pa, "find_users", side_effect=httpx.ConnectError("nodename nor servname")),
         pytest.raises(SystemExit) as exit_code,

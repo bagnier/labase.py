@@ -1,8 +1,5 @@
-"""Who may do what to a page and to the navigation.
-
-Drafts are collaborative; publishing, changing a published page and the navigation are the
-owners'. ``published`` stands for any visibility but ``draft``: the policy tells only those two
-apart.
+"""Who may do what to a page and the nav: drafts are everyone's, published pages and the nav are
+the owners'. ``published`` is any visibility but ``draft``.
 """
 
 import httpx

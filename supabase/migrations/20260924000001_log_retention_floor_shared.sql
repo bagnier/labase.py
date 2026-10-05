@@ -1,15 +1,5 @@
--- #92: the retention floor for `log_lines` was computed twice — once here, in
--- `roll_log_partitions`, and once in `LogRepository.purge` (Python), from the same
--- `retention_days` — with nothing binding the two expressions together. #43's fix made the
--- row-level DELETE agree with the day the roll keeps whole only because both sides happened to
--- use the same arithmetic; an edit to either alone (a grace day, an inclusive bound, a change of
--- unit) would silently reopen it.
---
--- The straggler DELETE moves into this function, next to the `floor_day` it must agree with, so
--- one statement — and one floor — owns both the partition drop and the row-level cleanup.
--- `purge` no longer computes a floor of its own; it just calls this. The return value keeps its
--- prior meaning (the row count a straggler DELETE removed) rather than mixing it with the
--- partition count, whose unit is a table, not a line.
+-- One retention floor for the partition drop and the row-level DELETE, so they cannot drift
+-- apart (#92). Returns the rows deleted.
 create or replace function public.roll_log_partitions(
   p_today date,
   p_retention_days int,
@@ -57,12 +47,8 @@ begin
     dropped := dropped + 1;
   end loop;
 
-  -- The stragglers: rows past the same floor day that a whole-partition DROP above could not
-  -- reach — a line dated outside every range, or a day the roll fell behind on, both of which
-  -- land in the default partition. Never the exact instant `p_retention_days` ago: that finer
-  -- floor falls inside the floor day itself, row-deleting part of the very partition just kept.
-  -- `dropped` (the partition count) stays a local count, not part of the return: a table and a
-  -- row are different units, and mixing them into one number would report neither honestly.
+  -- Default-partition rows past the floor day. The day, not the instant, which would cut into
+  -- the partition just kept.
   delete from public.log_lines where ts < floor_day;
   get diagnostics stragglers = row_count;
 

@@ -21,15 +21,13 @@ class PagesBrowserMixin(BrowserBase):
         return f"{self.base_url}/{handle or self._handle()}/pages{path}"
 
     def _goto_list(self, handle: str | None = None) -> None:
-        """Into the pages list by the sidebar entry — the only way in that a person has."""
+        """Through the sidebar."""
         self.follow_org_nav(handle or self._handle(), "pages")
-        # The list is an Alpine component; it flags itself ready once rendered.
+        # The Alpine list flags itself ready.
         self.page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
 
     def _on_list(self, handle: str | None = None, *, fresh: bool = False) -> None:
-        """On the pages list, without walking back to it when it is already the page shown.
-        ``fresh`` for the assertions: what the server lists now, not what was listed before the
-        action under test."""
+        """On the pages list; ``fresh`` reloads it."""
         path = f"/{handle or self._handle()}/pages"
         self.be_on(path, lambda: self._goto_list(handle), fresh=fresh)
         self.page.wait_for_selector("#pages-app[data-ready='1']", timeout=5000)
@@ -82,7 +80,6 @@ class PagesBrowserMixin(BrowserBase):
         self.page.wait_for_load_state("load")
 
     def _on_edit(self, slug: str) -> None:
-        """On that page's edit form — already open on it, the form is theirs to keep filling."""
         self.be_on(f"/{self._handle()}/pages/{slug}/edit", lambda: self._goto_edit(slug))
 
     def _submit_edit_form(self) -> None:
@@ -117,8 +114,7 @@ class PagesBrowserMixin(BrowserBase):
         self._set_visibility_via_form(slug, "public")
 
     def try_publish_to_members(self, slug: str) -> None:
-        # The visibility control is hidden for members; probe the endpoint directly
-        # to verify server-side enforcement (UI-hiding alone is not proof).
+        # Hidden for members: probe the endpoint so the server must refuse.
         self.last_response = self.page.request.fetch(
             self._pages_url(f"/{slug}/visibility"),
             method="POST",
@@ -130,7 +126,7 @@ class PagesBrowserMixin(BrowserBase):
         self._set_visibility_via_form(slug, "members")
 
     def view_page(self, slug: str) -> None:
-        # From the list as it stands now: the row clicked has to be the one the last action left.
+        # From a fresh list.
         self._on_list(fresh=True)
         self.page.click(f"#pages-list .page-row[data-slug='{slug}'] .page-title-link")
         self.page.wait_for_load_state("load")
@@ -163,8 +159,7 @@ class PagesBrowserMixin(BrowserBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_pages_list_as(self, email: str) -> None:
-        # The other tenant's org is seeded by the "is a member of" step; read its list from its
-        # own handle.
+        # Seeded by the "is a member of" step.
         page = self.page_for(email)
         slug = getattr(self, "secondary_handles", {}).get(email, self._handle())
         self.follow_org_nav(slug, "pages", page)
@@ -236,16 +231,13 @@ class PagesBrowserMixin(BrowserBase):
     # ── nav helpers ────────────────────────────────────────────────────────────
 
     def _goto_nav_manager(self) -> None:
-        """Into the navigation manager the way its owner gets there: the pages list, then the
-        link it offers."""
+        """Pages list → navigation manager."""
         self._on_list()
         self.page.click('a[href$="/pages/nav"]')
         self.page.wait_for_load_state("load")
 
     def _on_nav_manager(self, *, fresh: bool = False) -> None:
-        """On the navigation manager, two loads away from anywhere else and none away from
-        itself. ``fresh`` reloads it instead — checking a checkbox is a POST with no redirect,
-        so only a re-read says the choice was kept."""
+        """On the navigation manager; ``fresh`` reloads it to see what was saved."""
         self.be_on(f"/{self._handle()}/pages/nav", self._goto_nav_manager, fresh=fresh)
 
     def _candidate_row(self, title: str):
@@ -262,7 +254,7 @@ class PagesBrowserMixin(BrowserBase):
         cb = row.locator(".nav-checkbox")
         if not cb.is_checked():
             cb.click()
-            # The JS sets data-in-nav only after the POST resolves — the settled signal.
+            # data-in-nav is set once the POST resolves.
             expect(row).to_have_attribute("data-in-nav", "true")
 
     def add_to_nav(self, title: str) -> None:
@@ -282,8 +274,7 @@ class PagesBrowserMixin(BrowserBase):
     def move_nav_above(self, title: str, other: str) -> None:
         source = self._candidate_row(title).locator(".drag-handle")
         target = self._candidate_row(other).locator(".drag-handle")
-        # The reorder persists via a fire-and-forget PUT with no DOM signal — wait on the
-        # server response so a later reload sees the settled order.
+        # The reorder PUT leaves no DOM signal: wait for its response.
         with self.page.expect_response(
             lambda r: (
                 "/pages/nav/" in r.url and r.url.endswith("/position") and r.request.method == "PUT"

@@ -70,8 +70,7 @@ class LearningBrowserMixin(BrowserBase):
         t.join()
         if errors:
             raise errors[0]
-        # `result["v"]`, not `.get`: the key is set unless `target` raised, which `errors` already
-        # re-raised above. A KeyError here names a broken invariant instead of returning None.
+        # Set unless `target` raised, already re-raised: a KeyError is a broken invariant.
         return result["v"]
 
     # ── users / orgs ──────────────────────────────────────────────────────────
@@ -99,19 +98,13 @@ class LearningBrowserMixin(BrowserBase):
         return f"{self.base_url}/{self._learn_handle[key]}/learning{path}"
 
     def _goto_today(self, key: str):
-        """Into today's session by the sidebar entry — the only way in that a learner has.
-
-        Entered afresh every time, never reused where it already stands: the session is a
-        one-card-at-a-time stepper that only steps forward, so a helper landing on a page already
-        advanced past its card could never reach it."""
+        """Through the sidebar, afresh: the session only steps forward."""
         page = self._lpage(key)
         self.follow_org_nav(self._learn_handle[key], "learning/sessions", page)
         return page
 
     def _focus_card(self, page, ext: str) -> None:
-        """The review session is a one-card-at-a-time stepper; step Next as many times as the
-        target card sits from the first, then insist it is the one shown — a card the session
-        never rendered fails here, not in the click that follows."""
+        """Step to the card, then require it is the one shown."""
         cards = page.locator(".lcard")
         expect(cards.first).to_be_attached()
         order = [c.get_attribute("data-card-id") for c in cards.all()]
@@ -238,7 +231,6 @@ class LearningBrowserMixin(BrowserBase):
         assert text == answer, f"answer {text!r} != {answer!r}"
 
     def look_resources(self, name: str) -> None:
-        """The “Resources to review” button on today's session — where the learner finds them."""
         key = self._user(name)
         page = self._goto_today(key)
         with page.expect_navigation(wait_until="load"):

@@ -1,8 +1,4 @@
-"""The last-admin invariant: the server must always keep at least one admin.
-
-Shared by every path that can make an admin stop being one — a console revoke, the admin's own
-account deletion — so the rule is stated once rather than re-guessed at each call site.
-"""
+"""The server keeps at least one admin; checked by every path that can remove one."""
 
 
 class LastAdminViolation(Exception):

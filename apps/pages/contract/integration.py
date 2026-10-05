@@ -1,10 +1,4 @@
-"""How the pages (CMS) context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the public
-view router and the org-scoped management router, claims the ``pages`` slug, answers the
-dashboard ``OverviewQuery`` and the server-wide ``ConsoleOverviewQuery``, and seeds a
-public Welcome page (in the public nav) on ``OrganizationCreated``.
-"""
+"""The pages mount, and the public Welcome page each new org gets."""
 
 import uuid
 from pathlib import Path
@@ -97,12 +91,8 @@ async def _overview(query: OverviewQuery) -> Overview:
 
 
 async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
-    """Seed a public Welcome page, listed in the public nav.
-
-    Public so that pointing ``public.featured_org_handle`` at the org makes it the site home; in
-    the nav so ``/`` redirects straight to it. A durable async consumer of ``OrganizationCreated``,
-    suppressed in the test schema (via ``seed_org_welcome``), so it never runs under e2e.
-    """
+    """A public Welcome page in the nav: featuring the org (``public.featured_org_handle``) makes
+    it the site's home, and ``/`` redirects to it."""
     await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 

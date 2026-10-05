@@ -103,8 +103,7 @@ def step_delete_account(driver, pw):
 
 @when(parsers.parse('"{email}" deletes their account'))
 def step_delete_account_as(driver, email):
-    """Names the actor — once a scenario has a second user on stage, "they" says nothing — and
-    omits the password, which is the neighbouring scenarios' subject, not this one's."""
+    """Names the actor, since "they" is ambiguous with two users, and omits the password."""
     driver.set_acting_email(email)
     driver.delete_account(driver.PASSWORD)
 

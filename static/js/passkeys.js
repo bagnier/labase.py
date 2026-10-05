@@ -1,6 +1,5 @@
-// Passkey (WebAuthn) ceremonies: registration on the profile page, discoverable
-// sign-in on the login page. GoTrue's passkeys API speaks base64url strings;
-// navigator.credentials speaks ArrayBuffers — this file is the translation.
+// Passkey registration (profile) and sign-in (login): GoTrue speaks base64url,
+// navigator.credentials ArrayBuffers.
 
 (() => {
 	const b64urlToBuf = (s) => {

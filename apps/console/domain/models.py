@@ -1,4 +1,4 @@
-"""What the console's own routes take and answer — declared, so the schema says both."""
+"""The console routes' bodies and answers."""
 
 from typing import TypedDict
 
@@ -13,7 +13,7 @@ class AdminGrant(BaseModel):
 
 
 class AdminFlag(BaseModel):
-    """The one switch on an admin row; ``false`` is the hidden input the ticked box overrides."""
+    """``false`` comes from the hidden input the ticked box overrides."""
 
     is_admin: bool = False
 
@@ -25,7 +25,7 @@ class OrgOverrideCreate(BaseModel):
 
 
 class SettingValue(BaseModel):
-    """A setting's new value, as text — the group's declared type coerces and refuses it."""
+    """As text; the declared type coerces or refuses it."""
 
     value: str = ""
 
@@ -34,8 +34,6 @@ class SettingValue(BaseModel):
 
 
 class SettingView(TypedDict):
-    """A declared setting paired with its stored value, for rendering the admin page."""
-
     key: str
     type: SettingType
     label: str
@@ -44,15 +42,11 @@ class SettingView(TypedDict):
 
 
 class EventsByApp(TypedDict):
-    """Every declared event kind for one app — the full catalogue, wired or not."""
-
     app: str
     kinds: list[str]
 
 
 class OverviewRow(BaseModel):
-    """One app's console tile: its key, title and switch, plus whatever lines it reports."""
-
     model_config = ConfigDict(extra="allow")
 
     key: str
@@ -86,8 +80,6 @@ class Reaction(BaseModel):
 
 
 class EventRow(BaseModel):
-    """One event with a durable consumer: its owner and each reaction to it."""
-
     kind: str
     owner: str
     reactions: list[Reaction]

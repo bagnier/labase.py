@@ -1,10 +1,7 @@
-# Production topology: the app (Hypercorn) behind Caddy (automatic HTTPS).
-# Secrets come from an uncommitted production env file — never baked into the image.
+# The app behind Caddy; secrets from an uncommitted env file. Runbook: docs/production.md.
 #
 #   ENV_FILE=../.env.production DOMAIN=app.example.com ACME_EMAIL=ops@example.com \
 #     docker compose -f docker/docker-compose.prod.yml up -d --build
-#
-# Full runbook: docs/production.md.
 services:
   app:
     build:
@@ -16,12 +13,11 @@ services:
     environment:
       # Activates the boot-time preflight gate (apps/shared/settings/preflight.py).
       ENVIRONMENT: production
-      # Safe here and only here: the app is `expose`d, not published, so Caddy is the
-      # sole ingress and its X-Forwarded-For can be trusted to key the rate limiter.
+      # Safe only because Caddy is the sole ingress (`expose`, not published).
       TRUST_FORWARDED_FOR: "true"
-      # Git SHA, so error-tracking regression detection works across deploys.
+      # Lets issues detect a regression across deploys.
       APP_VERSION: ${APP_VERSION:-dev}
-      # Seconds to drain in-flight requests on SIGTERM (see stop_grace_period).
+      # Seconds to drain requests on SIGTERM, within stop_grace_period.
       GRACEFUL_TIMEOUT: ${GRACEFUL_TIMEOUT:-25}
     expose:
       - "8000"

@@ -1,9 +1,4 @@
-"""`TodoRepository`'s bounded read of the open items, run against a real, RLS-enforcing session.
-
-The dashboard overview needs an org's topmost open items without loading every task it has
-(done or not) — this holds `recent_open`'s contract (bounded, done items skipped, ordered by
-`position` rather than by creation order) in isolation from the overview that calls it.
-"""
+"""`TodoRepository.recent_open`: bounded, done tasks skipped, by `position`."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -22,7 +17,7 @@ from tests.rls import acting_as
 async def _an_org(session: AsyncSession) -> AsyncGenerator[tuple[uuid.UUID, uuid.UUID]]:
     owner = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, owner):
@@ -38,9 +33,7 @@ async def _an_org(session: AsyncSession) -> AsyncGenerator[tuple[uuid.UUID, uuid
 
 @pytest.mark.asyncio
 async def test_recent_open_orders_by_position_not_by_creation_order(db_session: AsyncSession):
-    """`oldest` is moved to the top after every item is created, so a query that ordered by id
-    (mint order) or by insertion order instead of `position` would return a different, wrong
-    pair — and done items are skipped regardless of where they sit."""
+    """`oldest` is moved to the top, so ordering by id would fail."""
     async with _an_org(db_session) as (org_id, owner_id):
         repo = TodoRepository(db_session, org_id)
         oldest = await repo.add(owner_id, "Oldest")

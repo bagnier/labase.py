@@ -1,4 +1,4 @@
-"""Password management — the auth surface other contexts may call (profile's form)."""
+"""Password checks and changes, for other contexts (the profile)."""
 
 from supabase_auth.errors import AuthApiError
 
@@ -11,7 +11,7 @@ class WrongPassword(Exception):
 
 
 async def verify_password(email: str, current_password: str) -> None:
-    """Re-authenticate before a sensitive action (deletion…); raises `WrongPassword`."""
+    """Before a sensitive action (deletion); raises `WrongPassword`."""
     try:
         await login(email, current_password)
     except AuthApiError as exc:
@@ -21,14 +21,10 @@ async def verify_password(email: str, current_password: str) -> None:
 async def change_password(
     email: str, current_password: str, new_password: str, session_access_token: str
 ) -> None:
-    """Re-authenticate with the current password, then set the new one.
+    """Check the current password, then set the new one.
 
-    The update itself runs on the caller's own session token — a fresh
-    password-only login is AAL1 and GoTrue rejects the update when the
-    account has MFA enabled, requiring the session's already-verified AAL2.
-
-    Raises `WrongPassword` when the current password is wrong and
-    `PasswordUpdateError` (user-safe message) when GoTrue refuses the new one.
+    The update uses the caller's session token: a fresh password login is AAL1, which GoTrue
+    refuses for an account with MFA. Raises `WrongPassword` or `PasswordUpdateError`.
     """
     await verify_password(email, current_password)
     await update_password(session_access_token, new_password)

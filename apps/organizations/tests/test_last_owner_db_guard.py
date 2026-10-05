@@ -1,9 +1,5 @@
-"""The last-owner invariant has a DB backstop, not just the Python domain guard.
-
-`ensure_not_last_owner` only protects the in-app routes; a raw PostgREST/supabase-js client
-holding the JWT can DELETE/UPDATE memberships directly. This drives the trigger the way
-that client would — direct SQL on the ``authenticated`` RLS session, bypassing the service.
-"""
+"""The last-owner trigger, driven as a PostgREST client holding a JWT would: raw SQL on the
+``authenticated`` session, past ``ensure_not_last_owner``."""
 
 import uuid
 
@@ -25,8 +21,7 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
     uid2 = create_user(email2, "Test1234!")
     try:
         async with acting_as(db_session, uid1):
-            # One savepoint holding every seeded row; rolled back before delete_user so the
-            # FK KEY SHARE locks on auth.users are released (else the GoTrue delete deadlocks).
+            # Rolled back before delete_user, releasing the FK locks the GoTrue delete waits on.
             outer = await db_session.begin_nested()
             try:
                 org = await OrganizationRepository(db_session).create_with_owner(
@@ -34,7 +29,6 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
                 )
                 await db_session.flush()
 
-                # Direct DELETE of the sole owner is rejected by the DB trigger.
                 with pytest.raises(IntegrityError) as exc:
                     async with db_session.begin_nested():
                         await db_session.execute(
@@ -43,7 +37,6 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
                         )
                 assert "last owner" in str(exc.value).lower()
 
-                # Demoting the sole owner to member is rejected the same way.
                 with pytest.raises(IntegrityError) as exc:
                     async with db_session.begin_nested():
                         await db_session.execute(
@@ -55,7 +48,7 @@ async def test_db_trigger_blocks_orphaning_the_last_owner(db_session: AsyncSessi
                         )
                 assert "last owner" in str(exc.value).lower()
 
-                # With a co-owner present, removing one owner is allowed (no over-blocking).
+                # With a co-owner, removing one is allowed.
                 await db_session.execute(
                     text(
                         "insert into memberships (org_id, user_id, role) values (:o, :u, 'owner')"

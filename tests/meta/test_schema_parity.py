@@ -1,14 +1,5 @@
-"""Parity guard: what the ORM declares and what the database holds must be the same thing.
-
-``Base.metadata`` is a *claim* about the database — its tables, their columns and nullability,
-and the names of the indexes and constraints on them. Nothing checks that claim: SQLAlchemy
-never issues DDL in this project (the schema is versioned as plain SQL under
-``supabase/migrations/``), so a model can declare an index that exists nowhere, or stay silent
-about a column that does, and the whole suite still passes. Both drifts were real when this
-test was written.
-
-Reads the live schema back and compares. Every model module is imported by glob, so a new
-context is covered the day its models land, without anyone remembering this file.
+"""The ORM's metadata matches the live schema: SQLAlchemy issues no DDL here, so nothing else
+would notice a drift. Model modules are found by glob.
 """
 
 import importlib
@@ -30,7 +21,6 @@ _EXTRA_MODEL_MODULES = (
 
 
 def _import_every_model() -> None:
-    """Populate ``Base.metadata`` — a table is only declared once its module is imported."""
     for path in sorted(Path("apps").glob("*/domain/models.py")):
         importlib.import_module(str(path.with_suffix("")).replace("/", "."))
     for module in _EXTRA_MODEL_MODULES:
@@ -47,9 +37,9 @@ class LiveSchema:
     ) -> None:
         self.columns = columns
         self.relation_names = relation_names
-        # Every column typed by a Postgres enum, with the labels it may hold, in order.
+        # Postgres-enum columns and their labels, in order.
         self.closed_sets = closed_sets
-        # Tables carrying a `before update ... execute function set_updated_at()` trigger.
+        # Tables with a `before update … set_updated_at()` trigger.
         self.updated_at_triggers = updated_at_triggers
 
     @property
@@ -75,8 +65,7 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
-            # Indexes and constraints share one namespace here on purpose: a UNIQUE constraint
-            # is backed by an index of the same name, and a model may declare either shape.
+            # One namespace: a UNIQUE constraint is backed by a same-named index.
             relations = (
                 await conn.execute(
                     text(
@@ -105,12 +94,8 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
-            # pg_catalog, not information_schema.triggers: the latter's action_statement is
-            # `pg_get_triggerdef`'s rendering, schema-qualified only when the function isn't on
-            # the session's search_path — so matching its text would go blind to every trigger
-            # the moment `search_path_connect_args` changed. tgtype 19 is ROW|BEFORE|UPDATE
-            # (Postgres' own bit values), tgattr empty means no column list narrows which
-            # updates fire it, and tgenabled excludes one turned off with `disable trigger`.
+            # pg_catalog, not information_schema, whose text depends on the search_path.
+            # tgtype 19: ROW|BEFORE|UPDATE; empty tgattr: no column list; tgenabled: not disabled.
             updated_at_triggers = (
                 await conn.execute(
                     text(
@@ -174,7 +159,7 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
         str(constraint.name)
         for table in Base.metadata.tables.values()
         for constraint in table.constraints
-        # An unnamed constraint (a bare primary key) has nothing to compare against.
+        # An unnamed constraint has nothing to compare.
         if isinstance(constraint.name, str)
     }
 
@@ -186,12 +171,7 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
 def test_every_timestamped_table_carries_the_set_updated_at_trigger(
     live_schema: LiveSchema,
 ) -> None:
-    """`Timestamped` (`apps/shared/persistence/base.py`) promises that `updated_at` is "also
-    maintained by a DB trigger, so a write through PostgREST or psql is stamped exactly like a
-    write through the ORM" — a promise the Python-side ratchet
-    (`tests/meta/test_conventions.py::test_no_repository_assigns_updated_at_from_the_python_clock`)
-    cannot see. Every mapped table declaring an `updated_at` column is a `Timestamped` table,
-    since only that mixin ever adds one."""
+    """Every table with an `updated_at` (only `Timestamped` adds one) has its trigger."""
     timestamped = {table.name for table in Base.metadata.tables.values() if "updated_at" in table.c}
 
     missing = sorted(timestamped - live_schema.updated_at_triggers)
@@ -200,12 +180,8 @@ def test_every_timestamped_table_carries_the_set_updated_at_trigger(
 
 
 def test_every_closed_set_column_is_a_python_enum(live_schema: LiveSchema) -> None:
-    """ "A constraint the domain must uphold is expressed as a constrained type wherever it can
-    be" — a column the database closes over a set of labels is the case where it always can. So
-    every such column is mapped through a ``StrEnum`` spelling exactly those labels, in order,
-    and a fifth role or a sixth status is a type error before it is a constraint violation. The
-    converse holds too: an enum the ORM declares that the database does not close is a check
-    Python is keeping alone."""
+    """(AGENTS: invariants are types, not checks) Each Postgres enum maps to a ``StrEnum`` with
+    the same labels, and the converse."""
     declared = {
         (table.name, column.name): [member.value for member in column.type.enum_class]
         for table in Base.metadata.tables.values()

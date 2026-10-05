@@ -1,17 +1,10 @@
-"""A form is JSON at the door.
+"""A form is JSON at the door (AGENTS: a form is JSON at the door).
 
-One handler answers a browser's form and an API caller's JSON (AGENTS: every business endpoint
-has two faces). FastAPI documents and validates a JSON body from the handler's signature; a body
-that may also arrive ``application/x-www-form-urlencoded`` it can neither describe nor parse into
-the same model. So the form is re-encoded as JSON before routing, and every mutation declares one
-Pydantic body — the schema then says what each takes, and nothing reads ``request.form()``.
+FastAPI can document and validate a JSON body, not a urlencoded form parsed into the same model,
+so this middleware re-encodes the form before routing. Multipart passes through untouched.
 
-Plain ASGI, like the other request middlewares: the body is read once here and replayed to the
-app as a single JSON message. Multipart (a file upload) is not a form in this sense and passes
-through untouched. A repeated key keeps its last value, as ``dict(request.form())`` always did —
-it is how a checkbox is made to say ``false``: a hidden input before it, same name, that the
-ticked box overrides. A blank value stays a blank string, so a handler can still tell "sent
-empty" from "not sent".
+A repeated key keeps its last value: a hidden ``false`` input before a checkbox of the same name
+is how an unticked box says ``false``. A blank value stays ``""``, distinct from "not sent".
 """
 
 import json
@@ -30,7 +23,7 @@ def _is_form(scope: Scope) -> bool:
 
 
 def _fields(pairs: list[tuple[str, str]]) -> dict[str, str]:
-    return dict(pairs)  # last value wins on a repeated key
+    return dict(pairs)
 
 
 async def _whole_body(receive: Receive) -> bytes:
@@ -43,8 +36,6 @@ async def _whole_body(receive: Receive) -> bytes:
 
 
 class FormAsJson:
-    """Re-encode a urlencoded form body as JSON, so the handler sees one body shape."""
-
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
@@ -68,7 +59,7 @@ class FormAsJson:
         async def receive_json() -> Message:
             nonlocal replayed
             if replayed:
-                return await receive()  # anything after the body — a disconnect — is the client's
+                return await receive()  # e.g. a disconnect
             replayed = True
             return {"type": "http.request", "body": encoded, "more_body": False}
 

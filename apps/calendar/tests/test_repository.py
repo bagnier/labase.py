@@ -1,9 +1,4 @@
-"""`CalendarEventRepository.upcoming`'s bound, run against a real, RLS-enforcing session.
-
-The dashboard overview needs an org's soonest upcoming events without loading every future one
-it has — this holds `upcoming`'s contract (past events excluded, bounded, ordered by start
-time rather than by creation order) in isolation from the overview that calls it.
-"""
+"""`CalendarEventRepository.upcoming`: bounded, past events excluded, by start time."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -25,7 +20,7 @@ from tests.rls import acting_as
 async def _an_org(session: AsyncSession) -> AsyncGenerator[tuple[uuid.UUID, uuid.UUID]]:
     owner = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, owner):
@@ -41,8 +36,7 @@ async def _an_org(session: AsyncSession) -> AsyncGenerator[tuple[uuid.UUID, uuid
 
 @pytest.mark.asyncio
 async def test_upcoming_orders_by_start_time_not_by_creation_order(db_session: AsyncSession):
-    """Inserted out of chronological order, so a query that ordered by id (mint order) or by
-    insertion order instead of `starts_at` would return a different, wrong pair."""
+    """Inserted out of order, so ordering by id would fail."""
     test_clock.set_current_date("2024-06-01")
     async with _an_org(db_session) as (org_id, owner_id):
         repo = CalendarEventRepository(db_session, org_id)

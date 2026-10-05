@@ -1,13 +1,4 @@
-"""How the tasks context plugs into the running app.
-
-``apps/tasks`` is the *read* side of the durable queue: the screen that says what work the async
-substrate still owes and what it ran. The queue itself — the table, the worker, the retry and park
-— stays in ``apps/shared/queue``, a foundation every app enqueues onto. This app never writes to
-it; it only reads what the substrate and the log sink already recorded.
-
-NOTE: mounted BEFORE the console context so its /console/tasks route registers ahead of the
-console's /console/{app} catch-all.
-"""
+"""The tasks mount: the read side of ``apps/shared/queue``, which it never writes."""
 
 from apps.console.contract.overviews import ConsoleOverview, ConsoleOverviewQuery
 from apps.shared.integration.host import Host, MountPhase
@@ -25,11 +16,9 @@ def mount(host: Host) -> None:
 
 
 async def _overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    """Console tile → the async substrate's backlog. Parked first, because that is the number that
-    means work nobody will redo: an issue was opened for the *bug*, and the row is still owed."""
+    """The console tile: rows owed per state, parked first, as nobody will redo them."""
     counts = await count_unfinished_tasks(query.session)
-    # Every state that has rows, worst first — "nothing owed" is a claim about the whole queue,
-    # and a healthy server still holds the recurring singletons, which are owed like anything else.
+    # Recurring rows count too: a healthy server always owes them.
     lines = [f"{counts[state]} {state}" for state in TASK_STATES if counts[state]]
     return ConsoleOverview(
         key=TASKS_APP,

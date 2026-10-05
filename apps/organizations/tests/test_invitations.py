@@ -1,4 +1,4 @@
-"""Tests for invitation_router.py branches not covered by BDD scenarios."""
+"""invitation_router.py branches the scenarios do not reach."""
 
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch

@@ -1,9 +1,5 @@
-"""Console screen: server accounts (GoTrue-backed) — list, disable, enable, delete.
-
-Accounts live in auth.users, so listing and state changes go through the GoTrue
-admin API; there is no app table and no migration. Deletion follows the exact
-self-serve path (``UserDeleted`` on the bus + soft delete) — one doctrine, two
-entry points.
+"""Console screen: server accounts, through the GoTrue admin API (no app table). Deletion takes
+the self-service path: ``UserDeleted`` and a soft delete.
 """
 
 import asyncio
@@ -50,7 +46,7 @@ def _ensure_enabled(users_settings: SettingsView) -> None:
 
 
 def _list_accounts() -> list[dict[str, Any]]:
-    """Every live GoTrue account (soft-deleted filtered out), newest first."""
+    """Live accounts, newest first."""
     admin = get_admin_supabase().auth.admin
     accounts: list[dict[str, Any]] = []
     page = 1
@@ -118,9 +114,26 @@ def _done(request: Request, message: str) -> Response:
     return RedirectResponse("/console/accounts", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# The gating mutation itself lives in GoTrue, so these handlers hold no transaction of their own —
-# but they take one anyway, for the fact: on a session the write either lands or fails loudly with
-# the request, instead of being swallowed by a detached best-effort task.
+async def _guard_last_admin(
+    admin_session: AdminSession, current_user_id: uuid.UUID, user_id: str
+) -> None:
+    """Refuse to disable or delete the last admin who can act. Takes the last-admin lock (see
+    ``admin_guard``), held until ``admin_session``'s transaction ends."""
+    await lock_last_admin_guard(admin_session)
+    admins = await list_server_admins()
+    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.can_act for u in admins)
+    try:
+        ensure_not_last_admin(
+            removes_admin=True,
+            target_is_admin=target_is_admin,
+            admin_count=sum(1 for u in admins if u.can_act),
+        )
+    except LastAdminViolation as exc:
+        log.warning("settings.last_admin_violation", user_id=str(current_user_id), target=user_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+# The mutation is GoTrue's; the session is for the fact, which lands or fails with the request.
 @accounts_router.post("/{user_id}/disable", responses=json_and_html(Message))
 async def disable_user(
     request: Request,
@@ -131,6 +144,7 @@ async def disable_user(
 ) -> Response:
     _ensure_enabled(users_settings)
     _self_guard(current_user.id, user_id)
+    await _guard_last_admin(admin_session, current_user.id, user_id)
     admin = get_admin_supabase().auth.admin
     await asyncio.to_thread(admin.update_user_by_id, user_id, {"ban_duration": BAN_FOREVER})
     await events.emit(
@@ -166,26 +180,11 @@ async def delete_user(
 ) -> Response:
     _ensure_enabled(users_settings)
     _self_guard(current_user.id, user_id)
-    # Serializes against a concurrent self-deletion (apps/profile) or another console delete
-    # racing the same invariant through a different gate (issue #36) — held on admin_session,
-    # released at its commit below.
-    await lock_last_admin_guard(admin_session)
-    admins = await list_server_admins()
-    target_is_admin = any(u.user_id == uuid.UUID(user_id) and u.can_act for u in admins)
-    try:
-        ensure_not_last_admin(
-            removes_admin=True,
-            target_is_admin=target_is_admin,
-            admin_count=sum(1 for u in admins if u.can_act),
-        )
-    except LastAdminViolation as exc:
-        log.warning("settings.last_admin_violation", user_id=str(current_user.id), target=user_id)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    await _guard_last_admin(admin_session, current_user.id, user_id)
     await events.emit(
         AccountDeletedByAdmin(user_id=current_user.id, entity_id=uuid.UUID(user_id)), admin_session
     )
-    # entity_id is the removed user's pk as a uuid (GoTrue ids are uuids) — matches the profile-side
-    # self-deletion emit, so both UserDeleted paths carry the one shape the forget consumers key on.
+    # Same shape as the self-deletion's UserDeleted, which the cleanup consumers key on.
     await events.emit(
         UserDeleted(user_id=current_user.id, entity_id=uuid.UUID(user_id)), session=admin_session
     )

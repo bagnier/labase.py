@@ -1,7 +1,5 @@
-{# The rows' standalone envelope. This is what the timeline routes answer to HTMX: parsed on its
-   own it is a valid table (no foster-parenting), and both consumers extract the rows with
-   `hx-select="tbody > tr"` — the polling tbody in index.html, and the load-older button in
-   _rows.html, which replaces itself with the next batch. #}
+{# The rows wrapped in a valid table, as HTMX answers them; the polling tbody and the load-older
+   row pick them out with `hx-select="tbody > tr"`. #}
 <table>
   <tbody>
     {% include "timeline/_rows.html" %}

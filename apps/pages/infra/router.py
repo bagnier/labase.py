@@ -94,9 +94,8 @@ async def _resolve_org_role(
     org_handle: str,
     current_user: OptionalCurrentUser,
 ) -> tuple[OrganizationRead, OrgRole | None]:
-    """The org — its handle is in the URL, public by nature — and the caller's role in it
-    (``None`` if anonymous or outside it). Pages are then read on ``rls`` either way: the table
-    for a member, ``public_pages`` for anyone else, so the database decides what each sees."""
+    """The org and the caller's role in it, ``None`` for an outsider. Pages are read on ``rls``
+    either way, so the database decides what each sees."""
     org = or_404(await org_by_handle(admin, org_handle))
     role = await role_in_org(rls, org.id, current_user.id) if current_user else None
     return org, role
@@ -108,8 +107,7 @@ async def _visible_page(
     role: OrgRole | None,
     ref: str | uuid.UUID,
 ) -> Page:
-    """The page a slug or an id names, as ``role`` may see it — a visitor outside the org only
-    among the public pages."""
+    """The page named by a slug or id, as ``role`` may see it."""
     if role is None:
         page = await public_page(rls, org_id, ref)
     elif isinstance(ref, str):
@@ -134,7 +132,7 @@ async def create_page(
 ) -> Response:
     title = body.title.strip()
     if not title:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title is required")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title is required")
     content = body.content
     slug = slugify(body.slug or title) or "page"
     if await repo.slug_taken(slug):
@@ -146,7 +144,6 @@ async def create_page(
         ),
         repo.session,
     )
-    # HTMX form submit navigates via HX-Redirect; plain HTML gets a 303 to the same edit page.
     return mutation_response(
         request,
         obj=PageRead.model_validate(page),
@@ -164,8 +161,7 @@ async def new_page(
     session: RlsSession,
     org: CurrentOrgModel,
 ) -> Response:
-    # Pure render: the empty form POSTs to create_page. A GET must never mutate, or a prefetch,
-    # a crawler or a double-click litters the org with orphan drafts.
+    # A GET never creates: a prefetch or a crawler would litter drafts.
     ctx = await fullpage_context(
         session,
         current_user,
@@ -246,8 +242,7 @@ async def update_page(
         ),
         repo.session,
     )
-    # The edit form submits via HTMX: send the browser to the (possibly re-slugged)
-    # page so the save lands on visible, rendered output instead of a silent swap.
+    # To the (maybe re-slugged) page, so the save shows its result.
     return mutation_response(
         request,
         obj=PageRead.model_validate(page),
@@ -278,8 +273,7 @@ async def delete_page(
         ),
         repo.session,
     )
-    # Deleting from the edit page (HTMX) sends the browser back to the list; deleting
-    # from a list row (X-Skip-Redirect) stays put and removes just that row client-side.
+    # From the edit page: back to the list. From a row (X-Skip-Redirect): the row goes.
     htmx_redirect_url = None
     if request.headers.get("X-Skip-Redirect") != "true":
         htmx_redirect_url = f"/{org.handle}/pages"
@@ -369,7 +363,7 @@ async def add_to_nav(
     page = or_404(await repo.by_slug(slug))
     if page.visibility == PageVisibility.draft:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "Draft pages cannot be added to navigation"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Draft pages cannot be added to navigation"
         )
     await nav_repo.add(page.id)
     item = NavItemRead(
@@ -485,9 +479,8 @@ async def view_page_by_id(
     rls: RlsSession,
     current_user: OptionalCurrentUser,
 ) -> RedirectResponse:
-    """Timeline deep link: a page's stable uuid (its ``entity_id`` on the journal) resolves to its
-    *current* slug URL. A temporary redirect on purpose — never 301: the slug can change, so the
-    uuid→slug mapping must not be cached, else an old feed link would 404 after a re-slug."""
+    """Redirect a page's uuid to its current slug URL; never a 301, which a browser would cache
+    past a re-slug."""
     org, role = await _resolve_org_role(admin, rls, org_handle, current_user)
     page = await _visible_page(rls, org.id, role, page_id)
     return RedirectResponse(f"/{org_handle}/pages/{page.slug}", status_code=307)

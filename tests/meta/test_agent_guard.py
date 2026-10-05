@@ -1,6 +1,5 @@
-"""The `Agent|Task` hooks of `.claude/settings.json` — run by `/bin/sh`, which is dash on the
-Ubuntu runner: a bashism there fails to parse, and a parse error exits 2, which the harness
-reads as a refusal of every agent call."""
+"""The `Agent|Task` hooks of `.claude/settings.json` run under dash on the runner: a bashism exits
+2, which refuses every agent call."""
 
 import json
 import os

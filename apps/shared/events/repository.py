@@ -1,14 +1,5 @@
-"""The business-events repository — the one owner of ``business_events``.
-
-:class:`EventRepository` is :class:`~apps.shared.persistence.repository.BaseRepository` over
-:class:`BusinessEventRecord`, and holds every query against the journal in one place:
-
-- **write** — append a fact through the SECURITY DEFINER writer, plus the single ``event →
-  record`` mapping (no column dict in between);
-- **delivery** — the listener's claim / mark / scan and the ``consumed_events`` ledger;
-- **read** — the RLS-scoped ``search`` and ``daily_counts`` behind the activity surfaces.
-
-Humanizing a record for a surface is not here: that is :mod:`apps.shared.events.activity`.
+"""Every query against ``business_events``: the write, the listener's delivery, the RLS-scoped
+reads. Turning a record into something readable is :mod:`apps.shared.events.activity`'s job.
 """
 
 import json
@@ -33,26 +24,22 @@ log = structlog.get_logger(__name__)
 
 
 class MaskedSecret(Exception):
-    """A field that looks like secret material reached the journal's write path.
+    """A secret-named field reached the write path, past the class-creation check.
 
-    ``BusinessEvent.__init_subclass__`` refuses one at class creation, so getting here means a
-    writer bypassed that check. Raised and caught immediately, purely to carry a live traceback
-    onto the warning that reports it — never ``log.exception``, which the capture seam folds
-    into an issue: the fact already commits once, and folding the same occurrence into an issue
-    would show it a second time, as a bug (see ``emit`` logs nothing of its own).
+    Raised and caught at once only to put a traceback on the warning.
     """
 
 
-# The base ``BusinessEvent`` fields stored in their own indexed column rather than in the JSON
-# ``payload`` — which is what lets RLS, the timeline and full-text search reach them directly.
-# ``event_to_record`` pops exactly these out of the payload and ``task_payload`` folds exactly these
-# back in, both walking this tuple, so the two halves cannot drift apart.
+# Event fields stored in their own indexed column, out of ``payload``, for RLS, the Timeline and
+# search. ``event_to_record`` pops them and ``task_payload`` folds them back, both from this tuple.
 LIFTED_COLUMNS: tuple[str, ...] = ("user_id", "org_id", "entity_id", "entity_name")
 
-# The journal's one writer: a SECURITY DEFINER function that inserts as its owner, so the request's
-# ``authenticated`` session writes the fact atomically with its mutation without a table grant
-# PostgREST would share. ``kind`` is generated and ``id``/``created_at`` keep their column defaults,
-# so none of the three is passed.
+# The journal's only writer, a SECURITY DEFINER function: the request's session writes the fact in
+# its own transaction without an INSERT grant, which PostgREST would expose on the same role. It
+# trusts the given ``user_id``: a durable consumer may record a fact for another actor. Auth routes
+# call it on the admin session, having no RLS identity yet; the signup trigger is the one direct
+# insert, inside GoTrue's transaction. ``kind``, ``id`` and
+# ``created_at`` come from the column definitions.
 _RECORD = sql_text(
     "SELECT record_business_event("
     ":app_name, :verb, :icon, :user_id, :user_name, :org_id, :org_name, "
@@ -64,9 +51,7 @@ _RECORD = sql_text(
 
 
 async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> None:
-    """Append a fact through the writer function on ``session`` (its transaction). ``record`` is the
-    typed carrier :func:`event_to_record` (or the explicit-column writer) already built — the one
-    ``event → record`` shape — read off as the function's arguments."""
+    """Append ``record`` through the writer function, in ``session``'s transaction."""
     await session.execute(
         _RECORD,
         {
@@ -88,8 +73,7 @@ async def _append_record(session: AsyncSession, record: BusinessEventRecord) -> 
 
 
 def _report_masked_secret(field_name: str, kind: str) -> None:
-    """Shout on the log sink, not the issues screen: a warning carries the traceback without the
-    capture seam folding it into a bug the fact already recorded once."""
+    """A warning, not ``log.exception``: the capture seam would turn it into an issue."""
     try:
         raise MaskedSecret(f"{kind} carries a field named {field_name!r}")
     except MaskedSecret as exc:
@@ -103,16 +87,14 @@ def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
     for f in fields(event):
         value = getattr(event, f.name)
         if _is_secret_field_name(f.name):
-            # Defence in depth: ``__init_subclass__`` already refuses a secret-named event field, so
-            # reaching here means one slipped past (a raw or legacy writer). Mask it *and* shout —
-            # a silent mask is how the leak stayed invisible, and the log sink is what gets it seen.
+            # Fallback behind ``__init_subclass__``'s refusal: mask, and say so.
             if value is not None:
                 _report_masked_secret(f.name, event.kind)
             payload[f.name] = "***" if value is not None else None
         elif isinstance(value, uuid.UUID):
-            payload[f.name] = str(value)  # json-safe: stdlib json can't serialize a uuid.UUID
+            payload[f.name] = str(value)
         elif isinstance(value, datetime):
-            payload[f.name] = value.isoformat()  # json-safe; from_payload re-parses it back
+            payload[f.name] = value.isoformat()
         else:
             payload[f.name] = value
     return payload
@@ -121,17 +103,14 @@ def _fact_payload(event: BusinessEvent) -> dict[str, Any]:
 def event_to_record(
     event: BusinessEvent, *, user_name: str | None = None, org_name: str | None = None
 ) -> BusinessEventRecord:
-    """The one ``event → record`` conversion. Scoping (user/org/entity) and the readable names are
-    lifted to their own columns — so RLS, the timeline and full-text search reach them directly —
-    leaving only the (redacted) rest in ``payload``; ``ip_address``/``request_id`` ride in from
-    the request contextvars."""
+    """Map an event to its record: :data:`LIFTED_COLUMNS` to columns, the rest (secrets masked)
+    to ``payload``, the request's ip and id from the log contextvars."""
     ctx = get_contextvars()
     request_id = ctx.get("request_id")
     payload = _fact_payload(event)
     for lifted in LIFTED_COLUMNS:
         payload.pop(lifted, None)
-    # Dropped, not carried: the emitter's created_at is always None, and passing it would shadow the
-    # column default that is the fact's one clock.
+    # Always None at emit; the column default sets it.
     payload.pop("created_at", None)
     return BusinessEventRecord(
         app_name=event.app_name,
@@ -139,11 +118,8 @@ def event_to_record(
         icon=event.icon,
         user_id=event.user_id,
         ip_address=ctx.get("ip"),
-        # Scope is carried by the event's type, not by every event: only an OrgScoped fact names
-        # an org. The column stays nullable — a server-wide fact legitimately has none.
         org_id=event.org_id if isinstance(event, OrgScoped) else None,
         entity_id=event.entity_id,
-        # The contextvar carries a str (structlog serializes it); the column is a uuid.
         request_id=uuid.UUID(request_id) if request_id else None,
         request_name=ctx.get("request_name"),
         payload=payload,
@@ -157,15 +133,9 @@ def event_to_record(
 
 
 def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
-    """Rebuild the async-consumer payload from a claimed record: the residual JSON ``payload`` plus
-    the lifted columns folded back in (a uuid stringified — the queue json-encodes it, and
-    ``from_payload`` re-parses it), the two correlation keys, and the record id as the dedup key and
-    causation id. The fold-back walks ``LIFTED_COLUMNS`` rather than naming each column, so it stays
-    one edit away from the pop loop it mirrors; the listener imports it.
-
-    Both correlation keys ride as strings the queue can json-encode. ``created_at`` rebuilds onto
-    the event; ``request_id`` is not an event field at all — the delivery wrapper reads it here to
-    bind the reaction's log context, and ``from_payload`` then drops it."""
+    """The queue payload for a consumer of ``record``: the event's fields as JSON-safe values,
+    plus ``event_id`` (dedup key) and ``request_id``, which the delivery wrapper binds to the
+    reaction's logs and ``from_payload`` ignores."""
     payload = dict(record.payload)
     for column in LIFTED_COLUMNS:
         value = getattr(record, column)
@@ -177,21 +147,16 @@ def task_payload(record: BusinessEventRecord) -> dict[str, Any]:
 
 
 class EventRepository(BaseRepository[BusinessEventRecord]):
-    """All ``business_events`` SQL, bound to one session.
-
-    The delivery scans read whole :class:`BusinessEventRecord` objects: the journal already has a
-    typed shape, so the delivery path reads it rather than re-deriving a narrower one of its own.
-    What stays raw ``sql_text()`` is the plumbing proper — the ``checked_at`` marker, deliberately
-    left off the fact model, the per-topic ``event_dispatch_cursors``, and the ``consumed_events``
-    / ``dispatched_consumers`` ledgers, whose ``ON CONFLICT`` reads best as SQL.
-    """
+    """All ``business_events`` SQL, bound to one session. Raw SQL only for the unmapped
+    ``checked_at`` marker, the per-topic ``event_dispatch_cursors`` and the ``consumed_events`` /
+    ``dispatched_consumers`` ledgers."""
 
     model: ClassVar[type[BusinessEventRecord]] = BusinessEventRecord
 
     # ── Write ────────────────────────────────────────────────────────────────────────────────
 
     async def record(self, event: BusinessEvent) -> None:
-        """Append a typed event to the journal on the bound session; the caller commits."""
+        """Append ``event`` to the journal; the caller commits."""
         org_id = event.org_id if isinstance(event, OrgScoped) else None
         user_name, org_name = await self.pinned_names(event.user_id, org_id)
         await _append_record(
@@ -201,31 +166,25 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
     async def pinned_names(
         self, user_id: uuid.UUID | None, org_id: uuid.UUID | None
     ) -> tuple[str | None, str | None]:
-        """Resolve the actor's handle and the org's name *now*, to store them on the record.
+        """The actor's and the org's names as they read now, in one query on the caller's session.
 
-        One round trip for both: the write path already sat on a query for the handle, and a second
-        one per emitted fact would double the cost of every business mutation. Both are read on the
-        caller's session, so they see the same transaction the fact commits with.
-
-        Profiles are ``own read`` under RLS, so a member cannot resolve a co-member's handle at read
-        time; an org can be renamed or deleted outright. Pinning both here is what keeps the journal
-        legible later."""
+        Falls back to the email when the account has no ``handle`` yet: it gets one on its first
+        visit to ``/profile`` (``ProfileRepository.auto_handle``)."""
         if not user_id and not org_id:
             return None, None
         try:
             names = (
                 await self.session.execute(
                     sql_text(
-                        "select (select handle from profiles where user_id = :u),"
+                        "select (select coalesce(handle, email) from profiles where user_id = :u),"
                         "       (select name from organizations where id = :o)"
                     ),
                     {"u": user_id, "o": org_id},
                 )
             ).first()
         except Exception as exc:
-            # The fact is still written, without the names — which is the right trade on the
-            # request's critical path, and a loss that is permanent: the journal outlives the
-            # profile and the org, so nothing can pin them later. Absorbed, hence a warning.
+            # The fact is still written, without names: losing them for good beats failing the
+            # action.
             log.warning("business_event.names_unpinned", exc_info=exc)
             return None, None
         return (names[0], names[1]) if names else (None, None)
@@ -233,13 +192,9 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
     # ── Delivery ─────────────────────────────────────────────────────────────────────────────
 
     async def claim_unchecked(self, batch: int) -> list[BusinessEventRecord]:
-        """``SKIP LOCKED`` so N instances never double-claim; the caller marks them checked in the
-        same transaction. ``checked_at`` is queue mechanics, not part of what happened, so the
-        model does not map it (see :mod:`apps.shared.events.models`) — hence the raw predicate in
-        an otherwise ORM query. Bounds the *routability* check alone (an unrecognized ``kind``
-        surfaced as an issue): per-consumer delivery is a separate, per-topic cursor (see
-        :meth:`facts_above_cursor`), so this marker no longer gates whether a consumer gets its
-        task."""
+        """Lock up to ``batch`` unchecked facts, skipping those another instance holds; the caller
+        marks them checked in the same transaction. Bounds the routability check only: delivery
+        runs off each topic's cursor (:meth:`facts_above_cursor`)."""
         claimed = await self.session.scalars(
             select(BusinessEventRecord)
             .where(sql_text("checked_at IS NULL"))
@@ -335,17 +290,15 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
                 .order_by(BusinessEventRecord.id)
             )
         )
-        # The contiguous settled prefix, never merely the settled rows: a cursor jumped past an
-        # unsettled key would skip whatever is still to surface beneath it.
+        # The contiguous prefix: jumping past an unsettled fact could skip one surfacing below it.
         settled = list(takewhile(lambda record: record.created_at < settled_before, found))
         return found, settled[-1].id if settled else cursor
 
     async def already_consumed(self, topic: str, event_id: uuid.UUID | str) -> bool:
-        """Insert-or-nothing against the ``consumed_events`` ledger — the idempotency substrate for
-        at-least-once ``bus.on`` delivery. ``True`` means this pair is a re-delivery. Runs on the
-        handler's session, so it commits/rolls back with the handler's own writes. ``event_id`` is
-        the journal record's uuid — it arrives as a string when replayed off the JSON queue, so the
-        ``CAST(... AS uuid)`` normalizes both forms."""
+        """Record the delivery in the ``consumed_events`` ledger; ``True`` if it was already there.
+
+        On the handler's session, so the mark commits or rolls back with the handler's writes.
+        ``event_id`` may be a string, as replayed off the JSON queue."""
         result = await self.session.execute(
             sql_text(
                 "INSERT INTO consumed_events (consumer, event_id) "
@@ -372,9 +325,8 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
         limit: int = 100,
         offset: int = 0,
     ) -> list[BusinessEventRecord]:
-        """Newest-first read under the filters. RLS already scopes the journal to the reader (self
-        + orgs); the ``user_id``/``org_id`` filters narrow to one feed on top. ``app`` matches the
-        record's own ``app_name`` column — an equality, not a scan of the composed kind's prefix."""
+        """Newest first. RLS already limits rows to the reader's own and their orgs'; the filters
+        narrow to one feed. ``text`` also searches the pinned names."""
         query = (
             select(BusinessEventRecord)
             .order_by(BusinessEventRecord.id.desc())
@@ -393,10 +345,6 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
             query = query.where(BusinessEventRecord.app_name == app)
         if text:
             like = f"%{text}%"
-            # The four pinned names are searched alongside the payload, because they were *lifted
-            # out* of it (see LIFTED_COLUMNS): searching the residual payload alone meant the
-            # journal could not be searched for the very thing a fact is about — the todo's title,
-            # the org's name, the route the request took.
             query = query.where(
                 or_(
                     BusinessEventRecord.kind.ilike(like),
@@ -420,8 +368,7 @@ class EventRepository(BaseRepository[BusinessEventRecord]):
         org_id: uuid.UUID | None = None,
         days: int = 366,
     ) -> dict[date, int]:
-        """Per-day counts for the contribution calendar. Missing days don't appear — the calendar
-        builder fills the gaps. RLS-scoped like :meth:`search`."""
+        """Per-day counts, RLS-scoped; days with none are absent."""
         since = clock.now() - timedelta(days=days)
         day = cast(BusinessEventRecord.created_at, Date)
         query = (

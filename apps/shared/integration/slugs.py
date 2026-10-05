@@ -1,4 +1,4 @@
-"""Global slug namespace: validation, reservation, and cross-context uniqueness."""
+"""The URL slug namespace: validation, reserved slugs, and uniqueness across contexts."""
 
 import re
 import uuid
@@ -31,7 +31,6 @@ def validate_handle(handle: str) -> tuple[int, str] | None:
 
 
 # ── Claimed slugs ─────────────────────────────────────────────────────────────
-# Each context claims its own route prefixes in contract/integration.py via reserve().
 
 _reserved: set[str] = set()
 
@@ -45,8 +44,8 @@ def is_reserved(handle: str) -> bool:
 
 
 # ── Open-list registry ────────────────────────────────────────────────────────
-# Each context with a handle namespace registers a checker in contract/integration.py.
-# Checker signature: (session, handle, exclude_id | None) → bool (True = taken)
+
+# ``(session, handle, exclude_id)`` → whether the handle is taken in that context.
 
 OpenListChecker = Callable[[AsyncSession, str, uuid.UUID | None], Awaitable[bool]]
 
@@ -64,11 +63,8 @@ async def handle_is_available(
     exclude_from: str | None = None,
     exclude_id: uuid.UUID | None = None,
 ) -> bool:
-    """True if handle is not reserved and not taken in any registered open list.
-
-    Pass exclude_from + exclude_id to ignore the calling context's own entity
-    (needed when checking availability for an update, not a creation).
-    """
+    """Neither reserved nor taken in any context. On an update, ``exclude_from`` and
+    ``exclude_id`` ignore the entity being renamed."""
     if is_reserved(handle):
         return False
     for name, checker in _open_lists.items():
@@ -85,7 +81,7 @@ async def unique_handle(
     exclude_from: str | None = None,
     exclude_id: uuid.UUID | None = None,
 ) -> str:
-    """Return base or base-N (first available across all registered namespaces)."""
+    """``base``, or the first available ``base-N``."""
     candidate = base
     n = 2
     while not await handle_is_available(

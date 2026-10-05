@@ -25,15 +25,11 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def queue_isolation():
-    """Fresh engines per test (loop binding) and a clean handler registry/table.
+    """Fresh engines, an empty table and handler registry, restored afterwards.
 
-    The whole table is emptied up front: a prior in-process E2E server may have
-    planted recurring singletons in the (disposable) test schema, and a tick
-    running with a reset registry would claim and park them mid-test.
-
-    The registry is snapshotted and restored (not just cleared): apps.main — imported by the
-    e2e drivers — registers the real task handlers at mount, and a later e2e test relies on them
-    still being there. Clearing without restoring would silently unregister the app's consumers.
+    The table is emptied up front: an earlier e2e server may have planted recurring rows that a
+    tick would claim and park. The registry is restored, not just cleared: later e2e tests need
+    the handlers ``apps.main`` registered.
     """
     _clear_engine_caches()
     saved_handlers = dict(_handlers)
@@ -78,8 +74,6 @@ async def _row(topic: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_a_task_rolls_back_with_the_transaction_that_enqueued_it():
-    """The outbox half of `enqueue()`: it writes through the caller's session, so a business
-    transaction that rolls back takes its task with it — nothing is left to run."""
     topic = f"test.outbox_{uuid.uuid4().hex}"
 
     async with db.admin_session_factory()() as session:
@@ -121,19 +115,19 @@ async def test_failing_task_retries_then_parks():
     await _enqueue_committed(topic, max_attempts=2)
     worker = TaskWorker(interval_seconds=1)
 
-    assert await worker.tick() == 1  # attempt 1 → retry scheduled with backoff
+    assert await worker.tick() == 1  # attempt 1: retry scheduled
     first = await _row(topic)
     assert first["failed_at"] is None
     assert first["attempts"] == 1
     assert "boom" in first["last_error"]
 
-    async with db.admin_session_factory()() as session:  # make it claimable again now
+    async with db.admin_session_factory()() as session:  # skip the backoff
         await session.execute(
             text("UPDATE task_queue SET run_at = now() WHERE topic = :topic"), {"topic": topic}
         )
         await session.commit()
 
-    assert await worker.tick() == 1  # attempt 2 = max_attempts → parked
+    assert await worker.tick() == 1  # attempt 2 = max_attempts: parked
     assert (await _row(topic))["failed_at"] is not None
 
 
@@ -177,7 +171,7 @@ async def test_recurring_task_reenqueues_next_run():
 
     register_task_handler(topic, handler)
     await ensure_scheduled(topic, every_seconds=3600)
-    await ensure_scheduled(topic, every_seconds=3600)  # idempotent
+    await ensure_scheduled(topic, every_seconds=3600)
 
     assert await TaskWorker(interval_seconds=1).tick() == 1
     assert len(runs) == 1
@@ -196,9 +190,7 @@ async def test_recurring_task_reenqueues_next_run():
 
 @pytest.mark.asyncio
 async def test_purge_drops_only_finished_tasks_past_retention():
-    """A done row is a receipt, not work — and nothing ever deleted them: a dev database grew
-    65k of them in two weeks. Pending and parked rows are still owed something (a run, a triage),
-    so age alone never removes those."""
+    """Pending and parked rows are still owed something, whatever their age."""
     async with db.admin_session_factory()() as session:
         await session.execute(
             text(
@@ -226,8 +218,6 @@ async def test_purge_drops_only_finished_tasks_past_retention():
 
 @pytest.mark.asyncio
 async def test_a_failure_the_queue_will_retry_is_not_captured_as_a_bug(log_chain):
-    """A retry is the queue's own lifecycle, not a defect: capturing it opens an issue on every
-    transient blip, and nothing closes that issue when the very next attempt succeeds."""
     topic = f"test.retry_{uuid.uuid4().hex}"
 
     async def handler(session, payload):
@@ -244,10 +234,8 @@ async def test_a_failure_the_queue_will_retry_is_not_captured_as_a_bug(log_chain
 
 @pytest.mark.asyncio
 async def test_a_topic_no_mount_handles_is_captured_as_a_bug(log_chain):
-    """A task nobody registered a handler for parks on its very first claim, and parking is as
-    final as exhausting the retries — but this path never raised, so it left a bare ``log.error``,
-    which is precisely the level the capture seam ignores. Disabling an app is enough to reach it:
-    its recurring rows outlive the mount that used to answer them."""
+    """It parks on its first claim, as final as exhausted retries (a disabled app's recurring
+    rows)."""
     topic = f"test.orphan_{uuid.uuid4().hex}"
     await _enqueue_committed(topic)
     capture._QUEUE.clear()
@@ -259,9 +247,7 @@ async def test_a_topic_no_mount_handles_is_captured_as_a_bug(log_chain):
 
 @pytest.mark.asyncio
 async def test_an_unhandled_topic_carries_its_delivery_context_in_the_issue_it_opens(log_chain):
-    """The same correlation keys have to join `queue.unhandled_topic` to the emitting request too:
-    this path opens on the very first claim, before a handler is even looked up — so the binding
-    has to start ahead of that lookup, not merely around a handler call that never happens here."""
+    """The binding starts before the handler lookup, since no handler runs here."""
     topic = f"test.orphan_ctx_{uuid.uuid4().hex}"
     request_id, event_id, user_id, org_id = (uuid.uuid7() for _ in range(4))
     await _enqueue_committed(
@@ -288,8 +274,6 @@ async def test_an_unhandled_topic_carries_its_delivery_context_in_the_issue_it_o
 
 @pytest.mark.asyncio
 async def test_a_task_parked_for_good_is_captured_as_a_bug(log_chain):
-    """Retries exhausted — nobody will ever run this task again, so the failure is final and an
-    issue is the only place it still shows up."""
     topic = f"test.parked_{uuid.uuid4().hex}"
 
     async def handler(session, payload):
@@ -306,11 +290,8 @@ async def test_a_task_parked_for_good_is_captured_as_a_bug(log_chain):
 
 @pytest.mark.asyncio
 async def test_a_parked_task_carries_its_delivery_context_in_the_issue_it_opens(log_chain):
-    """A durable reaction's payload carries the originating ``request_id``, the fact's own
-    ``event_id``, ``user_id`` and ``org_id`` — the keys the Timeline correlates a fact and its
-    reaction's lines on. Once retries are exhausted the failure is logged one frame above the
-    handler that raised, after the wrapper's own binding around the handler call has already
-    exited — so the issue it opens must still carry them, read straight off the payload."""
+    """``request_id``, ``event_id``, ``user_id`` and ``org_id``, read off the payload: the
+    failure is logged outside the handler's own binding."""
     topic = f"test.parked_ctx_{uuid.uuid4().hex}"
     request_id, event_id, user_id, org_id = (uuid.uuid7() for _ in range(4))
 
@@ -343,13 +324,7 @@ async def test_a_parked_task_carries_its_delivery_context_in_the_issue_it_opens(
 
 @pytest.mark.asyncio
 async def test_a_parked_task_names_itself_in_the_issue_it_opens(log_chain):
-    """The pivot off the issue and back to the row that is still owed.
-
-    ``task_id`` rode the line as a ``uuid.UUID``, and the capture processor keeps only scalars —
-    so the occurrence carried the topic and lost the one value that identifies *which* task. The
-    log line kept it (its payload encodes with ``default=str``), which is what made the gap read
-    like a rendering detail rather than a broken pivot.
-    """
+    """``task_id`` as a string: capture keeps only scalar context, and the admin needs the row."""
     topic = f"test.parked_{uuid.uuid4().hex}"
 
     async def handler(session, payload):

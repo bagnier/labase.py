@@ -1,19 +1,6 @@
-"""The sign-up seeding chain's actor-gone guard.
-
-``create_personal_org`` (a durable consumer of ``auth.user_created``) and every app's welcome
-seeder (durable consumers of ``organizations.created``, routed through ``seed_org_welcome``) run
-off the journal, after the actor may already be gone — self-deleted between the fact being
-emitted and this delivery. A vanished actor must degrade to a clean no-op, never a parked failure.
-
-The guard is a check followed by a write, which is two statements and therefore a race the check
-narrows but cannot close: the write itself is the second half, and it fails with an
-``IntegrityError``. Catching that is where the trap sits — the clause names a *type*, and an
-``IntegrityError`` says nothing about which constraint broke. A handle collision and the
-last-owner trigger arrive spelled exactly like the vanished seat, so a bare ``except`` would file
-all three as ``actor_gone`` at ``info``: a line in a window that rolls over, and no issue. What
-tells them apart is asking the same question again once the transaction is rolled back — if the
-actor is still there, the failure was never about the actor, and it must reach the queue's park,
-which is what opens an issue.
+"""The sign-up chain's reactions when the user or org is gone by delivery: a clean no-op, also
+when the write races the check. An ``IntegrityError`` while both remain is another bug, left to
+the worker to retry and park.
 """
 
 import uuid
@@ -41,8 +28,7 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _fresh_engines():
-    """Each test gets its own event loop; the engines are ``lru_cache``d singletons bound to
-    whichever loop built them, so a prior test's cached engine breaks on this one's loop."""
+    """Fresh engines for this test's loop."""
     _clear_engine_caches()
     yield
     await db._admin_engine().dispose()
@@ -50,8 +36,7 @@ async def _fresh_engines():
 
 
 async def _insert_a_doomed_membership(session, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
-    """A seeder whose write really violates a foreign key — a genuine ``IntegrityError`` off the
-    driver, not a fabricated one, so the session it poisons is poisoned the same way."""
+    """A real foreign-key violation, poisoning the session as a real one does."""
     session.add(Membership(org_id=org_id, user_id=owner_id, role=OrgRole.owner))
     await session.flush()
 
@@ -74,12 +59,10 @@ async def test_user_exists_is_false_for_an_unknown_user():
 
 @pytest.mark.asyncio
 async def test_seed_org_welcome_no_ops_when_the_resolved_owner_is_gone(monkeypatch):
-    """Regression: ``get_org_owner_id`` reads a real membership row, but the owner it names can
-    still vanish before the seeder writes anything keyed on that id."""
     monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
     monkeypatch.setattr(
         "apps.organizations.contract.queries.get_org_owner_id",
-        AsyncMock(return_value=uuid.uuid7()),  # a membership pointing at a now-vanished user
+        AsyncMock(return_value=uuid.uuid7()),  # a vanished owner
     )
     seed = AsyncMock()
 
@@ -111,7 +94,6 @@ async def test_org_exists_is_false_for_an_unknown_org():
 
 @pytest.mark.asyncio
 async def test_seed_org_welcome_no_ops_when_the_owner_vanishes_during_the_seeder(monkeypatch):
-    """The half the pre-check cannot cover: there when it ran, gone by the time of the write."""
     monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
     monkeypatch.setattr(
         "apps.organizations.contract.queries.get_org_owner_id",
@@ -119,18 +101,16 @@ async def test_seed_org_welcome_no_ops_when_the_owner_vanishes_during_the_seeder
     )
     monkeypatch.setattr(
         "apps.organizations.contract.queries.user_exists",
-        AsyncMock(side_effect=[True, False]),  # there when checked, gone when asked again
+        AsyncMock(side_effect=[True, False]),
     )
 
     async with db.admin_session_factory()() as session:
-        await seed_org_welcome(session, uuid.uuid7(), _insert_a_doomed_membership)  # must not raise
+        await seed_org_welcome(session, uuid.uuid7(), _insert_a_doomed_membership)
 
 
 @pytest.mark.asyncio
 async def test_seed_org_welcome_no_ops_when_the_org_vanishes_during_the_seeder(monkeypatch):
-    """The narrower race #75 found: the owner check passes (the owner row is untouched by an
-    org deletion), but the *org* is gone by the time the seeder writes — the insert fails on
-    the org's own foreign key, not the owner's, and must degrade to the same clean no-op."""
+    """The owner remains but the org is gone: the insert fails on the org's foreign key."""
     owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
     try:
         monkeypatch.setattr("apps.organizations.contract.queries.seeding_enabled", lambda: True)
@@ -138,10 +118,10 @@ async def test_seed_org_welcome_no_ops_when_the_org_vanishes_during_the_seeder(m
             "apps.organizations.contract.queries.get_org_owner_id",
             AsyncMock(return_value=uuid.UUID(owner_id)),
         )
-        ghost_org = uuid.uuid7()  # never created, so the insert genuinely violates the org FK
+        ghost_org = uuid.uuid7()
 
         async with db.admin_session_factory()() as session:
-            await seed_org_welcome(session, ghost_org, _insert_a_doomed_membership)  # no raise
+            await seed_org_welcome(session, ghost_org, _insert_a_doomed_membership)
     finally:
         delete_user(owner_id)
 
@@ -150,9 +130,7 @@ async def test_seed_org_welcome_no_ops_when_the_org_vanishes_during_the_seeder(m
 async def test_seed_org_welcome_reraises_a_failure_neither_the_owner_nor_the_org_contradicts(
     monkeypatch,
 ):
-    """The same ``IntegrityError``, an owner and an org that both never left: not either race,
-    so not this code's to absorb. It goes back to the worker, which retries it and eventually
-    parks it into an issue."""
+    """Owner and org both remain: the error goes back to the worker."""
     owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
     try:
         async with db.admin_session_factory()() as session:
@@ -166,9 +144,7 @@ async def test_seed_org_welcome_reraises_a_failure_neither_the_owner_nor_the_org
                 "apps.organizations.contract.queries.get_org_owner_id",
                 AsyncMock(return_value=uuid.UUID(owner_id)),
             )
-            # A real org, a real owner, already an owner member of it: the seeder's insert
-            # collides on the membership primary key — a genuine bug, unrelated to either
-            # actor's presence.
+            # The insert collides on the membership primary key.
             with pytest.raises(IntegrityError):
                 await seed_org_welcome(session, org.id, _insert_a_doomed_membership)
     finally:
@@ -179,20 +155,16 @@ async def test_seed_org_welcome_reraises_a_failure_neither_the_owner_nor_the_org
 async def test_create_org_survives_the_actor_vanishing_between_the_guard_and_the_write(
     monkeypatch,
 ):
-    """Regression: the dev log caught a real ``memberships_user_id_fkey`` violation — the guard's
-    existence check and the membership insert are two separate statements, and the actor can
-    vanish in between. The write must degrade to the same clean no-op as the guard itself."""
+    """The user vanishes between the check and the membership insert."""
     monkeypatch.setattr(
         "apps.organizations.contract.integration.user_exists",
-        # The race, staged: the guard says "go" for a user who is gone by the time it is asked
-        # again — which is the question that tells this failure from any other.
         AsyncMock(side_effect=[True, False]),
     )
-    ghost = uuid.uuid7()  # never created, so the membership insert genuinely violates the FK
+    ghost = uuid.uuid7()
     event = UserCreated(user_id=ghost, entity_id=ghost, email="ghost@signup-seeding.local")
 
     async with db.admin_session_factory()() as session:
-        await _create_org(session, event)  # must not raise
+        await _create_org(session, event)
         orphaned = await session.scalar(
             select(Organization).where(Organization.name == event.email)
         )
@@ -202,10 +174,8 @@ async def test_create_org_survives_the_actor_vanishing_between_the_guard_and_the
 
 @pytest.mark.asyncio
 async def test_create_org_still_creates_a_personal_org_for_an_invitee_who_joined_first():
-    """Regression: an invitee who accepts an invitation before the worker delivers their
-    ``UserCreated`` already holds a plain membership by the time this consumer runs. The guard
-    must look for an *owned* org, not any membership at all, or that invitee never gets the
-    personal org every account is promised at sign-up."""
+    """An invitee may already be a member when ``UserCreated`` is delivered: they still get a
+    personal org."""
     owner_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
     invitee_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
     try:
@@ -242,14 +212,8 @@ async def test_create_org_still_creates_a_personal_org_for_an_invitee_who_joined
 
 @pytest.mark.asyncio
 async def test_create_org_still_creates_a_personal_org_for_a_user_who_owns_a_team_org_first():
-    """Regression (#71): a user who creates a team org through ``POST /organizations`` before
-    the worker delivers their ``UserCreated`` already owns a non-personal org by the time this
-    consumer runs. The guard must look for an owned *personal* org, not any owned org, or that
-    user never gets the personal org every account is promised at sign-up.
-
-    Also stands in for the ordinary retry case: a redelivered ``UserCreated`` must stay a
-    no-op once the personal org exists — which only holds if creation actually stamped it
-    ``is_personal``, the one thing the guard itself now reads back."""
+    """A team org created before delivery does not count; a redelivery after the personal org
+    exists is a no-op."""
     user_id = create_user(f"{uuid.uuid4()}@signup-seeding.local", "Test1234!")
     try:
         async with db.admin_session_factory()() as session:
@@ -265,7 +229,7 @@ async def test_create_org_still_creates_a_personal_org_for_a_user_who_owns_a_tea
                 email="team-owner@signup-seeding.local",
             )
             await _create_org(session, event)
-            await _create_org(session, event)  # a retried delivery must not double-create
+            await _create_org(session, event)  # redelivery
             await session.commit()
 
             memberships = await OrganizationRepository(session).list_with_role_for_user(
@@ -282,13 +246,10 @@ async def test_create_org_still_creates_a_personal_org_for_a_user_who_owns_a_tea
 
 @pytest.mark.asyncio
 async def test_create_org_reraises_a_failure_the_actor_is_still_there_to_contradict(monkeypatch):
-    """``except IntegrityError`` names a type, not a cause: a handle collision and the last-owner
-    trigger arrive spelled the same way as the vanished seat. Absorbing those as ``actor_gone``
-    would bury a real defect under an ``info`` line — so an actor who is still there sends the
-    failure back to the worker, whose park is what opens the issue."""
+    """The user remains, so the error is not theirs: back to the worker."""
     monkeypatch.setattr(
         "apps.organizations.contract.integration.user_exists",
-        AsyncMock(return_value=True),  # still there both times it is asked
+        AsyncMock(return_value=True),
     )
     ghost = uuid.uuid7()
     event = UserCreated(user_id=ghost, entity_id=ghost, email="ghost2@signup-seeding.local")

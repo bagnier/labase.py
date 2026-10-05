@@ -8,8 +8,7 @@ from apps.api_keys.domain.models import ApiKey
 from apps.shared import clock
 from apps.shared.persistence.repository import OrgScopedRepository
 
-# ``last_used_at`` is informational, so it is refreshed at most this often — never a write per
-# request.
+# ``last_used_at`` is refreshed at most this often, not on every request.
 _LAST_USED_GRANULARITY_SECONDS = 300
 
 
@@ -21,9 +20,8 @@ class ApiKeyRepository(OrgScopedRepository[ApiKey]):
 async def resolve_key_principal(
     session: AsyncSession, key_hash: str
 ) -> tuple[uuid.UUID, uuid.UUID] | None:
-    """The live key matching ``key_hash`` as (creator, org), stamping its ``last_used_at`` when
-    stale — through ``api_key_principal``, on the request's own connection: no identity exists
-    yet, so the function is what answers, not a BYPASSRLS read."""
+    """``(creator, org)`` of the live key, stamping a stale ``last_used_at``, through the
+    ``api_key_principal`` function: no identity exists yet, and no BYPASSRLS read is needed."""
     now = clock.now()
     row = (
         await session.execute(

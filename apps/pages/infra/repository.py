@@ -10,8 +10,8 @@ from apps.shared.persistence.repository import OrgScopedRepository, PositionedRe
 
 
 def _public(sql: str, **params: object):
-    """Pages read through ``public_pages`` — the database's own rule for a visitor outside the
-    org, on the RLS connection. ``sql`` selects from it as ``p``."""
+    """Pages through ``public_pages``, the database's rule for an outsider; ``sql`` selects from
+    it as ``p``."""
     return select(Page).from_statement(text(sql).bindparams(**params))
 
 
@@ -20,8 +20,7 @@ async def public_page(
     org_id: uuid.UUID,
     ref: str | uuid.UUID,
 ) -> Page | None:
-    """One of an org's public pages, by slug or id — ``None`` for any other, which a visitor
-    outside the org cannot tell from a page that does not exist."""
+    """A public page by slug or id, else ``None``, like a page that does not exist."""
     if isinstance(ref, str):
         sql = "select p.* from public_pages(:org_id) p where p.slug = :key"
     else:
@@ -67,8 +66,7 @@ class PageRepository(OrgScopedRepository[Page]):
 async def visible_pages(
     session: AsyncSession, org_id: uuid.UUID, *, role: OrgRole | None
 ) -> list[Page]:
-    """Pages visible to the requester: members/owners see every page, anyone outside the org
-    what ``public_pages`` gives them."""
+    """Every page for a member; ``public_pages`` for anyone else."""
     if role is None:
         return list(
             await session.scalars(
@@ -85,11 +83,8 @@ async def visible_pages(
 async def search_visible_pages(
     session: AsyncSession, org_id: uuid.UUID, query: str, *, role: OrgRole | None
 ) -> list[Page]:
-    """Fulltext search over the visible pages (title + body), ranked by relevance.
-
-    Uses the generated ``search_vector`` (GIN-indexed) with ``websearch_to_tsquery`` so
-    natural queries (quoted phrases, ``or``) work; falls back to recency for ties. Same
-    visibility rules as :func:`visible_pages`."""
+    """Full-text search of the visible pages, by relevance then recency;
+    ``websearch_to_tsquery`` accepts quoted phrases and ``or``."""
     if role is None:
         return list(
             await session.scalars(
@@ -118,7 +113,7 @@ class PageNavRepository(PositionedRepository[PageNavItem]):
     position_key = "page_id"
 
     async def candidates(self) -> list[NavCandidate]:
-        """All published pages with their current nav status, nav items first."""
+        """Published pages with their nav status, nav items first."""
         nav_rows = await self.all()
         nav_by_page: dict[uuid.UUID, PageNavItem] = {n.page_id: n for n in nav_rows}
         pages = list(
@@ -156,8 +151,7 @@ class PageNavRepository(PositionedRepository[PageNavItem]):
         return in_nav + not_in_nav
 
     async def nav_items(self, *, public_only: bool = False) -> list[NavItemRead]:
-        """Ordered nav items for page rendering. ``public_only`` is the view from outside the org:
-        the items ``public_nav_items`` gives, pointing at pages ``public_pages`` gives."""
+        """The nav, in order; ``public_only`` is an outsider's view."""
         if public_only:
             rows = list(
                 await self.session.scalars(

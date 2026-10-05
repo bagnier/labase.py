@@ -18,7 +18,6 @@ from apps.shared.settings.env import get_technical_settings
 
 @pytest_asyncio.fixture(autouse=True)
 async def fresh_admin_engine():
-    """The cached admin engine binds to one event loop; give each test its own."""
     db._admin_engine.cache_clear()
     db.admin_session_factory.cache_clear()
     yield
@@ -42,8 +41,7 @@ def _app(limit_string: str) -> FastAPI:
     async def ping(request: Request) -> JSONResponse:
         return JSONResponse({"pong": True})
 
-    # A unique counter key per test run: the Postgres store outlives the test, and the bucket key
-    # is module-qualified (`__qualname__`), so that is what has to be made unique.
+    # A unique bucket per run: the store outlives the test, and the key is the `__qualname__`.
     ping.__qualname__ = f"ping_{uuid.uuid4().hex}"
     _app.get("/ping")(rate_limit(limit_string)(ping))
     return _app
@@ -75,7 +73,7 @@ async def test_rate_limit_blocks_excess_requests(rate_limited_client):
 
 @pytest.mark.asyncio
 async def test_rate_limit_counts_per_client_in_shared_store(rate_limiting_enabled):
-    """Two transports (≈ two app instances) share the same Postgres counters."""
+    """Two transports stand in for two instances."""
     app = _app("2/minute")
     async with (
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as first,
@@ -100,8 +98,7 @@ async def test_rate_limit_fails_open_when_store_is_down(rate_limiting_enabled):
 
 
 class _BlackHoledSession:
-    """A session whose statement never comes back — the store behind a black-holed address, where
-    the connection is neither refused nor answered."""
+    """A store neither refusing nor answering."""
 
     async def __aenter__(self) -> Self:
         return self
@@ -117,10 +114,8 @@ class _BlackHoledSession:
 async def test_a_store_that_never_answers_fails_open_within_its_timeout(
     rate_limiting_enabled, monkeypatch
 ):
-    """Failing open only keeps the endpoint up if it happens *fast*: a store that hangs instead of
-    refusing would otherwise hold every rate-limited request for as long as the network lets it.
-    The bound is the limiter's own setting, pinned small here; the outer guard is what fails the
-    test when nothing bounds it."""
+    """The limiter's timeout is pinned small; the outer guard fails the test if nothing bounds
+    the wait."""
     monkeypatch.setattr(
         get_technical_settings(), "rate_limit_store_timeout_seconds", 0.05, raising=False
     )
@@ -139,10 +134,7 @@ async def test_a_store_that_never_answers_fails_open_within_its_timeout(
 
 @pytest.mark.asyncio
 async def test_a_store_the_limiter_cannot_reach_is_a_bug(rate_limiting_enabled):
-    """Failing open is the doctrine; failing open *quietly* is how the limiter stays off for good.
-    A store that never answered is a broken dependency, and the verdict says that is an issue —
-    logged at ``warning``, it rolled out of the log window and nobody ever learned the server had
-    been unlimited since Tuesday. One issue, not one per request: same type, same frames."""
+    """Failing open quietly would leave the server unlimited unnoticed."""
     capture._QUEUE.clear()
     async with AsyncClient(
         transport=ASGITransport(app=_app("1/minute")), base_url="http://test"
@@ -151,14 +143,12 @@ async def test_a_store_the_limiter_cannot_reach_is_a_bug(rate_limiting_enabled):
             "apps.shared.http.limiter.admin_session_factory",
             side_effect=RuntimeError("db down"),
         ):
-            assert (await client.get("/ping")).status_code == 200  # still fails open
+            assert (await client.get("/ping")).status_code == 200
 
     assert [type(captured.exc) for captured in capture._QUEUE] == [RuntimeError]
 
 
 class _Answered(Exception):
-    """A dependency that answered — the shape ``refused_status`` reads a status off."""
-
     def __init__(self, status: int) -> None:
         super().__init__(f"the store answered {status}")
         self.status = status
@@ -166,8 +156,6 @@ class _Answered(Exception):
 
 @pytest.mark.asyncio
 async def test_a_store_that_answers_no_is_not_a_bug(rate_limiting_enabled):
-    """The other half of the verdict: a dependency that *answered* said no, and saying no is an
-    ordinary outcome — never an issue, whatever the limiter then does about it."""
     capture._QUEUE.clear()
     refused = _Answered(429)
     async with AsyncClient(
@@ -192,10 +180,9 @@ async def test_rate_limit_is_noop_when_disabled():
 
 @pytest.mark.asyncio
 async def test_distinct_endpoints_do_not_share_a_bucket(rate_limiting_enabled):
-    """Two identically-limited endpoints must count independently (no `func.__name__` collision)."""
     keys: list[str] = []
 
-    async def _capture(key, window_seconds):  # record the bucket key each endpoint increments
+    async def _capture(key, window_seconds):
         keys.append(key)
         return 1
 
@@ -223,13 +210,6 @@ async def test_distinct_endpoints_do_not_share_a_bucket(rate_limiting_enabled):
 
 @pytest.mark.asyncio
 async def test_missing_request_param_fails_open_but_opens_an_issue(rate_limiting_enabled):
-    """A handler without a `request` param can't be limited — it must not silently pass.
-
-    "Loudly" used to mean ``log.error`` with no exception, which is the one level the capture
-    seam ignores: the line went to the sink, rolled out of its window two days later, and an
-    endpoint stayed unlimited with nothing on the issues screen ever saying so. The seam reads
-    "error carrying a live exception", so the wiring bug raises one to be seen.
-    """
 
     async def no_request() -> str:
         return "ok"

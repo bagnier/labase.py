@@ -1,16 +1,6 @@
-"""Liveness and readiness probes.
-
-``/health/ready`` answers the one question an orchestrator asks on a timer: can this process
-reach its database? Because it is polled — the container healthcheck every ten seconds — a
-database it cannot reach is a *repeated* failure, so the probe puts it through the same verdict
-as the background loops (:mod:`apps.shared.logs.loop`): the transition into degraded is
-the bug the console has to show, the probes after it are the same outage still running.
-
-Both paths are silent in ``RequestLogger`` while healthy — a probe every ten seconds would
-otherwise be most of the timeline — but a failing readiness probe leaves its own
-``request.finished`` line like any other 5xx. ``LoopHealth`` is what keeps *this* line, the one
-naming why, from repeating on every tick of the same outage: the transition into degraded is the
-bug, the ticks after it are the same outage still running.
+"""Liveness and readiness probes. ``/health/ready`` asks whether this process reaches its
+database; it is polled, so a failure goes through the loop verdict
+(AGENTS: a failure that repeats is one bug).
 """
 
 import structlog
@@ -26,16 +16,12 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 log = structlog.get_logger(__name__)
 
-# One per process, like the log sink's write outage: the state *is* "has this process been unable
-# to reach its database", which is a property of the process and not of one probe.
+# Per process: whether this process has been unable to reach its database.
 _health = LoopHealth(log, "health.ready")
 
 
 def readiness_failures() -> int:
-    """Consecutive failed readiness probes on *this* process — what the console tile reads.
-
-    Per-process on purpose, like the state it reports: a probe is answered by one instance and
-    says nothing about the others, so the tile names the instance rather than the deployment."""
+    """Consecutive failed readiness probes on this instance, for the console tile."""
     return _health.failures
 
 

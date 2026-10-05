@@ -17,8 +17,8 @@ OPEN_STATUSES = (IssueStatus.new, IssueStatus.unresolved, IssueStatus.regressed)
 @dataclass(frozen=True)
 class SeenOccurrence:
     issue: Issue
-    opened: bool  # the first occurrence ever for this fingerprint
-    regressed: bool  # this occurrence flipped a resolved issue back open
+    opened: bool  # first occurrence of this fingerprint
+    regressed: bool  # reopened a resolved issue
 
 
 async def see_occurrence(
@@ -62,7 +62,7 @@ async def see_occurrence(
 
 
 class IssueRepository:
-    """Console-side reads and triage — driven by the BYPASSRLS admin session."""
+    """Console reads and triage, on the admin session."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -84,7 +84,7 @@ class IssueRepository:
     async def occurrences(
         self, issue_id: uuid.UUID, before_id: uuid.UUID | None = None, limit: int = 20
     ) -> tuple[list[Occurrence], uuid.UUID | None]:
-        """Newest-first cursor page of an issue's occurrences (log-viewer pattern)."""
+        """A newest-first page of an issue's occurrences, below ``before_id``."""
         query = (
             select(Occurrence)
             .where(Occurrence.issue_id == issue_id)
@@ -98,7 +98,7 @@ class IssueRepository:
         return found[:limit], next_before_id
 
     async def daily_counts(self, issue_id: uuid.UUID, *, days: int) -> dict[str, int]:
-        """Occurrences per ISO day over the trailing window — the detail sparkline."""
+        """Occurrences per ISO day, for the sparkline."""
         since = clock.now() - timedelta(days=days - 1)
         day = func.date(Occurrence.created_at)
         per_day = await self.session.execute(
@@ -115,7 +115,7 @@ class IssueRepository:
 
 
 async def purge_old_occurrences(session: AsyncSession, retention_days: int) -> int:
-    """Retention consumer: drop occurrences past the window; issues keep their totals."""
+    """Delete occurrences past retention; issues keep their totals."""
     deleted = await session.scalar(
         text(
             "WITH purged AS ("

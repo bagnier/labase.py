@@ -10,12 +10,10 @@ def set_auth_cookies(
     refresh_token: str,
     max_age: int | None = None,
 ) -> None:
-    """Hand a session over to the caller — the single place that does.
+    """Hand a session over; the only place that does (AGENTS: signing in is one fact).
 
-    The TTL is server-wide auth policy, deliberately not org-overridable: the cookie is user-global,
-    one session across every org, set at login outside any ``/{org_handle}``. A caller may pass a
-    shorter ``max_age`` to keep a re-emitted session inside a time-boxed window (impersonation),
-    where the default long TTL would defeat the box.
+    The TTL is server-wide: one cookie serves every org. ``max_age`` shortens it to fit the
+    impersonation window.
     """
     secure = get_technical_settings().cookies_secure
     if max_age is None:

@@ -1,7 +1,5 @@
-"""``password_change``/``email_change`` branch a ``PasswordUpdateError``/``EmailChangeError`` on
-``is_refusal``: a refusal (e.g. a weak password) keeps its own message and stays out of the
-capture seam; a break (a GoTrue outage) reaches the dependency verdict as a bug (issue #106,
-same rule as #52's ``reset_password_endpoint``)."""
+"""Password and email changes: a refusal (weak password) keeps its message, a GoTrue outage is an
+issue."""
 
 from unittest.mock import patch
 

@@ -1,8 +1,5 @@
--- Multi-tenancy: organizations, their memberships and their invitations — plus the two
--- SECURITY DEFINER helpers every other app's RLS policy is written against.
---
--- Comes right after the foundation because `user_org_ids()` and `user_is_org_owner()` are the
--- vocabulary of isolation in this schema: a table is org-scoped iff its policies call them.
+-- Organizations, memberships, invitations, and the RLS helpers `user_org_ids()` and
+-- `user_is_org_owner()`: a table is org-scoped iff its policies call them.
 
 create type public.org_role as enum ('owner', 'member');
 create type public.invitation_status as enum ('pending', 'accepted', 'revoked');
@@ -14,8 +11,7 @@ create table public.organizations (
   id         uuid        primary key default public.uuidv7(),
   name       text        not null,
   handle     text        not null default '' unique,
-  -- IANA zone an org's dates are entered and displayed in (the calendar reads form input in it
-  -- and renders stored UTC instants back into it). UTC until an owner picks one.
+  -- IANA zone the org's dates are entered and shown in.
   timezone   text        not null default 'UTC',
   version    integer     not null default 1,
   created_at timestamptz not null default now(),
@@ -30,15 +26,9 @@ alter table public.organizations enable row level security;
 
 
 -- ── memberships ─────────────────────────────────────────────────────────────────────────────
--- `user_id` is an `auth.users` id, as it is on every table in this schema. The FK is DEFERRABLE
--- (kept INITIALLY IMMEDIATE, so production behaviour is unchanged): an FK to auth.users takes a
--- FOR KEY SHARE lock on the referenced row at INSERT, held until the writing transaction ends,
--- and the API test driver keeps ONE transaction open for a whole scenario. When that scenario
--- then asks GoTrue — another service, another connection, same event loop — to mutate the user,
--- GoTrue blocks on the never-committing test transaction and self-deadlocks. The driver issues
--- `SET CONSTRAINTS ALL DEFERRED` to move the check past a commit that never happens. Only tables
--- an *external* service mutates concurrently need this; app-internal FKs stay NOT DEFERRABLE so
--- tests still catch their violations immediately.
+-- The FK to auth.users is DEFERRABLE (INITIALLY IMMEDIATE): its FOR KEY SHARE lock, held by the
+-- API test driver's one open transaction, would block GoTrue mutating the user; the driver
+-- defers it. App-internal FKs stay NOT DEFERRABLE.
 
 create table public.memberships (
   org_id     uuid            not null references public.organizations(id) on delete cascade,
@@ -121,10 +111,9 @@ grant select, insert, update, delete on public.memberships   to authenticated;
 
 
 -- ── Creating an org ─────────────────────────────────────────────────────────────────────────
--- The only way an org comes to exist, and it never exists ownerless. A session that took on an
--- API role may only make itself the owner; the admin session, which takes on none, seats whoever
--- it names. `role` is read rather than `current_user`, which is this function's owner here. The
--- id and the stamp come from the app, which owns the key shape and the clock.
+-- The only way an org comes to exist, never ownerless. An API role may only seat itself; the
+-- admin session seats whoever it names (`role`, as `current_user` is the owner here). Id and
+-- stamp come from the app's key shape and clock.
 create or replace function public.create_org_with_owner(
   p_id uuid,
   p_name text,
@@ -155,24 +144,15 @@ grant select, insert, update, delete on public.memberships   to service_role;
 
 -- ── The last-owner invariant, enforced in the database ──────────────────────────────────────
 --
--- The domain service guards it on the in-app routes, but the policies above carry no last-owner
--- condition and `authenticated` holds direct DELETE/UPDATE — so a raw PostgREST client wielding
--- the JWT could delete or demote the final owner and orphan the org. This trigger closes that gap,
--- and the TOCTOU race the Python check cannot cover.
---
--- Cascades must still pass: deleting an org (cascade → memberships) or an auth user (cascade →
--- their memberships) fires this BEFORE trigger with the parent row already gone from the
--- transaction's snapshot, so the guard is skipped when either parent is absent.
+-- `authenticated` holds DELETE/UPDATE, so a PostgREST client could orphan an org; the trigger
+-- also closes the race the Python check leaves. Skipped when the org or user is gone (cascade).
 create or replace function public.prevent_last_owner_removal()
 returns trigger
 language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  -- Guard only fires when an owner row loses its owner status (a demotion or a delete).
-  -- NB: a BEFORE UPDATE trigger writes whatever row it returns — so we must never early
-  -- return OLD on a legitimate update (that would silently discard it); we only ever RAISE
-  -- to block, and otherwise fall through to the correct per-op return at the bottom.
+  -- Only RAISE: an early `return OLD` from a BEFORE UPDATE would discard a legitimate update.
   if old.role = 'owner' and not (tg_op = 'UPDATE' and new.role = 'owner') then
     if exists (select 1 from public.organizations where id = old.org_id)
        and exists (select 1 from auth.users where id = old.user_id)

@@ -1,10 +1,5 @@
-"""The middleware stack, exercised on the app the composition root actually assembled.
-
-The pieces here are unit-tested one class at a time under ``apps/shared/tests``; what no unit
-test can say is that ``apps/main.py`` still mounts them, in an order that works. So these drive
-the assembled app itself, the way a browser would — and they pick requests the CSRF middleware
-refuses before routing, so no database is touched.
-"""
+"""The middleware stack as ``apps/main.py`` assembles it, with requests refused before routing,
+so no database is touched."""
 
 import httpx
 import pytest
@@ -17,8 +12,6 @@ from apps.shared.integration.host import Host
 
 @pytest.mark.asyncio
 async def test_a_cross_site_mutation_is_rejected_by_the_assembled_app():
-    """ "Cross-site mutations are rejected by a `Sec-Fetch-Site` middleware" — held against the
-    mounted stack, not the class: a browser-shaped POST from another site gets the 403."""
     transport = httpx.ASGITransport(app=apps.main.app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -32,9 +25,6 @@ async def test_a_cross_site_mutation_is_rejected_by_the_assembled_app():
 
 @pytest.mark.asyncio
 async def test_a_served_request_leaves_exactly_one_finished_line():
-    """ "Every served request leaves one `request.finished` line" — end to end, with the sink
-    captured: one exchange, one line, carrying the outcome. A 403 we refused on purpose is the
-    `warning` tier."""
     transport = httpx.ASGITransport(app=apps.main.app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -49,9 +39,7 @@ async def test_a_served_request_leaves_exactly_one_finished_line():
 
 @pytest.mark.asyncio
 async def test_a_refused_preflight_still_leaves_its_finished_line():
-    """ "Every served request leaves one `request.finished` line" — held against a CORS preflight
-    too: with no origin configured (the default) it is CORSMiddleware itself that answers, so it
-    must sit *inside* RequestLogger rather than wrap it."""
+    """CORSMiddleware answers it, so it must sit inside RequestLogger."""
     transport = httpx.ASGITransport(app=apps.main.app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -70,9 +58,7 @@ async def test_a_refused_preflight_still_leaves_its_finished_line():
 
 @pytest.mark.asyncio
 async def test_a_request_whose_handler_raised_still_leaves_its_finished_line():
-    """The other half of the sentence — "including one whose handler raised": the exchange ends
-    as a 500 and its one line carries `error`. Driven on a fresh host wearing the foundation's
-    own mount, since the assembled app deliberately has no route that raises."""
+    """On a fresh host with the foundation mount: the real app has no raising route."""
     host = Host()
     shared_integration.mount(host)
 

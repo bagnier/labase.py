@@ -67,14 +67,13 @@ def test_order_unstudied_first_then_oldest_next_review():
         DueCard("PYA02", 2, 1, 1, date(2024, 7, 15)),
     ]
     ordered = [c.external_id for c in order_due_cards(cards)]
-    # unstudied first, then by next_review, ties by deck then card position
     assert ordered == ["PY005", "PY001", "PY002", "PYA02"]
 
 
 def test_select_due_cards_filters_then_orders():
     cards = [
-        DueCard("PY001", 3, 0, 0, date(2024, 9, 5)),  # not due (future)
-        DueCard("PY002", 0, 0, 1, None),  # unstudied → due, first
+        DueCard("PY001", 3, 0, 0, date(2024, 9, 5)),  # not due
+        DueCard("PY002", 0, 0, 1, None),  # never studied: first
         DueCard("PY003", 2, 0, 2, date(2024, 8, 20)),  # due
     ]
     assert [c.external_id for c in select_due_cards(cards, TODAY)] == ["PY002", "PY003"]
@@ -122,8 +121,6 @@ CARD_ID = uuid.uuid7()
 
 
 class _FakeReviewRepo:
-    """In-memory port double: state per card + a canned daily count."""
-
     def __init__(self, state=None, reviews_today=0):
         self._state = state
         self._reviews_today = reviews_today

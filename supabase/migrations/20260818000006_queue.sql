@@ -1,12 +1,8 @@
--- The async substrate every Postgres-as-X brick builds on: a durable task queue, the idempotency
--- ledger its at-least-once delivery needs, and the shared rate-limit counters.
+-- The durable task queue, its idempotency ledger, and the shared rate-limit counters.
 
 -- ── task_queue ──────────────────────────────────────────────────────────────────────────────
--- Claimed with FOR UPDATE SKIP LOCKED, so N app instances never double-process.
---
--- Access: the app's RLS session may only enqueue (an outbox write inside its own business
--- transaction, so a task exists iff that transaction commits); claiming, completing and retrying
--- are admin work. Never `authenticated`: a task picks its handler and the identity it runs as.
+-- The RLS session only enqueues, in its business transaction; the rest is admin work. Never
+-- `authenticated`: a task picks its handler and the identity it runs as.
 
 create table public.task_queue (
   id                uuid        primary key default public.uuidv7(),
@@ -33,8 +29,6 @@ create unique index task_queue_recurring_singleton_idx on public.task_queue (top
 
 alter table public.task_queue enable row level security;
 
--- id comes from the column default (execute on uuidv7 granted in the foundation) — no sequence
--- to grant.
 grant insert on public.task_queue to app_rls;
 
 create policy "task_queue: app enqueue"
@@ -43,14 +37,8 @@ create policy "task_queue: app enqueue"
 
 
 -- ── consumed_events ─────────────────────────────────────────────────────────────────────────
--- The idempotency ledger for durable async event consumers.
---
--- Durable fan-out is at-least-once (the listener may re-deliver after a crash between a handler's
--- commit and its task bookkeeping), so a non-idempotent consumer records each (consumer, event)
--- pair it has processed here, in the SAME transaction as its own writes: a retry then sees the
--- row and no-ops, and a rolled-back handler leaves no ledger entry.
---
--- Disposable by design — a lost entry costs at most one redundant re-delivery.
+-- Delivery is at-least-once, so a non-idempotent consumer records (consumer, event) here in its
+-- own transaction, and a redelivery no-ops. A lost row costs one redelivery.
 
 create table public.consumed_events (
   consumer    text        not null,  -- the registered consumer's queue topic
@@ -69,8 +57,7 @@ create policy "consumed_events: app mark"
 
 
 -- ── rate_limit_counters ─────────────────────────────────────────────────────────────────────
--- Shared fixed-window counters, so a limit holds across instances. Written only through the
--- admin connection: no grants, RLS on with no policy (deny-all for the API roles).
+-- Fixed-window counters shared across instances. Admin only: RLS on with no policy.
 
 create table public.rate_limit_counters (
   key          text        not null,

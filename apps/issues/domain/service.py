@@ -1,11 +1,6 @@
-"""Pure issue-tracking domain logic — fingerprinting and lifecycle.
-
-The value is not capture (trivial) but *grouping*: the fingerprint hashes the
-exception type plus the top in-app frames normalized to ``file:function`` —
-never the message, whose variable parts would shatter issues. Lifecycle: an
-occurrence landing on a resolved issue from a *different* version than the fix
-reopens it as ``regressed`` (git SHAs have no ordering, so "different" is the
-honest test).
+"""Fingerprint and lifecycle. The fingerprint hashes the exception type and the top in-app frames
+as ``file:function``, never the message, whose variable parts would split issues. A resolved issue
+seen on another version than its fix regresses: git SHAs have no order, so "another" is the test.
 """
 
 import hashlib
@@ -35,7 +30,7 @@ def in_app_frames(exc: BaseException) -> list[str]:
 
 
 def fingerprint(exc: BaseException, override: str | None = None) -> str:
-    """Group key: exception type + top in-app frames; `override` for weird cases."""
+    """``override`` replaces the computed key."""
     material = override or "|".join([type(exc).__qualname__, *in_app_frames(exc)])
     return hashlib.sha256(material.encode()).hexdigest()
 
@@ -51,12 +46,8 @@ def formatted_stack(exc: BaseException) -> str:
 def status_after_occurrence(
     current: IssueStatus, resolved_in_release: str | None, seen_version: str
 ) -> IssueStatus:
-    """The issue's status once one more occurrence lands on it.
-
-    Resolved + an occurrence from another version ⇒ the fix did not hold: regressed
-    (Sentry's most useful feature — one column and one if). Ignored stays
-    ignored; everything else keeps its triage state.
-    """
+    """The status after one more occurrence: regressed if resolved on another version, else
+    unchanged."""
     if current is IssueStatus.resolved and seen_version != (resolved_in_release or ""):
         return IssueStatus.regressed
     return current
