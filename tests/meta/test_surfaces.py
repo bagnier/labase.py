@@ -14,13 +14,14 @@ from sqlalchemy import Table
 
 import apps.main
 from apps.console.contract.overviews import ConsoleOverviewQuery
+from apps.console.infra import router as console_router
 from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.shared.events import BusinessEvent
 from apps.shared.events.bus import EventBus
 from apps.shared.events.catalog import catalog
 from apps.shared.integration.contribs import Contribs
-from apps.shared.integration.host import Host
+from apps.shared.integration.host import Host, NavItem
 from apps.shared.logs.capture import ExceptionCaptured
 from apps.shared.persistence.base import Base
 from apps.shared.settings import live
@@ -562,13 +563,23 @@ _ICON_DECLARED_RE = re.compile(
 
 
 def _icons_declared() -> dict[str, str]:
-    """Each ``icon="…"`` or typed default outside tests, with where it is."""
+    """Each ``icon="…"`` or typed default outside tests, with where it is — plus
+    ``_GROUP_DISPLAY``'s and every mounted ``NavItem``'s, read from the live objects rather than
+    pattern-matched: neither carries an ``icon`` word anywhere near its value."""
     found = {}
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
             continue
         for icon in _ICON_DECLARED_RE.findall(path.read_text()):
             found[icon] = str(path.relative_to(_ROOT))
+
+    router_site = str(Path(inspect.getfile(console_router)).relative_to(_ROOT))
+    for _title, icon, _section in console_router._GROUP_DISPLAY.values():
+        found[icon] = router_site
+
+    nav_item_site = str(Path(inspect.getfile(NavItem)).relative_to(_ROOT))
+    for item in apps.main.host.nav_items:
+        found[item.icon] = nav_item_site
     return found
 
 
@@ -595,6 +606,17 @@ def test_the_icon_walk_finds_a_classvar_default():
 def test_icon_declared_re_matches_a_plain_annotated_default():
     # `icon: str = "file-text"`, as `OrgNavItem` declares it.
     assert _ICON_DECLARED_RE.findall('icon: str = "file-text"') == ["file-text"]
+
+
+def test_the_icon_walk_finds_a_name_declared_in_a_plain_tuple():
+    # `_GROUP_DISPLAY`'s `(title, icon, section)` tuple names an icon with no `icon` word nearby.
+    assert "gear-six" in _icons_declared()
+
+
+def test_the_icon_walk_finds_an_icon_passed_positionally_to_a_nav_item():
+    # `NavItem("Pages", "note-pencil", "pages", "/pages", order=40)`: the same plain-tuple shape,
+    # and unlike `_GROUP_DISPLAY`'s "gear-six" this name is declared nowhere else either.
+    assert "note-pencil" in _icons_declared()
 
 
 def _icons_spelled_in_templates() -> dict[str, str]:
