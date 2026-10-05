@@ -31,7 +31,7 @@ class TodoApiMixin(ApiBase):
         self.response = self.client().post(self._todos_url(), json={"title": title})
 
     def seed_org_setting_override(self, app: str, key: str, value: str) -> None:
-        resolve_org = getattr(self, "_active_org_id", None)  # provided by the learning mixin
+        resolve_org = getattr(self, "_active_org_id", None)  # learning mixin
         assert resolve_org is not None
         org_id = resolve_org()
 
@@ -113,8 +113,7 @@ class TodoApiMixin(ApiBase):
 
     # ── cross-tenant isolation ────────────────────────────────────────────────
     def view_todo_list_as(self, email: str) -> None:
-        # The other tenant's org is seeded by the "is a member of" step; read its list from its
-        # own handle.
+        # Seeded by the "is a member of" step.
         slug = getattr(self, "secondary_handles", {}).get(
             email, getattr(self, "active_org_handle", "")
         )

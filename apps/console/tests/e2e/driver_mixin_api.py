@@ -20,8 +20,7 @@ class ConsoleApiMixin(ApiBase):
         super().reset_session()
 
     def sign_in_as_admin(self, email: str) -> None:
-        # Create + promote out of band (admin API) so the issued JWT carries app_metadata.role,
-        # then log in on a dedicated client — base primitives only, no cross-mixin sign_in.
+        # Promote through the admin API before login, so the JWT carries the role.
         delete_user_if_exists(email)
         set_admin_role(create_user(email, _ADMIN_PASSWORD))
         self._track_auth_email(email)
@@ -32,7 +31,6 @@ class ConsoleApiMixin(ApiBase):
         self._admin_email = email
 
     def _as_admin(self) -> None:
-        # Multi-user scenarios sign in other users after the admin; re-target the admin.
         assert self._admin_email is not None
         self.set_acting_email(self._admin_email)
 
@@ -99,10 +97,7 @@ class ConsoleApiMixin(ApiBase):
         self.drive_spread()
 
     def drive_spread(self) -> None:
-        """Apply the settings change now. A settings edit persists a ``SettingsChanged`` fact; the
-        event listener replays it to each process's ``spread`` handler off the journal. None runs
-        under the API driver (and it could not see the rolled-back transaction anyway), so drive one
-        tick on the test connection here."""
+        """Run one listener tick on the test connection: none runs under the API driver."""
         self.run(EventListener(0, session_factory=self.test_session_factory()).tick())
 
     def try_set_console_setting(self, app: str, key: str, value: str) -> None:
@@ -136,8 +131,7 @@ class ConsoleApiMixin(ApiBase):
         clear_all_admin_roles()
 
     def seed_existing_admin(self) -> None:
-        # An admin must exist so a later registrant is *not* auto-promoted by the bootstrap.
-        # Seeded straight into GoTrue (no session) to leave the acting user untouched.
+        # An admin exists, so the bootstrap promotes nobody; seeded in GoTrue directly.
         email = "seed-admin@example.com"
         delete_user_if_exists(email)
         set_admin_role(create_user(email, _ADMIN_PASSWORD))
@@ -146,16 +140,13 @@ class ConsoleApiMixin(ApiBase):
     def _register_and_login(self, email: str, password: str) -> None:
         client = self._make_client()
         client.post("/auth/register", json={"email": email, "password": password})
-        # Drain UserCreated's reactions (admin bootstrap, personal org) BEFORE login, so the issued
-        # JWT already carries the admin claim where applicable — the reactions are async now.
+        # Drain UserCreated's reactions before login, so the JWT carries any admin role.
         self.drain_task_queue()
         client.post("/auth/login", json={"email": email, "password": password})
         self._clients[email] = client
         self._track_auth_email(email)
 
     def register_and_sign_in(self, email: str) -> None:
-        # Registration fires the bootstrap (promotes the first user); the drain in
-        # _register_and_login runs it *before* the login, so the JWT carries the admin claim.
         delete_user_if_exists(email)
         self._register_and_login(email, _USER_PASSWORD)
         self.set_acting_email(email)
@@ -165,7 +156,7 @@ class ConsoleApiMixin(ApiBase):
         self._register_and_login(email, _USER_PASSWORD)
 
     def sign_in_again(self, email: str) -> None:
-        # A designation only lands in the JWT on a fresh sign-in — mint a new token.
+        # The role reaches the JWT on a fresh sign-in.
         self._clients.pop(email, None)
         self._register_and_login(email, _USER_PASSWORD)
         self.set_acting_email(email)

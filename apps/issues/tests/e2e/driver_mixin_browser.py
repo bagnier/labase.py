@@ -30,9 +30,7 @@ class IssuesBrowserMixin(BrowserBase):
         return self.page.locator("[data-issue]", has_text=title).first
 
     def _on_issues(self, *, fresh: bool = False) -> None:
-        """On the issues list, without going round by the console when it is already open.
-        ``fresh`` re-reads it: triage changes rows, and the row about to be clicked has to be
-        the one the server holds."""
+        """On the issues list; ``fresh`` reloads it after triage changed rows."""
         self.be_on("/console/issues", self.open_issues_screen, fresh=fresh)
 
     def open_issue_detail(self, title: str) -> None:
@@ -47,9 +45,8 @@ class IssuesBrowserMixin(BrowserBase):
         self.page.wait_for_selector(f"[data-status-badge]:has-text('{status}')", timeout=5000)
 
     def _back_to_the_list(self) -> None:
-        """Triage leaves the admin on an issue's detail page; the way back to the list is the
-        page's own link, which is also what a human would click."""
-        back = self.page.get_by_role("link", name="← Issues")
+        """Back from the detail page by its own link."""
+        back = self.page.get_by_role("link", name="Back to issues")
         if back.count():
             back.click()
             self.page.wait_for_selector("[data-issue]", timeout=5000)

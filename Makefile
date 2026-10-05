@@ -1,18 +1,13 @@
 .PHONY: check meta flakehunt dev up down logs env db-start db-stop db-reset db-seed promote-admin migrate schema schema-supabase test test-e2e perf-smoke ci install cloud-setup js-build lint fix finalize coverage-erase coverage-report coverage-xml coverage-html cert letsencrypt upgrade act client-gen worktree worktree-rm provision-test test-stack test-stack-rm deadcode doctor upgrade-base preflight backup-storage
 
-# Each worktree's `make dev` runs on the single dev Supabase stack with its own schema/bucket/port;
-# each checkout's tests run on a stack of their own (test-stack).
-# Compose is isolated per checkout so several `make dev` can run at once.
-# Docker compose project names allow only [a-z0-9_-], so sanitise the dir name (e.g. "labase.py").
+# Worktrees share the dev stack (own schema, bucket, port); each checkout's tests have their own
+# stack. Compose is per checkout; its project name allows only [a-z0-9_-].
 WORKTREE := $(subst .,-,$(notdir $(CURDIR)))
 COMPOSE := docker compose --env-file .env --project-name labase-$(WORKTREE) --file docker/docker-compose.yml
 
-# One test schema/bucket per `make` invocation, named after that invocation's own pid (the
-# `$(shell echo $$PPID)` subshell's parent is this running make process): two `test`/`test-e2e`/
-# `meta`/`perf-smoke` runs started together in the same checkout never share, or stomp, each
-# other's rows (issue #30). A schema outlives its own run on purpose, so a failure stays
-# inspectable — provision_schema.py sweeps any other one whose pid has since exited on its
-# next call, so nothing accumulates.
+# A test schema and bucket per `make` run, named by its pid ($$PPID of the subshell), so
+# concurrent runs never share rows. Kept after the run for inspection; provision_schema.py sweeps
+# those whose pid has exited.
 TEST_RUN_ID := $(shell echo $$PPID)
 TEST_RUN_SCHEMA := test_$(TEST_RUN_ID)
 TEST_RUN_BUCKET := org-files-test-$(TEST_RUN_ID)
@@ -30,20 +25,16 @@ js-build:
 	mkdir --parents static/css static/fonts static/js
 	npm run build
 
-# cloud-setup: provisioning for a remote "Claude Code on the web" VM.
-# No local Supabase (DB via injected environment variables, see docs/REMOTE.md)
-# — lighter than `install`. Paste as the setup script in the web UI:
-# `make cloud-setup`.
+# cloud-setup: the setup script of a "Claude Code on the web" VM, without local Supabase
+# (docs/REMOTE.md).
 cloud-setup:
 	uv sync --all-groups
 	npm install
 	$(MAKE) js-build
 	uv run playwright install --with-deps chromium
 
-# Exports under ENV_FILE=.env.test: TechnicalSettings has required fields with
-# no defaults, so importing the app needs a complete env — .env.test is the one
-# committed config (CI has no .env). Routes are env-independent, so the schema is
-# identical either way.
+# Under .env.test, the one committed env, complete enough to import the app; routes do not
+# depend on it.
 client-gen:
 	ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/export_openapi.py /tmp/openapi.json
 	uv run openapi-python-client generate --path /tmp/openapi.json --output-path client/ --overwrite
@@ -65,8 +56,8 @@ db-reset:
 db-seed:
 	PYTHONPATH=. uv run python scripts/seed.py
 
-# Create the user if missing, then promote to server admin: make promote-admin EMAIL=you@example.com [PASSWORD=…]
-# Runs from the host, so targets localhost (.env.test). Override with ENV_FILE=.env to hit a linked remote.
+# make promote-admin EMAIL=you@example.com [PASSWORD=…]: create if missing, then promote.
+# Targets .env.test's stack; ENV_FILE=.env for a linked remote.
 promote-admin:
 	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env.test) PYTHONPATH=. uv run python scripts/promote_admin.py $(EMAIL) $(PASSWORD)
 
@@ -100,29 +91,21 @@ worktree:
 worktree-rm:
 	PYTHONPATH=. uv run python scripts/worktree.py remove $(NAME)
 
-# This checkout's own test stack (scripts/test_stack.py), on the ports .env.test points at:
-# started if needed, migrations applied. test-stack-rm removes it with its volumes, and the stacks
-# of worktrees whose directory is gone (git lists them as prunable).
+# This checkout's test stack (scripts/test_stack.py). test-stack-rm removes it with its volumes,
+# and those of prunable worktrees.
 test-stack:
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/test_stack.py start
 
 test-stack-rm:
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/test_stack.py stop
 
-# Clone the test stack's public schema into this run's own schema (+ its bucket).
+# This run's schema and bucket, cloned from the test stack's public schema.
 provision-test: test-stack
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/provision_schema.py --schema $(TEST_RUN_SCHEMA) --bucket $(TEST_RUN_BUCKET) --reset
 
 # --- Quality ---
-# lint: read-only, fails on non-conforming code (used by `make ci`).
-# Per file type: ruff/ty/pyright (Python), sqlfluff (SQL migrations, lint-light — no reformat),
-# yamllint (YAML), validate-pyproject (pyproject schema), zizmor (GitHub Actions security),
-# biome (JS/CSS/JSON), gplint (.feature), djlint (Jinja2). Dockerfiles are linted by
-# droast, which runs as a self-contained GitHub Action in CI (see .github/workflows/ci.yml).
-# All Python linters are pinned dev-deps in pyproject.toml, so they resolve once in uv.lock
-# and run straight from the project env — no per-invocation resolution.
-# Depends on client-gen because client/ is generated and gitignored: pyright resolves
-# scripts/smoke.py's import through it, so a tree that never generated it lints red.
+# lint: read-only. Dockerfiles are linted by droast, in CI only. Needs client-gen: pyright resolves
+# scripts/smoke.py's import through client/.
 lint: client-gen
 	uv run ruff check .
 	uv run ruff format --check .
@@ -143,8 +126,7 @@ lint: client-gen
 deadcode:
 	uv run vulture apps
 
-# fix: auto-fixes what's fixable, re-checks typing like lint does.
-# pip-audit (network, ~6s) intentionally stays in lint/CI only.
+# fix: auto-fix, then the type checks. pip-audit (network) stays in lint.
 fix:
 	uv run ruff check --fix .
 	uv run ruff format .
@@ -165,8 +147,7 @@ upgrade:
 BASE_REMOTE ?= base
 BASE_BRANCH ?= main
 
-# Merge the latest base into a dedicated branch; resolve, `make ci`, then merge
-# into the product branch. Ownership map and protocol: docs/upgrade-base.md.
+# Merge the latest base into its own branch, then into the product (docs/upgrade-base.md).
 upgrade-base:
 	@git remote get-url $(BASE_REMOTE) >/dev/null 2>&1 || { \
 	  echo "no '$(BASE_REMOTE)' remote — one-time setup:"; \
@@ -177,83 +158,61 @@ upgrade-base:
 	git merge --no-ff $(BASE_REMOTE)/$(BASE_BRANCH) \
 	  || echo "conflicts to resolve — see docs/upgrade-base.md, then run: make ci"
 
-# doctor: reachability AND latency of the local stack (a wedged Docker proxy
-# accepts TCP but multiplies every round-trip — see scripts/doctor.py).
+# doctor: the local stack's reachability and latency (scripts/doctor.py).
 doctor: test-stack
 	env ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/doctor.py
 
 # --- Production ---
-# preflight: production config safety gate. Point it at the prod env file; exits
-# non-zero on any blocking error, so it can gate a deploy. Docs: docs/production.md.
+# preflight: the production config gate (docs/production.md).
 #   make preflight ENV_FILE=.env.production
 preflight:
 	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/preflight.py
 
-# backup-storage: mirror the Supabase Storage bucket to disk (bytes aren't in SQL dumps).
+# backup-storage: mirror the Storage bucket to disk; SQL dumps lack the bytes.
 #   make backup-storage DEST=/backups/storage ENV_FILE=.env.production
 backup-storage:
 	ENV_FILE=$(if $(ENV_FILE),$(ENV_FILE),.env) PYTHONPATH=. uv run python scripts/backup_storage.py --dest $(if $(DEST),$(DEST),backups/storage)
 
 # --- Tests ---
-# Coverage wraps pytest from the outside, never from a plugin inside it — why, and what that
-# forbids, sits next to the flags themselves in pyproject's addopts. `--parallel-mode` gives each
-# lane its own data file, which `coverage-report` combines.
-# Off by default: the inner loop asks "did I break something", which coverage does not answer —
-# and a *one-lane* figure answers a different question badly, painting two thirds of the
-# TemplateResponse sites red because the api lane never renders HTML. `ci` sets COV=1; by hand:
+# Coverage wraps pytest from outside (see pyproject's addopts), one data file per lane for
+# `coverage-report`. Off by default, and one lane alone misreads the HTML face. `ci` sets COV=1:
 #   make test COV=1 test-e2e COV=1 coverage-report coverage-html
 PYTEST = $(if $(COV),uv run coverage run --parallel-mode -m pytest,uv run pytest)
-# No wall-clock guard here on purpose. There was one, warning past a threshold derived from a
-# duration measured once — and a duration in a Makefile rots: the suite tripled in test count and
-# the warning started firing on a healthy stack, which is how a guardrail becomes noise. What it
-# was a proxy for is measured directly and cannot go stale: `test_local_stack_is_responsive`
-# times each dependency on every run and fails the suite loudly when the stack is degraded.
+# No wall-clock guard: `test_local_stack_is_responsive` checks the stack's latency directly.
 test: provision-test
 	$(TEST_ENV) $(PYTEST)
 
-# The browser lane counts too: its Hypercorn server runs in-process, so it is the only lane
-# that renders HTML — the api driver asks for JSON on every request.
-# CHROMIUM_EXECUTABLE_PATH is the one outside variable let through: a Chromium installed on the
-# machine instead of Playwright's download (Google's Chrome for Testing). Unset, it arrives empty.
+# The browser lane, the only one rendering HTML. CHROMIUM_EXECUTABLE_PATH, the one outside variable
+# let through, picks an installed Chromium; unset, it arrives empty.
 test-e2e: provision-test
 	$(TEST_ENV) CHROMIUM_EXECUTABLE_PATH="$(CHROMIUM_EXECUTABLE_PATH)" $(PYTEST) apps/ tests/e2e/drivers/ -k "scenarios or test_browser_isolation" --driver=browser
 
-# meta: the README's own lane — every claim the front page makes, each one held by a test or
-# waived in writing (tests/meta/claims.py). Worth running on a README edit rather than on a code
-# edit: reword a sentence a test holds and this is what says so, by name.
+# meta: the claims of AGENTS.md and the README (tests/meta/claims.py); run it after editing them.
 meta: provision-test
 	$(TEST_ENV) $(PYTEST) tests/meta
 
-# flakehunt: run the browser scenarios N times and aggregate failures per test — an
-# intermittent test fails a few runs out of N, where a single run only says "red" or "green".
-# No rerun plugin on purpose: a rerun hides exactly what this looks for.
+# flakehunt: run the browser scenarios N times and count failures per test. No rerun plugin: a
+# rerun hides flakes.
 #   make flakehunt N=10 [TARGET=apps/auth/tests/e2e/test_scenarios.py]
 flakehunt:
 	scripts/flakehunt.sh $(if $(N),$(N),10) $(TARGET)
 
-# Perf smoke: boots the app on the test schema, drives it with Locust through
-# the generated OpenAPI client; blocking thresholds live in scripts/smoke.py.
+# perf-smoke: Locust through the generated client; thresholds in scripts/smoke.py.
 perf-smoke: provision-test client-gen
 	$(TEST_ENV) uv run python scripts/perf_smoke.py
 
 coverage-erase:
 	uv run coverage erase
 
-# The floor gates `ci`, not `test`: it judges the combined figure, and a single lane cannot be
-# held to it — two floors would be two numbers to keep honest. Raise COV_MIN when the real
-# number moves up, never lower it to fit.
-# `--sort=-miss --skip-covered` because an average hides: the total says how the repo is doing,
-# and these two say which file to open first. The leading minus is not a typo — `--sort=miss`
-# ascends, and would head the list with the files that need nothing. Ranked by dead statements
-# rather than by percentage, which ranks by module size as much as by neglect: 9 dead lines in a
-# 60-statement file read worse than 111 in an 862-statement one.
-# Neither flag touches the verdict — the total is computed over every file, skipped ones included.
+# The floor gates `ci`, on the combined figure. Raise COV_MIN as coverage rises, never lower it.
+# `--sort=-miss` (descending) lists the files with the most missed statements first; percentages
+# would rank by size. The total still counts every file.
 COV_MIN ?= 90
 coverage-report:
 	uv run coverage combine
 	uv run coverage report --sort=-miss --skip-covered --fail-under=$(COV_MIN)
 
-# Both read what `coverage-report` combined — parallel mode leaves one file per lane until then.
+# Both read what `coverage-report` combined.
 coverage-xml:
 	uv run coverage xml -o .cache/cov/coverage.xml
 
@@ -267,18 +226,14 @@ letsencrypt:
 	certbot certonly --standalone --domain $(DOMAIN) --agree-tos --non-interactive
 	@echo "Certs at /etc/letsencrypt/live/$(DOMAIN)/"
 
-# check = lint + test, the shared meaning across the three repos: read-only, no heavy lane,
-# and what a pre-commit hook can afford to run. `ci` below adds the heavy lanes.
+# check = lint + test: read-only, light enough for a pre-commit hook. `ci` adds the heavy lanes.
 check: lint test
 
-# --keep-going: run every step even if one fails, so no failure is hidden
-# behind an earlier one; the sub-make exits non-zero if any step failed.
+# --keep-going: every step runs, so no failure hides another.
 ci:
 	$(MAKE) COV=1 --keep-going js-build lint coverage-erase test test-e2e perf-smoke coverage-report coverage-xml
 
-# finalize: js-build + fix, then the full read-only gate and the suite. Run before committing.
-# Wider than `fix + test` on purpose: the wave that raised ruff shipped two regressions a
-# linter alone called green — one caught by `ty`, one only by the suite.
+# finalize: js-build + fix, then lint and the suite. Run before committing.
 finalize: js-build fix check
 
 act:

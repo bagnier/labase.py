@@ -1,15 +1,8 @@
-"""Software WebAuthn authenticator for the API driver's passkey scenarios.
+"""A software WebAuthn authenticator for the API driver: it signs whatever origin it claims,
+so the real server-side ceremony runs without a browser.
 
-GoTrue validates the origin *inside the signed clientDataJSON* against its
-configured ``rp_origins`` — and this device signs whatever origin we claim.
-That is what lets the API driver, which has no browser, still run the real
-server-side ceremony (app → GoTrue → auth schema). The browser driver goes
-further: it executes ``navigator.credentials`` for real via a CDP virtual
-authenticator against the pinned e2e origin (see the auth browser mixin).
-
-Self-contained on ``cryptography`` (P-256 / ES256, "none" attestation, minimal
-CBOR): the off-the-shelf soft authenticators pin a vulnerable ``cryptography``
-range, which pip-audit rightly rejects.
+Written on ``cryptography`` (ES256, "none" attestation, minimal CBOR): ready-made ones pin a
+vulnerable ``cryptography`` that pip-audit rejects.
 """
 
 import base64
@@ -48,7 +41,7 @@ def _cbor_head(major: int, n: int) -> bytes:
 
 
 def _cbor(value: Any) -> bytes:
-    """Minimal canonical CBOR — just the shapes an attestation object needs."""
+    """Only the CBOR an attestation object needs."""
     if isinstance(value, int):
         return _cbor_head(0, value) if value >= 0 else _cbor_head(1, -1 - value)
     if isinstance(value, bytes):
@@ -56,7 +49,7 @@ def _cbor(value: Any) -> bytes:
     if isinstance(value, str):
         encoded = value.encode()
         return _cbor_head(3, len(encoded)) + encoded
-    if isinstance(value, dict):  # caller supplies keys in canonical order
+    if isinstance(value, dict):  # keys come in canonical order
         return _cbor_head(5, len(value)) + b"".join(_cbor(k) + _cbor(v) for k, v in value.items())
     raise TypeError(f"unsupported CBOR type: {type(value)!r}")
 
@@ -69,8 +62,6 @@ def _client_data(kind: str, challenge_b64url: str) -> bytes:
 
 
 class PasskeyDevice:
-    """One resident P-256 credential, reused between registration and sign-in."""
-
     def __init__(self) -> None:
         self._key = ec.generate_private_key(ec.SECP256R1())
         self._credential_id = os.urandom(32)
@@ -80,7 +71,7 @@ class PasskeyDevice:
 
     def _cose_key(self) -> bytes:
         numbers = self._key.public_key().public_numbers()
-        # EC2 / ES256 COSE key; keys already in canonical order.
+        # EC2 / ES256 COSE key, in canonical order.
         return _cbor(
             {
                 1: 2,  # kty: EC2

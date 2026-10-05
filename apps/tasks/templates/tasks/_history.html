@@ -1,6 +1,5 @@
 {% from "macros/live_state.html" import live_refresh, live_state %}
-{# The film strip: one lane per subject, time left to right. Recurring topics keep their lane
-   whatever the window holds; one-shots appear only if it caught them. #}
+{# One lane per subject. Recurring lanes always show; one-shots only if the window caught them. #}
 {% macro lanes(rows) %}
   <div class="strip-group">
     <div class="relative">
@@ -33,8 +32,7 @@
                  href="{{ block.href }}"></a>
             {% endfor %}
           </div>
-          {# How the window went for this lane: one fixed-width bar, shared out by band in the
-             colours the lane itself is drawn in, with the total written on it. #}
+          {# The lane's bar, by band, with its total. #}
           <div class="strip-tail">
             {% if lane.counts %}
               {% set tally = spell_tally(lane.counts) %}
@@ -55,9 +53,8 @@
      id="task-history"
      {{ live_refresh(to_dt, "/console/tasks?panel=history" ~ ("&from_dt=" ~ from_dt if from_dt else ""), "#task-history") }}>
   <div class="flex items-end justify-end gap-4 flex-wrap">
-    {# `hx-push-url`: the window a reader chose belongs in the address, so it survives a reload and
-       can be sent to someone. It is also what makes "Back to live" below a navigation at all — a
-       link to the bare path is a no-op when the bare path is already what the URL says. #}
+    {# `hx-push-url`: the window survives a reload and can be shared, and "Back to live" becomes a
+       real navigation. #}
     <form hx-get="/console/tasks"
           hx-target="#task-history"
           hx-swap="outerHTML"
@@ -73,7 +70,7 @@
                class="input input-bordered input-sm text-xs"
                aria-label="History window start" />
       </label>
-      <span class="text-base-content/50 pb-2">→</span>
+      <span class="text-base-content/50 pb-2"><i class="ph ph-arrow-right" aria-hidden="true"></i></span>
       <label class="flex flex-col gap-1">
         <span class="label-text text-xs">To (UTC)</span>
         <input type="datetime-local"

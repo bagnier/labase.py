@@ -25,8 +25,7 @@ def _settings() -> AppSettings:
 @pytest.mark.asyncio
 async def test_reload_and_coerce_to_declared_type() -> None:
     settings = _settings()
-    # ``settings.reload`` is the ``spread`` handler the listener replays off the journal; it
-    # adopts the fresh values, coerced to their declared types on the next read.
+    # ``settings.reload`` is the ``spread`` handler.
     await settings.reload(
         SettingsChanged(
             target_app="files",
@@ -36,8 +35,8 @@ async def test_reload_and_coerce_to_declared_type() -> None:
         )
     )
 
-    assert settings.max_upload_mb == 1  # int, not "1"
-    assert settings.uploads_enabled is False  # bool, not "false"
+    assert settings.max_upload_mb == 1
+    assert settings.uploads_enabled is False
 
 
 @pytest.mark.asyncio
@@ -53,7 +52,7 @@ async def test_ignores_changes_for_other_apps() -> None:
         )
     )
 
-    assert settings.max_upload_mb == 25  # declared default, untouched
+    assert settings.max_upload_mb == 25
 
 
 def test_unknown_setting_raises_attribute_error() -> None:
@@ -83,7 +82,7 @@ def test_values_coerced_to_each_declared_type() -> None:
 def test_missing_values_fall_back_to_declared_default_typed() -> None:
     settings = AppSettings(raw={}, declaration=_TYPED_DECLARATION)
 
-    # Defaults coerced too: "10" -> 10, "true" -> True, "Untitled" stays text.
+    # Defaults are coerced too.
     assert settings.values == {"title": "Untitled", "limit": 10, "active": True}
 
 
@@ -96,7 +95,7 @@ def test_non_numeric_number_passes_through_unchanged() -> None:
 def test_undeclared_persisted_key_passes_through_as_text() -> None:
     settings = AppSettings(raw={"stray": "5"}, declaration=_TYPED_DECLARATION)
 
-    assert settings.stray == "5"  # no SettingDef -> left as the raw string
+    assert settings.stray == "5"  # undeclared: text
 
 
 def test_declaration_without_defs_leaves_everything_as_text() -> None:
@@ -108,8 +107,8 @@ def test_declaration_without_defs_leaves_everything_as_text() -> None:
 def test_merged_for_org_overlays_and_coerces():
     settings = _settings()
     values = settings.merged_for_org({"max_upload_mb": "5"})
-    assert values.max_upload_mb == 5  # int, org override wins
-    assert values.uploads_enabled is True  # untouched keys keep server defaults
+    assert values.max_upload_mb == 5
+    assert values.uploads_enabled is True
 
 
 def test_merged_for_org_without_override_keeps_server_values():
@@ -120,8 +119,8 @@ def test_merged_for_org_without_override_keeps_server_values():
 def test_coercion_is_cached_and_dropped_on_write():
     settings = _settings()
     first = settings.values
-    assert settings.values is first  # same dict: not re-coerced on every attribute access
-    settings._raw = {"max_upload_mb": "7"}  # any write path drops the cache
+    assert settings.values is first  # cached
+    settings._raw = {"max_upload_mb": "7"}
     assert settings.max_upload_mb == 7
 
 

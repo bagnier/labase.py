@@ -1,7 +1,5 @@
 class InvitationRefused(Exception):
-    """An invitation was not issued, and the message says why — already a member, the org's
-    limit reached, one already pending. The single outcome the caller branches on, so a refusal
-    never travels as a second value beside a missing invitation."""
+    """No invitation issued; the message says why (already a member, limit reached, pending)."""
 
 
 class LastOwnerViolation(Exception):

@@ -1,13 +1,6 @@
-"""How the metrics context (load metrics) plugs into the running app.
-
-Layer 1: the shared accumulator (fed by ``RequestLogger``) is exposed as a
-Prometheus endpoint. Layer 2: a per-process flusher persists per-minute deltas
-and the console "Load" screen aggregates them; a daily rollup downsamples
-minute → hour and applies retention (async-substrate consumer, like
-``issues.purge``).
-
-NOTE: mounted BEFORE the console context so its /console/load routes register
-ahead of the console's /console/{app} catch-all.
+"""The metrics mount (AGENTS: load metrics belong to their app alone): a Prometheus endpoint, a
+per-process flusher of per-minute deltas, the console Load screen, and a daily rollup from minute
+to hour rows with retention.
 """
 
 from datetime import timedelta
@@ -47,9 +40,7 @@ def mount(host: Host) -> None:
     host.reserve("metrics")
     if not settings.enabled:
         return
-    # Behind the gate on purpose: switched off, this app counts nothing, and ``apps/shared`` —
-    # which may not name a bounded context — simply keeps an empty observer list. Same shape as
-    # ``apps/issues`` subscribing to captured exceptions with ``on_captured``.
+    # Behind the gate: switched off, nothing counts.
     on_request_measured(accumulator.observe)
     host.app.include_router(exposition_router)
     host.app.include_router(router, prefix="/console/load")

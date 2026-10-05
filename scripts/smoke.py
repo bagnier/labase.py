@@ -1,12 +1,6 @@
-"""Locust perf smoke — one user class per context, all sharing one signed-in account.
-
-Transport goes through Locust's client (that is what gets measured); response
-parsing goes through the generated OpenAPI client (``client/``, package
-``labase-client``) — which keeps that client honest: a route or DTO drift
-breaks the smoke run.
-
-Run via ``make perf-smoke`` (scripts/perf_smoke.py boots the app on the test
-schema and enforces the thresholds below as a blocking CI step).
+"""The Locust perf smoke (``make perf-smoke``): one user class per context, one shared account.
+Requests go through Locust, which measures; answers are parsed by the generated client
+(``client/``), so a route or DTO drift fails the smoke.
 """
 
 import time
@@ -18,8 +12,7 @@ from locust import HttpUser, between, events, task
 
 _PASSWORD = "Perf1234!"
 
-# Blocking thresholds, enforced on quit: a smoke, not a benchmark — generous enough for a loaded CI
-# runner, tight enough to catch a real regression.
+# Blocking on quit: loose enough for a loaded CI runner, tight enough to catch a regression.
 FAIL_RATIO_MAX = 0.01
 P95_MS_MAX = 800.0
 
@@ -27,13 +20,7 @@ _account: dict = {}
 
 
 def _wait_for_personal_org(client: httpx.Client, timeout: float = 10.0) -> str:
-    """Return the handle of the account's personal org, polling until it lands.
-
-    Sign-up creates the personal org in an async consumer off the event trail
-    (see the sign-up event chain), so it isn't there the instant register/login
-    return — same shape as mailbox.wait_for_message. Polls rather than sleeps:
-    settles the moment the fact is delivered, names the failure if it never is.
-    """
+    """The personal org's handle, polled: a reaction creates it after sign-up."""
     deadline = time.monotonic() + timeout
     while True:
         orgs = client.get("/organizations").raise_for_status().json()
@@ -48,7 +35,7 @@ def _wait_for_personal_org(client: httpx.Client, timeout: float = 10.0) -> str:
 
 @events.init.add_listener
 def _create_account(environment, **_kwargs):
-    """One real account for the whole swarm — register/login are rate-limited per IP."""
+    """One account for the swarm: sign-up and sign-in are rate-limited per IP."""
     email = f"perf-{uuid.uuid4().hex[:8]}@test.local"
     with httpx.Client(
         base_url=environment.host, headers={"accept": "application/json"}, timeout=30
@@ -63,7 +50,7 @@ def _create_account(environment, **_kwargs):
 
 @events.quitting.add_listener
 def _enforce_thresholds(environment, **_kwargs):
-    """The thresholds ARE the verdict — override Locust's any-failure exit code."""
+    """The thresholds decide the exit code, not Locust's any-failure rule."""
     total = environment.stats.total
     p95 = total.get_response_time_percentile(0.95) or 0
     if total.fail_ratio > FAIL_RATIO_MAX:
@@ -101,13 +88,10 @@ class TodoUser(_SignedInUser):
             catch_response=True,
         ) as response:
             if response.status_code == 409:
-                # Optimistic-concurrency conflict on the position column —
-                # expected when the swarm writes one org; the client retries.
+                # A position conflict, expected with the swarm on one org.
                 response.success()
                 return
-        if response.ok:  # keep the org under max_items_per_org across runs
-            # POST returns the whole todo list (JSON); find the one we just
-            # created by title and delete it to balance the create.
+        if response.ok:  # deleted again, to stay under max_items_per_org
             created = next((t for t in response.json() if t["title"] == title), None)
             if created:
                 with self.client.delete(
@@ -116,8 +100,7 @@ class TodoUser(_SignedInUser):
                     catch_response=True,
                 ) as delete_response:
                     if delete_response.status_code == 409:
-                        # Same position-column optimistic-concurrency conflict as
-                        # the create path — expected when the swarm writes one org.
+                        # As above.
                         delete_response.success()
 
 
@@ -127,7 +110,7 @@ class OrganizationsUser(_SignedInUser):
         response = self.client.get("/organizations", name="GET /organizations")
         if response.ok:
             for item in response.json():
-                OrganizationWithRoleRead.from_dict(item)  # DTO drift fails the smoke
+                OrganizationWithRoleRead.from_dict(item)
 
     @task
     def dashboard_overviews(self):

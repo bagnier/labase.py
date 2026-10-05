@@ -1,25 +1,18 @@
-"""Conventions the README states as absolutes, checked from the artefact rather than its prose.
-
-Each of these decays one exception at a time — a fourth session dependency, a serial key, a test
-module parked next to the router it tests — and no single exception breaks anything the day it
-lands. The walks below make the first exception cost an edit here, which is the decision the
-README says someone has to make.
-"""
+"""AGENTS.md's conventions, checked on the code: a new exception costs an edit here."""
 
 import ast
 import re
 import uuid
 from pathlib import Path
 
-import apps.main  # noqa: F401 — mounting every app fills the ORM registry with every model
+import apps.main  # noqa: F401 — fills the ORM registry
 from apps.shared.persistence.base import Base
 
 _ROOT = Path(__file__).resolve().parents[2]
 _APPS = _ROOT / "apps"
 
-# The three dependencies the README names — `RlsSession` wraps the first, `AdminSession` the
-# third — plus the private substrate the two raw ones share. A fifth entry here is the "real
-# decision" the claim's waiver said would announce itself nowhere; now it announces itself here.
+# The three session dependencies (`RlsSession` wraps the first, `AdminSession` the third) and
+# their shared private helper.
 _SESSION_PROVIDERS = {
     "apps/auth/infra/session.py::get_rls_session",
     "apps/shared/persistence/database.py::_session",
@@ -27,9 +20,8 @@ _SESSION_PROVIDERS = {
     "apps/shared/persistence/database.py::get_user_session",
 }
 
-# Link and settings tables keep their natural composite keys — a surrogate id on a row that *is*
-# its pair would be a second identity to keep unique. The share token is the README's own stated
-# exception: a security token stays a random uuid4, unguessable, with no timestamp to read off it.
+# Link and settings tables keep composite keys: a surrogate id would be a second identity. The
+# share token is a uuid4 (AGENTS: every key is a UUIDv7, every token a UUIDv4).
 _NATURAL_COMPOSITE_KEYS = {"app_settings", "memberships", "org_app_settings"}
 _RANDOM_TOKEN_KEYS = {"org_file_share_tokens"}
 
@@ -41,8 +33,7 @@ def _python_files(*roots: Path):
 
 
 def test_the_session_dependencies_are_exactly_the_three_named():
-    """A DB session provider is a function yielding an ``AsyncSession`` — the shape FastAPI
-    injects. Enumerated over ``apps/`` so a fourth kind of session cannot appear quietly."""
+    """Functions yielding an ``AsyncSession`` under ``apps/``."""
     providers = {
         f"{relative}::{node.name}"
         for path, relative in _python_files(_APPS)
@@ -57,16 +48,13 @@ def test_the_session_dependencies_are_exactly_the_three_named():
 
 
 def _key_generator(column) -> object:
-    """The Python callable a pk column defaults to — unwrapped, since SQLAlchemy wraps a
-    zero-argument callable to feed it the execution context."""
+    """A pk column's default callable, unwrapped from SQLAlchemy's context wrapper."""
     generate = getattr(column.default, "arg", None)
     return getattr(generate, "__wrapped__", generate)
 
 
 def test_every_mapped_primary_key_is_a_time_ordered_uuid7():
-    """ "Every primary key is a time-ordered UUIDv7" — walked over every mapped table, not proven
-    on the mixin alone. The two exception families are frozen above, so a new composite key or a
-    new token is an edit here, made on purpose."""
+    """On every mapped table, not only the mixin."""
     composite, tokens, strays = set(), set(), set()
     for table in Base.metadata.tables.values():
         keys = list(table.primary_key.columns)
@@ -80,16 +68,12 @@ def test_every_mapped_primary_key_is_a_time_ordered_uuid7():
     assert (composite, tokens, strays) == (_NATURAL_COMPOSITE_KEYS, _RANDOM_TOKEN_KEYS, set())
 
 
-# The security tokens, named: the columns that must stay uuid4 — unguessable, with no timestamp
-# to read off them. `test_every_mapped_primary_key_is_a_time_ordered_uuid7` already keeps uuid4
-# out of the primary keys; this is the other direction.
+# The columns that must stay uuid4.
 _TOKEN_COLUMNS = {"org_file_share_tokens.token", "org_invitations.token"}
 
 
 def test_the_uuid4_exception_is_exactly_the_token_columns():
-    """ "Security tokens are the deliberate exception — they stay random UUIDv4", checked both
-    ways now that the exception has a list: every token column defaults to uuid4, and no other
-    column does."""
+    """Every token column defaults to uuid4, and no other column does."""
     defaulting_to_uuid4 = {
         f"{table.name}.{column.name}"
         for table in Base.metadata.tables.values()
@@ -101,7 +85,6 @@ def test_the_uuid4_exception_is_exactly_the_token_columns():
 
 
 def _assigned_attrs(target: ast.expr):
-    """Flatten a (possibly tuple/list-unpacking) assignment target into the attributes it sets."""
     if isinstance(target, ast.Tuple | ast.List):
         for elt in target.elts:
             yield from _assigned_attrs(elt)
@@ -110,10 +93,7 @@ def _assigned_attrs(target: ast.expr):
 
 
 def test_no_repository_assigns_updated_at_from_the_python_clock():
-    """Every ``Timestamped`` table's ``before update`` trigger overwrites ``updated_at`` on the
-    way in regardless of what the statement sent, so a repository writing it from Python
-    alongside — whether a plain assignment, an unpacked one, or a ``setattr`` — is dead code on
-    that path, only ever read back as the trigger's own Postgres ``now()``."""
+    """A trigger sets ``updated_at`` on every update: a Python write of it is dead code."""
     offenders = {
         f"{relative}:{node.lineno}"
         for path, relative in _python_files(_APPS)
@@ -139,8 +119,7 @@ def test_no_repository_assigns_updated_at_from_the_python_clock():
 
 
 def test_templates_tests_and_steps_live_with_their_context():
-    """The layout half of self-containment: a template, a test or a step module parked outside
-    its context is the piece a deletion leaves behind."""
+    """A template, test or step module outside its context outlives the context's deletion."""
     misplaced = (
         {
             str(path.relative_to(_ROOT))
@@ -162,14 +141,12 @@ def test_templates_tests_and_steps_live_with_their_context():
     assert misplaced == set()
 
 
-# What a browser's parser refuses to keep outside its context: handed a document that *starts*
-# with one of these, it foster-parents the text and drops the structure — 0 rows, 0 cells.
+# A document starting with one of these loses its structure to the parser's foster-parenting.
 _FOSTER_PARENTED = {"caption", "col", "colgroup", "tbody", "td", "tfoot", "th", "thead", "tr"}
 
 
 def _fragment_responses() -> set[str]:
-    """Every ``_*.html`` a python module returns as a response — the fragments that really are
-    "swapped into the live DOM", as opposed to partials only ever included by other templates."""
+    """The ``_*.html`` returned as responses, not only included."""
     fragments = set()
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
@@ -186,8 +163,7 @@ def _fragment_responses() -> set[str]:
 
 
 def _first_rendered_tag(template: Path) -> str:
-    """The first HTML tag the template renders — macro bodies stripped, since a macro defined at
-    the top is not output until something below calls it."""
+    """The first tag rendered, macro bodies aside."""
     body = template.read_text()
     body = re.sub(r"\{%-?\s*macro\b.*?\bendmacro\s*-?%\}", "", body, flags=re.DOTALL)
     body = re.sub(r"\{#.*?#\}", "", body, flags=re.DOTALL)
@@ -196,10 +172,8 @@ def _first_rendered_tag(template: Path) -> str:
 
 
 def test_no_fragment_response_starts_inside_a_table():
-    """ "Fragments are standalone valid markup (they're swapped into the live DOM)" — held on the
-    half a parser can refuse: a fragment whose first element is table furniture only survives
-    inside the right ancestor, and parsed alone it foster-parents into nothing. The rest of the
-    sentence (well-formedness at large) stays a review question."""
+    """(AGENTS: one set of helpers branches JSON, fragment and page) A fragment starting with
+    table furniture parses into nothing on its own."""
     inside_a_table = {
         f"{name} starts with <{tag}>"
         for name in _fragment_responses()
@@ -211,7 +185,7 @@ def test_no_fragment_response_starts_inside_a_table():
 
 
 def test_the_fragment_walk_actually_finds_the_responses():
-    # Guards the guard: a walk that matched nothing would make the assertion above vacuous.
+    # Guards the guard: a walk matching nothing would make it vacuous.
     assert len(_fragment_responses()) > 10
 
 
@@ -259,9 +233,48 @@ def test_the_router_walk_actually_finds_the_files():
 
 
 def test_the_layout_walk_actually_finds_the_files():
-    # Guards the guard: globs that matched nothing would make the assertion above vacuous.
+    # Guards the guard: globs matching nothing would make it vacuous.
     steps = list(_APPS.rglob("steps.py"))
 
     template_roots = [path for path in _APPS.rglob("templates") if path.is_dir()]
 
     assert (len(steps) > 10, len(template_roots) > 10) == (True, True)
+
+
+def _status_access(node: ast.expr) -> bool:
+    """``x.status`` or ``x["status"]``."""
+    if isinstance(node, ast.Attribute) and node.attr == "status":
+        return True
+    return (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.slice, ast.Constant)
+        and node.slice.value == "status"
+    )
+
+
+def _string_literals(node: ast.expr) -> list[ast.Constant]:
+    """A literal, or the literals of a set, tuple or list tested with ``in``."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node]
+    if isinstance(node, ast.Set | ast.Tuple | ast.List):
+        return [
+            element
+            for element in node.elts
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        ]
+    return []
+
+
+def test_invitation_status_is_never_compared_to_a_bare_string():
+    """Against a literal, ``"revokd"`` passes ``ty``; against ``InvitationStatus``, it fails
+    (AGENTS: invariants are types, not checks)."""
+    path = _APPS / "organizations" / "infra" / "invitation_router.py"
+    offenders = {
+        node.lineno
+        for node in ast.walk(ast.parse(path.read_text()))
+        if isinstance(node, ast.Compare)
+        and any(_status_access(side) for side in [node.left, *node.comparators])
+        and any(_string_literals(side) for side in [node.left, *node.comparators])
+    }
+
+    assert offenders == set()

@@ -26,3 +26,7 @@ should say instead.
 For a held claim, attack its tests as well: a change that would make the sentence false while
 those tests stay green is a break, located at the test. A waived claim has nothing behind it, so
 the code is its only evidence.
+
+Open each case with what reaches the faulty line on the code as it is — a route with its method, a
+worker or scheduled job, a `make` target, a user's action — or say that nothing does, and whether
+that is because nothing calls the code or because only a change nobody made would reach it.

@@ -1,6 +1,4 @@
-"""``CachingStaticFiles`` adds the public, content-aware ``Cache-Control`` that Starlette's
-``StaticFiles`` omits: fingerprinted URLs are immutable, the rest get a tunable TTL, and a
-zero TTL degrades to revalidate-every-time. ETag/304 (Starlette's job) is untouched."""
+"""``CachingStaticFiles``'s ``Cache-Control``."""
 
 import pytest
 
@@ -14,10 +12,10 @@ def _scope(query: bytes = b"") -> dict:
 @pytest.mark.parametrize(
     ("query", "max_age", "expected"),
     [
-        (b"v=123", 3600, "public, max-age=31536000, immutable"),  # fingerprinted → immutable
-        (b"", 3600, "public, max-age=3600"),  # plain asset → tunable TTL
-        (b"", 0, "public, max-age=0, must-revalidate"),  # dev → always revalidate
-        (b"v=1", 0, "public, max-age=31536000, immutable"),  # fingerprint wins over TTL=0
+        (b"v=123", 3600, "public, max-age=31536000, immutable"),
+        (b"", 3600, "public, max-age=3600"),
+        (b"", 0, "public, max-age=0, must-revalidate"),
+        (b"v=1", 0, "public, max-age=31536000, immutable"),
     ],
 )
 def test_cache_control_branches(query, max_age, expected):

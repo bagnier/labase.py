@@ -12,10 +12,8 @@
 {% endblock %}
 {% block content %}
   {% set paused = filters.to_dt %}
-  {# Full width (unlike the max-w-2xl console pages): the timeline is a wide, many-columned table
-     that reads far better with room to breathe. #}
+  {# Full width, unlike other console pages: a wide table. #}
   <div class="space-y-6">
-    {# Export is a page-level action on the current filtered view — kept away from the filters. #}
     {% call page_header('Timeline',
       'One timeline across all three sources — the log sink, the business-events journal and
       tracked issues — server-wide. Correlate by request id.') %}
@@ -30,22 +28,19 @@
         <i class="ph ph-download-simple" aria-hidden="true"></i>CSV
       </a>
     {% endcall %}
-    {# overflow-visible so the combobox popovers can escape the card (matches the mockup). #}
+    {# overflow-visible: the pill popovers escape the card. #}
     <div class="card-panel overflow-visible">
-      {# ── Activity: the shared ApexCharts stack. What the drivers read is what the reader
-         sees — the legend below and the series in [data-chart-config], which is the same JSON
-         charts.js draws from. #}
+      {# ── Activity. The drivers read the legend and [data-chart-config], what charts.js draws. #}
       <div class="p-4 border-b border-base-300" data-grain="{{ grain }}">
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-1">
           <span class="eyebrow">Activity</span>
-          {# One swatch per chart series, in series order — the colours match `_SOURCE_SERIES`.
-             Class names stay literal: Tailwind only emits what it can see in the markup. #}
+          {# Colours match `_SOURCE_SERIES`; literal class names, so Tailwind emits them. #}
           <span class="flex gap-3 text-xs text-base-content/60" data-activity-legend>
             <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-info"></span><span data-legend-label>Logs</span></span>
             <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span><span data-legend-label>Business</span></span>
             <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-error"></span><span data-legend-label>Issue</span></span>
           </span>
-          {# Grain toggle — a chart-only control; keeps the current filters and table sort. #}
+          {# Grain toggle, keeping filters and sort. #}
           <span class="join ml-auto" role="group" aria-label="Activity grain">
             {% for g in grains %}
               <a class="btn btn-xs join-item {{ 'btn-active' if g == grain else 'btn-ghost' }}"
@@ -62,10 +57,7 @@
           <p class="text-xs text-base-content/60" data-activity-summary>No activity in the current window.</p>
         {% endif %}
       </div>
-      {# ── Filter toolbar (GET form; combines every control) ─────────────────────
-         Every control applies instantly — the categorical pills (see _combobox.html)
-         auto-submit on selection, and free text / the date range submit on change. No
-         Filter button: the whole toolbar is live. #}
+      {# ── Filter toolbar: a GET form whose controls submit on change. #}
       {% call filter_bar('/console/timeline', 'Filter the timeline', class_='p-3 border-b border-base-300') %}
         {{ combobox("source", "source", filters.source, filters.source, facets.source) }}
         {{ combobox("app", "app", filters.app, filters.app, facets.app) }}
@@ -86,7 +78,7 @@
                  onchange="this.form.requestSubmit()"
                  class="input input-sm text-xs"
                  aria-label="from" />
-          <span class="text-base-content/50">→</span>
+          <span class="text-base-content/50"><i class="ph ph-arrow-right" aria-hidden="true"></i></span>
           <input type="datetime-local"
                  name="to_dt"
                  value="{{ filters.to_dt }}"
@@ -97,8 +89,7 @@
         <input type="hidden" name="sort" value="{{ sort }}" />
         <input type="hidden" name="dir" value="{{ dir }}" />
         <input type="hidden" name="bucket" value="{{ grain }}" />
-        {# entity_id has no pickable option list (opaque ids); it's reached by drilling into a row.
-           Keep it across other filter changes, and offer a chip to drop it. #}
+        {# entity_id is reached from a row, kept across filters, dropped by its chip. #}
         <input type="hidden" name="entity_id" value="{{ filters.entity_id }}" />
         {% if filters.entity_id %}
           <a class="badge badge-sm badge-neutral gap-1"
@@ -111,9 +102,7 @@
         {% endif %}
         {{ live_state(paused, "/console/timeline") }}
       {% endcall %}
-      {# The three sources do not share a memory: the journal and the issues keep whatever
-         retention left them, the log store answers a rolling window. Said out loud, because the
-         way it used to be discovered was a correlation that came back missing its lines. #}
+      {# Only the logs answer a rolling window. #}
       <p class="px-3 pt-3 text-xs text-base-content/60" data-log-window>
         <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
         {% if log_window_bounded %}
@@ -125,9 +114,7 @@
         {% endif %}
       </p>
       {% if entries %}
-        {# Only the default newest-first ts sort orders the whole window: the reader takes each
-           source's own newest rows, so any other column — or ts reversed — orders that sample
-           and not the timeline. Say it rather than let the header imply otherwise. #}
+        {# Any order but newest-first sorts a sample (see `orders_whole_window`). #}
         {% if not exact_order %}
           <p class="px-3 pt-3 text-xs text-base-content/60" data-sort-scope>
             <i class="ph ph-info" aria-hidden="true"></i>
@@ -164,11 +151,9 @@
                 <th>Details</th>
               </tr>
             </thead>
-            {# Only the newest page on the default order refetches itself: a poll fetches the
-               top of the timeline, so it would throw away pages a reader loaded below and snap a
-               re-sorted view back to newest-first. The guard counts the rows on screen against
-               the page it was rendered with — the tbody's own attributes survive the swap, so the
-               number stays the first page's. #}
+            {# Polls only while showing the first page on the default order, or a poll would drop
+               loaded pages and undo a sort. The tbody's attributes survive the swap, so the row
+               count compares against the first page. #}
             <tbody id="timeline-entries"
                    {{ live_refresh(paused or not exact_order or filters.before, "/console/timeline?" ~ load_more_qs, "#timeline-entries", swap="innerHTML", select="tbody > tr", unless="&&document.querySelectorAll('#timeline-entries tr[data-entry-name]').length<=" ~ entries | length) }}>
               {% include "timeline/_rows.html" %}

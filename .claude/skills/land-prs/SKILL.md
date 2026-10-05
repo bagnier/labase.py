@@ -2,7 +2,8 @@
 name: land-prs
 description: >
   Takes the open pull requests, computes which ones compose, gates the batch as one branch, and
-  opens the single pull request that lands them — with a rework brief for each one it ejected.
+  opens the single pull request that lands them — telling each one it ejected why, and what its
+  branch will need.
 
   Do NOT use for: one pull request (ci-rework-pr), or one issue (ci-fix-issue).
 when_to_use: >
@@ -27,8 +28,8 @@ The pull requests to take are "$ARGUMENTS", or every open one when that is empty
 
 ## The two ends of a run
 
-- **A pull request.** The integration branch is green and open against `main`, its body naming what
-  it carries and what it ejected, and every ejected pull request has its rework brief.
+- **A pull request.** The integration branch is green, reviewed and open against `main`, its body
+  naming what it carries and what it ejected, and every ejected pull request has its note.
 - **A question.** Two pull requests answer the same fault differently, and which one survives is
   the owner's call. Nothing pushed, one comment naming the two and what each does.
 
@@ -188,6 +189,32 @@ Never patch the integration branch itself: that is a commit nobody reviewed, on 
 everyone's work, and it hides the fault from the pull request that owns it.
 
 
+## Adversarial review
+
+The subject is the integration branch — these pull requests standing together — and nothing else:
+what the run left off it was judged by the partition, not here. Every hunk on the branch was
+reviewed and gated on its own pull request against the same base, so what no one has read is the
+composition, and the gate does not read it either: it answers whether the branch *runs*, never
+whether it still *means* what each pull request meant, a merge being silent exactly where both
+sides agreed on the letter. So hand the branch to one `adversarial-audit` agent, started once it is
+built so it reads while the gate runs, and take its report when the gate comes back:
+
+```
+Read .claude/skills/land-prs/review.md whole and follow it. Base: origin/main. Head: <branch>.
+Carries: #<n>, #<n>, … The simulation refs refs/prsim/* are still there.
+```
+
+One review per batch, never a second on the answer to the first. It applies nothing and never runs
+the gate, so a break marked `unverified` is run from its `to_run` command before anything is done
+about it.
+
+Either grid names a pair, and a pair is settled the way a red gate's is: eject one side, rebuild,
+re-gate. Which side goes is the same rule — the one that changes a contract stays, the one that
+consumes it leaves — and for an `[intent]` break it is the pull request that undid the thesis, not
+the one whose promise it broke. Never the patch: a composition fixed by hand is a commit nobody
+reviewed, which is what this review exists to refuse.
+
+
 ## Pull request
 
 ```sh
@@ -197,16 +224,37 @@ gh pr create --base main --head "$(git branch --show-current)" --label bot \
 ```
 
 The body, in this order: what it carries, one line per pull request with its number and title; what
-was ejected, one line each with the reason; what the gate gave. No history, no narration.
+was ejected, one line each with the reason; what the gate gave, and what the review found and
+what was done about it. No history, no narration.
 
 
 ## The ejected
 
 After the pull request is open, never before: three branches told to rebase at once produce three
-divergent rebases against a `main` about to move. One comment per ejected pull request, mentioning
-`@claude`, saying what state it must now sit on and what to change — each comment queues its pull
-request on `to-rework`, the tick hands them over one at a time, and `ci-rework-pr` takes it from
-there and merges `main` into its own branch itself.
+divergent rebases against a `main` about to move. One comment per ejected pull request, saying why
+it was ejected and what its branch will need once the batch has landed.
+
+**Ejection is not a review, so it does not mention `@claude`.** A `@claude` comment puts the pull
+request on `to-rework`, and that queue holds one thing: a review the owner sent back. What
+`ci-rework-pr` then looks for is *"every remark by the repository owner ... what the owner wants
+changed in the diff"* — so a collision reaches it as a review with no ask, and the run answers it by
+guessing which of two sound branches to bend. It burns a lane one rework at a time, and the label
+itself states a fault the run did not find.
+
+Which is what the two classes are for, and the comment says which one it is:
+
+- **A defect of the pull request itself** — a committed artefact, a broken file, something wrong in
+  the diff whatever else is open. That is a change to the diff, so it *is* a review: mention
+  `@claude`, say what to change, and let the queue take it.
+- **A collision with a sibling, or a stale base** — a textual conflict, a shared counter two
+  branches moved to the same value, a branch `main` has moved under. **Nothing is wrong with the
+  diff**, and saying so in the comment is half its purpose: the owner reads a label before a
+  paragraph, and `to-rework` on a sound pull request says the opposite of what the run found. No
+  mention, no label — the note stands, and the branch waits for a `main` that moved.
+
+The same line holds when the run ejects on the gate rather than on a conflict: two pull requests
+that are each right and only disagree once composed are a collision, not a fault, and neither one
+is the one to blame.
 
 
 ## Cadence
@@ -218,5 +266,6 @@ that moved, which is the same fix applied upstream.
 
 ## Report
 
-Which end the run took, the pull request URL, what it carries, and what was ejected with the brief
-each one got.
+Which end the run took, the pull request URL, what it carries, and what was ejected — saying, for
+each one, whether it was its own defect or a collision, since only the first is queued for rework;
+and what the adversarial review broke.

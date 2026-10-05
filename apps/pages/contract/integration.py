@@ -1,10 +1,4 @@
-"""How the pages (CMS) context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the public
-view router and the org-scoped management router, claims the ``pages`` slug, answers the
-dashboard ``OverviewQuery`` and the server-wide ``ConsoleOverviewQuery``, and seeds a
-public Welcome page (in the public nav) on ``OrganizationCreated``.
-"""
+"""The pages mount, and the public Welcome page each new org gets."""
 
 import uuid
 from pathlib import Path
@@ -30,13 +24,11 @@ from apps.pages.domain.models import Page, PageVisibility
 from apps.pages.infra.repository import PageNavRepository, PageRepository
 from apps.pages.infra.router import public_router, router
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import overview_from_count
-from apps.shared.persistence.repository import count_all
+from apps.shared.overview import RECENT_ITEMS, overview_from_count
+from apps.shared.persistence.repository import count_all, count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
-
-_RECENT = 3
 
 _WELCOME_TITLE = "Welcome"
 _WELCOME_SLUG = "welcome"
@@ -85,26 +77,22 @@ def _declare_settings() -> SettingsDeclaration:
 
 
 async def _overview(query: OverviewQuery) -> Overview:
-    pages = await PageRepository(query.session, query.org_id).all()
-    n = len(pages)
+    n = await count_where(query.session, Page, Page.org_id == query.org_id)
     lines = overview_from_count(n, "page", "No pages yet")
+    recent = await PageRepository(query.session, query.org_id).recent(RECENT_ITEMS) if n else []
     return Overview(
         key="pages",
         title="Pages",
         icon="file-text",
         href="pages",
         template="pages/_overview.html",
-        data={"lines": lines, "recent": [p.title for p in pages[:_RECENT]]},
+        data={"lines": lines, "recent": [p.title for p in recent]},
     )
 
 
 async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
-    """Seed a public Welcome page, listed in the public nav.
-
-    Public so that pointing ``public.featured_org_handle`` at the org makes it the site home; in
-    the nav so ``/`` redirects straight to it. A durable async consumer of ``OrganizationCreated``,
-    suppressed in the test schema (via ``seed_org_welcome``), so it never runs under e2e.
-    """
+    """A public Welcome page in the nav: featuring the org (``public.featured_org_handle``) makes
+    it the site's home, and ``/`` redirects to it."""
     await seed_org_welcome(session, event.org_id, _seed_welcome)
 
 

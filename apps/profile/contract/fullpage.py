@@ -1,11 +1,4 @@
-"""Profile's fullpage-context slice: the current user's handle.
-
-Registered as a fullpage provider at profile's ``mount()`` and collected by
-:func:`apps.shared.integration.fullpage.fullpage_context`. The page-assembly mechanism
-itself lives in
-:mod:`apps.shared.integration.fullpage` — no global render hook injects data silently (a Jinja
-"context processor" or middleware would, proscribed by the *Page composition* principle).
-"""
+"""The ``profile_*`` full-page slice: the user's handle and avatar."""
 
 import structlog
 from sqlalchemy import select
@@ -18,9 +11,7 @@ log = structlog.get_logger(__name__)
 
 
 async def provide_profile_handle(query: FullpageQuery) -> dict:
-    """Fullpage slice ``profile_handle`` / ``profile_avatar_path``: the user's handle and
-    avatar (RLS ``profiles: own read``). ``avatar_path`` stays ``None`` when the feature is
-    off, so the nav footer falls back to the initial without re-reading the switch."""
+    """``avatar_path`` is ``None`` when avatars are off, so the nav shows the initial."""
     if query.user is None:
         return {"handle": None, "avatar_path": None}
     try:

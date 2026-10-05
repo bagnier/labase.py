@@ -14,7 +14,6 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
     default_order = OrgFile.created_at.desc()
 
     async def total_size(self) -> int:
-        """Total bytes stored by this organisation, across all its files."""
         return int(
             await self.session.scalar(
                 select(func.coalesce(func.sum(OrgFile.size_bytes), 0)).where(
@@ -34,8 +33,7 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
         size_bytes: int,
         uploader_email: str = "",
     ) -> OrgFile:
-        """``file_id`` is the caller's, because the object is uploaded before the row exists and
-        its path carries that id — a row generating its own would name someone else's object."""
+        """``file_id`` is given: the object, uploaded first, already carries it in its path."""
         org_file = OrgFile(
             id=file_id,
             org_id=self.org_id,
@@ -67,7 +65,7 @@ class OrgFileRepository(OrgScopedRepository[OrgFile]):
 
 
 class FileShareRepository(BaseRepository[OrgFile]):
-    """Admin-scoped repository for public share download — no org isolation."""
+    """For anonymous share downloads, on the admin session."""
 
     model = OrgFile
 
@@ -77,7 +75,6 @@ class FileShareRepository(BaseRepository[OrgFile]):
         )
 
     async def count_and_size(self) -> tuple[int, int]:
-        """Server-wide file count and total size, across every organisation."""
         row = (
             await self.session.execute(
                 select(func.count(OrgFile.id), func.coalesce(func.sum(OrgFile.size_bytes), 0))

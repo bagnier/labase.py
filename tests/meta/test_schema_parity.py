@@ -1,14 +1,5 @@
-"""Parity guard: what the ORM declares and what the database holds must be the same thing.
-
-``Base.metadata`` is a *claim* about the database — its tables, their columns and nullability,
-and the names of the indexes and constraints on them. Nothing checks that claim: SQLAlchemy
-never issues DDL in this project (the schema is versioned as plain SQL under
-``supabase/migrations/``), so a model can declare an index that exists nowhere, or stay silent
-about a column that does, and the whole suite still passes. Both drifts were real when this
-test was written.
-
-Reads the live schema back and compares. Every model module is imported by glob, so a new
-context is covered the day its models land, without anyone remembering this file.
+"""The ORM's metadata matches the live schema: SQLAlchemy issues no DDL here, so nothing else
+would notice a drift. Model modules are found by glob.
 """
 
 import importlib
@@ -30,7 +21,6 @@ _EXTRA_MODEL_MODULES = (
 
 
 def _import_every_model() -> None:
-    """Populate ``Base.metadata`` — a table is only declared once its module is imported."""
     for path in sorted(Path("apps").glob("*/domain/models.py")):
         importlib.import_module(str(path.with_suffix("")).replace("/", "."))
     for module in _EXTRA_MODEL_MODULES:
@@ -43,11 +33,14 @@ class LiveSchema:
         columns: dict[tuple[str, str], bool],
         relation_names: set[str],
         closed_sets: dict[tuple[str, str], list[str]],
+        updated_at_triggers: set[str],
     ) -> None:
         self.columns = columns
         self.relation_names = relation_names
-        # Every column typed by a Postgres enum, with the labels it may hold, in order.
+        # Postgres-enum columns and their labels, in order.
         self.closed_sets = closed_sets
+        # Tables with a `before update … set_updated_at()` trigger.
+        self.updated_at_triggers = updated_at_triggers
 
     @property
     def tables(self) -> set[str]:
@@ -72,8 +65,7 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
-            # Indexes and constraints share one namespace here on purpose: a UNIQUE constraint
-            # is backed by an index of the same name, and a model may declare either shape.
+            # One namespace: a UNIQUE constraint is backed by a same-named index.
             relations = (
                 await conn.execute(
                     text(
@@ -102,6 +94,24 @@ async def live_schema() -> LiveSchema:
                     {"schema": schema},
                 )
             ).all()
+            # pg_catalog, not information_schema, whose text depends on the search_path.
+            # tgtype 19: ROW|BEFORE|UPDATE; empty tgattr: no column list; tgenabled: not disabled.
+            updated_at_triggers = (
+                await conn.execute(
+                    text(
+                        "select c.relname from pg_trigger t "
+                        "join pg_class c on c.oid = t.tgrelid "
+                        "join pg_namespace n on n.oid = c.relnamespace "
+                        "join pg_proc p on p.oid = t.tgfoid "
+                        "join pg_namespace pn on pn.oid = p.pronamespace "
+                        "where n.nspname = :schema and pn.nspname = :schema "
+                        "and p.proname = 'set_updated_at' and not t.tgisinternal "
+                        "and t.tgenabled <> 'D' and t.tgtype & 19 = 19 "
+                        "and t.tgattr = ''::int2vector"
+                    ),
+                    {"schema": schema},
+                )
+            ).all()
     finally:
         await engine.dispose()
 
@@ -109,6 +119,7 @@ async def live_schema() -> LiveSchema:
         columns={(table, column): nullable == "YES" for table, column, nullable in columns},
         relation_names={name for (name,) in relations},
         closed_sets={(table, column): list(labels) for table, column, labels in closed_sets},
+        updated_at_triggers={table for (table,) in updated_at_triggers},
     )
 
 
@@ -148,7 +159,7 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
         str(constraint.name)
         for table in Base.metadata.tables.values()
         for constraint in table.constraints
-        # An unnamed constraint (a bare primary key) has nothing to compare against.
+        # An unnamed constraint has nothing to compare.
         if isinstance(constraint.name, str)
     }
 
@@ -157,13 +168,20 @@ def test_every_declared_index_and_constraint_exists_in_the_database(
     assert missing == []
 
 
+def test_every_timestamped_table_carries_the_set_updated_at_trigger(
+    live_schema: LiveSchema,
+) -> None:
+    """Every table with an `updated_at` (only `Timestamped` adds one) has its trigger."""
+    timestamped = {table.name for table in Base.metadata.tables.values() if "updated_at" in table.c}
+
+    missing = sorted(timestamped - live_schema.updated_at_triggers)
+
+    assert missing == []
+
+
 def test_every_closed_set_column_is_a_python_enum(live_schema: LiveSchema) -> None:
-    """ "A constraint the domain must uphold is expressed as a constrained type wherever it can
-    be" — a column the database closes over a set of labels is the case where it always can. So
-    every such column is mapped through a ``StrEnum`` spelling exactly those labels, in order,
-    and a fifth role or a sixth status is a type error before it is a constraint violation. The
-    converse holds too: an enum the ORM declares that the database does not close is a check
-    Python is keeping alone."""
+    """(AGENTS: invariants are types, not checks) Each Postgres enum maps to a ``StrEnum`` with
+    the same labels, and the converse."""
     declared = {
         (table.name, column.name): [member.value for member in column.type.enum_class]
         for table in Base.metadata.tables.values()

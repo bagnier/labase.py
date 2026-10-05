@@ -1,13 +1,5 @@
-"""Which app a timeline entry belongs to — the axis the console browses by, across three sources.
-
-A business fact states its app on its own column. The other two have to name themselves at the
-boundary that builds them, and both read it off the *logger*: ``apps.auth.infra.router`` is auth's,
-``sqlalchemy.pool`` is the library's. An occurrence carries that logger in its captured context,
-which is what makes the pivot from an issue back to the code that raised it work at all.
-
-The pill that offers the axis has to agree with the filter that applies it: a value the filter
-accepts and the dropdown never lists is a filter an admin cannot reach.
-"""
+"""The ``app`` axis across the three sources, and the pill offering every value the filter
+accepts."""
 
 import uuid
 from datetime import UTC, datetime
@@ -36,8 +28,7 @@ def _pin_the_clock(tmp_path, monkeypatch):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _only_my_lines(reader):
-    """The store is shared and committed — the day files this replaced gave each test a scratch
-    directory. These tests assert over *every* ``logs`` entry, so they start from empty."""
+    """These tests assert over every ``logs`` entry of the shared store: start empty."""
     await clear_log_lines(reader.session)
     yield
     await clear_log_lines(reader.session)
@@ -50,23 +41,19 @@ def _occurrence(title: str, logger: str) -> IssueOccurrence:
 
 
 def test_an_occurrence_names_the_app_that_raised_not_its_own_title():
-    """An issue's title is ``ValueError: user 42 not found`` — an exception type and a message,
-    never a dotted app prefix. Splitting it on the first dot yielded the whole title as the app,
-    so no ``app`` filter could ever return an occurrence."""
+    """Not from the title, ``ValueError: user 42 not found``."""
     entry = _from_issue(_occurrence("ValueError: user 42 not found", "apps.todo.infra.router"))
 
     assert entry.app == "todo"
 
 
 def test_an_occurrence_from_a_library_names_the_library():
-    """Same rule the log sink already follows, so both sources of a failure agree."""
     entry = _from_issue(_occurrence("TimeoutError: pool exhausted", "sqlalchemy.pool"))
 
     assert entry.app == "sqlalchemy"
 
 
 def test_an_occurrence_with_no_logger_claims_no_app():
-    """A hand-inserted or legacy row has no logger to read; it must not invent one."""
     entry = _from_issue(
         IssueOccurrence(ts=_NOW, title="ValueError: boom", context={}, issue_id=uuid.uuid7())
     )
@@ -76,14 +63,10 @@ def test_an_occurrence_with_no_logger_claims_no_app():
 
 @pytest.mark.asyncio
 async def test_the_app_pill_offers_every_app_the_filter_accepts(reader):
-    """The filter runs over all three sources; a facet counting only business rows left ``shared``
-    and every library filterable but unlisted — reachable by hand-editing the URL and no other way.
-    """
     await seed_log_line(reader.session, "q.failed", logger="apps.shared.queue", ts=_THEN)
     await seed_log_line(reader.session, "pool gone", logger="sqlalchemy.pool", ts=_THEN)
 
-    # A facet clears the categorical filters on purpose (every pill offers all its values), so
-    # the date window is what keeps the shared journal's rows out of this assertion.
+    # Facets ignore categorical filters: the date window keeps other rows out.
     facets = await reader.facets(
         TimelineFilter(
             from_dt=datetime(2026, 7, 12, 9, tzinfo=UTC),

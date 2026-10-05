@@ -1,5 +1,4 @@
-"""Profile's settings dependency — the request's effective values; profile routes carry no
-``{org_handle}``, so this resolves to the server values (no org override can apply)."""
+"""Profile's settings: server values, as profile routes carry no ``{org_handle}``."""
 
 from typing import Annotated
 

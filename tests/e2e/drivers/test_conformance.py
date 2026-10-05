@@ -1,4 +1,4 @@
-"""The conformance check, on a schema of its own: what it lets through, what it names."""
+"""The conformance check, on a schema of its own."""
 
 import pytest
 from fastapi import FastAPI
@@ -52,8 +52,7 @@ async def test_an_answer_matching_its_schema_passes():
 
 @pytest.mark.asyncio
 async def test_an_answer_straying_from_its_schema_is_named_by_its_operation():
-    """The most literal template wins the match — `/{slug}/items/{item_id}`, not `/{slug}` —
-    and the message says which operation and which field."""
+    """The most literal template matches; the message names the operation and the field."""
     with pytest.raises(AssertionError) as refused:
         await _get("/acme/items/7")
 

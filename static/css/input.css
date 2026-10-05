@@ -37,23 +37,16 @@
 @import "tailwindcss";
 @source "../../apps/**/templates/**/*.html";
 
-/* Built-in daisyUI themes kept enabled as an admin-selectable roster (a product built
-   on this base may adopt any of them). The signature identity lives in the two custom
-   `labase-*` themes below, which are the actual light/dark defaults. Keep this list in
-   sync with THEMES in apps/console/contract/appearance.py — enforced by
-   scripts/check_design_tokens.py. */
+/* Built-in themes an admin may pick; the `labase-*` themes below are the defaults. In step with
+   THEMES in apps/console/contract/appearance.py (scripts/check_design_tokens.py). */
 @plugin "daisyui" {
   themes: light, dark, cupcake, dracula, emerald, corporate, synthwave, retro, nord, business;
 }
 
 /* ---------------------------------------------------------------------------
-   labase-light / labase-dark — the signature identity (refined-neutral,
-   editorial). The taste is in the *design variables* as much as the palette:
-   hairline 1px borders (--border), flat surfaces with no faux-3D gradient on
-   controls (--depth: 0 — elevation comes only from the deliberate shadow-sm on
-   .list-panel / .card-panel), a tight-but-not-sharp corner radius, and a single
-   restrained indigo accent (primary) with `neutral` set to ink so btn-neutral
-   reads as a near-black button. Semantic feedback colors are muted, not candy.
+   labase-light / labase-dark: hairline borders, flat controls (--depth: 0, elevation only from
+   .list-panel / .card-panel's shadow-sm), a tight radius, one indigo accent, `neutral` as ink,
+   muted feedback colours.
    --------------------------------------------------------------------------- */
 @plugin "daisyui/theme" {
   name: "labase-light";
@@ -79,7 +72,7 @@
   --color-accent: oklch(55% 0.1 264);
   --color-accent-content: oklch(98% 0.005 264);
 
-  /* Neutral = ink → near-black buttons/badges (the editorial move) */
+  /* Neutral = ink: near-black buttons and badges */
   --color-neutral: oklch(22% 0.006 286);
   --color-neutral-content: oklch(98% 0 0);
 
@@ -262,6 +255,27 @@
 .ph.ph-users:before {
   content: "\e4d6";
 }
+.ph.ph-user-plus:before {
+  content: "\e4d0";
+}
+.ph.ph-user-minus:before {
+  content: "\e4ce";
+}
+.ph.ph-user-gear:before {
+  content: "\e4cc";
+}
+.ph.ph-shield-check:before {
+  content: "\e40c";
+}
+.ph.ph-circle:before {
+  content: "\e18a";
+}
+.ph.ph-google-logo:before {
+  content: "\e292";
+}
+.ph.ph-github-logo:before {
+  content: "\e576";
+}
 .ph.ph-x:before {
   content: "\e4f6";
 }
@@ -291,6 +305,9 @@
 }
 .ph.ph-check-square:before {
   content: "\e186";
+}
+.ph.ph-check:before {
+  content: "\e182";
 }
 .ph.ph-text-strikethrough:before {
   content: "\e5c2";
@@ -375,26 +392,23 @@
 }
 
 @layer components {
-  /* Bordered, divided container for a vertical list of rows (the one recurring non-DaisyUI shape). */
+  /* Bordered, divided list of rows. */
   .list-panel {
     @apply bg-base-100 border border-base-300 rounded-box overflow-hidden divide-y divide-base-300 shadow-sm;
   }
 
-  /* Bordered card shell (the recurring non-DaisyUI card look) */
+  /* Bordered card shell */
   .card-panel {
     @apply card bg-base-100 border border-base-300 shadow-sm;
   }
 
-  /* `tabs-lift` panel's border/background/padding — DaisyUI's own `.tab-content` carries the
-     show/hide toggle tied to the sibling `.tab`'s `:checked` state, so this stays a companion
-     class next to `tab-content` in markup rather than folding it in, which `@apply` cannot
-     reach (a sibling-selector rule is not part of `.tab-content`'s own declaration block). */
+  /* The `tabs-lift` panel's look, next to `tab-content` in markup: `@apply` cannot reach the
+     sibling-selector rule that toggles it. */
   .tab-panel {
     @apply border-base-300 bg-base-100 p-4 sm:p-6;
   }
 
-  /* Type scale — the shared heading/meta ramp. Templates use these instead of
-     hand-spelling text sizes, so titles stay consistent across every app. */
+  /* Type scale, used instead of hand-spelled text sizes. */
   .page-title {
     @apply text-2xl font-semibold tracking-tight text-base-content;
   }
@@ -416,8 +430,7 @@
     @apply flex h-9 w-9 flex-none items-center justify-center rounded-field bg-primary/10 text-primary;
   }
 
-  /* Markdown body — styles generated HTML from mistune (child elements carry no
-     classes). Token-driven so it follows any active theme, including dark. */
+  /* Markdown body: mistune's HTML carries no classes; tokens follow the theme. */
   .md-body h1 {
     @apply text-2xl font-semibold text-base-content mb-4 mt-6;
   }
@@ -577,10 +590,8 @@
   }
 }
 
-/* Contribution calendar (profile activity) — a GitHub-style grid of day cells, one column
-   per ISO week. Tints are a color-mix on the single primary accent, so they track the active
-   theme (light/dark) instead of a hard-coded ramp. Structure is a semantic <table role="grid">
-   (see macros/activity_heatmap.html). */
+/* Contribution calendar (macros/activity_heatmap.html): tints mix the primary accent, so they
+   follow the theme. */
 .heatmap {
   border-collapse: separate;
   border-spacing: 3px;
@@ -651,9 +662,8 @@
   cursor: default;
 }
 
-/* Activity feed — a centered vertical timeline (content · node · time). The rail is a single
-   spine down the middle; each row is a 1fr / node / 1fr grid, so the node column sits at 50%
-   and the rail aligns through it. The nodes' ring-4 halo masks the rail behind each one. */
+/* Activity feed: each row a 1fr / node / 1fr grid, so nodes sit on the centered rail; their
+   ring-4 halo masks it. */
 .activity-timeline {
   position: relative;
 }
@@ -693,18 +703,14 @@
   transform: rotateY(4deg);
 }
 
-/* ── The queue history's film strip ──────────────────────────────────────────────────────────
-   Hand-written rather than utilities: a block's position is a percentage computed per row, and
-   the four kinds are a small closed vocabulary the template names once (see
-   apps/console/domain/queue_strip.py). */
+/* ── The Tasks history's film strip (apps/tasks/domain/strip.py) ───────────────────────────────
+   Hand-written: positions are computed percentages, and the bands a closed set. */
 .strip-lane {
   position: relative;
   flex: 1;
   height: 1.5rem;
 }
-/* A block's vertical placement is computed per band (see queue_strip.bucket_blocks): a slot
-   shared by two states stacks them, worst on top. The lane keeps a hair of padding so adjacent
-   rows do not touch. */
+/* Bands share a slot, worst on top; the padding keeps lanes apart. */
 .strip-block {
   position: absolute;
   border-radius: 2px;
@@ -733,12 +739,11 @@
 .strip-parked {
   background: var(--color-error);
 }
-/* Going wrong but not yet given up — solid where `.strip-attempt` is washed out, because one is
-   the try that failed and this is the task still owed after it. */
+/* Still owed after a failure: solid, unlike the washed-out `.strip-attempt`. */
 .strip-retrying {
   background: var(--color-warning);
 }
-/* Due, not run: hatched rather than filled, so an empty slot never reads as work that happened. */
+/* Due, not run: hatched, so it never reads as work done. */
 .strip-pending {
   background: repeating-linear-gradient(
     45deg,
@@ -748,12 +753,8 @@
     var(--color-base-200) 8px
   );
 }
-/* Wide enough for a consumer name and the event under it, and no wider: the column used to hold
-   a whole `evt:<kind>:<consumer>` topic, and kept its width after the topic stopped being spelled
-   there — leaving a hand's breadth of nothing between the names and the film they label. */
-/* The lines under a task's name — what it reacts to or how often it runs, which row it is, whose
-   seat it runs under. Smaller than the name on purpose: the name is what a reader scans a column
-   for, the rest is what they check once they have stopped. */
+/* Wide enough for a consumer name and its event. */
+/* Under the name, smaller: the name is what a reader scans for. */
 .task-sub {
   font-size: 0.6875rem;
   line-height: 1rem;
@@ -776,8 +777,7 @@
   padding-left: 0.75rem;
   text-align: right;
 }
-/* One bar per lane, always the same width: it says how the window went for that lane, never how
-   much of it there was. The count beside it is what carries volume. */
+/* One fixed-width bar per lane: the shape of the window; the count carries the volume. */
 .task-bar {
   position: relative;
   display: inline-flex;
@@ -789,14 +789,11 @@
 }
 .task-bar > span {
   height: 100%;
-  /* `.strip-attempt` carries a right border to mark where a try ended on the film; inside a bar
-     this narrow it would be a quarter of the segment. */
+  /* Without `.strip-attempt`'s border, too wide in so narrow a bar. */
   border-right: 0;
 }
-/* The count sits *on* the shares rather than beside them, so one object says both how many and how
-   they went. A white halo instead of a plate behind the digits, so the share the number describes
-   is not the share the number hides — and black rather than a theme colour, because it is read
-   against the bands and never against the page. */
+/* The count sits on the bar, with a halo rather than a plate that would hide a band; black, as it
+   is read against the bands, not the page. */
 .task-total {
   position: absolute;
   inset: 0;
@@ -805,9 +802,7 @@
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--color-base-content);
-  /* A grey halo rather than a white one: over the pale hatch of `pending` a white edge has nothing
-   to separate the digits from. Both tokens follow the theme, so this reads as black-on-grey on a
-   light one and flips on a dark one — the bands underneath stay saturated either way. */
+  /* A grey halo: a white one vanishes over `pending`'s pale hatch. */
   text-shadow:
     0 0 2px var(--color-base-300),
     0 0 2px var(--color-base-300),
@@ -831,8 +826,7 @@
 .strip-row:hover {
   background: var(--color-base-200);
 }
-/* The gridline column spans the whole group, not one row: it borrowed `.strip-lane`, whose fixed
-   height is a single lane, so the lines stopped after the first topic of each family. */
+/* The gridlines span the whole group, not one lane's height. */
 .strip-gridlines {
   position: relative;
   flex: 1;

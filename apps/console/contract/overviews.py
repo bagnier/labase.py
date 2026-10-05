@@ -1,10 +1,5 @@
-"""Server-wide overviews — the console's *pull* surface, carried by the contribs registry.
-
-Mirrors :mod:`apps.organizations.contract.overviews` but **server-wide**: there is no ``org_id``,
-the session is the BYPASSRLS admin session, and each app aggregates across *every* organisation.
-Apps answer :class:`ConsoleOverviewQuery` via ``host.contribs.provide(ConsoleOverviewQuery,
-provider)`` at mount; the console gathers them at runtime with ``contribs.collect`` (a failing
-provider is isolated, not fatal).
+"""The console tiles, pulled from every app: like :mod:`apps.organizations.contract.overviews`
+but server-wide, on the admin session, across all organizations.
 """
 
 from dataclasses import dataclass, field
@@ -13,10 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.vocabulary import AppName, PhosphorIcon
 
-# The console landing sections, in display order. ``operations`` groups the monitoring screens
-# (issues, metrics, logs) so they are visible at a glance; ``identity`` the who-and-tenancy screens
-# (users, organisations, profiles); ``features`` the product apps; ``configuration`` the platform
-# and foundation settings.
+# The console landing sections, in display order.
 SECTIONS: tuple[str, ...] = ("operations", "identity", "features", "configuration")
 
 
@@ -25,14 +17,12 @@ class ConsoleOverview:
     key: AppName
     title: str
     icon: PhosphorIcon
-    data: dict = field(default_factory=dict)  # JSON-serializable; "lines"
-    group: str | None = None  # fold into one console tile with others sharing this group
+    data: dict = field(default_factory=dict)  # JSON-serializable; "lines", "growth"
+    group: str | None = None  # tiles sharing a group fold into one
     section: str = "features"  # one of SECTIONS
-    href: str | None = None  # card link; defaults to /console/{key} when None
+    href: str | None = None  # defaults to /console/{key}
 
 
 @dataclass(frozen=True)
 class ConsoleOverviewQuery:
-    """Asked by the console; each app answers with a server-wide :class:`ConsoleOverview`."""
-
-    session: AsyncSession  # BYPASSRLS admin session — spans all organisations
+    session: AsyncSession  # admin session

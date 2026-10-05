@@ -35,10 +35,8 @@ class OrgFileApiMixin(ApiBase):
     def _cleanup_committed_data(self) -> None:
         self._cleanup_orgs()
 
-    # ── external (non-transactional) orgs ──────────────────────────────────────
-    # File tests must create the primary org outside the test transaction so that
-    # Supabase Storage RLS policies can see it; those orgs are deleted here rather
-    # than via transaction rollback.
+    # ── committed orgs ─────────────────────────────────────────────────────────
+    # Storage RLS reads committed rows: these orgs are deleted here, not rolled back.
     def track_org_id(self, org_id: str) -> None:
         if org_id not in self._test_org_ids:
             self._test_org_ids.append(org_id)
@@ -75,8 +73,7 @@ class OrgFileApiMixin(ApiBase):
     # ── sign-in with org naming ───────────────────────────────────────────────
 
     def sign_in_within_org(self, email: str, org_name: str) -> None:
-        # Supabase Storage RLS queries the *committed* database, so the org must
-        # exist outside any test transaction — hence the admin helper, not HTTP.
+        # Committed through the admin helper, for Storage RLS.
         self.primary_email = email
         self.last_registered_email = email
         delete_user_if_exists(email)
@@ -85,17 +82,14 @@ class OrgFileApiMixin(ApiBase):
         org = create_org_for_user(org_name, user_id)
         self.track_org_id(org["id"])
         self.active_org_handle = org["handle"]
-        # Log in on a client dedicated to this email — never the current acting client, which
-        # may belong to another already-signed-in user (e.g. an admin) and would be clobbered.
+        # On this email's own client, not the acting one.
         client = self._clients.get(email) or self._make_client()
         client.post("/auth/login", json={"email": email, "password": _PASSWORD})
         self._clients[email] = client
         self.set_acting_email(email)
 
     def sign_in_as_member_of_org(self, email: str, org_name: str) -> None:
-        # A genuine non-owner member: the org belongs to a synthetic owner and
-        # `email` joins as a plain member. This is what makes "within org" mean
-        # member-level access, in contrast to sign_in_within_org (owner).
+        # A plain member of an org owned by someone else.
         self.primary_email = email
         self.last_registered_email = email
         owner_email = f"owner-{org_name.lower().replace(' ', '-')}@example.com"
@@ -172,9 +166,8 @@ class OrgFileApiMixin(ApiBase):
     # ── multi-user operations ─────────────────────────────────────────────────
 
     def add_member_to_org(self, email: str) -> None:
-        # Membership must be committed to the real DB so Supabase Storage RLS can verify
-        # it when the member uploads files. Same constraint as sign_in_within_org.
-        self.client_for(email)  # ensure user is created and logged in
+        # Committed, for Storage RLS.
+        self.client_for(email)
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(email)
         add_membership(org_id, user_id, role="member")
@@ -198,15 +191,13 @@ class OrgFileApiMixin(ApiBase):
             client.patch(f"/{slug}", json={"name": org_name})
 
     def promote_to_owner(self) -> None:
-        """A precondition, not the behaviour under test: the admin helper bypasses the last-owner
-        constraint the real endpoint would enforce."""
+        """A precondition, bypassing the last-owner guard."""
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(self.primary_email)
         set_membership_role(org_id, user_id, "owner")
 
     def demote_to_member(self) -> None:
-        """A precondition, not the behaviour under test: the admin helper bypasses the last-owner
-        constraint the real endpoint would enforce."""
+        """A precondition, bypassing the last-owner guard."""
         org_id = self._get_primary_org_id()
         user_id = user_id_for_email(self.primary_email)
         set_membership_role(org_id, user_id, "member")

@@ -28,8 +28,7 @@ def _row(method: str, route: str, requests: int, errors: int, buckets: list[int]
 
 
 def test_percentile_interpolates_inside_the_crossing_bucket():
-    """30 observations in the (50, 100] bucket: p95 sits 95% of the way up it. rank = 0.95 * 30 =
-    28.5 → 50 + (100-50) * 28.5/30 = 97.5, not a bare 100."""
+    """30 in (50, 100]: rank 28.5 → 50 + 50 * 28.5/30 = 97.5, not 100."""
     assert percentile_ms(_buckets(ms_100=30)) == 97.5
     # 95 fast + 5 slow: rank 95 lands exactly on the (10, 25] bucket's top edge.
     assert percentile_ms(_buckets(ms_25=95, ms_5000=5)) == 25
@@ -40,7 +39,7 @@ def test_percentile_interpolates_inside_the_crossing_bucket():
 def test_percentile_edge_cases():
     assert percentile_ms([0] * (len(BUCKET_BOUNDS_MS) + 1)) is None
     only_inf = [0] * len(BUCKET_BOUNDS_MS) + [3]
-    assert percentile_ms(only_inf) is None  # slower than the largest bound
+    assert percentile_ms(only_inf) is None
 
 
 def test_aggregate_sums_rows_across_instances_and_sorts_by_volume():
@@ -56,7 +55,7 @@ def test_aggregate_sums_rows_across_instances_and_sorts_by_volume():
     assert get_todo.requests == 30
     assert get_todo.errors == 3
     assert get_todo.error_rate_pct == 10.0
-    assert get_todo.p95_ms == 97.5  # 30 obs in (50,100] → interpolated, not the 100 ceiling
+    assert get_todo.p95_ms == 97.5
     assert totals.requests == 70
     assert totals.error_rate_pct == round(100 * 3 / 70, 1)
 

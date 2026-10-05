@@ -1,8 +1,4 @@
--- Issue tracking (Sentry-as-Postgres): thousands of occurrences deduped into few issues by stack
--- fingerprint, each with a lifecycle.
---
--- Server-level admin data: no grants to `authenticated`, RLS on with no policy — the same posture
--- as app_settings.
+-- Occurrences folded into issues by stack fingerprint. Admin only: RLS on with no policy.
 
 create type public.issue_status as enum ('new', 'unresolved', 'resolved', 'ignored', 'regressed');
 
@@ -14,9 +10,7 @@ create table public.issues (
   occurrence_count    bigint              not null default 0,
   first_seen          timestamptz         not null default now(),
   last_seen           timestamptz         not null default now(),
-  -- The app release an issue was first and last seen in, and the one it was resolved in — a later
-  -- sighting past that release is a regression. Named `release`, not `version`: `version` is the
-  -- optimistic-lock counter every table in this schema carries, and one word cannot mean both.
+  -- A sighting past the resolved release is a regression. `version` is the optimistic lock.
   first_release       text                not null default 'dev',
   last_release        text                not null default 'dev',
   resolved_in_release text,
@@ -40,12 +34,11 @@ create table public.issue_occurrences (
   id         uuid        primary key default public.uuidv7(),
   issue_id   uuid        not null references public.issues(id) on delete cascade,
   created_at timestamptz not null default now(),
-  -- stack, request path/method, user, org, request_id — the request_id pivots each occurrence to
-  -- its correlated firehose lines, a link SaaS trackers cannot offer.
+  -- stack, request, user, org, request_id: the link to its log lines.
   context    jsonb       not null default '{}'
 );
 
--- id is a uuid7 (time-ordered), so (issue_id, id desc) stays a valid newest-first cursor index.
+-- Newest-first per issue.
 create index issue_occurrences_issue_idx on public.issue_occurrences (issue_id, id desc);
 
 alter table public.issue_occurrences enable row level security;

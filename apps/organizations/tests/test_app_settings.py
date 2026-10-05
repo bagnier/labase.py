@@ -1,6 +1,5 @@
-"""The ``app_settings`` dependency resolves *the request's effective settings*:
-org overrides only under ``/{org_handle}`` with an authenticated caller, server values
-everywhere else."""
+"""``app_settings``: org overrides under ``/{org_handle}`` for a signed-in caller, server values
+elsewhere."""
 
 import uuid
 from types import SimpleNamespace

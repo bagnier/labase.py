@@ -1,4 +1,4 @@
-"""The profile's 2FA section — its state is read from GoTrue, which can fail."""
+"""The profile's 2FA section, read from GoTrue, which can fail."""
 
 from unittest.mock import patch
 
@@ -11,8 +11,7 @@ _EMAIL = "two-factor-section@example.com"
 
 
 def test_confirming_an_enrolment_hands_over_the_upgraded_session(driver):
-    """Once enrolled, an aal1 token is refused: the session that confirmed the code must be the
-    aal2 one GoTrue returns, or the enrolment signs its own author out."""
+    """Else the enrolment signs its author out: aal1 is refused once enrolled."""
     client = driver.client_for(_EMAIL)
     upgraded = AuthTokens(access_token="aal2-access", refresh_token="aal2-refresh")
 
@@ -34,7 +33,7 @@ def test_confirming_an_enrolment_hands_over_the_upgraded_session(driver):
 
 
 def test_a_factor_lookup_gotrue_fails_hides_the_section_instead_of_the_page(driver):
-    """The section cannot say whether 2FA is on, so it says nothing; the rest of the page stands."""
+    """The section says nothing; the page stands."""
     client = driver.client_for(_EMAIL)
     request = httpx.Request("GET", "http://gotrue/auth/v1/user")
     failed = httpx.HTTPStatusError("boom", request=request, response=httpx.Response(500))

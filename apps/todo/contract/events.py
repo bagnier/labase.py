@@ -1,11 +1,5 @@
-"""To-do's business events — a task's life recorded on the shared journal.
-
-The verbs are the *domain* actions, not flat CRUD: a task is created, **edited** (its title),
-**ticked**/un-ticked (its done flag) and deleted. Edit/tick/untick are all forms of *update*, so
-they derive from :class:`~apps.shared.events.EntityUpdated` (sharing its ``entity_id``/``label``
-shape) but override ``verb`` — giving each a distinct ``kind`` (``"todo.ticked"`` …) so the
-profile/dashboard timeline reads "Ticked", not a flat "Updated". ``kind`` is derived from
-``app_name`` + ``verb``.
+"""To-do facts, named by domain action (created, edited, ticked, unticked, deleted), so a feed
+reads "Ticked" rather than "Updated".
 """
 
 from dataclasses import dataclass
@@ -16,8 +10,6 @@ from apps.shared.vocabulary import AppName, PhosphorIcon
 
 
 class TodoEvent(OrgScoped, BusinessEvent):
-    """Per-app mixin: fixes the entity prefix and the icon every to-do event carries."""
-
     app_name: ClassVar[AppName] = "todo"
     icon: ClassVar[PhosphorIcon] = "clipboard-text"
 

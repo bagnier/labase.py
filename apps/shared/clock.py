@@ -8,8 +8,7 @@ def now() -> datetime:
 
 
 def ago(ts: datetime, now: datetime) -> str:
-    """A compact relative moment (`3h ago`, `Mar 4`) — a feed reads better in elapsed time; the
-    exact instant stays on the row's ``title``/``datetime``."""
+    """``3h ago``, or ``Mar 4`` past a week."""
     secs = max(0.0, (now - ts).total_seconds())
     if secs < 60:
         return "just now"

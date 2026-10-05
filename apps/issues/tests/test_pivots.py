@@ -1,10 +1,4 @@
-"""The way back out of an issue: the request that tripped it.
-
-An occurrence stores the correlation keys the capture seam snapshotted, and the detail page
-printed the request id as plain text — the end of the trail. Yet that id is the whole point of
-storing it: it is what gathers this failure, the lines around it and the fact that it opened into
-one view. Making it a link is what closes the loop the timeline opens.
-"""
+"""An occurrence's request id links to the Timeline filtered on it."""
 
 _ADMIN = "issue-pivots@example.com"
 _TITLE = "ValueError: pivot boom"

@@ -1,12 +1,4 @@
-"""Row-Level Security context.
-
-Postgres RLS is the **single source of truth** for data isolation: who can read
-or write which rows is decided by the policies in supabase/migrations, evaluated
-against the JWT claims set below. Do not reimplement isolation filters in Python —
-the only app-level authorization check is the ``OwnerMembership`` /
-``CurrentOwnerMembership`` gate, kept solely to return a clean 403 for owner-only
-actions (RLS is the backstop).
-"""
+"""The RLS identity of a session (AGENTS: the database enforces isolation and authorization)."""
 
 import json
 from collections.abc import Mapping
@@ -15,26 +7,17 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Where a session keeps the claims it speaks under — ``None`` for the login role. Production reads
-# it nowhere: each session has its connection. The API test lane, which runs every session of a
-# request on one connection, re-applies it before each statement so each keeps its own identity.
+# The claims a session speaks under. Read only by the API test lane, which runs every session on
+# one connection and re-applies them before each statement.
 RLS_CLAIMS = "rls_claims"
 
 
 async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> None:
-    """Set the role + JWT claims so Postgres RLS policies see auth.uid().
+    """Run the session as ``app_rls`` under ``claims``, the verified JWT payload, which policies
+    read as is (``auth.uid()``, ``auth.jwt()``). The role is fixed, never taken from the token.
 
-    ``claims`` is the verified JWT payload, passed through verbatim so policies can
-    read any claim (auth.jwt(), auth.email(), app_metadata...). The Postgres role is
-    pinned server-side to ``app_rls`` and never driven by the token's role claim: a member of
-    ``authenticated``, plus the writes only the server makes (queue, journal), which PostgREST's
-    ``authenticated`` requests never get.
-
-    Both are set **transaction-local** (``set_config(..., is_local=true)``), in a single
-    round-trip: ``session.connection()`` has opened the request's transaction, and the
-    request commits/rolls back exactly once (see ``_commit_on_success``), at which point
-    Postgres discards these settings automatically — so no reset round-trips are needed
-    and nothing can leak onto the next borrower of the pooled connection.
+    Transaction-local: the request's single commit or rollback discards both, so nothing leaks to
+    the pooled connection's next user.
     """
     conn = await session.connection()
     await conn.execute(
@@ -47,13 +30,8 @@ async def set_rls_context(session: AsyncSession, claims: Mapping[str, Any]) -> N
 
 
 async def clear_rls_context(session: AsyncSession) -> None:
-    """Reset role and claims mid-transaction, for callers that reuse one session.
-
-    The HTTP request path does **not** need this — its single commit/rollback discards the
-    transaction-local context set above. It stays for the two consumers that toggle identity
-    on a still-open transaction: the queue worker (belt-and-suspenders around a task that owns
-    its own commit) and the direct RLS tests (``tests/rls.py`` switches between users on one
-    rolled-back session, so it must undo the previous identity explicitly)."""
+    """Reset role and claims inside an open transaction, for a session that changes identity
+    (the queue worker, ``tests/rls.py``). A request needs none."""
     conn = await session.connection()
     await conn.execute(text("RESET role"))
     await conn.execute(text("RESET request.jwt.claims"))

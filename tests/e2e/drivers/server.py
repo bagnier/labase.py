@@ -1,9 +1,5 @@
-"""In-process hypercorn server for browser e2e tests.
-
-Runs the app on a daemon-thread event loop so the test and the app share memory
-(enables monkeypatching). Single responsibility: own the server lifecycle so the
-browser substrate only orchestrates it.
-"""
+"""The browser driver's in-process hypercorn server: test and app share memory, so
+monkeypatching reaches the app."""
 
 import asyncio
 import socket
@@ -27,11 +23,7 @@ def _free_port() -> int:
 
 
 def _loopback_binds(port: int) -> list[str]:
-    """Both loopback sockets when the machine has them.
-
-    The base URL says ``localhost`` (WebAuthn rp_id), and resolvers differ on
-    whether that means ``::1`` or ``127.0.0.1`` — listening on both makes the
-    URL work either way."""
+    """Both loopbacks: ``localhost`` (the WebAuthn rp_id) may resolve to either."""
     binds = [f"127.0.0.1:{port}"]
     try:
         with socket.socket(socket.AF_INET6) as s:
@@ -48,12 +40,8 @@ async def _make_event() -> asyncio.Event:
 
 class InProcessServer:
     def __init__(self, port: int | None = None) -> None:
-        """Launch the server (on `port`, or a free one); it serves until ``stop()``.
-
-        The URL says ``localhost`` (same socket) so the browser's origin domain
-        matches the WebAuthn ``rp_id`` GoTrue pins; a pinned `port` listed in
-        ``rp_origins`` is what lets ``navigator.credentials`` ceremonies verify
-        in e2e (see the browser driver)."""
+        """Serve on `port`, or a free one, until ``stop()``; at ``localhost``, the WebAuthn
+        ``rp_id``."""
         self._port = port or _free_port()
         self._bg = BackgroundLoop()
         config = Config()
@@ -61,19 +49,14 @@ class InProcessServer:
         config.accesslog = config.errorlog = None
         self._shutdown = self._bg.run(_make_event())
         self._server_future = self._bg.submit(
-            # starlette types an ASGI scope as a loose mapping, hypercorn as precise TypedDicts;
-            # a FastAPI app satisfies the protocol at runtime, not statically. Both checkers agree.
+            # hypercorn's TypedDict scopes against starlette's mapping: fine at runtime only.
             serve(cast(Framework, app), config, shutdown_trigger=self._shutdown.wait)
         )
         self._wait_for_server()
         self.base_url = f"http://localhost:{self._port}"
 
     def run(self, coro):
-        """Run a coroutine on the server's event loop and return its result.
-
-        The app's engines live on that loop; anything touching them (e.g. a
-        TaskWorker tick) must run there too.
-        """
+        """Run a coroutine on the server's loop, where the app's engines live."""
         return self._bg.submit(coro).result(timeout=30)
 
     def _wait_for_server(self, timeout: float = 30.0) -> None:

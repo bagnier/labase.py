@@ -1,8 +1,5 @@
-"""Avatars share the ``org-files`` bucket under ``avatars/{user_id}.{ext}`` — a path whose first
-segment is never an org id. Every storage policy casts that segment to uuid to scope the row by
-org, so once an avatar object exists, a user-scoped read of the bucket has to evaluate that row
-too, and the cast must not raise on it.
-"""
+"""Avatars sit in ``org-files`` under ``avatars/…``, a first segment that is no org id: the
+policies' uuid cast must not raise on it when a user lists the bucket."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -40,15 +37,14 @@ async def _an_org_object_and_an_avatar_object(
 ) -> AsyncGenerator[OrgFileAndAvatar]:
     member = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, member):
                 org = await OrganizationRepository(session).create_with_owner(
                     f"Org {uuid.uuid4().hex[:8]}", uuid.UUID(member)
                 )
-            # Seeded on the bootstrap (superuser) role: an insert under RLS would hit the
-            # same cast this test is about, in the policy's WITH CHECK.
+            # As superuser: under RLS the insert would hit the same cast.
             org_object_id = await session.scalar(
                 _INSERT_OBJECT, {"bucket": bucket(), "name": f"{org.id}/notes.txt"}
             )
@@ -69,8 +65,7 @@ async def test_a_member_lists_the_bucket_without_the_avatar_cast_raising(
     db_session: AsyncSession,
 ):
     async with _an_org_object_and_an_avatar_object(db_session) as seeded:
-        # Bootstrap role, RLS bypassed: proves the avatar row is really there to be evaluated,
-        # so the assertion below can only pass by the cast actually surviving it.
+        # The row exists, so the assertion below exercises the cast.
         ids = {"org_object_id": seeded.org_object_id, "avatar_object_id": seeded.avatar_object_id}
         seeded_ids = set(await db_session.scalars(_OBJECTS_BY_ID, ids))
         assert seeded_ids == {seeded.org_object_id, seeded.avatar_object_id}

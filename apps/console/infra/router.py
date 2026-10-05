@@ -54,7 +54,7 @@ router = APIRouter(tags=["console"])
 
 _NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-# Display metadata for a folded group — ``(title, icon, section)``; see ``_fold_groups``.
+# ``(title, icon, section)`` per folded group.
 _GROUP_DISPLAY: dict[str, tuple[str, str, str]] = {
     "settings": ("Settings", "gear-six", "configuration")
 }
@@ -68,11 +68,7 @@ _SECTION_LABELS: dict[str, str] = {
 
 
 def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
-    """Fold overviews sharing a ``group`` into one tile, so publishers stay independent.
-
-    Each app still answers ``ConsoleOverviewQuery`` with its own overview; this only affects
-    how the grid renders them — same mechanism any future group of tiles can opt into.
-    """
+    """Fold overviews sharing a ``group`` into one tile; each app still answers on its own."""
     grouped: dict[str, list[ConsoleOverview]] = {}
     folded: list[ConsoleOverview] = []
     for o in overviews:
@@ -92,10 +88,7 @@ def _fold_groups(overviews: list[ConsoleOverview]) -> list[ConsoleOverview]:
 
 
 def _sectioned(overviews: list[ConsoleOverview]) -> list[dict]:
-    """Group overviews into the console landing sections, in ``SECTIONS`` order.
-
-    Empty sections are dropped; an unknown section label falls back to its raw key.
-    """
+    """Overviews by section, in ``SECTIONS`` order; empty sections dropped."""
     sections: list[dict] = []
     for section in SECTIONS:
         members = [o for o in overviews if o.section == section]
@@ -109,10 +102,7 @@ _GROWTH_DAYS = 14
 
 
 def _growth_chart(overviews: list[ConsoleOverview]) -> dict | None:
-    """Fold every tile's ``growth`` slice ({iso_day: n}) into one stacked chart.
-
-    The console stays ignorant of who grows: any app may put a ``growth`` dict in its
-    console overview data (profiles and organizations do) and lands on the chart."""
+    """One stacked chart of every tile's ``growth`` (``{iso_day: n}``)."""
     buckets: dict[str, dict[str, int]] = {}
     names: dict[str, str] = {}
     for o in overviews:
@@ -151,8 +141,7 @@ def _overview_for(overviews: list[ConsoleOverview], app: str) -> ConsoleOverview
 
 
 def _app_event_wiring(app: str) -> dict:
-    """The events ``app`` emits and the events it reacts to — read from the event wiring, so no
-    app has to report its own wiring (the console asks it directly)."""
+    """What ``app`` emits and reacts to, from the wiring."""
     emits = sorted(e.kind for e in wiring.by_app().get(app, []))
     listens = sorted(
         (
@@ -171,8 +160,7 @@ def _app_event_wiring(app: str) -> dict:
 
 
 def _event_graph() -> list[dict]:
-    """The whole event → reaction graph: every event with a durable consumer, its owner app, and
-    each reaction (listening app + name), kind-sorted for a stable console listing."""
+    """Every event with a durable consumer, its owner and reactions, sorted by kind."""
     rows = [
         {
             "kind": event_type.kind,
@@ -188,7 +176,7 @@ def _event_graph() -> list[dict]:
 
 
 def _events_by_app() -> list[EventsByApp]:
-    """Every declared event, grouped by owner app — the full catalogue, wired or not."""
+    """Every declared event by owner, wired or not."""
     return [
         EventsByApp(app=app, kinds=sorted(e.kind for e in event_types))
         for app, event_types in wiring.by_app().items()
@@ -283,8 +271,7 @@ async def get_admins(
     )
 
 
-# The admin flag itself lives in GoTrue, so the session here carries only the fact — but it carries
-# it on a transaction, so a failed journal write fails the request instead of being swallowed.
+# The flag lives in GoTrue; the session carries the fact, which fails the request if it fails.
 @router.post("/admins", responses=json_and_html(AdminList))
 async def add_admin(
     request: Request, body: AdminGrant, current_user: CurrentAdmin, session: AdminSession
@@ -296,7 +283,7 @@ async def add_admin(
     except AdminNotFound as exc:
         if wants_json(request):
             return JSONResponse({"detail": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
-        # Matches the JSON branch: "not found by email" is a 404, not a validation failure.
+        # A 404, like the JSON branch.
         return _admins_partial(
             request,
             await admins.list_admins(),
@@ -381,7 +368,6 @@ async def get_settings_page(
 async def get_events(
     request: Request, current_user: CurrentAdmin, session: AdminSession
 ) -> Response:
-    """The event → reaction graph across the whole system — what each app emits and who reacts."""
     graph = _event_graph()
     by_app = _events_by_app()
     if wants_json(request):
@@ -398,8 +384,7 @@ async def get_events(
     )
 
 
-# The history's default reach. Six hours shows an hourly recurring topic as a readable comb and
-# still fits a morning's incidents; anything wider is asked for explicitly.
+# The history's default window: an hourly topic reads as a comb, a morning fits.
 @router.get("/{app}", responses=json_and_html(AppPage))
 async def get_app(
     request: Request, app: str, current_user: CurrentAdmin, session: AdminSession
@@ -500,7 +485,7 @@ async def create_org_override(
             app=app,
             key=key,
             value=stored,
-            entity_name=f"{app}.{key}",  # the setting is the subject: name it for the timeline
+            entity_name=f"{app}.{key}",
         ),
         session,
     )
@@ -551,9 +536,7 @@ async def update_setting(
     repo = AppSettingRepository(session)
     await repo.set(app, key, stored)
     values = await repo.values(app)
-    # One fact: SettingsChanged is persisted as the audit record (who changed what) AND fires the
-    # spread NOTIFY (delivered on commit) so every instance re-reads and reloads — atomic with the
-    # write, all on this session, committed together.
+    # On this session, with the write: both the record and every instance's reload.
     await events.emit(
         SettingsChanged(
             user_id=current_user.id,
@@ -561,7 +544,6 @@ async def update_setting(
             key=key,
             value=stored,
             values=values,
-            # `target_app` routes the reload; `entity_name` is what a human reads in the timeline.
             entity_name=f"{app}.{key}",
         ),
         session=session,

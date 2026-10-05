@@ -15,8 +15,7 @@ async def get_current_org(
     current_user: CurrentUser,
     session: RlsSession,
 ) -> uuid.UUID:
-    """Resolve the request's org, then correlate this request's logs with it — the unified logs
-    viewer filters the log sink by org_id (bound once here, at the single resolution point)."""
+    """Resolve the request's org and bind ``org_id`` for its logs."""
     org_id = await _resolve_current_org(request, current_user, session)
     structlog.contextvars.bind_contextvars(org_id=str(org_id))
     return org_id
@@ -27,14 +26,12 @@ async def _resolve_current_org(
     current_user: CurrentUser,
     session: RlsSession,
 ) -> uuid.UUID:
-    """Resolve org from {org_handle} path parameter."""
     user_uuid = current_user.id
     repo = OrganizationRepository(session)
 
     slug = request.path_params.get("org_handle")
     if slug:
-        # A reserved slug (e.g. /console) must never resolve as an org handle. If routing ever
-        # lets one reach here, fail as 404 — never confirm the reserved surface exists.
+        # A reserved slug never resolves; a 404 confirms nothing.
         if is_reserved(slug):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
         org = await repo.get_by_handle_for_user(slug, user_uuid)
@@ -45,11 +42,10 @@ async def _resolve_current_org(
             status_code=status.HTTP_403_FORBIDDEN, detail="Organisation not found or access denied"
         )
 
-    # An API-key principal has exactly one organisation: its own.
     if current_user.api_key_org_id is not None:
         return current_user.api_key_org_id
 
-    # Routes outside /{org_handle} have no handle to resolve: fall back to the user's first org.
+    # Outside /{org_handle}: the user's first org.
     org = await repo.get_first_for_user(user_uuid)
     if org is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No organization found")
@@ -94,6 +90,8 @@ async def get_membership_by_org_id(
     current_user: CurrentUser,
     session: RlsSession,
 ) -> Membership:
+    """Owner gate for ``{org_id}`` routes, binding ``org_id`` first so refusals carry it."""
+    structlog.contextvars.bind_contextvars(org_id=str(org_id))
     repo = OrganizationRepository(session)
     membership = await repo.get_membership(org_id, current_user.id)
     if membership is None:
@@ -102,9 +100,6 @@ async def get_membership_by_org_id(
 
 
 def _gate_owner(membership: Membership) -> Membership:
-    # request.finished already reports this 403 with the same user and path, and its detail via
-    # note_rejection — a line here would only restate it. (require_current_owner's callers also
-    # get org_id for free, bound by get_current_org; require_owner's do not — see #95.)
     if membership.role != OrgRole.owner:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return membership
@@ -113,12 +108,10 @@ def _gate_owner(membership: Membership) -> Membership:
 async def require_owner(
     membership: Membership = Depends(get_membership_by_org_id),
 ) -> Membership:
-    """Owner gate for routes with an ``{org_id}`` path parameter (JSON API)."""
     return _gate_owner(membership)
 
 
 async def require_current_owner(
     membership: Membership = Depends(get_current_membership),
 ) -> Membership:
-    """Owner gate for ``/{org_handle}/...`` routes (resolves the org from the slug)."""
     return _gate_owner(membership)

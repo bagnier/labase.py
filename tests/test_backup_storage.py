@@ -11,7 +11,7 @@ _PAGE_SIZE = 100
 
 
 class _FakeStore:
-    """Mimics storage3's ``list()``: a single level, capped at ``_PAGE_SIZE`` unless paged."""
+    """Like storage3's ``list()``: one level, ``_PAGE_SIZE`` per page."""
 
     def __init__(self, names_by_prefix: dict[str, Sequence[str]]):
         self._names_by_prefix = names_by_prefix

@@ -35,7 +35,7 @@ class _SpreadEvent(BusinessEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class _StrictSpreadEvent(BusinessEvent):
-    """A spread event with a *required* payload field: a stored fact missing it cannot rebuild."""
+    """A stored fact missing ``value`` cannot rebuild."""
 
     app_name = "test_listener"
     verb = "strict_spread"
@@ -50,8 +50,7 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture
 async def iso():
-    # Isolate the listener's global view: mark every pre-existing fact dispatched so tick() sees
-    # only what this test inserts. Restore the process-wide wiring and task handlers afterwards.
+    # Mark existing facts dispatched, so tick() sees only this test's; restore wiring and handlers.
     _clear_engine_caches()
     saved_wiring = wiring.snapshot()
     saved_handlers = dict(_handlers)
@@ -156,8 +155,7 @@ async def test_worker_runs_the_consumer_with_the_reconstructed_typed_event(iso):
 
 @pytest.mark.asyncio
 async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(iso):
-    """A durable consumer must reason about *when the fact happened* — the journal's created_at —
-    not when a retry/park finally delivered it. The delivered event carries the record's instant."""
+    """Not when a retry finally delivered it."""
     seen: list[BusinessEvent] = []
 
     async def handler(session, event) -> None:
@@ -180,14 +178,12 @@ async def test_the_consumer_receives_the_event_stamped_with_the_facts_instant(is
         pass
 
     assert len(seen) == 1
-    assert seen[0].created_at == stored  # the fact's instant, rebuilt from the record
+    assert seen[0].created_at == stored
 
 
 @pytest.mark.asyncio
 async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
-    """The reaction runs off the journal on a background task with no request of its own; delivery
-    wrapper binds the fact's originating request_id onto structlog, so the reaction's log lines join
-    the emitting request's timeline. Assert it is bound while the handler runs."""
+    """The fact's request_id is bound while the handler runs, so its logs join that request."""
     seen: dict[str, object] = {}
 
     async def handler(session, event) -> None:
@@ -216,11 +212,8 @@ async def test_a_reaction_runs_under_the_originating_requests_correlation(iso):
 
 @pytest.mark.asyncio
 async def test_a_reaction_parked_for_good_logs_its_failure_under_the_facts_delivery_context(iso):
-    """The issue's own reproduction: an ``on`` consumer that always raises, retried to exhaustion.
-    ``queue.task_failed`` must carry the same request_id/user_id/org_id as the fact that triggered
-    it — the keys the Timeline correlates a bug back to the request, actor and org it concerns —
-    read off the reaction's own payload past the point where the wrapper's narrower binding
-    (only around the handler call) has already exited."""
+    """``queue.task_failed`` is logged outside the handler's binding, and still carries the fact's
+    request_id, user_id and org_id."""
 
     async def handler(session, event) -> None:
         raise RuntimeError("boom")
@@ -249,8 +242,7 @@ async def test_a_reaction_parked_for_good_logs_its_failure_under_the_facts_deliv
         )
         await s.commit()
 
-    # `capture_logs()` disables every configured processor for its duration — `merge_contextvars`
-    # included — so it is handed back explicitly, or the bound keys never reach the captured entry.
+    # `capture_logs()` drops the configured processors, `merge_contextvars` included.
     with capture_logs(processors=(structlog.contextvars.merge_contextvars,)) as logs:
         worker = TaskWorker(0, session_factory=factory)
         while await worker.tick():
@@ -267,10 +259,7 @@ async def test_a_reaction_parked_for_good_logs_its_failure_under_the_facts_deliv
 
 @pytest.mark.asyncio
 async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispatched(iso):
-    """A kind with no registered class can be routed to no one — a fact we cannot even name. That is
-    not the benign "nobody listens" no-op: it is logged at exception level (the capture seam folds
-    it into a console Issue), so it stops being lost in silence. The cursor still advances: the
-    record is marked dispatched and nothing is enqueued."""
+    """Unlike a kind nobody listens to, an unknown kind is a bug. Nothing is enqueued."""
     async with db.admin_session_factory()() as s:
         await s.execute(
             text(
@@ -284,16 +273,14 @@ async def test_an_unroutable_kind_is_surfaced_as_an_issue_but_still_marked_dispa
         assert await EventListener(0).tick() == 1
     surfaced = [entry for entry in logs if entry["event"] == "listener.unroutable_fact"]
     assert len(surfaced) == 1
-    assert surfaced[0]["log_level"] == "error"  # exception level → captured as an Issue
+    assert surfaced[0]["log_level"] == "error"
     assert surfaced[0]["kind"] == "test_listener.legacy"
     assert await _topics() == []
     assert await _undispatched("test_listener.legacy") == 0
 
 
 def test_forget_apps_register_durable_consumers_of_user_deleted():
-    """Account deletion cleanup runs off the listener: organizations and profile each declare one
-    async consumer of UserDeleted (auth.user_deleted), keyed by topic (shared may not import the
-    bounded contexts to name the handlers)."""
+    """Checked by topic: shared may not import the contexts."""
     import apps.main  # noqa: F401
 
     topics = set(_handlers)
@@ -302,9 +289,7 @@ def test_forget_apps_register_durable_consumers_of_user_deleted():
 
 
 def test_org_seed_apps_register_durable_consumers_of_organization_created():
-    """Importing the composition root mounts every app; each welcome-seed app declares a durable
-    async consumer of OrganizationCreated via the manifest's consumes_when_enabled. Checked by
-    topic string (shared may not import a bounded context to name the event type)."""
+    """Checked by topic: shared may not import the contexts."""
     import apps.main  # noqa: F401
 
     topics = set(_handlers)
@@ -314,9 +299,7 @@ def test_org_seed_apps_register_durable_consumers_of_organization_created():
 
 @pytest.mark.asyncio
 async def test_tick_runs_spread_handlers_per_instance_off_the_trail(iso):
-    """A spread fact is replayed to this process's spread handler off the journal — no claim, no
-    dispatch mark (every instance applies it). Reconstructed as its typed event. Its own wiring
-    isolates the spread handler; the catalog is process-wide, so class_for resolves the kind."""
+    """Replayed as its typed event, without being claimed or marked dispatched."""
     own = EventWiring()
     seen: list[object] = []
 
@@ -341,15 +324,8 @@ def _spread_record(value: str) -> BusinessEventRecord:
 
 @pytest.mark.asyncio
 async def test_spread_reaches_a_fact_that_commits_after_a_later_one(iso):
-    """Two facts whose commit order reverses their minting order — the everyday shape of a slow
-    transaction next to a quick one.
-
-    ``early`` is minted first, so it holds the lower key (uuid7 is time-ordered), but it is still
-    in flight when ``late`` commits. A tick then sees ``late`` alone and the spread cursor moves
-    to its key; ``early`` surfaces on the commit that follows, *below* that cursor. Spread has
-    neither claim nor ledger to catch what a key comparison skips, so a reload lost this way is
-    lost for good: the instance runs the settings the console changed two changes ago.
-    """
+    """``early`` holds the lower key but commits after a tick has seen ``late``: it surfaces
+    below the cursor, and must still be applied."""
     own = EventWiring()
     seen: list[str | None] = []
 
@@ -371,10 +347,7 @@ async def test_spread_reaches_a_fact_that_commits_after_a_later_one(iso):
 
 @pytest.mark.asyncio
 async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_advances(iso):
-    """A fact whose payload can't rebuild its typed event (a field added to the class after it was
-    written, a hand-inserted one) must not wedge the spread path: without advancing the cursor,
-    every later tick would replay the same poison fact and none would ever propagate again. It is
-    logged, skipped, and the healthy fact behind it still runs."""
+    """Else every later tick replays the poison fact; the healthy one behind it still runs."""
     own = EventWiring()
     seen: list[_StrictSpreadEvent] = []
 
@@ -382,7 +355,7 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
         seen.append(event)
 
     EventBus(own).spread(_StrictSpreadEvent, apply)
-    for payload in ({}, {"value": "on"}):  # poison first — uuid7 keeps the healthy one behind
+    for payload in ({}, {"value": "on"}):
         await seed_fact(
             BusinessEventRecord(app_name="test_listener", verb="strict_spread", payload=payload)
         )
@@ -392,24 +365,17 @@ async def test_a_fact_that_cannot_be_rebuilt_is_skipped_and_the_spread_cursor_ad
         await listener.tick()
 
     assert [e.value for e in seen] == ["on"]
-    # The poison fact is not swallowed as a warning: it is logged at exception level, so capture
-    # seam records a console Issue for a fact that can no longer be rebuilt.
     failed = [entry for entry in logs if entry["event"] == "listener.reconstruct_failed"]
     assert len(failed) == 1
     assert failed[0]["log_level"] == "error"
-    await listener.tick()  # cursor moved past both facts: nothing replays
+    await listener.tick()
     assert [e.value for e in seen] == ["on"]
 
 
 @pytest.mark.asyncio
 async def test_a_spread_handler_that_refuses_is_surfaced_as_an_issue(iso):
-    """A ``spread`` handler is a config reload — the settings the console just changed reaching
-    this instance. One that raises means this process is now running on stale values while every
-    other one moved, and nothing retries it (spread has no claim and no queue). That is a defect,
-    not a degradation, and used to be a ``warning`` inside a two-day window.
-
-    The cursor still advances, like a fact that cannot be rebuilt: replaying a handler that
-    refuses would freeze propagation for good."""
+    """The instance is left on stale settings and nothing retries: a bug. The cursor still
+    advances, or propagation would freeze."""
     own = EventWiring()
 
     async def refuse(_event: _SpreadEvent) -> None:
@@ -433,5 +399,5 @@ async def test_a_second_tick_does_not_refan_a_dispatched_fact(iso):
     await _seed(uuid.uuid7())
 
     assert await EventListener(0).tick() == 1
-    assert await EventListener(0).tick() == 0  # nothing left undispatched
-    assert await _topics() == ["evt:test_listener.happened:counter"]  # not duplicated
+    assert await EventListener(0).tick() == 0
+    assert await _topics() == ["evt:test_listener.happened:counter"]

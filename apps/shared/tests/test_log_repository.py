@@ -1,13 +1,5 @@
-"""``log_lines`` as a store the whole deployment shares, rather than a file each process keeps.
-
-Per-day JSON lines on local disk made the timeline lie by omission the moment a second instance
-existed: the journal and the issues are in Postgres and therefore global, while the ``logs``
-source showed only whatever the instance answering that page happened to have written. An admin
-correlating a request could see the fact and the occurrence and miss every line between them.
-
-Retention had the same shape of problem from the other end — the module promised that per-day
-rotation made it "a plain file delete", and nothing ever deleted.
-"""
+"""``LogRepository``: one ``log_lines`` store shared by every instance, its filters and its
+retention."""
 
 import uuid
 from datetime import UTC, datetime, time, timedelta
@@ -35,12 +27,8 @@ def _pin_the_clock(monkeypatch):
 
 @pytest_asyncio.fixture
 async def sessions():
-    """Two sessions on the same store — standing in for two instances of the app.
-
-    Engine caches cleared on the way *in* as well as out: ``admin_session_factory`` is lru_cached
-    and binds its pool to the first loop that asks, so a driver-based test before this one leaves
-    a pool bound to a dead loop.
-    """
+    """Two sessions standing in for two instances. Engine caches are cleared on the way in too:
+    an earlier test may have left a pool bound to a dead loop."""
     db._admin_engine.cache_clear()
     db.admin_session_factory.cache_clear()
     factory = db.admin_session_factory()
@@ -53,7 +41,6 @@ async def sessions():
 
 @pytest.mark.asyncio
 async def test_a_line_one_instance_wrote_is_read_by_another(sessions):
-    """The whole point: the store is shared, so the reader never has to be the writer."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
 
@@ -65,10 +52,7 @@ async def test_a_line_one_instance_wrote_is_read_by_another(sessions):
 
 @pytest.mark.asyncio
 async def test_a_line_carrying_unserializable_values_still_lands(sessions):
-    """Regression: a ``UUID`` bound into a line's context was refused by the engine's default JSON
-    encoding, and the drain wrote the whole batch off to the day files — the store missed exactly
-    the tracebacks it exists to show. Callers must not have to know which types survive: whatever a
-    site binds, the line lands."""
+    """A ``UUID`` bound into a line's context must not send the whole batch to the day files."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
 
@@ -81,8 +65,6 @@ async def test_a_line_carrying_unserializable_values_still_lands(sessions):
 
 @pytest.mark.asyncio
 async def test_a_line_names_the_instance_that_wrote_it(sessions):
-    """One store, N writers — a line that cannot say which process it came from makes an outage
-    on a single instance indistinguishable from one everywhere."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
 
@@ -95,9 +77,7 @@ async def test_a_line_names_the_instance_that_wrote_it(sessions):
 
 @pytest.mark.asyncio
 async def test_append_writes_the_whole_batch_as_one_statement(sessions):
-    """AGENTS.md, "The log sink traces the machinery off the request's path": "the write is
-    one multi-row insert per drain" — not one single-row statement replayed once per line, and
-    every line of the batch still has to land, not just the statement count be right."""
+    """One multi-row insert per drain, every line landing."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
     lines = [_line(marker, seq=0), _line(marker, seq=1), _line(marker, seq=2)]
@@ -121,9 +101,8 @@ async def test_append_writes_the_whole_batch_as_one_statement(sessions):
 
 @pytest.mark.asyncio
 async def test_append_lands_a_batch_wider_than_one_statements_bind_limit(sessions):
-    """A drain tick can hand back everything the bounded queue held (``_QUEUE``'s maxlen is
-    10000) — asyncpg refuses a single statement bound to more than 32767 parameters, so a
-    batch this wide must still all land, not raise, however it is chunked."""
+    """A full queue holds more lines than asyncpg's 32767 bound parameters allow in one
+    statement."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
     lines = [_line(marker) for _ in range(3300)]
@@ -137,7 +116,6 @@ async def test_append_lands_a_batch_wider_than_one_statements_bind_limit(session
 
 @pytest.mark.asyncio
 async def test_retention_drops_what_is_past_the_window(sessions):
-    """The delete the module promised and never performed."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
     stale, fresh = _NOW - timedelta(days=40), _NOW
@@ -154,19 +132,14 @@ async def test_retention_drops_what_is_past_the_window(sessions):
 
 @pytest.mark.asyncio
 async def test_retention_keeps_a_line_from_the_start_of_the_floor_day(sessions):
-    """The floor day is the oldest day ``roll`` keeps whole — so a line dated at its very start,
-    before ``now``'s own time-of-day, must survive purge *inside that same surviving partition*,
-    not just in the default one. A purge floor cut to the exact hour instead of the day catches it
-    anyway, which is what turns the partition's instant ``DROP`` into a row-by-row ``DELETE`` that
-    leaves dead tuples behind (issue #43)."""
+    """The floor is a day, not ``now`` minus the window to the hour: a line from the floor day's
+    start survives inside its own partition."""
     writer, reader = sessions
     marker = f"store.{uuid.uuid4().hex}"
     floor_day = (_NOW - timedelta(days=30)).date()
     on_floor_day = datetime.combine(floor_day, time.min, tzinfo=UTC)
 
-    # A real partition for the floor day, the way years of nightly rolls would have made one —
-    # not the default partition every prior version of this test landed in, which is blind to
-    # whether the row-level floor actually agrees with the day the roll keeps whole.
+    # A real partition for the floor day, not the default one, which could not tell.
     await LogRepository(writer).roll(today=floor_day, retention_days=9999)
     await writer.commit()
     await LogRepository(writer).append([_line(marker, ts=on_floor_day)], instance="gw0")
@@ -182,9 +155,7 @@ async def test_retention_keeps_a_line_from_the_start_of_the_floor_day(sessions):
 
 @pytest.mark.asyncio
 async def test_retention_drops_a_whole_day_as_one_partition(sessions):
-    """What partitioning buys, and the reason the table is partitioned at all: a day past the
-    window leaves as a ``DROP TABLE`` — instant, and leaving no dead tuples for VACUUM — instead
-    of a DELETE walking one row per log line."""
+    """A ``DROP TABLE``, not a row-by-row ``DELETE`` leaving dead tuples."""
     writer, _ = sessions
     old_day = (_NOW - timedelta(days=40)).date()
 
@@ -216,9 +187,7 @@ async def _day_partitions(session) -> set[str]:
 
 # ── The filter matrix ────────────────────────────────────────────────────────────────────────
 #
-# Every filter the console Timeline can put on the ``logs`` source. Each test seeds its own marker
-# so it never sees another's rows: the store is shared and committed, unlike the scratch directory
-# the file reader used to get for free.
+# Each test seeds its own marker: the store is shared and committed across tests.
 
 
 @pytest_asyncio.fixture
@@ -295,8 +264,7 @@ async def test_keeps_only_lines_of_the_named_request(seeded):
 
 @pytest.mark.asyncio
 async def test_text_searches_the_whole_line_not_just_its_name(seeded):
-    """The needle is unique per run: unlike the scratch directory the file reader got for free,
-    the store is shared and committed, so a plain word would match every earlier run's rows."""
+    """The needle is unique per run: a plain word would match earlier runs' rows."""
     seed, names = seeded
     needle = f"needle-{uuid.uuid4().hex}"
     await seed("kept", detail=f"a {needle} in the payload")
@@ -307,8 +275,6 @@ async def test_text_searches_the_whole_line_not_just_its_name(seeded):
 
 @pytest.mark.asyncio
 async def test_from_dt_reaches_past_the_default_window(seeded):
-    """What the file window could not do. Its floor *was* the retention horizon, so ``from_dt``
-    could only tighten it; the store holds what is being asked for, so a date filter wins."""
     seed, names = seeded
     await seed("kept", ts=_NOW - timedelta(days=9))
 
@@ -345,8 +311,7 @@ async def test_limit_keeps_the_newest_of_what_matched(seeded):
 
 @pytest.mark.asyncio
 async def test_promotes_the_reserved_keys_and_leaves_the_rest_in_the_payload(seeded, sessions):
-    """The store is shared and committed, so this asks for an org no other test seeds — the
-    marker discipline the other tests get from ``names`` does not reach a direct read."""
+    """Reads an org no other test seeds: the ``names`` marker does not apply to a direct read."""
     seed, _ = seeded
     _, reader = sessions
     org = f"org-{uuid.uuid4().hex}"
@@ -361,7 +326,7 @@ async def test_promotes_the_reserved_keys_and_leaves_the_rest_in_the_payload(see
 
 @pytest.mark.asyncio
 async def test_an_empty_filter_value_filters_nothing(seeded):
-    """The Timeline builds these from URL query params, where an untouched field arrives as ""."""
+    """An untouched query param arrives as ``""``."""
     seed, names = seeded
     await seed("kept", level="info", org_id="org-1")
 

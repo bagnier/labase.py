@@ -1,9 +1,5 @@
-"""Per-process flush of the in-memory accumulator to Postgres.
-
-Same lifespan-task shape as the event listener. Each process writes its own
-rows (keyed by a random instance id) — multi-instance is correct by summing in
-the read path, no coordination needed. The accumulator stays cumulative for the
-Prometheus exposition; this task persists the deltas between ticks.
+"""Each process flushes its accumulator's deltas to its own rows (by instance id); reads sum
+them, so instances need no coordination.
 """
 
 import asyncio
@@ -43,9 +39,8 @@ class MetricsFlusher:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
-        # Without this the Load screen dips at every deploy, by the traffic since the last tick.
-        # Guarded like the periodic run: at shutdown the database may already be going, and a
-        # lost interval of metrics must not be what fails the stop.
+        # Else every deploy dips the Load screen. Guarded: losing the interval must not fail
+        # the stop.
         try:
             await self.tick()
         except Exception as exc:
@@ -61,14 +56,11 @@ class MetricsFlusher:
                     session, instance=self._instance, bucket_start=minute, deltas=deltas
                 )
                 await session.commit()
-        # Advance only after a successful write, so a failed flush is retried
-        # next tick instead of dropping the interval's traffic.
+        # Only after a successful write, so a failed flush is retried.
         self._previous = snapshot
 
     async def guarded_tick(self) -> None:
-        """One flush, and the verdict its outcome earns. Split out of ``_run`` so the failure
-        path is drivable — and so a flusher that has stopped persisting says so in the console
-        rather than in a log window that rolls over."""
+        """One flush, reported to the loop verdict. Public so tests can drive the failure path."""
         try:
             await self.tick()
         except Exception as exc:

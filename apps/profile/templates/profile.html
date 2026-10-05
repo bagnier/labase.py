@@ -12,8 +12,7 @@
 {% block content %}
   <div class="space-y-6 max-w-2xl">
     {{ page_header('Profile', 'Your activity, and your account settings.') }}
-    {# Activity is the primary tab; a form POST re-renders the whole page, so keep the tab that
-       owns a just-shown alert/enrolment open across that reload. #}
+    {# A form POST re-renders the page: reopen the tab holding its alert. #}
     {% set active_tab = "activity" %}
     {% if error or success or avatar_error or avatar_info %}
       {% set active_tab = "profile" %}
@@ -222,7 +221,7 @@
                        class="border border-base-300 rounded-box p-4 flex items-center justify-between">
                     <h3 class="text-sm font-semibold">{{ org.name }}</h3>
                     <a href="/{{ org.handle }}/dashboard"
-                       class="text-sm font-medium text-primary hover:underline">Open →</a>
+                       class="text-sm font-medium text-primary hover:underline">Open <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
                   </div>
                 {% endfor %}
               </div>
@@ -255,8 +254,7 @@
              {% if active_tab == "email" %}checked{% endif %} />
       <div role="tabpanel" class="tab-content tab-panel">
         <div class="space-y-6">
-          {# Current sign-in email, always shown read-only: the address itself is never edited in
-             place — a change goes through the confirm-by-link flow below (when enabled). #}
+          {# Read-only: a change goes through the confirmation flow below. #}
           <section class="card-panel">
             <div class="card-body">
               <h2 class="card-title text-sm font-semibold mb-3">Email</h2>

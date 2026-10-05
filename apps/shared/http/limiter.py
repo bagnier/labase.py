@@ -1,10 +1,5 @@
-"""Fixed-window rate limiting backed by Postgres — multi-instance correct.
-
-Replaces slowapi's in-memory store: with N app instances, each counted alone;
-here the hit count is one atomic upsert in a shared table (first
-Postgres-as-Redis brick). Fail-open, and loudly so (AGENTS: CSRF needs no token, and the rate
-limiter fails open): the unreachable store goes through the dependency verdict, which is
-what turns it into an issue rather than a line that rolls out of its window.
+"""Fixed-window rate limiting, counted in a shared Postgres table so limits hold across
+instances (AGENTS: CSRF needs no token, and the rate limiter fails open).
 """
 
 import asyncio
@@ -27,22 +22,11 @@ log = structlog.get_logger(__name__)
 
 
 class UnlimitedEndpoint(Exception):
-    """A ``@rate_limit`` decorator that cannot see a request, so its endpoint is not limited.
-
-    Raised only to give the capture seam a live exception to fingerprint on — caught immediately
-    and logged, exactly like the listener's ``UnroutableFact``. The seam reads "error carrying an
-    exception", so a bare ``log.error`` — which is what this used to be — reached the log sink and
-    nothing else: the hole rolled out of the two-day window with no issue ever opened.
-    """
+    """A ``@rate_limit`` endpoint without a ``request`` parameter, hence unlimited. Raised and
+    caught to open an issue."""
 
 
 def _report_unlimited_endpoint(scope: str, func: Any) -> None:
-    """Say that this endpoint is unlimited, in the one place an admin will still see it tomorrow.
-
-    The decorator requires a ``request: Request`` parameter; its absence is a wiring bug. Failing
-    open is the doctrine (a limiter must never be what takes an endpoint down) — which is exactly
-    why the report has to survive.
-    """
     try:
         raise UnlimitedEndpoint(f"{getattr(func, '__qualname__', func)} takes no request")
     except UnlimitedEndpoint as exc:
@@ -75,29 +59,24 @@ def _parse(limit_string: str) -> tuple[int, int]:
 
 
 async def _increment(key: str, window_seconds: int) -> int | None:
-    """Hits for (key, current window) after counting this one; None if the store failed."""
+    """Hits in the current window, this one included; ``None`` if the store failed."""
     epoch = int(clock.now().timestamp())
     window_start = epoch - (epoch % window_seconds)
     try:
-        # Failing open only keeps the endpoint up if it is fast: a black-holed store neither
-        # refuses nor answers, so the whole round trip — connect, pool, statement — is bounded.
+        # Failing open only helps if it is fast: a store that never answers is bounded too.
         async with asyncio.timeout(get_technical_settings().rate_limit_store_timeout_seconds):
             async with admin_session_factory()() as session:
                 hits = await session.scalar(_INCREMENT, {"key": key, "window_start": window_start})
                 await session.commit()
                 return int(hits or 0)
     except Exception as exc:
-        # Fail-open stays: the limiter must never be what takes an endpoint down. What changes is
-        # the *level* — a store that never answered is a broken dependency, and the verdict makes
-        # that an issue. At ``warning`` it rolled out of the log window, and nobody learned the
-        # server had been unlimited since Tuesday. One issue however many requests hit it: same
-        # type, same frames, one fingerprint.
+        # Fail open, but as an issue: an unlimited server must not go unnoticed.
         log_dependency_failure(log, "rate_limit.store_failed", exc, key=key)
         return None
 
 
 async def purge_counters(session: AsyncSession, _payload: dict[str, Any]) -> None:
-    """Recurring queue consumer: drop windows old enough to be outside any limit."""
+    """Recurring task: delete windows older than any limit."""
     await session.execute(
         text("DELETE FROM rate_limit_counters WHERE window_start < now() - interval '1 day'")
     )
@@ -108,8 +87,7 @@ def rate_limit(limit_string: str) -> Callable[[Any], Any]:
     max_hits, window_seconds = _parse(limit_string)
 
     def decorator(func: Any) -> Any:
-        # Module-qualified so identically-named handlers in different routers (two `create`s)
-        # get distinct buckets instead of silently sharing one.
+        # Module-qualified: two routers' `create` handlers must not share a bucket.
         scope = f"{func.__module__}.{func.__qualname__}"
 
         @functools.wraps(func)

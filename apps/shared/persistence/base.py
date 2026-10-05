@@ -1,4 +1,4 @@
-"""Declarative base and reusable ORM column mixins, composed by each context's models."""
+"""The declarative base and the column mixins every context's models compose."""
 
 import uuid
 from datetime import datetime
@@ -8,10 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 from apps.shared import clock
 
-# Postgres' own auto-naming, spelled out — so a constraint the ORM declares and the same constraint
-# written in a migration land on the very same name, by construction rather than by vigilance.
-# SQLAlchemy issues no DDL here (the schema is versioned as plain SQL under
-# ``supabase/migrations/``), so this is what keeps the two halves able to talk about one object.
+# Postgres's own default names, so the ORM and the SQL migrations name a constraint alike.
 NAMING_CONVENTION = {
     "pk": "%(table_name)s_pkey",
     "uq": "%(table_name)s_%(column_0_N_name)s_key",
@@ -26,13 +23,8 @@ class Base(DeclarativeBase):
 
 
 class UUIDPk:
-    """A UUIDv7 primary key: time-ordered, so a pk doubles as the monotonic cursor the append-only
-    trails read on.
-
-    Generated Python-side on the ORM write path, while the column mirrors ``default
-    public.uuidv7()`` for raw and PostgREST inserts. Security tokens are the exception and keep
-    uuid4 — unguessable, with no timestamp to read off them.
-    """
+    """A UUIDv7 primary key (AGENTS: every key is a UUIDv7, every token a UUIDv4), minted here on
+    ORM writes and by the column default ``public.uuidv7()`` elsewhere."""
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
 
@@ -42,14 +34,13 @@ class OrgScoped:
 
 
 class Positioned:
-    """Dense 0-based ordering column, managed by `PositionedRepository`."""
+    """Managed by `PositionedRepository`."""
 
     position: Mapped[int] = mapped_column(default=0)
 
 
 class Versioned:
-    """Optimistic-lock version column: a stale concurrent write raises ``StaleDataError``,
-    which the shared handler turns into a clean 409."""
+    """Optimistic lock: a stale write raises ``StaleDataError``, answered as a 409."""
 
     version: Mapped[int] = mapped_column(default=1)
 
@@ -59,7 +50,7 @@ class Versioned:
 
 
 class Created:
-    """Birth stamp alone — for the append-only tables, where a row is never updated."""
+    """For append-only tables."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()
@@ -67,8 +58,7 @@ class Created:
 
 
 class Timestamped(Created):
-    """Birth and last-touch stamps; ``updated_at`` is also maintained by a DB trigger, so a
-    write through PostgREST or psql is stamped exactly like a write through the ORM."""
+    """``updated_at`` is also set by a DB trigger, for writes outside the ORM."""
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: clock.now()

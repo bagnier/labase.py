@@ -1,5 +1,4 @@
-"""Public's settings dependency — the request's effective values; public routes carry no
-``{org_handle}`` (and are mostly anonymous), so this resolves to the server values."""
+"""Public's settings: server values, as public routes carry no ``{org_handle}``."""
 
 from typing import Annotated
 
