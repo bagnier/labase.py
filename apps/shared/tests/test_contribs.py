@@ -108,7 +108,7 @@ async def test_collect_isolates_a_failing_sql_provider_so_the_session_stays_usab
 
     async def ok(q: _SessionQuery) -> int:
         result = await q.session.execute(text("select 2"))
-        return result.scalar()
+        return result.scalar_one()
 
     contribs.provide(_SessionQuery, boom)
     contribs.provide(_SessionQuery, ok)

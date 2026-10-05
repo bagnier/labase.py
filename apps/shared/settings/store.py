@@ -49,14 +49,14 @@ class OrgAppSetting(Base, Versioned, Timestamped):
     value: Mapped[str]
 
 
-def disabled_apps_select() -> Select[tuple[str]]:
+def disabled_apps_select() -> Select[str]:
     """The apps switched off."""
     return select(AppSetting.app_name).where(
         AppSetting.key == ENABLED_KEY, AppSetting.value == BOOL_FALSE
     )
 
 
-def _app_settings_select(app: str) -> Select[tuple[str, str]]:
+def _app_settings_select(app: str) -> Select[str, str]:
     return select(AppSetting.key, AppSetting.value).where(AppSetting.app_name == app)
 
 
