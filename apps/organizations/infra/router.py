@@ -466,7 +466,7 @@ async def rename_organization(
         error = "Name must be 255 characters or fewer."
     if error is not None:
         if wants_json(request):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error)
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
         ctx = await _settings_context(
             session, current_user, org, org_handle, membership.role.value, repo=repo
@@ -501,7 +501,7 @@ async def update_org_handle(
     org = or_404(await repo.get(org_id))
     validation_error = validate_handle(handle)
     error = validation_error[1] if validation_error else None
-    code = validation_error[0] if validation_error else status.HTTP_422_UNPROCESSABLE_ENTITY
+    code = validation_error[0] if validation_error else status.HTTP_422_UNPROCESSABLE_CONTENT
     if error is None and not await repo.is_handle_available(handle, org_id):
         error = f"'{handle}' is already taken."
         code = status.HTTP_409_CONFLICT
@@ -546,7 +546,7 @@ async def update_org_timezone(
     if timezone not in available_timezones():
         error = f"'{timezone}' is not a valid timezone."
         if wants_json(request):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error)
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error)
         org_handle = request.path_params.get("org_handle", org.handle)
         ctx = await _settings_context(
             session, current_user, org, org_handle, membership.role.value, repo=repo

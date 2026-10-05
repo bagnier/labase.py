@@ -132,7 +132,7 @@ async def create_page(
 ) -> Response:
     title = body.title.strip()
     if not title:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title is required")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Title is required")
     content = body.content
     slug = slugify(body.slug or title) or "page"
     if await repo.slug_taken(slug):
@@ -363,7 +363,7 @@ async def add_to_nav(
     page = or_404(await repo.by_slug(slug))
     if page.visibility == PageVisibility.draft:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "Draft pages cannot be added to navigation"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Draft pages cannot be added to navigation"
         )
     await nav_repo.add(page.id)
     item = NavItemRead(

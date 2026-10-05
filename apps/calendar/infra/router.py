@@ -68,11 +68,11 @@ def _require_times(start_raw: str, end_raw: str, tz: tzinfo = UTC) -> tuple[date
     end = _parse_dt(end_raw, tz)
     if start is None or end is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "A valid start and end are required"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "A valid start and end are required"
         )
     if end <= start:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "The end time must be after the start time"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "The end time must be after the start time"
         )
     return start, end
 
@@ -238,7 +238,7 @@ async def _form_error_response(
         error=error,
     )
     return templates.TemplateResponse(
-        request, "calendar/form.html", ctx, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+        request, "calendar/form.html", ctx, status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
     )
 
 
@@ -254,7 +254,7 @@ async def _reject(
     error: str,
 ) -> Response:
     if wants_json(request):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, error)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
     return await _form_error_response(
         request, session, current_user, org, body, event=event, action=action, error=error
     )

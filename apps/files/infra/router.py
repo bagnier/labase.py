@@ -149,14 +149,14 @@ async def upload_file(
     if len(content) > settings.max_upload_mb * 1024 * 1024:
         return HTMLResponse(
             '<div role="alert" class="alert-error">File too large</div>',
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
         )
 
     quota_mb = settings.org_storage_quota_mb
     if quota_mb >= 0 and await repo.total_size() + len(content) > quota_mb * 1024 * 1024:
         return HTMLResponse(
             '<div role="alert" class="alert-error">Organisation storage quota exceeded</div>',
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
         )
 
     try:
