@@ -1,5 +1,5 @@
-"""The capture seam's edges: what the full queue drops, one capture per exception, the drain at
-shutdown, failing trackers. The round trip to the issues tables is in
+"""The capture seam's edges: what the full queue sheds and reports, one capture per exception, the
+drain at shutdown, failing trackers. The round trip to the issues tables is in
 ``apps/issues/tests/test_capture.py``."""
 
 import asyncio
@@ -15,6 +15,15 @@ from apps.shared.logs import capture
 _PROBE_LOGGER = "apps.todo.infra.router"
 
 
+@pytest.fixture(autouse=True)
+def _reset_overflow_counter():
+    """A leftover count from another test would otherwise ride into this one's own ``tick()`` —
+    now delivered straight to whatever tracker is wired up, not just a log line to skim past."""
+    capture._overflow.dropped = 0
+    yield
+    capture._overflow.dropped = 0
+
+
 def _log_exceptions(count: int) -> None:
     log = structlog.get_logger(_PROBE_LOGGER)
     for i in range(count):
@@ -22,6 +31,28 @@ def _log_exceptions(count: int) -> None:
             raise ValueError(f"storm {i}")
         except ValueError:
             log.exception("todo.blew_up")
+
+
+def test_a_storm_of_duplicates_never_evicts_the_distinct_capture_behind_it(monkeypatch):
+    """A blind FIFO eviction costs whatever sits at the front of the queue, storm or not — a
+    cheap 500 repeated a thousand times would then evict the one distinct failure that arrived
+    first. Shedding by fingerprint instead means the storm pays for its own room: three slots let
+    the distinct capture and two of the storm's coexist, so the third can crowd its own kind out
+    rather than the one thing standing apart from it."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=3))
+    log = structlog.get_logger(_PROBE_LOGGER)
+    try:
+        raise KeyError("distinct")
+    except KeyError:
+        log.exception("todo.blew_up")
+
+    _log_exceptions(5)
+
+    assert [type(captured.exc) for captured in capture._QUEUE] == [
+        KeyError,
+        ValueError,
+        ValueError,
+    ]
 
 
 @pytest.mark.asyncio
@@ -34,10 +65,90 @@ async def test_the_drain_reports_the_captures_the_queue_had_to_shed(log_chain, m
     _log_exceptions(5)
     await capture.CaptureDrain(0).tick()
 
-    reported = [
-        (line.name, line.payload) for line in log_chain() if line.logger == capture.__name__
+    [reported] = [line for line in log_chain() if line.logger == capture.__name__]
+    assert (reported.name, reported.payload["dropped"]) == ("capture.overflowed", 3)
+
+
+@pytest.mark.asyncio
+async def test_the_dropped_shortfall_reaches_the_trackers_the_same_tick(monkeypatch):
+    """A warning that ages out of the two-day log window leaves nothing an admin can find
+    tomorrow (AGENTS: A line says what no other record says) — the shortfall must instead reach
+    the trackers directly, the same tick it is counted, so even the single tick ``stop()`` runs
+    before a deploy still folds it into an issue rather than queuing it for a tick that never
+    comes."""
+    folded: list[capture.ExceptionCaptured] = []
+
+    async def fold(captured: capture.ExceptionCaptured) -> None:
+        folded.append(captured)
+
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=2))
+    monkeypatch.setattr(capture, "_trackers", [fold])
+
+    _log_exceptions(5)
+    await capture.CaptureDrain(0).tick()
+
+    delivered = [(type(c.exc), c.context.get("dropped")) for c in folded]
+    assert delivered == [
+        (ValueError, None),
+        (ValueError, None),
+        (capture.CaptureQueueOverflowed, 3),
     ]
-    assert reported == [("capture.overflowed", {"dropped": 3})]
+
+
+@pytest.mark.asyncio
+async def test_a_shortfall_no_tracker_took_is_reported_once_the_tracker_is_back(monkeypatch):
+    """A queue overflows during an outage, which is exactly when the tracker is down: the
+    shortfall is kept like any capture no tracker took, and its count is the one it reports once
+    a tracker takes it."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    capture._overflow.dropped = 3
+    calls = 0
+    took: list[tuple[type[BaseException], object]] = []
+
+    async def down_on_its_first_call(captured: capture.ExceptionCaptured) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("Postgres is down")
+        took.append((type(captured.exc), captured.context.get("dropped")))
+
+    monkeypatch.setattr(capture, "_trackers", [down_on_its_first_call])
+
+    await capture.CaptureDrain(0).tick()
+    await capture.CaptureDrain(0).tick()
+
+    # The tracker's own failure carries the context of the capture it failed on, the report's.
+    assert took == [(RuntimeError, 3), (capture.CaptureQueueOverflowed, 3)]
+
+
+@pytest.mark.asyncio
+async def test_a_shortfall_kept_through_an_outage_is_said_once(log_chain, monkeypatch):
+    """``capture.overflowed`` is written at ``error``, the level of a bug: said on every tick the
+    tracker stays down, one shortfall would read as a new one each second (AGENTS: a failure that
+    repeats is one bug). It is said with the report a tracker takes, and with its whole count."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    capture._overflow.dropped = 3
+    calls = 0
+
+    async def down_on_its_first_two_calls(_captured: capture.ExceptionCaptured) -> None:
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [down_on_its_first_two_calls])
+
+    for _ in range(3):
+        await capture.CaptureDrain(0).tick()
+
+    said = [
+        line.payload["dropped"]
+        for line in log_chain()
+        if line.logger == capture.__name__ and line.name == "capture.overflowed"
+    ]
+    assert said == [3]
 
 
 # An unhandled 500 is logged by Starlette's 500 handler, then again by the ASGI server.
@@ -124,6 +235,33 @@ async def test_a_requeued_capture_reports_the_overflow_it_causes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_a_requeued_capture_sheds_a_duplicate_rather_than_a_distinct_one(monkeypatch):
+    """An outage is when both happen at once: the tracker is down, so its capture comes back, and
+    the storm it causes fills the queue meanwhile. The requeue makes room the way any capture
+    does, out of the storm's duplicates, never out of the distinct capture queued ahead of it."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=3))
+    capture._overflow.dropped = 0
+    storm = [capture.ExceptionCaptured(exc=ValueError(f"storm {i}")) for i in range(2)]
+
+    async def down_through_a_storm(_captured: capture.ExceptionCaptured) -> None:
+        capture._QUEUE.extend(storm)  # concurrent requests failing the same way, mid-drain
+        raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [down_through_a_storm])
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary({down_through_a_storm: 1}))
+    capture._QUEUE.extend(
+        [
+            capture.ExceptionCaptured(exc=RuntimeError("outage")),
+            capture.ExceptionCaptured(exc=KeyError("distinct")),
+        ]
+    )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert [str(captured.exc) for captured in capture._QUEUE] == ["'distinct'", "storm 1", "outage"]
+
+
+@pytest.mark.asyncio
 async def test_a_stayed_capture_rejoins_the_back_of_the_queue(monkeypatch):
     """The requeue is an ordinary append, not a jump back to the front: a capture whose tracker
     just failed waits behind whatever else is already queued, so a storm of failures still
@@ -179,38 +317,16 @@ async def test_a_tracker_that_took_nothing_is_probed_with_one_capture_per_tick(m
 
 
 @pytest.mark.asyncio
-async def test_a_tracker_raising_cancelled_error_does_not_kill_the_drain(log_chain, monkeypatch):
+@pytest.mark.parametrize(
+    "failure", [asyncio.CancelledError, SystemExit], ids=["CancelledError", "SystemExit"]
+)
+async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(
+    failure, log_chain, monkeypatch
+):
     tracked: list[capture.ExceptionCaptured] = []
 
     async def flaky(_captured: capture.ExceptionCaptured) -> None:
-        raise asyncio.CancelledError
-
-    async def fine(captured: capture.ExceptionCaptured) -> None:
-        tracked.append(captured)
-
-    monkeypatch.setattr(capture, "_trackers", [flaky, fine])
-    monkeypatch.setattr(
-        capture,
-        "_QUEUE",
-        deque(
-            [
-                capture.ExceptionCaptured(exc=ValueError("first")),
-                capture.ExceptionCaptured(exc=ValueError("second")),
-            ]
-        ),
-    )
-
-    await capture.CaptureDrain(0).tick()
-
-    assert [str(c.exc) for c in tracked] == ["first", "second"]
-
-
-@pytest.mark.asyncio
-async def test_a_tracker_raising_any_base_exception_does_not_kill_the_drain(monkeypatch):
-    tracked: list[capture.ExceptionCaptured] = []
-
-    async def flaky(_captured: capture.ExceptionCaptured) -> None:
-        raise SystemExit("tracker bug")
+        raise failure("tracker bug")
 
     async def fine(captured: capture.ExceptionCaptured) -> None:
         tracked.append(captured)
