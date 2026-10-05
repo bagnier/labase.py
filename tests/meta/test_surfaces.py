@@ -14,6 +14,7 @@ from sqlalchemy import Table
 
 import apps.main
 from apps.console.contract.overviews import ConsoleOverviewQuery
+from apps.console.infra.router import _GROUP_DISPLAY
 from apps.issues.contract.events import IssueOpened, IssueRegressed
 from apps.organizations.contract.overviews import OverviewQuery
 from apps.shared.events import BusinessEvent
@@ -562,13 +563,17 @@ _ICON_DECLARED_RE = re.compile(
 
 
 def _icons_declared() -> dict[str, str]:
-    """Each ``icon="…"`` or typed default outside tests, with where it is."""
+    """Each ``icon="…"`` or typed default outside tests, with where it is — plus
+    ``_GROUP_DISPLAY``'s, read from the live dict rather than pattern-matched: its tuple names an
+    icon with no ``icon`` word anywhere near it."""
     found = {}
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
             continue
         for icon in _ICON_DECLARED_RE.findall(path.read_text()):
             found[icon] = str(path.relative_to(_ROOT))
+    for _title, icon, _section in _GROUP_DISPLAY.values():
+        found[icon] = "apps/console/infra/router.py"
     return found
 
 
@@ -595,6 +600,11 @@ def test_the_icon_walk_finds_a_classvar_default():
 def test_icon_declared_re_matches_a_plain_annotated_default():
     # `icon: str = "file-text"`, as `OrgNavItem` declares it.
     assert _ICON_DECLARED_RE.findall('icon: str = "file-text"') == ["file-text"]
+
+
+def test_the_icon_walk_finds_a_name_declared_in_a_plain_tuple():
+    # `_GROUP_DISPLAY`'s `(title, icon, section)` tuple names an icon with no `icon` word nearby.
+    assert "gear-six" in _icons_declared()
 
 
 def _icons_spelled_in_templates() -> dict[str, str]:
