@@ -1,15 +1,6 @@
-"""Driver-agnostic seeding for the timeline scenarios.
-
-Two of the three sources are seeded through their real writers:
-- request lines → the log repository's own append (``LogRepository.append``);
-- business events → the shared ``BusinessEventRecord`` model.
-
-Issue occurrences are the exception. The production path — emitting ``ExceptionCaptured`` —
-records through the app's *shared* engine (``admin_session_factory``), which asyncpg can't be
-driven from the browser driver's seed thread while the app is live (cross-loop corruption). So
-issues are written directly through the driver's own session; because the ``error_*`` tables are
-private to the issues context (the import-linter contract forbids importing its models), this is
-the one place a raw insert is warranted — it also lets a fixture backdate ``created_at`` freely.
+"""Seeding for the timeline scenarios, on either driver. Log lines and facts go through their real
+models; occurrences are raw inserts on the driver's session, since the capture path's shared engine
+cannot be driven from the browser driver's seed thread, and the issues models are private.
 """
 
 import uuid
@@ -21,13 +12,10 @@ from sqlalchemy import text
 from apps.shared import clock
 from apps.shared.events.models import BusinessEventRecord
 
-# Deterministic ids so a seed step and a filter step agree on "Acme" / "alice@…" without needing
-# a real org/user row (the timeline filters by the raw id it stored).
+# Stable ids, so seed and filter steps agree on "Acme" without a real row.
 _NS = uuid.UUID("00000000-0000-0000-0000-00000000da7a")
 
-# The scenarios call these "request log entries", so they are seeded under the logger the
-# request tracer really writes with — stated here rather than imported, since production has
-# no reason to export it: the timeline reads the name only for a line's app axis.
+# The request tracer's logger name, not exported by production.
 _REQUEST_LOGGER = "apps.shared.logs.request"
 
 
@@ -40,8 +28,7 @@ def timeline_user_id(email: str) -> str:
 
 
 def timeline_request_id(token: str) -> str:
-    """A scenario names a request "r-100"; the journal stores a uuid. Same trick as orgs and users:
-    map the readable token to a stable uuid5 so the Gherkin stays plain language."""
+    """``"r-100"`` → a stable uuid5, so the Gherkin stays plain."""
     return str(uuid.uuid5(_NS, f"request:{token}"))
 
 
@@ -59,11 +46,8 @@ def event_model(
     request_name: str | None = None,
     entity_name: str | None = None,
 ) -> BusinessEventRecord:
-    """A ready-to-``add`` business-event row — the same model ``emit`` writes, with an
-    explicit ``created_at`` so a fixture can predate the current day (the writer can't backdate).
-
-    The scenarios name an event the way it reads on screen (``"todo.created"``), so this is where
-    that sentence becomes the two columns a row stores — ``kind`` itself is generated from them."""
+    """A fact to ``add``, with a ``created_at`` a fixture may backdate; ``kind`` such as
+    ``"todo.created"`` is split into its two columns."""
     app_name, _, verb = event.partition(".")
     return BusinessEventRecord(
         created_at=when or clock.now(),
@@ -79,18 +63,9 @@ def event_model(
 
 
 def event_run(count: int, org: str, *, now: datetime) -> list[BusinessEventRecord]:
-    """``count`` facts of one org, a minute apart, **oldest first** — the order to add them in.
-
-    Oldest first is not cosmetic. The journal pages on ``id desc`` (a uuid7, minted by the insert)
-    while the timeline sorts on ``created_at``, and production keeps the two in step for free:
-    ``created_at`` is the column default, stamped by the very statement that mints the id. A
-    fixture that backdates ``created_at`` breaks that tie unless it inserts in the same order, and
-    what it then measures is a state the product cannot reach — the source handing back its
-    *oldest* rows as if they were its newest.
-
-    A distinct ``entity_name`` per row, because a paging assertion has to tell one row from the
-    next: every fact here is a ``todo.created``, so the kind cannot say which page a row came from.
-    """
+    """``count`` facts a minute apart, oldest first: the journal pages on the insert-minted id,
+    so backdated rows must be inserted in time order. Each has its own ``entity_name`` for paging
+    assertions."""
     return [
         event_model(
             "todo.created",
@@ -132,7 +107,6 @@ def error_context(
     }
 
 
-# Issue occurrences: an issue (by fingerprint) plus one occurrence carrying the context.
 INSERT_ISSUE = text(
     "INSERT INTO issues (fingerprint, title, first_seen, last_seen) "
     "VALUES (:fp, :title, :ts, :ts) RETURNING id"

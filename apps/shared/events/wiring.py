@@ -1,25 +1,9 @@
-"""The event wiring — what *this process* activated at mount.
+"""What this process's mounts activated: which events it emits, and who reacts.
 
-One question: given the events that exist (:mod:`apps.shared.events.catalog`), which of them does
-this process emit, and who reacts to them. Two halves, written by the same caller at the same
-moment — an app's ``mount`` going through the bus:
-
-- **ownership** — an app *declares* the events it emits (:meth:`declare`), recording the owner app
-  read off the event's own ``app_name``. ``emit`` refuses an undeclared event (a disabled app never
-  declares, so its facts cannot be emitted), and the console reads ownership as the per-app
-  catalogue.
-- **reactions** — ``bus.on`` durable consumers (each tagged with the listening app) and
-  ``bus.spread`` run-everywhere handlers.
-
-Per instance, unlike the catalog — but the *process* has one, the :data:`wiring` singleton below,
-and it is imported rather than reached through whoever writes it. That is the point of the pair:
-:data:`~apps.shared.events.catalog.catalog` and :data:`wiring` are the two halves of what this
-process knows about events, and a reader of either imports it directly. A test that needs its own
-subscriptions builds ``EventBus(EventWiring())``; a test that must register on the *live* bus — to
-exercise the real fan-out — uses :meth:`snapshot` and :meth:`restore` instead.
-
-The bus writes here at mount; the listener reads reactions to deliver off the journal; the console
-reads both halves for its event → reaction graph.
+Written by the bus at mount; read directly by the listener (to deliver) and the console (its
+event → reaction graph). Unlike the catalog, a test can build its own: ``EventBus(EventWiring())``.
+A test that needs the real fan-out registers on the live :data:`wiring` and puts it back with
+:meth:`~EventWiring.snapshot` / :meth:`~EventWiring.restore`.
 """
 
 from __future__ import annotations
@@ -37,8 +21,8 @@ SpreadHandler = Callable[[Any], Awaitable[object]]
 
 @dataclass(frozen=True)
 class Reaction:
-    """A durable ``bus.on`` consumer of an event type: its ``name`` (the reaction), the queue
-    ``topic`` it feeds, and the ``app`` that listens (for the console's event → reaction graph)."""
+    """A durable ``bus.on`` consumer: its ``name``, the queue ``topic`` it feeds, and the listening
+    ``app``."""
 
     name: str
     topic: str
@@ -48,8 +32,7 @@ class Reaction:
 
 @dataclass(frozen=True)
 class WiringSnapshot:
-    """A copy of a wiring's two halves, deep enough to restore over later mutations — what a test
-    fixture holds while it registers on the live bus."""
+    """A copy of a wiring, deep enough to survive later registrations."""
 
     owners: dict[type[BusinessEvent], str]
     reactions: dict[type[BusinessEvent], list[Reaction]]
@@ -57,7 +40,7 @@ class WiringSnapshot:
 
 
 class EventWiring:
-    """Who emits what, and who reacts to it — this process's mount-time wiring."""
+    """Who emits what, and who reacts to it."""
 
     def __init__(self) -> None:
         self._owner_by_type: dict[type[BusinessEvent], str] = {}
@@ -67,14 +50,11 @@ class EventWiring:
     # ── Ownership: who emits what ────────────────────────────────────────────────────────────
 
     def declare(self, *event_types: type[BusinessEvent]) -> None:
-        """Record that each of ``event_types`` is emitted by the app it names — ``app_name``, read
-        off the class. Declaring is therefore only *activation* (this mounted app emits these
-        facts), never an attribution: an app cannot claim another's events because it never says
-        whose they are. Re-declaring is idempotent.
+        """Activate events, each owned by the app its ``app_name`` names: an app cannot claim
+        another's events. Idempotent.
 
-        An event with no ``app_name``/``verb`` has no kind at all — it never entered the catalog, so
-        the listener could not rebuild it from a record. Declaring one is a mistake worth naming
-        (typically an abstract base handed over instead of its concrete subclasses)."""
+        Raises ``ValueError`` on a class with no ``kind`` (usually an abstract base passed instead
+        of its concrete subclasses): the listener could not rebuild it from a record."""
         for event_type in event_types:
             if not event_type.kind:
                 raise ValueError(
@@ -84,16 +64,14 @@ class EventWiring:
             self._owner_by_type[event_type] = event_type.app_name
 
     def is_declared(self, event_type: type[BusinessEvent]) -> bool:
-        """Whether some app declared it — the gate ``emit`` checks before persisting a fact."""
         return event_type in self._owner_by_type
 
     def owner_of(self, event_type: type[BusinessEvent]) -> str | None:
-        """The app that declared (emits) this event, or ``None`` if undeclared."""
+        """The app that declared this event, or ``None``."""
         return self._owner_by_type.get(event_type)
 
     def by_app(self) -> dict[str, list[type[BusinessEvent]]]:
-        """The declared events grouped by owner app (app name sorted), for the console — each app's
-        own vocabulary of "what it emits"."""
+        """Declared events grouped by owner app, apps sorted."""
         grouped: dict[str, list[type[BusinessEvent]]] = defaultdict(list)
         for event_type, app in self._owner_by_type.items():
             grouped[app].append(event_type)
@@ -104,18 +82,11 @@ class EventWiring:
     def add_consumer(
         self, event_type: type[BusinessEvent], name: str, *, as_actor: bool, app: str
     ) -> str:
-        """Register a durable consumer ``name`` (in ``app``) for ``event_type``; return its topic.
+        """Register a durable consumer and return its queue topic, ``evt:<kind>:<name>``.
 
-        ``name`` must be unique among the event's consumers (the topic ``evt:<kind>:<name>`` keys an
-        independent queued task per consumer). Raises ``ValueError`` on a duplicate — checked across
-        *every* registered topic, not just this event type's own consumers: the topic, not the
-        class, is what the queue's handler registry keys on, so two different types that happen to
-        build the same topic would otherwise silently overwrite each other there.
-
-        An event with no ``app_name``/``verb`` has no kind at all, so its topic ``evt::<name>``
-        cannot be told apart from any other kindless type's — refused here for the same reason
-        :meth:`declare` refuses it (typically an abstract base handed over instead of a concrete
-        subclass)."""
+        Raises ``ValueError`` on a kindless class (as :meth:`declare`) and on a topic already
+        taken by any event: the queue keys its handlers by topic, so two consumers sharing one
+        would silently overwrite each other."""
         if not event_type.kind:
             raise ValueError(
                 f"{event_type.__name__} names no kind, so it has no topic to register a consumer "
@@ -130,34 +101,28 @@ class EventWiring:
         return topic
 
     def consumers_of(self, event_type: type) -> list[Reaction]:
-        """All durable consumers keyed on the event's MRO — a base-type subscription catches
-        subclasses, mirroring the bus's dispatch. Read by the listener to fan a fact out."""
+        """Consumers of the type or any of its bases: subscribing a base catches its subclasses."""
         collected: list[Reaction] = []
         for klass in event_type.__mro__:
             collected.extend(self._reactions.get(klass, ()))
         return collected
 
     def reactions(self) -> dict[type[BusinessEvent], list[Reaction]]:
-        """Every event type that has a durable consumer, mapped to its consumers — the console's
-        event → reaction graph (who reacts to what). Read-only copy."""
+        """A copy of every event type that has a durable consumer, with its consumers."""
         return {event_type: list(rs) for event_type, rs in self._reactions.items()}
 
     # ── Spread handlers: run everywhere ──────────────────────────────────────────────────────
 
     def add_spread_handler(self, event_type: type[BusinessEvent], handler: SpreadHandler) -> None:
-        """Register a run-everywhere ``spread`` handler for ``event_type`` (config propagation)."""
         self._spread[event_type].append(handler)
 
     def spread_kinds(self) -> list[str]:
-        """The dotted kinds that have a ``spread`` handler — the listener scans the journal for
-        exactly these to replay per instance. An abstract base has no kind of its own and drops out
-        here; its concrete subclasses carry theirs, and :meth:`spread_handlers_for` walks the MRO
-        to reach the handler from them."""
+        """The kinds the listener scans the journal for. A handler on an abstract base has no kind
+        here; its subclasses reach it through :meth:`spread_handlers_for`."""
         return [k for t in self._spread if (k := t.kind)]
 
     def spread_handlers_for(self, event: BusinessEvent) -> Iterator[SpreadHandler]:
-        """The ``spread`` handlers registered for the event's runtime type or any base, most-
-        specific first, each once — run in-process by the listener off a persisted fact."""
+        """Handlers for the event's type or any base, most specific first, each once."""
         seen: set[int] = set()
         for klass in type(event).__mro__:
             for handler in self._spread.get(klass, ()):
@@ -168,9 +133,6 @@ class EventWiring:
     # ── Isolation, for a test that must register on the live bus ─────────────────────────────
 
     def snapshot(self) -> WiringSnapshot:
-        """A restorable copy of both halves. A test exercising the *real* fan-out has to register
-        on the process-wide bus; this is how it puts back what it found, without reaching into the
-        wiring's internals to do it."""
         return WiringSnapshot(
             owners=dict(self._owner_by_type),
             reactions={t: list(rs) for t, rs in self._reactions.items()},
@@ -184,7 +146,5 @@ class EventWiring:
         self._spread = defaultdict(list, {t: list(hs) for t, hs in snapshot.spread.items()})
 
 
-# The process's wiring — what the mounted apps declared and subscribed. Imported by everyone who
-# reads it (the listener, the console), never reached through the bus that writes it: a reader
-# wanting to know who reacts to a fact has no business holding an emitter.
+# Readers import this directly rather than through the bus: reading who reacts needs no emitter.
 wiring = EventWiring()

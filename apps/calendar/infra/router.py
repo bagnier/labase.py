@@ -38,8 +38,7 @@ CalendarRepo = Annotated[CalendarEventRepository, Depends(_get_repo)]
 
 
 def _combine(body: dict, prefix: str) -> str:
-    """A datetime from either a single ``<prefix>`` field (JSON) or ``<prefix>_date`` +
-    ``<prefix>_time`` (the HTML form's split inputs)."""
+    """From ``<prefix>`` (JSON) or the form's ``<prefix>_date`` and ``<prefix>_time``."""
     direct = body.get(prefix)
     if direct:
         return str(direct).strip()
@@ -49,12 +48,12 @@ def _combine(body: dict, prefix: str) -> str:
 
 
 def _org_tz(org: CalendarEvent | object) -> ZoneInfo:
-    """The org's zone, falling back to UTC for a missing/blank value."""
+    """The org's zone, else UTC."""
     return ZoneInfo(getattr(org, "timezone", None) or "UTC")
 
 
 def _parse_dt(raw: str, tz: tzinfo = UTC) -> datetime | None:
-    """Parse a wall-clock string entered in ``tz`` and return the UTC instant."""
+    """A wall-clock time in ``tz``, as a UTC instant."""
     s = raw.strip().replace("T", " ")
     for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
@@ -69,11 +68,11 @@ def _require_times(start_raw: str, end_raw: str, tz: tzinfo = UTC) -> tuple[date
     end = _parse_dt(end_raw, tz)
     if start is None or end is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "A valid start and end are required"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "A valid start and end are required"
         )
     if end <= start:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "The end time must be after the start time"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "The end time must be after the start time"
         )
     return start, end
 
@@ -82,9 +81,7 @@ def _require_times(start_raw: str, end_raw: str, tz: tzinfo = UTC) -> tuple[date
 
 
 def _agenda(events: list[CalendarEvent], tz: tzinfo = UTC) -> list[dict]:
-    """Events grouped by day, in chronological order — the list the page renders and tests read.
-
-    Stored UTC instants are rendered in the org's ``tz`` (UTC by default)."""
+    """Events by day, chronological, in the org's ``tz``."""
     groups: list[dict] = []
     for e in events:
         start = e.starts_at.astimezone(tz)
@@ -106,13 +103,8 @@ def _agenda(events: list[CalendarEvent], tz: tzinfo = UTC) -> list[dict]:
 def _month_grid(
     events: list[CalendarEvent], ref: date, today: date, tz: tzinfo = UTC
 ) -> list[list[dict]]:
-    """The month's cells, one row per week.
-
-    A multi-day event is placed on every day it spans, not just its start day, and each day marks
-    whether it is the event's start or end — which is what lets the grid show the time on the first
-    day and a continuation bar on the rest. Spans are computed on the org-local date, so an event
-    occupies the days it occupies in the org's timezone.
-    """
+    """The month's cells, a row per week. A multi-day event sits on every day it spans in the
+    org's timezone, each day marked as start, end or continuation."""
     local: dict[uuid.UUID, tuple[date, date, str]] = {}
     by_day: dict[date, list[CalendarEvent]] = {}
     for e in events:
@@ -122,7 +114,7 @@ def _month_grid(
         span = (end_local.date() - start_local.date()).days
         for offset in range(span + 1):
             by_day.setdefault(start_local.date() + timedelta(days=offset), []).append(e)
-    cal = _calendar.Calendar(firstweekday=0)  # Monday-first, matching the mockup
+    cal = _calendar.Calendar(firstweekday=0)  # Monday first
 
     def _cell_event(ev: CalendarEvent, d: date) -> dict:
         start_date, end_date, start_time = local[ev.id]
@@ -237,9 +229,7 @@ async def _form_error_response(
         org_handle=org.handle,
         event=event,
         action=action,
-        # The edit form posts to "calendar/{id}"; the create form to "calendar".
-        # Drive the heading off the target, not off ``event`` (set to the rejected
-        # body on create so fields repopulate) — else a create error reads "Edit".
+        # The heading follows the target: ``event`` is also set on a failed create.
         is_edit="/" in action,
         start_date=str(body.get("start_date", "")),
         start_time=str(body.get("start_time", "")),
@@ -248,7 +238,7 @@ async def _form_error_response(
         error=error,
     )
     return templates.TemplateResponse(
-        request, "calendar/form.html", ctx, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+        request, "calendar/form.html", ctx, status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
     )
 
 
@@ -264,7 +254,7 @@ async def _reject(
     error: str,
 ) -> Response:
     if wants_json(request):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, error)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
     return await _form_error_response(
         request, session, current_user, org, body, event=event, action=action, error=error
     )

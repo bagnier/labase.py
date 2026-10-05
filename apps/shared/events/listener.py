@@ -1,22 +1,9 @@
-"""The event listener — reads the persisted journal and runs both deliveries off it.
+"""The event listener: delivers reactions off the journal after commit, woken by its ``AFTER
+INSERT`` NOTIFY and polling as a net.
 
-``emit`` only writes a ``BusinessEvent`` to the ``business_events`` journal inside the request's
-transaction (the bus's ``emit`` → ``EventRepository.record``). This listener reads that
-journal, woken by its ``AFTER INSERT`` NOTIFY (poll as a net), and runs the two deliveries the
-producer no longer does — so it never knows its consumers nor waits for them:
-
-- **``on`` / async fan-out — exactly-once, cluster-wide.** Each tick claims un-dispatched records
-  with ``FOR UPDATE SKIP LOCKED`` and, in the same transaction, enqueues one queued task per
-  registered ``bus.on`` consumer (read from the wiring via ``consumers_of``) and stamps
-  ``dispatched_at`` — one transaction, so there is no sequence-visibility gap
-  (AGENTS: Deferred work rides a durable Postgres queue).
-- **``spread`` — per instance.** A settings reload must run on *every* process, so it cannot claim:
-  each tick reads facts above this process's in-memory cursor whose kind has a ``spread``
-  subscriber and runs those handlers in-process (idempotent, so a replay is harmless). That cursor
-  trails a settle window, because a key is minted at INSERT and a late commit would otherwise land
-  under it unseen — the window is the only bound on how far under.
-- **Reconstruct from the record.** Both paths rebuild the typed event from the record's ``kind``
-  via the catalog's ``class_for``; the async dedup key is the record id.
+- ``on`` consumers, once cluster-wide: claim undispatched facts, enqueue one task per consumer and
+  mark them dispatched in one transaction (AGENTS: deferred work rides a durable Postgres queue).
+- ``spread`` handlers, on every instance: replay facts above a per-process cursor, in-process.
 """
 
 import asyncio
@@ -42,31 +29,22 @@ log = structlog.get_logger(__name__)
 
 NOTIFY_CHANNEL = "business_event"
 
-# How long a fact stays replayable before the spread cursor is allowed past it. A key is minted at
-# INSERT, so a fact can surface below a cursor that already passed it (see ``scan_spread``); the
-# only thing bounding how far below is how long its transaction stayed open. This is that bound,
-# stated — well past any request or queue task, and paid for only by re-reading an indexed range
-# of facts nobody is producing most of the time.
+# The longest a fact's transaction may stay open and still be seen by ``spread`` (see
+# ``scan_spread``): well past any request or task, at the cost of re-reading a small indexed range.
 SPREAD_SETTLE_SECONDS = 60.0
 
 
 class UnroutableFact(Exception):
-    """A persisted fact the listener cannot route: its ``kind`` maps to no registered event class,
-    so no consumer could ever be handed it. Raised only to give the capture seam a live exception
-    to fingerprint on — caught immediately, logged, and the record is still marked dispatched."""
+    """A stored fact whose ``kind`` no event class claims. Raised and caught at once, to give
+    the capture seam a traceback to fingerprint."""
 
 
 class EventListener:
-    """The journal's reader, ticking on its own task.
+    """The journal's reader, ticking on its own task. The catalog says what a record is, the
+    wiring who wants it.
 
-    Delivering is where the two halves of the event system meet, and the only place they do: the
-    *catalog* says what a record is, the *wiring* says who wants it. Both are imported, so the
-    listener reads what a mount declared without holding the bus that wrote it — and a test can hand
-    over a ``wiring`` of its own to deliver against isolated subscriptions.
-
-    ``session_factory`` likewise overrides the admin session: the API test driver injects its
-    rolled-back test connection, so the listener sees the same uncommitted facts a request just
-    wrote.
+    ``wiring`` and ``session_factory`` default to the process's; the API test driver passes its
+    rolled-back connection so the listener sees the facts a request just wrote.
     """
 
     def __init__(
@@ -94,17 +72,8 @@ class EventListener:
         return factory()
 
     async def tick(self) -> int:
-        """One pass of both delivery paths. Returns the ``on``-path count, which is what drives
-        the drain loop's batching — the spread scan has no ``LIMIT``, so one tick applies all of it
-        and never needs another pass.
-
-        - **``on`` / async** — claim a batch of never-dispatched facts (``FOR UPDATE SKIP LOCKED``),
-          enqueue one task per durable consumer, stamp them dispatched. Exactly-once cluster-wide;
-          the tasks and the mark commit together.
-        - **``spread``** — read facts newer than this process's cursor whose kind has a ``spread``
-          subscriber and run those handlers **in-process** (config reload). No claim, no dispatched
-          mark: every instance replays them.
-        """
+        """One pass of both deliveries. Returns how many facts the ``on`` path claimed, so the
+        caller drains until zero; the spread scan has no limit and needs one pass."""
         async with self._session() as session:
             repo = EventRepository(session)
             claimed = await repo.claim_undispatched(self._batch)
@@ -119,41 +88,25 @@ class EventListener:
         return len(claimed)
 
     async def _read_spread(self, repo: EventRepository) -> list[BusinessEventRecord]:
-        """Facts above the spread cursor whose kind has a ``spread`` subscriber, minus the ones
-        this process already applied while they sat inside the settle window.
-
-        The cursor trails the window on purpose, so a fact that commits late still surfaces above
-        it (see ``scan_spread``). What that costs is the same fact offered on every tick until it
-        settles, and this set is what keeps the handler from being run again for it — the reason
-        a late commit is caught without a config reload firing sixty times over.
-        """
+        """Spread facts not yet applied. The cursor trails the settle window, so a fact comes
+        back on each tick until it settles; ``_spread_applied`` stops it running twice."""
         kinds = self._wiring.spread_kinds()
         if not kinds:
             return []
-        # Nil-uuid sentinel on first pass: uuid7 is version-tagged, so it always sorts above nil.
+        # Every uuid7 sorts above nil.
         cursor = self._spread_cursor if self._spread_cursor is not None else uuid.UUID(int=0)
         found, settled = await repo.scan_spread(cursor, kinds, self._spread_settle)
         fresh = [record for record in found if record.id not in self._spread_applied]
         self._spread_cursor = settled
-        # Only what the cursor has not passed: below it nothing is ever scanned again, so
-        # remembering it would grow this set for the life of the process.
+        # Below the cursor nothing is scanned again: forget it, or the set grows forever.
         self._spread_applied = {record.id for record in found if record.id > settled}
         return fresh
 
     async def _apply_spread(self, record: BusinessEventRecord) -> None:
-        """Reconstruct the fact and run its ``spread`` handlers on this instance, then advance the
-        cursor.
+        """Run the fact's ``spread`` handlers on this instance.
 
-        A handler that raises leaves *this* instance running on stale config while every other one
-        moved on, and nothing will retry it: spread has no claim, no queue and no ledger. So it is
-        a defect, logged at ``exception`` level — the capture seam folds it into a console Issue —
-        exactly like a record that cannot be rebuilt at all (a field added to the event class after
-        the fact was written, a hand-inserted payload). Not a loop, hence no transition rule: these
-        run when an admin edits a setting, not once a second.
-
-        The record counts as applied either way, refused or unrebuildable: ``_read_spread`` books
-        it on the way out, so a fact this process can never make sense of is passed over once
-        rather than replayed until the window closes and then forgotten anyway."""
+        A failing handler leaves this instance on stale config and nothing retries it, so it is
+        logged as an exception (an issue). The fact counts as applied either way."""
         event = self._reconstruct(record)
         if event is not None:
             for handler in self._wiring.spread_handlers_for(event):
@@ -164,13 +117,8 @@ class EventListener:
 
     @staticmethod
     def _reconstruct(record: BusinessEventRecord) -> BusinessEvent | None:
-        """Rebuild the typed event from a business_events record (its fields + scoping columns), or
-        ``None`` when it cannot be — the caller skips such a record rather than stalling on it.
-
-        A payload that no longer fits its event class is not skipped silently: a stored fact that
-        stopped rebuilding (a field made required after the fact was written, a hand-inserted
-        payload) is a defect, so it is logged at ``exception`` level — the capture seam folds it
-        into a console Issue — not swallowed as a mere warning."""
+        """The typed event, or ``None`` for the caller to skip. A payload that no longer fits its
+        class is a bug: logged as an exception."""
         event_type = catalog.class_for(record.kind)
         if event_type is None:
             return None
@@ -183,13 +131,11 @@ class EventListener:
     async def _fan_out(self, session: AsyncSession, record: BusinessEventRecord) -> None:
         event_type = catalog.class_for(record.kind)
         if event_type is None:
-            # Not the benign "known kind, nobody listens" no-op below: a fact was persisted that
-            # this process cannot even name, and that is a defect worth an Issue of its own.
             self._capture_unroutable(record)
             return
         subs = self._wiring.consumers_of(event_type)
         if not subs:
-            return  # known kind, nobody listens — a clean no-op, no fact is lost
+            return
         payload = task_payload(record)
         actor = record.user_id
         for sub in subs:
@@ -197,9 +143,8 @@ class EventListener:
 
     @staticmethod
     def _capture_unroutable(record: BusinessEventRecord) -> None:
-        """Log an unroutable fact at ``exception`` level so the capture seam records a console
-        Issue. Raised-and-caught to give the capture fingerprint a live traceback; the caller marks
-        the record dispatched regardless, so a fact we cannot route never wedges the cursor."""
+        """A bug, logged as an exception; the caller still marks the fact dispatched, so it never
+        blocks the ones behind it."""
         try:
             raise UnroutableFact(f"no event class registered for kind {record.kind!r}")
         except UnroutableFact:
@@ -219,14 +164,11 @@ class EventListener:
         await self._unlisten()
 
     async def guarded_tick(self) -> None:
-        """One pass of both delivery paths, and the verdict its outcome earns.
-
-        Split out of ``_run`` so the failure path is drivable: a listener that stops delivering
-        leaves every fact's reactions unrun, and used to say so only at ``warning``.
-        """
+        """Drain ready facts and report the outcome to the loop verdict
+        (AGENTS: a failure that repeats is one bug). Public so tests can drive the failure path."""
         try:
             while await self.tick():
-                pass  # drain all ready facts before waiting
+                pass
         except Exception as exc:
             self._health.tick_failed(exc)
         else:
@@ -235,14 +177,12 @@ class EventListener:
     async def _run(self) -> None:
         while True:
             await self.guarded_tick()
-            # Wake on NOTIFY, or poll after the interval as a durability net.
             with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(self._wake.wait(), timeout=self._interval)
             self._wake.clear()
 
     async def _listen(self) -> None:
-        """Open a dedicated connection LISTENing on the NOTIFY channel; a notification wakes the run
-        loop for an immediate drain."""
+        """LISTEN on a dedicated connection; a notification wakes the run loop."""
         try:
             raw = await _user_engine().raw_connection()
             asyncpg_conn = raw.driver_connection
@@ -251,7 +191,7 @@ class EventListener:
             await asyncpg_conn.add_listener(NOTIFY_CHANNEL, self._on_notify)
             self._listen_conn = raw
         except Exception as exc:
-            # No LISTEN (e.g. DB down at boot) — the poll loop still delivers, just not instantly.
+            # The poll still delivers, only later.
             log.warning("listener.listen_failed", exc_info=exc)
 
     async def _unlisten(self) -> None:

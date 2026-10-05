@@ -1,10 +1,5 @@
-"""Console's business events — platform-admin actions on the shared journal.
-
-Granting/revoking the platform-admin role and setting per-org overrides are ``settings.*`` events
-(the vocabulary the journal already uses). None is CRUD, so they subclass
-:class:`~apps.shared.events.BusinessEvent` directly and spell out a ``verb`` of their own.
-``AdminGranted``/``AdminRevoked`` are server-wide (no ``org_id``), the override events carry the
-target org.
+"""The console's ``settings.*`` events: admin grants and revokes (server-wide), per-org
+overrides (carrying their org).
 """
 
 from dataclasses import dataclass
@@ -22,13 +17,13 @@ class SettingsEvent(BusinessEvent):
 @dataclass(frozen=True, kw_only=True)
 class AdminGranted(SettingsEvent):
     verb: ClassVar[str] = "admin_granted"
-    # the promoted user: entity_id resolved from the email, entity_name = the email
+    # entity_id, entity_name: the promoted user and their email
 
 
 @dataclass(frozen=True, kw_only=True)
 class AdminRevoked(SettingsEvent):
     verb: ClassVar[str] = "admin_revoked"
-    # the demoted user: entity_id resolved from the email, entity_name = the email
+    # entity_id, entity_name: the demoted user and their email
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -29,8 +29,7 @@ class AuthApiMixin(ApiBase):
     def visit(self, path: str) -> None:
         self.response = self.client().get(path, follow_redirects=True)
 
-    # The front door — fetched once by the `when`, so the assertions that follow read the page
-    # the visitor opened rather than one of their own.
+    # Fetched once by the `when`; the assertions after read that page.
     def start_to_sign_in(self) -> None:
         self._visitor_page = self._visitor_get("/auth/login")
 
@@ -58,7 +57,7 @@ class AuthApiMixin(ApiBase):
             self.active_org_handle = resp.json()[0]["handle"]
 
     def registered_email(self) -> str:
-        """The user the scenario last registered — the one a bare "they" names."""
+        """The user the scenario last registered, the one "they" names."""
         if self.last_registered_email is None:
             raise AssertionError("no user registered in this scenario")
         return self.last_registered_email
@@ -67,15 +66,14 @@ class AuthApiMixin(ApiBase):
         resp = self.client().post("/auth/login", json={"email": email, "password": password})
         self.response = resp
         if self.response.status_code == 200:
-            # Whoever's client just authenticated holds `email`'s cookies now —
-            # re-key it under that identity (visitor or a previous user alike).
+            # The client that just authenticated now holds `email`'s cookies: re-key it.
             self.adopt_current_client(email)
         self._store_active_slug()
 
     def ensure_registered(self, email: str, password: str) -> None:
         self.client().post("/auth/register", json={"email": email, "password": password})
         self._track_auth_email(email)
-        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
+        self.drain_task_queue()  # UserCreated's reactions: personal org, admin bootstrap
 
     def register(self, email: str, password: str) -> None:
         self.last_registered_email = email
@@ -83,7 +81,7 @@ class AuthApiMixin(ApiBase):
             "/auth/register", json={"email": email, "password": password}
         )
         self._track_auth_email(email)
-        self.drain_task_queue()  # run UserCreated's reactions (personal org, admin bootstrap) now
+        self.drain_task_queue()  # UserCreated's reactions: personal org, admin bootstrap
 
     def register_fresh(self, password: str) -> None:
         self.register(f"{uuid4()}@test.local", password)
@@ -145,9 +143,7 @@ class AuthApiMixin(ApiBase):
         self._track_auth_email(email)
 
     def register_confirmed(self, email: str, password: str) -> None:
-        """An account whose mailbox is already verified — via the admin API's own
-        ``email_confirm: True``, so the state holds whatever the stack's own signup
-        confirmation setting is."""
+        """Confirmed through the admin API, whatever the stack's signup setting."""
         delete_user_if_exists(email)
         create_user(email, password)
         self._track_auth_email(email)
@@ -185,7 +181,7 @@ class AuthApiMixin(ApiBase):
         assert resp.status_code == 303, f"confirm failed: {resp.status_code} {resp.text}"
 
     def assert_resend_offered(self) -> None:
-        # REST face of the affordance: the endpoint answers (neutral 200).
+        # The endpoint answers a neutral 200.
         resp = self.client().post(
             "/auth/resend-confirmation",
             json={"email": ""},
@@ -250,8 +246,8 @@ class AuthApiMixin(ApiBase):
         )
 
     def open_profile_with_pending_sign_in(self, *, as_impersonator: bool = False) -> None:
-        # The attacker's move: the challenge's relay cookie, presented as a bearer — and, dressed
-        # up, as the stashed admin session an impersonation carries.
+        # The attacker presents the challenge's relay cookie as a bearer, and as an impersonator
+        # stash.
         pending = self.response.cookies.get("mfa_access_token")
         assert pending, "no pending sign-in to replay"
         headers = {"authorization": f"Bearer {pending}", "accept": "application/json"}
@@ -463,8 +459,7 @@ class AuthApiMixin(ApiBase):
         )
 
     def impersonate_from_accounts(self, email: str) -> None:
-        # The accounts row renders a "View as user" form posting the target email;
-        # assert the button is on the HTML page, then drive the endpoint behind it.
+        # The "View as user" button is on the page; then its endpoint is driven.
         listing = self.client().get("/console/accounts", headers={"accept": "text/html"})
         assert listing.status_code == 200, f"GET /console/accounts: {listing.status_code}"
         assert "View as user" in listing.text, "accounts list is missing the impersonate button"
@@ -474,7 +469,7 @@ class AuthApiMixin(ApiBase):
         assert self._profile_email() == email, f"not viewing as {email!r}"
 
     def assert_impersonation_banner(self) -> None:
-        # The API face of the banner: the stash cookie that renders it is present.
+        # The stash cookie that renders the banner.
         assert "impersonator_access_token" in self.client().cookies
 
     def stop_impersonating(self) -> None:
@@ -491,5 +486,5 @@ class AuthApiMixin(ApiBase):
         self.response = self.client().post("/auth/impersonate", data={"email": email})
 
     def assert_impersonation_refused(self) -> None:
-        # Non-admins get the console treatment: a plain 404, never a confirmation.
+        # A 404, like the console, never confirming the surface.
         assert self.response.status_code == 404, f"Expected 404, got {self.response.status_code}"

@@ -4,8 +4,7 @@ import re
 import sys
 from pathlib import Path
 
-# Backups live under ``.cache/`` like every other scratch artefact here (pytest, ruff, coverage),
-# never in the world-writable ``/tmp`` where a predictable name is anyone's to preempt.
+# Not ``/tmp``, where anyone can preempt a predictable name.
 BAK = Path(".cache/upgrade")
 LOCK_BAK = BAK / "uv.lock.bak"
 TOML_BAK = BAK / "pyproject.toml.bak"
@@ -23,11 +22,8 @@ def relax_pins() -> None:
 
 
 def repin(content: str, resolved: dict[str, str]) -> str:
-    """Write the resolved versions back onto the original pins, extras included.
-
-    The lock keys names normalized (lowercase, no extras), so `sqlalchemy[asyncio]`
-    is looked up as `sqlalchemy` — miss it and pyproject silently keeps the old pin.
-    """
+    """Re-pin to the resolved versions. The lock keys names without extras:
+    `sqlalchemy[asyncio]` is looked up as `sqlalchemy`."""
 
     def resolve(m: re.Match[str]) -> str:
         name, extras, pinned = m.group(1), m.group(2) or "", m.group(3)

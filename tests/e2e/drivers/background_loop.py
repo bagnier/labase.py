@@ -1,8 +1,5 @@
-"""A single asyncio event loop running in a daemon thread.
-
-Owned once and reused by both e2e substrates: the API driver runs coroutines on
-it (ASGI calls over httpx), the browser driver schedules the hypercorn server on
-it. There is exactly one launch/stop mechanism for the in-process server, here.
+"""An event loop in a daemon thread, shared by both drivers: the API driver's calls, the browser
+driver's server.
 """
 
 import asyncio
@@ -10,8 +7,7 @@ import threading
 
 
 class BackgroundLoop:
-    """Running from construction to ``stop()`` — there is no loop that exists without running,
-    so no reader has to ask whether it started."""
+    """Runs from construction to ``stop()``."""
 
     def __init__(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -19,11 +15,9 @@ class BackgroundLoop:
         self._thread.start()
 
     def run(self, coro):
-        """Run a coroutine to completion and return its result (blocks the caller)."""
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
 
     def submit(self, coro):
-        """Schedule a coroutine without waiting; returns a concurrent.futures.Future."""
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def call_soon(self, fn, *args) -> None:

@@ -1,14 +1,5 @@
-"""The promise, end to end: one failed request leaves records in all three sources, all naming it.
-
-Every other test here seeds a source by hand — a log line written with the ids already on it,
-an occurrence inserted with a context. That is what let the correlation keys go missing in
-production while the suite stayed green: nothing drove a *real* request through the real chain and
-asked whether the records it leaves behind actually name the same request.
-
-So this one does. A handler raises; what follows is production wiring the whole way — the request
-middleware, Starlette's 500 handler, the capture seam, the drain that folds the exception into an
-issue and records the fact of its opening — and the assertion is the console's own read: filter the
-timeline by that request id and get everything back.
+"""End to end: one failing request, through production wiring, leaves records in all three
+sources, and filtering the Timeline by its id returns them all. Other tests seed sources by hand.
 """
 
 import logging
@@ -44,9 +35,7 @@ _ISSUE_TITLE = "RuntimeError: the handler gave up"
 
 @pytest.fixture(autouse=True)
 def _a_private_chain(tmp_path, monkeypatch):
-    """``setup_logging`` reconfigures structlog, the root logger and the exception hooks
-    process-wide, so this puts everything back — the same care ``apps/shared/tests/conftest``
-    takes, needed here because the whole point is to run the real chain."""
+    """The real chain, put back afterwards (as ``apps/shared/tests/conftest``)."""
     settings = get_technical_settings()
     monkeypatch.setattr(settings, "firehose_dir", str(tmp_path), raising=False)
     monkeypatch.setattr(sink, "get_technical_settings", lambda: settings)
@@ -77,23 +66,11 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _forget_the_issue_this_test_opens():
-    """Drop the issue afterwards, so each run really *opens* one.
+    """Delete the issue afterwards, so each run opens one (the message is not part of the
+    fingerprint). Raw SQL: the issues models are private to their context.
 
-    A fingerprint is the exception type plus the frames — never the message, on purpose, so a
-    unique message would not buy a fresh issue. Left behind, the second run folds into the first
-    and records no ``issues.opened`` at all, which is precisely the fact under test.
-
-    Torn down after the reader's own session (autouse fixtures are set up first and finalised
-    last), so it opens — and disposes — an engine of its own. Raw SQL because the ``issues``
-    tables are private to that context and the import-linter contract forbids reaching for its
-    models — the same reason ``tests/e2e/seed_data`` writes them by hand.
-
-    The caches are cleared on the way *in* as well as out, which is what makes this test
-    order-independent. ``admin_session_factory`` is lru_cached and its pool binds to whichever
-    loop first asked for one: any driver-based test running before this one leaves a pool bound
-    to a dead loop, and the capture drain then fails to write its occurrence — silently, because
-    the drain isolates its trackers by design. The symptom was this test's ``issue`` entry simply
-    missing, three fixtures away from the cause.
+    Engine caches are cleared on the way in too: a pool bound to a dead loop would make the drain
+    fail silently, isolating its tracker.
     """
     _clear_engine_caches()
     yield
@@ -108,16 +85,11 @@ async def _forget_the_issue_this_test_opens():
 
 @pytest_asyncio.fixture
 async def failing_request():
-    """Serve one request that raises, through the real middleware stack, and return its id.
-
-    The stack is assembled by the shared context's own ``mount`` rather than listed here, so the
-    test cannot drift from what production wires. The lifespan is deliberately not entered —
-    these are the request-path pieces, not the background workers.
-    """
+    """Serve one failing request through the stack ``mount`` builds, without the lifespan;
+    return its id."""
 
     async def scope_the_request() -> None:
-        # Stands in for auth's ``get_current_user`` and organizations' ``get_current_org``, which
-        # bind exactly these while the request is served — below the middleware that reports it.
+        # Binds what auth's and organizations' dependencies would.
         structlog.contextvars.bind_contextvars(user_id=_USER_ID, org_id=_ORG_ID)
 
     host = Host()
@@ -127,8 +99,8 @@ async def failing_request():
     response = TestClient(host.app, raise_server_exceptions=False).get("/acme/explode")
 
     assert response.status_code == 500
-    await LogDrain(interval_seconds=0).tick()  # the lines reach the store, off the request path
-    await CaptureDrain(0).tick()  # the exception becomes an occurrence, and a fact
+    await LogDrain(interval_seconds=0).tick()
+    await CaptureDrain(0).tick()
     yield response.headers["X-Request-ID"]
 
 
@@ -138,14 +110,7 @@ async def _explode() -> None:
 
 @pytest.mark.asyncio
 async def test_one_failed_request_leaves_four_entries_that_all_name_it(failing_request, reader):
-    """The four keys the console correlates on, asserted where an admin actually reads them.
-
-    A set, not a list: the four records are stamped by three different clocks — structlog's for
-    the lines, ``clock.now()`` for the occurrence, Postgres' ``now()`` for the fact — so their
-    relative order is an accident of the test's pinned clock, not a promise. Two log lines and
-    not one, because they say different things: *here is the exception*, then *the exchange
-    ended with a 500*.
-    """
+    """A set: three clocks stamp the four records, so their order means nothing."""
     entries = await reader.search(TimelineFilter(request_id=failing_request))
 
     assert {(e.source, e.level, e.name, e.request_id) for e in entries} == {
@@ -158,12 +123,10 @@ async def test_one_failed_request_leaves_four_entries_that_all_name_it(failing_r
 
 @pytest.mark.asyncio
 async def test_the_trace_and_the_occurrence_name_the_user_and_the_org(failing_request, reader):
-    """Bound below the middleware that writes the finished line, and read by the seam that
-    captures the exception — the two places they used to go missing."""
     entries = await reader.search(TimelineFilter(request_id=failing_request))
 
     assert {(e.source, e.user_id, e.org_id) for e in entries} == {
-        # The fact stays server-wide: naming a user would file an internal issue in their feed.
+        # Server-wide: naming the user would put an internal issue in their feed.
         (TimelineSource.business, None, None),
         (TimelineSource.issue, _USER_ID, _ORG_ID),
         (TimelineSource.logs, _USER_ID, _ORG_ID),

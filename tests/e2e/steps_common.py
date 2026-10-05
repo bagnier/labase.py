@@ -1,11 +1,4 @@
-"""Cross-cutting BDD steps shared by every app.
-
-Registered once via ``pytest_plugins`` in ``tests/plugin.py`` so these phrases
-reach every scenario, the same way the ``driver`` fixture does — no app needs to
-re-declare them. The bodies dispatch to helpers on the driver base classes
-(``ApiBase`` / ``BrowserBase``): the *phrase* is shared, each driver keeps its
-own way of reading the last response.
-"""
+"""Steps shared by every app, registered in ``tests/plugin.py``; each driver base answers them."""
 
 from pytest_bdd import parsers, then
 
@@ -17,8 +10,5 @@ def step_action_forbidden(driver):
 
 @then(parsers.parse("the {target} is not found"))
 def step_not_found(driver, target):
-    """Admin-only surfaces answer a non-admin with a plain 404, never a 403 — the
-    surface must not even reveal its existence. ``target`` (console, accounts
-    screen, logs screen, …) is documentary; the assertion is the same everywhere.
-    """
+    """A 404, never a 403 that would reveal the surface; ``target`` only documents."""
     driver.assert_not_found()

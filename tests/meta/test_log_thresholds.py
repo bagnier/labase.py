@@ -1,23 +1,6 @@
-"""One invariant over the *levels*: what the capture seam can see, and what it cannot.
-
-``tests/meta/test_log_vocabulary`` pins what a line is called, ``tests/meta/test_capture_sites``
-what a broad ``except`` may leave out. This one pins the doctrine's own arithmetic
-(:mod:`apps.shared.logs.capture`): two levels and a seam, and nothing underneath them.
-
-``error`` is the level the seam reads — but only carrying a live exception, since
-``capture_processor`` fires on "error level with ``exc_info``" and on nothing else. A bare
-``log.error`` is therefore the one spelling that *looks* like an alarm and reaches no console: it
-writes a line into a window that rolls over, and opens no issue. The two sites that used to spell
-it were both doubles of something already said one line earlier — a preflight error the process
-was about to raise anyway, a parked task the seam had just captured.
-
-The one deliberate ``error`` carrying no exception is ``request.finished`` on a 5xx, which states
-the *outcome* of an exchange rather than a defect. It is written through a bound alias
-(``log_at = log.error if … else log.info``), which the walk resolves to every level it can take —
-so it is named below as the one outcome line, rather than left out by the shape of its call.
-
-Same shape and same reason as its two siblings: these choices live at call sites, so nothing but
-an AST walk enumerates them.
+"""Log levels (AGENTS: a line says what no other record says): ``error`` always carries an
+exception, the capture seam's only trigger, save ``request.finished`` on a 5xx; ``info`` is a
+listed set of surprises; no ``debug``.
 """
 
 import ast
@@ -29,8 +12,7 @@ _APPS = Path(__file__).resolve().parents[2] / "apps"
 
 
 def _levels_of(value: ast.expr) -> set[str]:
-    """The levels an expression can bind: ``log.error``, or either branch of an ``if``/``else``
-    choosing between two — empty for anything that is not a logger's level."""
+    """Levels an expression binds: ``log.error``, or both branches of a conditional."""
     if isinstance(value, ast.IfExp):
         return _levels_of(value.body) | _levels_of(value.orelse)
     if isinstance(value, ast.Attribute) and is_a_logger(value.value):
@@ -39,8 +21,7 @@ def _levels_of(value: ast.expr) -> set[str]:
 
 
 def _bound_levels(tree: ast.Module) -> dict[str, set[str]]:
-    """Each name bound to a logger's level somewhere in the module, with every level it can take
-    — ``log_at = log.error if … else log.info``, then ``log_at = log.warning``."""
+    """Names bound to a level in the module, with every level each can take."""
     bound: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and (levels := _levels_of(node.value)):
@@ -51,9 +32,7 @@ def _bound_levels(tree: ast.Module) -> dict[str, set[str]]:
 
 
 def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:
-    """Every ``(site, name, call)`` writing a line at ``level`` under ``apps/``, tests aside —
-    ``<logger>.<level>(…)`` whatever the logger is called, and a call through a name bound to a
-    level, counted at each level it can take."""
+    """``(site, name, call)`` writing at ``level`` under ``apps/``, aliases included."""
     found = []
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
@@ -77,14 +56,11 @@ def _calls_at(level: str) -> list[tuple[str, str, ast.Call]]:
     return found
 
 
-# The exchange's own line: its level is computed from the outcome, so it is `error` on a 5xx with
-# no exception to carry, and `info` when the exchange did what was asked — neither a defect nor a
-# surprise, and the only line allowed to be either.
+# Its level is the exchange's outcome.
 _THE_OUTCOME_LINE = "request.finished (apps/shared/logs/request.py)"
 
 
 def test_an_error_line_carries_the_exception_that_justifies_it():
-    """Without one it alarms nobody: the seam skips it, and the line rolls out of its window."""
     blind = {
         f"{name} ({site.split(':')[0]})"
         for site, name, call in _calls_at("error")
@@ -95,57 +71,43 @@ def test_an_error_line_carries_the_exception_that_justifies_it():
 
 
 def test_the_walk_actually_finds_the_error_sites():
-    # Guards the guard: an AST shape that matched nothing would make the assertion vacuous.
+    # Guards the guard: a walk matching nothing would make it vacuous.
     assert len(_calls_at("error")) > 0
 
 
-# Every ``info`` the base admits, and nothing else. The list is the point: an ``info`` reports a
-# point of surprise, and a codebase holds only so many genuine surprises before the level stops
-# meaning anything. Adding one is a deliberate edit, argued here, rather than something that
-# happens while writing a handler.
+# Every ``info`` allowed, each a surprise argued here.
 _THE_SURPRISES = {
-    # A reaction whose actor closed their account between the fact and its delivery — the
-    # personal org, the first-admin grant. Rare, and it explains a missing row later.
+    # A reaction whose user left before delivery: explains a missing row.
     "bootstrap_first_admin.actor_gone (apps/console/contract/integration.py)",
     "create_personal_org.actor_gone (apps/organizations/contract/integration.py)",
     "seed_org_welcome.actor_gone (apps/organizations/contract/queries.py)",
-    # The narrower half of that same race: the owner never left, but the org itself was deleted
-    # between the pre-check and the seeder's write.
+    # The org deleted between the seeder's check and its write.
     "seed_org_welcome.org_gone (apps/organizations/contract/queries.py)",
-    # An admin-role write the server took whose echoed record the SDK could not parse (an
-    # anonymized identity): the action landed, and this explains the missing confirmation.
+    # A role write that landed, its echo unreadable.
     "set_server_admin.record_unreadable (apps/auth/infra/user_repository.py)",
-    # A dependency that answered *no*: the ordinary half of the verdict, whose other half is an
-    # issue. The name comes from the caller, so the walk cannot read it off the constant.
+    # A dependency's refusal; the caller names it.
     "<caller-supplied> (apps/shared/logs/dependency.py)",
-    # The log store taking lines again, carrying what the outage cost.
+    # The log store back, with the outage's toll.
     "log_sink.write_recovered (apps/shared/logs/sink.py)",
-    # A lifespan loop ticking again after an outage, carrying how many ticks it lost — the name
-    # is derived from the loop's, so the walk cannot read it off the constant either.
+    # A loop back after an outage; the name is derived.
     "<caller-supplied> (apps/shared/logs/loop.py)",
-    # A request whose SQL crossed a threshold, naming the statements that cost the time.
     "db.heavy_request (apps/shared/persistence/sql_stats.py)",
-    # A capture tracker succeeding again after a run of failures, carrying how many it lost.
+    # A tracker back after failures.
     "capture.tracker_recovered (apps/shared/logs/capture.py)",
-    # A production boot with a non-blocking preflight finding — a configuration observation,
-    # not something the code absorbed or refused, but still not the sound-config happy path.
+    # A non-blocking preflight finding at a production boot.
     "preflight.finding (apps/shared/settings/preflight.py)",
 }
 
 
 def test_the_info_lines_are_exactly_the_surprises():
-    """A healthy server at rest writes nothing; every name below is a thing that did not go as a
-    reader would have predicted."""
+    """A healthy server at rest writes nothing."""
     written = {f"{name} ({site.split(':')[0]})" for site, name, _ in _calls_at("info")}
 
     assert written == _THE_SURPRISES | {_THE_OUTCOME_LINE}
 
 
 def test_nothing_is_written_below_the_two_levels():
-    """``debug`` answers "what did it do", which the exchange line and the journal answer between
-    them — and it charges a line per statement, on every request, to do it. The one thing it
-    uniquely bought is ``db.heavy_request``: the same drill-down, written only when there is
-    something to drill into."""
+    """``db.heavy_request`` gives the drill-down a per-statement ``debug`` would."""
     below = [f"{name} ({site})" for site, name, _ in _calls_at("debug")]
 
     assert below == []

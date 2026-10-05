@@ -1,15 +1,6 @@
-"""Which facts may be detached — the criterion, proved against the real request teardown.
-
-``emit(fact, session)`` rides the request's transaction, and ``_commit_on_success`` commits it on a
-clean exit but rolls it back on an exception. So the two failure shapes a handler can take are *not*
-equivalent for the journal: returning a 4xx keeps the fact, raising ``HTTPException`` loses
-it.
-
-That asymmetry is why the journal holds no refusals. A fact emitted on a raising path would need to
-escape its transaction to survive, and the facts that wanted to — a blocked revoke, a denied admin
-surface — turned out to describe nothing that happened. They are log lines now, and ``emit`` has no
-exception left. This pins the mechanism, so the reasoning stays derivable rather than remembered.
-"""
+"""A fact rides the request's transaction: returning a 4xx keeps it, raising ``HTTPException``
+rolls it back. Hence a refusal is a log line, not a fact (AGENTS: business events are facts, not
+sagas)."""
 
 import uuid
 
@@ -39,8 +30,7 @@ router = APIRouter()
 
 
 async def _mutate_and_emit(actor: uuid.UUID, session: AdminSession) -> None:
-    """A mutation and its fact on one transaction — the shape every emitting route takes. The row
-    is a queued task, the cheapest write the base owns that needs no table of the test's own."""
+    """A mutation (a queued task: no table of the test's own) and its fact, one transaction."""
     await enqueue(session, _KIND, {"actor": str(actor)})
     await events.emit(_DurabilityEvent(user_id=actor), session)
 
@@ -72,8 +62,7 @@ async def _wipe() -> None:
 
 @pytest_asyncio.fixture
 async def client():
-    # A fresh engine on this test's loop, as the sibling write-path tests do: the ApiDriver's
-    # shared connection lives on another loop and would deadlock the commits asserted here.
+    # A fresh engine on this loop: the ApiDriver's connection lives on another and would deadlock.
     _clear_engine_caches()
     wiring.declare(_DurabilityEvent)
     await _wipe()
@@ -87,8 +76,6 @@ async def client():
 
 
 async def _rows_and_facts(actor: uuid.UUID) -> tuple[int, int]:
-    """How many of the actor's rows and facts committed — read together, since the claim is that
-    one never commits without the other."""
     async with db.admin_session_factory()() as session:
         rows = await session.scalar(
             text("SELECT count(*) FROM task_queue WHERE topic = :k AND payload->>'actor' = :a"),

@@ -17,9 +17,7 @@
   </div>
   <div class="flex items-center gap-3">
     {{ role_badge(m.role) }}
-    {# One "Manage" combo per row — owners act on others (promote/demote/remove); everyone gets
-       "Leave" on their own row. The menu is a daisyUI dropdown; the enclosing list overrides
-       `overflow-hidden` to `overflow-visible` so the popup isn't clipped by the panel. #}
+    {# Owners manage others' rows; everyone may leave from their own. #}
     {% set is_self = m.email == current_user.email %}
     {% if caller_role == "owner" or is_self %}
       <div class="dropdown dropdown-end">

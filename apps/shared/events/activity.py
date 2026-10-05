@@ -1,13 +1,6 @@
-"""The activity projection — pure presentation over journal records.
-
-The repository reads the journal; this module humanizes those records for the two surfaces that
-show a member their own history: the profile / dashboard feed, and the contribution calendar.
-Every function is pure — no session, no I/O — and the raw ``kind``/payload never reach a member;
-only projected, safe fields do.
-
-Not :mod:`apps.timeline`, which is the console's unified read view over the log sink, the journal
-*and* issue occurrences. This one owns no screen, reads one source, and knows nothing of the bus,
-the catalog, the wiring or the listener — only :class:`BusinessEventRecord`.
+"""Journal records made readable for a member: the profile/dashboard feed and the contribution
+calendar. Pure functions over :class:`BusinessEventRecord`; the raw ``kind`` and payload never
+reach the page. The console's view of the journal is :mod:`apps.timeline`.
 """
 
 from collections.abc import Callable
@@ -26,22 +19,20 @@ from apps.shared.vocabulary import AppName, PhosphorIcon
 
 @dataclass(frozen=True, slots=True)
 class ActivityEntry:
-    """One humanized journal record for the timeline — *who did what to which, when*. Only safe,
-    projected fields; the raw ``kind`` and the rest of the payload never reach here. Templates
-    read it by attribute (``e.who``, ``e.icon``)."""
+    """One feed line: who did what to which, when."""
 
-    who: str | None  # the actor's pinned name (handle, else email), or None on the own journal
-    label: str  # the humanized verb (``Created``), never the dotted kind
-    detail: str | None  # the subject's own name (a todo title, a page slug)
-    app: AppName  # shown as a subtle source line under the entry
+    who: str | None  # pinned handle or email; None on the viewer's own journal
+    label: str  # the humanized verb, ``Created``
+    detail: str | None  # the subject's name (a todo title, a page slug)
+    app: AppName
     icon: PhosphorIcon
-    ts: datetime  # the exact instant, shown as clock time under the day header
-    href: str | None  # a deep link to the concerned entity, when the surface supplies one
+    ts: datetime
+    href: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class DaySection:
-    """A day's worth of feed entries under a ``Today`` / ``Yesterday`` / ``Mon, Jul 13`` header."""
+    """Feed entries under a ``Today`` / ``Yesterday`` / ``Mon, Jul 13`` header."""
 
     date: date
     label: str
@@ -53,9 +44,7 @@ class DaySection:
 
 
 def _activity_label(verb: str) -> str:
-    """`share_link_created` → `Share link created` — readable without a per-event table. Purely
-    string-shaping: shared never enumerates the apps, it just humanizes the verb a record
-    carries."""
+    """`share_link_created` → `Share link created`, with no per-event table to maintain."""
     return verb.replace("_", " ").capitalize()
 
 
@@ -65,9 +54,7 @@ def activity_entries(
     show_actor: bool = True,
     link: Callable[[BusinessEventRecord], str | None] | None = None,
 ) -> list[ActivityEntry]:
-    """Project records to *who did what to which, when* — only safe fields, never the raw
-    ``kind`` or the rest of the payload. ``show_actor`` drops *who* on the profile's own journal
-    (always the viewer); ``link`` lets the surface supply a deep link."""
+    """``show_actor=False`` on the viewer's own journal; ``link`` builds each entry's deep link."""
     return [
         ActivityEntry(
             who=r.user_name if show_actor else None,
@@ -91,8 +78,7 @@ def _day_label(d: date, today: date) -> str:
 
 
 def group_activity_by_day(entries: list[ActivityEntry], *, now: datetime) -> list[DaySection]:
-    """Group humanized entries (newest-first) into ``Today`` / ``Yesterday`` / ``Mon, Jul 13``
-    day sections, each carrying its count."""
+    """Split newest-first entries into day sections."""
     today = now.date()
     sections: list[DaySection] = []
     for entry in entries:
@@ -108,8 +94,6 @@ def group_activity_by_day(entries: list[ActivityEntry], *, now: datetime) -> lis
 
 @dataclass(frozen=True, slots=True)
 class ActivityStats:
-    """Headline numbers for the activity view, computed from per-day counts."""
-
     total: int
     active_days: int
     longest_streak: int  # consecutive active days
@@ -119,25 +103,23 @@ class ActivityStats:
 
 @dataclass(frozen=True, slots=True)
 class HeatmapDay:
-    """One cell in the contribution grid — a real day (its ``level``/``count``/``title``) or an
-    out-of-range filler (``empty``) that renders as a blank cell."""
+    """A grid cell: a day, or a blank filler (``empty``) past today."""
 
     empty: bool = False
-    level: int = 0  # 0–4 intensity, from quartiles of the non-zero days
-    title: str = ""  # the cell's accessible label / tooltip (carries the day's count)
+    level: int = 0  # 0–4, see ``_intensity``
+    title: str = ""  # accessible label and tooltip
 
 
 @dataclass(frozen=True, slots=True)
 class HeatmapWeek:
-    """A column of the grid — seven ``HeatmapDay`` cells, Mon→Sun."""
+    """Seven cells, Mon→Sun."""
 
     days: list[HeatmapDay]
 
 
 @dataclass(frozen=True, slots=True)
 class MonthHeader:
-    """A colspan segment over the week-columns of one month; ``label`` is blank for a short run
-    (fewer than three weeks) so it never widens a cell."""
+    """A month label spanning its week columns."""
 
     label: str
     span: int
@@ -145,7 +127,7 @@ class MonthHeader:
 
 @dataclass(frozen=True, slots=True)
 class HeatmapCalendar:
-    """A GitHub-style contribution grid, fully computed for the macro to iterate."""
+    """A GitHub-style contribution grid, ready for the template macro to iterate."""
 
     weeks: list[HeatmapWeek]
     weekday_labels: list[str]
@@ -154,8 +136,6 @@ class HeatmapCalendar:
 
 
 def activity_stats(counts: dict[date, int], *, now: datetime) -> ActivityStats:
-    """Headline numbers for the activity view, from per-day counts — totals, active days, the
-    longest consecutive-day streak, and this week vs the one before."""
     today = now.date()
     total = sum(counts.values())
     active_days = sum(1 for n in counts.values() if n)
@@ -180,12 +160,8 @@ def activity_stats(counts: dict[date, int], *, now: datetime) -> ActivityStats:
 def _calendar_window(
     today: date, since: date | None, min_weeks: int, max_weeks: int
 ) -> tuple[list[date], str]:
-    """The Monday-starting week columns to render, and the label naming that range.
-
-    The window runs from the join week (``since``) to now, floored at ``min_weeks`` (a fresh
-    account isn't a lone column) and capped at ``max_weeks`` (so a new account never shows a
-    mostly-empty year). A window that hit the cap can no longer claim the join date, so it says
-    "last 12 months" instead."""
+    """The week columns (their Mondays) from the join week to now, kept between ``min_weeks``
+    and ``max_weeks``, and the range's label: a capped window cannot say "Since <join date>"."""
     end_monday = today - timedelta(days=today.weekday())
     if since is not None:
         since_monday = since - timedelta(days=since.weekday())
@@ -203,9 +179,8 @@ def _calendar_window(
 
 
 def _intensity(counts: dict[date, int]) -> Callable[[int], int]:
-    """The 0–4 ``level`` ramp, built from quartiles of the non-zero days — so it adapts to each
-    user instead of a fixed scale that washes out a light one. With no activity at all, every
-    non-zero day is a plain level 1."""
+    """The 0–4 level from quartiles of the active days, so a light user's grid is not washed out
+    by a fixed scale."""
     nonzero = sorted(n for n in counts.values() if n)
     thresholds = (
         [nonzero[min(len(nonzero) - 1, int(len(nonzero) * f))] for f in (0.25, 0.5, 0.75)]
@@ -227,8 +202,6 @@ def _intensity(counts: dict[date, int]) -> Callable[[int], int]:
 def _week_column(
     week_start: date, today: date, counts: dict[date, int], level: Callable[[int], int]
 ) -> HeatmapWeek:
-    """One column of the grid, Mon→Sun (``week_start`` is a Monday). A day past today is a blank
-    filler cell, not a zero-activity one."""
     days: list[HeatmapDay] = []
     for offset in range(7):
         d = week_start + timedelta(days=offset)
@@ -245,8 +218,8 @@ def _week_column(
 
 
 def _month_headers(week_starts: list[date]) -> list[MonthHeader]:
-    """Colspan segments over the consecutive week-columns sharing a month, so a label never widens
-    a cell. A segment narrower than 3 weeks stays blank to avoid clutter."""
+    """One segment per month; under three weeks it stays unlabelled so the label never widens a
+    cell."""
     headers: list[MonthHeader] = []
     for _key, run in groupby(week_starts, key=lambda ws: (ws.year, ws.month)):
         cols = list(run)
@@ -263,9 +236,7 @@ def heatmap_calendar(
     min_weeks: int = 5,
     max_weeks: int = 53,
 ) -> HeatmapCalendar:
-    """A GitHub-style contribution grid, fully computed for the macro to iterate — the window
-    (:func:`_calendar_window`), the intensity ramp (:func:`_intensity`) and the month segments
-    (:func:`_month_headers`) each decided on their own."""
+    """The contribution grid from per-day counts, starting at the join date ``since``."""
     today = now.date()
     since_date = since.date() if isinstance(since, datetime) else since
     week_starts, range_label = _calendar_window(today, since_date, min_weeks, max_weeks)
@@ -279,7 +250,6 @@ def heatmap_calendar(
 
 
 class ActivityFeedRead(BaseModel):
-    """The day-grouped feed flattened for a JSON caller: each entry as the template renders it,
-    ``ts`` in ISO."""
+    """The feed for a JSON caller, ``ts`` in ISO."""
 
     entries: list[dict[str, Any]]

@@ -1,9 +1,7 @@
-"""Account deletion — the auth surface the profile Danger zone calls.
+"""Account deletion, called by the profile's danger zone.
 
-GoTrue is *soft*-deleted (sign-in impossible, row retained): hard-deleting
-auth.users would block under open transactions holding key-share locks on the
-user row, and would erase the record of the deletion with it. A purge job on the async
-substrate can hard-delete cold soft-deleted accounts later.
+A soft delete: a hard delete of ``auth.users`` blocks on transactions holding key-share locks on
+the row, and erases the record of the deletion.
 """
 
 import asyncio

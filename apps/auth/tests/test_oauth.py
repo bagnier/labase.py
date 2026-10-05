@@ -1,4 +1,4 @@
-"""OAuth domain service: PKCE pair, authorize URL, code-for-session exchange."""
+"""OAuth: PKCE pair, authorize URL, code exchange."""
 
 import base64
 import hashlib
@@ -54,7 +54,7 @@ async def test_exchange_oauth_code_returns_tokens():
     response.json.return_value = {
         "access_token": "at",
         "refresh_token": "rt",
-        # created ≈ last sign-in → a genuine first sign-in, so the callback provisions the account.
+        # created ≈ last sign-in: a first sign-in.
         "user": {"created_at": "2026-07-22T09:10:08Z", "last_sign_in_at": "2026-07-22T09:10:08Z"},
     }
     client_cls = _client_returning(response)

@@ -1,37 +1,19 @@
-"""In-memory HTTP metrics — the single collector of the load-metrics brick.
+"""The process's request counters, fed by ``RequestLogger``. ``/metrics`` reads them cumulative;
+the ``MetricsFlusher`` persists the deltas between snapshots, one row per route and minute.
 
-``RequestLogger`` feeds one process-wide :class:`MetricsAccumulator`; two readers
-share it (collection is written once):
-
-- the ``/metrics`` Prometheus exposition reads the **cumulative** counters live;
-- the ``MetricsFlusher`` (apps/metrics) diffs successive :meth:`snapshot` calls
-  and persists **deltas**, one row per (route, minute) — never one per request.
-
-Labels stay low-cardinality by design: route *template* (``/{org_handle}/todos``,
-not the expanded path), method, status class. A request that matched no route is
-recorded under its real path (so a dead link from ourselves is identifiable), but
-only up to ``UNMATCHED_LABEL_CAP`` distinct paths — the overflow collapses into
-``unmatched`` so nothing can explode the label set. The method sits in every key
-regardless of route, so it is capped the same way but with a fixed set rather than
-a growing one: a verb outside ``KNOWN_METHODS`` collapses into ``OTHER_METHOD``. And
-only 4xx worth an admin's eyes reach here at all: ``RequestLogger`` gates them to
-internal dead links, so bot scans, the favicon probe and ``/.well-known`` browser
-probes never feed the accumulator (see ``_feeds_load_metrics``).
+Labels stay few: the route template, the method (outside ``KNOWN_METHODS``: ``OTHER_METHOD``) and
+the status class. An unmatched path keeps its own label up to ``UNMATCHED_LABEL_CAP``, then
+collapses into ``unmatched``.
 """
 
 from dataclasses import dataclass, field
 
-# Fixed histogram boundaries, in milliseconds. p50/p95 are derived from the bucket counts,
-# Prometheus-style; the ``+Inf`` bucket is the implicit last slot of ``buckets``.
+# Histogram bounds in ms; ``+Inf`` is the implicit last slot.
 BUCKET_BOUNDS_MS: tuple[float, ...] = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000)
 UNMATCHED_ROUTE = "unmatched"
-# How many distinct no-route paths keep their real label before overflow collapses them into
-# ``unmatched``. A safety net only: what is recordable is already gated to our own dead links, a
-# handful, so this caps nothing but a same-host-referer scanner.
+# A safety net: only our own dead links reach here, a handful.
 UNMATCHED_LABEL_CAP = 25
-# The verbs our own routes ever declare, plus the two Starlette answers on their behalf (HEAD for
-# a GET route, OPTIONS for CORS preflight). The method sits in every label's key, so — unlike the
-# path — it is never let grow: a made-up verb collapses here instead of minting its own label.
+# Our routes' verbs, plus HEAD and OPTIONS answered by Starlette.
 KNOWN_METHODS: frozenset[str] = frozenset(
     {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 )
@@ -44,9 +26,7 @@ def _empty_buckets() -> list[int]:
 
 @dataclass
 class RouteStats:
-    """Counters for one (method, route template) pair."""
-
-    by_status: dict[str, int] = field(default_factory=dict)  # "2xx" → count
+    by_status: dict[str, int] = field(default_factory=dict)  # "2xx": count
     buckets: list[int] = field(default_factory=_empty_buckets)
     duration_sum_ms: float = 0.0
 
@@ -101,7 +81,6 @@ class MetricsAccumulator:
         stats.duration_sum_ms += duration_ms
 
     def _bounded_unmatched_label(self, path: str) -> str:
-        """The real path while under the cap; the collapsed ``unmatched`` bucket beyond it."""
         if path in self._unmatched_paths:
             return path
         if len(self._unmatched_paths) >= UNMATCHED_LABEL_CAP:
@@ -117,7 +96,7 @@ class MetricsAccumulator:
         self._unmatched_paths.clear()
 
     def render_prometheus(self) -> str:
-        """Standard text exposition — cumulative counters since process start."""
+        """Prometheus text format, cumulative since process start."""
         lines = ["# TYPE http_requests_total counter"]
         items = sorted(self._stats.items())
         for (method, route), stats in items:
@@ -144,7 +123,6 @@ class MetricsAccumulator:
 
 
 def snapshot_deltas(previous: MetricsSnapshot, current: MetricsSnapshot) -> MetricsSnapshot:
-    """What happened between two snapshots — the flusher's write set."""
     deltas: MetricsSnapshot = {}
     for key, stats in current.items():
         prev = previous.get(key, RouteStats())

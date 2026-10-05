@@ -5,14 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install dependencies (leverages layer cache when pyproject.toml unchanged)
+# Dependencies first: their layer survives a source change.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-# Copy source
 COPY apps/ ./apps/
 COPY static/ ./static/
 COPY docker/entrypoint.sh /entrypoint.sh

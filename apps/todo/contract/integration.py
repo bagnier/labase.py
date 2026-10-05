@@ -1,8 +1,4 @@
-"""How the to-do context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the router,
-answers the dashboard ``OverviewQuery``, and seeds welcome data on ``OrganizationCreated``.
-"""
+"""The to-do mount, and the welcome tasks each new org gets."""
 
 import uuid
 
@@ -96,6 +92,6 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, owner_id: uuid.UUID) -> None:
     repo = TodoRepository(session, org_id)
-    # add() prepends, so insert in reverse to keep list order.
+    # add() prepends: reversed to keep the order.
     for title in reversed(_WELCOME_TODOS):
         await repo.add(owner_id, title)

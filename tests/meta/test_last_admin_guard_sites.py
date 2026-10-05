@@ -1,16 +1,6 @@
-"""One invariant over the *call sites*: whoever checks the last-admin guard holds its lock.
-
-``ensure_not_last_admin`` reads a count an earlier statement fetched; without
-``lock_last_admin_guard`` serializing the read against every other caller, two concurrent
-callers can both fetch the same stale count and both pass (issue #36). The mechanism is proven
-once, generically, by ``apps/console/tests/test_admins_concurrency.py`` — this is the ratchet
-that every *site* actually uses it: a route that gains a new ``ensure_not_last_admin`` call
-without the lock silently reopens the race the mechanism closes.
-
-The guard's own domain function (framework-free, no session) cannot hold the lock itself — the
-router that carries the session does, before calling in. So the check climbs one level: a
-function holding the guard call is compliant if it takes the lock itself, or if *every* function
-that calls it (by name, own body, apps/ non-test code) takes the lock first.
+"""Every ``ensure_not_last_admin`` site holds ``lock_last_admin_guard`` (the mechanism is tested in
+``apps/console/tests/test_admins_concurrency.py``): the function itself, or every caller of it,
+since the domain function has no session to lock.
 """
 
 import ast
@@ -39,10 +29,7 @@ def _not_a_def(nodes) -> list[ast.AST]:
 
 
 def _own_calls(body: list[ast.stmt]):
-    """The ``ast.Call`` nodes of a def's body, not descending into the defs nested in it —
-    those are their own function, and answer for their own calls. Filtered on the way onto the
-    stack, not just on the way further down it, or a nested def sitting directly in the body
-    (never itself pushed through the filtered branch below) would still be walked."""
+    """A def's calls, nested defs excluded, including those right in the body."""
     stack: list[ast.AST] = _not_a_def(body)
     while stack:
         node = stack.pop()
@@ -52,8 +39,7 @@ def _own_calls(body: list[ast.stmt]):
 
 
 def _function_defs(tree: ast.Module):
-    """Every ``def``, including methods — a class body is walked too, just never yielded
-    itself."""
+    """Every ``def``, methods included."""
 
     def visit(node: ast.AST):
         for child in ast.iter_child_nodes(node):
@@ -67,7 +53,7 @@ def _function_defs(tree: ast.Module):
 @dataclass(frozen=True)
 class _Fn:
     qualname: str
-    calls: list[tuple[int, str]]  # (lineno, called name), own body only
+    calls: list[tuple[int, str]]  # (lineno, name), own body
 
 
 def _every_function() -> list[_Fn]:
@@ -110,9 +96,7 @@ def _unguarded_sites(functions: list[_Fn]) -> list[str]:
     return offenders
 
 
-# Every function that currently calls ``ensure_not_last_admin`` — pinned by name, not just by
-# count, so the scan finding zero sites (an empty ``apps/`` tree, a renamed root) fails loudly
-# instead of reading as "nothing to report".
+# By name, so a scan finding nothing fails.
 _KNOWN_GUARD_SITES = {"set_admin", "account_delete", "_guard_last_admin"}
 
 

@@ -1,18 +1,6 @@
-"""The foundation's own ``mount(host)`` — the app that runs before any app.
-
-Every bounded context declares itself through the same call; this is the one that goes first
-(``MountPhase.FOUNDATION``) and puts in place what all the others already assume: the logging
-chain, the exception handlers, the middleware stack, the static mount, and the three background
-workers the base itself owns — the task worker, the event listener and the log drain.
-
-It is also where an unsafe production config stops the process instead of being served
-(:func:`~apps.shared.settings.preflight.enforce_at_boot`): a boot that refuses is the one failure
-mode an operator can act on.
-
-The middleware order is the delicate part, and is commented at the call site: they go in
-innermost-first, and all four are plain ASGI — a ``BaseHTTPMiddleware`` anywhere beneath
-``RequestLogger`` would run the rest in a child task and strip the request's correlation off its
-own finished line.
+"""The foundation's ``mount(host)``, run before every app (``MountPhase.FOUNDATION``): logging,
+the production preflight, exception handlers, middleware, static files, and the base's own
+background workers (task worker, event listener, log drain).
 """
 
 from pathlib import Path
@@ -69,7 +57,7 @@ _STATIC_DIR = Path(__file__).parents[3] / "static"
 def mount(host: Host) -> None:
     setup_logging()
     settings = get_technical_settings()
-    enforce_at_boot(settings)  # refuse to boot on an unsafe production config
+    enforce_at_boot(settings)
     app = host.app
 
     app.exception_handler(RateLimitExceeded)(handle_rate_limit)
@@ -78,22 +66,14 @@ def mount(host: Host) -> None:
     app.exception_handler(HTTPException)(handle_http_error)
     app.exception_handler(StarletteHTTPException)(handle_http_error)
 
-    # Added innermost-first: each ``add_middleware`` wraps what is already there, so
-    # ``RequestLogger`` ends up outermost and the form re-encoder closest to the router.
-    # ``RequestLogger`` has to wrap ``CORSMiddleware`` rather than sit inside it: a preflight
-    # CORS itself refuses (no origin configured, a disallowed one) never reaches what is beneath
-    # it, and "every served request leaves one `request.finished` line" has no exception for that.
-    # All five are plain ASGI — a ``BaseHTTPMiddleware`` anywhere under ``RequestLogger`` would run
-    # the rest in a child task and strip the request's correlation off the finished line (see
-    # ``RequestLogger``).
+    # Innermost first: ``RequestLogger`` ends outermost, so a preflight CORS refuses still gets
+    # its ``request.finished`` line. All plain ASGI (see ``RequestLogger``).
     app.add_middleware(FormAsJson)
     app.add_middleware(SecurityHeaders)
     app.add_middleware(CsrfProtect)
     app.add_middleware(CORSMiddleware, **cors_config(settings.cors_origins))
     app.add_middleware(RequestLogger)
 
-    # The three process-wide hooks go in with setup_logging; the loop's only exists once
-    # there is a loop to install it on.
     host.on_startup(catch_loop_exceptions)
 
     _start_task_worker(host, settings)
@@ -110,11 +90,10 @@ def mount(host: Host) -> None:
     async def favicon() -> Response:
         return Response(status_code=204)
 
-    host.reserve("static", "api")  # infra-owned slugs (StaticFiles mount + reserved API namespace)
+    host.reserve("static", "api")
 
 
 def _start_task_worker(host: Host, settings: TechnicalSettings) -> None:
-    """The async substrate: one task worker per process, and the recurring jobs it plants."""
     register_task_handler(PURGE_TOPIC, purge_counters)
     register_task_handler(QUEUE_PURGE_TOPIC, _purge_finished_tasks)
     register_task_handler(EMAIL_SEND_TOPIC, deliver_queued_email)
@@ -124,14 +103,11 @@ def _start_task_worker(host: Host, settings: TechnicalSettings) -> None:
 
 
 def _start_event_listener(host: Host, settings: TechnicalSettings) -> None:
-    """Reads the ``business_events`` journal and fans each fact out to its consumers (NOTIFY-woken,
-    polling as a net). One per process, like the worker."""
     listener = EventListener(settings.task_worker_interval_seconds)
     host.run_background(listener)
 
 
 def _start_log_drain(host: Host, settings: TechnicalSettings) -> None:
-    """Keeps the log sink off the request path: the processor enqueues, this task writes."""
     log_drain = LogDrain(settings.firehose_flush_seconds)
     host.run_background(log_drain)
 
@@ -141,7 +117,7 @@ async def _purge_finished_tasks(session: AsyncSession, _payload: dict[str, Any])
 
 
 async def _plant_recurring_tasks() -> None:
-    """Best-effort: a missing DB at startup must not prevent serving (probes, unit runs)."""
+    """Best effort: an unreachable database must not stop the app serving."""
     try:
         await ensure_scheduled(PURGE_TOPIC, PURGE_EVERY_SECONDS)
         await ensure_scheduled(QUEUE_PURGE_TOPIC, QUEUE_PURGE_EVERY_SECONDS)

@@ -21,8 +21,7 @@ async def get_public_nav(session: AsyncSession, org_id: uuid.UUID) -> list[NavIt
 async def get_public_page(
     session: AsyncSession, org_id: uuid.UUID, slug: str
 ) -> PageDocumentRead | None:
-    """A public page as a document — its Markdown, its rendered HTML, and ``can_edit`` false:
-    whoever reads a page here is anonymous, and never may."""
+    """A public page: Markdown, rendered HTML, and ``can_edit`` false for an anonymous reader."""
     page = await public_page(session, org_id, slug)
     if page is None:
         return None

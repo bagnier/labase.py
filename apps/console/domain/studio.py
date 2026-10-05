@@ -1,11 +1,6 @@
-"""Supabase Studio deep links, from configuration rather than guesswork.
-
-The Studio URL is *browser-facing*: the admin's browser follows it, so nothing derived from the
-server-side ``SUPABASE_API_URL`` (a docker host, a worktree's port) can stand in for it —
-``SUPABASE_STUDIO_URL`` names it explicitly, and ``make env`` fills it from ``supabase status``.
-Empty means what it says: this deployment has no Studio (the test stacks run without one), and
-the console hides the link. The one derivable case is a hosted project, whose dashboard URL
-follows from the project ref alone — for everyone, forever — so it stays the fallback.
+"""Supabase Studio deep links. The URL is browser-facing, so it cannot be derived from
+``SUPABASE_API_URL``: ``SUPABASE_STUDIO_URL`` names it (``make env`` fills it), and empty hides the
+link. A hosted project's dashboard follows from its ref, the fallback.
 """
 
 from urllib.parse import urlparse

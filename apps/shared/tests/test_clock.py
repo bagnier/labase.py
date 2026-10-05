@@ -1,4 +1,4 @@
-"""The single clock — relative-moment formatting is pure and deterministic given ``now``."""
+"""Relative moments, given ``now``."""
 
 from datetime import timedelta
 

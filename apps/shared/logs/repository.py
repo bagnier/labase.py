@@ -1,13 +1,5 @@
-"""The log repository — the one owner of ``log_lines``.
-
-:class:`LogRepository` is :class:`~apps.shared.persistence.repository.BaseRepository` over
-:class:`~apps.shared.logs.models.LogLine`, and holds every query against the table
-in one place: the batch append the sink's drain performs, the filtered read the console Timeline
-merges with its two other sources, and the retention purge.
-
-The mirror of :mod:`apps.shared.events.repository` for the technical side. How a line *gets* here
-— the queue, the structlog processor, the background drain, the file fallback — is the sink's
-business, not this module's.
+"""Every query against ``log_lines``: the drain's batch append, the Timeline's read, retention.
+How lines get here is :mod:`apps.shared.logs.sink`'s job.
 """
 
 import json
@@ -23,21 +15,17 @@ from apps.shared import clock
 from apps.shared.logs.models import LogLine
 from apps.shared.persistence.repository import BaseRepository
 
-# How far back the Timeline reads by default. Not retention — the table keeps whatever the purge
-# leaves — just the bound on an otherwise unfiltered screen. An explicit ``from_dt`` reaches past
-# it, which the two-day file window this replaced could not honour.
+# Bounds an unfiltered Timeline read; not retention.
 DEFAULT_WINDOW = timedelta(days=2)
 
-# This process, for the ``instance`` column. One table, N writers: a line that cannot say where it
-# came from makes an outage on one instance look like an outage everywhere.
+# This process, for the ``instance`` column.
 INSTANCE = uuid.uuid4().hex[:8]
 
 # Event-dict keys promoted to first-class columns; everything else lands in ``payload``.
 _RESERVED = {"timestamp", "level", "logger", "event", "org_id", "user_id", "request_id"}
 
-# asyncpg's own hard cap on one statement's bound parameters (a 16-bit count in the Postgres
-# wire protocol's Bind message) — the figure that *is* the thing, not a tunable. The queue this
-# batch comes from holds up to 10000 lines, well past what one multi-row ``VALUES`` can bind.
+# asyncpg's cap on one statement's bound parameters (a 16-bit count in the wire protocol). A full
+# queue holds more lines than one multi-row ``VALUES`` can bind.
 _MAX_STATEMENT_PARAMS = 32767
 
 
@@ -52,28 +40,20 @@ def _parse_ts(value: Any) -> datetime:
 
 
 def _as_text(value: Any) -> str | None:
-    """A correlation key as the column holds it. The context may carry a uuid, a str, or something
-    a test bound by hand; the column is text precisely so none of those is a reason to drop a
-    line."""
     return None if value is None else str(value)
 
 
 def _columns(line: dict[str, Any], instance: str) -> dict[str, Any]:
-    """One queued event dict, flattened to the row's columns."""
     return {
         "ts": _parse_ts(line.get("timestamp")),
         "level": str(line.get("level") or "info"),
         "logger": str(line.get("logger") or ""),
-        # ``event`` is structlog's own key for the trace name — the library's word on the wire,
-        # never ours in the column that stores it.
         "name": str(line.get("event") or ""),
         "org_id": _as_text(line.get("org_id")),
         "user_id": _as_text(line.get("user_id")),
         "request_id": _as_text(line.get("request_id")),
         "instance": instance,
-        # ``default=str``, the same tolerance the day-file fallback has: the context carries
-        # whatever a caller bound — a UUID, an exception — and one such value must not cost the
-        # store the whole batch it rides in.
+        # ``default=str``: one unserializable value bound by a caller must not cost the batch.
         "payload": json.loads(
             json.dumps({k: v for k, v in line.items() if k not in _RESERVED}, default=str)
         ),
@@ -81,45 +61,21 @@ def _columns(line: dict[str, Any], instance: str) -> dict[str, Any]:
 
 
 class LogRepository(BaseRepository[LogLine]):
-    """All ``log_lines`` SQL, bound to one session — the twin of ``EventRepository`` for the
-    technical side.
-
-    Append, search, purge: the three things a log store owes. Nothing about *how* lines get here,
-    which is the sink's business (:mod:`apps.shared.logs.sink`).
-    """
+    """All ``log_lines`` SQL, bound to one session."""
 
     model: ClassVar[type[LogLine]] = LogLine
 
     async def append(
         self, lines: list[dict[str, Any]], *, instance: str = INSTANCE, lock_timeout_ms: int = 0
     ) -> None:
-        """Append a batch of queued lines; the caller commits.
+        """Append a batch as multi-row inserts; the caller commits.
 
-        One ``execute`` for the whole batch: a burst costs one round trip, not one per line — the
-        same reason the file fallback opens its day file once per drain.
+        ``synchronous_commit = off`` for this transaction only: an unclean shutdown may lose the
+        last milliseconds of lines, whose durable copy is on stdout. ``lock_timeout_ms`` bounds a
+        wait on a lock held elsewhere (a TRUNCATE); ``0`` is Postgres's "no timeout".
 
-        ``synchronous_commit`` is off for this transaction: the commit returns without waiting
-        for the WAL to reach disk, which is the single cheapest thing that makes a log table keep
-        up with a busy server. What it costs is the last few milliseconds of lines on an unclean
-        shutdown — already the doctrine here (the queue is bounded and drops, the drain is
-        best-effort, stdout carries the durable copy). ``LOCAL``, so it dies with the transaction
-        and never leaks onto a caller that meant to be durable.
-
-        ``lock_timeout``, also ``LOCAL``, is the drain's own bound on a lock held elsewhere (e.g.
-        a concurrent TRUNCATE) — past it the insert gives up rather than sit blocked, and the
-        sink's existing store-refused fallback takes it from there. ``0`` (the default here) is
-        Postgres's own "no timeout", for every other caller of this repository.
-
-        Nothing here has to silence itself any more: with no per-statement line, this INSERT
-        writes nothing that the next drain would insert and log again.
-
-        ``.values([...])`` rather than a parameter list on ``execute``: the id column has no
-        server default to ``RETURNING``, so nothing pushes SQLAlchemy's own insertmanyvalues
-        batching to kick in, and a parameter list is sent as a plain DBAPI executemany — one
-        single-row statement replayed once per line, not the multi-row ``VALUES`` this builds.
-
-        Chunked at :data:`_MAX_STATEMENT_PARAMS`: a queue-wide batch can hold far more rows than
-        one statement may bind, and asyncpg refuses the whole insert rather than truncate it.
+        ``.values([...])``, not a parameter list: with no ``RETURNING``, SQLAlchemy would send a
+        parameter list as one single-row statement per line.
         """
         if not lines:
             return
@@ -133,40 +89,24 @@ class LogRepository(BaseRepository[LogLine]):
             await self.session.execute(insert(LogLine).values(rows[start : start + chunk_size]))
 
     async def roll(self, *, today: date, retention_days: int) -> int:
-        """Create the day partitions just ahead of ``today``, drop those past retention, and
-        delete the stragglers the drop could not reach as a whole partition; returns how many
-        rows the row-level delete removed (a dropped partition is a table, not a row, and is not
-        counted in this number).
+        """Create the day partitions ahead of ``today``, drop those past retention, and delete
+        the expired rows left in the default partition; returns how many rows were deleted
+        (dropped partitions not counted).
 
-        Working *ahead* is the correctness condition, not an optimisation: a partition cannot be
-        created for a range the default partition already holds rows for, so a day the roll misses
-        belongs to the default partition for good — readable, but no longer droppable as a unit.
-
-        The floor day that decides both what gets dropped and what gets deleted is computed once,
-        in this one SQL function (``roll_log_partitions``) — never in Python, so there is only one
-        expression to keep in agreement with what ``roll`` actually kept whole.
+        Ahead, because a partition cannot be created once the default partition holds rows for
+        its range: a missed day stays there for good, no longer droppable as a whole. The floor
+        day is computed in ``roll_log_partitions`` only.
         """
         deleted = await self.session.scalar(
-            # Unqualified, like the journal's ``record_business_event``: the search_path picks the
-            # schema, which is what makes a worktree or the test schema manage its own partitions
-            # rather than reach into ``public``.
+            # Unqualified: the search_path picks the schema, so a worktree or the test schema
+            # rolls its own partitions.
             sql_text("SELECT roll_log_partitions(:today, :days)"),
             {"today": today, "days": retention_days},
         )
         return int(deleted or 0)
 
     async def purge(self, *, retention_days: int) -> int:
-        """Drop lines past the retention window; returns how many. The delete the day files
-        promised ("retention is a plain file delete") and never performed.
-
-        ``roll`` owns the whole move, because the table is partitioned by day and a day can end
-        up in either place: it drops yesterday's whole day as a partition — instant, and it
-        leaves no dead tuples for VACUUM — then deletes the stragglers still in the default
-        partition against the very same floor day, so nothing here computes a floor of its own.
-
-        Takes its date from ``clock.now()``, never from Postgres' ``current_date``: one clock,
-        here as everywhere, which is also what lets a test pin it.
-        """
+        """:meth:`roll` as of ``clock.now()``, not Postgres's ``current_date``."""
         return await self.roll(today=clock.now().date(), retention_days=retention_days)
 
     async def counted_by_payload_key(
@@ -178,18 +118,12 @@ class LogRepository(BaseRepository[LogLine]):
         until: datetime,
         bucket: int,
     ) -> dict[tuple[str, datetime], int]:
-        """How many of the named lines each ``payload[key]`` wrote, per slot of time.
-
-        A caller drawing a whole window does not want the lines, it wants how many landed where:
-        the queue's history walks its own ``topic`` this way. Grouped in Postgres, so a window
-        holding tens of thousands of retries still answers in one bounded read.
-        """
+        """Count the named lines per ``payload[key]`` value and per ``bucket``-second slot,
+        grouped in Postgres (the Tasks screen counts per ``topic``)."""
         if not names:
             return {}
-        # Built through the expression API rather than raw SQL: the slot is both selected and
-        # grouped by, and a text clause cannot be aliased or reused as a grouping key.
-        # One expression object, used in both the select and the group by: spelling it twice
-        # makes two bind parameters, and Postgres then refuses to match them as the same grouping.
+        # One expression object for select and group by: written twice it binds two parameters,
+        # and Postgres no longer sees the same grouping.
         held = LogLine.payload[key].astext
         slot = func.to_timestamp(func.floor(extract("epoch", LogLine.ts) / bucket) * bucket)
         rows = await self.session.execute(
@@ -212,14 +146,9 @@ class LogRepository(BaseRepository[LogLine]):
         window: timedelta | None = DEFAULT_WINDOW,
         limit: int = 100,
     ) -> list[LogLine]:
-        """Newest-first read under the given filters.
+        """Newest first, filters ANDed. An empty filter (``""`` from a query param) matches all.
 
-        ``window`` bounds an otherwise unfiltered read; an explicit ``from_dt`` replaces it
-        rather than tightening it, because the sink — unlike the two-day file window it replaced —
-        actually holds what is being asked for. ``window=None`` reads all the purge has left.
-
-        Filters combine with AND, and an unset one matches everything — empty, not just ``None``,
-        because these arrive from URL query params where an untouched field is ``""``.
+        ``window`` bounds the read unless ``from_dt`` is given; ``None`` reads everything kept.
         """
         query = select(LogLine).order_by(LogLine.ts.desc()).limit(limit)
         floor = from_dt or (clock.now() - window if window else None)
@@ -236,7 +165,6 @@ class LogRepository(BaseRepository[LogLine]):
         if request_id:
             query = query.where(LogLine.request_id == request_id)
         if text:
-            # The whole record, payload included — what the file reader's substring scan covered.
             like = f"%{text}%"
             query = query.where(
                 or_(

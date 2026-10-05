@@ -18,7 +18,7 @@ def _boom_elsewhere() -> ValueError:
 
 def test_fingerprint_ignores_the_variable_message():
     assert fingerprint(_boom()) == fingerprint(_boom())
-    # same type, same message, different raise site → different issue
+    # Same type and message, another raise site.
     assert fingerprint(_boom()) != fingerprint(_boom_elsewhere())
 
 

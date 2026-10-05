@@ -1,4 +1,4 @@
-"""Business-events write path — persists transactionally on emit and degrades safely."""
+"""The journal's write path: emit persists on the caller's transaction."""
 
 import uuid
 from dataclasses import dataclass
@@ -30,10 +30,9 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture
 async def _clean_p1():
-    # Bypass the ApiDriver's shared test connection (its background loop) with a fresh engine on
-    # this test's loop, and clean up our own committed facts — the pattern test_bus established.
+    # A fresh engine on this test's loop, and our committed facts cleaned up.
     _clear_engine_caches()
-    wiring.declare(_P1Event)  # emit refuses an undeclared event
+    wiring.declare(_P1Event)
 
     async def _wipe():
         async with db.admin_session_factory()() as s:
@@ -54,13 +53,12 @@ async def _count_p1(actor: uuid.UUID) -> int:
         )
 
 
-# ── Transactional persist (Phase 1): the fact commits iff the action commits ──────────────────
+# ── The fact commits iff the action commits ───────────────────────────────────────────────────
 
 
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_emit_writes_the_record_on_the_given_session():
-    """emit persists the fact on the caller's session — scoping to columns, the rest in payload."""
     actor, eid = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await events.emit(
@@ -78,19 +76,14 @@ async def test_emit_writes_the_record_on_the_given_session():
     assert record.kind == "test_p1.happened"
     assert record.entity_id == eid
     assert record.payload["label"] == "Hi"
-    assert "user_id" not in record.payload  # scoping fields are lifted to their own columns
+    assert "user_id" not in record.payload  # lifted to its column
     assert "org_id" not in record.payload
 
 
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_the_journal_composes_kind_from_the_two_halves_it_stores():
-    """``kind`` is a view over the record, not a value in it.
-
-    An event names itself in two parts and the class composes them; the table composes the same way,
-    ``kind`` being generated from ``app_name`` and ``verb``. The two derivations cannot drift: there
-    is no second writer to keep in sync, and no writer at all can put a dotted string in that column
-    — which is what would let a hand-written kind disagree with the halves it claims to be."""
+    """``kind`` is a generated column: no writer can put a kind disagreeing with its halves."""
     actor = uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await session.execute(
@@ -120,7 +113,6 @@ async def test_the_journal_composes_kind_from_the_two_halves_it_stores():
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_emit_rolls_back_with_the_transaction():
-    """A rolled-back transaction leaves no event — atomic with the action (best-effort before)."""
     actor = uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await events.emit(_P1Event(user_id=actor, org_id=uuid.uuid7()), session)
@@ -145,13 +137,6 @@ async def test_emit_persists_the_business_event_and_rolls_back_atomically():
 @pytest.mark.usefixtures("_clean_p1")
 @pytest.mark.asyncio
 async def test_the_record_keeps_the_org_name_after_the_org_is_gone():
-    """The journal is history: it has to stay readable once its subjects are deleted.
-
-    Resolving an org's name at read time works only while the org exists — and deleting an org is a
-    product feature, so the journal would lose the *where* exactly when it matters. The name is
-    therefore pinned onto the record as it was then (the same reason ``user_name`` is denormalized:
-    RLS can't resolve a co-member's handle later either).
-    """
     actor, org = uuid.uuid7(), uuid.uuid7()
     async with db.admin_session_factory()() as session:
         await session.execute(
@@ -178,15 +163,7 @@ async def test_the_record_keeps_the_org_name_after_the_org_is_gone():
 
 
 def test_a_secret_that_slips_past_the_class_check_does_not_open_an_issue(monkeypatch, log_chain):
-    """Defence in depth, without doubling the fact into a bug.
-
-    ``__init_subclass__`` refuses a secret-named field at class creation, so reaching the write
-    path's mask means one got through — a raw writer, or a class defined before the check
-    existed. The mask still has to be said, or the leak stays invisible — but ``emit`` records
-    the fact once; folding the same occurrence into an issue would show it a second time, as a
-    bug, which is exactly what the journal promises never happens. So the line stays, at a level
-    the capture seam does not fold in: a warning, not ``log.exception``.
-    """
+    """The mask is said as a warning, not an issue: the fact is already recorded once."""
     monkeypatch.setattr(repository, "_is_secret_field_name", lambda name: name == "entity_name")
     capture._QUEUE.clear()
 

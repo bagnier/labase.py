@@ -128,13 +128,8 @@ def _friendly_auth_error(e: AuthError) -> str:
 
 
 def _log_gotrue_failure(event: str, exc: Exception, **kw: object) -> None:
-    """Log an auth-flow failure at the level its nature warrants — GoTrue is a dependency like
-    any other, so the verdict is the base's (:mod:`apps.shared.logs.dependency`).
-
-    A 4xx ``AuthApiError`` (expired/single-use link, wrong password, already-confirmed,
-    rate-limited) is GoTrue answering no: a normal user outcome. Anything else — unreachable, a
-    5xx, an unexpected error — is a bug the capture seam tracks as an issue.
-    """
+    """GoTrue's failures get the dependency verdict: a 4xx (expired link, wrong password, rate
+    limit) is a refusal, anything else an issue."""
     log_dependency_failure(log, event, exc, **kw)
 
 
@@ -152,7 +147,7 @@ _INFO_MESSAGES: dict[str, str] = {
 
 
 def _safe_next(next_url: str | None) -> str:
-    """Return next_url if it is a safe internal path, else /profile."""
+    """``next_url`` if it is an internal path (not ``//host``), else ``/profile``."""
     if next_url and next_url.startswith("/") and not next_url.startswith("//"):
         return next_url
     return "/profile"
@@ -169,22 +164,19 @@ def _client_ip(request: Request) -> str | None:
 
 
 def _sub_uuid(sub: object) -> uuid.UUID | None:
-    """The actor uuid from a JWT ``sub`` claim (a string), tolerating an absent/blank one — the one
-    seam that turns the identity provider's string subject into our uuid actor id."""
+    """A JWT ``sub`` claim as a uuid, ``None`` if absent or blank."""
     return uuid.UUID(str(sub)) if sub else None
 
 
 def _token_sub(token: str) -> uuid.UUID | None:
-    """The ``sub`` (user id) claim of a freshly minted token — the actor of a just-completed auth
-    ceremony, for attributing its business event when no request user is in hand yet."""
+    """The actor of a just-minted token, before any request user exists."""
     return _sub_uuid(decode_jwt(token).get("sub"))
 
 
 def _error_response(
     request: Request, template: str, message: str, status_code: int, **context: object
 ) -> Response:
-    """The content-negotiated error tail shared by the form-backed auth endpoints: JSON
-    ``{"detail": message}`` for API callers, else the template re-rendered with ``error``."""
+    """``{"detail": message}`` as JSON, else ``template`` re-rendered with ``error``."""
     if wants_json(request):
         return JSONResponse({"detail": message}, status_code=status_code)
     return templates.TemplateResponse(
@@ -193,8 +185,8 @@ def _error_response(
 
 
 def _set_ephemeral_cookie(response: Response, name: str, value: str, max_age: int) -> None:
-    """Set a short-lived, HttpOnly, lax cookie honouring the ``cookies_secure`` config —
-    the shape shared by the MFA hand-off, OAuth PKCE parking, and impersonation stash."""
+    """A short-lived HttpOnly lax cookie: MFA hand-off, OAuth PKCE verifier, impersonation
+    stash."""
     response.set_cookie(
         name,
         value,
@@ -252,8 +244,7 @@ async def login_endpoint(
             factor_id = await verified_totp_factor(tokens.access_token)
             if factor_id:
                 return await _mfa_challenge_response(request, tokens, factor_id, next, "password")
-        # Past the 2FA gate: this is a completed password sign-in (the 2FA branch is marked by
-        # two_factor). Record it — the freshly minted token carries the actor.
+        # Past the 2FA gate: the sign-in is complete (AGENTS: signing in is one fact).
         await events.emit(
             SignedIn(user_id=_token_sub(tokens.access_token), method="password"), admin_session
         )
@@ -265,13 +256,9 @@ async def login_endpoint(
         set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
         return resp
     except AuthError as e:
-        # is_refusal(e) settles refusal vs. breakage from the status GoTrue actually answered
-        # with, never from which AuthError subclass carried it — a 500 with a JSON body earns
-        # the same breakage answer as a 502/503/504 or a body-less 500.
+        # Judged on GoTrue's status, not the AuthError subclass.
         if is_refusal(e):
-            # Not a business fact: nothing happened, and the subject may not even be an
-            # account. ``warning``, not the ``info`` a refusal would otherwise earn: this is a
-            # signal about a *caller*, and a run of these is what brute force looks like.
+            # A warning, not a refusal's ``info``: a run of these is what brute force looks like.
             log.warning("auth.login_failed", email=email, ip=ip)
             code = str(e.code) if e.code else ""
             error = _AUTH_ERROR_MESSAGES.get(code, "Invalid email or password")
@@ -288,13 +275,9 @@ async def login_endpoint(
                 next=next,
                 resend_email=offer_resend and email,
             )
-        # GoTrue breaking rather than refusing takes the same capture path as any other broken
-        # dependency. (AGENTS: a broken dependency is a bug, a refusal is not)
         log.exception("auth.login_failed", exc_info=e, email=email, ip=ip)
     except Exception as exc:
-        # Not the dependency verdict, unlike the GoTrue wrapper above: this ``try`` holds the
-        # whole sign-in — the journal write, the cookies, the redirect — so what lands here is
-        # our own code breaking, always an issue.
+        # Our own code broke (journal write, cookies, redirect): always an issue.
         log.exception("auth.login_error", exc_info=exc, email=email, ip=ip)
     return _error_response(
         request,
@@ -308,8 +291,7 @@ async def login_endpoint(
 
 _MFA_COOKIE = "mfa_access_token"
 _MFA_REFRESH_COOKIE = "mfa_refresh_token"
-# Which ceremony opened this challenge, so the completed sign-in can name it. The AAL1 tokens
-# already ride the hand-off; the method rides beside them rather than being guessed afterwards.
+# Which ceremony opened the challenge, for the sign-in fact recorded once it is passed.
 _MFA_METHOD_COOKIE = "mfa_method"
 _MFA_MAX_SECONDS = 300
 
@@ -317,12 +299,8 @@ _RELAYABLE_METHODS: tuple[SignInMethod, ...] = ("password", "oauth", "passkey")
 
 
 def relayed_method(cookie: str | None) -> SignInMethod:
-    """Narrow the relayed ceremony back to the closed set the event declares.
-
-    The value travelled through the caller's cookie jar, so it can arrive missing (the browser
-    dropped it, the challenge outlived it) or forged. Anything unrecognised falls back to the
-    password ceremony — the only one reachable without a relay — so a bad value degrades the fact's
-    precision instead of putting an unknown method on the journal."""
+    """The relayed method, or ``"password"`` when the cookie is missing or forged: the fact loses
+    precision rather than recording an unknown method."""
     return cookie if cookie in _RELAYABLE_METHODS else "password"
 
 
@@ -396,8 +374,7 @@ async def mfa_verify_endpoint(
             {"factor_id": factor_id, "challenge_id": challenge_id, "next": next, "error": error},
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    # The completed second factor IS the sign-in: this is the first point at which a session
-    # exists, and the ceremony that opened the challenge rides in on the relay cookie.
+    # The sign-in happens here, the first moment a session exists.
     await events.emit(
         SignedIn(
             user_id=_token_sub(tokens.access_token),
@@ -423,10 +400,8 @@ async def logout_endpoint(
 ) -> Response:
     if access_token:
         await logout(access_token)
-        # Attribute the sign-out to the account holder — but the cookie may be expired by now, so
-        # a failed decode must not turn a logout into a 500; record it with no actor instead.
-        # Said rather than suppressed: the sign-out lands on the journal attributed to nobody, and
-        # a `SignedOut` with no actor is exactly the row an admin would later call a mystery.
+        # An expired cookie must not turn a logout into a 500: the fact is recorded without an
+        # actor, and the warning explains that row.
         user_id = None
         try:
             user_id = _sub_uuid(decode_jwt(access_token).get("sub"))
@@ -440,8 +415,7 @@ async def logout_endpoint(
 
 
 # ── Passkey sign-in (WebAuthn, discoverable credentials) ───────────────────────
-# The login page's JS drives navigator.credentials.get(); these two endpoints
-# proxy GoTrue's anonymous authentication ceremony and land the session cookies.
+# The login page's JS drives navigator.credentials.get(); these proxy GoTrue's ceremony.
 
 
 def _ensure_passkeys_enabled(users_settings: SettingsView) -> None:
@@ -502,9 +476,8 @@ async def passkey_verify_endpoint(
 
 
 # ── OAuth social sign-in ────────────────────────────────────────────────────────
-# GoTrue drives the provider; the app only holds the PKCE verifier between the
-# redirect and the callback, parked in a short-lived cookie (the MFA pattern —
-# the process keeps no session state).
+# GoTrue drives the provider; the PKCE verifier waits in a short-lived cookie between redirect
+# and callback, since the process keeps no session state.
 
 _OAUTH_VERIFIER_COOKIE = "oauth_code_verifier"
 _OAUTH_NEXT_COOKIE = "oauth_next"
@@ -558,11 +531,8 @@ async def oauth_callback(
     oauth_code_verifier: str | None = Cookie(default=None),
     oauth_next: str | None = Cookie(default=None),
 ) -> Response:
-    """Land the browser back from GoTrue: exchange the PKCE code for a session.
-
-    Account merge is GoTrue's: a provider identity whose verified email matches an
-    existing account is linked into it (auth.identities), never duplicated.
-    """
+    """Exchange the PKCE code for a session. GoTrue links a provider identity to the existing
+    account with the same verified email."""
     if not code or not oauth_code_verifier:
         log.warning("auth.oauth_callback_rejected", has_code=bool(code))
         return _oauth_failure(
@@ -571,8 +541,7 @@ async def oauth_callback(
             users_settings,
         )
     try:
-        # The org and admin bootstrap are provisioned by the signup trigger the moment GoTrue
-        # creates the account, so a first visit needs no app-side hook here.
+        # A new account's org and admin bootstrap come from the signup trigger.
         tokens, _is_new = await exchange_oauth_code(code, oauth_code_verifier)
     except OAuthError as e:
         log.warning("auth.oauth_failed", detail=str(e))
@@ -582,8 +551,7 @@ async def oauth_callback(
     if users_settings.two_factor_enabled:
         factor_id = await verified_totp_factor(tokens.access_token)
         if factor_id:
-            # No session yet — the challenge decides. The sign-in is recorded on the other side,
-            # by mfa_verify_endpoint, carrying "oauth" across the relay.
+            # The sign-in is recorded by mfa_verify_endpoint, once the code is checked.
             resp = await _mfa_challenge_response(request, tokens, factor_id, next, "oauth")
             _clear_oauth_cookies(resp)
             return resp
@@ -641,19 +609,16 @@ async def register_endpoint(
     except AuthWeakPasswordError as e:
         error = f"Password too weak: {_format_weak_password_reasons(e.reasons)}"
     except AuthError as e:
-        # is_refusal(e) settles refusal vs. breakage from the status GoTrue actually answered
-        # with, never from which AuthError subclass carried it, like login above.
+        # Judged on GoTrue's status, like login.
         code = str(e.code) if e.code else ""
         if is_refusal(e):
             error = _friendly_auth_error(e)
             log.warning("auth.register_failed", ip=ip, email=email, code=code)
         else:
-            # GoTrue breaking rather than refusing takes the same capture path as any other
-            # broken dependency. (AGENTS: a broken dependency is a bug, a refusal is not)
             log.exception("auth.register_failed", exc_info=e, ip=ip, email=email, code=code)
             error = "An unexpected error occurred."
     except Exception as exc:
-        # Our own code as much as GoTrue's, like login above — always an issue, never a refusal.
+        # Our own code broke, like login: always an issue.
         log.exception("auth.register_error", exc_info=exc, ip=ip, email=email)
         error = "An unexpected error occurred."
     return _error_response(
@@ -690,10 +655,8 @@ async def impersonate_endpoint(
         resp: Response = JSONResponse({"impersonating": email})
     else:
         resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
-    # Stash the admin's own session, then become the target — everything time-boxed:
-    # when these cookies expire the disguise and the stash die together. The deadline cookie
-    # carries the absolute end of the window so a mid-window token refresh re-caps the target
-    # session to the time it has left instead of re-minting a full-length login (see security.py).
+    # Stash the admin's session and become the target, all expiring together. The deadline cookie
+    # lets a refresh mid-window cap the target session to the time left (see security.py).
     deadline = int(clock.now().timestamp()) + IMPERSONATION_MAX_SECONDS
     _set_ephemeral_cookie(resp, IMPERSONATOR_COOKIE, access_token, IMPERSONATION_MAX_SECONDS)
     _set_ephemeral_cookie(
@@ -720,7 +683,7 @@ async def stop_impersonation_endpoint(
     admin_id = None
     try:
         admin_id = _sub_uuid(decode_jwt(stash)["sub"])
-    except Exception as exc:  # expired stash: still drop the disguise, record without the id
+    except Exception as exc:  # expired stash: drop the disguise anyway, record without the id
         log.warning("auth.impersonation_stash_invalid", exc_info=exc)
     await events.emit(
         ImpersonationStopped(
@@ -768,18 +731,15 @@ async def resend_confirmation_endpoint(
     users_settings: UsersSettings,
     admin_session: AdminSession,
 ) -> Response:
-    """Send the signup confirmation again — the way out for an unconfirmed account.
-
-    Neutral answer whatever happens (no account enumeration), like forgot-password.
-    """
+    """Resend the signup confirmation. The answer is the same whatever the address: no account
+    enumeration."""
     if not users_settings.resend_confirmation_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     email = body.email.strip().lower()
     sent_message = "If an account exists for this address, a confirmation email is on its way."
     if email:
-        # GoTrue is asked either way, so an unknown address costs the same round-trip as a known
-        # one — the timing keeps the neutral answer's secret. Only a mail actually sent is a fact:
-        # an already-confirmed account gets none from GoTrue, so it records none either.
+        # GoTrue is asked either way, so timing does not tell addresses apart. Only a mail
+        # actually sent is a fact: a confirmed account gets none.
         awaiting_confirmation = await auth_user_awaiting_confirmation(admin_session, email)
         try:
             await resend_confirmation(email)
@@ -811,17 +771,14 @@ async def reset_password_endpoint(
         await update_password(tokens.access_token, password)
     except Exception as e:
         if isinstance(e, PasswordUpdateError) and is_refusal(e):
-            # The recovery token is single-use and already consumed: a new link is needed.
+            # The single-use recovery token is consumed.
             error = f"{e}. Please request a new reset link."
         else:
-            # GoTrue broke rather than refused (e.g. a 503), or the flow raised something of
-            # its own: the verdict, not the exception's Python type, decides whether this
-            # reaches the log sink as a bug instead of vanishing.
             _log_gotrue_failure("auth.password_reset_failed", e, ip=ip)
             error = "This reset link is invalid or has expired. Please request a new one."
         return _error_response(request, "forgot_password.html", error, status.HTTP_400_BAD_REQUEST)
-    # The recovery session is dropped on purpose: the user signs in with the new password — but
-    # decode its ``sub`` first, so the reset lands on the journal attributed to the account holder.
+    # The recovery session is dropped: the user signs in with the new password. Its ``sub`` still
+    # attributes the fact.
     await events.emit(PasswordReset(user_id=_token_sub(tokens.access_token)), admin_session)
     if wants_json(request):
         return JSONResponse({"message": _INFO_MESSAGES["password_reset"]})
@@ -830,9 +787,8 @@ async def reset_password_endpoint(
     )
 
 
-# A mailed link opens a page, never a session: a GET is what a cross-site page can make a browser
-# send, and a link that signed in would let an attacker's own link sign a victim into the
-# attacker's account. The reader's click posts the token back, same-origin (CSRF-checked).
+# (AGENTS: a GET never delivers a session) A cross-site page can make a browser send a GET, so an
+# attacker's link would sign the victim into the attacker's account. The page posts the token back.
 def _confirmation_page(request: Request, action: str, body: LinkConfirmation) -> Response:
     return templates.TemplateResponse(
         request,
@@ -858,11 +814,8 @@ async def confirm_email_endpoint(
     admin_session: AdminSession,
     users_settings: UsersSettings,
 ) -> Response:
-    """Finalize an email change from the link mailed to the new address.
-
-    Anonymous on purpose — the single-use token IS the credential (the reader of
-    the new mailbox proves ownership), and the requesting session may be gone.
-    """
+    """Finish an email change from the link mailed to the new address. Anonymous: the single-use
+    token proves the mailbox, and the requesting session may be gone."""
     token_hash = body.token_hash
     try:
         tokens = await confirm_signup(token_hash, type="email_change")
@@ -874,12 +827,11 @@ async def confirm_email_endpoint(
     claims = decode_jwt(tokens.access_token)
     actor = _sub_uuid(claims.get("sub"))
     await events.emit(EmailChanged(user_id=actor), admin_session)
-    # An enrolled authenticator still has its say: the change holds, the sign-in asks for the code.
+    # With an authenticator enrolled, the change holds and the sign-in asks for the code.
     if users_settings.two_factor_enabled and await verified_totp_factor(tokens.access_token):
         return RedirectResponse(
             "/auth/login?info=email_changed", status_code=status.HTTP_303_SEE_OTHER
         )
-    # The link also signs the reader in: the single-use token is the credential.
     await events.emit(SignedIn(user_id=actor, method="email_link"), admin_session)
     resp = RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     set_auth_cookies(resp, tokens.access_token, tokens.refresh_token)
@@ -903,14 +855,11 @@ async def confirm_page(
 async def confirm_endpoint(
     request: Request, body: LinkConfirmation, admin_session: AdminSession
 ) -> Response:
-    """Handle Supabase email confirmation links (?token_hash=...&type=signup)."""
+    """Confirm a signup from its mailed link; this is the account's first sign-in."""
     token_hash, type, next = body.token_hash, body.type, body.next or "/profile"
     try:
-        # UserCreated (and thus the personal org) was recorded by the signup trigger when the
-        # account row was first created; confirming an email adds no new provisioning here.
+        # The signup trigger already recorded UserCreated, hence the personal org.
         tokens = await confirm_signup(token_hash, type)
-        # Confirming the link *is* the sign-in: the account's very first session is handed over
-        # here.
         await events.emit(
             SignedIn(user_id=_token_sub(tokens.access_token), method="email_link"), admin_session
         )

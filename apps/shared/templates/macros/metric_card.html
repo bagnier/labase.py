@@ -1,6 +1,5 @@
 {% macro metric_card(label, icon, value=none, desc='', href=none) %}
-  {# `href` makes the figure the way into what it counts: a screen nothing links to is a screen
-     nobody reaches. Wrapped like the console's own cards, not restyled. #}
+  {# `href` links the figure to what it counts. #}
   {% if href %}
     <a href="{{ href }}"
        class="block hover:-translate-y-0.5 transition-transform rounded-box">

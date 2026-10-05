@@ -1,10 +1,6 @@
-"""How the console context plugs into the running app: mounts the admin router, claims slugs.
-
-Also owns the *bootstrap policy*: the first registered user becomes a server admin. It reacts
-to auth's ``UserCreated`` (a durable consumer, run off the journal after commit) and promotes the
-user iff the server has no admin yet. The claim lands in GoTrue shortly after registration; a
-signed-in session picks it up on its next token mint (tests drive the listener to make this
-deterministic).
+"""The console mount, and the first-admin bootstrap (AGENTS: the first to sign up is admin): a
+``UserCreated`` consumer promoting the user while the server has no admin. The role reaches the
+user's token at its next mint.
 """
 
 from typing import cast
@@ -47,8 +43,7 @@ log = structlog.get_logger(__name__)
 def mount(host: Host) -> None:
     host.app.include_router(router, prefix="/console")
     host.reserve("console", "admin", "timeline", "settings")
-    # The console owns the ``settings.*`` namespace: the platform-admin actions plus the
-    # server-wide settings-change fact it emits when an admin edits a setting.
+    # ``settings.*``: admin actions and server-wide setting changes.
     host.events.declare(
         SettingsChanged,
         AdminGranted,
@@ -66,19 +61,13 @@ def mount(host: Host) -> None:
 
     host.contribs.provide(ConsoleOverviewQuery, technical_overview)
 
-    # Settings live-reload rides the event listener: a persisted ``SettingsChanged`` is replayed to
-    # each process's ``spread`` handler (``settings.reload``) off the journal — no per-app re-read
-    # loop here (see ``host.register_settings`` + ``apps.shared.events.listener``).
-
-    # Live appearance globals, alongside ``asset`` — every page reads the app-wide theme.
     jinja_globals = cast("dict[str, object]", templates.env.globals)
     jinja_globals["app_theme"] = current_theme
     jinja_globals["app_themes"] = lambda: THEMES
 
 
 async def _events_overview(query: ConsoleOverviewQuery) -> ConsoleOverview:
-    """Console tile → the event → reaction graph: how many events the system emits, and how many
-    durable reactions wire them together. Read straight from the wiring (no DB)."""
+    """The events tile: event and reaction counts, from the wiring."""
     emitted = sum(len(declared) for declared in wiring.by_app().values())
     reactions = sum(len(rs) for rs in wiring.reactions().values())
     return ConsoleOverview(
@@ -106,12 +95,8 @@ def _declare_appearance_settings() -> SettingsDeclaration:
 
 
 async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> None:
-    # Durable consumer of UserCreated; runs on the GoTrue admin API, not ``session``.
-    # UserCreated is an immutable fact: by delivery the actor may be hard-deleted (gone from the
-    # directory) or soft-deleted (a tombstone the directory's live listing excludes). Only a user
-    # the admin count would see may be promoted — a claim on a tombstone counts for nothing, so
-    # the count stays at zero and every following fact promotes another. One listing answers both
-    # questions.
+    # On the GoTrue admin API, not ``session``. By delivery the user may be deleted: only one the
+    # admin count sees may be promoted, or the count stays zero and every next signup is promoted.
     if event.user_id is None:
         return
     directory = await list_server_admins()
@@ -123,5 +108,5 @@ async def _bootstrap_first_admin(session: AsyncSession, event: UserCreated) -> N
     try:
         await set_server_admin(event.user_id, is_admin=True)
     except AuthApiError:
-        # The race remains: hard-deleted between the listing and the write is a clean 404 no-op.
+        # Deleted between listing and write: a clean 404 no-op.
         log.info("bootstrap_first_admin.actor_gone", user_id=event.user_id)

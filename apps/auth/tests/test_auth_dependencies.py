@@ -39,8 +39,7 @@ def _clear_engine_caches() -> None:
 
 @pytest_asyncio.fixture()
 async def client():
-    # Resolving a user may read the factor table, so the engines must live on this test's loop:
-    # the engines are ``lru_cache``d singletons bound to whichever loop built them.
+    # Resolving a user may read the factor table: the cached engines must bind to this loop.
     _clear_engine_caches()
     async with AsyncClient(transport=ASGITransport(app=_app), base_url="http://test") as c:
         yield c
@@ -64,7 +63,7 @@ async def test_invalid_token_returns_401(client):
 
 @pytest.mark.asyncio
 async def test_wrong_signature_returns_401(client):
-    # A well-formed JWT structure but signed with a different key
+    # Well-formed, signed with another key
     client.cookies.set(
         "access_token",
         "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9"
@@ -86,9 +85,7 @@ async def test_api_key_bearer_returns_401_when_no_provider_matches(client):
 
 @pytest.mark.asyncio
 async def test_api_key_bearer_returns_503_when_the_provider_fails(client):
-    """A failing contributor is a degraded service, not a refusal: `contribs.collect` logs and
-    skips it the same way it would a dashboard card, which would otherwise read as "no key
-    matched" and answer 401 to what may well be a valid key."""
+    """Not a 401: the key may well be valid."""
     fresh = Contribs()
 
     async def boom(query: ApiKeyQuery) -> None:
@@ -115,9 +112,7 @@ async def test_valid_token_returns_user(client, test_user):
 
 @pytest.mark.asyncio
 async def test_api_key_auth_lets_a_captured_issue_keep_its_user():
-    """capture.py's _SCALARS filter (str | int | float | bool | None) keeps only scalars in a
-    captured issue's context — an API-key request's user_id must be one, the same way the
-    JWT path's already is (it binds payload["sub"], a string)."""
+    """Capture keeps only scalar context, so ``user_id`` must be bound as a string."""
     user_id = uuid.UUID("00000000-0000-0000-0000-000000000042")
     principal = AuthenticatedUser(id=user_id, email="key@test.local")
 
@@ -205,8 +200,6 @@ def test_impersonation_remaining_reads_deadline():
 
 @pytest.mark.asyncio
 async def test_refresh_while_impersonating_caps_cookie_to_window(client, test_user):
-    """A mid-window refresh must re-emit the session capped to the impersonation window's remaining
-    time, not the long login TTL — otherwise the disguise outlives its time-box."""
     import time
 
     email, password = test_user
@@ -236,7 +229,6 @@ async def test_refresh_while_impersonating_caps_cookie_to_window(client, test_us
 
 @pytest.mark.asyncio
 async def test_refresh_after_impersonation_window_returns_401(client, test_user):
-    # Past the deadline the target session must die with the banner, not silently refresh.
     import time
 
     email, password = test_user
@@ -252,7 +244,7 @@ async def test_refresh_after_impersonation_window_returns_401(client, test_user)
         response = await client.get("/me")
 
     assert response.status_code == 401
-    refresh.assert_not_called()  # refused before spending a refresh round-trip
+    refresh.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -300,9 +292,7 @@ async def test_expired_token_with_invalid_refresh_returns_401(client):
 
 @pytest.mark.asyncio
 async def test_expired_token_stale_refresh_logs_nothing(client):
-    """A 4xx AuthApiError is GoTrue's routine "your refresh token is bad" — the everyday end of
-    a session for every returning user whose token turned over, not a surprise. It earns no
-    line at all, at any level."""
+    """The everyday end of a session."""
     stale = AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, None)
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "stale.refresh.token")
@@ -320,9 +310,7 @@ async def test_expired_token_stale_refresh_logs_nothing(client):
 
 @pytest.mark.asyncio
 async def test_expired_token_refresh_rate_limited_logs_info(client):
-    """GoTrue rate-limiting the refresh endpoint (429) is not "your token turned over" — it can
-    sign out every returning user on the instance at once, a surprise still worth an info line,
-    unlike the routine stale-token case above."""
+    """A 429 can sign out every user at once."""
     limited = AuthApiError("Request rate limit reached", 429, "over_request_rate_limit")
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "some.refresh.token")
@@ -341,7 +329,6 @@ async def test_expired_token_refresh_rate_limited_logs_info(client):
 
 @pytest.mark.asyncio
 async def test_expired_token_unexpected_refresh_failure_logs_exception(client):
-    # GoTrue unreachable / 5xx / a bug is not a routine "no" — log.exception is the capture seam.
     boom = RuntimeError("gotrue unreachable")
     client.cookies.set("access_token", "expired.token.value")
     client.cookies.set("refresh_token", "some.refresh.token")
@@ -354,8 +341,6 @@ async def test_expired_token_unexpected_refresh_failure_logs_exception(client):
         response = await client.get("/me")
 
     assert response.status_code == 401
-    # The exception is handed to the line rather than resolved from the frame, so the capture
-    # seam holds wherever the report is written from.
     log.exception.assert_called_once_with(
         "auth.token_refresh_failed", exc_info=boom, detail=str(boom)
     )
@@ -363,17 +348,15 @@ async def test_expired_token_unexpected_refresh_failure_logs_exception(client):
 
 
 def test_auth_takes_its_level_from_the_bases_verdict():
-    """The rule itself — a 4xx is the dependency refusing, anything else is it breaking — lives in
-    ``apps/shared/logs/dependency`` and is pinned by its own tests. What this holds is
-    auth's end of the wiring: the GoTrue seam asks for that verdict instead of judging again."""
+    """The verdict itself is tested in ``apps/shared``; this holds that auth uses it."""
     from apps.auth.infra.router import _log_gotrue_failure
 
-    with patch("apps.auth.infra.router.log") as log:  # 4xx AuthApiError = normal user outcome
+    with patch("apps.auth.infra.router.log") as log:  # 4xx: a refusal
         _log_gotrue_failure("auth.x", AuthApiError("bad link", 400, None))
         log.info.assert_called_once()
         log.exception.assert_not_called()
 
-    with patch("apps.auth.infra.router.log") as log:  # GoTrue unreachable = a bug → captured
+    with patch("apps.auth.infra.router.log") as log:  # unreachable: an issue
         _log_gotrue_failure("auth.x", RuntimeError("boom"))
         log.exception.assert_called_once()
         log.info.assert_not_called()
@@ -406,9 +389,7 @@ def test_login_wrong_password_returns_401_with_generic_message(driver):
 
 
 def test_password_reset_gotrue_outage_is_logged_not_silent(driver):
-    """A GoTrue 503 on ``PUT /auth/v1/user`` (password update) must reach the dependency
-    verdict as a bug, not be swallowed by the "recovery token already consumed" branch, which
-    used to catch every ``PasswordUpdateError`` and log nothing (issue #52)."""
+    """Not swallowed by the "recovery token already consumed" branch."""
     outage = PasswordUpdateError("Service Unavailable", 503)
     tokens = AuthTokens(
         access_token="recovery.access.token", refresh_token="recovery.refresh.token"
@@ -426,8 +407,7 @@ def test_password_reset_gotrue_outage_is_logged_not_silent(driver):
 
 
 def test_password_reset_consumed_token_returns_400_without_opening_an_issue(driver):
-    """A 4xx from GoTrue on the same call (the recovery token already spent) is a refusal, not
-    a bug: it keeps its own user-facing message and must stay out of the capture seam."""
+    """It keeps its own message and opens no issue."""
     refused = PasswordUpdateError("Token has expired or is invalid", 401)
     tokens = AuthTokens(
         access_token="recovery.access.token", refresh_token="recovery.refresh.token"
@@ -454,10 +434,8 @@ def test_register_unexpected_exception_returns_400(driver):
 
 
 def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
-    # GoTrue answering 500 with a JSON body on /token is the dependency breaking, not refusing —
-    # it must take the same log.exception capture path, and the same system-error response, as
-    # any other broken dependency (a 502/503/504, or a 500 with no JSON body), never the
-    # brute-force warning and "invalid password" answer reserved for an actual refusal (#104).
+    # A 500 with a JSON body is a breakage like any 5xx: an issue and the system-error answer,
+    # never "invalid password".
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Internal Server Error", 500, None)
     with (
@@ -472,8 +450,7 @@ def test_login_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
 
 
 def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
-    # Same fault as login above: a 500 with a JSON body must earn the same "unexpected error"
-    # answer as any other broken dependency, never GoTrue's raw internal message (#104).
+    # Likewise: "unexpected error", never GoTrue's raw message.
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Internal Server Error", 500, None)
     with (
@@ -488,8 +465,7 @@ def test_register_gotrue_5xx_is_captured_as_an_issue_not_a_refusal(driver):
 
 
 def test_login_refusal_still_warns_instead_of_opening_an_issue(driver):
-    # Holds the other side of the branch above: a routine 4xx refusal (wrong password) keeps
-    # earning the brute-force warning, not the capture path the 5xx case earns.
+    # A wrong password still gets the brute-force warning, not an issue.
     creds = {"email": "x@test.local", "password": "pw"}
     err = AuthApiError("Invalid login credentials", 400, "invalid_credentials")
     with (
@@ -531,8 +507,7 @@ async def test_get_rls_session_sets_context_and_relies_on_commit_to_clear():
     async def mock_set(session, uid):
         set_calls.append(uid)
 
-    # No clear on teardown: the context is transaction-local, discarded by the request's
-    # single commit/rollback — so get_rls_session never issues reset round-trips.
+    # No reset on teardown: the context is transaction-local.
     with patch("apps.auth.infra.session.set_rls_context", side_effect=mock_set):
         gen = get_rls_session(current_user=fake_user, session=fake_session)
         session = await gen.__anext__()
@@ -544,8 +519,7 @@ async def test_get_rls_session_sets_context_and_relies_on_commit_to_clear():
 
 @pytest.mark.asyncio
 async def test_get_rls_session_gives_an_anonymous_caller_a_context_with_no_identity():
-    """Left on the login role, an anonymous query hits ``permission denied``: the context is set
-    all the same — the app's role, and claims that name nobody."""
+    """On the bare login role an anonymous query is denied."""
     from apps.auth.infra.session import get_rls_session
 
     fake_session = MagicMock()
@@ -562,13 +536,11 @@ async def test_get_rls_session_gives_an_anonymous_caller_a_context_with_no_ident
 
 
 def _calls(dependant: Dependant) -> set:
-    """Every callable a dependency tree resolves, at any depth."""
     return {call for child in dependant.dependencies for call in {child.call} | _calls(child)}
 
 
 def test_knowing_who_asks_opens_no_bypassrls_session():
-    """README: the admin session is reserved for event handlers, console queries and anonymous
-    public surfaces — resolving the caller of every authenticated request is none of those."""
+    """(AGENTS: three sessions, and RLS by default)"""
     calls = _calls(get_dependant(path="/", call=get_current_user))
 
     assert get_admin_session not in calls

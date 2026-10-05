@@ -108,9 +108,7 @@ async def test_handle_http_error_403_html():
 
 @pytest.mark.asyncio
 async def test_the_error_page_captures_the_exception_it_was_handed(log_chain):
-    """The capture seam must not depend on the frame the handler runs under: called anywhere
-    ``sys.exc_info()`` is empty, a 500 that resolved the exception implicitly would open no
-    issue at all — and the handler is holding the exception the whole time."""
+    """Even where ``sys.exc_info()`` is empty."""
     capture._QUEUE.clear()
     boom = RuntimeError("the request blew up")
 
@@ -121,9 +119,7 @@ async def test_the_error_page_captures_the_exception_it_was_handed(log_chain):
 
 @pytest.mark.asyncio
 async def test_the_error_page_carries_the_request_id(log_chain):
-    """A 500 is built above the middleware that stamps every other response, so it used to be the
-    one page without the id — the page a user is looking at when an admin needs to find the trace.
-    """
+    """A 500 is built above the middleware that stamps every other response."""
     with structlog.contextvars.bound_contextvars(request_id="the-request"):
         resp = await handle_unhandled_error(_mock_request(), RuntimeError("boom"))
 

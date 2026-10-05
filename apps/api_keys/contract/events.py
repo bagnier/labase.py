@@ -1,9 +1,5 @@
-"""API keys' business events — issuing and revoking recorded on the shared journal.
-
-Issuing is a create, revoking a state change (an update), so they derive from the shared CRUD
-abstracts with domain verbs (``"api_keys.created"`` / ``"api_keys.revoked"``). ``ApiKeyIssued`` is
-named apart from the ``ApiKeyCreated`` response DTO; both are scoped by actor/org. The secret is
-never carried — only the key id and its name.
+"""``api_keys.created`` and ``api_keys.revoked``. ``ApiKeyIssued`` is named apart from the
+``ApiKeyCreated`` DTO. Only the key's id and name are carried, never its secret.
 """
 
 from dataclasses import dataclass

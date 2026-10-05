@@ -1,8 +1,7 @@
 def test_appearance_tab_renders_component_gallery(driver):
     driver.sign_in_as_admin("styleguide-admin@example.com")
     body = driver.client().get("/console/settings", headers={"accept": "text/html"}).text
-    # Each section is a landmark labelled by its heading (id="<section>-h") so
-    # accessibility tooling — and this test — can target it by role/label, not CSS.
+    # Each section is a landmark labelled by its heading (id="<section>-h").
     for section in ("sg-buttons", "sg-alerts", "sg-cards", "sg-forms", "sg-table"):
         assert f'id="{section}"' in body
         assert f'aria-labelledby="{section}-h"' in body
@@ -16,9 +15,7 @@ def test_appearance_tab_applies_app_theme(driver):
 
 
 def test_appearance_tab_loads_the_chart_scripts(driver):
-    """The gallery's charts are markup plus a JSON config — inert until charts.js reads them.
-    A refactor once dropped this page's `scripts` block and the whole Charts tab went blank,
-    silently: every id the tests looked for was still there."""
+    """Without charts.js, the charts are inert markup that still has every id."""
     driver.sign_in_as_admin("styleguide-admin3@example.com")
 
     body = driver.client().get("/console/settings", headers={"accept": "text/html"}).text

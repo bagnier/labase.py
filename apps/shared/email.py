@@ -1,14 +1,8 @@
-"""Transactional email: `Mailer` port + SMTP adapter + `email.send` queue topic.
+"""Transactional email: the ``Mailer`` port, its SMTP adapter, and the ``email.send`` queue topic.
 
-Sending never blocks a mutation — but unlike a business-event write it is not fire-and-forget:
-callers outbox the mail with :func:`enqueue_email` through their own session, so
-the task exists iff the business transaction commits, and the ``TaskWorker``
-delivers it with the queue's retry-then-park semantics. The process-wide mailer
-is swappable clock-style — tests install a recording fake through `set_mailer`.
-
-Dev: the Supabase mail catcher (Mailpit) receives SMTP on localhost:54325 and
-serves the same inbox as GoTrue auth mail on http://localhost:54324.
-Prod: point the SMTP_* env vars at any provider — no vendor SDK.
+Callers outbox a mail with :func:`enqueue_email` on their own session; the queue delivers it with
+retries, then parks it. Tests swap the mailer with :func:`set_mailer`. In development Mailpit
+catches the mail; production points ``SMTP_*`` at any provider.
 """
 
 from dataclasses import asdict, dataclass
@@ -104,11 +98,11 @@ EMAIL_SEND_TOPIC = "email.send"
 
 
 async def enqueue_email(session: AsyncSession, email: Email) -> None:
-    """Outbox `email` through the caller's session — it is sent iff the transaction commits."""
+    """Queue ``email`` on the caller's session: it is sent iff that transaction commits."""
     await enqueue(session, EMAIL_SEND_TOPIC, asdict(email))
 
 
 async def deliver_queued_email(_session: AsyncSession, payload: dict[str, Any]) -> None:
-    """``email.send`` task handler — raises on failure so the queue retries, then parks."""
+    """The ``email.send`` handler; raises so the queue retries."""
     email = Email(**payload)
     await get_mailer().send(email)

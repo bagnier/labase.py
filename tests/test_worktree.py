@@ -1,7 +1,4 @@
-"""A worktree's tests run on a stack of their own: its `.env.test` names that stack's ports.
-
-The main checkout's committed `.env.test` holds the 544xx block; a worktree gets a block above it.
-"""
+"""A worktree's `.env.test` names its own stack's ports, above the main checkout's 544xx."""
 
 from scripts import worktree
 

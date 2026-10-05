@@ -1,11 +1,4 @@
-"""Auth's public FastAPI dependencies — who is calling, and their DB session.
-
-The aliases below are the sanctioned inter-context surface for authentication:
-other contexts depend on ``CurrentUser`` / ``OptionalCurrentUser`` / ``RlsSession``
-without reaching into ``auth/infra``. The real work lives in the providers they
-wrap (``get_current_user`` decodes the JWT cookie and refreshes when expired;
-``get_rls_session`` opens the request's RLS-scoped session).
-"""
+"""Auth's dependencies for other contexts: who is calling, and the request's RLS session."""
 
 from typing import Annotated
 

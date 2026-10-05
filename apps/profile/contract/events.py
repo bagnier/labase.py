@@ -1,9 +1,5 @@
-"""Profile's business events — display/account actions the profile page owns.
-
-Only genuinely *profile* concerns live here: the avatar, the public handle, and deleting one's own
-account. Security actions (password, email, passkeys, 2FA) are auth-domain — see
-``apps.auth.contract.events``. All are user-scoped (``user_id`` = the account holder, and no
-``org_id`` at all — none of them mixes in ``OrgScoped``).
+"""Profile facts: avatar, handle, account deletion; no org. Security actions are auth's
+(``apps.auth.contract.events``).
 """
 
 from dataclasses import dataclass

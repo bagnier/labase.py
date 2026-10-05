@@ -3,10 +3,7 @@
 Usage:
     ENV_FILE=.env.test PYTHONPATH=. uv run python scripts/export_openapi.py <output-path>
 
-Every app is forced on for the export: ``mount()`` reads each app's persisted ``enabled``
-switch once, synchronously, at import — so a deployment that switched one off would otherwise
-silently export fewer paths. The schema must be a full description of the app, not of however
-it happens to be configured (Makefile: "routes are env-independent").
+Every app is forced on, so a switched-off one still exports its routes.
 """
 
 import json
@@ -21,8 +18,7 @@ ReadValues = Callable[[str], dict[str, str]]
 
 
 def force_all_apps_enabled(read_values: ReadValues) -> ReadValues:
-    """Wrap a ``read_values``-shaped function so every app's ``enabled`` switch reads as on,
-    whatever a deployment persisted."""
+    """``read_values`` with every ``enabled`` switch on."""
 
     def _all_enabled(app: str) -> dict[str, str]:
         values = read_values(app)
@@ -35,15 +31,14 @@ def force_all_apps_enabled(read_values: ReadValues) -> ReadValues:
 _original_read_values = settings_live.read_values
 settings_live.read_values = force_all_apps_enabled(_original_read_values)
 try:
-    from apps.main import host  # mount() reads settings synchronously, while patched above
+    from apps.main import host  # mounts under the patch
 finally:
     settings_live.read_values = _original_read_values
 
 
 def build_schema() -> dict:
-    """The exported schema, ``org_handle`` included: it is injected via the ``CurrentOrg``
-    dependency and never reaches FastAPI's own parameter list, and openapi-python-client
-    rejects a path template variable no operation declares as a parameter."""
+    """The schema, with ``org_handle`` declared: ``CurrentOrg`` hides it from FastAPI, and
+    openapi-python-client rejects an undeclared path variable."""
     schema = host.app.openapi()
 
     org_handle_param = {
@@ -67,8 +62,7 @@ def build_schema() -> dict:
 
 
 def main() -> None:
-    # Write to the path argument (not stdout): importing the whole app emits log
-    # noise to stdout, which would corrupt a redirected JSON stream.
+    # Not stdout, where the app's logs go.
     Path(sys.argv[1]).write_text(json.dumps(build_schema(), indent=2))
 
 
