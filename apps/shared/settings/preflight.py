@@ -44,8 +44,7 @@ def check_production(settings: TechnicalSettings) -> tuple[list[str], list[str]]
         for prefix in _SUPABASE_SECRET_KEY_PREFIXES
     ):
         errors.append(
-            "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a "
-            "legacy JWT."
+            "SUPABASE_SECRET_KEY looks unset or malformed — expected `sb_secret_…` or a legacy JWT."
         )
 
     if not settings.is_production:
