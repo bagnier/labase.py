@@ -243,25 +243,29 @@ class CaptureDrain:
     async def tick(self) -> None:
         with _lock:
             dropped, _overflow.dropped = _overflow.dropped, 0
-        found_down = False
+        took_any = found_down = False
         # Snapshot the current length so appends arriving mid-drain wait for the next tick.
         for _ in range(len(_QUEUE)):
             with _lock:
                 if not _QUEUE:
                     break
                 captured = _QUEUE.popleft()
-            if not await self._deliver(captured):
-                # Postgres down is a tracker raising, not a capture that stops mattering: kept
-                # for the next tick's retry rather than lost with the outage it would explain.
-                # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
-                # already, so the marking path would read the retry as a duplicate and drop it.
-                # Bound and shed like any other append: a concurrent request can fill the freed slot
-                # while the tracker awaits, and the eviction that follows counts the same way.
-                _append(captured)
-                # And it ends the tick: what is still queued behind it would only cost the
-                # tracker that is down one more failing call each, every tick of the outage.
-                found_down = True
-                break
+            if await self._deliver(captured):
+                took_any = True
+                continue
+            # Postgres down is a tracker raising, not a capture that stops mattering: kept
+            # for the next tick's retry rather than lost with the outage it would explain.
+            # Through ``_append``, not ``_enqueue``: the exception carries its capture mark
+            # already, so the marking path would read the retry as a duplicate and drop it.
+            # Bound and shed like any other append: a concurrent request can fill the freed slot
+            # while the tracker awaits, and the eviction that follows counts the same way.
+            _append(captured)
+            # And it ends the tick: what is still queued behind it would only cost the
+            # tracker that is down one more failing call each, every tick of the outage.
+            # Down only if nothing was taken: a tracker that took one is up and only refused
+            # this capture.
+            found_down = not took_any
+            break
         if dropped and found_down:
             # The shortfall too: this tick's one probe is spent, so it waits for a tick that
             # finds the tracker back, with its count.

@@ -333,6 +333,32 @@ async def test_a_pending_shortfall_adds_no_second_probe_to_a_tick_that_found_the
     assert seen == ["kept"]
 
 
+@pytest.mark.asyncio
+async def test_a_shortfall_still_reaches_a_tracker_that_refuses_one_capture_but_took_another(
+    monkeypatch,
+):
+    """A tracker that took a capture this tick is up: the one it refuses (a value its table
+    rejects) rejoins the queue on every tick, and must not hold the shortfall back with it."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    capture._overflow.dropped = 3
+    took: list[tuple[type[BaseException], object]] = []
+
+    async def refuses_the_poison(captured: capture.ExceptionCaptured) -> None:
+        if str(captured.exc) == "poison":
+            raise ValueError("A string literal cannot contain NUL (0x00) characters.")
+        took.append((type(captured.exc), captured.context.get("dropped")))
+
+    monkeypatch.setattr(capture, "_trackers", [refuses_the_poison])
+    capture._QUEUE.extend(
+        capture.ExceptionCaptured(exc=RuntimeError(name)) for name in ("taken", "poison")
+    )
+
+    await capture.CaptureDrain(0).tick()
+
+    assert took == [(RuntimeError, None), (capture.CaptureQueueOverflowed, 3)]
+
+
 # Every deploy ends the process with SIGTERM: what the queue holds then must be delivered.
 
 
