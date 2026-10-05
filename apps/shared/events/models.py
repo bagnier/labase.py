@@ -1,7 +1,8 @@
 """The ORM mapping of the append-only ``business_events`` journal.
 
-Only the columns that are the fact are mapped. ``dispatched_at``, the listener's claim cursor, is
-queue mechanics and stays off the model; the repository reaches it in raw SQL.
+Only the columns that are the fact are mapped. ``checked_at``, the listener's routability claim,
+is queue mechanics and stays off the model; the repository reaches it, the per-topic cursors and
+the ledgers in raw SQL.
 """
 
 import uuid
