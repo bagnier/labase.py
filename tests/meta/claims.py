@@ -1289,4 +1289,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 57
+UNHELD_TODAY = 56
