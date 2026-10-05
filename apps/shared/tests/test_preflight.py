@@ -19,11 +19,8 @@ def _settings(
     log_debug: bool = False,
     app_version: str = "1a2b3c4",
 ) -> TechnicalSettings:
-    """A production config that passes every check, minus the given overrides.
-
-    Every field `check_production` reads is passed explicitly, so the ambient
-    .env cannot leak into the result.
-    """
+    """A passing production config with ``overrides``; every field is explicit, so ``.env``
+    cannot leak in."""
     return TechnicalSettings(
         supabase_api_url="https://abcdefgh.supabase.co",
         supabase_publishable_key="sb_publishable_" + "x" * 32,
@@ -115,9 +112,8 @@ def test_an_unset_app_version_only_reports_a_finding():
 
 
 def test_console_rendering_only_reports_a_finding():
-    """``LOG_DEBUG`` no longer picks a level — with no ``debug`` tier there is none to pick. What
-    it still decides is the renderer, and a production server rendering console text is one whose
-    aggregator has nothing to parse. Surfaced, not blocked: the logs are readable either way."""
+    """``LOG_DEBUG`` renders console text an aggregator cannot parse; still readable, so only a
+    finding."""
     _, findings = check_production(_settings(log_debug=True))
 
     assert findings == [

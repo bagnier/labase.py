@@ -1,7 +1,5 @@
-"""Technical substrate for browser (e2e) tests: in-process server, Playwright
-browser, unified per-user isolated contexts (distinct cookie jars) keyed by
-email, and HTMX interaction helpers. Feature mixins inherit this; BrowserDriver
-assembles them."""
+"""The browser driver's base: in-process server, Playwright, one context per user, HTMX
+helpers."""
 
 import os
 from collections.abc import Callable
@@ -24,13 +22,11 @@ from tests.e2e import cleanup
 from tests.e2e.drivers.server import InProcessServer
 
 _PASSWORD = "Secret1!"
-_VISITOR = "visitor"  # sentinel — unauthenticated context, no associated user
-VISITOR = _VISITOR  # public alias, mirroring api_base.VISITOR
+_VISITOR = "visitor"  # the unauthenticated context
+VISITOR = _VISITOR
 
-# Pinned so ``http://localhost:8801`` can sit in ``supabase/config.toml`` ``[auth.webauthn]``
-# rp_origins: GoTrue verifies the origin signed into a WebAuthn ceremony, and a random port could
-# never be allow-listed. ``LABASE_E2E_PORT`` overrides it when two checkouts run browser e2e at once
-# — passkey scenarios then need that origin allow-listed too.
+# Pinned, so it can be listed in ``supabase/config.toml``'s WebAuthn ``rp_origins``.
+# ``LABASE_E2E_PORT`` overrides it for a second checkout, whose passkeys need it listed too.
 _E2E_PORT = 8801
 
 
@@ -39,15 +35,13 @@ class LaunchOptions(TypedDict, total=False):
 
 
 def launch_options() -> LaunchOptions:
-    """``CHROMIUM_EXECUTABLE_PATH`` names a Chromium installed on the machine; unset or empty, the
-    driver launches Playwright's own download, which is Google's Chrome for Testing."""
+    """``CHROMIUM_EXECUTABLE_PATH``, else Playwright's own Chrome for Testing."""
     executable_path = os.environ.get("CHROMIUM_EXECUTABLE_PATH", "")
     return {"executable_path": executable_path} if executable_path else {}
 
 
 class BrowserBase:
-    # The canonical e2e password, mirroring ``ApiBase.PASSWORD``: the per-email contexts sign in
-    # with it, so a scenario that only names a user can omit it.
+    # As ``ApiBase.PASSWORD``.
     PASSWORD = _PASSWORD
 
     def __init__(self) -> None:
@@ -56,8 +50,7 @@ class BrowserBase:
         self._playwright = None
         self.__browser: Browser | None = None
         self.last_response: Response | APIResponse | None = None
-        # per-user contexts (distinct cookie jars) and their pages, keyed by email
-        # (or _VISITOR for the unauthenticated context).
+        # by email, or _VISITOR
         self._contexts: dict[str, BrowserContext] = {}
         self._pages: dict[str, Page] = {}
         self._acting_email: str = _VISITOR
@@ -68,9 +61,7 @@ class BrowserBase:
         assert self.last_response.status == 403, f"Expected 403, got {self.last_response.status}"
 
     def assert_not_found(self) -> None:
-        # Some denials come back through an AJAX/fetch, not a page navigation; a mixin
-        # that took that path stashes the status in ``_denied_status`` (absent otherwise,
-        # so the plain page-navigation case falls through to ``last_response``).
+        # A denial seen through a fetch leaves its status in ``_denied_status``.
         status = getattr(self, "_denied_status", None)
         if status is None:
             assert self.last_response is not None, "No response stored — cannot check not-found"
@@ -99,7 +90,6 @@ class BrowserBase:
         self.__browser = value
 
     def _open_context(self) -> None:
-        """Open the unauthenticated (visitor) context and its page."""
         ctx = self._browser.new_context()
         self._contexts[_VISITOR] = ctx
         self._pages[_VISITOR] = ctx.new_page()
@@ -131,14 +121,10 @@ class BrowserBase:
         pass
 
     def drain_task_queue(self) -> None:
-        """Deliver async work now: fan persisted facts out to consumers (listener), then run them
-        (worker), looping until both are dry. Runs on the in-process server's loop, where the
-        engines live; the browser driver commits for real, so the listener sees committed facts.
-
-        The polling worker is off under tests, so a scenario reading what a reaction produced has
-        to drain first."""
+        """Run the listener and the worker until both are dry, on the server's loop where the
+        engines live. The loops are off under tests."""
         if self._server is None:
-            return  # external APP_URL: that deployment runs its own listener/worker
+            return  # an external APP_URL runs its own
         listener = EventListener(0)
         worker = TaskWorker(0)
         while True:
@@ -154,20 +140,15 @@ class BrowserBase:
 
     # ── unified multi-user context management ──────────────────────────────────
     def _setup_context(self, ctx: BrowserContext, email: str) -> None:
-        """Register and login `email` in a fresh browser context.
-
-        The page that signed in *becomes* that actor's page: a real sign-in leaves someone on
-        their landing page, sidebar and all, which is what lets every later move be a click on a
-        link rather than a URL typed for them.
-        """
+        """Register and sign in `email` in a fresh context; that page, left on the landing page,
+        becomes theirs, so every later move is a click."""
         page = ctx.new_page()
         page.goto(f"{self.base_url}/auth/register")
         page.fill("input[name=email]", email)
         page.fill("input[name=password]", _PASSWORD)
         page.click("button[type=submit]")
         page.wait_for_load_state("domcontentloaded")
-        # Run UserCreated's reactions (admin bootstrap, personal org) before login: they are async
-        # off the journal, and the JWT must already carry the admin claim.
+        # UserCreated's reactions before login, so the JWT carries any admin role.
         self.drain_task_queue()
         page.goto(f"{self.base_url}/auth/login")
         page.fill("input[name=email]", email)
@@ -177,11 +158,7 @@ class BrowserBase:
         self._pages[email] = page
 
     def context_for(self, email: str) -> BrowserContext:
-        """Get or create an isolated browser context (distinct cookie jar) for `email`.
-
-        Secondary users (email != _VISITOR) are registered and logged in on creation;
-        the visitor context stays unauthenticated.
-        """
+        """`email`'s own context, registered and signed in on creation (not the visitor's)."""
         if email not in self._contexts:
             ctx = self._browser.new_context()
             if email != _VISITOR:
@@ -190,7 +167,6 @@ class BrowserBase:
         return self._contexts[email]
 
     def page_for(self, email: str) -> Page:
-        """Get or create the persistent page for `email`'s isolated context."""
         ctx = self.context_for(email)
         if email not in self._pages:
             self._pages[email] = ctx.new_page()
@@ -205,12 +181,7 @@ class BrowserBase:
         return self.page_for(self._acting_email)
 
     def set_acting_email(self, email: str) -> None:
-        """Adopt `email` as the acting user, promoting the visitor context if one exists.
-
-        Mirrors ApiBase.set_acting_email: when the freshly-authenticated visitor
-        context becomes a named user, re-key it (and its page) rather than spawning
-        a second context that would re-register/re-login the same email.
-        """
+        """Adopt `email`; a visitor context that signed in is re-keyed, not duplicated."""
         if _VISITOR in self._contexts and email not in self._contexts:
             self._contexts[email] = self._contexts.pop(_VISITOR)
             if _VISITOR in self._pages:
@@ -218,8 +189,7 @@ class BrowserBase:
         self._acting_email = email
 
     def rekey_acting_identity(self, email: str) -> None:
-        """The acting user changed identity in place (e.g. confirmed an email change):
-        their live context keeps its cookies but now answers to the new email."""
+        """After an email change: the same context, under the new email."""
         old = self._acting_email
         if old != email:
             if old in self._contexts and email not in self._contexts:
@@ -229,12 +199,7 @@ class BrowserBase:
         self._acting_email = email
 
     def adopt_current_context(self, email: str) -> None:
-        """The acting context just authenticated as `email`: key it under that identity.
-
-        Generalizes visitor promotion: whoever's browser submitted the login form
-        holds `email`'s session now, whatever that context was keyed before. A stale
-        context already keyed `email` is closed — its cookies are dead anyway.
-        """
+        """Key the context that just signed in under `email`, closing a stale one."""
         old = self._acting_email
         if old == email:
             return
@@ -258,23 +223,19 @@ class BrowserBase:
     def follow_org_nav(
         self, handle: str, segment: str, page: Page | None = None
     ) -> Response | None:
-        """Enter an org section the way a person does: the sidebar entry the app registered at
-        mount. Located by the link's own href — every org in the sidebar repeats the same labels
-        — and the sidebar folds every org but the current one, so unfold it first.
-        """
+        """Follow the sidebar link to an org section, by href (orgs repeat labels), unfolding
+        the org first."""
         target = page if page is not None else self.page
         link = f"a[href='/{handle}/{segment}']"
         if target.locator(f"aside {link}").count() == 0:
-            # The sidebar lists the orgs known when the page rendered; a membership granted since
-            # only shows up on the next one. Load the page again, as its reader would.
+            # A membership granted since the render shows after a reload.
             target.reload(wait_until="load")
         assert target.locator(f"aside {link}").count(), (
             f"nothing in the sidebar leads to /{handle}/{segment} at {target.url!r} — "
             "this actor is not in that org, is not offered that section, or never signed in"
         )
         if target.locator(f"aside details:not([open]) ul {link}").count():
-            # Another org's sections are folded away. Its name is the way in — and landing on its
-            # dashboard is what makes it the current org, whose sections the sidebar unfolds.
+            # Its name leads to its dashboard, which unfolds its sections.
             with target.expect_navigation(wait_until="load"):
                 target.locator(f"aside a[href='/{handle}/dashboard']").first.click()
         with target.expect_navigation(wait_until="load") as nav:
@@ -282,8 +243,7 @@ class BrowserBase:
         return nav.value
 
     def follow_to_profile(self, page: Page | None = None) -> Response | None:
-        """The account link in the sidebar footer, reachable from every signed-in page — how a
-        person gets to their own profile, and the only way this driver takes."""
+        """The sidebar footer's account link."""
         target = page if page is not None else self.page
         with target.expect_navigation(wait_until="load") as nav:
             target.locator("aside a[href='/profile']").first.click()
@@ -291,8 +251,7 @@ class BrowserBase:
 
     # ── being somewhere, rather than travelling there ──────────────────────────
     def showing(self, path: str, page: Page | None = None) -> bool:
-        """Whether the browser already has ``path`` on screen — query string included, since a
-        list carrying a filter or a sort is not the same page as the bare one."""
+        """Whether ``path``, query string included, is on screen."""
         target = page if page is not None else self.page
         current = urlsplit(target.url or "")
         return current.path + (f"?{current.query}" if current.query else "") == path
@@ -305,14 +264,8 @@ class BrowserBase:
         fresh: bool = False,
         page: Page | None = None,
     ) -> None:
-        """Have ``path`` on screen, walking there only when it is not already the page shown.
-
-        Nobody re-enters the room they are standing in, and a driver that did paid a full render
-        for it. ``fresh`` is the caller stating it needs what the server holds rather than what a
-        swap left in the DOM: on the page already, it is loaded again; anywhere else, arriving is
-        that read. Say it wherever the answer would be wrong if the page were stale — an
-        assertion checking a change stuck, or a helper whose next act must start from stored
-        state.
+        """Have ``path`` on screen, walking there only if needed. ``fresh`` reloads a page already
+        shown, for a reader needing what the server holds rather than a swap's DOM.
         """
         target = page if page is not None else self.page
         if not self.showing(path, target):
@@ -323,7 +276,6 @@ class BrowserBase:
     def reach_org_nav(
         self, handle: str, segment: str, page: Page | None = None, *, fresh: bool = False
     ) -> None:
-        """``follow_org_nav``, minus the click when that section is already the page shown."""
         self.be_on(
             f"/{handle}/{segment}",
             lambda: self.follow_org_nav(handle, segment, page),
@@ -332,12 +284,10 @@ class BrowserBase:
         )
 
     def reach_profile(self, page: Page | None = None, *, fresh: bool = False) -> None:
-        """``follow_to_profile``, minus the click when the profile is already the page shown."""
         self.be_on("/profile", lambda: self.follow_to_profile(page), fresh=fresh, page=page)
 
     # ── HTMX interaction helpers ───────────────────────────────────────────────
     def _arm_dialogs(self, page: Page) -> None:
-        """Auto-accept hx-confirm dialogs, once per page."""
         armed = getattr(self, "_dialogs_armed", None)
         if armed is None:
             armed = self._dialogs_armed = set()
@@ -359,16 +309,11 @@ class BrowserBase:
     def click_and_capture(
         self, page: Page, target: str | Locator, method: str, path_token: str
     ) -> Response:
-        """Click a control and return the HTMX response it triggers.
-
-        ``target`` may be a CSS selector string or a Playwright Locator.
-        """
+        """The HTMX response a click on ``target`` (selector or Locator) triggers."""
         action = (lambda: page.click(target)) if isinstance(target, str) else target.click
         return self.wait_htmx(page, method, path_token, action)
 
     def find_row(self, page: Page, list_selector: str, text_selector: str, text: str) -> Locator:
-        """Return the row within ``list_selector`` whose ``text_selector`` sub-element
-        matches ``text`` exactly."""
         for row in page.locator(list_selector).all():
             if row.locator(text_selector).inner_text().strip() == text:
                 return row
@@ -384,8 +329,6 @@ class BrowserBase:
         method: str,
         path_token: str,
     ) -> Response:
-        """Find the row matching ``text``, click a control inside it, capture the HTMX
-        response it triggers."""
         row = self.find_row(page, list_selector, text_selector, text)
         return self.click_and_capture(page, row.locator(action_selector), method, path_token)
 
@@ -399,11 +342,8 @@ class BrowserBase:
         path_token: str | None = None,
         root: Locator | None = None,
     ) -> Response | None:
-        """Fill labelled fields (optionally scoped to ``root``), then submit.
-
-        HTMX forms pass ``method`` + ``path_token`` and get the captured Response
-        back; full-page-reload forms omit them and get a plain navigation wait.
-        """
+        """Fill labelled fields and submit. An HTMX form passes ``method`` and ``path_token`` and
+        gets the response; a full-page form waits for the navigation."""
         scope = root if root is not None else page
         for label, value in fields.items():
             scope.get_by_label(label).fill(value)

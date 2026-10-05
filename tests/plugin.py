@@ -1,39 +1,20 @@
-"""Global pytest entry point: clock bootstrap, the ``--driver`` option and the
-``pytest_plugins`` registration of the BDD steps and e2e driver fixtures.
-
-Registered via ``-p tests.plugin`` in pyproject so its options and the plugins it
-pulls in are available to every test under ``app/`` and ``tests/`` — which a
-directory-scoped conftest.py could not provide. Keeping it as an explicit plugin
-lets the project root stay free of a conftest.py. The driver and per-test
-isolation fixtures live in ``tests.e2e.plugin`` (pulled in below).
+"""The pytest entry point (``-p tests.plugin``): the clock, ``--driver``, the shared steps and
+the driver fixtures, for tests under both ``apps/`` and ``tests/``.
 """
 
 import os
 
 os.environ.setdefault("ENV_FILE", ".env.test")
 
-# pytest-xdist (experimental, opt-in via `-n`): each worker (gw0, gw1, …) gets its own
-# app schema + Storage bucket + e2e port so their DB/files/servers never collide. This
-# runs *before* importing config — settings are cached on first read and an env var
-# overrides the .env file — and provisions here (not in pytest_configure) because the
-# module-level reset_app_switches() below already needs the schema to exist.
-#
-# NOT yet safe for the whole browser suite: GoTrue / auth.users is one shared table, so
-# scenarios that register the same email on two workers, or touch global admin state
-# (clear_all_admin_roles / find_users span every worker), collide (~34/243 fail at -n2).
-# Making it green needs per-worker email namespacing across the driver mixins plus an
-# xdist_group serialising the admin-role scenarios — a large, deferred change. Until then
-# keep `make ci` serial; `-n` is a hand-run experiment (~1.4× on the passing subset).
-# Guarded so the whole block is a single conditional (keeps E402 happy — no module-level
-# assignment lands before the imports below, only this allowed compound statement).
+# pytest-xdist (`-n`, experimental): each worker gets its own schema, bucket and e2e port, set
+# before settings are first read, and provisioned here since reset_app_switches() below needs it.
+# Not safe for the browser suite: workers share auth.users, so same-email and admin-role
+# scenarios collide; `make ci` stays serial. One conditional block, for E402.
 if os.environ.get("PYTEST_XDIST_WORKER"):
     _worker = os.environ["PYTEST_XDIST_WORKER"]
     os.environ["SUPABASE_DATABASE_SCHEMA"] = f"test_{_worker}"
     os.environ["SUPABASE_STORAGE_BUCKET"] = f"org-files-test-{_worker}"
-    # Each worker binds its own e2e server port so two browser servers never fight
-    # over 8801. 8801+index keeps every port inside the WebAuthn rp_origins band
-    # (supabase/config.toml), so passkey ceremonies verify on whichever worker runs
-    # them — no need to pin those scenarios to one worker.
+    # 8801+index stays within the WebAuthn rp_origins listed in supabase/config.toml.
     os.environ["LABASE_E2E_PORT"] = str(8801 + int(_worker.removeprefix("gw")))
     from scripts.provision_schema import provision
 
@@ -47,10 +28,7 @@ import tests.e2e.clock as test_clock
 from apps.shared.settings.env import get_technical_settings
 from tests.e2e import cleanup
 
-# Clear feature-switch overrides before pytest imports the nested plugins below — which pull in
-# the drivers and therefore ``apps.main``, whose disabled set is read at import time. A leftover
-# ``enabled = false`` (e.g. from manual dev testing on the shared DB) would otherwise unmount an
-# app for the whole run.
+# Before the plugins below import ``apps.main``, which reads the switches at import.
 cleanup.reset_app_switches()
 cleanup.disable_welcome_seeding()
 
@@ -78,26 +56,20 @@ def pytest_addoption(parser):
 
 
 def pytest_runtest_setup(item):
-    """A @web scenario only makes sense through a browser (rendered chrome, DOM
-    placement); skip it on any non-browser driver so the functional suite stays
-    surface-agnostic. pytest-bdd turns the Gherkin @web tag into this marker."""
+    """Skip a @web scenario (about rendered pages) on the API driver."""
     if item.get_closest_marker("web") and item.config.getoption("--driver") != "browser":
         pytest.skip("web-only scenario; runs under the browser driver")
 
 
 @pytest.fixture
 def clock():
-    """The test clock for date-pinning steps — independent of the driver."""
     return test_clock
 
 
 @pytest.fixture(autouse=True)
 def reset_clock(monkeypatch):
-    """Route apps.shared.clock.now onto the test clock, and unpin it after the test.
-
-    Both drivers run the app in-process, so a plain monkeypatch reaches every
-    runtime clock.now() call — including the in-thread browser server.
-    """
+    """Patch ``apps.shared.clock.now`` with the test clock; both drivers run the app
+    in-process."""
     monkeypatch.setattr("apps.shared.clock.now", test_clock.now)
     yield
     test_clock.reset()
@@ -105,12 +77,7 @@ def reset_clock(monkeypatch):
 
 @pytest_asyncio.fixture()
 async def db_session():
-    """RLS-enforcing session (user role) for direct integration tests (no HTTP).
-
-    Uses a throwaway engine wrapped in a single transaction rolled back at teardown:
-    set_rls_context sets a transaction-local role + claims, so the rollback discards
-    them and nothing needs disposing back to a shared pool.
-    """
+    """An RLS-enforced session for tests without HTTP, in one transaction rolled back after."""
     settings = get_technical_settings()
     connect_args = {
         "server_settings": {"search_path": f"{settings.supabase_database_schema},public"}

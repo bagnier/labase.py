@@ -17,8 +17,7 @@ async def _overview_with_a_missing_template(query: OverviewQuery) -> Overview:
 
 
 def test_a_cards_missing_template_does_not_500_the_dashboard(driver):
-    """A registry of its own, holding the broken card alone: no mounted app can be made to
-    return a template that does not exist, so the failure is staged by the provider."""
+    """A registry holding only the broken card."""
     driver.sign_in_as_member_of_org("dashboard-broken-card@example.com", "Acme")
     broken = Contribs()
     broken.provide(OverviewQuery, _overview_with_a_missing_template)

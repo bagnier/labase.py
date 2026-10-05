@@ -1,10 +1,6 @@
-"""Passkeys (WebAuthn) — the auth surface the profile section calls.
-
-GoTrue owns credentials and challenges (beta API, raw HTTP — no supabase-py
-support yet); the app wires the two UI moments: management on the profile,
-discoverable sign-in on the login page. The ``users.passkeys_enabled`` setting
-gates both, and the server-side feature also needs ``[auth.passkey]`` enabled
-in ``supabase/config.toml``.
+"""Passkeys, called by the profile. GoTrue owns credentials and challenges.
+``users.passkeys_enabled`` gates management and sign-in; GoTrue also needs ``[auth.passkey]`` in
+``supabase/config.toml``.
 """
 
 from apps.auth.domain.service import (

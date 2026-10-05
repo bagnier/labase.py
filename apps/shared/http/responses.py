@@ -1,7 +1,5 @@
-"""Response helpers that absorb the JSON / HTMX-fragment / full-page branching.
-
-One handler serves all three audiences (AGENTS: every business endpoint has two faces);
-these centralize the negotiation so routers stay free of it.
+"""Response helpers that absorb the JSON / fragment / full-page branching
+(AGENTS: one set of helpers branches JSON, fragment and page).
 """
 
 from typing import Any
@@ -10,43 +8,25 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
-from apps.shared.http.content_type import is_htmx, wants_json
+from apps.shared.http.content_type import is_htmx, wants_full_page, wants_json
 from apps.shared.http.templates import templates
 
-# What a negotiating handler answers, said where the schema can read it.
-#
-# `response_class=` cannot say this. FastAPI reads exactly one media type off it
-# (`current_response_class.media_type`, openapi/utils.py) and that single type becomes the
-# success response's whole content — `application/json` by default, `text/html` under
-# `response_class=HTMLResponse`. A handler that answers both therefore describes one of them,
-# whichever it happened to name. Its other job is a runtime one: it wraps a handler that
-# returns a bare value, and is never used by a handler returning its own Response.
-#
-# `responses=` is the documentation lever, merged over whatever the response class produced —
-# so naming both media types here is right whichever one the route already declared.
-#
-# Two types, three audiences: a fragment and a full page are both `text/html`, and which one
-# a request gets is `is_htmx`, not a media type. The schema has nothing finer to say.
-# It matters beyond the docs page: `client/` is generated from this schema, so a face the
-# schema omits is a face no external caller can reach.
+# The OpenAPI side of negotiation. `response_class=` documents a single media type, so a route
+# answering both JSON and HTML names them through `responses=`, merged over it. The schema
+# matters beyond the docs: `client/` is generated from it. Fragment and full page are both
+# `text/html`.
 
-# The shape FastAPI's ``responses=`` takes — its own annotation, which a `TypedDict` could not
-# satisfy (``dict`` is invariant in its values), so the helpers below say what they build in
-# their names rather than in the type.
+# FastAPI's own annotation for `responses=`; a TypedDict would not satisfy it.
 type Responses = dict[int | str, dict[str, Any]]
 
 
 def json_and_html(model: Any) -> Responses:
-    """Both faces, with the JSON one's content named. FastAPI files ``model`` under the route's
-    default media type, so the route must *not* pin ``response_class=HTMLResponse`` — that would
-    document the model as the shape of the HTML. Handlers returning their own ``Response`` need
-    no response class at runtime anyway."""
+    """JSON as ``model``, plus HTML. The route must not set ``response_class=HTMLResponse``,
+    which would document ``model`` as the HTML's shape."""
     return {200: {"model": model, "content": {"text/html": {}}}}
 
 
-# A deletion answers two ways: ``204`` for a JSON caller — the route's own status — and the
-# re-rendered list or page for a browser. Declared as the 200 the browser gets; the 204 is the
-# decorator's ``status_code``.
+# A deletion: the route's ``status_code=204`` for JSON, a re-rendered 200 page for a browser.
 HTML_AFTER_DELETE: Responses = {200: {"content": {"text/html": {}}}}
 
 
@@ -64,9 +44,8 @@ def mutation_response(
     htmx_redirect_url: str | None = None,
     status_code: int = 200,
 ) -> Response:
-    """JSON clients get `obj`. Plain HTML gets a 303 redirect. HTMX gets 204 + HX-Redirect
-    when htmx_redirect_url is given (a navigating mutation); callers with an in-place HTMX
-    fragment update should not use this helper at all."""
+    """JSON gets ``obj``; HTML a 303 to ``redirect_url``; HTMX a 204 + ``HX-Redirect`` when
+    ``htmx_redirect_url`` is given. Not for a mutation that swaps a fragment in place."""
     if wants_json(request):
         return JSONResponse(obj.model_dump(mode="json"), status_code=status_code)
     if htmx_redirect_url and is_htmx(request):
@@ -77,10 +56,8 @@ def mutation_response(
 
 
 def delete_response(request: Request, *, htmx_redirect_url: str | None = None) -> Response:
-    """204 for JSON, always. 204 + HX-Redirect for HTMX when htmx_redirect_url is given
-    (navigating away from the deleted item). Callers that re-render in place (a list
-    fragment, an OOB swap) should branch on wants_json() themselves and call this only
-    for the JSON case, keeping their own HTML path untouched."""
+    """A 204, plus ``HX-Redirect`` for HTMX when ``htmx_redirect_url`` is given. A route that
+    re-renders in place calls it only for JSON."""
     r = Response(status_code=status.HTTP_204_NO_CONTENT)
     if htmx_redirect_url and not wants_json(request) and is_htmx(request):
         r.headers["HX-Redirect"] = htmx_redirect_url
@@ -102,12 +79,12 @@ def render_list(
 ) -> Response:
     if wants_json(request):
         return JSONResponse([schema.model_validate(i).model_dump(mode="json") for i in items])
-    htmx = is_htmx(request)
-    template = fragment if htmx else full
+    full_page = wants_full_page(request)
+    template = full if full_page else fragment
     org_handle = request.path_params.get("org_handle", "")
     ctx = {"user": user, items_key: items, "org_handle": org_handle, "org": org}
     if extra:
         ctx |= extra
-    if not htmx and context:
+    if full_page and context:
         ctx |= context
     return templates.TemplateResponse(request, template, ctx)

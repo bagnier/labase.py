@@ -48,7 +48,7 @@ async def test_enqueue_email_outboxes_through_the_callers_session():
         "text": "Hi",
         "html": "<p>Hi</p>",
     }
-    assert params["user_id"] is None  # server-level work: admin session in the worker
+    assert params["user_id"] is None  # runs on the admin session
 
 
 @pytest.mark.asyncio

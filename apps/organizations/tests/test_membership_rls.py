@@ -1,8 +1,5 @@
-"""Ownership is only ever handed out by an owner, or at an org's creation.
-
-Driven the way a PostgREST client holding its own JWT would: raw SQL on the ``authenticated``
-session, bypassing the routes.
-"""
+"""Ownership is granted by an owner or at an org's creation, even to raw SQL on the
+``authenticated`` session."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -32,7 +29,7 @@ async def _an_org_and_a_stranger(session: AsyncSession) -> AsyncGenerator[Org]:
     owner = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     stranger = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, owner):

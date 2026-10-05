@@ -32,7 +32,6 @@ LEAVE = Action(
     sql="delete from memberships where org_id = :org_id and user_id = :me returning user_id",
     route=Route("DELETE", "/members/me"),
 )
-# Members join by accepting an invitation, never by a route that seats them.
 ADD = Action(
     name="add",
     sql="insert into memberships (org_id, user_id) values (:org_id, :user_id) returning user_id",
@@ -44,7 +43,7 @@ INVITE = Action(
     " values (:org_id, 'invitee@example.com', :me) returning id",
     route=Route("POST", "/invitations", {"email": "invitee@example.com"}),
 )
-# A pending invitation carries the token that accepts it: reading one is an owner's act.
+# A pending invitation carries its accept token: owners only.
 READ_INVITATION = Action(
     name="read-invitation",
     sql="select id from org_invitations where id = :invitation_id",

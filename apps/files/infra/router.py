@@ -49,18 +49,8 @@ log = structlog.get_logger(__name__)
 
 
 def storage_failure(event: str, exc: StorageApiError, **context: object) -> HTTPException:
-    """One verdict for a failed Storage call, and the answer the caller is owed.
-
-    Storage is a dependency like GoTrue or Postgres, so the level is the base's
-    (:mod:`apps.shared.logs.dependency`) — a 4xx is Storage answering no (a name already
-    taken, an object that isn't there), anything else is Storage being broken, which the capture
-    seam tracks as an issue. Logged with *this* module's logger, so the issue and the lines around
-    it file under ``files`` rather than under ``shared``.
-
-    The status follows the same split: only a refusal is the caller's fault. Answering 400 to an
-    outage told a user their upload was malformed when it was fine, and hid the outage behind a
-    status nothing alerts on.
-    """
+    """Log a Storage failure with the dependency verdict, and answer 400 for a refusal (a name
+    taken, a missing object) or 500 for an outage, which is not the caller's fault."""
     log_dependency_failure(log, event, exc, **context)
     if is_refusal(exc):
         return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -159,14 +149,14 @@ async def upload_file(
     if len(content) > settings.max_upload_mb * 1024 * 1024:
         return HTMLResponse(
             '<div role="alert" class="alert-error">File too large</div>',
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
         )
 
     quota_mb = settings.org_storage_quota_mb
     if quota_mb >= 0 and await repo.total_size() + len(content) > quota_mb * 1024 * 1024:
         return HTMLResponse(
             '<div role="alert" class="alert-error">Organisation storage quota exceeded</div>',
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
         )
 
     try:
@@ -204,8 +194,7 @@ async def upload_file(
     )
 
     if wants_json(request):
-        # Lets other surfaces (e.g. the pages editor's image upload) get a usable
-        # reference back instead of the files-list HTML fragment.
+        # For other surfaces (the pages editor's image upload).
         return JSONResponse(
             {
                 "id": str(org_file.id),
@@ -355,7 +344,7 @@ async def public_share_download(
     admin_session: AdminSession,
 ):
     async def reject(reason: str, code: int, detail: str) -> NoReturn:
-        # Anonymous attempt: no actor, no org — a refusal, not a fact.
+        # A refusal: a log line, not a fact.
         log.warning("files.share_link_rejected", reason=reason, token=str(token))
         raise HTTPException(code, detail)
 
@@ -373,8 +362,7 @@ async def public_share_download(
     await events.emit(
         FileShareDownloaded(org_id=org_file.org_id, entity_id=org_file.id), admin_session
     )
-    # Effective TTL for the file's org — the admin session reads its overrides (no RLS caller
-    # here: share downloads are anonymous, the org comes from the file row).
+    # The file's org's TTL, on the admin session: the download is anonymous.
     effective = await get_settings("files").for_org(admin_session, org_file.org_id)
     storage = admin_storage()
     result = await storage.from_(bucket()).create_signed_url(

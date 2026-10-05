@@ -1,8 +1,5 @@
-"""Who may rename and delete a file: its uploader, and the org's owners.
-
-The target is the owner's own upload, the one shape both doors can seed — a member acting on it
-is the case the route used to refuse alone.
-"""
+"""Who may rename and delete a file: its uploader, and the org's owners. The target is the
+owner's upload."""
 
 import uuid
 

@@ -1,9 +1,4 @@
-"""`DeckRepository`'s own bounded read, run directly against a real, RLS-enforcing session.
-
-The dashboard overview needs an org's most recent decks without loading every one of them —
-this holds `recent`'s own contract (bounded, newest first, ties broken by minting order) in
-isolation from the overview that calls it.
-"""
+"""`DeckRepository.recent`: bounded, newest first, ties by id."""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -24,7 +19,7 @@ from tests.rls import acting_as
 async def _an_org(session: AsyncSession) -> AsyncGenerator[uuid.UUID]:
     owner = create_user(f"{uuid.uuid4()}@rls.local", "Test1234!")
     try:
-        # Rolled back before delete_user, so the FK locks on auth.users are released.
+        # Rolled back before delete_user, releasing the FK locks.
         outer = await session.begin_nested()
         try:
             async with acting_as(session, owner):
@@ -54,9 +49,7 @@ async def test_recent_returns_only_the_newest_decks_up_to_the_limit(db_session: 
 
 @pytest.mark.asyncio
 async def test_recent_breaks_a_tied_created_at_by_minting_order(db_session: AsyncSession):
-    """`created_at` alone is not a total order: decks created under the same pinned instant
-    (a real occurrence — a request, or a test clock nobody advanced) tie, and an `ORDER BY`
-    with no secondary key is free to return either one first."""
+    """Decks created at one instant tie on `created_at`."""
     async with _an_org(db_session) as org_id:
         test_clock.set_current_date("2024-01-01")
         for name in ("First", "Second", "Third"):

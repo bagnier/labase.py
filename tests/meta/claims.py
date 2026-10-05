@@ -89,11 +89,20 @@ from apps.shared.tests.test_queue import (
     test_worker_runs_enqueued_task,
 )
 from apps.shared.tests.test_request_logging import (
+    test_a_failing_liveness_probe_is_traced_at_error,
+    test_a_failing_readiness_probe_is_traced_at_error,
     test_a_full_sink_and_a_full_capture_queue_leave_the_request_untouched,
+    test_a_healthy_liveness_probe_leaves_no_line,
+    test_a_healthy_readiness_probe_leaves_no_line,
     test_a_raising_observer_never_replaces_the_handlers_own_exception,
 )
 from apps.shared.tests.test_uuid7 import test_uuid7_is_time_ordered_and_versioned
 from apps.timeline.tests.test_pivots import test_a_row_correlates_by_the_request_it_names
+from apps.timeline.tests.test_sort_honesty import (
+    test_a_column_sort_says_it_only_orders_the_page,
+    test_ascending_time_says_it_only_orders_the_page,
+    test_the_default_sort_claims_nothing,
+)
 from tests.e2e.drivers.test_api_isolation import test_distinct_emails_get_isolated_sessions
 from tests.e2e.drivers.test_api_rls import (
     test_the_rls_session_runs_as_the_app_role_and_the_admin_one_does_not,
@@ -167,6 +176,7 @@ from tests.meta.test_ratchets import (
     test_no_assertion_step_reaches_a_page_by_url,
     test_no_compensating_assert_narrows_an_annotation,
     test_no_router_reaches_the_database_itself,
+    test_no_router_reads_settings_by_string,
     test_no_state_wait_is_a_sleep,
     test_nothing_reruns_a_failing_test,
     test_the_defensive_reads_are_the_named_ones,
@@ -551,11 +561,11 @@ CLAIMS = [
         "nothing checks the shared homes",
     ),
     # ── AGENTS Integration ────────────────────────────────────────────────────────────────
-    waived(
+    held(
         "settings-dependency-per-request",
         "Handlers declare the app's `TodoSettings` dependency",
-        "test_no_contract_exports_a_settings_handle holds the negative; nothing checks that a "
-        "handler reads its settings through the dependency rather than get_settings",
+        test_no_contract_exports_a_settings_handle,
+        test_no_router_reads_settings_by_string,
     ),
     waived(
         "non-request-settings-read",
@@ -798,6 +808,13 @@ CLAIMS = [
         "the-timeline-says-its-sort-is-partial",
         "the screen says so rather than pass a sample off as an ordering",
         "no scenario sorts by another column and reads the notice",
+    ),
+    held(
+        "the-timeline-sort-boundary-covers-reversed-time",
+        "any sort other than newest-first orders the loaded page only",
+        test_the_default_sort_claims_nothing,
+        test_a_column_sort_says_it_only_orders_the_page,
+        test_ascending_time_says_it_only_orders_the_page,
     ),
     held(
         "metrics-owns-the-counter-outright",
@@ -1103,6 +1120,14 @@ CLAIMS = [
         test_a_request_whose_handler_raised_still_leaves_its_finished_line,
     ),
     held(
+        "health-probe-exemption",
+        "what the browser fetched by itself leaves nothing unless it 5xx'd",
+        test_a_healthy_readiness_probe_leaves_no_line,
+        test_a_healthy_liveness_probe_leaves_no_line,
+        test_a_failing_readiness_probe_is_traced_at_error,
+        test_a_failing_liveness_probe_is_traced_at_error,
+    ),
+    held(
         "timeline-writes-nothing",
         "`apps/timeline` writes nothing",
         test_the_timeline_writes_nothing,
@@ -1263,4 +1288,4 @@ CLAIMS = [
 
 # Claims nothing holds yet. It only goes down: waiving a new one is a decision, and this line is
 # where the decision is recorded.
-UNHELD_TODAY = 58
+UNHELD_TODAY = 57

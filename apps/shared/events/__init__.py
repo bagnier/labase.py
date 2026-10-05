@@ -1,23 +1,12 @@
-"""The event subsystem — one cohesive package of focused modules.
+"""Business events (AGENTS: business events are facts, not sagas).
 
-A business event is a frozen dataclass (``types``), and declaring one puts it in the ``catalog`` —
-*which facts exist*, keyed by the ``kind`` the journal stores, process-wide from import. What a
-mount activates is the other half, in ``wiring``: *which of them this process emits, and who
-reacts*.
+- ``types``: the event classes; ``catalog``: which events exist, by stored ``kind``.
+- ``bus``: declare, emit, subscribe; ``wiring``: what this process's mounts activated.
+- ``repository``: the only writer and reader of ``business_events``.
+- ``listener``: delivers reactions off the journal after commit.
+- ``activity``: the journal as a user-facing feed (the console's view is ``apps.timeline``).
 
-The bus (``bus``) writes that wiring and emits — persisting the fact to the append-only journal
-through the one owner of ``business_events``, the ``repository`` (``EventRepository.record`` writes
-a typed event as a record on the session the caller names). Durable async consumers register via
-``bus.on`` and are delivered off the journal by the ``listener`` after commit, the one place the two
-halves meet: the catalog says what a record is, the wiring says who wants it. Reading the journal
-back for a surface — the humanized activity feed and contribution calendar — is pure presentation,
-in ``activity`` (not to be confused with ``apps.timeline``, the console's own read view).
-
-This ``__init__`` re-exports only the lightweight **vocabulary** so declaration sites can keep
-``from apps.shared.events import BusinessEvent`` without dragging in SQLAlchemy or the DB engine —
-importing a type must stay cheap. Everything else is reached at its submodule path
-(``apps.shared.events.bus`` / ``.catalog`` / ``.wiring`` / ``.repository`` / ``.activity`` /
-``.listener``).
+Only the event types are re-exported here, so declaring an event never imports SQLAlchemy.
 """
 
 from apps.shared.events.types import (

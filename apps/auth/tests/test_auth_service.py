@@ -106,17 +106,14 @@ async def test_logout_network_error_does_not_raise():
         mock_client.post.side_effect = OSError("network down")
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-        await logout("some-token")  # must not raise
+        await logout("some-token")
 
 
-# A sign-out reaches GoTrue, and that call fails two ways that look identical in the ``except``:
-# the token was already expired (GoTrue answered, and the disguise comes off anyway), or GoTrue is
-# unreachable (nobody is signing out anywhere). At ``warning`` both read the same.
+# A failed sign-out is an expired token (a refusal) or GoTrue unreachable (an issue).
 
 
 @pytest.mark.asyncio
 async def test_a_sign_out_gotrue_refuses_is_not_a_bug():
-    """An expired token is the ordinary way a sign-out ends — the cookies drop either way."""
     capture._QUEUE.clear()
     refused = AuthApiError("invalid token", 401, "bad_jwt")
 
@@ -132,8 +129,6 @@ async def test_a_sign_out_gotrue_refuses_is_not_a_bug():
 
 @pytest.mark.asyncio
 async def test_a_sign_out_that_never_reached_gotrue_is_a_bug():
-    """Nobody's session is being revoked anywhere, and the only trace used to roll out of the log
-    window in two days."""
     capture._QUEUE.clear()
 
     with patch("apps.auth.domain.service.httpx.AsyncClient") as mock_client_cls:
@@ -148,7 +143,7 @@ async def test_a_sign_out_that_never_reached_gotrue_is_a_bug():
 
 @pytest.mark.asyncio
 async def test_a_factor_lookup_gotrue_fails_is_not_a_missing_factor():
-    """The lookup is the 2FA gate: reading a GoTrue 500 as "no factor" skipped the step-up."""
+    """The 2FA gate: a GoTrue 500 must not read as "no factor"."""
     failed = httpx.Response(500, request=httpx.Request("GET", "http://gotrue/auth/v1/user"))
 
     with patch("apps.auth.domain.service.httpx.AsyncClient") as mock_client_cls:
@@ -162,8 +157,7 @@ async def test_a_factor_lookup_gotrue_fails_is_not_a_missing_factor():
 
 @pytest.mark.asyncio
 async def test_a_sign_in_tells_gotrue_whose_address_it_carries(test_user):
-    """The server calls GoTrue for every visitor: without the visitor's address, GoTrue's per-IP
-    limit sees one caller per instance."""
+    """Else GoTrue's per-IP limit sees one caller per instance."""
     email, password = test_user
     with patch(
         "apps.shared.persistence.supabase.acreate_client", wraps=supabase_module.acreate_client
@@ -190,27 +184,25 @@ def test_user_created_is_a_persisted_business_event():
     actor = uuid7()
     event = UserCreated(user_id=actor, entity_id=actor, email="a@b.c")
 
-    assert isinstance(event, BusinessEvent)  # persisted on the journal like any fact
-    assert event.kind == "auth.user_created"  # distinct from the sign-in (Login) events
-    assert event.user_id == actor  # the new user acts
+    assert isinstance(event, BusinessEvent)
+    assert event.kind == "auth.user_created"
+    assert event.user_id == actor
     assert event.email == "a@b.c"
-    assert not hasattr(event, "access_token")  # a token is never persisted
+    assert not hasattr(event, "access_token")
 
 
 def test_is_first_sign_in_detects_a_brand_new_oauth_user():
-    """GoTrue stamps created_at and last_sign_in_at in the same sign-up — milliseconds apart, and
-    last carries nanosecond precision + Z. That is a genuine first sign-in."""
+    """Milliseconds apart, with nanoseconds and a ``Z``."""
     assert _is_first_sign_in(
         {
             "created_at": "2026-07-22T09:10:08.33665Z",
             "last_sign_in_at": "2026-07-22T09:10:08.358220884Z",
         }
     )
-    # A returning user signed up long before this sign-in.
     assert not _is_first_sign_in(
         {"created_at": "2026-01-01T00:00:00Z", "last_sign_in_at": "2026-07-22T09:10:08Z"}
     )
-    # No sign-in recorded yet → treat as new; empty payload → not new (nothing to provision).
+    # No sign-in yet: new. Empty payload: not new.
     assert _is_first_sign_in({"created_at": "2026-07-22T09:10:08Z", "last_sign_in_at": None})
     assert not _is_first_sign_in({})
 
@@ -221,5 +213,5 @@ def test_user_deleted_is_a_persisted_business_event():
 
     assert isinstance(event, BusinessEvent)
     assert event.kind == "auth.user_deleted"
-    assert event.entity_id == victim  # the removed user — forget consumers key on it
-    assert not hasattr(event, "session")  # no live session travels on a frozen fact
+    assert event.entity_id == victim
+    assert not hasattr(event, "session")

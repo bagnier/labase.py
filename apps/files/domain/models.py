@@ -12,8 +12,7 @@ class OrgFile(Base, UUIDPk, OrgScoped, Versioned, Timestamped):
     __tablename__ = "org_files"
 
     uploaded_by: Mapped[uuid.UUID]
-    # The uploader's email as it read *then*, so the list survives RLS hiding a co-member's
-    # identity and an account being closed.
+    # Pinned at upload: RLS hides co-members' identities, and accounts close.
     uploader_email: Mapped[str] = mapped_column(String, default="")
     filename: Mapped[str] = mapped_column(String)
     storage_path: Mapped[str] = mapped_column(String)
@@ -45,7 +44,7 @@ class OrgFileRead(BaseModel):
 
 
 class UploadedFile(BaseModel):
-    """What an upload answers a script: enough to reference the file from another surface."""
+    """Enough for a script to reference the file elsewhere."""
 
     id: str
     filename: str

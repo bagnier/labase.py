@@ -1,17 +1,5 @@
-"""One invariant over the *call sites*: no fact gives up its transaction.
-
-``tests/meta/test_event_vocabulary`` walks the catalog — every event **class**, enumerable because a
-class registers itself at import. Nothing enumerated the **emit sites**, and that is where the
-divergence lived: two facts about one action, in one handler, could carry different durability
-guarantees with nothing saying so.
-
-That is settled twice over. ``emit`` takes its session as a required argument, so the type checker
-enumerates the sites; and the escape hatch that briefly existed for the facts a rollback would
-erase — the security refusals — is gone, because those turned out to describe nothing that happened
-and are log lines now. ``apps/shared/tests/test_emit_durability`` holds the mechanism that made a
-raising path the only case ever needing one.
-
-This is the ratchet on that: an escape hatch is easy to reintroduce and much harder to notice.
+"""No fact leaves its transaction: ``emit`` is the only way in, and nothing emits after a commit
+(AGENTS: `emit` records a fact and does only that).
 """
 
 import ast
@@ -23,7 +11,6 @@ _APPS = _ROOT / "apps"
 
 
 def _emit_variants() -> set[str]:
-    """Every ``….emit*`` method name called under ``apps/``, tests aside."""
     return {
         node.func.attr
         for path in _APPS.rglob("*.py")
@@ -36,7 +23,6 @@ def _emit_variants() -> set[str]:
 
 
 def _functions(tree: ast.Module):
-    """Each def in a module with its qualified name, and the module body itself as ``<module>``."""
     yield (
         "<module>",
         [
@@ -58,8 +44,7 @@ def _functions(tree: ast.Module):
 
 
 def _own_nodes(body: list[ast.stmt]):
-    """The nodes of a def's body, not descending into the defs nested in it — those are named on
-    their own."""
+    """A def's body nodes, nested defs aside."""
     stack: list[ast.AST] = list(body)
     while stack:
         node = stack.pop()
@@ -72,9 +57,8 @@ def _own_nodes(body: list[ast.stmt]):
 
 
 def _writer_callers() -> dict[str, set[str]]:
-    """Who reaches each link of the journal's write chain — the SQL function's name, the statement
-    that calls it, the helper running that statement, and the repository method wrapping the
-    helper — named by the function doing it, tests aside."""
+    """Callers of each link of the write chain (SQL function, statement, helper, repository
+    method), by function."""
     callers: dict[str, set[str]] = defaultdict(set)
     for path in sorted(_APPS.rglob("*.py")):
         if "/tests/" in path.as_posix():
@@ -107,7 +91,6 @@ def _writer_callers() -> dict[str, set[str]]:
 
 
 def _touches(stmt: ast.stmt, attr: str) -> bool:
-    """Whether ``stmt`` — not descending into a def nested in it — calls ``<expr>.<attr>(...)``."""
     return any(
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
@@ -117,10 +100,7 @@ def _touches(stmt: ast.stmt, attr: str) -> bool:
 
 
 def _commit_before_emit_sites() -> set[str]:
-    """Route functions where a ``.commit()`` statement precedes a ``.emit(`` statement — the fact
-    would then ride a second, later transaction of its own, so a raise between the two keeps the
-    mutation and loses the fact: exactly backwards from the README's own
-    ``the fact commits iff the mutation does``."""
+    """Routes where ``.commit()`` precedes ``.emit(``."""
     sites: set[str] = set()
     for path in sorted(_APPS.rglob("infra/router.py")):
         relative = str(path.relative_to(_ROOT))
@@ -135,21 +115,16 @@ def _commit_before_emit_sites() -> set[str]:
 
 
 def test_the_only_way_to_record_a_fact_is_on_a_transaction():
-    """A second entry point would have to weaken durability to be worth adding at all."""
     assert _emit_variants() == {"emit"}
 
 
 def test_no_route_commits_before_emitting_its_fact():
-    """The other half of the same README claim: emitting after the mutation's own commit puts the
-    fact on a second transaction, so a raise in between keeps the row and loses the fact."""
+    """After the commit, a raise in between would keep the row and lose the fact."""
     assert _commit_before_emit_sites() == set()
 
 
 def test_every_link_of_the_journal_writer_has_its_one_caller():
-    """The name of the method is one entry point; the chain behind it is four more. A route calling
-    ``EventRepository(s).record(e)`` or ``_append_record`` directly skips nothing ``emit`` checks
-    today, and everything it may check tomorrow — so each link has exactly one caller, the next
-    link up, and ``emit`` is the only door."""
+    """Each link of the chain has one caller, the next one up: ``emit`` is the only door."""
     events = "apps/shared/events"
 
     assert _writer_callers() == {

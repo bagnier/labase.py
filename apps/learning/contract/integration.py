@@ -1,8 +1,4 @@
-"""How the learning context plugs into the running app.
-
-Single composition entry (:func:`mount`, called from :mod:`apps.main`): mounts the router,
-answers the dashboard ``OverviewQuery``, and seeds a welcome deck on ``OrganizationCreated``.
-"""
+"""The learning mount, and the welcome deck each new org gets."""
 
 import uuid
 
@@ -18,13 +14,11 @@ from apps.organizations.contract.events import OrganizationCreated
 from apps.organizations.contract.overviews import Overview, OverviewQuery
 from apps.organizations.contract.queries import seed_org_welcome
 from apps.shared.integration.host import AppManifest, Host, MountPhase, NavItem
-from apps.shared.overview import overview_from_count
+from apps.shared.overview import RECENT_ITEMS, overview_from_count
 from apps.shared.persistence.repository import count_where
 from apps.shared.settings.live import SettingDef, SettingsDeclaration, SupabaseLink, feature_switch
 
 PHASE = MountPhase.ORG
-
-_RECENT = 3
 
 _WELCOME_DECK = "Welcome"
 _WELCOME_CARDS = [
@@ -83,7 +77,7 @@ async def _overview(query: OverviewQuery) -> Overview:
     decks = await count_where(query.session, Deck, Deck.org_id == query.org_id)
     cards = await count_where(query.session, Card, Card.org_id == query.org_id)
     if decks:
-        recent = await DeckRepository(query.session, query.org_id).recent(_RECENT)
+        recent = await DeckRepository(query.session, query.org_id).recent(RECENT_ITEMS)
         lines = [*overview_from_count(decks, "deck", "No decks yet"), f"{cards} cards"]
     else:
         recent = []
@@ -103,7 +97,7 @@ async def _seed(session: AsyncSession, event: OrganizationCreated) -> None:
 
 
 async def _seed_welcome(session: AsyncSession, org_id: uuid.UUID, _owner_id: uuid.UUID) -> None:
-    # Decks and cards are org-scoped, not owner-scoped, so the owner isn't needed here.
+    # Decks belong to the org, not the owner.
     deck = Deck(org_id=org_id, name=_WELCOME_DECK, position=0)
     session.add(deck)
     await session.flush()

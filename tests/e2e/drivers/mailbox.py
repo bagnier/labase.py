@@ -1,9 +1,5 @@
-"""Mailpit client — the HTTP face of the local Supabase mail catcher.
-
-One mailbox per stack: the app's SmtpMailer and GoTrue both deliver over SMTP
-(``smtp_port``), both E2E drivers assert real deliveries through this API
-(``mailpit_url``). Assertions match on a per-scenario unique marker (an
-invitation token) so runs sharing the catcher never collide.
+"""The Mailpit client, where both the app and GoTrue deliver. Matched on a per-scenario marker,
+so runs sharing the catcher do not collide.
 """
 
 import re
@@ -20,12 +16,8 @@ _TOKEN_HASH = re.compile(r"token_hash=([A-Za-z0-9_-]+)")
 def wait_for_message(
     to: str, containing: str, timeout: float = 10.0, since: datetime | None = None
 ) -> dict:
-    """Return the first message to `to` whose text body contains `containing`.
-
-    Polls: delivery happens in a server-side background task after the HTTP
-    response. `since` skips messages older than the current scenario (the
-    catcher accumulates across runs). Raises AssertionError on deadline.
-    """
+    """The first mail to `to` containing `containing`, polled (delivery is asynchronous);
+    `since` skips older mail. Raises AssertionError at the deadline."""
     deadline = time.monotonic() + timeout
     mailpit_url = get_technical_settings().mailpit_url
     with httpx.Client(base_url=mailpit_url, timeout=5.0) as client:
@@ -50,7 +42,6 @@ def wait_for_message(
 
 
 def token_hash_from_mail(email: str, since: datetime) -> str:
-    """token_hash from the freshest GoTrue mail (recovery, email change…) to `email`."""
     message = wait_for_message(to=email, containing="token_hash=", since=since)
     match = _TOKEN_HASH.search(message.get("Text") or "")
     assert match, f"no token_hash in mail: {message.get('Text')!r}"
@@ -58,12 +49,10 @@ def token_hash_from_mail(email: str, since: datetime) -> str:
 
 
 def recovery_token(email: str, since: datetime) -> str:
-    """token_hash from the freshest GoTrue recovery mail sent to `email` this scenario."""
     return token_hash_from_mail(email, since)
 
 
 def assert_invitation_delivered(email: str, token: str | None) -> None:
-    """Shared by both driver mixins: the invitation email really reached the inbox."""
     assert token, "no invitation token captured by the driver"
     message = wait_for_message(to=email, containing=token)
     assert "invited" in message.get("Subject", "").lower(), message.get("Subject")

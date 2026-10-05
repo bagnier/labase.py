@@ -1,9 +1,6 @@
--- The secret key (`service_role`) reads and writes data; it does not reshape tables. Supabase's
--- default privileges also hand it TRUNCATE, TRIGGER, REFERENCES and MAINTAIN on every table in
--- `public` — a leaked key could then wipe a table past RLS in one statement, or plant a trigger
--- that runs on every tenant's writes. Reset to the four data privileges on today's tables, and on
--- what `postgres` creates tomorrow (the next app's tables, the log partitions rolled each day).
--- Spelled as revoke-all-then-grant: the linter's dialect predates MAINTAIN.
+-- The secret key reads and writes data, never TRUNCATE or TRIGGER: a leaked key would wipe a
+-- table past RLS or plant a trigger on every tenant's writes. On today's tables and tomorrow's.
+-- Revoke-all-then-grant: the linter's dialect predates MAINTAIN.
 revoke all on all tables in schema public from service_role;
 grant select, insert, update, delete on all tables in schema public to service_role;
 

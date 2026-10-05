@@ -31,23 +31,20 @@ _SPARK_DAYS = 14
 
 
 def _known_status(raw: str, allowed: set[IssueStatus]) -> IssueStatus:
-    """Narrow a raw query/form value to the enum, or refuse it here.
-
-    Both inputs end up compared against the Postgres ``issue_status`` column, where an unknown
-    value raises down in the driver — a 500, and an issue about the crafted request itself.
-    """
+    """Narrow a raw value to the enum, or refuse it: an unknown value would raise in the driver
+    against the ``issue_status`` column, a 500."""
     if raw not in {s.value for s in allowed}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status")
     return IssueStatus(raw)
 
 
 def _status_filter(raw: str) -> IssueStatus | None:
-    """The console dropdown's value; empty is its "all" option, and means no filter."""
+    """Empty is the dropdown's "all"."""
     return _known_status(raw, set(IssueStatus)) if raw else None
 
 
 def _triage_status(raw: str) -> IssueStatus:
-    """The status a human may set. ``new`` and ``regressed`` are the tracker's own verdicts."""
+    """Not ``new`` nor ``regressed``, the tracker's own verdicts."""
     return _known_status(raw, _TRIAGE_STATUSES)
 
 
@@ -136,8 +133,6 @@ async def set_issue_status(
     repo = IssueRepository(session)
     issue = await _issue_or_404(repo, issue_id)
     await repo.set_status(issue, new_status, get_technical_settings().app_version)
-    # Emit on the request session: the status-change fact commits iff the status does (auto-commit
-    # at request teardown, like every other business route — no explicit commit here).
     await events.emit(
         IssueStatusChanged(
             user_id=current_user.id,

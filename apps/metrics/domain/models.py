@@ -16,17 +16,12 @@ class MetricResolution(StrEnum):
 
 
 class RequestMetric(Base, UUIDPk, Created):
-    """One flushed delta: traffic of one route on one instance in one time bucket.
-
-    ``duration_buckets`` is positionally aligned with ``BUCKET_BOUNDS_MS`` (+Inf
-    last) — the shape Prometheus derives percentiles from, so p95 survives
-    aggregation across rows where raw averages would not.
-    """
+    """One route's traffic on one instance in one time bucket. ``duration_buckets`` aligns with
+    ``BUCKET_BOUNDS_MS``, +Inf last."""
 
     __tablename__ = "request_metrics"
 
-    # The instant the bucket opens — `bucket` alone would collide with `duration_buckets` (a
-    # histogram) and with Storage buckets.
+    # When the time bucket opens; not `bucket`, taken by histograms and Storage.
     bucket_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     resolution: Mapped[MetricResolution] = mapped_column(
         SAEnum(MetricResolution, name="metric_resolution", create_type=False),
@@ -42,8 +37,6 @@ class RequestMetric(Base, UUIDPk, Created):
 
 
 class RouteLoad(BaseModel):
-    """Aggregated view of one route over the screen's window."""
-
     method: str
     route: str
     label: str
@@ -62,16 +55,12 @@ class LoadTotals(BaseModel):
 
 
 class LoadPoint(BaseModel):
-    """Traffic of one time bucket, summed across routes and instances."""
-
     bucket_start: datetime
     requests: int
     errors: int
 
 
 class LoadPage(BaseModel):
-    """The console Load screen: totals, the busiest routes, and the series behind the chart."""
-
     totals: LoadTotals
     routes: list[RouteLoad]
     series: list[LoadPoint]

@@ -1,15 +1,10 @@
-"""Auth application services — registration use-case.
-
-Sign-up creates the auth user in GoTrue; the ``UserCreated`` fact is recorded at the source by the
-``on_auth_user_created`` trigger (``handle_new_user``), atomic with the user row in GoTrue's own
-transaction — see migration ``20260723000002``. Its reactions (personal org, admin bootstrap,
-welcome seeders) are durable consumers run off the journal. HTTP routers call into here and only map
-results/errors to responses.
+"""Registration (AGENTS: sign-up is a chain of durable reactions). ``UserCreated`` is recorded by
+the ``on_auth_user_created`` trigger, in GoTrue's own transaction.
 """
 
 from apps.auth.domain.service import RegisterResult, register
 
 
 async def register_user(email: str, password: str, client_ip: str | None = None) -> RegisterResult:
-    """Create the auth user. ``UserCreated`` is recorded by the signup trigger, not here."""
+    """Create the auth user in GoTrue."""
     return await register(email, password, client_ip)

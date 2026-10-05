@@ -1,22 +1,8 @@
-"""Type-keyed contribution registry — the *pull* half of inter-app collaboration.
+"""The contribution registry, keyed by query type
+(AGENTS: a contribution is pulled, and a failing contributor is skipped).
 
-Where :mod:`apps.shared.events.bus` carries *events* (a fact happened, fan out to reactions), this
-carries *contributions*: a host asks "who contributes to this query?" and aggregates the
-answers. It is not pub/sub — it is a registry of providers (an extension point), declared at
-mount and read synchronously on the request path:
-
-- ``provide(query_type, provider)`` — register a contributor for a query type.
-- ``collect(query)`` — run every provider for the query's exact type, isolate failures
-  (log + skip), return the successful results.
-
-The two halves have opposite failure policies on purpose: a missing/failing *contribution*
-must never break the page that gathers it (a dashboard renders without the down app's card),
-whereas an *event* handler failure is a real fault the emitter may need to compensate for.
-
-Runtime collectors import the process-wide :data:`contribs` singleton directly — a focused
-collaborator, not the whole :class:`~apps.shared.integration.host.Host`. Mount wires providers onto
-``host.contribs``, which *is* this same ``contribs`` in production, so registration and
-dispatch share one registry.
+Mount registers providers on ``host.contribs``, which is :data:`contribs` in production; runtime
+code collects on :data:`contribs` directly.
 """
 
 import asyncio
@@ -43,25 +29,15 @@ class Contribs:
         self._providers[query_type].append(provider)
 
     def providers(self, query_type: type) -> tuple[Callable[[Any], Awaitable[Any]], ...]:
-        """The providers registered for a query type — read-only, so declaration-level tests can
-        ask the mounted registry instead of grepping source, or (as auth's own resolution of
-        ``ApiKeyQuery`` does) call each in turn without ``collect``'s log-and-skip policy."""
+        """For a caller that needs no log-and-skip (auth's ``ApiKeyQuery``), and for tests."""
         return tuple(self._providers.get(query_type, ()))
 
     async def collect(self, query: object) -> list[Any]:
-        """Run every provider for this query type; log and skip failing or hanging providers.
+        """Run every provider of the query's exact type, in turn; one that raises or exceeds
+        ``contribs_provider_timeout_seconds`` is logged as a bug and skipped.
 
-        A provider failure is a bug: ``log.exception`` feeds it to the capture seam, which folds
-        it into an issue (``query_type`` names the query so it survives into the issue's
-        context). The drain delivers under a reentrancy guard, so a tracker that is itself a
-        failing provider here cannot recurse. A provider that hangs rather than raises is just as
-        down: each call is bounded by ``contribs_provider_timeout_seconds``, so it never holds the
-        page open for good.
-
-        Providers share the caller's session (every query type carries one), so they run one after
-        another — the page waits at most that bound once per provider — and a provider's own SQL
-        error, or its timeout, would abort that shared transaction: a savepoint around each call
-        confines the abort to it, leaving later providers and the caller's own queries unaffected.
+        Providers share the query's session: each runs in a savepoint, so its SQL error or
+        timeout does not abort the caller's transaction.
         """
         timeout_seconds = get_technical_settings().contribs_provider_timeout_seconds
         session = getattr(query, "session", None)
@@ -83,6 +59,4 @@ class Contribs:
         return results
 
 
-# Process-wide singleton. Runtime code collects on this directly; the production Host is built with
-# ``contribs=contribs``, so its mount-time ``.provide(...)`` registrations land here too.
 contribs = Contribs()

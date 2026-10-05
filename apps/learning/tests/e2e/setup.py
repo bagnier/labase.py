@@ -1,9 +1,5 @@
-"""Direct-DB fixtures for BDD setup (catalog + preset progress).
-
-These build the deck/card catalog and pre-existing learning state that scenarios
-assume. The driver supplies the right session: a test-transaction session for the
-API driver (rolled back) or a committed admin session for the browser driver.
-"""
+"""Catalog and progress written straight to the database, on the driver's session (rolled back
+for the API driver, committed for the browser's)."""
 
 import uuid
 from datetime import date, timedelta
@@ -90,12 +86,7 @@ async def set_state(
 async def get_state(
     session: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID, external_id: str
 ) -> dict:
-    """Reads a card's review state (level + dates) through SQLAlchemy.
-
-    The browser driver validates spaced-repetition state from here rather than the JSON
-    API: these dates are not surfaced in the rendered HTML, so the DB is the only non-REST
-    source of truth.
-    """
+    """A card's level and dates, which the page does not show."""
     card_id = await card_id_by_external(session, org_id, external_id)
     state = await session.scalar(
         select(CardState).where(CardState.user_id == user_id, CardState.card_id == card_id)

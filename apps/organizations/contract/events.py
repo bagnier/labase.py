@@ -1,13 +1,5 @@
-"""Org's public events — org lifecycle, membership and invitations on the shared journal.
-
-All are :class:`OrgEvent` business events (org-scoped) — an org being created, a member
-joining/leaving, roles changing, invitations. A refused action is *not* here: a blocked
-last-owner change or a non-owner reaching an owner-only route changed nothing, so it is a
-structured log line, not a fact.
-
-:class:`OrganizationCreated` doubles as the welcome-seeding trigger: each per-app seeder is a
-durable ``bus.on`` consumer of it, run by the listener off the journal after the org commits. One
-event, one business meaning — no separate seeding signal.
+"""Org lifecycle, membership and invitation facts. The welcome seeders are consumers of
+:class:`OrganizationCreated`.
 """
 
 from dataclasses import dataclass
@@ -29,16 +21,15 @@ class OrganizationCreated(OrgEvent, EntityCreated):
 
 @dataclass(frozen=True, kw_only=True)
 class OrganizationRenamed(OrgEvent, EntityUpdated):
-    """The org's display name changed — ``kind`` → ``"organizations.renamed"``. ``entity_id`` is
-    the org id, ``label`` the new name, so it joins the org's facts in the per-entity filter."""
+    """``entity_id`` is the org, so it shows in the org's entity filter; ``label`` the new
+    name."""
 
     verb: ClassVar[str] = "renamed"
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrgHandleChanged(OrgEvent, EntityUpdated):
-    """The org handle changed — rewrites every ``/{handle}/…`` URL, so it is a sensitive,
-    high-visibility change. ``label`` is the new handle."""
+    """Every ``/{handle}/…`` URL changes. ``label`` is the new handle."""
 
     verb: ClassVar[str] = "handle_changed"
 
@@ -67,10 +58,10 @@ class MemberRemoved(OrgEvent):
 @dataclass(frozen=True, kw_only=True)
 class InvitationSent(OrgEvent):
     verb: ClassVar[str] = "invitation_sent"
-    # the invitee — no account yet, so entity_name = their email, entity_id stays None
+    # entity_name: the invitee's email; no account yet, so no entity_id
 
 
 @dataclass(frozen=True, kw_only=True)
 class InvitationRevoked(OrgEvent):
     verb: ClassVar[str] = "invitation_revoked"
-    # the revoked invitation is the subject: its id rides on entity_id
+    # entity_id: the revoked invitation

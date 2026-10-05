@@ -1,11 +1,5 @@
-"""fullpage_context — a route's own page extra must not silently clobber a slice already
-claimed for this render: the host's own ``user``/``nav_items``, or a provider's declared,
-namespaced key (see the *Page composition* principle: each slice is owned by the app that
-provides it). Provider keys are declared at mount
-(:class:`~apps.shared.integration.host.FullpageProvider`), so the collision is checked
-against that declaration before any provider runs — no provider here is ever awaited, so a
-bare, unbound ``AsyncSession`` stands in for the session none of them reads.
-"""
+"""``fullpage_context`` refuses a route extra named like a claimed slice. The check runs before
+any provider, so an unbound ``AsyncSession`` is enough."""
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
