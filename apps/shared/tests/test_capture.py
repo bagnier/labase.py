@@ -310,6 +310,29 @@ async def test_a_tracker_that_took_nothing_is_probed_with_one_capture_per_tick(m
     assert seen == ["first"]
 
 
+@pytest.mark.asyncio
+async def test_a_pending_shortfall_adds_no_second_probe_to_a_tick_that_found_the_tracker_down(
+    monkeypatch,
+):
+    """An outage is when a storm fills the queue, so a shortfall is pending through it: reported
+    on the tick whose probe just failed, it would hand the down tracker a second capture."""
+    monkeypatch.setattr(capture, "_QUEUE", deque(maxlen=10))
+    monkeypatch.setattr(capture, "_tracker_failures", WeakKeyDictionary())
+    capture._overflow.dropped = 3
+    seen: list[str] = []
+
+    async def always_fails(captured: capture.ExceptionCaptured) -> None:
+        seen.append(str(captured.exc))
+        raise RuntimeError("Postgres is down")
+
+    monkeypatch.setattr(capture, "_trackers", [always_fails])
+    capture._QUEUE.append(capture.ExceptionCaptured(exc=RuntimeError("kept")))
+
+    await capture.CaptureDrain(0).tick()
+
+    assert seen == ["kept"]
+
+
 # Every deploy ends the process with SIGTERM: what the queue holds then must be delivered.
 
 

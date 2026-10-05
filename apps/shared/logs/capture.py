@@ -243,6 +243,7 @@ class CaptureDrain:
     async def tick(self) -> None:
         with _lock:
             dropped, _overflow.dropped = _overflow.dropped, 0
+        found_down = False
         # Snapshot the current length so appends arriving mid-drain wait for the next tick.
         for _ in range(len(_QUEUE)):
             with _lock:
@@ -259,8 +260,14 @@ class CaptureDrain:
                 _append(captured)
                 # And it ends the tick: what is still queued behind it would only cost the
                 # tracker that is down one more failing call each, every tick of the outage.
+                found_down = True
                 break
-        if dropped:
+        if dropped and found_down:
+            # The shortfall too: this tick's one probe is spent, so it waits for a tick that
+            # finds the tracker back, with its count.
+            with _lock:
+                _overflow.dropped += dropped
+        elif dropped:
             await self._report_overflow(dropped)
 
     async def _deliver(self, captured: ExceptionCaptured) -> bool:
