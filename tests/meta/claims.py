@@ -938,8 +938,9 @@ CLAIMS = [
     waived(
         "reuse-components",
         "Reuse components instead of re-spelling utility chains",
-        "a ratchet holds the two named chains (card-panel, the tab shell) at zero; nothing "
-        "yet detects an arbitrary re-spelled chain",
+        "a ratchet holds card-panel's chain at zero; the tab shell is spelled as utilities, a "
+        "@layer components class losing to daisyUI's tab-content; nothing yet detects an "
+        "arbitrary re-spelled chain",
     ),
     held(
         "icons-are-phosphor",

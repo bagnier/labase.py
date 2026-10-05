@@ -41,8 +41,6 @@ class TechnicalSettings(BaseSettings):
     # Past this wait on the counter store (connect, pool, query), the request goes through
     # unlimited and the dependency verdict opens an issue.
     rate_limit_store_timeout_seconds: float = 2.0
-    # Per provider in `Contribs.collect`: a hanging app is skipped like a failing one.
-    contribs_provider_timeout_seconds: float = 2.0
     # Use the left-most X-Forwarded-For entry as the client IP. Only behind a proxy we control:
     # otherwise any caller can spoof its IP, evading rate limits and poisoning logs.
     trust_forwarded_for: bool = False
